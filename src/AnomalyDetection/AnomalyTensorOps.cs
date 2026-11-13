@@ -1,0 +1,965 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
+
+namespace AiDotNet.AnomalyDetection;
+
+/// <summary>
+/// Whole-array engine building blocks shared by the anomaly detectors (row broadcasting, column
+/// statistics, sliding windows, row selection). Everything stays generic in <typeparamref name="T"/>.
+/// </summary>
+internal static class AnomalyTensorOps
+{
+    // Upper bound on the elements of one block of row pairs materialised by the pairwise helpers.
+    private const int PairBlockElements = 1 << 22;
+
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Applies <paramref name="scoreBlock"/> to bounded row blocks of <paramref name="rows"/> ([n, d]) and
+    /// concatenates the per-block results along axis 0, so a per-row computation that materialises
+    /// <paramref name="elementsPerRow"/> elements per row (e.g. a query-by-reference kernel) never holds more
+    /// than about one block of them at a time.
+    /// </summary>
+    internal static Tensor<T> MapRowBlocks<T>(Tensor<T> rows, long elementsPerRow, Func<Tensor<T>, Tensor<T>> scoreBlock)
+    {
+        int n = rows.Shape[0];
+        int d = rows.Shape[1];
+        int rowsPerBlock = (int)Math.Max(1, Math.Min(n, PairBlockElements / Math.Max(1, elementsPerRow)));
+        if (rowsPerBlock >= n)
+        {
+            return scoreBlock(rows);
+        }
+
+        var blocks = new List<Tensor<T>>();
+        for (int first = 0; first < n; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - first);
+            blocks.Add(scoreBlock(Engine.TensorSlice(rows, new[] { first, 0 }, new[] { count, d })));
+        }
+
+        return Engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// The k-means update step shared by the k-means based detectors: the mean of every cluster's points
+    /// (rows of <paramref name="points"/> [n, d] grouped by <paramref name="assignments"/>), with every empty
+    /// cluster re-initialized from the point at <c>random.Next(n)</c>, drawn in cluster order.
+    /// </summary>
+    internal static Tensor<T> KMeansUpdate<T>(Tensor<T> points, int[] assignments, int k, Random random)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = points.Shape[0];
+        int d = points.Shape[1];
+        var counts = new int[k];
+        foreach (int cluster in assignments)
+        {
+            counts[cluster]++;
+        }
+
+        var replacement = new int[k];
+        var empty = new int[k];
+        for (int c = 0; c < k; c++)
+        {
+            if (counts[c] == 0)
+            {
+                replacement[c] = random.Next(n);
+                empty[c] = 1;
+            }
+        }
+
+        var labels = Tensor<int>.FromVector(Vector<int>.Wrap(assignments), new[] { n }).Cast<T>();
+        var membership = engine.TensorEquals(
+            BroadcastColumn(engine.TensorArange<T>(0, k, 1), n), BroadcastRow(labels, k));
+        var means = DivideColumn(engine.TensorMatMul(membership, points),
+            engine.TensorMax(engine.ReduceSum(membership, new[] { 1 }, false), numOps.One));
+        var emptyMask = BroadcastColumn(Tensor<int>.FromVector(Vector<int>.Wrap(empty), new[] { k }).Cast<T>(), d);
+        return engine.TensorWhere(emptyMask, SelectRows(points, replacement), means);
+    }
+
+    /// <summary>Copies a matrix into a [rows, columns] tensor.</summary>
+    internal static Tensor<T> ToTensor<T>(Matrix<T> matrix) => Tensor<T>.FromMatrix(matrix);
+
+    /// <summary>Repeats a length-n vector tensor as the n x width matrix whose row i is filled with v[i].</summary>
+    internal static Tensor<T> BroadcastColumn<T>(Tensor<T> values, int width)
+    {
+        int n = values.Length;
+        return Engine.TensorBroadcastTo(Engine.Reshape(values, new[] { n, 1 }), new[] { n, width });
+    }
+
+    /// <summary>Repeats a length-d vector tensor as the rows x d matrix whose every row is v.</summary>
+    internal static Tensor<T> BroadcastRow<T>(Tensor<T> values, int rows)
+    {
+        int d = values.Length;
+        return Engine.TensorBroadcastTo(Engine.Reshape(values, new[] { 1, d }), new[] { rows, d });
+    }
+
+    /// <summary>m - row, row subtracted from every row of m.</summary>
+    internal static Tensor<T> SubtractRow<T>(Tensor<T> m, Tensor<T> row)
+        => Engine.TensorSubtract(m, BroadcastRow(row, m.Shape[0]));
+
+    /// <summary>m / row, every row of m divided element-wise by row.</summary>
+    internal static Tensor<T> DivideRow<T>(Tensor<T> m, Tensor<T> row)
+        => Engine.TensorDivide(m, BroadcastRow(row, m.Shape[0]));
+
+    /// <summary>m * row, every row of m multiplied element-wise by row.</summary>
+    internal static Tensor<T> MultiplyRow<T>(Tensor<T> m, Tensor<T> row)
+        => Engine.TensorMultiply(m, BroadcastRow(row, m.Shape[0]));
+
+    /// <summary>Row i of m divided by values[i].</summary>
+    internal static Tensor<T> DivideColumn<T>(Tensor<T> m, Tensor<T> values)
+        => Engine.TensorDivide(m, BroadcastColumn(values, m.Shape[1]));
+
+    /// <summary>m[i, j] - values[i].</summary>
+    internal static Tensor<T> SubtractColumn<T>(Tensor<T> m, Tensor<T> values)
+        => Engine.TensorSubtract(m, BroadcastColumn(values, m.Shape[1]));
+
+    /// <summary>Row i of m multiplied by values[i].</summary>
+    internal static Tensor<T> MultiplyColumn<T>(Tensor<T> m, Tensor<T> values)
+        => Engine.TensorMultiply(m, BroadcastColumn(values, m.Shape[1]));
+
+    /// <summary>
+    /// The trailing windows of a 1-D series: row i holds series[i - window + 1 .. i], zero-padded where
+    /// the window starts before the series. <paramref name="mask"/> is 1 at real entries, 0 at padding.
+    /// </summary>
+    internal static Tensor<T> TrailingWindows<T>(Tensor<T> series, int window, out Tensor<T> mask)
+        => SlidingWindows(series, window - 1, 0, out mask);
+
+    /// <summary>
+    /// The sliding windows of a 1-D series of length n: row i holds series[i - before .. i + after],
+    /// zero-padded where the window runs past either end. <paramref name="mask"/> ([n, before + after + 1])
+    /// is 1 at real entries and 0 at padding, so its row sums are the truncated window lengths.
+    /// </summary>
+    internal static Tensor<T> SlidingWindows<T>(Tensor<T> series, int before, int after, out Tensor<T> mask)
+    {
+        var engine = Engine;
+        int n = series.Length;
+        int width = before + after + 1;
+        var ones = Tensor<T>.CreateOnes(new[] { n });
+        if (width == 1)
+        {
+            mask = engine.Reshape(ones, new[] { n, 1 });
+            return engine.Reshape(series, new[] { n, 1 });
+        }
+
+        var parts = new List<Tensor<T>>(3);
+        var maskParts = new List<Tensor<T>>(3);
+        if (before > 0)
+        {
+            parts.Add(Tensor<T>.CreateZeros(new[] { before }));
+            maskParts.Add(Tensor<T>.CreateZeros(new[] { before }));
+        }
+
+        parts.Add(series);
+        maskParts.Add(ones);
+        if (after > 0)
+        {
+            parts.Add(Tensor<T>.CreateZeros(new[] { after }));
+            maskParts.Add(Tensor<T>.CreateZeros(new[] { after }));
+        }
+
+        mask = engine.TensorUnfold(engine.TensorConcatenate(maskParts.ToArray(), 0), 0, width, 1);
+        return engine.TensorUnfold(engine.TensorConcatenate(parts.ToArray(), 0), 0, width, 1);
+    }
+
+    /// <summary>
+    /// Exact squared Euclidean distances between every row of x ([n, d]) and every row of y ([m, d]),
+    /// summed from the explicit differences (no ||x||^2 + ||y||^2 - 2xy cancellation). Row pairs are
+    /// materialised in bounded blocks.
+    /// </summary>
+    internal static Tensor<T> PairwiseSquaredDistances<T>(Tensor<T> x, Tensor<T> y)
+    {
+        var engine = Engine;
+        int n = x.Shape[0];
+        int m = y.Shape[0];
+        int d = x.Shape[1];
+        if (n == 0 || m == 0 || d == 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { n, m });
+        }
+
+        long perRow = (long)m * d;
+        int rowsPerBlock = (int)Math.Max(1, Math.Min(n, PairBlockElements / perRow));
+        if (rowsPerBlock >= n)
+        {
+            return engine.Reshape(RowPairSquaredDistances(x, y, n), new[] { n, m });
+        }
+
+        // Collect the row blocks and concatenate once (TensorSetSlice would copy the whole result per block)
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - start);
+            var block = engine.TensorSlice(x, new[] { start, 0 }, new[] { count, d });
+            blocks.Add(engine.Reshape(RowPairSquaredDistances(block, y, count), new[] { count, m }));
+        }
+
+        return engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>Exact Euclidean distances between every row of x and every row of y.</summary>
+    internal static Tensor<T> PairwiseDistances<T>(Tensor<T> x, Tensor<T> y)
+        => Engine.TensorSqrt(PairwiseSquaredDistances(x, y));
+
+    /// <summary>Exact Euclidean distances between every pair of rows of a matrix.</summary>
+    internal static Tensor<T> PairwiseDistances<T>(Matrix<T> x)
+    {
+        var t = ToTensor(x);
+        return PairwiseDistances(t, t);
+    }
+
+    /// <summary>Exact squared Euclidean distances from one point to every row of data.</summary>
+    internal static Tensor<T> SquaredDistancesToPoint<T>(Tensor<T> data, Tensor<T> point)
+    {
+        var engine = Engine;
+        return engine.ReduceSum(engine.TensorSquare(SubtractRow(data, point)), new[] { 1 }, false);
+    }
+
+    // The [rows * m] flattened squared distances of every (block row, y row) pair.
+    private static Tensor<T> RowPairSquaredDistances<T>(Tensor<T> block, Tensor<T> y, int rows)
+    {
+        var engine = Engine;
+        int m = y.Shape[0];
+        var a = engine.TensorRepeatInterleave(block, m, 0);
+        var b = engine.TensorTile(y, new[] { rows, 1 });
+        return engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(a, b)), new[] { 1 }, false);
+    }
+
+    /// <summary>Per-column mean and population (divide by n) standard deviation of a matrix.</summary>
+    internal static (Vector<T> Means, Vector<T> Stds) ColumnMeanStd<T>(Matrix<T> x, int correction = 0)
+    {
+        var (std, mean) = Engine.TensorStdMean(ToTensor(x), new[] { 0 }, correction, false);
+        return (mean.ToVector(), std.ToVector());
+    }
+
+    /// <summary>
+    /// The quantile t with P(T &lt;= t) = <paramref name="p"/> (p &gt;= 0.5) of Student's t distribution with
+    /// <paramref name="degreesOfFreedom"/> degrees of freedom, by bisection on the exact CDF (regularized
+    /// incomplete beta). Used for test critical values computed from the configured significance level.
+    /// </summary>
+    internal static double StudentTQuantile(double p, int degreesOfFreedom)
+    {
+        var distribution = new AiDotNet.Distributions.StudentTDistribution<double>(degreesOfFreedom);
+        double lo = 0;
+        double hi = 1;
+        while (distribution.Cdf(hi) < p && hi < 1e15)
+        {
+            lo = hi;
+            hi *= 2;
+        }
+
+        for (int i = 0; i < 200 && hi - lo > 1e-13 * hi; i++)
+        {
+            double mid = 0.5 * (lo + hi);
+            if (distribution.Cdf(mid) < p)
+            {
+                lo = mid;
+            }
+            else
+            {
+                hi = mid;
+            }
+        }
+
+        return 0.5 * (lo + hi);
+    }
+
+    /// <summary>
+    /// Per row, the largest |x_ij - mean_j| / std_j over the columns whose std is non-zero, or 0 when
+    /// there is none. A NaN ratio never wins the comparison.
+    /// </summary>
+    internal static Vector<T> MaxStandardizedDeviation<T>(Matrix<T> x, Vector<T> means, Vector<T> stds)
+        => MaxScaledDeviation(x, means, stds, false, MathHelper.GetNumericOperations<T>().One);
+
+    /// <summary>
+    /// As <see cref="MaxStandardizedDeviation{T}(Matrix{T}, Vector{T}, Vector{T})"/> with the deviation
+    /// multiplied by <paramref name="factor"/> first (when <paramref name="scaled"/>):
+    /// |factor * (x_ij - center_j)| / scale_j.
+    /// </summary>
+    internal static Vector<T> MaxScaledDeviation<T>(Matrix<T> x, Vector<T> means, Vector<T> stds, bool scaled, T factor)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var stdTensor = stds.AsTensor();
+        var deviation = SubtractRow(ToTensor(x), means.AsTensor());
+        if (scaled)
+        {
+            deviation = engine.TensorMultiplyScalar(deviation, factor);
+        }
+
+        // Zero-std columns are skipped: they are divided by 1 instead of 0 (no division by zero for types such
+        // as decimal) and then zeroed; NaN entries (NaN inputs) become 0.
+        var nonZeroStd = engine.TensorNotEquals(stdTensor, numOps.Zero);
+        var safeStd = engine.TensorAdd(stdTensor, engine.TensorEquals(stdTensor, numOps.Zero));
+        var ratio = MultiplyRow(DivideRow(engine.TensorAbs(deviation), safeStd), nonZeroStd);
+        ratio = engine.TensorMaskedFill(ratio, engine.TensorIsNan(ratio), numOps.Zero);
+        return engine.ReduceMax(ratio, new[] { 1 }, false).ToVector();
+    }
+
+    /// <summary>A 1-D pattern repeated end to end and cut to length n (element i is pattern[i % period]).</summary>
+    internal static Tensor<T> TileToLength<T>(Tensor<T> pattern, int n)
+    {
+        var engine = Engine;
+        int period = pattern.Length;
+        int repeats = (n + period - 1) / period;
+        var tiled = repeats > 1 ? engine.TensorTile(pattern, new[] { repeats }) : pattern;
+        return tiled.Length == n ? tiled : engine.TensorSlice(tiled, new[] { 0 }, new[] { n });
+    }
+
+    /// <summary>
+    /// Per-phase means of a 1-D series: element s is the mean of series[i] over the i with i % period == s
+    /// (0 for a phase with no samples).
+    /// </summary>
+    internal static Tensor<T> PhaseMeans<T>(Tensor<T> series, int period)
+    {
+        var engine = Engine;
+        int n = series.Length;
+        int rows = (n + period - 1) / period;
+        int padding = rows * period - n;
+        var values = series;
+        var mask = Tensor<T>.CreateOnes(new[] { n });
+        if (padding > 0)
+        {
+            values = engine.TensorConcatenate(new[] { series, Tensor<T>.CreateZeros(new[] { padding }) }, 0);
+            mask = engine.TensorConcatenate(new[] { mask, Tensor<T>.CreateZeros(new[] { padding }) }, 0);
+        }
+
+        var sums = engine.ReduceSum(engine.Reshape(values, new[] { rows, period }), new[] { 0 }, false);
+        var counts = engine.ReduceSum(engine.Reshape(mask, new[] { rows, period }), new[] { 0 }, false);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return engine.TensorDivide(sums, engine.TensorMax(counts, numOps.One));
+    }
+
+    /// <summary>The columns of a matrix as separate 1-D tensors.</summary>
+    internal static Tensor<T>[] Columns<T>(Matrix<T> x)
+    {
+        var data = ToTensor(x);
+        var columns = new Tensor<T>[x.Columns];
+        for (int j = 0; j < columns.Length; j++)
+        {
+            columns[j] = Engine.TensorSliceAxis(data, 1, j);
+        }
+
+        return columns;
+    }
+
+    /// <summary>0, 1, ..., n - 1 as an int tensor.</summary>
+    internal static Tensor<int> Range(int n) => Engine.TensorArange<int>(0, n, 1);
+
+    /// <summary>The entries of an int tensor where a 0/1 mask equals <paramref name="flag"/> (1 or 0), in order.</summary>
+    internal static Tensor<int> SelectWhere<T>(Tensor<int> items, Tensor<T> mask01, T flag)
+        => Engine.TensorMaskedSelect(items, Engine.TensorEqScalar(mask01, flag));
+
+    /// <summary>
+    /// Assembles per-row values delivered in pieces: the row ids of all pieces together are a permutation
+    /// of 0..n-1, and the result holds, at each row id, the value delivered for it.
+    /// </summary>
+    internal static Tensor<T> AssembleByRow<T>(List<Tensor<int>> rowPieces, List<Tensor<T>> valuePieces)
+    {
+        var engine = Engine;
+        var rows = rowPieces.Count == 1 ? rowPieces[0] : engine.TensorConcatenate(rowPieces.ToArray(), 0);
+        var values = valuePieces.Count == 1 ? valuePieces[0] : engine.TensorConcatenate(valuePieces.ToArray(), 0);
+        return engine.TensorGather(values, engine.TensorArgsort(rows, 0, false), 0);
+    }
+
+    /// <summary>The projections rows · direction of every row of a [n, d] tensor onto a length-d vector.</summary>
+    internal static Tensor<T> Project<T>(Tensor<T> rows, Vector<T> direction)
+    {
+        var engine = Engine;
+        int n = rows.Shape[0];
+        var column = Tensor<T>.FromVector(direction, new[] { direction.Length, 1 });
+        return engine.Reshape(engine.TensorMatMul(rows, column), new[] { n });
+    }
+
+    /// <summary>Inlier/outlier labels: -1 where score &gt; threshold, 1 otherwise (NaN scores are inliers).</summary>
+    internal static Vector<T> LabelsFromThreshold<T>(Vector<T> scores, T threshold)
+    {
+        if (scores.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var above = engine.TensorGreaterThan(scores.AsTensor(), threshold);
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(above, numOps.FromDouble(-2)), numOps.One).ToVector();
+    }
+
+    /// <summary>
+    /// The number of real entries in each window of <see cref="SlidingWindows"/>: for row i of a length-n
+    /// series, min(n, i + after + 1) - max(0, i - before).
+    /// </summary>
+    internal static int[] SlidingWindowLengths(int n, int before, int after)
+    {
+        var lengths = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            lengths[i] = Math.Min(n, i + after + 1) - Math.Max(0, i - before);
+        }
+
+        return lengths;
+    }
+
+    /// <summary>
+    /// The median of the real entries of each row of a padded window matrix ([n, w], mask 1 at real
+    /// entries); row i has lengths[i] real entries. Even counts average the two middle values.
+    /// </summary>
+    internal static Tensor<T> MaskedRowMedians<T>(Tensor<T> windows, Tensor<T> mask, int[] lengths)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = windows.Shape[0];
+
+        // Padding sorts after every real value, so the real entries occupy the first lengths[i] slots.
+        var padded = engine.TensorMaskedFill(windows, engine.TensorEqScalar(mask, numOps.Zero), numOps.MaxValue);
+        var (sorted, _) = engine.TensorSort(padded, 1, false);
+
+        var lower = new int[n];
+        var upper = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            lower[i] = (lengths[i] - 1) / 2;
+            upper[i] = lengths[i] / 2;
+        }
+
+        var low = engine.TensorTakeAlongDim(sorted, Tensor<int>.FromVector(Vector<int>.Wrap(lower), new[] { n, 1 }), 1);
+        var high = engine.TensorTakeAlongDim(sorted, Tensor<int>.FromVector(Vector<int>.Wrap(upper), new[] { n, 1 }), 1);
+
+        // Halve before adding so large values cannot overflow; for an odd count both picks are the middle
+        // value and v / 2 + v / 2 == v exactly.
+        T half = numOps.FromDouble(0.5);
+        var median = engine.TensorAdd(engine.TensorMultiplyScalar(low, half), engine.TensorMultiplyScalar(high, half));
+        return engine.Reshape(median, new[] { n });
+    }
+
+    /// <summary>
+    /// Per-column medians of a [n, d] tensor (n &gt; 0); an even n averages the two middle values.
+    /// </summary>
+    internal static Tensor<T> ColumnMedians<T>(Tensor<T> data)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = data.Shape[0];
+        var (sorted, _) = engine.TensorSort(data, 0, false);
+        var low = engine.TensorSliceAxis(sorted, 0, (n - 1) / 2);
+        var high = engine.TensorSliceAxis(sorted, 0, n / 2);
+
+        // Halve before adding so large values cannot overflow; for an odd n both picks are the middle value
+        // and v / 2 + v / 2 == v exactly.
+        T half = numOps.FromDouble(0.5);
+        return engine.TensorAdd(engine.TensorMultiplyScalar(low, half), engine.TensorMultiplyScalar(high, half));
+    }
+
+    /// <summary>
+    /// The given percentile (0-100) of every column of an already column-sorted [n, d] tensor, by linear
+    /// interpolation between the order statistics around index p / 100 * (n - 1).
+    /// </summary>
+    internal static Tensor<T> SortedColumnPercentile<T>(Tensor<T> sortedColumns, double percentile)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = sortedColumns.Shape[0];
+        double index = (percentile / 100.0) * (n - 1);
+        int lower = (int)Math.Floor(index);
+        int upper = (int)Math.Ceiling(index);
+
+        if (lower == upper || upper >= n)
+        {
+            return engine.TensorSliceAxis(sortedColumns, 0, Math.Min(lower, n - 1));
+        }
+
+        T fraction = numOps.FromDouble(index - lower);
+        var low = engine.TensorSliceAxis(sortedColumns, 0, lower);
+        var high = engine.TensorSliceAxis(sortedColumns, 0, upper);
+        return engine.TensorAdd(low, engine.TensorMultiplyScalar(engine.TensorSubtract(high, low), fraction));
+    }
+
+    /// <summary>
+    /// The quantile q of every column of an already column-sorted [n, d] tensor, as
+    /// StatisticsHelper.CalculateQuantile computes it: position = (n - 1) * q,
+    /// sorted[i] * (1 - f) + sorted[i + 1] * f with i = floor(position), f = position - i.
+    /// </summary>
+    internal static Tensor<T> SortedColumnQuantile<T>(Tensor<T> sortedColumns, double quantile)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = sortedColumns.Shape[0];
+        T position = numOps.Multiply(numOps.FromDouble(n - 1), numOps.FromDouble(quantile));
+        int index = Convert.ToInt32(numOps.Floor(position));
+        T fraction = numOps.Subtract(position, numOps.FromDouble(index));
+
+        var low = engine.TensorSliceAxis(sortedColumns, 0, index);
+        if (index + 1 >= n)
+        {
+            return low;
+        }
+
+        var high = engine.TensorSliceAxis(sortedColumns, 0, index + 1);
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(low, numOps.Subtract(numOps.One, fraction)),
+            engine.TensorMultiplyScalar(high, fraction));
+    }
+
+    /// <summary>
+    /// Per row, the largest distance outside the per-column band [low_j, high_j], divided by scale_j:
+    /// (low_j - x_ij) / scale_j below the band, (x_ij - high_j) / scale_j above it, 0 inside (and for NaN).
+    /// Columns whose scale is zero are skipped.
+    /// </summary>
+    internal static Vector<T> MaxOutsideBand<T>(Matrix<T> x, Tensor<T> low, Tensor<T> high, Tensor<T> scale)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var data = ToTensor(x);
+        int rows = x.Rows;
+        var below = engine.TensorSubtract(BroadcastRow(low, rows), data);
+        var above = SubtractRow(data, high);
+        var outside = engine.TensorMax(engine.TensorMax(below, above), numOps.Zero);
+        // Zero-scale columns are skipped: they are divided by 1 instead of 0 (no division by zero for types
+        // such as decimal) and then zeroed; NaN entries (NaN inputs) become 0.
+        var safeScale = engine.TensorAdd(scale, engine.TensorEquals(scale, numOps.Zero));
+        var score = MultiplyRow(DivideRow(outside, safeScale), engine.TensorNotEquals(scale, numOps.Zero));
+        score = engine.TensorMaskedFill(score, engine.TensorIsNan(score), numOps.Zero);
+        return engine.ReduceMax(score, new[] { 1 }, false).ToVector();
+    }
+
+    /// <summary>Per-column median absolute deviation from the given per-column centers.</summary>
+    internal static Tensor<T> ColumnMads<T>(Tensor<T> data, Tensor<T> centers)
+        => ColumnMedians(Engine.TensorAbs(SubtractRow(data, centers)));
+
+    /// <summary>The scatter matrix centered^T centered of already centered rows, divided by divisor.</summary>
+    internal static Tensor<T> Covariance<T>(Tensor<T> centered, T divisor)
+    {
+        var engine = Engine;
+        return engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(centered), centered), divisor);
+    }
+
+    /// <summary>
+    /// Squared Mahalanobis distance of every already centered row: d_i' * inverse * d_i.
+    /// </summary>
+    internal static Tensor<T> MahalanobisSquared<T>(Tensor<T> centered, Tensor<T> inverse)
+    {
+        var engine = Engine;
+        var projected = engine.TensorMatMul(centered, engine.TensorTranspose(inverse));
+        return engine.ReduceSum(engine.TensorMultiply(centered, projected), new[] { 1 }, false);
+    }
+
+    /// <summary>The p x p identity matrix times a scalar.</summary>
+    internal static Tensor<T> ScaledIdentity<T>(int p, T scale)
+        => Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), scale);
+
+    /// <summary>
+    /// The smallest and largest value of a vector, NaN entries ignored; (MaxValue, MinValue) when there is
+    /// no non-NaN entry, as a running min/max started from those bounds gives.
+    /// </summary>
+    internal static (T Min, T Max) MinMaxIgnoringNaN<T>(Vector<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (values.Length == 0)
+        {
+            return (numOps.MaxValue, numOps.MinValue);
+        }
+
+        var engine = Engine;
+        var t = values.AsTensor();
+        var nan = engine.TensorIsNan(t);
+        return (engine.TensorMinValue(engine.TensorMaskedFill(t, nan, numOps.MaxValue)),
+            engine.TensorMaxValue(engine.TensorMaskedFill(t, nan, numOps.MinValue)));
+    }
+
+    /// <summary>
+    /// The element-wise maximum over a list of equal-length vectors, NaN entries ignored; MinValue where
+    /// every entry is NaN or the list is empty.
+    /// </summary>
+    internal static Vector<T> ElementwiseMaxIgnoringNaN<T>(IReadOnlyList<Vector<T>> vectors, int length)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (vectors.Count == 0)
+        {
+            return Engine.Fill(length, numOps.MinValue);
+        }
+
+        var engine = Engine;
+        var stacked = engine.TensorStack(vectors.Select(v => v.AsTensor()).ToArray(), 0);
+        var comparable = engine.TensorMaskedFill(stacked, engine.TensorIsNan(stacked), numOps.MinValue);
+        return engine.ReduceMax(comparable, new[] { 0 }, false).ToVector();
+    }
+
+    /// <summary>
+    /// Min-max normalization against a training range, clamped to [0, 1]; every score maps to 0.5 when the
+    /// range is not above 1e-10.
+    /// </summary>
+    internal static Vector<T> NormalizeToTrainingRange<T>(Vector<T> scores, T trainMin, T trainMax)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T range = numOps.Subtract(trainMax, trainMin);
+        if (!numOps.GreaterThan(range, numOps.FromDouble(1e-10)))
+        {
+            return engine.Fill(scores.Length, numOps.FromDouble(0.5));
+        }
+
+        if (scores.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var normalized = engine.TensorDivideScalar(engine.TensorSubtractScalar(scores.AsTensor(), trainMin), range);
+        return engine.TensorClamp(normalized, numOps.Zero, numOps.One).ToVector();
+    }
+
+    /// <summary>The element-wise mean over a non-empty list of equal-length vectors (summed in list order).</summary>
+    internal static Vector<T> ElementwiseMean<T>(IReadOnlyList<Vector<T>> vectors)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var stacked = engine.TensorStack(vectors.Select(v => v.AsTensor()).ToArray(), 0);
+        return engine.TensorDivideScalar(engine.ReduceSum(stacked, new[] { 0 }, false), numOps.FromDouble(vectors.Count)).ToVector();
+    }
+
+    /// <summary>
+    /// The k nearest reference rows of every query row: their Euclidean distances ([m, k], ascending) and,
+    /// in <paramref name="indices"/>, their row indices. With <paramref name="excludeSelf"/> (query and
+    /// reference are the same rows) each row's own entry is pushed past every real distance first.
+    /// </summary>
+    internal static Tensor<T> NearestNeighbors<T>(Tensor<T> query, Tensor<T> reference, int k, bool excludeSelf,
+        out Tensor<int> indices)
+        => NearestNeighbors(query, reference, k, excludeSelf, false, out indices);
+
+    /// <summary>
+    /// As <see cref="NearestNeighbors{T}(Tensor{T}, Tensor{T}, int, bool, out Tensor{int})"/>, returning
+    /// squared distances when <paramref name="squared"/> is set (the neighbour order is the same).
+    /// </summary>
+    internal static Tensor<T> NearestNeighbors<T>(Tensor<T> query, Tensor<T> reference, int k, bool excludeSelf,
+        bool squared, out Tensor<int> indices)
+    {
+        // Query rows are processed in bounded blocks and each block is reduced to its k nearest before the
+        // next one, so only a [block, n] distance matrix is live, never [m, n]. Row r of the block starting
+        // at first is query row first + r, so its self entry is the diagonal j - r = first.
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int m = query.Shape[0];
+        int n = reference.Shape[0];
+        int d = query.Shape[1];
+        if (m == 0)
+        {
+            indices = Tensor<int>.FromVector(Vector<int>.Wrap(new int[0]), new[] { 0, k });
+            return Tensor<T>.CreateZeros(new[] { 0, k });
+        }
+
+        int rowsPerBlock = (int)Math.Max(1, Math.Min(m, PairBlockElements / Math.Max(1L, n)));
+        var valueParts = new List<Tensor<T>>();
+        var indexParts = new List<Tensor<int>>();
+        for (int first = 0; first < m; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, m - first);
+            var block = engine.TensorSlice(query, new[] { first, 0 }, new[] { count, d });
+            var distances = squared ? PairwiseSquaredDistances(block, reference) : PairwiseDistances(block, reference);
+            if (excludeSelf)
+            {
+                var ones = Tensor<T>.CreateOnes(new[] { count, n });
+                var self = engine.TensorEqScalar(
+                    engine.TensorSubtract(engine.TensorTril(ones, first), engine.TensorTril(ones, first - 1)), numOps.One);
+                distances = engine.TensorMaskedFill(distances, self, numOps.MaxValue);
+            }
+
+            var (sorted, order) = StableSortRows(distances, descending: false);
+            indexParts.Add(engine.TensorSlice(order, new[] { 0, 0 }, new[] { count, k }));
+            valueParts.Add(engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { count, k }));
+        }
+
+        indices = indexParts.Count == 1 ? indexParts[0] : engine.TensorConcatenate(indexParts.ToArray(), 0);
+        return valueParts.Count == 1 ? valueParts[0] : engine.TensorConcatenate(valueParts.ToArray(), 0);
+    }
+
+    /// <summary>values[indices[i, j]] for every entry of a [m, k] index tensor, as a [m, k] tensor.</summary>
+    internal static Tensor<T> GatherByIndex<T>(Tensor<T> values, Tensor<int> indices)
+    {
+        var engine = Engine;
+        int m = indices.Shape[0];
+        int k = indices.Shape[1];
+        if (m == 0 || k == 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { m, k });
+        }
+
+        var flat = engine.Reshape(indices, new[] { m * k });
+        return engine.Reshape(engine.TensorGather(values, flat, 0), new[] { m, k });
+    }
+
+    /// <summary>The rows of a [n, k] int tensor as separate arrays.</summary>
+    internal static int[][] ToJagged(Tensor<int> indices)
+    {
+        int n = indices.Shape[0];
+        int k = indices.Shape[1];
+        var flat = indices.ToArray();
+        var rows = new int[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rows[i] = new int[k];
+            Array.Copy(flat, i * k, rows[i], 0, k);
+        }
+
+        return rows;
+    }
+
+    /// <summary>Equal-length int rows as one [n, k] int tensor.</summary>
+    internal static Tensor<int> FromJagged(int[][] rows, int k)
+    {
+        int n = rows.Length;
+        var flat = new int[n * k];
+        for (int i = 0; i < n; i++)
+        {
+            Array.Copy(rows[i], 0, flat, i * k, k);
+        }
+
+        return Tensor<int>.FromVector(Vector<int>.Wrap(flat), new[] { n, k });
+    }
+
+    /// <summary>The rows of a [n, k] tensor as separate vectors.</summary>
+    internal static Vector<T>[] RowVectors<T>(Tensor<T> m)
+    {
+        int n = m.Shape[0];
+        var rows = new Vector<T>[n];
+        for (int i = 0; i < n; i++)
+        {
+            rows[i] = Engine.TensorSliceAxis(m, 0, i).ToVector();
+        }
+
+        return rows;
+    }
+
+    /// <summary>Equal-length vectors as the rows of one [n, k] tensor.</summary>
+    internal static Tensor<T> StackRows<T>(Vector<T>[] rows)
+        => Engine.TensorStack(rows.Select(r => r.AsTensor()).ToArray(), 0);
+
+    /// <summary>The positions of the non-zero entries of a 1-D tensor, ascending.</summary>
+    internal static int[] NonzeroIndices<T>(Tensor<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        return Engine.TensorNonzero(values).ToArray();
+    }
+
+    /// <summary>The rows of m at the given indices, in order.</summary>
+    internal static Tensor<T> SelectRows<T>(Tensor<T> m, int[] rows)
+    {
+        if (rows.Length == 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { 0, m.Shape[1] });
+        }
+
+        return Engine.TensorIndexSelect(m, Vector<int>.Wrap(rows).AsTensor(), 0);
+    }
+
+    /// <summary>The columns of m at the given indices, in order.</summary>
+    internal static Tensor<T> SelectColumns<T>(Tensor<T> m, int[] columns)
+    {
+        if (columns.Length == 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { m.Shape[0], 0 });
+        }
+
+        return Engine.TensorIndexSelect(m, Vector<int>.Wrap(columns).AsTensor(), 1);
+    }
+
+    /// <summary>The elements of v at the given indices, in order.</summary>
+    internal static Vector<T> SelectElements<T>(Vector<T> v, int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGather(v.AsTensor(), Vector<int>.Wrap(indices).AsTensor(), 0).ToVector();
+    }
+
+    /// <summary>
+    /// Symmetric eigendecomposition with the eigenvalues in descending order ([d]) and the matching
+    /// eigenvectors as the rows of a [d, d] tensor.
+    /// </summary>
+    internal static (Tensor<T> Values, Tensor<T> Vectors) SymmetricEigenDescending<T>(Tensor<T> symmetric)
+    {
+        var engine = Engine;
+        var (values, vectors) = AiDotNet.Helpers.LinalgDispatch<T>.Eigh(symmetric);
+        var order = StableOrder(values, descending: true);
+        var rows = engine.TensorTranspose(engine.TensorIndexSelect(vectors, order, 1));
+        return (engine.TensorGather(values, order, 0), WithLargestComponentPositive(rows));
+    }
+
+    /// <summary>
+    /// Fixes the sign of every row of a [r, d] tensor of eigenvectors / singular vectors so that its
+    /// largest-magnitude entry (the first one among equal magnitudes) is positive, as scikit-learn
+    /// svd_flip does. Eigen solvers return each vector only up to sign, so this makes the result
+    /// deterministic.
+    /// </summary>
+    internal static Tensor<T> WithLargestComponentPositive<T>(Tensor<T> rows)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int r = rows.Shape[0];
+        if (r == 0 || rows.Shape[1] == 0)
+        {
+            return rows;
+        }
+
+        var largest = FirstArgMaxRows(engine.TensorAbs(rows));
+        var pivots = engine.Reshape(engine.TensorTakeAlongDim(rows, engine.Reshape(largest, new[] { r, 1 }), 1), new[] { r });
+        var ones = Tensor<T>.CreateOnes(new[] { r });
+        var signs = engine.TensorWhere(engine.TensorLessThan(pivots, numOps.Zero), engine.TensorNegate(ones), ones);
+        return engine.TensorMultiply(rows, BroadcastColumn(signs, rows.Shape[1]));
+    }
+
+    /// <summary>
+    /// Sorts every row of a [m, k] tensor (ascending, or descending) with tied values kept in their original
+    /// index order, like LINQ <c>OrderBy</c>/<c>OrderByDescending</c>; with <paramref name="lastAmongTies"/> the
+    /// tied values come in reverse index order instead. The engine sort is not documented as stable, so the
+    /// order is taken from a distinct composite key (dense rank of the value within its row, then the index),
+    /// which no tie-breaking rule can reorder. Returns the sorted values and the source index of each.
+    /// </summary>
+    internal static (Tensor<T> Sorted, Tensor<int> Order) StableSortRows<T>(Tensor<T> values, bool descending,
+        bool lastAmongTies = false)
+    {
+        var engine = Engine;
+        int m = values.Shape[0];
+        int k = values.Shape[1];
+        if (m == 0 || k == 0)
+        {
+            return (values, new Tensor<int>(new int[m * k], new[] { m, k }));
+        }
+
+        var (sorted, order) = engine.TensorSort(values, 1, descending);
+        var positions = order.ToArray();
+        var groups = k > 1
+            ? engine.TensorCumSum(engine.TensorNotEquals(
+                engine.TensorSlice(sorted, new[] { 0, 1 }, new[] { m, k - 1 }),
+                engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k - 1 })), 1).Cast<int>().ToArray()
+            : Array.Empty<int>();
+
+        // keys[r, j] = (dense rank of values[r, j] in sort order) * k + (j, or k - 1 - j for the last among ties)
+        var keys = new long[m * k];
+        for (int row = 0; row < m; row++)
+        {
+            for (int p = 0; p < k; p++)
+            {
+                int j = positions[row * k + p];
+                long rank = p == 0 ? 0 : groups[row * (k - 1) + p - 1];
+                keys[row * k + j] = rank * k + (lastAmongTies ? k - 1 - j : j);
+            }
+        }
+
+        var stable = engine.TensorArgsort(new Tensor<long>(keys, new[] { m, k }), 1, false);
+        return (engine.TensorTakeAlongDim(values, stable, 1), stable);
+    }
+
+    /// <summary>
+    /// The indices that sort a 1-D tensor ascending (or descending) with tied values in original index order
+    /// (reverse index order with <paramref name="lastAmongTies"/>); see <see cref="StableSortRows{T}"/>.
+    /// </summary>
+    internal static Tensor<int> StableOrder<T>(Tensor<T> values, bool descending, bool lastAmongTies = false)
+    {
+        int n = values.Length;
+        var (_, order) = StableSortRows(Engine.Reshape(values, new[] { 1, n }), descending, lastAmongTies);
+        return Engine.Reshape(order, new[] { n });
+    }
+
+    /// <summary>
+    /// The index of the first (lowest-index) smallest entry of every row of a [m, k] tensor, as a loop that
+    /// replaces its best only on a strictly smaller value does.
+    /// </summary>
+    internal static Tensor<int> FirstArgMinRows<T>(Tensor<T> values)
+        => FirstArgMaxRows(Engine.TensorNegate(values));
+
+    /// <summary>
+    /// The index of the first (lowest-index) largest entry of every row of a [m, k] tensor, as a loop that
+    /// replaces its best only on a strictly larger value does. The positions holding the row maximum get the
+    /// distinct weights k - j (every other position 0), so the arg max of the weights is unique.
+    /// </summary>
+    internal static Tensor<int> FirstArgMaxRows<T>(Tensor<T> values)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int m = values.Shape[0];
+        int k = values.Shape[1];
+        var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(values, new[] { 1 }, true), new[] { m, k });
+        var weights = BroadcastRow(engine.ScalarMinusTensor(numOps.FromDouble(k), Range(k).Cast<T>()), m);
+        return engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(values, rowMax), weights), 1);
+    }
+
+    /// <summary>
+    /// The index of the last (highest-index) largest entry of every row of a [m, k] tensor, as a loop that
+    /// replaces its best on a value at least as large does (weights j + 1 on the maximal positions).
+    /// </summary>
+    internal static Tensor<int> LastArgMaxRows<T>(Tensor<T> values)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int m = values.Shape[0];
+        int k = values.Shape[1];
+        var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(values, new[] { 1 }, true), new[] { m, k });
+        var weights = BroadcastRow(engine.TensorAddScalar(Range(k).Cast<T>(), numOps.One), m);
+        return engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(values, rowMax), weights), 1);
+    }
+
+    /// <summary>The index of the first (lowest-index) smallest entry of a 1-D tensor.</summary>
+    internal static int FirstArgMin<T>(Tensor<T> values)
+        => FirstArgMinRows(Engine.Reshape(values, new[] { 1, values.Length })).ToArray()[0];
+
+    /// <summary>
+    /// The index of the first (lowest-index) largest entry of a 1-D tensor; for a 0/1 mask, the first set
+    /// position (or 0 when none is set).
+    /// </summary>
+    internal static int FirstArgMax<T>(Tensor<T> values)
+        => FirstArgMaxRows(Engine.Reshape(values, new[] { 1, values.Length })).ToArray()[0];
+
+    /// <summary>
+    /// The per-feature tail terms of ECOD / COPOD as the PyOD reference implementation computes them, for
+    /// the rows of <paramref name="query"/> ([q, d]) against the empirical distribution of the reference
+    /// sample (the training columns, plus the query rows when <paramref name="includeQuery"/>, as PyOD's
+    /// decision_function concatenates X_train and X):
+    /// left = -log(#{v &lt;= x} / N), right = -log(#{v &gt;= x} / N) ([q, d]) and the skewness weights
+    /// skewLeft = -sign(s - 1), skewRight = sign(s + 1) ([d]) with s the sign of the sample skewness, so that
+    /// U_skew = skewLeft * left + skewRight * right.
+    /// </summary>
+    internal static (Tensor<T> Left, Tensor<T> Right, Tensor<T> SkewLeft, Tensor<T> SkewRight) EcdfTails<T>(
+        Vector<T>[] trainingColumns, Tensor<T> query, bool includeQuery)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int q = query.Shape[0];
+        int d = trainingColumns.Length;
+        T eps = numOps.FromDouble(1e-10);
+
+        // Every training column holds the same training rows, so the reference sample size N is shared
+        int referenceLength = (d > 0 ? trainingColumns[0].Length : 0) + (includeQuery ? q : 0);
+        T count = numOps.FromDouble(referenceLength);
+        var lefts = new Tensor<T>[d];
+        var rights = new Tensor<T>[d];
+        var thirdMoments = new Tensor<T>[d];
+
+        for (int j = 0; j < d; j++)
+        {
+            var column = engine.TensorSliceAxis(query, 1, j);
+            var reference = includeQuery
+                ? engine.TensorSort(engine.TensorConcatenate(new[] { trainingColumns[j].AsTensor(), column }, 0), 0, false).Item1
+                : trainingColumns[j].AsTensor();
+            var atMost = engine.TensorDivideScalar(engine.TensorSearchSorted(reference, column, true).Cast<T>(), count);
+            var below = engine.TensorDivideScalar(engine.TensorSearchSorted(reference, column, false).Cast<T>(), count);
+            var atLeast = engine.ScalarMinusTensor(numOps.One, below);
+            lefts[j] = engine.Reshape(engine.TensorNegate(engine.TensorLog(engine.TensorMax(atMost, eps))), new[] { q, 1 });
+            rights[j] = engine.Reshape(engine.TensorNegate(engine.TensorLog(engine.TensorMax(atLeast, eps))), new[] { q, 1 });
+
+            // The skewness m3 / m2^1.5 has the sign of the third central moment m3
+            var deviations = engine.TensorSubtractScalar(reference, engine.TensorMean(reference));
+            thirdMoments[j] = engine.ReduceMean(engine.TensorMultiply(engine.TensorSquare(deviations), deviations), new[] { 0 }, true);
+        }
+
+        // -sign(s - 1) is 1 unless s = 1; sign(s + 1) is 1 unless s = -1
+        var m3 = engine.TensorConcatenate(thirdMoments, 0);
+        var skewLeft = engine.ScalarMinusTensor(numOps.One, engine.TensorGreaterThan(m3, numOps.Zero));
+        var skewRight = engine.ScalarMinusTensor(numOps.One, engine.TensorLessThan(m3, numOps.Zero));
+        return (engine.TensorConcatenate(lefts, 1), engine.TensorConcatenate(rights, 1), skewLeft, skewRight);
+    }
+}

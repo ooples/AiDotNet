@@ -34,6 +34,8 @@ public class MarkowitzOptimizer<T> : IMeanVarianceOptimizer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>Shared stateless default instance for injection as an <see cref="IMeanVarianceOptimizer{T}"/>.</summary>
     public static IMeanVarianceOptimizer<T> Default { get; } = new MarkowitzOptimizer<T>();
 
@@ -84,11 +86,7 @@ public class MarkowitzOptimizer<T> : IMeanVarianceOptimizer<T>
         }
 
         // excess = μ − rf·1
-        var excess = new Vector<T>(n);
-        for (var i = 0; i < n; i++)
-        {
-            excess[i] = NumOps.Subtract(expectedReturns[i], riskFreeRate);
-        }
+        var excess = Engine.Subtract(expectedReturns, Engine.Fill(n, riskFreeRate));
 
         // z = Σ⁻¹·(μ − rf·1), then normalize so the weights sum to 1.
         var z = covariance.Inverse().Multiply(excess);
@@ -127,15 +125,9 @@ public class MarkowitzOptimizer<T> : IMeanVarianceOptimizer<T>
 
         // Scalar invariants of the frontier (Merton's notation):
         //   A = 1ᵀΣ⁻¹μ,  B = μᵀΣ⁻¹μ,  C = 1ᵀΣ⁻¹1,  D = B·C − A².
-        var capA = NumOps.Zero;
-        var capB = NumOps.Zero;
-        var capC = NumOps.Zero;
-        for (var i = 0; i < n; i++)
-        {
-            capA = NumOps.Add(capA, b[i]);                               // sum of Σ⁻¹·μ  = 1ᵀΣ⁻¹μ
-            capB = NumOps.Add(capB, NumOps.Multiply(expectedReturns[i], b[i])); // μᵀΣ⁻¹μ
-            capC = NumOps.Add(capC, a[i]);                               // sum of Σ⁻¹·1  = 1ᵀΣ⁻¹1
-        }
+        var capA = Engine.Sum(b);                           // sum of Σ⁻¹·μ  = 1ᵀΣ⁻¹μ
+        var capB = Engine.DotProduct(expectedReturns, b);   // μᵀΣ⁻¹μ
+        var capC = Engine.Sum(a);                           // sum of Σ⁻¹·1  = 1ᵀΣ⁻¹1
 
         var capD = NumOps.Subtract(NumOps.Multiply(capB, capC), NumOps.Multiply(capA, capA));
         if (!IsUsable(capD))
@@ -150,11 +142,7 @@ public class MarkowitzOptimizer<T> : IMeanVarianceOptimizer<T>
         var lambda = NumOps.Divide(NumOps.Subtract(NumOps.Multiply(capC, targetReturn), capA), capD);
         var gamma = NumOps.Divide(NumOps.Subtract(capB, NumOps.Multiply(capA, targetReturn)), capD);
 
-        var w = new Vector<T>(n);
-        for (var i = 0; i < n; i++)
-        {
-            w[i] = NumOps.Add(NumOps.Multiply(lambda, b[i]), NumOps.Multiply(gamma, a[i]));
-        }
+        var w = Engine.Add(Engine.Multiply(b, lambda), Engine.Multiply(a, gamma));
 
         // By construction these already sum to 1; renormalize to clean up floating-point drift.
         return Normalize(w);
@@ -163,29 +151,13 @@ public class MarkowitzOptimizer<T> : IMeanVarianceOptimizer<T>
     /// <summary>Σ⁻¹·1 — the row sums of the inverse covariance (equivalently Σ⁻¹ times the all-ones vector).</summary>
     private static Vector<T> RowSums(Matrix<T> inverse, int n)
     {
-        var result = new Vector<T>(n);
-        for (var i = 0; i < n; i++)
-        {
-            var sum = NumOps.Zero;
-            for (var j = 0; j < n; j++)
-            {
-                sum = NumOps.Add(sum, inverse[i, j]);
-            }
-
-            result[i] = sum;
-        }
-
-        return result;
+        return Engine.MatrixVectorMultiply(inverse, Engine.Fill(n, NumOps.One));
     }
 
     /// <summary>Scales a weight vector so its entries sum to 1 (fully invested).</summary>
     private static Vector<T> Normalize(Vector<T> weights)
     {
-        var total = NumOps.Zero;
-        for (var i = 0; i < weights.Length; i++)
-        {
-            total = NumOps.Add(total, weights[i]);
-        }
+        var total = Engine.Sum(weights);
 
         if (!IsUsable(NumOps.Abs(total)))
         {
@@ -193,13 +165,7 @@ public class MarkowitzOptimizer<T> : IMeanVarianceOptimizer<T>
                 "Portfolio weights sum to (near) zero; the covariance matrix may be singular or ill-conditioned.");
         }
 
-        var result = new Vector<T>(weights.Length);
-        for (var i = 0; i < weights.Length; i++)
-        {
-            result[i] = NumOps.Divide(weights[i], total);
-        }
-
-        return result;
+        return Engine.Divide(weights, total);
     }
 
     /// <summary>Validates that the covariance is square and non-empty; returns its dimension N.</summary>

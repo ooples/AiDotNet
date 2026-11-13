@@ -525,20 +525,19 @@ public class StringKernel<T>
         if (strings is null) throw new ArgumentNullException(nameof(strings));
 
         int n = strings.Length;
-        var K = new Matrix<T>(n, n);
+        if (n == 0)
+            return new Matrix<T>(0, 0);
 
-        for (int i = 0; i < n; i++)
-        {
-            K[i, i] = _numOps.One; // Normalized kernel has k(x,x) = 1
+        T zero = _numOps.Zero;
 
-            for (int j = i + 1; j < n; j++)
-            {
-                T value = Calculate(strings[i], strings[j]);
-                K[i, j] = value;
-                K[j, i] = value;
-            }
-        }
+        // Each pair is evaluated once (strict upper triangle); K = U + U^T + diag(k(s, s)). The diagonal
+        // is computed rather than assumed to be 1: k(s, s) is 0 for a string with no substrings of the
+        // configured length (for example one shorter than it).
+        var upper = new Matrix<T>(Enumerable.Range(0, n)
+            .Select(i => Enumerable.Range(0, n).Select(j => j > i ? Calculate(strings[i], strings[j]) : zero)));
+        var diagonal = new Vector<T>(strings.Select(text => Calculate(text, text)));
 
-        return K;
+        var engine = AiDotNetEngine.Current;
+        return engine.MatrixAdd(engine.MatrixAdd(upper, engine.MatrixTranspose(upper)), Matrix<T>.CreateDiagonal(diagonal));
     }
 }

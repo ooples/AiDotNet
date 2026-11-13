@@ -112,7 +112,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     #endregion
 
     #region Graph Fields
-    private readonly double[,]? _adjacencyMatrix;
+    // Not readonly: a checkpoint restore replaces the graph (and what is derived from it) rather than
+    // copying into a constructor-built tensor that may be absent or shaped for a different NumNodes.
+    private Tensor<T>? _adjacencyMatrix;
     private readonly Random _random;
     #endregion
 
@@ -214,9 +216,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     /// <param name="onnxModelPath">Path to a pretrained ONNX model file.</param>
     /// <param name="options">STGNN-specific options.</param>
     /// <param name="adjacencyMatrix">Optional pre-defined adjacency matrix for the graph.</param>
-    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
+    /// <para>Every parameter is required: an ONNX model is inference-only, so it takes no optimizer or loss
+    /// function, and the native constructor is the one overload with optional parameters.</para>
     /// <para><b>For Beginners:</b> Use this constructor to load a pretrained STGNN model.
     /// The ONNX model contains the trained spatial and temporal processing layers.
     /// </para>
@@ -224,11 +226,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     public STGNN(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        STGNNOptions<T>? options = null,
-        double[,]? adjacencyMatrix = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        STGNNOptions<T>? options,
+        Tensor<T>? adjacencyMatrix)
+        : base(architecture, new MeanSquaredErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -240,9 +240,8 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new STGNNOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
@@ -257,8 +256,8 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _useGatedFusion = _options.UseGatedFusion;
         _useResidualConnections = _options.UseResidualConnections;
 
-        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
-        _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
+        RequireAdjacencyNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        _adjacencyMatrix = adjacencyMatrix ?? ProximityAdjacency(_numNodes, rowNormalize: true);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
 
@@ -279,7 +278,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     public STGNN(
         NeuralNetworkArchitecture<T> architecture,
         STGNNOptions<T>? options = null,
-        double[,]? adjacencyMatrix = null,
+        Tensor<T>? adjacencyMatrix = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -304,8 +303,8 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _useGatedFusion = _options.UseGatedFusion;
         _useResidualConnections = _options.UseResidualConnections;
 
-        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
-        _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
+        RequireAdjacencyNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
+        _adjacencyMatrix = adjacencyMatrix ?? ProximityAdjacency(_numNodes, rowNormalize: true);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeLayers();
@@ -372,59 +371,6 @@ public partial class STGNN<T> : ForecastingModelBase<T>
             _outputLayer = allDense[allDense.Count - 1];
         }
     }
-
-    /// <summary>
-    /// Creates a default adjacency matrix for the graph.
-    /// </summary>
-    /// <param name="numNodes">Number of nodes in the graph.</param>
-    /// <returns>Adjacency matrix with distance-based weights.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When no graph structure is provided, creates a
-    /// default matrix where nearby nodes (by index) are more connected. In practice,
-    /// you should provide a real adjacency matrix based on actual spatial relationships.
-    /// </para>
-    /// </remarks>
-    private double[,] CreateDefaultAdjacencyMatrix(int numNodes)
-    {
-        var adj = new double[numNodes, numNodes];
-
-        // Create a sparse adjacency with nearby connections
-        for (int i = 0; i < numNodes; i++)
-        {
-            adj[i, i] = 1.0; // Self-connections
-
-            // Connect to nearby nodes (simulate spatial proximity)
-            int range = Math.Max(1, numNodes / 10);
-            for (int j = Math.Max(0, i - range); j <= Math.Min(numNodes - 1, i + range); j++)
-            {
-                if (i != j)
-                {
-                    double distance = Math.Abs(i - j);
-                    adj[i, j] = Math.Exp(-distance / range); // Exponential decay
-                }
-            }
-        }
-
-        // Normalize rows
-        for (int i = 0; i < numNodes; i++)
-        {
-            double rowSum = 0;
-            for (int j = 0; j < numNodes; j++)
-            {
-                rowSum += adj[i, j];
-            }
-            if (rowSum > 0)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    adj[i, j] /= rowSum;
-                }
-            }
-        }
-
-        return adj;
-    }
-
     /// <summary>
     /// Validates custom layers provided by the user.
     /// </summary>
@@ -606,16 +552,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = Math.Min(predictions.Data.Length, actuals.Data.Length);
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], actuals.Data.Span[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -736,10 +673,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         }
 
         var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-        {
-            flattened.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
     }
@@ -772,26 +706,11 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         // new Tensor<T> detached the autodiff graph right before the loss and
         // zeroed every gradient. Express it as a tape-aware matmul against the
         // constant adjacency so gradients flow back through the layer stack.
-        var adj = BuildConstantMatrix(_adjacencyMatrix);                 // [numNodes, numNodes]
+        var adj = Engine.Reshape(_adjacencyMatrix.Contiguous(), new[] { _numNodes, _numNodes });
         var hMat = Engine.Reshape(nodeFeatures, new[] { _numNodes, featuresPerNode });
         var conv = Engine.TensorMatMul(adj, hMat);                       // A H
         return Engine.Reshape(conv, nodeFeatures._shape);
     }
-
-    /// <summary>
-    /// Builds a constant (non-trainable) <see cref="Tensor{T}"/> from the
-    /// adjacency matrix so it can participate in tape-aware matmuls without being
-    /// treated as a learnable parameter.
-    /// </summary>
-    private Tensor<T> BuildConstantMatrix(double[,] matrix)
-    {
-        var data = new T[_numNodes * _numNodes];
-        for (int i = 0; i < _numNodes; i++)
-            for (int j = 0; j < _numNodes; j++)
-                data[i * _numNodes + j] = NumOps.FromDouble(matrix[i, j]);
-        return new Tensor<T>(new[] { _numNodes, _numNodes }, new Vector<T>(data));
-    }
-
     #endregion
 
     #region Forecasting Methods
@@ -829,10 +748,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
 
         var flatInput = FlattenInput(input);
         var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(flatInput.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(flatInput.Data.Span.Slice(0, flatInput.Data.Length), inputData.AsSpan(0, flatInput.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData,
@@ -847,10 +763,7 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(new[] { _numNodes * _forecastHorizon }, new Vector<T>(outputData));
     }
@@ -923,31 +836,22 @@ public partial class STGNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
-        var inputVec = input.ToVector();
-        var predVec = prediction.ToVector();
-
-        // Use actual input size, not calculated expected size
-        int inputSize = inputVec.Length;
+        // [input after the first shiftSize values | leading predictions | zeros], detached.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int inputSize = input.Length;
         int shiftSize = Math.Min(_numNodes * _numFeatures, inputSize);
-        var shifted = new T[inputSize];
-
-        // Copy shifted values from input (avoiding index out of range)
         int copyLen = Math.Max(0, inputSize - shiftSize);
-        for (int i = 0; i < copyLen; i++)
-        {
-            int srcIdx = i + shiftSize;
-            if (srcIdx < inputVec.Length)
-                shifted[i] = inputVec[srcIdx];
-        }
-        // Fill end with prediction values
-        for (int i = 0; i < Math.Min(shiftSize, predVec.Length); i++)
-        {
-            int dstIdx = inputSize - shiftSize + i;
-            if (dstIdx >= 0 && dstIdx < inputSize)
-                shifted[dstIdx] = predVec[i];
-        }
-
-        return new Tensor<T>(new[] { inputSize }, new Vector<T>(shifted));
+        int fill = Math.Max(0, Math.Min(shiftSize, prediction.Length));
+        var parts = new List<Tensor<T>>(3);
+        if (copyLen > 0)
+            parts.Add(Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { inputSize }), 0, inputSize - copyLen, copyLen));
+        if (fill > 0)
+            parts.Add(Engine.TensorNarrow(Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length }), 0, 0, fill));
+        if (inputSize - copyLen - fill > 0)
+            parts.Add(new Tensor<T>(new[] { inputSize - copyLen - fill }));
+        if (parts.Count == 0)
+            return new Tensor<T>(new[] { inputSize });
+        return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.Select(p => p.Contiguous()).ToArray(), 0);
     }
 
     /// <summary>
@@ -996,20 +900,38 @@ public partial class STGNN<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 0 });
 
         int len = samples[0].ToVector().Length;
-        var result = new T[len * quantiles.Length];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        for (int pos = 0; pos < len; pos++)
+        // One row per sample, sorted down each position; quantile q reads row (int)(q * (n - 1)).
+        var rows = new Tensor<T>[samples.Count];
+        for (int s = 0; s < samples.Count; s++)
+            rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s], new[] { samples[s].Length }), 0, 0, len);
+        var grid = Engine.TensorStack(rows, 0);
+
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) > 0)
         {
-            var values = samples.Select(s => NumOps.ToDouble(s.ToVector()[pos])).OrderBy(v => v).ToList();
-
-            for (int q = 0; q < quantiles.Length; q++)
+            // NaN sorts first under the default double comparer; keep that exact ordering.
+            var result = new T[len * quantiles.Length];
+            for (int pos = 0; pos < len; pos++)
             {
-                int idx = (int)(quantiles[q] * (values.Count - 1));
-                result[q * len + pos] = NumOps.FromDouble(values[idx]);
+                var values = samples.Select(s => NumOps.ToDouble(s.ToVector()[pos])).OrderBy(v => v).ToList();
+
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    int idx = (int)(quantiles[q] * (values.Count - 1));
+                    result[q * len + pos] = NumOps.FromDouble(values[idx]);
+                }
             }
+
+            return new Tensor<T>(new[] { quantiles.Length, len }, new Vector<T>(result));
         }
 
-        return new Tensor<T>(new[] { quantiles.Length, len }, new Vector<T>(result));
+        var sorted = Engine.TensorSort(grid, 0, false).Values;
+        var picks = new int[quantiles.Length];
+        for (int q = 0; q < quantiles.Length; q++)
+            picks[q] = (int)(quantiles[q] * (samples.Count - 1));
+
+        return Engine.TensorIndexSelect(sorted, new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks)), 0);
     }
 
     /// <summary>
@@ -1034,21 +956,14 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         var resultVec = quantileResult.ToVector();
 
         int len = samples[0].ToVector().Length;
-        var lowerVec = new T[len];
-        var medianVec = new T[len];
-        var upperVec = new T[len];
+        var flat = Tensor<T>.FromVector(resultVec);
 
-        for (int i = 0; i < len; i++)
-        {
-            lowerVec[i] = resultVec[i];
-            medianVec[i] = resultVec[len + i];
-            upperVec[i] = resultVec[2 * len + i];
-        }
-
-        var shape = new[] { len };
-        return (new Tensor<T>(shape, new Vector<T>(medianVec)),
-                new Tensor<T>(shape, new Vector<T>(lowerVec)),
-                new Tensor<T>(shape, new Vector<T>(upperVec)));
+        // Rows 0, 1 and 2 of the [quantiles, len] block are the lower, median and upper bounds.
+        return (
+            Engine.TensorNarrow(flat, 0, len, len).Contiguous(),
+            Engine.TensorNarrow(flat, 0, 0, len).Contiguous(),
+            Engine.TensorNarrow(flat, 0, 2 * len, len).Contiguous()
+        );
     }
 
     #endregion

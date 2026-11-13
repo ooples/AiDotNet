@@ -224,14 +224,11 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
     /// </remarks>
     public T CalculateGeneratorGANLoss(Vector<T> discriminatorOutput)
     {
-        T loss = NumOps.Zero;
-        double epsilon = 1e-7;
+        T epsilon = NumOps.FromDouble(1e-7);
 
-        for (int i = 0; i < discriminatorOutput.Length; i++)
-        {
-            double d = Math.Max(NumOps.ToDouble(discriminatorOutput[i]), epsilon);
-            loss = NumOps.Add(loss, NumOps.FromDouble(-Math.Log(d)));
-        }
+        // -log(max(D(G(x)), eps))
+        T loss = NumOps.Negate(Engine.TensorSum(
+            Engine.TensorLog(Engine.TensorClampMin(discriminatorOutput.AsTensor(), epsilon))));
 
         return NumOps.Divide(loss, NumOps.FromDouble(discriminatorOutput.Length));
     }
@@ -250,23 +247,16 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
     /// </remarks>
     public T CalculateDiscriminatorLoss(Vector<T> realOutput, Vector<T> fakeOutput)
     {
-        T loss = NumOps.Zero;
-        double epsilon = 1e-7;
+        T epsilon = NumOps.FromDouble(1e-7);
 
         // Real images: want D(x) = 1, so loss = -log(D(x))
-        for (int i = 0; i < realOutput.Length; i++)
-        {
-            double d = Math.Max(NumOps.ToDouble(realOutput[i]), epsilon);
-            loss = NumOps.Add(loss, NumOps.FromDouble(-Math.Log(d)));
-        }
+        T realLogSum = Engine.TensorSum(Engine.TensorLog(Engine.TensorClampMin(realOutput.AsTensor(), epsilon)));
 
         // Fake images: want D(G(x)) = 0, so loss = -log(1 - D(G(x)))
-        for (int i = 0; i < fakeOutput.Length; i++)
-        {
-            double d = NumOps.ToDouble(fakeOutput[i]);
-            double oneMinusD = Math.Max(1.0 - d, epsilon);
-            loss = NumOps.Add(loss, NumOps.FromDouble(-Math.Log(oneMinusD)));
-        }
+        var oneMinusFake = Engine.ScalarMinusTensor(NumOps.One, fakeOutput.AsTensor());
+        T fakeLogSum = Engine.TensorSum(Engine.TensorLog(Engine.TensorClampMin(oneMinusFake, epsilon)));
+
+        T loss = NumOps.Negate(NumOps.Add(realLogSum, fakeLogSum));
 
         // Average over both batches
         int totalSamples = realOutput.Length + fakeOutput.Length;
@@ -278,12 +268,11 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
     /// </summary>
     private T CalculateFeatureLoss(Tensor<T> predictedFeatures, Tensor<T> actualFeatures)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predictedFeatures.Length; i++)
-        {
-            T diff = NumOps.Subtract(predictedFeatures.Data.Span[i], actualFeatures.Data.Span[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
+        // Flat element-wise comparison, as the features are compared position by position.
+        var flatShape = new[] { predictedFeatures.Length };
+        var diff = Engine.TensorSubtract(
+            Engine.Reshape(predictedFeatures, flatShape), Engine.Reshape(actualFeatures, flatShape));
+        T sum = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predictedFeatures.Length));
     }

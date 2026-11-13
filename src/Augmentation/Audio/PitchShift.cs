@@ -103,26 +103,20 @@ public class PitchShift<T> : AudioAugmenterBase<T>
             return waveform.Clone();
         }
 
-        // Convert to double array for processing
-        double[] input = new double[samples];
-        for (int i = 0; i < samples; i++)
-        {
-            input[i] = NumOps.ToDouble(waveform[i]);
-        }
+        // Work on the first `samples` values as a flat tensor
+        var engine = Engine;
+        var input = engine.TensorSlice(engine.Reshape(waveform, [waveform.Length]), [0], [samples]).Contiguous();
 
         // Step 1: Time-stretch by pitchRatio using WSOLA
         // To shift pitch up by ratio, we stretch time by ratio, then resample back
-        double[] stretched = TimeStretchWSOLA(input, pitchRatio);
+        var stretched = TimeStretchWSOLA(engine, input, pitchRatio);
 
         // Step 2: Resample back to original length
-        double[] output = ResampleLinear(stretched, samples);
+        var output = ResampleLinear(engine, stretched, samples);
 
-        // Convert back to tensor
+        // Copy into a tensor of the original shape (values past `samples` stay zero)
         var result = new Tensor<T>(waveform._shape);
-        for (int i = 0; i < samples; i++)
-        {
-            result[i] = NumOps.FromDouble(output[i]);
-        }
+        output.Contiguous().CopyTo(result.AsWritableSpan().Slice(0, samples));
 
         return result;
     }
@@ -130,24 +124,25 @@ public class PitchShift<T> : AudioAugmenterBase<T>
     /// <summary>
     /// Time-stretches audio using WSOLA algorithm.
     /// </summary>
+    /// <param name="engine">The engine used for the tensor operations.</param>
     /// <param name="input">Input audio samples.</param>
     /// <param name="stretchFactor">Factor to stretch by (>1 = longer, &lt;1 = shorter).</param>
     /// <returns>Time-stretched audio.</returns>
-    private double[] TimeStretchWSOLA(double[] input, double stretchFactor)
+    private Tensor<T> TimeStretchWSOLA(IEngine engine, Tensor<T> input, double stretchFactor)
     {
         int inputLength = input.Length;
         int outputLength = (int)(inputLength * stretchFactor);
         if (outputLength < 1) outputLength = 1;
 
-        double[] output = new double[outputLength];
-        double[] windowWeights = new double[outputLength];
+        var output = new Tensor<T>([outputLength]);
+        var windowWeights = new Tensor<T>([outputLength]);
 
-        // Precompute Hann window
-        double[] hannWindow = new double[_frameSize];
-        for (int i = 0; i < _frameSize; i++)
-        {
-            hannWindow[i] = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (_frameSize - 1)));
-        }
+        // Precompute Hann window: 0.5 * (1 - cos(2 pi i / (frameSize - 1)))
+        var phase = engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, _frameSize, 1), NumOps.FromDouble(2 * Math.PI)),
+            NumOps.FromDouble(_frameSize - 1));
+        var hannWindow = engine.TensorMultiplyScalar(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorCos(phase)), NumOps.FromDouble(0.5));
 
         // Synthesis hop size (input hop scaled by stretch factor)
         int synthesisHop = Math.Max(1, (int)(_hopSize * stretchFactor));
@@ -163,124 +158,97 @@ public class PitchShift<T> : AudioAugmenterBase<T>
             // For subsequent frames, find best match using cross-correlation
             if (synthesisPos > 0)
             {
-                int bestOffset = FindBestOffset(input, output, currentAnalysisPos, synthesisPos, inputLength, outputLength);
+                int bestOffset = FindBestOffset(engine, input, output, currentAnalysisPos, synthesisPos, inputLength);
                 currentAnalysisPos = Math.Max(0, Math.Min(inputLength - _frameSize, currentAnalysisPos + bestOffset));
             }
 
-            // Overlap-add the frame with Hann window
-            for (int i = 0; i < _frameSize && synthesisPos + i < outputLength; i++)
-            {
-                if (currentAnalysisPos + i < inputLength)
-                {
-                    output[synthesisPos + i] += input[currentAnalysisPos + i] * hannWindow[i];
-                    windowWeights[synthesisPos + i] += hannWindow[i];
-                }
-            }
+            // Overlap-add the frame with Hann window (the loop bounds keep the whole frame in range)
+            var frame = engine.TensorMultiply(engine.TensorSlice(input, [currentAnalysisPos], [_frameSize]), hannWindow);
+            // Only the frame's span is written back, so each frame costs O(frameSize), not O(output)
+            engine.TensorAdd(engine.TensorSlice(output, [synthesisPos], [_frameSize]), frame).Contiguous()
+                .CopyTo(output.AsWritableSpan().Slice(synthesisPos, _frameSize));
+            engine.TensorAdd(engine.TensorSlice(windowWeights, [synthesisPos], [_frameSize]), hannWindow).Contiguous()
+                .CopyTo(windowWeights.AsWritableSpan().Slice(synthesisPos, _frameSize));
 
             analysisPos += _hopSize;
             synthesisPos += synthesisHop;
         }
 
         // Normalize by window weights to prevent amplitude changes
-        for (int i = 0; i < outputLength; i++)
-        {
-            if (windowWeights[i] > 0.001)
-            {
-                output[i] /= windowWeights[i];
-            }
-        }
-
-        return output;
+        var covered = engine.TensorGreaterThan(windowWeights, NumOps.FromDouble(0.001));
+        var safeWeights = engine.TensorWhere(covered, windowWeights, OnesLike(engine, windowWeights));
+        return engine.TensorWhere(covered, engine.TensorDivide(output, safeWeights), output);
     }
 
     /// <summary>
-    /// Finds the best offset for frame alignment using cross-correlation.
+    /// Offset in [-searchRange, searchRange] (kept inside the input) whose input window best matches,
+    /// by normalized cross-correlation, the last frameSize / 4 output samples before the synthesis
+    /// position; the first best offset wins, and 0 is returned when the overlap is under 4 samples.
     /// </summary>
-    private int FindBestOffset(double[] input, double[] output, int analysisPos, int synthesisPos, int inputLength, int outputLength)
+    private int FindBestOffset(IEngine engine, Tensor<T> input, Tensor<T> output, int analysisPos, int synthesisPos, int inputLength)
     {
-        int bestOffset = 0;
-        double bestCorrelation = double.MinValue;
-
         // Search for best matching position within search range
         int searchStart = -Math.Min(_searchRange, analysisPos);
         int searchEnd = Math.Min(_searchRange, inputLength - analysisPos - _frameSize);
 
         // Use overlap region for correlation (last part of previous frame)
         int overlapSize = Math.Min(_frameSize / 4, synthesisPos);
-        if (overlapSize < 4)
+        if (overlapSize < 4 || searchEnd < searchStart)
         {
             return 0;
         }
 
-        for (int offset = searchStart; offset <= searchEnd; offset++)
-        {
-            double correlation = 0;
-            double norm1 = 0;
-            double norm2 = 0;
+        // Every candidate window at once: [offsets, overlapSize]
+        int offsets = searchEnd - searchStart + 1;
+        var region = engine.TensorSlice(input, [analysisPos + searchStart], [offsets + overlapSize - 1]);
+        var windows = engine.TensorUnfold(region, 0, overlapSize, 1).Contiguous();
+        var reference = engine.TensorSlice(output, [synthesisPos - overlapSize], [overlapSize]).Contiguous();
 
-            int testPos = analysisPos + offset;
-            if (testPos < 0 || testPos + overlapSize > inputLength)
-            {
-                continue;
-            }
+        // Compute normalized cross-correlation (raw correlation when the norm product is tiny)
+        var correlation = engine.TensorMatMul(windows, engine.Reshape(reference, [overlapSize, 1]));
+        T referenceNorm = engine.TensorSum(engine.TensorMultiply(reference, reference));
+        var windowNorms = engine.ReduceSum(engine.TensorMultiply(windows, windows), [1], true);
+        var denominator = engine.TensorSqrt(engine.TensorMultiplyScalar(windowNorms, referenceNorm));
+        var usable = engine.TensorGreaterThan(denominator, NumOps.FromDouble(0.0001));
+        var safeDenominator = engine.TensorWhere(usable, denominator, OnesLike(engine, denominator));
+        var score = engine.TensorWhere(usable, engine.TensorDivide(correlation, safeDenominator), correlation);
 
-            // Compute normalized cross-correlation
-            for (int i = 0; i < overlapSize; i++)
-            {
-                int outIdx = synthesisPos - overlapSize + i;
-                if (outIdx >= 0 && outIdx < outputLength && testPos + i < inputLength)
-                {
-                    double val1 = output[outIdx];
-                    double val2 = input[testPos + i];
-                    correlation += val1 * val2;
-                    norm1 += val1 * val1;
-                    norm2 += val2 * val2;
-                }
-            }
-
-            double denominator = Math.Sqrt(norm1 * norm2);
-            if (denominator > 0.0001)
-            {
-                correlation /= denominator;
-            }
-
-            if (correlation > bestCorrelation)
-            {
-                bestCorrelation = correlation;
-                bestOffset = offset;
-            }
-        }
-
-        return bestOffset;
+        int best = engine.TensorArgMax(engine.Reshape(score, [offsets]), 0).GetFlat(0);
+        return searchStart + best;
     }
 
     /// <summary>
-    /// Resamples audio to target length using linear interpolation.
+    /// Linear resampling to <paramref name="targetLength"/> samples: output i reads source position
+    /// i * (inputLength - 1) / (targetLength - 1); positions at or past the last sample take it.
     /// </summary>
-    private static double[] ResampleLinear(double[] input, int targetLength)
+    /// <summary>
+    /// Returns a tensor shaped like <paramref name="like"/> with every element set to one.
+    /// </summary>
+    private static Tensor<T> OnesLike(IEngine engine, Tensor<T> like)
+    {
+        var ones = new Tensor<T>((int[])like._shape.Clone());
+        engine.TensorFill(ones, NumOps.One);
+        return ones;
+    }
+
+    private static Tensor<T> ResampleLinear(IEngine engine, Tensor<T> input, int targetLength)
     {
         int inputLength = input.Length;
-        double[] output = new double[targetLength];
+        T ratio = NumOps.FromDouble((double)(inputLength - 1) / (targetLength - 1));
+        T last = NumOps.FromDouble(inputLength - 1);
 
-        double ratio = (double)(inputLength - 1) / (targetLength - 1);
+        var srcPos = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, targetLength, 1), ratio);
+        var srcIndex = engine.TensorFloor(srcPos);
+        var atEnd = engine.TensorGreaterThan(srcIndex, NumOps.FromDouble(inputLength - 1.5));
+        var lower = engine.TensorClampMax(srcIndex, last);
+        var upper = engine.TensorClampMax(engine.TensorAddScalar(srcIndex, NumOps.One), last);
+        var frac = engine.TensorMultiply(engine.TensorSubtract(srcPos, srcIndex), engine.ScalarMinusTensor(NumOps.One, atEnd));
 
-        for (int i = 0; i < targetLength; i++)
-        {
-            double srcPos = i * ratio;
-            int srcIndex = (int)srcPos;
-            double frac = srcPos - srcIndex;
-
-            if (srcIndex >= inputLength - 1)
-            {
-                output[i] = input[inputLength - 1];
-            }
-            else
-            {
-                output[i] = input[srcIndex] * (1 - frac) + input[srcIndex + 1] * frac;
-            }
-        }
-
-        return output;
+        var value0 = engine.TensorTake(input, lower.Cast<int>());
+        var value1 = engine.TensorTake(input, upper.Cast<int>());
+        return engine.TensorAdd(
+            engine.TensorMultiply(value0, engine.ScalarMinusTensor(NumOps.One, frac)),
+            engine.TensorMultiply(value1, frac));
     }
 
     /// <inheritdoc />

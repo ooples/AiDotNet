@@ -203,15 +203,19 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         var zeroStep = NumOps.FromDouble(_options.ZeroCoordinateSimplexStep);
         var zeroThreshold = NumOps.FromDouble(_options.ZeroCoordinateThreshold);
 
+        // Vertex i moves coordinate i by relativeStep * x_i, or by zeroStep when |x_i| <= zeroThreshold.
+        var engine = Engine;
+        var startTensor = start.AsTensor();
+        var nonZero = engine.TensorGreaterThan(engine.TensorAbs(startTensor), zeroThreshold);
+        var steps = engine.TensorWhere(
+            nonZero,
+            engine.TensorMultiplyScalar(startTensor, relativeStep),
+            engine.TensorAddScalar(new Tensor<T>(new[] { n }), zeroStep)).AsVector();
+        var offsets = Matrix<T>.CreateDiagonal(steps);
+
         for (int i = 0; i < n; i++)
         {
-            var vertex = start.Clone();
-            bool coordinateIsEffectivelyZero =
-                NumOps.LessThanOrEquals(NumOps.Abs(start[i]), zeroThreshold);
-            vertex[i] = coordinateIsEffectivelyZero
-                ? NumOps.Add(start[i], zeroStep)
-                : NumOps.Add(start[i], NumOps.Multiply(relativeStep, start[i]));
-            simplex.Add(vertex);
+            simplex.Add((Vector<T>)engine.Add(start, offsets.GetRow(i)));
         }
 
         return simplex;
@@ -310,14 +314,9 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             // relative to the current best value (with tolerance itself as the additive floor so a
             // best value of zero still terminates), which makes it scale-invariant: the same
             // tolerance behaves identically whether objective values are near 1e-6 or near 1e6.
-            if (useSpreadTolerance)
+            if (useSpreadTolerance && SimplexHasConverged(values[0], values[n], tolerance))
             {
-                var spread = NumOps.Abs(NumOps.Subtract(values[n], values[0]));
-                var threshold = NumOps.Multiply(tolerance, NumOps.Add(NumOps.Abs(values[0]), tolerance));
-                if (NumOps.LessThanOrEquals(spread, threshold))
-                {
-                    break;
-                }
+                break;
             }
 
             var centroid = CalculateCentroid(simplex, n);
@@ -327,32 +326,32 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             var reflected = Combine(centroid, Subtract(centroid, worst), _alpha);
             var (reflectedValue, reflectedEvaluation) = objective(reflected);
 
-            if (NumOps.LessThan(reflectedValue, values[0]))
+            if (IsLower(reflectedValue, values[0]))
             {
                 // Reflection produced a new best — try going further in the same direction.
                 // xe = centroid + gamma * (xr - centroid)
                 var expanded = Combine(centroid, Subtract(reflected, centroid), _gamma);
                 var (expandedValue, expandedEvaluation) = objective(expanded);
 
-                bool takeExpanded = NumOps.LessThan(expandedValue, reflectedValue);
+                bool takeExpanded = IsLower(expandedValue, reflectedValue);
                 simplex[n] = takeExpanded ? expanded : reflected;
                 values[n] = takeExpanded ? expandedValue : reflectedValue;
                 evaluations[n] = takeExpanded ? expandedEvaluation : reflectedEvaluation;
             }
-            else if (NumOps.LessThan(reflectedValue, values[n - 1]))
+            else if (IsLower(reflectedValue, values[n - 1]))
             {
                 // Better than the second-worst but not a new best: accept the reflection as-is.
                 simplex[n] = reflected;
                 values[n] = reflectedValue;
                 evaluations[n] = reflectedEvaluation;
             }
-            else if (NumOps.LessThan(reflectedValue, values[n]))
+            else if (IsLower(reflectedValue, values[n]))
             {
                 // Outside contraction: xoc = centroid + beta * (xr - centroid)
                 var contracted = Combine(centroid, Subtract(reflected, centroid), _beta);
                 var (contractedValue, contractedEvaluation) = objective(contracted);
 
-                if (NumOps.LessThanOrEquals(contractedValue, reflectedValue))
+                if (IsLowerOrEqual(contractedValue, reflectedValue))
                 {
                     simplex[n] = contracted;
                     values[n] = contractedValue;
@@ -369,7 +368,7 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
                 var contracted = Combine(centroid, Subtract(worst, centroid), _beta);
                 var (contractedValue, contractedEvaluation) = objective(contracted);
 
-                if (NumOps.LessThan(contractedValue, values[n]))
+                if (IsLower(contractedValue, values[n]))
                 {
                     simplex[n] = contracted;
                     values[n] = contractedValue;
@@ -383,7 +382,7 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
 
             SortSimplex(simplex, values, evaluations);
 
-            AdaptCoefficients(NumOps.Subtract(previousBest, values[0]));
+            AdaptCoefficients(previousBest, values[0]);
             previousBest = values[0];
 
             if (onIteration is not null && onIteration(iteration, simplex[0], values[0], evaluations[0]))
@@ -408,7 +407,7 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
             var value = values[i];
             var evaluation = evaluations[i];
             int j = i - 1;
-            while (j >= 0 && NumOps.GreaterThan(values[j], value))
+            while (j >= 0 && IsLower(value, values[j]))
             {
                 simplex[j + 1] = simplex[j];
                 values[j + 1] = values[j];
@@ -479,6 +478,26 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <param name="improvement">
     /// How much the best objective value improved this iteration (positive means it got better).
     /// </param>
+    /// <summary>True when <paramref name="value"/> is strictly lower (better) than <paramref name="other"/>.</summary>
+    private bool IsLower(T value, T other) => NumOps.LessThan(value, other);
+
+    /// <summary>True when <paramref name="value"/> is lower than or equal to <paramref name="other"/>.</summary>
+    private bool IsLowerOrEqual(T value, T other) => NumOps.LessThanOrEquals(value, other);
+
+    /// <summary>
+    /// The relative spread test: |worst - best| &lt;= tolerance * (|best| + tolerance).
+    /// </summary>
+    private bool SimplexHasConverged(T best, T worst, T tolerance)
+    {
+        var spread = NumOps.Abs(NumOps.Subtract(worst, best));
+        var threshold = NumOps.Multiply(tolerance, NumOps.Add(NumOps.Abs(best), tolerance));
+        return NumOps.LessThanOrEquals(spread, threshold);
+    }
+
+    /// <summary>Adapts the coefficients to the improvement previousBest - currentBest.</summary>
+    private void AdaptCoefficients(T previousBest, T currentBest)
+        => AdaptCoefficients(NumOps.Subtract(previousBest, currentBest));
+
     private void AdaptCoefficients(T improvement)
     {
         if (!_options.UseAdaptiveParameters)

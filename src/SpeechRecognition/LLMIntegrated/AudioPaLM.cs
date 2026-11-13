@@ -49,7 +49,7 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
                 Source = "Rubenstein et al. 2023 §3.6: the finetuning setup of Chowdhery et al. 2022 §6.1.2, Adafactor with a "
                         + "constant learning rate of 5e-5, dropout 0.1, loss masking on the inputs.")]
 [TaskVariantOf(typeof(AiDotNet.TextToSpeech.MultiModal.AudioPaLM<>), "speech recognition")]
-public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     private readonly AudioPaLMOptions _options;
     private readonly AudioPalmCore<T> _core;
@@ -229,18 +229,31 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         ThrowIfDisposed();
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var transcript = new int[expected.Length];
-        for (int i = 0; i < transcript.Length; i++)
-        {
-            transcript[i] = (int)Math.Round(numOps.ToDouble(expected.GetFlat(i)));
-            if (transcript[i] < 0 || transcript[i] >= _options.VocabSize)
-                throw new ArgumentOutOfRangeException(nameof(expected), $"Transcript ids are text tokens in [0, {_options.VocabSize}).");
-        }
+        var transcript = Transcript(expected, nameof(expected));
         var prefix = Prefix(input, null);
         var random = _trainingRandom ??= AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.TrainingSeed);
         TrainWithCustomObjective(input, expected, (_, _) => _core.Loss(prefix, transcript, true, random), Optimizer());
         return true;
+    }
+
+    private int[] Transcript(Tensor<T> ids, string parameterName)
+        => TokenIds(ids, id => id >= 0 && id < _options.VocabSize
+            ? id
+            : throw new ArgumentOutOfRangeException(parameterName, $"Transcript ids are text tokens in [0, {_options.VocabSize})."));
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes: the transcript's cross-entropy after the
+    /// prefix, plus PaLM's z-loss, with dropout off.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        ThrowIfDisposed();
+        var transcript = Transcript(target, nameof(target));
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return _core.Loss(Prefix(input, null), transcript, false, null).GetFlat(0);
     }
 
     /// <inheritdoc />

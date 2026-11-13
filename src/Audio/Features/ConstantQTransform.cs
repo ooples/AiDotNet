@@ -283,16 +283,7 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         var cqt = Transform(audio);
 
-        for (int i = 0; i < cqt.Shape[0]; i++)
-        {
-            for (int j = 0; j < cqt.Shape[1]; j++)
-            {
-                double mag = NumOps.ToDouble(cqt[i, j]);
-                cqt[i, j] = NumOps.FromDouble(Math.Pow(mag, power));
-            }
-        }
-
-        return cqt;
+        return Engine.TensorPower(cqt, NumOps.FromDouble(power));
     }
 
     /// <summary>
@@ -306,18 +297,16 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
         var cqt = TransformPower(audio, 2.0);
 
-        for (int i = 0; i < cqt.Shape[0]; i++)
-        {
-            for (int j = 0; j < cqt.Shape[1]; j++)
-            {
-                double power = NumOps.ToDouble(cqt[i, j]);
-                double db = 10.0 * Math.Log10(Math.Max(power, 1e-10) / (refValue * refValue));
-                db = Math.Max(db, minDb);
-                cqt[i, j] = NumOps.FromDouble(db);
-            }
-        }
-
-        return cqt;
+        // db = max(10 log10(max(power, 1e-10) / ref^2), minDb); NaN propagates as Math.Max does.
+        T floor = NumOps.FromDouble(1e-10);
+        var floored = Engine.TensorWhere(
+            Engine.TensorLessThan(cqt, floor), Tensor<T>.CreateDefault(cqt.Shape.ToArray(), floor), cqt);
+        var db = Engine.TensorMultiplyScalar(
+            Engine.TensorLog10(Engine.TensorDivideScalar(floored, NumOps.FromDouble(refValue * refValue))),
+            NumOps.FromDouble(10.0));
+        T minimum = NumOps.FromDouble(minDb);
+        return Engine.TensorWhere(
+            Engine.TensorLessThan(db, minimum), Tensor<T>.CreateDefault(db.Shape.ToArray(), minimum), db);
     }
 
     /// <summary>

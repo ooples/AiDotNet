@@ -11,6 +11,7 @@ name: Website Performance Claims
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [master]
   schedule:
@@ -26,6 +27,7 @@ concurrency:
 
 jobs:
   claims:
+    if: ${{ github.event.pull_request.draft != true }}
     name: Website performance claims
     runs-on: ubuntu-latest
     timeout-minutes: 5

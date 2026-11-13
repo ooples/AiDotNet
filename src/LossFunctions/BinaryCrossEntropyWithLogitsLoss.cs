@@ -65,28 +65,22 @@ public class BinaryCrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T x = predicted[i];
-            T y = actual[i];
+        var x = predicted.AsTensor();
+        var y = actual.AsTensor();
 
-            // max(x, 0)
-            T maxXZero = NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero;
+        // max(x, 0)
+        var maxXZero = Engine.TensorMax(x, NumOps.Zero);
 
-            // x * y
-            T xy = NumOps.Multiply(x, y);
+        // x * y
+        var xy = Engine.TensorMultiply(x, y);
 
-            // log(1 + exp(-|x|)) — softplus(-|x|), guaranteed non-overflowing because
-            // -|x| <= 0 so exp(-|x|) is in (0, 1].
-            T absX = NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Negate(x);
-            T expNegAbsX = NumOps.Exp(NumOps.Negate(absX));
-            T logTerm = NumericalStabilityHelper.SafeLog(NumOps.Add(NumOps.One, expNegAbsX));
+        // log(1 + exp(-|x|)) — softplus(-|x|), guaranteed non-overflowing because
+        // -|x| <= 0 so exp(-|x|) is in (0, 1], so 1 + exp(-|x|) >= 1 never needs the SafeLog floor.
+        var expNegAbsX = Engine.TensorExp(Engine.TensorNegate(Engine.TensorAbs(x)));
+        var logTerm = Engine.TensorLog(Engine.TensorAddScalar(expNegAbsX, NumOps.One));
 
-            // loss_i = max(x,0) - xy + log(1 + exp(-|x|))
-            T term = NumOps.Add(NumOps.Subtract(maxXZero, xy), logTerm);
-            sum = NumOps.Add(sum, term);
-        }
+        // loss_i = max(x,0) - xy + log(1 + exp(-|x|))
+        T sum = Engine.TensorSum(Engine.TensorAdd(Engine.TensorSubtract(maxXZero, xy), logTerm));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }

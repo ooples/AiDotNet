@@ -83,14 +83,12 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
         int featDim = 4;
         T initScale = NumOps.FromDouble(Math.Sqrt(2.0 / featDim));
 
-        // Shared encoder MLP: W1 (featDim x h), W2 (h x 1)
-        var W1 = new Matrix<T>(featDim, h);
-        var W2 = new Matrix<T>(h, 1);
-        for (int f = 0; f < featDim; f++)
-            for (int k = 0; k < h; k++)
-                W1[f, k] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-        for (int k = 0; k < h; k++)
-            W2[k, 0] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+        // Shared encoder MLP: W1 (featDim x h), W2 (h x 1), drawn W1 row-major then W2.
+        var draws = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.CreateRandom(rng, featDim * h + h), NumOps.FromDouble(-0.5)),
+            initScale);
+        var W1 = Engine.TensorSlice(draws, new[] { 0 }, new[] { featDim * h }).Reshape(new[] { featDim, h });
+        var W2 = Engine.TensorSlice(draws, new[] { featDim * h }, new[] { h }).Reshape(new[] { h, 1 });
 
         // Optimization budget, for the same reason CASTLE carries one. `MaxEpochs` here counts RAW
         // full-batch gradient steps, but the reference implementations this family follows use that
@@ -108,124 +106,29 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
         // silently run 2,000 steps, which is not what the option says it does.
         int steps = MaxEpochs;
 
-        T lr = NumOps.FromDouble(LearningRate);
         // Acyclicity warm-up: rho = 0 (no NOTEARS penalty) for the first half of training so the data fit
         // can drive edge probabilities toward the correlations; a bounded fixed penalty is applied after.
         T rho = NumOps.Zero;
+        T boundedRho = NumOps.One;
 
-        // Precompute features for each pair
-        var features = new Matrix<T>(d * d, featDim);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                int idx = i * d + j;
-                features[idx, 0] = cov[i, j];
-                features[idx, 1] = corr[i, j];
-                features[idx, 2] = cov[i, i];
-                features[idx, 3] = cov[j, j];
-            }
+        // Precompute features for each pair (row i*d + j): cov[i,j], corr[i,j], cov[i,i], cov[j,j]
+        var c = Tensor<T>.FromMatrix(cov);
+        var r = Tensor<T>.FromMatrix(corr);
+        var variance = Engine.TensorDiagonal(c);
+        var shape = new[] { d, d };
+        var features = Engine.TensorStack(new[]
+        {
+            c.Reshape(new[] { d * d }),
+            r.Reshape(new[] { d * d }),
+            Engine.TensorBroadcastTo(variance.Reshape(new[] { d, 1 }), shape).Reshape(new[] { d * d }),
+            Engine.TensorBroadcastTo(variance.Reshape(new[] { 1, d }), shape).Reshape(new[] { d * d }),
+        }, 1);
+        var offDiagonal = OffDiagonalMask(d);
+        var absCorr = Engine.TensorAbs(r);
 
         for (int epoch = 0; epoch < steps; epoch++)
         {
-            // Forward: compute edge logits for all pairs
-            var logits = new Matrix<T>(d, d);
-            var P = new Matrix<T>(d, d);
-            var hiddenCache = new Matrix<T>(d * d, h);
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    int idx = i * d + j;
-
-                    // Hidden = sigmoid(features * W1)
-                    for (int k = 0; k < h; k++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int f = 0; f < featDim; f++)
-                            sum = NumOps.Add(sum, NumOps.Multiply(features[idx, f], W1[f, k]));
-                        hiddenCache[idx, k] = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(sum)));
-                    }
-
-                    // Logit = hidden * W2
-                    T logit = NumOps.Zero;
-                    for (int k = 0; k < h; k++)
-                        logit = NumOps.Add(logit, NumOps.Multiply(hiddenCache[idx, k], W2[k, 0]));
-                    logits[i, j] = logit;
-
-                    P[i, j] = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(logit)));
-                }
-
-            // Compute NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
-            var PSquared = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    PSquared[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
-            var expWW = MatrixExponentialTaylor(PSquared, d);
-            T hValPrev = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                hValPrev = NumOps.Add(hValPrev, expWW[i, i]);
-            hValPrev = NumOps.Subtract(hValPrev, NumOps.FromDouble(d));
-
-            var gW1 = new Matrix<T>(featDim, h);
-            var gW2 = new Matrix<T>(h, 1);
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    int idx = i * d + j;
-                    T pij = P[i, j];
-
-                    // Data fit gradient: encourage edges where correlation is strong
-                    T absCorr = NumOps.Abs(corr[i, j]);
-                    T dataGrad = NumOps.Subtract(pij, absCorr);
-
-                    // Acyclicity gradient: d/dP[i,j] of the bounded NOTEARS penalty (rho/2 * h^2),
-                    // where h = tr(exp(P∘P)) - d, so gradient = (rho*h) * [exp(P∘P)^T ∘ 2P][i,j].
-                    // (No augmented-Lagrangian alpha term: this schedule uses a fixed rho, not the
-                    // alpha-accumulating dual ascent that collapsed every edge on correlated data.)
-                    T acycGrad = NumOps.Multiply(
-                        NumOps.Multiply(rho, hValPrev),
-                        NumOps.Multiply(expWW[j, i], NumOps.Multiply(pij, NumOps.FromDouble(2))));
-
-                    T totalGradP = NumOps.Add(dataGrad, acycGrad);
-
-                    // Chain rule: d_loss/d_logit = d_loss/d_P * d_P/d_logit
-                    T sigDeriv = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
-                    T dLogit = NumOps.Multiply(totalGradP, sigDeriv);
-
-                    // d_logit/d_W2
-                    for (int k = 0; k < h; k++)
-                        gW2[k, 0] = NumOps.Add(gW2[k, 0],
-                            NumOps.Multiply(dLogit, hiddenCache[idx, k]));
-
-                    // d_logit/d_hidden -> d_hidden/d_W1
-                    for (int k = 0; k < h; k++)
-                    {
-                        T hk = hiddenCache[idx, k];
-                        T hidSigD = NumOps.Multiply(hk, NumOps.Subtract(NumOps.One, hk));
-                        T dHidden = NumOps.Multiply(dLogit, NumOps.Multiply(W2[k, 0], hidSigD));
-                        for (int f = 0; f < featDim; f++)
-                            gW1[f, k] = NumOps.Add(gW1[f, k],
-                                NumOps.Multiply(dHidden, features[idx, f]));
-                    }
-                }
-
-            // Normalize gradients
-            T normFactor = NumOps.FromDouble(1.0 / (d * (d - 1)));
-            for (int f = 0; f < featDim; f++)
-                for (int k = 0; k < h; k++)
-                    gW1[f, k] = NumOps.Multiply(gW1[f, k], normFactor);
-            for (int k = 0; k < h; k++)
-                gW2[k, 0] = NumOps.Multiply(gW2[k, 0], normFactor);
-
-            // Apply gradients
-            for (int f = 0; f < featDim; f++)
-                for (int k = 0; k < h; k++)
-                    W1[f, k] = NumOps.Subtract(W1[f, k], NumOps.Multiply(lr, gW1[f, k]));
-            for (int k = 0; k < h; k++)
-                W2[k, 0] = NumOps.Subtract(W2[k, 0], NumOps.Multiply(lr, gW2[k, 0]));
+            (W1, W2) = EncoderStep(features, W1, W2, absCorr, offDiagonal, rho, d);
 
             // Apply only a BOUNDED acyclicity penalty in the second half of training (warm-up; see the rho
             // init). The original schedule grew rho ×10 toward 1e16 AND accumulated alpha every epoch, which
@@ -233,37 +136,71 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
             // edge to 0 (the empty graph is trivially acyclic) — recovering no edges. A fixed, modest rho
             // breaks ties toward a DAG without overwhelming the data fit.
             if (epoch >= steps / 2)
-                rho = NumOps.FromDouble(1.0);
+                rho = boundedRho;
         }
 
         // Final inference pass
-        var learnedP = new double[d, d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                int idx = i * d + j;
-
-                T logit = NumOps.Zero;
-                for (int k = 0; k < h; k++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int f = 0; f < featDim; f++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(features[idx, f], W1[f, k]));
-                    T hid = NumOps.FromDouble(Sigmoid(NumOps.ToDouble(sum)));
-                    logit = NumOps.Add(logit, NumOps.Multiply(hid, W2[k, 0]));
-                }
-
-                learnedP[i, j] = Sigmoid(NumOps.ToDouble(logit));
-            }
+        var (learnedProbabilities, _) = EncodeEdges(features, W1, W2, offDiagonal, d);
 
         // Pairwise direction tie-breaks rule out only 2-cycles; project the asymmetric learned
         // probabilities through their net out-flow ordering to guarantee a DAG without assuming
         // that raw marginal variance determines causal direction.
-        return BuildFinalAdjacency(ProjectToDag(learnedP, d), cov, d);
+        return BuildFinalAdjacency(ProjectToDag(learnedProbabilities, d), cov, d);
     }
 
-    private static double Sigmoid(double x) =>
-        x > 20 ? 1.0 : x < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-x));
+    /// <summary>
+    /// Runs the shared encoder on every pair: hidden = sigmoid(features W1), P = sigmoid(hidden W2),
+    /// both saturated beyond ±20; P is [d, d] with a zero diagonal and hidden is [d*d, h].
+    /// </summary>
+    private (Tensor<T> P, Tensor<T> Hidden) EncodeEdges(Tensor<T> features, Tensor<T> W1, Tensor<T> W2,
+        Tensor<T> offDiagonal, int d)
+    {
+        var hidden = ClampedSigmoid(Engine.TensorMatMul(features, W1), 1.0);
+        var logits = Engine.TensorMatMul(hidden, W2).Reshape(new[] { d, d });
+        return (Engine.TensorMultiply(offDiagonal, ClampedSigmoid(logits, 1.0)), hidden);
+    }
+
+    /// <summary>
+    /// One gradient step on the encoder: dL/dP = (P - |corr|) + rho·h·[exp(P∘P)^T ∘ 2P] over the
+    /// off-diagonal pairs, back-propagated through both sigmoids and averaged over the d(d-1) pairs.
+    /// </summary>
+    private (Tensor<T> W1, Tensor<T> W2) EncoderStep(Tensor<T> features, Tensor<T> W1, Tensor<T> W2,
+        Tensor<T> absCorr, Tensor<T> offDiagonal, T rho, int d)
+    {
+        // Forward: compute edge logits for all pairs
+        var (P, hidden) = EncodeEdges(features, W1, W2, offDiagonal, d);
+
+        // Compute NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+        var expWW = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(P, P).ToMatrix(), d));
+        T hValPrev = NumOps.Subtract(Engine.TensorTrace(expWW), NumOps.FromDouble(d));
+
+        // Data fit gradient: encourage edges where correlation is strong
+        var dataGrad = Engine.TensorSubtract(P, absCorr);
+
+        // Acyclicity gradient: d/dP[i,j] of the bounded NOTEARS penalty (rho/2 * h^2),
+        // where h = tr(exp(P∘P)) - d, so gradient = (rho*h) * [exp(P∘P)^T ∘ 2P][i,j].
+        // (No augmented-Lagrangian alpha term: this schedule uses a fixed rho, not the
+        // alpha-accumulating dual ascent that collapsed every edge on correlated data.)
+        var acycGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorTranspose(expWW), Engine.TensorMultiplyScalar(P, NumOps.FromDouble(2))),
+            NumOps.Multiply(rho, hValPrev));
+
+        // Chain rule: d_loss/d_logit = d_loss/d_P * d_P/d_logit
+        var sigDeriv = Engine.TensorMultiply(P, Engine.ScalarMinusTensor(NumOps.One, P));
+        var dLogit = Engine.TensorMultiply(offDiagonal,
+            Engine.TensorMultiply(Engine.TensorAdd(dataGrad, acycGrad), sigDeriv)).Reshape(new[] { d * d, 1 });
+
+        // d_logit/d_W2, then d_logit/d_hidden -> d_hidden/d_W1
+        var gW2 = Engine.TensorMatMul(Engine.TensorTranspose(hidden), dLogit);
+        var hidSigD = Engine.TensorMultiply(hidden, Engine.ScalarMinusTensor(NumOps.One, hidden));
+        var dHidden = Engine.TensorMultiply(Engine.TensorMatMul(dLogit, Engine.TensorTranspose(W2)), hidSigD);
+        var gW1 = Engine.TensorMatMul(Engine.TensorTranspose(features), dHidden);
+
+        // Normalize gradients, then apply them
+        T normFactor = NumOps.FromDouble(1.0 / (d * (d - 1)));
+        T lr = NumOps.FromDouble(LearningRate);
+        return (Engine.TensorSubtract(W1, Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(gW1, normFactor), lr)),
+            Engine.TensorSubtract(W2, Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(gW2, normFactor), lr)));
+    }
 
 }

@@ -48,11 +48,6 @@ public class ProductKernel<T> : IKernelFunction<T>
     private readonly IKernelFunction<T>[] _kernels;
 
     /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new Product kernel from an array of kernels.
     /// </summary>
     /// <param name="kernels">The kernels to combine by multiplication.</param>
@@ -82,7 +77,6 @@ public class ProductKernel<T> : IKernelFunction<T>
         }
 
         _kernels = kernels;
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -117,13 +111,8 @@ public class ProductKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        T product = _numOps.One;
-        foreach (var kernel in _kernels)
-        {
-            product = _numOps.Multiply(product, kernel.Calculate(x1, x2));
-        }
-
-        return product;
+        var values = new Vector<T>(_kernels.Select(kernel => kernel.Calculate(x1, x2)));
+        return AiDotNetEngine.Current.Product(values);
     }
 
     /// <summary>

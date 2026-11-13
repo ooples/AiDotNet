@@ -121,94 +121,75 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
     private (Matrix<T> centers, int[] assignments) KMeansClustering(Matrix<T> data, int k)
     {
         int n = data.Rows;
-        int d = data.Columns;
         var random = RandomHelper.CreateSeededRandom(_randomSeed);
+        var engine = Engine;
+        var points = AnomalyTensorOps.ToTensor(data);
 
         // Initialize centers randomly
-        var centers = new Matrix<T>(k, d);
         var indices = Enumerable.Range(0, n).OrderBy(_ => random.NextDouble()).Take(k).ToArray();
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                centers[i, j] = data[indices[i], j];
-            }
-        }
+        var centers = AnomalyTensorOps.SelectRows(points, indices);
 
         var assignments = new int[n];
         int maxIterations = 100;
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            // Assign points to nearest center
+            // Assign points to nearest center (first on ties)
+            var nearest = AnomalyTensorOps.FirstArgMinRows(AnomalyTensorOps.PairwiseDistances(points, centers)).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
-                T minDist = NumOps.MaxValue;
-                int bestCluster = 0;
-
-                var point = new Vector<T>(data.GetRowReadOnlySpan(i).ToArray());
-
-                for (int c = 0; c < k; c++)
+                if (assignments[i] != nearest[i])
                 {
-                    var centroid = new Vector<T>(centers.GetRowReadOnlySpan(c).ToArray());
-                    var diff = Engine.Subtract(point, centroid);
-                    T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        bestCluster = c;
-                    }
-                }
-
-                if (assignments[i] != bestCluster)
-                {
-                    assignments[i] = bestCluster;
+                    assignments[i] = nearest[i];
                     changed = true;
                 }
             }
 
             if (!changed) break;
 
-            // Update centers
+            // Update centers: cluster means, empty clusters re-initialized from a random point
             var counts = new int[k];
-            var newCenters = new Matrix<T>(k, d);
-
-            for (int i = 0; i < n; i++)
+            foreach (int c in assignments)
             {
-                int c = assignments[i];
                 counts[c]++;
-                for (int j = 0; j < d; j++)
-                {
-                    newCenters[c, j] = NumOps.Add(newCenters[c, j], data[i, j]);
-                }
             }
 
+            var replacement = new int[k];
+            var empty = new int[k];
             for (int c = 0; c < k; c++)
             {
-                if (counts[c] > 0)
+                if (counts[c] == 0)
                 {
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCenters[c, j] = NumOps.Divide(newCenters[c, j], NumOps.FromDouble(counts[c]));
-                    }
-                }
-                else
-                {
-                    // Re-initialize empty cluster
-                    int randomIdx = random.Next(n);
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCenters[c, j] = data[randomIdx, j];
-                    }
+                    replacement[c] = random.Next(n);
+                    empty[c] = 1;
                 }
             }
 
-            centers = newCenters;
+            var membership = ClusterMembership(assignments, k);
+            var means = AnomalyTensorOps.DivideColumn(engine.TensorMatMul(membership, points),
+                engine.TensorMax(engine.ReduceSum(membership, new[] { 1 }, false), NumOps.One));
+            var emptyMask = AnomalyTensorOps.BroadcastColumn(
+                Tensor<int>.FromVector(Vector<int>.Wrap(empty), new[] { k }).Cast<T>(), data.Columns);
+            centers = engine.TensorWhere(emptyMask, AnomalyTensorOps.SelectRows(points, replacement), means);
         }
 
-        return (centers, assignments);
+        return (centers.ToMatrix(), assignments);
     }
+
+    // [k, n] 0/1 membership of point i in cluster c.
+    private Tensor<T> ClusterMembership(int[] assignments, int k)
+    {
+        var engine = Engine;
+        int n = assignments.Length;
+        var labels = Tensor<int>.FromVector(Vector<int>.Wrap(assignments), new[] { n }).Cast<T>();
+        return engine.TensorEquals(
+            AnomalyTensorOps.BroadcastColumn(engine.TensorArange<T>(0, k, 1), n),
+            AnomalyTensorOps.BroadcastRow(labels, k));
+    }
+
+    // Upper bound on the elements of one [rows, n] block of within-cluster distances.
+    private const int DensityBlockElements = 1 << 22;
 
     private Vector<T> ComputeClusterDensities()
     {
@@ -220,57 +201,63 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
+        var engine = Engine;
         int k = clusterCenters.Rows;
-        var densities = new Vector<T>(k);
+        int n = trainingData.Rows;
+        var membership = ClusterMembership(clusterAssignments, k);
+        var clusterSizes = engine.ReduceSum(membership, new[] { 1 }, false);
 
-        for (int c = 0; c < k; c++)
+        // k-distance of every point within its own cluster (itself excluded by index): the
+        // min(numNeighbors, size - 1)-th smallest distance, 0 for a single-point cluster
+        var sizes = new int[k];
+        foreach (int c in clusterAssignments)
         {
-            // Get indices of points in this cluster
-            var clusterIndices = Enumerable.Range(0, trainingData.Rows)
-                .Where(i => clusterAssignments[i] == c)
-                .ToArray();
-
-            if (clusterIndices.Length == 0)
-            {
-                densities[c] = NumOps.One;
-                continue;
-            }
-
-            // Compute average k-distance within cluster
-            T totalKDist = NumOps.Zero;
-            int effectiveK = Math.Min(_numNeighbors, clusterIndices.Length - 1);
-
-            foreach (int pIdx in clusterIndices)
-            {
-                var point = new Vector<T>(trainingData.GetRowReadOnlySpan(pIdx).ToArray());
-
-                var distances = clusterIndices
-                    .Where(qIdx => qIdx != pIdx)
-                    .Select(qIdx =>
-                    {
-                        var other = new Vector<T>(trainingData.GetRowReadOnlySpan(qIdx).ToArray());
-                        var diff = Engine.Subtract(point, other);
-                        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
-                    })
-                    .OrderBy(d => NumOps.ToDouble(d))
-                    .ToArray();
-
-                if (distances.Length > 0 && effectiveK > 0)
-                {
-                    totalKDist = NumOps.Add(totalKDist, distances[Math.Min(effectiveK - 1, distances.Length - 1)]);
-                }
-            }
-
-            // Average k-distance (inverse is density)
-            T avgKDist = clusterIndices.Length > 0
-                ? NumOps.Divide(totalKDist, NumOps.FromDouble(clusterIndices.Length))
-                : NumOps.One;
-
-            T eps = NumOps.FromDouble(1e-10);
-            densities[c] = NumOps.Divide(NumOps.One, NumOps.Add(avgKDist, eps));
+            sizes[c]++;
         }
 
-        return densities;
+        var kthPosition = new int[n];
+        var hasNeighbors = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            int effectiveK = Math.Min(_numNeighbors, sizes[clusterAssignments[i]] - 1);
+            kthPosition[i] = Math.Max(effectiveK - 1, 0);
+            hasNeighbors[i] = effectiveK > 0 ? 1 : 0;
+        }
+
+        // Within-cluster k-distances in bounded row blocks (only [block, n] tensors are live). Row r of the
+        // block starting at first is point first + r, so its self entry is the diagonal j - r = first.
+        var points = AnomalyTensorOps.ToTensor(trainingData);
+        int d = points.Shape[1];
+        int rowsPerBlock = Math.Max(1, Math.Min(n, DensityBlockElements / Math.Max(1, n)));
+        var kParts = new List<Tensor<T>>();
+        for (int first = 0; first < n; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - first);
+            var block = engine.TensorSlice(points, new[] { first, 0 }, new[] { count, d });
+            var blockMembership = engine.TensorSlice(membership, new[] { 0, first }, new[] { k, count });
+            var sameCluster = engine.TensorMatMul(engine.TensorTranspose(blockMembership), membership);
+            var ones = Tensor<T>.CreateOnes(new[] { count, n });
+            var self = engine.TensorSubtract(engine.TensorTril(ones, first), engine.TensorTril(ones, first - 1));
+            var other = engine.TensorEqScalar(engine.TensorSubtract(sameCluster, self), NumOps.Zero);
+            var withinCluster = engine.TensorMaskedFill(AnomalyTensorOps.PairwiseDistances(block, points), other, NumOps.MaxValue);
+            var (sorted, _) = engine.TensorSort(withinCluster, 1, false);
+            var blockPositions = new int[count];
+            Array.Copy(kthPosition, first, blockPositions, 0, count);
+            kParts.Add(engine.Reshape(engine.TensorTakeAlongDim(sorted,
+                Tensor<int>.FromVector(Vector<int>.Wrap(blockPositions), new[] { count, 1 }), 1), new[] { count }));
+        }
+
+        var kDistances = kParts.Count == 1 ? kParts[0] : engine.TensorConcatenate(kParts.ToArray(), 0);
+        kDistances = engine.TensorMultiply(kDistances,
+            Tensor<int>.FromVector(Vector<int>.Wrap(hasNeighbors), new[] { n }).Cast<T>());
+
+        // Average k-distance per cluster (inverse is density); an empty cluster has density 1
+        var totalKDist = engine.Reshape(
+            engine.TensorMatMul(membership, engine.Reshape(kDistances, new[] { n, 1 })), new[] { k });
+        var nonEmpty = engine.TensorGreaterThan(clusterSizes, NumOps.Zero);
+        var avgKDist = engine.TensorDivide(totalKDist, engine.TensorMax(clusterSizes, NumOps.One));
+        var density = engine.TensorReciprocal(engine.TensorAddScalar(avgKDist, NumOps.FromDouble(1e-10)));
+        return engine.TensorWhere(nonEmpty, density, Tensor<T>.CreateOnes(new[] { k })).ToVector();
     }
 
     /// <inheritdoc/>
@@ -292,51 +279,28 @@ public partial class LDCOFDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-        int effectiveK = Math.Min(_numNeighbors, trainingData.Rows - 1);
+        var engine = Engine;
+        int nTraining = trainingData.Rows;
+        int effectiveK = Math.Min(_numNeighbors, nTraining - 1);
         T eps = NumOps.FromDouble(1e-10);
+        var points = AnomalyTensorOps.ToTensor(X);
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
+        // Nearest cluster (first on ties)
+        var nearestCluster = AnomalyTensorOps.FirstArgMinRows(
+            AnomalyTensorOps.PairwiseDistances(points, AnomalyTensorOps.ToTensor(clusterCenters)));
 
-            // Find nearest cluster
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-            for (int c = 0; c < clusterCenters.Rows; c++)
-            {
-                var centroid = new Vector<T>(clusterCenters.GetRowReadOnlySpan(c).ToArray());
-                var diff = Engine.Subtract(point, centroid);
-                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearestCluster = c;
-                }
-            }
+        // Local density 1 / (k-distance + eps), the k-distance being the effectiveK-th smallest distance to the
+        // training points (the largest when effectiveK is 0)
+        // (bounded blocks of query rows; only a [block, nTraining] distance matrix is live)
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        int kthColumn = effectiveK > 0 ? effectiveK - 1 : nTraining - 1;
+        var kDist = AnomalyTensorOps.MapRowBlocks(points, nTraining, block =>
+            engine.TensorSliceAxis(engine.TensorSort(AnomalyTensorOps.PairwiseDistances(block, training), 1, false).Item1, 1, kthColumn));
+        var localDensity = engine.TensorReciprocal(engine.TensorAddScalar(kDist, eps));
 
-            // Compute local density (k-distance to training points)
-            var distances = Enumerable.Range(0, trainingData.Rows)
-                .Select(ti =>
-                {
-                    var trainPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(ti).ToArray());
-                    var diff = Engine.Subtract(point, trainPoint);
-                    return NumOps.Sqrt(Engine.DotProduct(diff, diff));
-                })
-                .OrderBy(d => NumOps.ToDouble(d))
-                .ToArray();
-
-            T kDist = effectiveK > 0 && effectiveK <= distances.Length
-                ? distances[effectiveK - 1]
-                : (distances.Length > 0 ? distances[distances.Length - 1] : NumOps.Zero);
-            T localDensity = NumOps.Divide(NumOps.One, NumOps.Add(kDist, eps));
-
-            // LDCOF score: ratio of cluster density to local density
-            T score = NumOps.Divide(clusterDensities[nearestCluster], NumOps.Add(localDensity, eps));
-
-            scores[i] = score;
-        }
-
-        return scores;
+        // LDCOF score: ratio of cluster density to local density
+        return engine.TensorDivide(
+            engine.TensorGather(clusterDensities.AsTensor(), nearestCluster, 0),
+            engine.TensorAddScalar(localDensity, eps)).ToVector();
     }
 }

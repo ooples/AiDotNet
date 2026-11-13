@@ -56,6 +56,11 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
         "SAM2",
         "VideoLLaMA2",
 
+        // Kokoro reads its predicted durations back to the host and builds the token-to-frame alignment from them, so
+        // the graph's shape and the alignment follow each step's data; a traced plan trained on a NaN loss with every
+        // gradient zero.
+        "Kokoro",
+
         // Video models whose step depends on values computed on the host from the step's own data, which a compiled
         // plan would bake at trace time and replay for every later step (the opt-out also covers their declared and
         // custom objectives, which would otherwise descend the first step's frozen draw):

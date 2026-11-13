@@ -238,7 +238,8 @@ public class CompositeLayerLazyCtorIssue1213Tests
         // a positive count after the first Forward proves the chained
         // resolution actually allocated weights for router + experts.
         // expert1/2: 12→8 (12*8 + 8 bias = 104 each). router: 12→2 (12*2 + 2 = 26).
-        int expectedParams = 2 * (12 * 8 + 8) + (12 * 2 + 2);
+        // W_noise of noisy top-k gating (Shazeer et al. 2017, eq. 4, the default): 12→2, no bias = 24.
+        int expectedParams = 2 * (12 * 8 + 8) + (12 * 2 + 2) + (12 * 2);
         Assert.Equal(expectedParams, moe.ParameterCount);
     }
 }

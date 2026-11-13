@@ -133,27 +133,12 @@ public class CPCAlgorithm<T> : ConstraintBasedBase<T>
         ApplyMeekRules(adj, oriented, d);
 
         // Build weighted adjacency matrix
-        var W = new Matrix<T>(d, d);
+        // Oriented i→j or unoriented edges keep |corr|; j→i edges are skipped.
+        var edgeMask = new bool[d * d];
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                if (!adj[i, j]) continue;
-
-                if (oriented[i, j])
-                {
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-                }
-                else if (oriented[j, i])
-                {
-                    continue; // j→i, skip
-                }
-                else
-                {
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-                }
-            }
-        }
+                edgeMask[i * d + j] = adj[i, j] && (oriented[i, j] || !oriented[j, i]);
+        var W = ApplyEdgeMask(edgeMask, ComputeAbsoluteCorrelationMatrix(data));
 
         return W;
     }

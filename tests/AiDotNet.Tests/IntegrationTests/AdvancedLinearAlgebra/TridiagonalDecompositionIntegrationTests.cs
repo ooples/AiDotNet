@@ -315,5 +315,21 @@ public class TridiagonalDecompositionIntegrationTests
             new TridiagonalDecomposition<double>(A));
     }
 
+    [Theory]
+    [InlineData(TridiagonalAlgorithmType.Householder)]
+    [InlineData(TridiagonalAlgorithmType.Givens)]
+    [InlineData(TridiagonalAlgorithmType.Lanczos)]
+    public void TridiagonalDecomposition_NonSymmetricMatrix_ThrowsArgumentException(TridiagonalAlgorithmType algorithm)
+    {
+        // The orthogonal reduction of a non-symmetric matrix is upper Hessenberg, not tridiagonal;
+        // keeping only the tridiagonal band would make Q*T*Q^T differ from A, so it must be rejected.
+        var A = new Matrix<double>(3, 3);
+        A[0, 0] = 1; A[0, 1] = 2; A[0, 2] = 3;
+        A[1, 0] = 0; A[1, 1] = 1; A[1, 2] = 4;
+        A[2, 0] = 0; A[2, 1] = 0; A[2, 2] = 1;
+
+        Assert.Throws<ArgumentException>(() => new TridiagonalDecomposition<double>(A, algorithm));
+    }
+
     #endregion
 }

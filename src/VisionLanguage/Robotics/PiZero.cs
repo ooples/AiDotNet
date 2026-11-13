@@ -199,79 +199,90 @@ public partial class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageActi
         int instrLen = instrTokens.Length;
 
         // Step 3: VLM backbone produces conditioning representation
-        var condInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            if (instrLen > 0)
-            {
-                double instrVal = NumOps.ToDouble(instrTokens[d % instrLen]);
-                double gate = 1.0 / (1.0 + Math.Exp(-instrVal / 100.0));
-                vis = vis * (0.5 + gate);
-            }
-            condInput[d] = NumOps.FromDouble(vis);
-        }
+        var engine = Engine;
+        // vis[d] * (0.5 + sigmoid(instr[d % instrLen] / 100)).
+        var visFlat = visualFeatures.Reshape([dim]);
+        var condInput = instrLen > 0
+            ? engine.TensorMultiply(
+                visFlat,
+                engine.TensorAddScalar(
+                    engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(instrTokens, dim), NumOps.FromDouble(100.0))),
+                    NumOps.FromDouble(0.5)))
+            : visFlat.Clone();
 
         var conditioningRepr = condInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
             conditioningRepr = Layers[i].Forward(conditioningRepr);
 
-        // Step 4: Extract per-action-dimension conditioning from VLM output
-        var condPerDim = new double[actionDim];
-        for (int a = 0; a < actionDim; a++)
+        // Step 4: Extract per-action-dimension conditioning from VLM output: the mean of
+        // block a = [a * blockSize, min(a * blockSize + blockSize, length)) (0 for an empty block).
+        int totalActions = actionDim * horizon;
+        if (totalActions == 0)
+            return new Tensor<T>([totalActions]);
+
+        int condLength = conditioningRepr.Length;
+        Tensor<T> condPerDim;
+        if (condLength == 0)
         {
-            double sum = 0;
-            int blockSize = Math.Max(1, conditioningRepr.Length / actionDim);
-            int start = a * blockSize;
-            int end = Math.Min(start + blockSize, conditioningRepr.Length);
-            for (int d = start; d < end; d++)
-                sum += NumOps.ToDouble(conditioningRepr[d]);
-            condPerDim[a] = sum / Math.Max(1, end - start);
+            condPerDim = new Tensor<T>([actionDim]);
+        }
+        else
+        {
+            int blockSize = Math.Max(1, condLength / actionDim);
+            var positions = engine.TensorAdd(
+                engine.TensorBroadcastTo(
+                    engine.TensorMultiplyScalar(engine.TensorArange<int>(0, actionDim, 1), blockSize).Reshape([actionDim, 1]),
+                    [actionDim, blockSize]),
+                engine.TensorBroadcastTo(engine.TensorArange<int>(0, blockSize, 1).Reshape([1, blockSize]), [actionDim, blockSize]));
+            var inBlock = engine.TensorLessThan(positions, condLength).Cast<T>();
+            var blockValues = engine.TensorWhere(
+                inBlock,
+                engine.TensorTake(conditioningRepr.Reshape([condLength]), engine.TensorMin(positions, condLength - 1)),
+                new Tensor<T>([actionDim, blockSize]));
+            condPerDim = engine.TensorDivide(
+                engine.ReduceSum(blockValues, [1], false),
+                engine.TensorMax(engine.ReduceSum(inBlock, [1], false), NumOps.One));
         }
 
         // Step 5: Flow matching action expert
         // Initialize from noise (t=0) and integrate velocity field to t=1
-        int totalActions = actionDim * horizon;
-        var actionTrajectory = new double[totalActions];
+        var tiledCond = engine.TensorBroadcastTo(condPerDim.Reshape([1, actionDim]), [horizon, actionDim]);
+        var stepNumber = engine.TensorArange<T>(0, horizon, 1).Reshape([horizon, 1]);
 
-        // Initialize noise at t=0
-        for (int t = 0; t < totalActions; t++)
+        // Initialize noise at t=0: structured initial noise seeded by conditioning,
+        // cond[dimIdx] * 0.01 * sin((stepIdx + 1) pi / (horizon + 1)).
+        var noisePhase = engine.TensorSin(engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(stepNumber, NumOps.One), NumOps.FromDouble(Math.PI / (horizon + 1))));
+        var actionTrajectory = engine.TensorMultiply(
+            engine.TensorMultiplyScalar(tiledCond, NumOps.FromDouble(0.01)), noisePhase).Reshape([totalActions]);
+
+        // Learned velocity field: v(x_t, t, c). Direction: toward the conditioned target
+        // cond[dimIdx] * exp(-0.05 stepIdx) (temporal decay).
+        var target = engine.TensorMultiply(
+            tiledCond, engine.TensorExp(engine.TensorMultiplyScalar(stepNumber, NumOps.FromDouble(-0.05)))).Reshape([totalActions]);
+
+        // ODE integration: Euler method over flow steps from t=0 to t=1. Optimal transport velocity
+        // (target - current) / max(1e-6, 1 - t) with t = s / flowSteps.
+        if (flowSteps > 0)
         {
-            int dimIdx = t % actionDim;
-            int stepIdx = t / actionDim;
-            // Structured initial noise seeded by conditioning
-            actionTrajectory[t] =
-                condPerDim[dimIdx] * 0.01 * Math.Sin((stepIdx + 1) * Math.PI / (horizon + 1));
-        }
-
-        // ODE integration: Euler method over flow steps from t=0 to t=1
-        double dt = 1.0 / flowSteps;
-        for (int s = 0; s < flowSteps; s++)
-        {
-            double t = (double)s / flowSteps;
-
-            for (int idx = 0; idx < totalActions; idx++)
+            T dt = NumOps.FromDouble(1.0 / flowSteps);
+            var remainingTime = engine.TensorMax(
+                engine.ScalarMinusTensor(NumOps.One, engine.TensorDivideScalar(
+                    engine.TensorArange<T>(0, flowSteps, 1), NumOps.FromDouble(flowSteps))),
+                NumOps.FromDouble(1e-6));
+            for (int s = 0; s < flowSteps; s++)
             {
-                int dimIdx = idx % actionDim;
-                int stepIdx = idx / actionDim;
-
-                // Learned velocity field: v(x_t, t, c)
-                // Direction: toward conditioned target
-                double target = condPerDim[dimIdx] * Math.Exp(-0.05 * stepIdx); // Temporal decay
-
-                // Optimal transport velocity: (target - current) / (1 - t)
-                double remainingTime = Math.Max(1e-6, 1.0 - t);
-                double velocity = (target - actionTrajectory[idx]) / remainingTime;
+                var velocity = engine.TensorDivide(
+                    engine.TensorSubtract(target, actionTrajectory),
+                    engine.TensorBroadcastTo(Pick(remainingTime, s), [totalActions]));
 
                 // Euler step
-                actionTrajectory[idx] += velocity * dt;
+                actionTrajectory = engine.TensorAdd(actionTrajectory, engine.TensorMultiplyScalar(velocity, dt));
             }
         }
 
         // Step 6: Bound actions and package result
-        var actions = new Tensor<T>([totalActions]);
-        for (int t = 0; t < totalActions; t++)
-            actions[t] = NumOps.FromDouble(Math.Tanh(actionTrajectory[t]));
+        var actions = engine.TensorTanh(actionTrajectory);
 
         return actions;
     }
@@ -315,10 +326,7 @@ public partial class PiZero<T> : VisionLanguageModelBase<T>, IVisionLanguageActi
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

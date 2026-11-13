@@ -62,16 +62,9 @@ public class JaccardLoss<T> : LossFunctionBase<T>
 
         // Soft IoU (differentiable): intersection = Σ(p*a), union = Σp + Σa - Σ(p*a)
         // This is the standard formulation used by PyTorch and matches the derivative.
-        T intersection = NumOps.Zero;
-        T sumPredicted = NumOps.Zero;
-        T sumActual = NumOps.Zero;
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
-            sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
-            sumActual = NumOps.Add(sumActual, actual[i]);
-        }
+        T intersection = Engine.DotProduct(predicted, actual);
+        T sumPredicted = Engine.Sum(predicted);
+        T sumActual = Engine.Sum(actual);
 
         T union = NumOps.Subtract(NumOps.Add(sumPredicted, sumActual), intersection);
 

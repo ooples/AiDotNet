@@ -47,6 +47,8 @@ namespace AiDotNet.SpeechRecognition.NeMo;
                 WarmupSteps = 15000, PostWarmupDecay = LinearWarmupScheduler.DecayMode.Cosine,
                 ReferenceBatchSize = 2048,
                 Source = "Rekesh et al. 2023, Sec. 4.1: Fast Conformer models were trained using cosine scheduler with a 15k linear warmup, AdamW, global batch size 2048 across 32 GPUs. No learning rate is declared here because the paper states peak rates per decoder (0.0025 RNNT, 0.001 CTC) and this model is neither.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class NeMoMultitask<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

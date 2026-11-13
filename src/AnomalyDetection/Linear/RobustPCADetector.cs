@@ -117,27 +117,10 @@ public partial class RobustPCADetector<T> : AnomalyDetectorBase<T>
         _nFeatures = X.Columns;
 
         // Compute mean and center data
-        _mean = new Vector<T>(_nFeatures);
-        T nT = NumOps.FromDouble(_nSamples);
-
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < _nSamples; i++)
-            {
-                sum = NumOps.Add(sum, X[i, j]);
-            }
-            _mean[j] = NumOps.Divide(sum, nT);
-        }
-
-        var data = new Matrix<T>(_nSamples, _nFeatures);
-        for (int i = 0; i < _nSamples; i++)
-        {
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                data[i, j] = NumOps.Subtract(X[i, j], _mean[j]);
-            }
-        }
+        var values = AnomalyTensorOps.ToTensor(X);
+        var mean = Engine.ReduceMean(values, new[] { 0 }, false);
+        _mean = mean.ToVector();
+        var data = AnomalyTensorOps.SubtractRow(values, mean);
 
         // Set lambda if auto
         T effectiveLambda = _lambda > 0
@@ -157,23 +140,24 @@ public partial class RobustPCADetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private void SolveADMM(Matrix<T> M, T lambda)
+    private void SolveADMM(Tensor<T> M, T lambda)
     {
+        var engine = Engine;
         int n = _nSamples;
         int m = _nFeatures;
 
         // Initialize
-        _lowRank = new Matrix<T>(n, m);
-        _sparse = new Matrix<T>(n, m);
-        var Y = new Matrix<T>(n, m); // Dual variable
+        var lowRank = Tensor<T>.CreateZeros(new[] { n, m });
+        var sparse = Tensor<T>.CreateZeros(new[] { n, m });
+        var Y = Tensor<T>.CreateZeros(new[] { n, m }); // Dual variable
+        _lowRank = lowRank.ToMatrix();
+        _sparse = sparse.ToMatrix();
 
         // Guard against zero-norm inputs to avoid NaN/Inf
-        T normL1 = NormL1(M);
+        T normL1 = engine.TensorSum(engine.TensorAbs(M));
         T eps = NumOps.FromDouble(1e-10);
         if (NumOps.LessThan(normL1, eps))
-        {
             return;
-        }
 
         T mu = NumOps.Divide(NumOps.FromDouble(n * m), NumOps.Multiply(NumOps.FromDouble(4), normL1));
         T muInv = NumOps.Divide(NumOps.One, mu);
@@ -183,159 +167,44 @@ public partial class RobustPCADetector<T> : AnomalyDetectorBase<T>
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Update L
-            var LInput = new Matrix<T>(n, m);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < m; j++)
-                {
-                    LInput[i, j] = NumOps.Add(NumOps.Subtract(M[i, j], _sparse[i, j]), NumOps.Multiply(muInv, Y[i, j]));
-                }
-            }
+            // Update L: singular value thresholding of M - S + Y / mu
+            var scaledDual = engine.TensorMultiplyScalar(Y, muInv);
+            lowRank = SingularValueThreshold(engine.TensorAdd(engine.TensorSubtract(M, sparse), scaledDual), muInv);
 
-            _lowRank = SingularValueThreshold(LInput, muInv);
-
-            // Update S
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < m; j++)
-                {
-                    T val = NumOps.Add(NumOps.Subtract(M[i, j], _lowRank[i, j]), NumOps.Multiply(muInv, Y[i, j]));
-                    _sparse[i, j] = SoftThreshold(val, lambdaMuInv);
-                }
-            }
+            // Update S: soft thresholding of M - L + Y / mu
+            sparse = SoftThreshold(engine.TensorAdd(engine.TensorSubtract(M, lowRank), scaledDual), lambdaMuInv);
 
             // Update Y: Y = Y + mu(M - L - S)
-            T primalResidual = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < m; j++)
-                {
-                    T residual = NumOps.Subtract(NumOps.Subtract(M[i, j], _lowRank[i, j]), _sparse[i, j]);
-                    Y[i, j] = NumOps.Add(Y[i, j], NumOps.Multiply(mu, residual));
-                    primalResidual = NumOps.Add(primalResidual, NumOps.Multiply(residual, residual));
-                }
-            }
-
-            if (NumOps.LessThan(NumOps.Divide(NumOps.Sqrt(primalResidual), nm), toleranceT))
-            {
+            var residual = engine.TensorSubtract(engine.TensorSubtract(M, lowRank), sparse);
+            Y = engine.TensorAdd(Y, engine.TensorMultiplyScalar(residual, mu));
+            // Converged when sqrt(||M - L - S||_F^2) / (n m) < tolerance
+            var primalResidual = engine.ReduceSum(engine.Reshape(engine.TensorSquare(residual), new[] { n * m }),
+                new[] { 0 }, true);
+            var converged = engine.TensorLessThan(engine.TensorDivideScalar(engine.TensorSqrt(primalResidual), nm), toleranceT);
+            if (converged.Cast<int>().ToArray()[0] != 0)
                 break;
-            }
         }
+
+        _lowRank = lowRank.ToMatrix();
+        _sparse = sparse.ToMatrix();
     }
 
-    private Matrix<T> SingularValueThreshold(Matrix<T> M, T tau)
+    // Singular value thresholding: U diag(max(s - tau, 0)) V^T from the (exact) thin SVD of M.
+    private Tensor<T> SingularValueThreshold(Tensor<T> M, T tau)
     {
-        int n = M.Rows;
-        int m = M.Columns;
-        int k = Math.Min(n, m);
-        T eps = NumOps.FromDouble(1e-10);
-
-        var U = new Matrix<T>(n, k);
-        var S = new Vector<T>(k);
-        var V = new Matrix<T>(m, k);
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < k; j++)
-                U[i, j] = NumOps.FromDouble(_random.NextDouble() - 0.5);
-
-        for (int iter = 0; iter < 20; iter++)
-        {
-            // V = M' * U
-            for (int j = 0; j < k; j++)
-            {
-                for (int col = 0; col < m; col++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int row = 0; row < n; row++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(M[row, col], U[row, j]));
-                    V[col, j] = sum;
-                }
-            }
-
-            // Orthogonalize V (Gram-Schmidt)
-            for (int j = 0; j < k; j++)
-            {
-                for (int prev = 0; prev < j; prev++)
-                {
-                    T dot = NumOps.Zero;
-                    for (int row = 0; row < m; row++)
-                        dot = NumOps.Add(dot, NumOps.Multiply(V[row, j], V[row, prev]));
-                    for (int row = 0; row < m; row++)
-                        V[row, j] = NumOps.Subtract(V[row, j], NumOps.Multiply(dot, V[row, prev]));
-                }
-                T normSq = NumOps.Zero;
-                for (int row = 0; row < m; row++)
-                    normSq = NumOps.Add(normSq, NumOps.Multiply(V[row, j], V[row, j]));
-                T norm = NumOps.Sqrt(normSq);
-                if (NumOps.GreaterThan(norm, eps))
-                    for (int row = 0; row < m; row++)
-                        V[row, j] = NumOps.Divide(V[row, j], norm);
-            }
-
-            // U = M * V
-            for (int j = 0; j < k; j++)
-            {
-                for (int row = 0; row < n; row++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int col = 0; col < m; col++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(M[row, col], V[col, j]));
-                    U[row, j] = sum;
-                }
-
-                T sSq = NumOps.Zero;
-                for (int row = 0; row < n; row++)
-                    sSq = NumOps.Add(sSq, NumOps.Multiply(U[row, j], U[row, j]));
-                S[j] = NumOps.Sqrt(sSq);
-
-                if (NumOps.GreaterThan(S[j], eps))
-                    for (int row = 0; row < n; row++)
-                        U[row, j] = NumOps.Divide(U[row, j], S[j]);
-            }
-        }
-
-        // Soft-threshold singular values and reconstruct
-        var result = new Matrix<T>(n, m);
-        for (int c = 0; c < k; c++)
-        {
-            T thresholdedS = NumOps.Subtract(S[c], tau);
-            if (NumOps.LessThan(thresholdedS, NumOps.Zero)) thresholdedS = NumOps.Zero;
-            if (NumOps.GreaterThan(thresholdedS, NumOps.Zero))
-            {
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < m; j++)
-                    {
-                        result[i, j] = NumOps.Add(result[i, j],
-                            NumOps.Multiply(thresholdedS, NumOps.Multiply(U[i, c], V[j, c])));
-                    }
-                }
-            }
-        }
-
-        return result;
+        var engine = Engine;
+        var (U, S, Vh) = LinalgDispatch<T>.Svd(M, false);
+        var thresholded = engine.TensorMax(engine.TensorSubtractScalar(S, tau), NumOps.Zero);
+        return engine.TensorMatMul(AnomalyTensorOps.MultiplyRow(U, thresholded), Vh);
     }
 
-    private T SoftThreshold(T x, T threshold)
+    // x - t where x > t, x + t where x < -t, else 0.
+    private Tensor<T> SoftThreshold(Tensor<T> x, T threshold)
     {
-        if (NumOps.GreaterThan(x, threshold)) return NumOps.Subtract(x, threshold);
-        T negThreshold = NumOps.Negate(threshold);
-        if (NumOps.LessThan(x, negThreshold)) return NumOps.Add(x, threshold);
-        return NumOps.Zero;
-    }
-
-    private T NormL1(Matrix<T> M)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < M.Rows; i++)
-        {
-            for (int j = 0; j < M.Columns; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Abs(M[i, j]));
-            }
-        }
-        return sum;
+        var engine = Engine;
+        var zeros = Tensor<T>.CreateZeros(new[] { x.Shape[0], x.Shape[1] });
+        return engine.TensorWhere(engine.TensorGreaterThan(x, threshold), engine.TensorSubtractScalar(x, threshold),
+            engine.TensorWhere(engine.TensorLessThan(x, NumOps.Negate(threshold)), engine.TensorAddScalar(x, threshold), zeros));
     }
 
     /// <inheritdoc/>
@@ -362,61 +231,30 @@ public partial class RobustPCADetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
+        var engine = Engine;
+        int rows = X.Rows;
 
-        T nSamplesT = NumOps.FromDouble(_nSamples);
+        // For new points, center the point and subtract the average low-rank row (the sparse estimate)
+        var centered = AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), mean.AsTensor());
+        var lowRank = _lowRank;
+        var sparseEstimate = lowRank != null && _nSamples > 0
+            ? AnomalyTensorOps.SubtractRow(centered, engine.ReduceMean(AnomalyTensorOps.ToTensor(lowRank), new[] { 0 }, false))
+            : centered;
+        var score = engine.ReduceSum(engine.TensorSquare(sparseEstimate), new[] { 1 }, false);
 
-        for (int i = 0; i < X.Rows; i++)
+        // For training data, use the precomputed sparse component magnitude
+        var sparse = _sparse;
+        if (isTrainingData && sparse != null)
         {
-            T score;
-
-            // For training data, use the precomputed sparse component magnitude
-            if (isTrainingData && i < _nSamples && _sparse != null)
-            {
-                score = NumOps.Zero;
-                for (int j = 0; j < _nFeatures; j++)
-                {
-                    score = NumOps.Add(score, NumOps.Multiply(_sparse[i, j], _sparse[i, j]));
-                }
-            }
-            else
-            {
-                // For new points, center the point
-                var centered = new Vector<T>(X.Columns);
-                for (int j = 0; j < X.Columns; j++)
-                {
-                    centered[j] = NumOps.Subtract(X[i, j], mean[j]);
-                }
-
-                if (_lowRank != null && _nSamples > 0)
-                {
-                    score = NumOps.Zero;
-                    for (int j = 0; j < X.Columns; j++)
-                    {
-                        T avgLowRank = NumOps.Zero;
-                        for (int k = 0; k < _nSamples; k++)
-                        {
-                            avgLowRank = NumOps.Add(avgLowRank, _lowRank[k, j]);
-                        }
-                        avgLowRank = NumOps.Divide(avgLowRank, nSamplesT);
-
-                        T sparseEst = NumOps.Subtract(centered[j], avgLowRank);
-                        score = NumOps.Add(score, NumOps.Multiply(sparseEst, sparseEst));
-                    }
-                }
-                else
-                {
-                    score = NumOps.Zero;
-                    for (int j = 0; j < X.Columns; j++)
-                    {
-                        score = NumOps.Add(score, NumOps.Multiply(centered[j], centered[j]));
-                    }
-                }
-            }
-
-            scores[i] = NumOps.Sqrt(score);
+            int covered = Math.Min(rows, _nSamples);
+            var sparseScore = engine.ReduceSum(engine.TensorSquare(
+                engine.TensorSlice(AnomalyTensorOps.ToTensor(sparse), new[] { 0, 0 }, new[] { covered, _nFeatures })), new[] { 1 }, false);
+            score = covered == rows
+                ? sparseScore
+                : engine.TensorConcatenate(new[] { sparseScore,
+                    engine.TensorSlice(score, new[] { covered }, new[] { rows - covered }) }, 0);
         }
 
-        return scores;
+        return engine.TensorSqrt(score).ToVector();
     }
 }

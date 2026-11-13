@@ -203,59 +203,35 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         // Standard heuristic (scikit-learn 'scale'): gamma = 1 / (n_features * variance(X))
         if (Math.Abs(_options.Gamma - 1.0) < 1e-15 && Options.KernelType != KernelType.Linear)
         {
-            double totalVar = 0;
-            for (int j = 0; j < x.Columns; j++)
-            {
-                double mean = 0;
-                for (int i = 0; i < x.Rows; i++)
-                    mean += NumOps.ToDouble(x[i, j]);
-                mean /= x.Rows;
-
-                double variance = 0;
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    double diff = NumOps.ToDouble(x[i, j]) - mean;
-                    variance += diff * diff;
-                }
-                totalVar += variance / x.Rows;
-            }
-
-            double autoGamma = totalVar > 1e-10 ? 1.0 / (x.Columns * (totalVar / x.Columns)) : 1.0;
-            Options.Gamma = autoGamma;
+            T totalVar = RegressionEngineOps2.TotalColumnVariance(x);
+            T columns = NumOps.FromDouble(x.Columns);
+            T autoGamma = NumOps.GreaterThan(totalVar, NumOps.FromDouble(1e-10))
+                ? NumOps.Divide(NumOps.One, NumOps.Multiply(columns, NumOps.Divide(totalVar, columns)))
+                : NumOps.One;
+            // The option is a plain configuration number, so the fitted scalar is stored back into it.
+            Options.Gamma = NumOps.ToDouble(autoGamma);
         }
 
         // Auto-scale epsilon relative to y range if using default 0.1
         if (Math.Abs(_options.Epsilon - 0.1) < 1e-10)
         {
-            double yMin = double.MaxValue, yMax = double.MinValue;
-            for (int i = 0; i < y.Length; i++)
+            if (y.Length > 0)
             {
-                double yi = NumOps.ToDouble(y[i]);
-                if (yi < yMin) yMin = yi;
-                if (yi > yMax) yMax = yi;
-            }
-            double yRange = yMax - yMin;
-            if (yRange > 1.0)
-            {
-                _options.Epsilon = yRange * 0.05; // 5% of range
+                var (yMin, yMax) = RegressionEngineOps2.MinMax(y);
+                T yRange = NumOps.Subtract(yMax, yMin);
+                if (NumOps.GreaterThan(yRange, NumOps.One))
+                {
+                    _options.Epsilon = NumOps.ToDouble(NumOps.Multiply(yRange, NumOps.FromDouble(0.05))); // 5% of range
+                }
             }
         }
 
         // Auto-scale C relative to y range if using default 1.0
         if (Math.Abs(_options.C - 1.0) < 1e-10)
         {
-            double yStd = 0;
-            double yMean = 0;
-            for (int i = 0; i < y.Length; i++) yMean += NumOps.ToDouble(y[i]);
-            yMean /= y.Length;
-            for (int i = 0; i < y.Length; i++)
-            {
-                double d = NumOps.ToDouble(y[i]) - yMean;
-                yStd += d * d;
-            }
-            yStd = Math.Sqrt(yStd / y.Length);
-            if (yStd > 1.0)
-                _options.C = yStd;
+            T yStd = RegressionEngineOps2.PopulationStdDev(y);
+            if (NumOps.GreaterThan(yStd, NumOps.One))
+                _options.C = NumOps.ToDouble(yStd);
         }
 
         SequentialMinimalOptimization(x, y);
@@ -288,27 +264,19 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     {
         if (_useOLS && _olsCoefficients is not null)
         {
-            var predictions = new Vector<T>(input.Rows);
-            for (int i = 0; i < input.Rows; i++)
+            if (input.Rows == 0)
             {
-                // Use Engine for vectorized prediction: pred = intercept + x · coef
-                var row = new Vector<T>(Math.Min(input.Columns, _olsCoefficients.Length));
-                for (int j = 0; j < row.Length; j++) row[j] = input[i, j];
-                var coefVec = new Vector<T>(_olsCoefficients.Length);
-                for (int j = 0; j < _olsCoefficients.Length; j++) coefVec[j] = _olsCoefficients[j];
-                predictions[i] = NumOps.Add(_olsIntercept, Engine.DotProduct(row, coefVec));
+                return new Vector<T>(0);
             }
-            return predictions;
+
+            // pred = intercept + x[:, :k] · coef, k = min(columns, coefficient count)
+            int k = Math.Min(input.Columns, _olsCoefficients.Length);
+            var used = k == input.Columns ? input : input.GetSubMatrix(0, 0, input.Rows, k);
+            return RegressionEngineOps2.AddScalar(Engine.MatrixVectorMultiply(used, _olsCoefficients), _olsIntercept);
         }
 
         // Note: SVR doesn't transform input data - predictions use kernel similarity
-        var svrPredictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            svrPredictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return svrPredictions;
+        return KernelPredict(input);
     }
 
     /// <summary>
@@ -344,14 +312,28 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        T result = B;
-        for (int i = 0; i < SupportVectors.Rows; i++)
+        if (SupportVectors.Rows == 0)
         {
-            result = NumOps.Add(result, NumOps.Multiply(Alphas[i],
-                KernelFunction(SupportVectors.GetRow(i), input)));
+            return B;
         }
 
-        return result;
+        return KernelPredict(RegressionEngineOps2.AsRowMatrix(input))[0];
+    }
+
+    /// <summary>
+    /// B + Σ_i alpha_i · K(supportVector_i, row) for every input row at once.
+    /// </summary>
+    private Vector<T> KernelPredict(Matrix<T> input)
+    {
+        int supportCount = SupportVectors.Rows;
+        if (supportCount == 0 || input.Rows == 0)
+        {
+            return Engine.Fill(input.Rows, B);
+        }
+
+        var kernel = RegressionEngineOps2.KernelMatrix(input, SupportVectors, Options);
+        var alphas = Alphas.Length == supportCount ? Alphas : Alphas.GetSubVector(0, supportCount);
+        return RegressionEngineOps2.AddScalar(Engine.MatrixVectorMultiply(kernel, alphas), B);
     }
 
     /// <summary>
@@ -392,13 +374,8 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         int m = x.Rows;
 
         // Precompute the kernel matrix; SMO reads each entry many times.
-        var K = new Matrix<T>(m, m);
-        for (int ki = 0; ki < m; ki++)
-            for (int kj = 0; kj <= ki; kj++)
-            {
-                K[ki, kj] = KernelFunction(x.GetRow(ki), x.GetRow(kj));
-                K[kj, ki] = K[ki, kj]; // Kernel matrix is symmetric
-            }
+        // Kernel matrix is symmetric: keep the lower triangle and mirror it.
+        var K = RegressionEngineOps2.SymmetricFromLower(RegressionEngineOps2.KernelMatrix(x, x, Options));
 
         // The epsilon-insensitive regression dual (Smola and Scholkopf, 2004; LIBSVM's formulation)
         // uses TWO multipliers per training point, one for each side of the epsilon-tube:
@@ -419,22 +396,13 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
         }
 
         int total = 2 * m;
-        var labels = new Vector<T>(total);
-        var linear = new Vector<T>(total);
-        var upperBounds = new Vector<T>(total);
-
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T c = NumOps.FromDouble(_options.C);
 
-        for (int i = 0; i < m; i++)
-        {
-            labels[i] = NumOps.One;
-            labels[i + m] = NumOps.Negate(NumOps.One);
-            linear[i] = NumOps.Subtract(epsilon, y[i]);
-            linear[i + m] = NumOps.Add(epsilon, y[i]);
-            upperBounds[i] = c;
-            upperBounds[i + m] = c;
-        }
+        var epsilons = Engine.Fill(m, epsilon);
+        var labels = Vector<T>.Concatenate(Engine.Fill(m, NumOps.One), Engine.Fill(m, NumOps.Negate(NumOps.One)));
+        var linear = Vector<T>.Concatenate(Engine.Subtract(epsilons, y), Engine.Add(epsilons, y));
+        var upperBounds = Engine.Fill(total, c);
 
         long requestedIterations = _options.MaxIterations > 0
             ? (long)_options.MaxIterations * total
@@ -453,11 +421,7 @@ public partial class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 
         // Collapse the two-sided multipliers back into the signed form the prediction path uses:
         // f(x) = sum_i (a_i - a*_i)·K(x_i, x) + b.
-        var signedAlphas = new Vector<T>(m);
-        for (int i = 0; i < m; i++)
-        {
-            signedAlphas[i] = NumOps.Subtract(dual[i], dual[i + m]);
-        }
+        var signedAlphas = Engine.Subtract(dual.GetSubVector(0, m), dual.GetSubVector(m, m));
 
         B = bias;
         SetSupportVectorState(x, signedAlphas);

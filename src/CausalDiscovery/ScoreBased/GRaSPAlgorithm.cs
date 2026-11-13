@@ -66,7 +66,7 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
         // Initialize ordering using marginal variance (low variance = likely exogenous)
-        var ordering = InitializeOrdering(data, d);
+        var ordering = InitializeOrdering(data);
 
         // Compute initial parent sets and edge count
         var parentSets = ComputeOptimalParents(data, ordering);
@@ -183,29 +183,11 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
     /// <summary>
     /// Initializes ordering based on marginal variance (ascending — low variance first).
     /// </summary>
-    private int[] InitializeOrdering(Matrix<T> data, int d)
+    private int[] InitializeOrdering(Matrix<T> data)
     {
-        int n = data.Rows;
-        var variances = new double[d];
-
-        for (int j = 0; j < d; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            variances[j] = variance / n;
-        }
-
-        var ordering = Enumerable.Range(0, d).ToArray();
-        Array.Sort(ordering, (a, b) => variances[a].CompareTo(variances[b]));
-        return ordering;
+        // Columns ascending by population variance; equal variances keep column order.
+        var variances = Engine.ReduceMean(Engine.TensorSquare(CenterColumns(Tensor<T>.FromMatrix(data))), new[] { 0 }, false);
+        return CausalTensorHelpers.StableArgsort(variances, descending: false);
     }
 
     /// <summary>
@@ -279,55 +261,22 @@ public class GRaSPAlgorithm<T> : ScoreBasedBase<T>
 
     private Matrix<T> BuildAdjacencyMatrix(Matrix<T> data, HashSet<int>[] parentSets, int d)
     {
-        int n = data.Rows;
-        var W = new Matrix<T>(d, d);
-
         // Use multivariate OLS for each child regressed against all its parents jointly
+        // (centered, ridge 1e-10); beta[j] is W[parents[j], child].
+        var x = Tensor<T>.FromMatrix(data);
+        var positions = new List<int>();
+        var coefficients = new List<Tensor<T>>();
         for (int child = 0; child < d; child++)
         {
             var parents = parentSets[child].ToList();
             if (parents.Count == 0) continue;
 
-            int p = parents.Count;
-            double meanC = 0;
-            var parentMeans = new double[p];
-            for (int i = 0; i < n; i++)
-            {
-                meanC += NumOps.ToDouble(data[i, child]);
-                for (int j = 0; j < p; j++)
-                    parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
-            }
-            meanC /= n;
-            for (int j = 0; j < p; j++) parentMeans[j] /= n;
-
-            var XtX = new double[p, p];
-            var Xty = new double[p];
-            for (int i = 0; i < n; i++)
-            {
-                double dy = NumOps.ToDouble(data[i, child]) - meanC;
-                var dx = new double[p];
-                for (int j = 0; j < p; j++)
-                    dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
-                for (int a = 0; a < p; a++)
-                {
-                    Xty[a] += dx[a] * dy;
-                    for (int b = a; b < p; b++)
-                        XtX[a, b] += dx[a] * dx[b];
-                }
-            }
-            for (int a = 0; a < p; a++)
-            {
-                XtX[a, a] += 1e-10;
-                for (int b = a + 1; b < p; b++)
-                    XtX[b, a] = XtX[a, b];
-            }
-
-            var beta = SolveSmallSystem(XtX, Xty, p);
-            for (int j = 0; j < p; j++)
-                W[parents[j], child] = NumOps.FromDouble(beta[j]);
+            var (beta, _) = FitCenteredRegression(x, child, parents.ToArray());
+            positions.AddRange(parents.Select(parent => parent * d + child));
+            coefficients.Add(beta);
         }
 
-        return W;
+        return CausalTensorHelpers.FromTensorValues(d, d, positions, coefficients);
     }
 
     // SolveSmallSystem is inherited from CausalDiscoveryBase<T>

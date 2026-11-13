@@ -141,14 +141,8 @@ public partial class BicubicInterpolation<T> : I2DInterpolation<T>
             dy = _numOps.Divide(_numOps.Subtract(y, _y[j]), _numOps.Subtract(_y[j + 1], _y[j]));
         }
 
-        T[,] p = new T[4, 4];
-        for (int m = -1; m <= 2; m++)
-        {
-            for (int n = -1; n <= 2; n++)
-            {
-                p[m + 1, n + 1] = _z[MathHelper.Clamp(i + m, 0, _z.Rows - 1), MathHelper.Clamp(j + n, 0, _z.Columns - 1)];
-            }
-        }
+        // The clamped cell keeps i - 1 .. i + 2 and j - 1 .. j + 2 inside the grid, so the 4x4 patch is contiguous
+        Matrix<T> p = _z.GetSubMatrix(i - 1, j - 1, 4, 4);
 
         return InterpolateBicubicPatch(p, dx, dy);
     }
@@ -165,25 +159,23 @@ public partial class BicubicInterpolation<T> : I2DInterpolation<T>
     /// formula that considers 16 surrounding points (a 4x4 grid) to create a smooth surface
     /// and then calculates the height at the exact position we want.
     /// </remarks>
-    /// <param name="p">A 4x4 array of z-values around the target point.</param>
+    /// <param name="p">A 4x4 matrix of z-values around the target point.</param>
     /// <param name="x">The normalized x-coordinate within the grid cell (0 to 1).</param>
     /// <param name="y">The normalized y-coordinate within the grid cell (0 to 1).</param>
     /// <returns>The interpolated value at the specified normalized coordinates.</returns>
-    private T InterpolateBicubicPatch(T[,] p, T x, T y)
+    private T InterpolateBicubicPatch(Matrix<T> p, T x, T y)
     {
-        T[,] a = CalculateBicubicCoefficients(p);
-        T result = _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> a = CalculateBicubicCoefficients(p).AsTensor();
 
-        for (int i = 0; i < 4; i++)
-        {
-            for (int j = 0; j < 4; j++)
-            {
-                result = _numOps.Add(result, _numOps.Multiply(a[i, j],
-                    _numOps.Multiply(_numOps.Power(x, _numOps.FromDouble(i)), _numOps.Power(y, _numOps.FromDouble(j)))));
-            }
-        }
+        // terms[i * 4 + j] = x^i * y^j, aligned with a[i * 4 + j]
+        Tensor<T> powers = CubicPowers();
+        // TensorKron promotes rank-1 inputs to [1, 4] matrices, so the [1, 16] result is reshaped to a's [16]
+        Tensor<T> terms = engine.TensorKron(
+            engine.TensorPower(engine.Fill(4, x).AsTensor(), powers),
+            engine.TensorPower(engine.Fill(4, y).AsTensor(), powers)).Reshape(16);
 
-        return result;
+        return engine.TensorSum(engine.TensorMultiply(a, terms));
     }
 
     /// <summary>
@@ -201,48 +193,43 @@ public partial class BicubicInterpolation<T> : I2DInterpolation<T>
     /// This involves solving a system of 16 equations with 16 unknowns - a complex
     /// mathematical operation that's handled automatically by the library.
     /// </remarks>
-    /// <param name="p">A 4x4 array of z-values around the target point.</param>
-    /// <returns>A 4x4 array of bicubic coefficients.</returns>
-    private T[,] CalculateBicubicCoefficients(T[,] p)
+    /// <param name="p">A 4x4 matrix of z-values around the target point.</param>
+    /// <returns>The 16 bicubic coefficients; entry i * 4 + j multiplies x^i * y^j.</returns>
+    private Vector<T> CalculateBicubicCoefficients(Matrix<T> p)
     {
-        T[,] a = new T[4, 4];
-        Matrix<T> coefficients = new Matrix<T>(16, 16);
-        Vector<T> values = new Vector<T>(16);
+        Vector<T> values = p.ToRowVector();
 
-        // Fill the coefficients matrix and values vector
-        for (int i = 0; i < 4; i++)
-        {
-            for (int j = 0; j < 4; j++)
-            {
-                int index = i * 4 + j;
-                values[index] = p[i, j];
+        // Solve the system; the default system is the same for every patch, so its factorization is shared
+        var decomposition = _decomposition ?? DefaultDecomposition.Value;
+        return MatrixSolutionHelper.SolveLinearSystem(values, decomposition);
+    }
 
-                for (int k = 0; k < 4; k++)
-                {
-                    for (int l = 0; l < 4; l++)
-                    {
-                        T xTerm = _numOps.Power(_numOps.FromDouble(i - 1), _numOps.FromDouble(k));
-                        T yTerm = _numOps.Power(_numOps.FromDouble(j - 1), _numOps.FromDouble(l));
-                        coefficients[index, k * 4 + l] = _numOps.Multiply(xTerm, yTerm);
-                    }
-                }
-            }
-        }
+    /// <summary>
+    /// The LU factorization of the fixed 16x16 bicubic system, built once per numeric type.
+    /// </summary>
+    private static readonly Lazy<LuDecomposition<T>> DefaultDecomposition =
+        new Lazy<LuDecomposition<T>>(() => new LuDecomposition<T>(BuildCoefficientSystem()));
 
-        // Solve the system
-        var decomposition = _decomposition ?? new LuDecomposition<T>(coefficients);
-        Vector<T> solution = MatrixSolutionHelper.SolveLinearSystem(values, decomposition);
+    /// <summary>
+    /// The 16x16 bicubic system: row i * 4 + j samples the patch at grid offset (i - 1, j - 1) and column
+    /// k * 4 + l holds (i - 1)^k * (j - 1)^l, the Kronecker product of V[i, k] = (i - 1)^k with itself.
+    /// </summary>
+    private static Matrix<T> BuildCoefficientSystem()
+    {
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> offsets = new Tensor<int>(new[] { -1, 0, 1, 2 }, new[] { 4, 1 }).Cast<T>();
+        Tensor<T> vandermonde = engine.TensorPower(
+            engine.TensorBroadcastTo(offsets, new[] { 4, 4 }),
+            engine.TensorBroadcastTo(CubicPowers().Reshape(1, 4), new[] { 4, 4 }));
+        return engine.TensorKron(vandermonde, vandermonde).ToMatrix();
+    }
 
-        // Convert the solution vector to the 4x4 coefficient matrix
-        for (int i = 0; i < 4; i++)
-        {
-            for (int j = 0; j < 4; j++)
-            {
-                a[i, j] = solution[i * 4 + j];
-            }
-        }
-
-        return a;
+    /// <summary>
+    /// The exponents 0, 1, 2, 3 of a cubic polynomial's terms.
+    /// </summary>
+    private static Tensor<T> CubicPowers()
+    {
+        return new Tensor<int>(new[] { 0, 1, 2, 3 }, new[] { 4 }).Cast<T>();
     }
 
     /// <summary>
@@ -261,13 +248,7 @@ public partial class BicubicInterpolation<T> : I2DInterpolation<T>
     /// <returns>The index of the lower bound of the interval containing the point.</returns>
     private int FindInterval(Vector<T> values, T point)
     {
-        for (int i = 0; i < values.Length - 1; i++)
-        {
-            if (_numOps.LessThanOrEquals(point, values[i + 1]))
-                return i;
-        }
-
-        return values.Length - 2;
+        return InterpolationSearch.FirstSegmentReaching(values, point, 0, values.Length - 2);
     }
 
     /// <summary>
@@ -278,28 +259,6 @@ public partial class BicubicInterpolation<T> : I2DInterpolation<T>
     /// <returns>The index of the exact match, or -1 if not found.</returns>
     private int BinarySearchExact(Vector<T> values, T target)
     {
-        int left = 0;
-        int right = values.Length - 1;
-
-        while (left <= right)
-        {
-            int mid = left + (right - left) / 2;
-
-            if (_numOps.Equals(values[mid], target))
-            {
-                return mid;
-            }
-
-            if (_numOps.LessThan(values[mid], target))
-            {
-                left = mid + 1;
-            }
-            else
-            {
-                right = mid - 1;
-            }
-        }
-
-        return -1; // Not found
+        return InterpolationSearch.IndexOfExact(values, target);
     }
 }

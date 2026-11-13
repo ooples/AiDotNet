@@ -108,22 +108,23 @@ public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
         if (_numOps.LessThan(x, _x[0]) || _numOps.GreaterThan(x, _x[_x.Length - 1]))
             throw new ArgumentOutOfRangeException(nameof(x), "Interpolation point is outside the data range.");
 
+        var engine = AiDotNetEngine.Current;
         int i = FindSpan(x);
-        Vector<T> basis = CalculateBasisFunctions(x, i);
+        Tensor<T>[] basis = CalculateBasisFunctions(Tensor<T>.FromScalar(x), new Tensor<int>(new[] { i }, new[] { 1 }));
 
-        T result = _numOps.Zero;
-        for (int j = 0; j < 4; j++)
+        // Basis j weights coefficient i - 3 + j. FindSpan clamps at the right-hand end, which can name a coefficient
+        // one past the last; its basis value there is zero, so only the in-range coefficients are summed.
+        int first = Math.Max(0, i - 3);
+        int last = Math.Min(_coefficients.Length - 1, i);
+        if (last < first)
         {
-            // Guarded because FindSpan clamps at the right-hand end, which can name a coefficient
-            // one past the last. Its basis value there is zero, so skipping it changes nothing
-            // except that it no longer indexes off the end of the vector.
-            int index = i - 3 + j;
-            if (index < 0 || index >= _coefficients.Length) continue;
-
-            result = _numOps.Add(result, _numOps.Multiply(basis[j], _coefficients[index]));
+            return _numOps.Zero;
         }
 
-        return result;
+        int count = last - first + 1;
+        Tensor<T> weights = engine.TensorSlice(engine.TensorConcatenate(basis, 0), new[] { first - (i - 3) }, new[] { count });
+        Tensor<T> coefficients = engine.TensorSlice(_coefficients.AsTensor(), new[] { first }, new[] { count });
+        return engine.TensorSum(engine.TensorMultiply(weights, coefficients));
     }
 
     /// <summary>
@@ -141,25 +142,29 @@ public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// <returns>A vector containing the knot values.</returns>
     private Vector<T> GenerateKnots()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
-        Vector<T> knots = new Vector<T>(n + 6);
 
-        // Not-a-knot condition
-        knots[0] = _numOps.Subtract(_x[0], _numOps.Multiply(_numOps.FromDouble(3), _numOps.Subtract(_x[1], _x[0])));
-        knots[1] = _numOps.Subtract(_x[0], _numOps.Multiply(_numOps.FromDouble(2), _numOps.Subtract(_x[1], _x[0])));
-        knots[2] = _numOps.Subtract(_x[0], _numOps.Subtract(_x[1], _x[0]));
+        // Not-a-knot condition: three knots before the data, spaced like the first interval
+        T firstStep = _numOps.Subtract(_x[1], _x[0]);
+        T k0 = _numOps.Subtract(_x[0], _numOps.Multiply(_numOps.FromDouble(3), firstStep));
+        T k1 = _numOps.Subtract(_x[0], _numOps.Multiply(_numOps.FromDouble(2), firstStep));
+        T k2 = _numOps.Subtract(_x[0], firstStep);
 
-        for (int i = 0; i < n; i++)
+        // Not-a-knot condition: three knots after the data, spaced like the last interval
+        T lastStep = _numOps.Subtract(_x[n - 1], _x[n - 2]);
+        T kN3 = _numOps.Add(_x[n - 1], lastStep);
+        T kN4 = _numOps.Add(_x[n - 1], _numOps.Multiply(_numOps.FromDouble(2), lastStep));
+        T kN5 = _numOps.Add(_x[n - 1], _numOps.Multiply(_numOps.FromDouble(3), lastStep));
+
+        Tensor<T> knots = engine.TensorConcatenate(new[]
         {
-            knots[i + 3] = _x[i];
-        }
+            new Tensor<T>(new[] { k0, k1, k2 }, new[] { 3 }),
+            _x.AsTensor(),
+            new Tensor<T>(new[] { kN3, kN4, kN5 }, new[] { 3 })
+        }, 0);
 
-        // Not-a-knot condition
-        knots[n + 3] = _numOps.Add(_x[n - 1], _numOps.Subtract(_x[n - 1], _x[n - 2]));
-        knots[n + 4] = _numOps.Add(_x[n - 1], _numOps.Multiply(_numOps.FromDouble(2), _numOps.Subtract(_x[n - 1], _x[n - 2])));
-        knots[n + 5] = _numOps.Add(_x[n - 1], _numOps.Multiply(_numOps.FromDouble(3), _numOps.Subtract(_x[n - 1], _x[n - 2])));
-
-        return knots;
+        return knots.ToVector();
     }
 
     /// <summary>
@@ -183,29 +188,28 @@ public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
         // zero pivot rather than an answer.
         int coefficientCount = _knots.Length - 4;
 
-        Matrix<T> A = new Matrix<T>(n, coefficientCount);
-        Vector<T> b = new Vector<T>(n);
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < n; i++)
+        // The columns are indexed from the SPAN, not from the data index. Interpolate reads
+        // _coefficients[span - 3 + j], and the two have to agree; with this knot vector the
+        // span of x[i] is i + 3, so writing to i - 3 + j put every basis value three columns
+        // to the left of where it is later read.
+        Tensor<T> points = _x.AsTensor();
+        Tensor<int> spans = FindSpans(points);
+        Tensor<T>[] basis = CalculateBasisFunctions(points, spans);
+
+        // A[i, span[i] - 3 + j] = basis[j][i]. One-hot rows place each basis value in its column; a column outside
+        // [0, coefficientCount) has an all-zero one-hot row, so that value is left out as before.
+        Tensor<T> system = new Tensor<T>(new[] { n, coefficientCount });
+        for (int j = 0; j < 4; j++)
         {
-            // The columns are indexed from the SPAN, not from the data index. Interpolate reads
-            // _coefficients[span - 3 + j], and the two have to agree; with this knot vector the
-            // span of x[i] is i + 3, so writing to i - 3 + j put every basis value three columns
-            // to the left of where it is later read.
-            int span = FindSpan(_x[i]);
-            Vector<T> basis = CalculateBasisFunctions(_x[i], span);
-
-            for (int j = 0; j < 4; j++)
-            {
-                int column = span - 3 + j;
-                if (column >= 0 && column < coefficientCount)
-                {
-                    A[i, column] = basis[j];
-                }
-            }
-
-            b[i] = _y[i];
+            Tensor<T> placement = engine.TensorOneHot<T>(engine.TensorAddScalar(spans, j - 3), coefficientCount);
+            system = engine.TensorAdd(system, engine.TensorMultiply(
+                placement, engine.TensorBroadcastTo(basis[j].Reshape(n, 1), new[] { n, coefficientCount })));
         }
+
+        Matrix<T> A = system.ToMatrix();
+        Vector<T> b = _y.Clone();
 
         // n equations in n + 2 unknowns: every spline through the data is a solution, and the
         // pseudoinverse returns the one of smallest coefficient norm. That is a deliberate choice
@@ -230,22 +234,9 @@ public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the knot span containing the x-value.</returns>
     private int FindSpan(T x)
     {
-        if (_numOps.GreaterThanOrEquals(x, _knots[_knots.Length - 4]))
-            return _knots.Length - 5;
-
-        int low = 3;
-        int high = _knots.Length - 4;
-
-        while (low < high)
-        {
-            int mid = (low + high) / 2;
-            if (_numOps.LessThan(x, _knots[mid]))
-                high = mid;
-            else
-                low = mid + 1;
-        }
-
-        return low - 1;
+        // The span is the last knot at or below x among knots 3 .. Length - 5; the clamp also sends
+        // x >= knots[Length - 4] to the last span, Length - 5.
+        return InterpolationSearch.LastKnotAtOrBelow(_knots, x, 2, _knots.Length - 5);
     }
 
     /// <summary>
@@ -262,38 +253,43 @@ public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
     /// The math looks complex, but it's essentially determining how much influence each nearby
     /// control point has on the curve at your chosen x-value.
     /// </remarks>
-    /// <param name="x">The x-value at which to calculate the basis functions.</param>
-    /// <param name="i">The knot span index containing the x-value.</param>
-    /// <returns>A vector containing the four basis function values at point x.</returns>
-    private Vector<T> CalculateBasisFunctions(T x, int i)
+    /// <param name="points">The x-values at which to calculate the basis functions.</param>
+    /// <param name="spans">The knot span index containing each x-value.</param>
+    /// <returns>The four basis function values; entry j holds basis j at every point.</returns>
+    private Tensor<T>[] CalculateBasisFunctions(Tensor<T> points, Tensor<int> spans)
     {
-        // Create vectors to store the basis functions and temporary values
-        Vector<T> basis = new Vector<T>(4);
-        Vector<T> left = new Vector<T>(4);
-        Vector<T> right = new Vector<T>(4);
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> knots = _knots.AsTensor();
+
+        // Hold the basis functions and temporary values, one tensor across all points per entry
+        var basis = new Tensor<T>[4];
+        var left = new Tensor<T>[4];
+        var right = new Tensor<T>[4];
+        Tensor<T> zeros = new Tensor<T>(new[] { points.Length });
 
         // Initialize the first basis function to 1
-        basis[0] = _numOps.One;
+        basis[0] = new Tensor<T>(new[] { points.Length });
+        engine.TensorFill(basis[0], _numOps.One);
 
         // Calculate the basis functions using the Cox-de Boor recursion formula
         for (int j = 1; j <= 3; j++)
         {
             // Calculate distances from x to the knots on the left and right
-            left[j] = _numOps.Subtract(x, _knots[i + 1 - j]);
-            right[j] = _numOps.Subtract(_knots[i + j], x);
-            T saved = _numOps.Zero;
+            left[j] = engine.TensorSubtract(points, engine.TensorGather(knots, engine.TensorAddScalar(spans, 1 - j), 0));
+            right[j] = engine.TensorSubtract(engine.TensorGather(knots, engine.TensorAddScalar(spans, j), 0), points);
+            Tensor<T> saved = zeros;
 
             // Apply the recursive formula to build higher-degree basis functions
             for (int r = 0; r < j; r++)
             {
                 // Calculate the denominator (knot distance)
-                T temp = _numOps.Divide(basis[r], _numOps.Add(right[r + 1], left[j - r]));
+                Tensor<T> temp = engine.TensorDivide(basis[r], engine.TensorAdd(right[r + 1], left[j - r]));
 
                 // Update the current basis function
-                basis[r] = _numOps.Add(saved, _numOps.Multiply(right[r + 1], temp));
+                basis[r] = engine.TensorAdd(saved, engine.TensorMultiply(right[r + 1], temp));
 
                 // Save the left term for the next basis function
-                saved = _numOps.Multiply(left[j - r], temp);
+                saved = engine.TensorMultiply(left[j - r], temp);
             }
 
             // Store the last basis function of this degree
@@ -301,5 +297,17 @@ public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
         }
 
         return basis;
+    }
+
+    /// <summary>
+    /// Finds the knot span index of every x-value at once, matching <see cref="FindSpan"/> for each.
+    /// </summary>
+    /// <param name="points">The x-values to locate within the knot vector.</param>
+    /// <returns>The knot span index of each x-value.</returns>
+    private Tensor<int> FindSpans(Tensor<T> points)
+    {
+        var engine = AiDotNetEngine.Current;
+        Tensor<int> insertion = engine.TensorSearchSorted(_knots.AsTensor(), points, right: true);
+        return engine.TensorSubtractScalar(engine.TensorClamp(insertion, 3, _knots.Length - 4), 1);
     }
 }

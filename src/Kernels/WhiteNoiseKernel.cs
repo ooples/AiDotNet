@@ -112,17 +112,10 @@ public class WhiteNoiseKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        // Check if the vectors are the same point (within tolerance)
-        bool isSamePoint = true;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double diff = Math.Abs(_numOps.ToDouble(_numOps.Subtract(x1[i], x2[i])));
-            if (diff > _tolerance)
-            {
-                isSamePoint = false;
-                break;
-            }
-        }
+        // Check if the vectors are the same point (within tolerance): max_i |x1_i - x2_i| <= tolerance
+        var engine = AiDotNetEngine.Current;
+        bool isSamePoint = x1.Length == 0
+            || !_numOps.GreaterThan(engine.TensorMaxValue(engine.Abs(engine.Subtract(x1, x2)).AsTensor()), _numOps.FromDouble(_tolerance));
 
         return isSamePoint ? _numOps.FromDouble(_noiseVariance) : _numOps.Zero;
     }

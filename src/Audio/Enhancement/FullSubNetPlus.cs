@@ -178,14 +178,7 @@ public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhanc
         ThrowIfDisposed();
         var stft = ComputeSTFT(audio);
         if (_noiseProfile is not null)
-        {
-            int len = Math.Min(stft.Length, _noiseProfile.Length);
-            for (int i = 0; i < len; i++)
-            {
-                T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
-                stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
-            }
-        }
+            stft = AudioEngineOps.SubtractNoiseClampPrefix(Engine, stft, _noiseProfile);
         Tensor<T> mask;
         if (IsOnnxMode && OnnxEncoder is not null)
             mask = OnnxEncoder.Run(stft);
@@ -207,8 +200,7 @@ public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhanc
             }
             else
             {
-                for (int i = 0; i < result.Length && i < audio.Length; i++)
-                    result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
+                result = AudioEngineOps.BlendPrefix(Engine, result, audio, s, inv);
             }
         }
         return result;
@@ -230,16 +222,13 @@ public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhanc
     {
         ThrowIfDisposed();
         _streamingBuffer ??= [];
-        for (int i = 0; i < audioChunk.Length; i++)
-            _streamingBuffer.Add(audioChunk[i]);
+        _streamingBuffer.AddRange(audioChunk.ToArray());
 
         int frameSize = _options.FftSize;
         if (_streamingBuffer.Count < frameSize)
             return new Tensor<T>([0]);
 
-        var frame = new Tensor<T>([frameSize]);
-        for (int i = 0; i < frameSize; i++)
-            frame[i] = _streamingBuffer[i];
+        var frame = new Tensor<T>(_streamingBuffer.GetRange(0, frameSize).ToArray(), [frameSize]);
         _streamingBuffer.RemoveRange(0, _options.HopLength);
         return Enhance(frame);
     }
@@ -341,10 +330,7 @@ public partial class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhanc
         // a flat mask against a rank-2 STFT still work.
         if (stft._shape.SequenceEqual(mask._shape))
             return Engine.TensorMultiply(stft, mask);
-        var result = new Tensor<T>(stft._shape);
-        for (int i = 0; i < stft.Length; i++)
-            result[i] = NumOps.Multiply(stft[i], mask[i]);
-        return result;
+        return Engine.TensorMultiply(stft, Engine.Reshape(mask, stft.Shape.ToArray()));
     }
 
     private Tensor<T> ComputeISTFT(Tensor<T> magnitude, int originalLength)

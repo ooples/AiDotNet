@@ -214,44 +214,14 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 
     private void InitializeWeights()
@@ -298,23 +268,19 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
-    private Vector<T> InitializeVector(int size)
-    {
-        var vector = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            vector[i] = NumOps.Zero;
-        }
-        return vector;
-    }
+    private Vector<T> InitializeVector(int size) => new Vector<T>(size);
 
     private void Train(Matrix<T> data)
     {
+        var engine = Engine;
         int n = data.Rows;
         int numSeqs = n - _seqLength + 1;
-        double lr = _learningRate;
-        double clipValue = 5.0;
-        int ffDim = _modelDim * 4;
+        var values = AnomalyTensorOps.ToTensor(data);
+        T lr = NumOps.FromDouble(_learningRate);
+        T clipValue = NumOps.FromDouble(5.0);
+        T one = NumOps.One;
+        T minSigma = NumOps.FromDouble(0.1);
+        T lossScale = NumOps.FromDouble(2.0 / (_seqLength * _modelDim));
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -322,443 +288,205 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
             foreach (var idx in indices)
             {
-                // Extract sequence as a Matrix<T> (seqLength x inputDim)
-                var seq = new Matrix<T>(_seqLength, _inputDim);
-                for (int t = 0; t < _seqLength; t++)
-                {
-                    for (int j = 0; j < _inputDim; j++)
-                    {
-                        seq[t, j] = data[idx + t, j];
-                    }
-                }
+                // Sequence (seqLength x inputDim) and the forward pass with intermediate caching
+                var seq = engine.TensorSlice(values, new[] { idx, 0 }, new[] { _seqLength, _inputDim });
+                var pass = ForwardPass(seq);
 
-                // Forward pass with intermediate caching
-                var (output, attention, assocDisc) = ForwardWithCache(seq, out var projected, out var attnOutput, out var ffHidden);
+                // Reconstruction loss gradient (MSE) against the projected input:
+                // dL/dOutput = 2 * (output - projected) / N. The target is a stop-gradient (as on master): its
+                // -dOutput term is deliberately not sent into the input projection, since through the residual
+                // path it would reward shrinking the projection toward zero rather than reconstructing it.
+                var dOutput = engine.TensorMultiplyScalar(engine.TensorSubtract(pass.Output, pass.Projected), lossScale);
 
-                // Compute reconstruction loss gradient (MSE)
-                // dL/dOutput = 2 * (output - target) / N, where target is reconstructed input
-                var dOutput = new Matrix<T>(_seqLength, _modelDim);
-                for (int t = 0; t < _seqLength; t++)
-                {
-                    for (int j = 0; j < _modelDim; j++)
-                    {
-                        // Reconstruction target: try to predict the projected input
-                        T diff = NumOps.Subtract(output[t, j], projected[t, j]);
-                        dOutput[t, j] = NumOps.Multiply(NumOps.FromDouble(2.0 / (_seqLength * _modelDim)), diff);
-                    }
-                }
-
-                // Backprop through feed-forward (output -> attnOutput)
-                var dAttnOutput = BackpropFeedForward(attnOutput, ffHidden, dOutput, lr, clipValue);
-
-                // Backprop through attention (attnOutput -> projected)
-                var dProjected = BackpropAttention(projected, attention, dAttnOutput, lr, clipValue);
-
-                // Backprop through input projection (projected -> seq)
+                // Backprop through feed-forward (output -> attnOutput), attention (attnOutput -> projected)
+                // and the input projection (projected -> seq)
+                var dAttnOutput = BackpropFeedForward(pass.AttnOutput, pass.FFHidden, dOutput, lr, clipValue);
+                var dProjected = BackpropAttention(pass.Projected, dAttnOutput, lr, clipValue);
                 BackpropInputProjection(seq, dProjected, lr, clipValue);
 
-                // Update prior sigma based on association discrepancy
-                T avgDisc = NumOps.Zero;
-                for (int i = 0; i < assocDisc.Length; i++)
+                // Update prior sigma based on association discrepancy (at least 0.1)
+                T discDiff = NumOps.Subtract(engine.TensorMean(pass.AssocDisc), one);
+                _priorSigma = NumOps.Subtract(_priorSigma, NumOps.Multiply(lr, discDiff));
+                if (NumOps.LessThan(_priorSigma, minSigma))
                 {
-                    avgDisc = NumOps.Add(avgDisc, assocDisc[i]);
-                }
-                avgDisc = NumOps.Divide(avgDisc, NumOps.FromDouble(assocDisc.Length));
-
-                T discDiff = NumOps.Subtract(avgDisc, NumOps.One);
-                T update = NumOps.Multiply(NumOps.FromDouble(lr), discDiff);
-                _priorSigma = NumOps.Subtract(_priorSigma, update);
-
-                double sigmaVal = NumOps.ToDouble(_priorSigma);
-                if (sigmaVal < 0.1)
-                {
-                    _priorSigma = NumOps.FromDouble(0.1);
+                    _priorSigma = minSigma;
                 }
             }
         }
     }
 
-    private (Matrix<T> output, Matrix<T> attention, Vector<T> assocDisc) ForwardWithCache(
-        Matrix<T> sequence, out Matrix<T> projected, out Matrix<T> attnOutput, out Matrix<T> ffHidden)
+    // weights - lr * clamp(gradient, -clip, clip)
+    private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradient, T lr, T clip)
+    {
+        var engine = Engine;
+        return engine.TensorSubtract(weights,
+            engine.TensorMultiplyScalar(engine.TensorClamp(gradient, NumOps.Negate(clip), clip), lr));
+    }
+
+    private sealed class ForwardResult
+    {
+        public required Tensor<T> Projected { get; init; }
+        public required Tensor<T> AttnOutput { get; init; }
+        public required Tensor<T> Attention { get; init; }
+        public required Tensor<T> FFHidden { get; init; }
+        public required Tensor<T> Output { get; init; }
+        public required Tensor<T> AssocDisc { get; init; }
+    }
+
+    // Input projection + positional encoding, self-attention, feed-forward (with residuals) and the
+    // association discrepancy of one sequence ([seqLen, inputDim]).
+    private ForwardResult ForwardPass(Tensor<T> sequence)
     {
         var inputProj = _inputProj;
         var W1 = _W1;
         var b1 = _b1;
         var W2 = _W2;
         var b2 = _b2;
-
         if (inputProj == null || W1 == null || b1 == null || W2 == null || b2 == null)
         {
-            throw new InvalidOperationException("Weights not initialized.");
+            throw new InvalidOperationException("Model weights not initialized.");
         }
 
-        int seqLen = sequence.Rows;
-        int ffDim = W1.Columns;
+        var engine = Engine;
+        int seqLen = sequence.Shape[0];
 
-        // Input projection
-        projected = new Matrix<T>(seqLen, _modelDim);
-        // Input projection: [seqLen, inputDim] @ [inputDim, modelDim] — vectorized TensorMatMul
-        var seqTensor = Tensor<T>.FromMatrix(sequence);
-        var projTensor = Tensor<T>.FromMatrix(inputProj);
-        var projResult = Engine.TensorMatMul(seqTensor, projTensor);
-        projected = projResult.ToMatrix();
-
-        // Add positional encoding
-        AddPositionalEncoding(projected);
+        // Input projection [seqLen, inputDim] @ [inputDim, modelDim], plus positional encoding
+        var projected = engine.TensorAdd(engine.TensorMatMul(sequence, Tensor<T>.FromMatrix(inputProj)),
+            PositionalEncoding(seqLen));
 
         // Self-attention
-        Matrix<T> attention;
-        (attnOutput, attention) = SelfAttention(projected);
+        var (attnOutput, attention) = SelfAttention(projected);
 
-        // Feed-forward layer 1: hidden = ReLU(attnOutput @ W1 + b1) — vectorized
-        var attnTensor = Tensor<T>.FromMatrix(attnOutput);
-        var w1Tensor = Tensor<T>.FromMatrix(W1);
-        var ffPre = Engine.TensorMatMul(attnTensor, w1Tensor);
-        // Add bias: broadcast [1, ffDim] across [seqLen, ffDim]
-        var b1Broadcast = Tensor<T>.FromVector(b1).Reshape(1, ffDim);
-        ffPre = Engine.TensorAdd(ffPre, b1Broadcast);
-        // ReLU
-        var ffHiddenTensor = Engine.ReLU(ffPre);
-        ffHidden = ffHiddenTensor.ToMatrix();
+        // Feed-forward: hidden = ReLU(attnOutput @ W1 + b1), output = hidden @ W2 + b2 + attnOutput
+        var ffHidden = engine.TensorMax(engine.TensorAdd(engine.TensorMatMul(attnOutput, Tensor<T>.FromMatrix(W1)),
+            AnomalyTensorOps.BroadcastRow(b1.AsTensor(), seqLen)), NumOps.Zero);
+        var output = engine.TensorAdd(engine.TensorAdd(engine.TensorMatMul(ffHidden, Tensor<T>.FromMatrix(W2)),
+            AnomalyTensorOps.BroadcastRow(b2.AsTensor(), seqLen)), attnOutput);
 
-        // Feed-forward layer 2: output = ffHidden @ W2 + b2 + residual — vectorized
-        var w2Tensor = Tensor<T>.FromMatrix(W2);
-        var ffOut = Engine.TensorMatMul(ffHiddenTensor, w2Tensor);
-        var b2Broadcast = Tensor<T>.FromVector(b2).Reshape(1, _modelDim);
-        ffOut = Engine.TensorAdd(ffOut, b2Broadcast);
-        var output = Engine.TensorAdd(ffOut, attnTensor).ToMatrix();
-
-        // Compute prior association and discrepancy
-        var priorAssoc = ComputePriorAssociation(seqLen);
-        var assocDisc = new Vector<T>(seqLen);
+        // Association discrepancy |KL(series || prior)| per position, both shifted by 1e-10
         T epsilon = NumOps.FromDouble(1e-10);
+        var p = engine.TensorAddScalar(attention, epsilon);
+        var q = engine.TensorAddScalar(ComputePriorAssociation(seqLen), epsilon);
+        var assocDisc = engine.TensorAbs(engine.ReduceSum(
+            engine.TensorMultiply(p, engine.TensorLog(engine.TensorDivide(p, q))), new[] { 1 }, false));
 
-        for (int i = 0; i < seqLen; i++)
+        return new ForwardResult
         {
-            double klDouble = 0;
-            for (int j = 0; j < seqLen; j++)
-            {
-                T p = NumOps.Add(attention[i, j], epsilon);
-                T q = NumOps.Add(priorAssoc[i, j], epsilon);
-                double pVal = NumOps.ToDouble(p);
-                double qVal = NumOps.ToDouble(q);
-                double klTerm = pVal * Math.Log(pVal / qVal);
-                klDouble += klTerm;
-            }
-            // Apply absolute value for consistency with inference
-            assocDisc[i] = NumOps.Abs(NumOps.FromDouble(klDouble));
-        }
-
-        return (output, attention, assocDisc);
+            Projected = projected,
+            AttnOutput = attnOutput,
+            Attention = attention,
+            FFHidden = ffHidden,
+            Output = output,
+            AssocDisc = assocDisc
+        };
     }
 
-    private Matrix<T> BackpropFeedForward(Matrix<T> attnOutput, Matrix<T> ffHidden, Matrix<T> dOutput, double lr, double clipValue)
+    private Tensor<T> BackpropFeedForward(Tensor<T> attnOutput, Tensor<T> ffHidden, Tensor<T> dOutput, T lr, T clipValue)
     {
         var W1 = _W1;
         var b1 = _b1;
         var W2 = _W2;
         var b2 = _b2;
-
         if (W1 == null || b1 == null || W2 == null || b2 == null)
         {
             throw new InvalidOperationException("Feed-forward weights not initialized.");
         }
 
-        int seqLen = attnOutput.Rows;
-        int ffDim = W1.Columns;
+        var engine = Engine;
+        var w1 = Tensor<T>.FromMatrix(W1);
+        var w2 = Tensor<T>.FromMatrix(W2);
 
-        // Gradient accumulators
-        var dW2 = new double[ffDim, _modelDim];
-        var dB2 = new double[_modelDim];
-        var dW1 = new double[_modelDim, ffDim];
-        var dB1 = new double[ffDim];
+        // Second layer (residual connection: output = W2*h + attnOutput): dW2 = h^T dOutput, dB2 = sum dOutput,
+        // dh = dOutput W2^T through the ReLU
+        var dW2 = engine.TensorMatMul(engine.TensorTranspose(ffHidden), dOutput);
+        var dB2 = engine.ReduceSum(dOutput, new[] { 0 }, false);
+        var dH = engine.TensorMultiply(engine.TensorMatMul(dOutput, engine.TensorTranspose(w2)),
+            engine.TensorGreaterThan(ffHidden, NumOps.Zero));
 
-        var dAttnOutput = new Matrix<T>(seqLen, _modelDim);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Gradient through second layer (residual connection: output = W2*h + attnOutput)
-            // dL/dAttnOutput += dOutput (from residual)
-            for (int j = 0; j < _modelDim; j++)
-            {
-                dAttnOutput[t, j] = dOutput[t, j];
-            }
-
-            // dL/dW2 += h * dOutput^T
-            // dL/dh = W2 * dOutput
-            var dH = new double[ffDim];
-            for (int i = 0; i < ffDim; i++)
-            {
-                for (int j = 0; j < _modelDim; j++)
-                {
-                    double dOutVal = NumOps.ToDouble(dOutput[t, j]);
-                    double hVal = NumOps.ToDouble(ffHidden[t, i]);
-                    dW2[i, j] += hVal * dOutVal;
-                    dH[i] += NumOps.ToDouble(W2[i, j]) * dOutVal;
-                }
-            }
-
-            for (int j = 0; j < _modelDim; j++)
-            {
-                dB2[j] += NumOps.ToDouble(dOutput[t, j]);
-            }
-
-            // ReLU derivative
-            for (int i = 0; i < ffDim; i++)
-            {
-                if (!NumOps.GreaterThan(ffHidden[t, i], NumOps.Zero)) dH[i] = 0;
-            }
-
-            // Gradient through first layer
-            for (int i = 0; i < _modelDim; i++)
-            {
-                double attnVal = NumOps.ToDouble(attnOutput[t, i]);
-                for (int j = 0; j < ffDim; j++)
-                {
-                    dW1[i, j] += attnVal * dH[j];
-                    double w1Grad = NumOps.ToDouble(W1[i, j]) * dH[j];
-                    dAttnOutput[t, i] = NumOps.Add(dAttnOutput[t, i], NumOps.FromDouble(w1Grad));
-                }
-            }
-
-            for (int j = 0; j < ffDim; j++)
-            {
-                dB1[j] += dH[j];
-            }
-        }
+        // First layer: dW1 = attnOutput^T dh, dB1 = sum dh; dAttnOutput = dOutput (residual) + dh W1^T
+        var dW1 = engine.TensorMatMul(engine.TensorTranspose(attnOutput), dH);
+        var dB1 = engine.ReduceSum(dH, new[] { 0 }, false);
+        var dAttnOutput = engine.TensorAdd(dOutput, engine.TensorMatMul(dH, engine.TensorTranspose(w1)));
 
         // Apply weight updates with gradient clipping
-        for (int i = 0; i < ffDim; i++)
-        {
-            for (int j = 0; j < _modelDim; j++)
-            {
-                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dW2[i, j]));
-                W2[i, j] = NumOps.Subtract(W2[i, j], NumOps.FromDouble(lr * clipped));
-            }
-        }
-        for (int j = 0; j < _modelDim; j++)
-        {
-            double clipped = Math.Max(-clipValue, Math.Min(clipValue, dB2[j]));
-            b2[j] = NumOps.Subtract(b2[j], NumOps.FromDouble(lr * clipped));
-        }
-        for (int i = 0; i < _modelDim; i++)
-        {
-            for (int j = 0; j < ffDim; j++)
-            {
-                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dW1[i, j]));
-                W1[i, j] = NumOps.Subtract(W1[i, j], NumOps.FromDouble(lr * clipped));
-            }
-        }
-        for (int j = 0; j < ffDim; j++)
-        {
-            double clipped = Math.Max(-clipValue, Math.Min(clipValue, dB1[j]));
-            b1[j] = NumOps.Subtract(b1[j], NumOps.FromDouble(lr * clipped));
-        }
+        _W2 = Step(w2, dW2, lr, clipValue).ToMatrix();
+        _b2 = Step(b2.AsTensor(), dB2, lr, clipValue).ToVector();
+        _W1 = Step(w1, dW1, lr, clipValue).ToMatrix();
+        _b1 = Step(b1.AsTensor(), dB1, lr, clipValue).ToVector();
 
         return dAttnOutput;
     }
 
-    private Matrix<T> BackpropAttention(Matrix<T> projected, Matrix<T> attention, Matrix<T> dAttnOutput, double lr, double clipValue)
+    // Exact backward pass of SelfAttention for every head: output = concat_h(A_h V_h) Wo + projected with
+    // A_h = softmax(Q_h K_h^T / sqrt(headDim)). Returns dL/dprojected through the residual and the Q, K and V
+    // paths, and updates Wq, Wk, Wv and Wo.
+    private Tensor<T> BackpropAttention(Tensor<T> projected, Tensor<T> dAttnOutput, T lr, T clipValue)
     {
         var Wq = _Wq;
         var Wk = _Wk;
         var Wv = _Wv;
         var Wo = _Wo;
-
         if (Wq == null || Wk == null || Wv == null || Wo == null)
         {
             throw new InvalidOperationException("Attention weights not initialized.");
         }
 
-        int seqLen = projected.Rows;
-        int headDim = _modelDim / _numHeads;
+        var engine = Engine;
+        int seqLen = projected.Shape[0];
+        int heads = _numHeads;
+        int headDim = _modelDim / heads;
+        T scale = NumOps.Sqrt(NumOps.FromDouble(headDim));
+        var wq = Tensor<T>.FromMatrix(Wq);
+        var wk = Tensor<T>.FromMatrix(Wk);
+        var wv = Tensor<T>.FromMatrix(Wv);
+        var wo = Tensor<T>.FromMatrix(Wo);
+        var projectedT = engine.TensorTranspose(projected);
 
-        // Gradient accumulators
-        var dWo = new double[_modelDim, _modelDim];
-        var dWq = new double[_modelDim, _modelDim];
-        var dWk = new double[_modelDim, _modelDim];
-        var dWv = new double[_modelDim, _modelDim];
+        // Recompute the per-head forward pass (the attention weights are not updated before this point)
+        var Q = SplitHeads(engine.TensorMatMul(projected, wq), seqLen, heads, headDim);
+        var K = SplitHeads(engine.TensorMatMul(projected, wk), seqLen, heads, headDim);
+        var V = SplitHeads(engine.TensorMatMul(projected, wv), seqLen, heads, headDim);
+        var attention = engine.TensorSoftmax(
+            engine.TensorDivideScalar(engine.TensorBatchMatMul(Q, engine.TensorSwapAxes(K, 1, 2)), scale), 2);
+        var concatenated = MergeHeads(engine.TensorBatchMatMul(attention, V), seqLen);
 
-        var dProjected = new Matrix<T>(seqLen, _modelDim);
+        // Output projection: dWo = concat^T dOut, dConcat = dOut Wo^T (split back into heads)
+        var dWo = engine.TensorMatMul(engine.TensorTranspose(concatenated), dAttnOutput);
+        var dHeads = SplitHeads(engine.TensorMatMul(dAttnOutput, engine.TensorTranspose(wo)), seqLen, heads, headDim);
 
-        // Recompute Q, K, V for backprop
-        var Q = new double[seqLen, _modelDim];
-        var K = new double[seqLen, _modelDim];
-        var V = new double[seqLen, _modelDim];
+        // headOutput_h = A_h V_h: dV_h = A_h^T dO_h, dA_h = dO_h V_h^T
+        var dV = engine.TensorBatchMatMul(engine.TensorSwapAxes(attention, 1, 2), dHeads);
+        var dAttn = engine.TensorBatchMatMul(dHeads, engine.TensorSwapAxes(V, 1, 2));
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int j = 0; j < _modelDim; j++)
-            {
-                for (int i = 0; i < _modelDim; i++)
-                {
-                    double pVal = NumOps.ToDouble(projected[t, i]);
-                    Q[t, j] += pVal * NumOps.ToDouble(Wq[i, j]);
-                    K[t, j] += pVal * NumOps.ToDouble(Wk[i, j]);
-                    V[t, j] += pVal * NumOps.ToDouble(Wv[i, j]);
-                }
-            }
-        }
+        // Softmax Jacobian per row: dScore = A * (dA - sum_l A[., l] dA[., l]), then the 1 / scale
+        var rowDot = engine.ReduceSum(engine.TensorMultiply(attention, dAttn), new[] { 2 }, true);
+        var dScore = engine.TensorDivideScalar(engine.TensorMultiply(attention,
+            engine.TensorSubtract(dAttn, engine.TensorBroadcastTo(rowDot, new[] { heads, seqLen, seqLen }))), scale);
 
-        // For simplified backprop, compute gradients through output projection
-        // dAttnOutput includes residual, so we need to separate
-        // attnOutput = Wo * (attention * V) + projected (residual)
+        // score_h = Q_h K_h^T (scaled above): dQ_h = dScore_h K_h, dK_h = dScore_h^T Q_h
+        var dQ = MergeHeads(engine.TensorBatchMatMul(dScore, K), seqLen);
+        var dK = MergeHeads(engine.TensorBatchMatMul(engine.TensorSwapAxes(dScore, 1, 2), Q), seqLen);
+        var dVMerged = MergeHeads(dV, seqLen);
+        var dWq = engine.TensorMatMul(projectedT, dQ);
+        var dWk = engine.TensorMatMul(projectedT, dK);
+        var dWv = engine.TensorMatMul(projectedT, dVMerged);
 
-        // Gradient through Wo
-        for (int i = 0; i < seqLen; i++)
-        {
-            // attnOut[i] = sum_j attention[i,j] * V[j]
-            // then projected through Wo
-            var weightedV = new double[_modelDim];
-            for (int j = 0; j < seqLen; j++)
-            {
-                double attnVal = NumOps.ToDouble(attention[i, j]);
-                for (int k = 0; k < _modelDim; k++)
-                {
-                    weightedV[k] += attnVal * V[j, k];
-                }
-            }
-
-            // dWo += weightedV * dAttnOutput^T
-            for (int m = 0; m < _modelDim; m++)
-            {
-                double dOutVal = NumOps.ToDouble(dAttnOutput[i, m]);
-                for (int k = 0; k < _modelDim; k++)
-                {
-                    dWo[k, m] += weightedV[k] * dOutVal;
-                }
-            }
-
-            // Gradient to projected (from residual connection)
-            for (int j = 0; j < _modelDim; j++)
-            {
-                dProjected[i, j] = NumOps.Add(dProjected[i, j], dAttnOutput[i, j]);
-            }
-
-            // Gradient through Wo to weightedV
-            var dWeightedV = new double[_modelDim];
-            for (int k = 0; k < _modelDim; k++)
-            {
-                for (int m = 0; m < _modelDim; m++)
-                {
-                    dWeightedV[k] += NumOps.ToDouble(Wo[k, m]) * NumOps.ToDouble(dAttnOutput[i, m]);
-                }
-            }
-
-            // Gradient through V projection
-            for (int j = 0; j < seqLen; j++)
-            {
-                double attnVal = NumOps.ToDouble(attention[i, j]);
-                for (int k = 0; k < _modelDim; k++)
-                {
-                    double dV = attnVal * dWeightedV[k];
-                    // dWv += projected[j] * dV
-                    for (int p = 0; p < _modelDim; p++)
-                    {
-                        dWv[p, k] += NumOps.ToDouble(projected[j, p]) * dV;
-                    }
-                    // dProjected[j] += Wv * dV
-                    for (int p = 0; p < _modelDim; p++)
-                    {
-                        dProjected[j, p] = NumOps.Add(dProjected[j, p],
-                            NumOps.FromDouble(NumOps.ToDouble(Wv[p, k]) * dV));
-                    }
-                }
-            }
-        }
-
-        // Proper attention backprop through softmax Jacobian for Q and K
-        double scale = Math.Sqrt(headDim);
-        for (int i = 0; i < seqLen; i++)
-        {
-            // Compute dScore[i, j] = gradient of loss w.r.t. attention scores (pre-softmax)
-            // dScore = attention * (dWeightedV * V^T) passed through softmax Jacobian
-            // For softmax: dScore[i,j] = sum_l (attention[i,l] * (delta(j,l) - attention[i,j])) * dAttn[i,l]
-            // where dAttn[i,l] = sum_k dWeightedV[k] * V[l,k]
-
-            // First compute dAttn: gradient w.r.t. attention weights (post-softmax)
-            var dAttn = new double[seqLen];
-            for (int j = 0; j < seqLen; j++)
-            {
-                for (int k = 0; k < _modelDim; k++)
-                {
-                    double dWVk = 0;
-                    for (int m = 0; m < _modelDim; m++)
-                    {
-                        dWVk += NumOps.ToDouble(Wo[k, m]) * NumOps.ToDouble(dAttnOutput[i, m]);
-                    }
-                    dAttn[j] += dWVk * V[j, k];
-                }
-            }
-
-            // Apply softmax Jacobian: dScore[j] = sum_l attention[i,l] * (delta(l,j) - attention[i,j]) * dAttn[l]
-            var dScore = new double[seqLen];
-            for (int j = 0; j < seqLen; j++)
-            {
-                double attnJ = NumOps.ToDouble(attention[i, j]);
-                for (int l = 0; l < seqLen; l++)
-                {
-                    double attnL = NumOps.ToDouble(attention[i, l]);
-                    double jacobian = attnL * ((l == j ? 1.0 : 0.0) - attnJ);
-                    dScore[j] += jacobian * dAttn[l];
-                }
-            }
-
-            // Score[i,j] = Q[i,:] . K[j,:] / scale, so:
-            // dQ[i,k] = sum_j dScore[i,j] * K[j,k] / scale
-            // dK[j,k] = sum_i dScore[i,j] * Q[i,k] / scale
-            for (int k = 0; k < _modelDim; k++)
-            {
-                double dQ_ik = 0;
-                for (int j = 0; j < seqLen; j++)
-                {
-                    dQ_ik += dScore[j] * K[j, k] / scale;
-                }
-
-                // dWq: dL/dWq[p,k] += projected[i,p] * dQ[i,k]
-                for (int p = 0; p < _modelDim; p++)
-                {
-                    dWq[p, k] += NumOps.ToDouble(projected[i, p]) * dQ_ik;
-                }
-            }
-
-            for (int j = 0; j < seqLen; j++)
-            {
-                for (int k = 0; k < _modelDim; k++)
-                {
-                    double dK_jk = dScore[j] * Q[i, k] / scale;
-                    // dWk: dL/dWk[p,k] += projected[j,p] * dK[j,k]
-                    for (int p = 0; p < _modelDim; p++)
-                    {
-                        dWk[p, k] += NumOps.ToDouble(projected[j, p]) * dK_jk;
-                    }
-                }
-            }
-        }
+        // dL/dprojected: the residual connection plus the Q, K and V projection paths
+        var dProjected = engine.TensorAdd(
+            engine.TensorAdd(dAttnOutput, engine.TensorMatMul(dQ, engine.TensorTranspose(wq))),
+            engine.TensorAdd(engine.TensorMatMul(dK, engine.TensorTranspose(wk)),
+                engine.TensorMatMul(dVMerged, engine.TensorTranspose(wv))));
 
         // Apply weight updates
-        for (int i = 0; i < _modelDim; i++)
-        {
-            for (int j = 0; j < _modelDim; j++)
-            {
-                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dWo[i, j]));
-                Wo[i, j] = NumOps.Subtract(Wo[i, j], NumOps.FromDouble(lr * clipped));
-
-                clipped = Math.Max(-clipValue, Math.Min(clipValue, dWq[i, j]));
-                Wq[i, j] = NumOps.Subtract(Wq[i, j], NumOps.FromDouble(lr * clipped));
-
-                clipped = Math.Max(-clipValue, Math.Min(clipValue, dWk[i, j]));
-                Wk[i, j] = NumOps.Subtract(Wk[i, j], NumOps.FromDouble(lr * clipped));
-
-                clipped = Math.Max(-clipValue, Math.Min(clipValue, dWv[i, j]));
-                Wv[i, j] = NumOps.Subtract(Wv[i, j], NumOps.FromDouble(lr * clipped));
-            }
-        }
+        _Wo = Step(wo, dWo, lr, clipValue).ToMatrix();
+        _Wq = Step(wq, dWq, lr, clipValue).ToMatrix();
+        _Wk = Step(wk, dWk, lr, clipValue).ToMatrix();
+        _Wv = Step(wv, dWv, lr, clipValue).ToMatrix();
 
         return dProjected;
     }
 
-    private void BackpropInputProjection(Matrix<T> sequence, Matrix<T> dProjected, double lr, double clipValue)
+    private void BackpropInputProjection(Tensor<T> sequence, Tensor<T> dProjected, T lr, T clipValue)
     {
         var inputProj = _inputProj;
         if (inputProj == null)
@@ -766,331 +494,91 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Input projection not initialized.");
         }
 
-        int seqLen = sequence.Rows;
-
-        // Gradient accumulator for inputProj
-        var dInputProj = new double[_inputDim, _modelDim];
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int i = 0; i < _inputDim; i++)
-            {
-                double seqVal = NumOps.ToDouble(sequence[t, i]);
-                for (int j = 0; j < _modelDim; j++)
-                {
-                    dInputProj[i, j] += seqVal * NumOps.ToDouble(dProjected[t, j]);
-                }
-            }
-        }
-
-        // Apply weight updates
-        for (int i = 0; i < _inputDim; i++)
-        {
-            for (int j = 0; j < _modelDim; j++)
-            {
-                double clipped = Math.Max(-clipValue, Math.Min(clipValue, dInputProj[i, j]));
-                inputProj[i, j] = NumOps.Subtract(inputProj[i, j], NumOps.FromDouble(lr * clipped));
-            }
-        }
+        var engine = Engine;
+        var dInputProj = engine.TensorMatMul(engine.TensorTranspose(sequence), dProjected);
+        _inputProj = Step(Tensor<T>.FromMatrix(inputProj), dInputProj, lr, clipValue).ToMatrix();
     }
 
-    private (Matrix<T> output, Matrix<T> attention, Vector<T> assocDisc, Matrix<T> projected) Forward(Matrix<T> sequence)
+    // Sinusoidal positional encoding [seqLen, modelDim]: angle = pos / 10000^(2 * (i / 2) / modelDim),
+    // sin for even i and cos for odd i.
+    private Tensor<T> PositionalEncoding(int seqLen)
     {
-        // Capture nullable fields for proper null checking
-        var inputProj = _inputProj;
-        if (inputProj == null)
+        var engine = Engine;
+        int modelDim = _modelDim;
+        var pairIndex = new int[modelDim];
+        var even = new int[modelDim];
+        for (int i = 0; i < modelDim; i++)
         {
-            throw new InvalidOperationException("Weights not initialized.");
+            pairIndex[i] = 2 * (i / 2);
+            even[i] = i % 2 == 0 ? 1 : 0;
         }
 
-        int seqLen = sequence.Rows;
-
-        // Project input to model dimension: projected[t, j] = sum(sequence[t, i] * inputProj[i, j])
-        var projected = new Matrix<T>(seqLen, _modelDim);
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int j = 0; j < _modelDim; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < _inputDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(sequence[t, i], inputProj[i, j]));
-                }
-                projected[t, j] = sum;
-            }
-        }
-
-        // Add positional encoding
-        AddPositionalEncoding(projected);
-
-        // Self-attention
-        var (attnOutput, attention) = SelfAttention(projected);
-
-        // Compute prior association (Gaussian kernel based on position distance)
-        var priorAssoc = ComputePriorAssociation(seqLen);
-
-        // Association discrepancy: KL divergence between series and prior associations
-        var assocDisc = new Vector<T>(seqLen);
-        T epsilon = NumOps.FromDouble(1e-10);
-        for (int i = 0; i < seqLen; i++)
-        {
-            T kl = NumOps.Zero;
-            for (int j = 0; j < seqLen; j++)
-            {
-                T p = NumOps.Add(attention[i, j], epsilon);
-                T q = NumOps.Add(priorAssoc[i, j], epsilon);
-                // KL = p * log(p/q)
-                double pVal = NumOps.ToDouble(p);
-                double qVal = NumOps.ToDouble(q);
-                double klTerm = pVal * Math.Log(pVal / qVal);
-                kl = NumOps.Add(kl, NumOps.FromDouble(klTerm));
-            }
-            // Take absolute value
-            assocDisc[i] = NumOps.Abs(kl);
-        }
-
-        // Feed-forward
-        var output = FeedForward(attnOutput);
-
-        return (output, attention, assocDisc, projected);
+        var exponents = engine.TensorDivideScalar(
+            Tensor<int>.FromVector(Vector<int>.Wrap(pairIndex), new[] { modelDim }).Cast<T>(), NumOps.FromDouble(modelDim));
+        var divisor = engine.TensorPower(engine.Fill(modelDim, NumOps.FromDouble(10000)).AsTensor(), exponents);
+        var angle = engine.TensorDivide(
+            AnomalyTensorOps.BroadcastColumn(engine.TensorArange<T>(0, seqLen, 1), modelDim),
+            AnomalyTensorOps.BroadcastRow(divisor, seqLen));
+        var evenMask = AnomalyTensorOps.BroadcastRow(
+            Tensor<int>.FromVector(Vector<int>.Wrap(even), new[] { modelDim }).Cast<T>(), seqLen);
+        return engine.TensorWhere(evenMask, engine.TensorSin(angle), engine.TensorCos(angle));
     }
 
-    private void AddPositionalEncoding(Matrix<T> x)
+    // Multi-head self-attention with an output projection and residual connection; also returns the
+    // attention averaged across heads ([seqLen, seqLen]).
+    private (Tensor<T> output, Tensor<T> attention) SelfAttention(Tensor<T> x)
     {
-        int seqLen = x.Rows;
-
-        for (int pos = 0; pos < seqLen; pos++)
-        {
-            for (int i = 0; i < _modelDim; i++)
-            {
-                double angle = pos / Math.Pow(10000, (2.0 * (i / 2)) / _modelDim);
-                double pe = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
-                x[pos, i] = NumOps.Add(x[pos, i], NumOps.FromDouble(pe));
-            }
-        }
-    }
-
-    private (Matrix<T> output, Matrix<T> attention) SelfAttention(Matrix<T> x)
-    {
-        // Capture nullable fields for proper null checking
         var Wq = _Wq;
         var Wk = _Wk;
         var Wv = _Wv;
         var Wo = _Wo;
-
         if (Wq == null || Wk == null || Wv == null || Wo == null)
         {
             throw new InvalidOperationException("Attention weights not initialized.");
         }
 
-        int seqLen = x.Rows;
-        int headDim = _modelDim / _numHeads;
+        var engine = Engine;
+        int seqLen = x.Shape[0];
+        int heads = _numHeads;
+        int headDim = _modelDim / heads;
         T scale = NumOps.Sqrt(NumOps.FromDouble(headDim));
 
-        // Compute Q, K, V projections (full model dimension)
-        var Q = new Matrix<T>(seqLen, _modelDim);
-        var K = new Matrix<T>(seqLen, _modelDim);
-        var V = new Matrix<T>(seqLen, _modelDim);
+        // Q, K, V projections (full model dimension), split into heads [heads, seqLen, headDim]
+        var Q = SplitHeads(engine.TensorMatMul(x, Tensor<T>.FromMatrix(Wq)), seqLen, heads, headDim);
+        var K = SplitHeads(engine.TensorMatMul(x, Tensor<T>.FromMatrix(Wk)), seqLen, heads, headDim);
+        var V = SplitHeads(engine.TensorMatMul(x, Tensor<T>.FromMatrix(Wv)), seqLen, heads, headDim);
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int j = 0; j < _modelDim; j++)
-            {
-                T qSum = NumOps.Zero;
-                T kSum = NumOps.Zero;
-                T vSum = NumOps.Zero;
-                for (int i = 0; i < _modelDim; i++)
-                {
-                    qSum = NumOps.Add(qSum, NumOps.Multiply(x[t, i], Wq[i, j]));
-                    kSum = NumOps.Add(kSum, NumOps.Multiply(x[t, i], Wk[i, j]));
-                    vSum = NumOps.Add(vSum, NumOps.Multiply(x[t, i], Wv[i, j]));
-                }
-                Q[t, j] = qSum;
-                K[t, j] = kSum;
-                V[t, j] = vSum;
-            }
-        }
+        // Per-head scaled dot-product attention (softmax over each row) applied to V
+        var scores = engine.TensorDivideScalar(engine.TensorBatchMatMul(Q, engine.TensorSwapAxes(K, 1, 2)), scale);
+        var headAttention = engine.TensorSoftmax(scores, 2);
+        var avgAttention = engine.ReduceSum(engine.TensorDivideScalar(headAttention, NumOps.FromDouble(heads)), new[] { 0 }, false);
+        var headOutputs = engine.TensorBatchMatMul(headAttention, V);
 
-        // Multi-head attention: compute attention for each head separately
-        // headOutputs[head][seq][headDim] stores the output of each head
-        var headOutputs = new T[_numHeads][,];
-        for (int h = 0; h < _numHeads; h++)
-        {
-            headOutputs[h] = new T[seqLen, headDim];
-        }
-
-        // Average attention across heads for returning (for visualization/analysis)
-        var avgAttention = new Matrix<T>(seqLen, seqLen);
-
-        for (int head = 0; head < _numHeads; head++)
-        {
-            int headStart = head * headDim;
-
-            // Compute attention scores for this head
-            var headAttention = new double[seqLen, seqLen];
-
-            for (int i = 0; i < seqLen; i++)
-            {
-                double maxScore = double.MinValue;
-
-                for (int j = 0; j < seqLen; j++)
-                {
-                    double score = 0;
-                    // Dot product over headDim dimensions for this head
-                    for (int k = 0; k < headDim; k++)
-                    {
-                        double q = NumOps.ToDouble(Q[i, headStart + k]);
-                        double kVal = NumOps.ToDouble(K[j, headStart + k]);
-                        score += q * kVal;
-                    }
-                    score /= NumOps.ToDouble(scale);
-                    headAttention[i, j] = score;
-                    if (score > maxScore) maxScore = score;
-                }
-
-                // Softmax for this row
-                double sum = 0;
-                for (int j = 0; j < seqLen; j++)
-                {
-                    headAttention[i, j] = Math.Exp(headAttention[i, j] - maxScore);
-                    sum += headAttention[i, j];
-                }
-                for (int j = 0; j < seqLen; j++)
-                {
-                    headAttention[i, j] /= sum;
-                    // Accumulate for average attention
-                    avgAttention[i, j] = NumOps.Add(avgAttention[i, j],
-                        NumOps.FromDouble(headAttention[i, j] / _numHeads));
-                }
-            }
-
-            // Apply attention to V for this head
-            for (int i = 0; i < seqLen; i++)
-            {
-                for (int k = 0; k < headDim; k++)
-                {
-                    double sum = 0;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        double v = NumOps.ToDouble(V[j, headStart + k]);
-                        sum += headAttention[i, j] * v;
-                    }
-                    headOutputs[head][i, k] = NumOps.FromDouble(sum);
-                }
-            }
-        }
-
-        // Concatenate head outputs into attnOutput [seqLen, modelDim]
-        var attnOutput = new Matrix<T>(seqLen, _modelDim);
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int head = 0; head < _numHeads; head++)
-            {
-                int headStart = head * headDim;
-                for (int k = 0; k < headDim; k++)
-                {
-                    attnOutput[i, headStart + k] = headOutputs[head][i, k];
-                }
-            }
-        }
-
-        // Output projection with residual connection
-        var output = new Matrix<T>(seqLen, _modelDim);
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int k = 0; k < _modelDim; k++)
-            {
-                T proj = NumOps.Zero;
-                for (int m = 0; m < _modelDim; m++)
-                {
-                    proj = NumOps.Add(proj, NumOps.Multiply(attnOutput[i, m], Wo[m, k]));
-                }
-                // Residual connection
-                output[i, k] = NumOps.Add(proj, x[i, k]);
-            }
-        }
-
+        // Concatenate head outputs into attnOutput [seqLen, modelDim], then the output projection with
+        // residual connection
+        var attnOutput = engine.Reshape(engine.TensorPermute(headOutputs, new[] { 1, 0, 2 }), new[] { seqLen, _modelDim });
+        var output = engine.TensorAdd(engine.TensorMatMul(attnOutput, Tensor<T>.FromMatrix(Wo)), x);
         return (output, avgAttention);
     }
 
-    private Matrix<T> ComputePriorAssociation(int seqLen)
+    // [heads, seqLen, headDim] as [seqLen, heads * headDim] (the inverse of SplitHeads).
+    private Tensor<T> MergeHeads(Tensor<T> x, int seqLen)
+        => Engine.Reshape(Engine.TensorPermute(x, new[] { 1, 0, 2 }), new[] { seqLen, _modelDim });
+
+    // [seqLen, heads * headDim] as [heads, seqLen, headDim].
+    private Tensor<T> SplitHeads(Tensor<T> x, int seqLen, int heads, int headDim)
+        => Engine.TensorPermute(Engine.Reshape(x, new[] { seqLen, heads, headDim }), new[] { 1, 0, 2 });
+
+    // Row-normalized Gaussian kernel exp(-(i - j)^2 / (2 sigma^2)) over positions.
+    private Tensor<T> ComputePriorAssociation(int seqLen)
     {
-        var prior = new Matrix<T>(seqLen, seqLen);
+        var engine = Engine;
         T twoSigmaSq = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(_priorSigma, _priorSigma));
-
-        for (int i = 0; i < seqLen; i++)
-        {
-            T sum = NumOps.Zero;
-
-            for (int j = 0; j < seqLen; j++)
-            {
-                // Gaussian kernel based on position distance
-                double dist = Math.Abs(i - j);
-                double distSq = dist * dist;
-                double gaussVal = Math.Exp(-distSq / NumOps.ToDouble(twoSigmaSq));
-                prior[i, j] = NumOps.FromDouble(gaussVal);
-                sum = NumOps.Add(sum, prior[i, j]);
-            }
-
-            // Normalize
-            for (int j = 0; j < seqLen; j++)
-            {
-                prior[i, j] = NumOps.Divide(prior[i, j], sum);
-            }
-        }
-
-        return prior;
-    }
-
-    private Matrix<T> FeedForward(Matrix<T> x)
-    {
-        // Capture nullable fields for proper null checking
-        var W1 = _W1;
-        var b1 = _b1;
-        var W2 = _W2;
-        var b2 = _b2;
-
-        if (W1 == null || b1 == null || W2 == null || b2 == null)
-        {
-            throw new InvalidOperationException("Feed-forward weights not initialized.");
-        }
-
-        int seqLen = x.Rows;
-        int ffDim = W1.Columns;
-
-        var output = new Matrix<T>(seqLen, _modelDim);
-        // Pre-allocate reusable vectors outside the loop
-        var h = new Vector<T>(ffDim);
-        var wCol = new Vector<T>(ffDim);
-
-        var w1Tensor = Tensor<T>.FromMatrix(W1);
-        var b1Tensor = Tensor<T>.FromVector(b1).Reshape(1, ffDim);
-        var w2Tensor = Tensor<T>.FromMatrix(W2);
-        var b2Tensor = Tensor<T>.FromVector(b2).Reshape(1, _modelDim);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Extract row as vector for SIMD
-            var xRow = new Vector<T>(_modelDim);
-            for (int i = 0; i < _modelDim; i++) xRow[i] = x[t, i];
-            var xTensor = Tensor<T>.FromVector(xRow).Reshape(1, _modelDim);
-
-            // Layer 1: h = ReLU(x @ W1 + b1)  (SIMD via Engine)
-            var h1Pre = Engine.TensorAdd(
-                Engine.TensorMatMul(xTensor, w1Tensor), b1Tensor);
-            var hVec = Engine.ReLU(h1Pre.Reshape(ffDim).ToVector());
-
-            // Layer 2: out = h @ W2 + b2  (SIMD via Engine)
-            var hTensor = Tensor<T>.FromVector(hVec).Reshape(1, ffDim);
-            var l2Out = Engine.TensorAdd(
-                Engine.TensorMatMul(hTensor, w2Tensor), b2Tensor).Reshape(_modelDim).ToVector();
-
-            // Residual connection
-            for (int j = 0; j < _modelDim; j++)
-                output[t, j] = NumOps.Add(l2Out[j], x[t, j]);
-        }
-
-        return output;
+        var positions = engine.TensorArange<T>(0, seqLen, 1);
+        var offset = engine.TensorSubtract(AnomalyTensorOps.BroadcastColumn(positions, seqLen),
+            AnomalyTensorOps.BroadcastRow(positions, seqLen));
+        var prior = engine.TensorExp(engine.TensorNegate(engine.TensorDivideScalar(engine.TensorSquare(offset), twoSigmaSq)));
+        return AnomalyTensorOps.DivideColumn(prior, engine.ReduceSum(prior, new[] { 1 }, false));
     }
 
     /// <inheritdoc/>
@@ -1111,115 +599,41 @@ public partial class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
         }
 
+        var engine = Engine;
         int n = X.Rows;
-        var scores = new Vector<T>(n);
 
-        // Convert to normalized Matrix<T>
-        var data = new Matrix<T>(n, _inputDim);
-        for (int i = 0; i < n; i++)
+        // Normalized data
+        var data = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
+
+        // Score using sliding windows (step at least 1), taking the max of overlapping scores. Per the
+        // Anomaly Transformer paper, the anomaly score combines association discrepancy and the per-timestep
+        // reconstruction error RMSE(output, projected input): disc * error + error.
+        // Each window keeps only its own [seqLength] scores; one scatter-max then reduces the overlaps.
+        int stepSize = Math.Max(1, _seqLength / 2);
+        T modelDim = NumOps.FromDouble(_modelDim);
+        var windowScores = new List<Tensor<T>>();
+        var positions = new List<int>();
+        for (int windowStart = 0; windowStart + _seqLength <= n; windowStart += stepSize)
         {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                data[i, j] = NumOps.Divide(diff, dataStds[j]);
-            }
+            var pass = ForwardPass(engine.TensorSlice(data, new[] { windowStart, 0 }, new[] { _seqLength, _inputDim }));
+            var reconError = engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(
+                engine.TensorSquare(engine.TensorSubtract(pass.Output, pass.Projected)), new[] { 1 }, false), modelDim));
+            windowScores.Add(engine.TensorAdd(engine.TensorMultiply(pass.AssocDisc, reconError), reconError));
+            positions.AddRange(Enumerable.Range(windowStart, _seqLength));
         }
 
-        // Track which points have been scored
-        var hasScore = new bool[n];
-
-        // Score using sliding window
-        int windowStart = 0;
-        int stepSize = Math.Max(1, _seqLength / 2); // Ensure step size is at least 1
-
-        while (windowStart + _seqLength <= n)
-        {
-            var seq = new Matrix<T>(_seqLength, _inputDim);
-            for (int t = 0; t < _seqLength; t++)
-            {
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    seq[t, j] = data[windowStart + t, j];
-                }
-            }
-
-            var (output, _, assocDisc, projected) = Forward(seq);
-
-            // Compute per-timestep reconstruction error (MSE between output and projected input).
-            // Per the Anomaly Transformer paper, the anomaly score combines
-            // association discrepancy and reconstruction error.
-            for (int t = 0; t < _seqLength; t++)
-            {
-                double reconError = 0;
-                for (int j = 0; j < _modelDim; j++)
-                {
-                    double diff = NumOps.ToDouble(NumOps.Subtract(output[t, j], projected[t, j]));
-                    reconError += diff * diff;
-                }
-                reconError = Math.Sqrt(reconError / _modelDim);
-
-                // Combined score: association discrepancy * reconstruction error
-                double disc = NumOps.ToDouble(assocDisc[t]);
-                double combinedScore = disc * reconError + reconError;
-
-                int idx = windowStart + t;
-                if (hasScore[idx])
-                {
-                    // Take max of overlapping scores
-                    if (combinedScore > NumOps.ToDouble(scores[idx]))
-                    {
-                        scores[idx] = NumOps.FromDouble(combinedScore);
-                    }
-                }
-                else
-                {
-                    scores[idx] = NumOps.FromDouble(combinedScore);
-                    hasScore[idx] = true;
-                }
-            }
-
-            windowStart += stepSize;
-        }
-
-        // Handle remaining points that weren't scored
-        for (int i = 0; i < n; i++)
-        {
-            if (!hasScore[i])
-            {
-                // Use simple distance for points without window coverage
-                double dist = 0;
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    double val = NumOps.ToDouble(data[i, j]);
-                    dist += val * val;
-                }
-                scores[i] = NumOps.Sqrt(NumOps.FromDouble(dist));
-            }
-        }
-
-        // Multiply by value deviation signal: the absolute normalized value of each point.
-        // The association discrepancy and reconstruction error from the transformer
-        // capture temporal pattern anomalies, while value deviation captures
-        // point-level magnitude anomalies. Using multiplicative combination ensures
-        // extreme values get proportionally amplified scores, which is critical
-        // when the model hasn't fully converged (few training epochs).
-        for (int i = 0; i < n; i++)
-        {
-            double valueDev = 0;
-            for (int j = 0; j < _inputDim; j++)
-            {
-                double val = NumOps.ToDouble(NumOps.Abs(data[i, j]));
-                valueDev += val * val;
-            }
-            valueDev = Math.Sqrt(valueDev);
-
-            double currentScore = NumOps.ToDouble(scores[i]);
-            // Multiplicative: anomaly score * (1 + valueDev)
-            // Normal points (~0 normalized) get multiplied by ~1 (unchanged)
-            // Extreme points (high normalized abs) get multiplied by much more
-            scores[i] = NumOps.FromDouble(currentScore * (1.0 + valueDev));
-        }
-
-        return scores;
+        // Points without window coverage use the simple distance ||x||; then multiply by the value deviation
+        // signal (1 + ||x||). The association discrepancy and reconstruction error from the transformer
+        // capture temporal pattern anomalies, while value deviation captures point-level magnitude
+        // anomalies. Using multiplicative combination ensures extreme values get proportionally amplified
+        // scores, which is critical when the model hasn't fully converged (few training epochs).
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(data), new[] { 1 }, false));
+        var scores = windowScores.Count == 0
+            ? norm
+            : engine.TensorScatterReduce(norm, 0,
+                Tensor<int>.FromVector(Vector<int>.Wrap(positions.ToArray()), new[] { positions.Count }),
+                engine.TensorConcatenate(windowScores.ToArray(), 0), ScatterReduceMode.AMax, false);
+        return engine.TensorMultiply(scores, engine.TensorAddScalar(norm, NumOps.One)).ToVector();
     }
 }

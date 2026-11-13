@@ -105,11 +105,7 @@ public class DotProductKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        T dotProduct = _numOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            dotProduct = _numOps.Add(dotProduct, _numOps.Multiply(x1[i], x2[i]));
-        }
+        T dotProduct = AiDotNetEngine.Current.DotProduct(x1, x2);
 
         return _numOps.Add(_numOps.FromDouble(_sigma0Squared), dotProduct);
     }

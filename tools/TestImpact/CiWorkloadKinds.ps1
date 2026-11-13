@@ -204,12 +204,14 @@ function Set-CiShardRunners {
 }
 
 # Plans self-hosted routing from the SELF_HOSTED_RUNNERS secret, e.g. {"label":"aidotnet-cpu","shardsPerRunner":6},
-# and the repository's runners. Each online runner carrying the label takes shardsPerRunner shards, so a runner
-# that is asleep, stopped or removed gets nothing and its shards stay on the hosted pool. Anything missing or
+# and the repository's runners. Each online runner carrying the label can hold shardsPerRunner shards, so a runner
+# that is asleep, stopped or removed gets nothing and its shards stay on the hosted pool. Jobs other runs have
+# already sent to the label ($Pending) use up that room: a self-hosted runner works one job at a time, so
+# routing past its backlog would make it the slowest path of every run instead of relief. Anything missing or
 # malformed routes nothing, because the hosted pool is always a correct place to run a shard; Warning marks a
 # configuration that is present but unusable, so the run says why routing is off.
 function Get-SelfHostedShardPlan {
-    param([string] $Config, [AllowNull()] [object[]] $Runners)
+    param([string] $Config, [AllowNull()] [object[]] $Runners, [int] $Pending = 0)
     $off = { param([string] $Reason, [bool] $Warn) [pscustomobject]@{ Count = 0; Label = ''; Reason = $Reason; Warning = $Warn } }
     if ([string]::IsNullOrWhiteSpace($Config)) { return & $off 'SELF_HOSTED_RUNNERS is not set.' $false }
     try { $parsed = $Config | ConvertFrom-Json -ErrorAction Stop }
@@ -227,9 +229,62 @@ function Get-SelfHostedShardPlan {
         return & $off 'the runner list could not be read (is SELF_HOSTED_RUNNER_TOKEN set, with Administration: read?).' $true
     }
     $online = @($Runners | Where-Object { $_.status -eq 'online' -and @($_.labels.name) -ccontains $label }).Count
+    $capacity = $online * $perRunner
     return [pscustomobject]@{
-        Count = $online * $perRunner; Label = $label; Warning = $false
-        Reason = "$online online runner(s) labelled '$label' x $perRunner shard(s) each."
+        Count = [Math]::Max(0, $capacity - [Math]::Max(0, $Pending)); Label = $label; Warning = $false
+        Reason = "$online online runner(s) labelled '$label' x $perRunner shard(s) each, less $Pending job(s) already waiting for or running on them."
+    }
+}
+
+# Counts jobs of unfinished runs that are queued for, or running on, the label. Returns 0 when the count
+# cannot be read in time; the online-runner check still bounds routing then.
+# Every page of runs and of jobs is read (a busy repository has more than one page of each), within one overall
+# budget so the calling job can still write its outputs before its own timeout. -Get replaces the HTTP call in tests.
+function Get-SelfHostedPendingJobs {
+    param([string] $Repository, [string] $Token, [string] $Label, [int] $BudgetSeconds = 90, [scriptblock] $Get = $null)
+    if ([string]::IsNullOrWhiteSpace($Token) -or [string]::IsNullOrWhiteSpace($Label)) { return 0 }
+    $deadline = [DateTime]::UtcNow.AddSeconds($BudgetSeconds)
+    $remaining = { [int][Math]::Floor(($deadline - [DateTime]::UtcNow).TotalSeconds) }
+    if ($null -eq $Get) {
+        $headers = @{ Authorization = "Bearer $Token"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' }
+        # -TimeoutSec bounds only the request and the response headers; a body that stalls after them is bounded per
+        # read by -OperationTimeoutSeconds (PowerShell 7.4+, whose default 0 means no limit). Passed only where the
+        # parameter exists: on an older pwsh it would fail binding, and the scan would silently count 0.
+        $boundsBodyReads = (Get-Command Invoke-RestMethod).Parameters.ContainsKey('OperationTimeoutSeconds')
+        # Three tries for transient errors, each request capped by what is left of the budget.
+        $Get = { param([string] $Uri) for ($try = 1; ; $try++) {
+            $left = & $remaining
+            if ($left -lt 1) { throw "pending-job scan exceeded its $BudgetSeconds s budget" }
+            $limit = [Math]::Min(30, $left)
+            $bodyLimit = @{}
+            if ($boundsBodyReads) { $bodyLimit['OperationTimeoutSeconds'] = $limit }
+            try { return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec $limit @bodyLimit -ErrorAction Stop }
+            catch { if ($try -ge 3 -or (& $remaining) -lt (2 * $try + 1)) { throw }; Start-Sleep -Seconds (2 * $try) } } }
+    }
+    try {
+        $runs = foreach ($status in 'queued', 'in_progress') {
+            for ($page = 1; ; $page++) {
+                if ((& $remaining) -lt 1) { throw "pending-job scan exceeded its $BudgetSeconds s budget" }
+                $batch = @((& $Get "https://api.github.com/repos/$Repository/actions/runs?status=$status&per_page=100&page=$page").workflow_runs | Where-Object { $_ })
+                $batch
+                if ($batch.Count -lt 100) { break }
+            }
+        }
+        $pending = 0
+        foreach ($run in @($runs | Where-Object { $_ } | Sort-Object id -Unique)) {
+            # Pages of 30: a job list of 100 from a large run answered 502 every time.
+            for ($page = 1; ; $page++) {
+                if ((& $remaining) -lt 1) { throw "pending-job scan exceeded its $BudgetSeconds s budget" }
+                $jobs = @((& $Get "https://api.github.com/repos/$Repository/actions/runs/$($run.id)/jobs?filter=latest&per_page=30&page=$page").jobs | Where-Object { $_ })
+                $pending += @($jobs | Where-Object { $_.status -ne 'completed' -and @($_.labels) -ccontains $Label }).Count
+                if ($jobs.Count -lt 30) { break }
+            }
+        }
+        return $pending
+    }
+    catch {
+        Write-Host "Pending self-hosted job count failed: $($_.Exception.Message)"
+        return 0
     }
 }
 

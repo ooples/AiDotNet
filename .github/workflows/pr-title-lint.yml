@@ -2,7 +2,7 @@ name: Auto-Fix PR Title
 
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   auto-fix-pr-title:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ (github.event.pull_request.draft != true) && (!startsWith(github.head_ref, 'release-please--')) }}
     name: Auto-Fix PR Title
     runs-on: ubuntu-latest
     steps:

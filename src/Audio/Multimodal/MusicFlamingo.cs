@@ -219,10 +219,9 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
 
     private Tensor<T> AdaptMusicFeatures(Tensor<T> musicEmbed)
     {
-        var adapted = new Tensor<T>([_options.NumPerceiverTokens]);
-        for (int i = 0; i < adapted.Length; i++)
-            adapted[i] = NumOps.FromDouble(i < musicEmbed.Length ? NumOps.ToDouble(musicEmbed[i % musicEmbed.Length]) : 0);
-        return adapted;
+        // The first NumPerceiverTokens embedding values, zero-padded (a fresh tensor)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AudioEngineOps.FitLength(Engine, musicEmbed, _options.NumPerceiverTokens).Clone();
     }
 
     private Tensor<T> EncodePrompt(string prompt)
@@ -237,24 +236,26 @@ public partial class MusicFlamingo<T> : AudioNeuralNetworkBase<T>, IAudioLanguag
 
     private Tensor<T> CombineEmbeddings(Tensor<T> a, Tensor<T> b)
     {
-        var combined = new Tensor<T>([a.Length + b.Length]);
-        for (int i = 0; i < a.Length; i++) combined[i] = a[i];
-        for (int i = 0; i < b.Length; i++) combined[a.Length + i] = b[i];
-        return combined;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.Concat(new[] { AudioEngineOps.Flatten(Engine, a), AudioEngineOps.Flatten(Engine, b) }, 0);
     }
 
     private string DecodeToText(Tensor<T> output, int maxTokens)
     {
         int numTokens = Math.Min(maxTokens, output.Length);
-        var tokenIds = new List<int>();
-        for (int i = 0; i < numTokens; i++)
-        {
-            int tokenId = (int)Math.Round(NumOps.ToDouble(output[i]));
-            if (tokenId < 0) tokenId = 0;
-            if (tokenId >= _tokenizer.VocabularySize) tokenId = _tokenizer.VocabularySize - 1;
-            tokenIds.Add(tokenId);
-        }
-        return _tokenizer.Decode(tokenIds);
+        if (numTokens <= 0)
+            return _tokenizer.Decode(new List<int>());
+
+        // Token ids: round to nearest (banker's), clamped to [0, vocab - 1]; NaN maps to 0
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var rounded = Engine.TensorRound(AudioEngineOps.FitLength(Engine, output, numTokens));
+        var zeros = new Tensor<T>([numTokens]);
+        T maxId = NumOps.FromDouble(_tokenizer.VocabularySize - 1);
+        var clamped = Engine.TensorWhere(Engine.TensorLessThan(rounded, NumOps.Zero), zeros, rounded);
+        clamped = Engine.TensorWhere(
+            Engine.TensorGreaterThan(clamped, maxId), Tensor<T>.CreateDefault([numTokens], maxId), clamped);
+        clamped = Engine.TensorWhere(Engine.TensorIsNan(clamped), zeros, clamped);
+        return _tokenizer.Decode(clamped.Cast<int>().ToArray().ToList());
     }
 
     #endregion

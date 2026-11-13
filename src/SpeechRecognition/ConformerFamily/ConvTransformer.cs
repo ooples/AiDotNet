@@ -41,6 +41,8 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ResearchPaper("Transformers with convolutional context for ASR", "https://arxiv.org/abs/1904.11660", Year = 2019, Authors = "Mohamed, Okhonko and Zettlemoyer")]
 [PaperOptimizer(OptimizerKind.Adadelta, LearningRate = 1.0, MaxGradientNorm = 10.0,
                 Source = "Mohamed et al. 2019, section 3.1: AdaDelta with a fixed learning rate of 1.0, no warmup schedule, and gradient clipping at 10.0.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

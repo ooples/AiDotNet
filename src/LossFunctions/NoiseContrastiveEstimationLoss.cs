@@ -69,30 +69,16 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
             throw new ArgumentException("Number of noise samples per target must match the configured value.");
         }
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < targetLogits.Length; i++)
-        {
-            // P(target is real | target)
-            T targetProb = Sigmoid(targetLogits[i]);
+        // Log P(target is real | target)
+        var targetProb = Engine.TensorSigmoid(targetLogits.AsTensor());
+        var targetTerm = SafeLogTensor(targetProb, NumericalStabilityHelper.SmallEpsilon);
 
-            // Log P(target is real | target)
-            T targetTerm = NumericalStabilityHelper.SafeLog(targetProb, NumericalStabilityHelper.SmallEpsilon);
+        // Sum of log(1 - P(noise is real | noise))
+        var noiseProb = Engine.TensorSigmoid(Tensor<T>.FromMatrix(noiseLogits));
+        var noiseTerm = SafeLogTensor(Engine.ScalarMinusTensor(NumOps.One, noiseProb), NumericalStabilityHelper.SmallEpsilon);
 
-            // Sum of log(1 - P(noise is real | noise))
-            T noiseSum = NumOps.Zero;
-            for (int j = 0; j < _numNoiseSamples; j++)
-            {
-                T noiseProb = Sigmoid(noiseLogits[i, j]);
-                T noiseTerm = NumericalStabilityHelper.SafeLog(
-                    NumOps.Subtract(NumOps.One, noiseProb),
-                    NumericalStabilityHelper.SmallEpsilon
-                );
-                noiseSum = NumOps.Add(noiseSum, noiseTerm);
-            }
-
-            // -(log P(target is real) + sum(log P(noise is noise)))
-            loss = NumOps.Add(loss, NumOps.Negate(NumOps.Add(targetTerm, noiseSum)));
-        }
+        // -(Σ_i log P(target_i is real) + Σ_ij log P(noise_ij is noise))
+        T loss = NumOps.Negate(NumOps.Add(Engine.TensorSum(targetTerm), Engine.TensorSum(noiseTerm)));
 
         return NumOps.Divide(loss, NumOps.FromDouble(targetLogits.Length));
     }
@@ -110,19 +96,6 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
         throw new NotSupportedException(
             "NCE Loss requires specific input formats. " +
             "Use the Calculate(Vector<T>, Matrix<T>) method instead."
-        );
-    }
-
-    /// <summary>
-    /// Applies the sigmoid function to a scalar value.
-    /// </summary>
-    /// <param name="x">The input value.</param>
-    /// <returns>The sigmoid of the input, a value between 0 and 1.</returns>
-    private T Sigmoid(T x)
-    {
-        return NumOps.Divide(
-            NumOps.One,
-            NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x)))
         );
     }
 

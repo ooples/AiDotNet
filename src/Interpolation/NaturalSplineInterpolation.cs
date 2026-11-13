@@ -61,6 +61,11 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     private readonly INumericOperations<T> _numOps;
 
     /// <summary>
+    /// The coefficients of each segment's (x - x[i])^1..(x - x[i])^degree terms, one row per segment.
+    /// </summary>
+    private readonly Tensor<T> _segmentTerms;
+
+    /// <summary>
     /// Creates a new instance of the Natural Spline interpolation algorithm.
     /// </summary>
     /// <remarks>
@@ -100,6 +105,10 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
         }
 
         CalculateCoefficients();
+
+        // Row i holds coefficients[1..degree][i], so evaluation reads one segment's terms with a single slice
+        _segmentTerms = AiDotNetEngine.Current.TensorStack(
+            Array.ConvertAll(_coefficients, coefficient => coefficient.AsTensor()).Skip(1).ToArray(), 1);
     }
 
     /// <summary>
@@ -123,14 +132,13 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     {
         int i = FindInterval(x);
         T dx = _numOps.Subtract(x, _x[i]);
-        T result = _y[i];
 
-        for (int j = 1; j <= _degree; j++)
-        {
-            result = _numOps.Add(result, _numOps.Multiply(_coefficients[j][i], Power(dx, j)));
-        }
+        // sum over j = 1..degree of coefficients[j][i] * dx^j, with dx^j built as a running product
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> powers = engine.TensorCumProd(Tensor<T>.CreateDefault(new[] { _degree }, dx), 0);
+        Tensor<T> terms = engine.TensorSlice(_segmentTerms, new[] { i, 0 }, new[] { 1, _degree }).Reshape(_degree);
 
-        return result;
+        return _numOps.Add(_y[i], engine.TensorSum(engine.TensorMultiply(terms, powers)));
     }
 
     /// <summary>
@@ -149,71 +157,63 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// </remarks>
     private void CalculateCoefficients()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
+        T two = _numOps.FromDouble(2);
+        T six = _numOps.FromDouble(6);
 
-        // Calculate interval widths h[i] = x[i+1] - x[i]
-        Vector<T> h = new Vector<T>(n - 1);
-        for (int i = 0; i < n - 1; i++)
-        {
-            h[i] = _numOps.Subtract(_x[i + 1], _x[i]);
-        }
+        // Interval widths h[i] = x[i+1] - x[i] and secant slopes (y[i+1] - y[i]) / h[i]
+        Tensor<T> h = engine.TensorSubtract(Slice(xs, 1, n - 1), Slice(xs, 0, n - 1));
+        Tensor<T> slope = engine.TensorDivide(engine.TensorSubtract(Slice(ys, 1, n - 1), Slice(ys, 0, n - 1)), h);
 
-        // Set up the tridiagonal system for natural cubic spline
-        // We solve for second derivatives M[i] at each point
-        Matrix<T> A = new Matrix<T>(n, n);
-        Vector<T> b = new Vector<T>(n);
+        // Rows 1..n-2 are the interior equations; rows 0 and n-1 are the natural boundary rows M[0] = M[n-1] = 0
+        Tensor<T> interior = Tensor<T>.CreateDefault(new[] { n }, _numOps.One);
+        interior[0] = _numOps.Zero;
+        interior[n - 1] = _numOps.Zero;
+        Tensor<T> zero = Tensor<T>.FromScalar(_numOps.Zero);
+        Tensor<T> zerosN = new Tensor<T>(new[] { n });
+        Tensor<T> zerosSegments = new Tensor<T>(new[] { n - 1 });
 
-        // Natural spline boundary conditions: M[0] = 0, M[n-1] = 0
-        // Ensure boundary rows are completely set (all zeros except diagonal = 1)
-        for (int j = 0; j < n; j++)
-        {
-            A[0, j] = _numOps.Zero;
-            A[n - 1, j] = _numOps.Zero;
-        }
-        A[0, 0] = _numOps.One;
-        b[0] = _numOps.Zero;
-        A[n - 1, n - 1] = _numOps.One;
-        b[n - 1] = _numOps.Zero;
+        // Interior row i: h[i-1]*M[i-1] + 2*(h[i-1]+h[i])*M[i] + h[i]*M[i+1] = 6*(slope[i] - slope[i-1])
+        Tensor<T> hPrev = engine.TensorConcatenate(new[] { zero, h }, 0);
+        Tensor<T> hNext = engine.TensorConcatenate(new[] { h, zero }, 0);
+        Tensor<T> diagonal = engine.TensorWhere(
+            interior,
+            engine.TensorMultiplyScalar(engine.TensorAdd(hPrev, hNext), two),
+            Tensor<T>.CreateDefault(new[] { n }, _numOps.One));
+        Tensor<T> lower = engine.TensorWhere(Slice(interior, 1, n - 1), h, zerosSegments);
+        Tensor<T> upper = engine.TensorWhere(Slice(interior, 0, n - 1), h, zerosSegments);
+        Matrix<T> A = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorDiagEmbed(lower, -1), engine.TensorDiagEmbed(diagonal, 0)),
+            engine.TensorDiagEmbed(upper, 1)).ToMatrix();
 
-        // Interior equations (tridiagonal system)
-        // h[i-1]*M[i-1] + 2*(h[i-1]+h[i])*M[i] + h[i]*M[i+1] = 6*((y[i+1]-y[i])/h[i] - (y[i]-y[i-1])/h[i-1])
-        for (int i = 1; i < n - 1; i++)
-        {
-            A[i, i - 1] = h[i - 1];
-            A[i, i] = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Add(h[i - 1], h[i]));
-            A[i, i + 1] = h[i];
-
-            T slope1 = _numOps.Divide(_numOps.Subtract(_y[i], _y[i - 1]), h[i - 1]);
-            T slope2 = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h[i]);
-            b[i] = _numOps.Multiply(_numOps.FromDouble(6), _numOps.Subtract(slope2, slope1));
-        }
+        Tensor<T> slopePrev = engine.TensorConcatenate(new[] { zero, slope }, 0);
+        Tensor<T> slopeNext = engine.TensorConcatenate(new[] { slope, zero }, 0);
+        Vector<T> b = engine.TensorWhere(
+            interior,
+            engine.TensorMultiplyScalar(engine.TensorSubtract(slopeNext, slopePrev), six),
+            zerosN).ToVector();
 
         // Solve the system for second derivatives M
         var decomposition = _decomposition ?? new LuDecomposition<T>(A);
-        Vector<T> M = MatrixSolutionHelper.SolveLinearSystem(b, decomposition);
+        Tensor<T> M = MatrixSolutionHelper.SolveLinearSystem(b, decomposition).AsTensor();
+        Tensor<T> mLeft = Slice(M, 0, n - 1);
+        Tensor<T> mRight = Slice(M, 1, n - 1);
 
-        // Calculate the spline coefficients for each segment
-        // S(x) = a + b*(x-x[i]) + c*(x-x[i])^2 + d*(x-x[i])^3
-        for (int i = 0; i < n - 1; i++)
-        {
-            // a[i] = y[i]
-            _coefficients[0][i] = _y[i];
-
-            // b[i] = (y[i+1] - y[i])/h[i] - h[i]*(2*M[i] + M[i+1])/6
-            T term1 = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h[i]);
-            T term2 = _numOps.Divide(
-                _numOps.Multiply(h[i], _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), M[i]), M[i + 1])),
-                _numOps.FromDouble(6));
-            _coefficients[1][i] = _numOps.Subtract(term1, term2);
-
-            // c[i] = M[i]/2
-            _coefficients[2][i] = _numOps.Divide(M[i], _numOps.FromDouble(2));
-
-            // d[i] = (M[i+1] - M[i])/(6*h[i])
-            _coefficients[3][i] = _numOps.Divide(
-                _numOps.Subtract(M[i + 1], M[i]),
-                _numOps.Multiply(_numOps.FromDouble(6), h[i]));
-        }
+        // S(x) = a + b*(x-x[i]) + c*(x-x[i])^2 + d*(x-x[i])^3 on each segment, with
+        // a = y[i], b = slope[i] - h[i]*(2*M[i] + M[i+1])/6, c = M[i]/2, d = (M[i+1] - M[i])/(6*h[i])
+        _coefficients[0] = Slice(ys, 0, n - 1).ToVector();
+        _coefficients[1] = engine.TensorSubtract(
+            slope,
+            engine.TensorDivideScalar(
+                engine.TensorMultiply(h, engine.TensorAdd(engine.TensorMultiplyScalar(mLeft, two), mRight)),
+                six)).ToVector();
+        _coefficients[2] = engine.TensorDivideScalar(mLeft, two).ToVector();
+        _coefficients[3] = engine.TensorDivide(
+            engine.TensorSubtract(mRight, mLeft),
+            engine.TensorMultiplyScalar(h, six)).ToVector();
     }
 
     /// <summary>
@@ -231,41 +231,14 @@ public class NaturalSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the lower bound of the interval containing x.</returns>
     private int FindInterval(T x)
     {
-        for (int i = 0; i < _x.Length - 1; i++)
-        {
-            if (_numOps.LessThanOrEquals(x, _x[i + 1]))
-                return i;
-        }
-
-        return _x.Length - 2;
+        return InterpolationSearch.FirstSegmentReaching(_x, x, 0, _x.Length - 2);
     }
 
     /// <summary>
-    /// Calculates the value of x raised to the specified power.
+    /// Returns <paramref name="length"/> consecutive elements of a vector tensor starting at <paramref name="start"/>.
     /// </summary>
-    /// <remarks>
-    /// This helper method computes x^power by repeatedly multiplying x by itself.
-    /// 
-    /// <b>For Beginners:</b> This method calculates what happens when you multiply a number by itself
-    /// multiple times. For example:
-    /// - x^1 = x
-    /// - x^2 = x × x
-    /// - x^3 = x × x × x
-    /// 
-    /// In the context of spline interpolation, we need these calculations to evaluate
-    /// polynomial terms like x, x², x³, etc., which are used to create the smooth curve.
-    /// </remarks>
-    /// <param name="x">The base value to be raised to a power.</param>
-    /// <param name="power">The exponent (how many times to multiply x by itself).</param>
-    /// <returns>The value of x raised to the specified power.</returns>
-    private T Power(T x, int power)
+    private static Tensor<T> Slice(Tensor<T> values, int start, int length)
     {
-        T result = _numOps.One;
-        for (int i = 0; i < power; i++)
-        {
-            result = _numOps.Multiply(result, x);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorSlice(values, new[] { start }, new[] { length });
     }
 }

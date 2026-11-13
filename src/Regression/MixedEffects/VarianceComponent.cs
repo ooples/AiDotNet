@@ -142,12 +142,13 @@ public class VarianceDecomposition<T>
     {
         get
         {
-            T total = ResidualVariance.Variance;
-            foreach (var re in RandomEffectVariances)
+            if (RandomEffectVariances.Count == 0)
             {
-                total = NumOps.Add(total, re.Variance);
+                return ResidualVariance.Variance;
             }
-            return total;
+
+            var randomVariances = new Vector<T>(RandomEffectVariances.Select(re => re.Variance));
+            return NumOps.Add(ResidualVariance.Variance, AiDotNetEngine.Current.Sum(randomVariances));
         }
     }
 

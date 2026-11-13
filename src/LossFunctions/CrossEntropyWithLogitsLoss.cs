@@ -73,28 +73,16 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // LogSoftmax using log-sum-exp trick for numerical stability:
         // log_softmax_i = logit_i - log(sum(exp(logit_j)))
         // First find max for numerical stability
-        T maxLogit = predicted[0];
-        for (int i = 1; i < predicted.Length; i++)
-        {
-            if (NumOps.GreaterThan(predicted[i], maxLogit))
-                maxLogit = predicted[i];
-        }
+        var logits = predicted.AsTensor();
+        T maxLogit = Engine.TensorMaxValue(logits);
 
         // Compute log(sum(exp(logit_i - max))) + max
-        T sumExp = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(predicted[i], maxLogit)));
-        }
+        T sumExp = Engine.TensorSum(Engine.TensorExp(Engine.TensorSubtractScalar(logits, maxLogit)));
         T logSumExp = NumOps.Add(NumericalStabilityHelper.SafeLog(sumExp), maxLogit);
 
         // CE = -sum(actual_i * log_softmax_i) = -sum(actual_i * (logit_i - logSumExp))
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T logSoftmax = NumOps.Subtract(predicted[i], logSumExp);
-            loss = NumOps.Add(loss, NumOps.Multiply(actual[i], logSoftmax));
-        }
+        var logSoftmax = Engine.TensorSubtractScalar(logits, logSumExp);
+        T loss = Engine.TensorSum(Engine.TensorMultiply(actual.AsTensor(), logSoftmax));
 
         return NumOps.Negate(loss);
     }
@@ -372,15 +360,17 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (alternateAxis == defaultAxis || alternateAxis >= rank)
             return defaultAxis;
 
-        double defaultScore = ProbabilityAxisScore(target, defaultAxis);
-        double alternateScore = ProbabilityAxisScore(target, alternateAxis);
+        T defaultScore = ProbabilityAxisScore(target, defaultAxis);
+        T alternateScore = ProbabilityAxisScore(target, alternateAxis);
+        T tolerance = NumOps.FromDouble(1e-6);
 
-        return alternateScore < 1e-6 && alternateScore + 1e-6 < defaultScore
+        return NumOps.LessThan(alternateScore, tolerance)
+            && NumOps.LessThan(NumOps.Add(alternateScore, tolerance), defaultScore)
             ? alternateAxis
             : defaultAxis;
     }
 
-    private double ProbabilityAxisScore(Tensor<T> target, int axis)
+    private T ProbabilityAxisScore(Tensor<T> target, int axis)
     {
         // _shape, not Shape.ToArray(): every read below is read-only, so the defensive copy was
         // pure allocation on a per-call scoring path (ADNPERF001).
@@ -391,25 +381,13 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             inner *= shape[i];
 
         int outer = target.Length / (axisSize * inner);
-        var span = target.Data.Span;
-        double totalDeviation = 0.0;
-        int slices = 0;
+        if (outer * inner == 0)
+            return NumOps.MaxValue; // no slices: never preferred over a scored axis
 
-        for (int o = 0; o < outer; o++)
-        {
-            int outerOffset = o * axisSize * inner;
-            for (int i = 0; i < inner; i++)
-            {
-                double sum = 0.0;
-                for (int c = 0; c < axisSize; c++)
-                    sum += NumOps.ToDouble(span[outerOffset + c * inner + i]);
-
-                totalDeviation += Math.Abs(sum - 1.0);
-                slices++;
-            }
-        }
-
-        return slices == 0 ? double.PositiveInfinity : totalDeviation / slices;
+        // Mean over every slice along the axis of |Σ_axis target - 1|.
+        var axisSums = Engine.ReduceSum(target, new[] { axis }, keepDims: false);
+        var deviation = Engine.TensorAbs(Engine.TensorSubtractScalar(axisSums, NumOps.One));
+        return Engine.TensorMean(deviation);
     }
 
     private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses, int classAxis, int[] oneHotShape)
@@ -423,50 +401,20 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
                 nameof(indices));
         }
 
-        var oneHot = new Tensor<T>(oneHotShape.ToArray());
-        var oneHotStrides = ComputeStrides(oneHotShape);
-        var indicesSpan = indices.Data.Span;
-        var oneHotSpan = oneHot.Data.Span;
-        // oneHot is initialized to zero on construction; we only need to
-        // set the active class index per row.
-        for (int i = 0; i < indicesSpan.Length; i++)
-        {
-            int classIdx = (int)Math.Round(NumOps.ToDouble(indicesSpan[i]));
-            if (classIdx >= 0 && classIdx < numClasses)
-            {
-                // The flattened target ordinal enumerates all non-class coordinates in row-major
-                // order. Decode it directly against those logits axes, inserting the class
-                // coordinate afterward. This avoids indexing an independently computed target
-                // stride array and works for both last-axis sequence labels and channel-first NCHW.
-                int remaining = i;
-                int oneHotOffset = 0;
+        // Build the one-hot with the class axis last: compare each rounded index against
+        // 0..numClasses-1, so indices outside [0, numClasses) (e.g. an ignore sentinel) stay all-zero.
+        // Then move that axis into its logits position.
+        var lastAxisShape = new int[indicesShape.Length + 1];
+        Array.Copy(indicesShape, lastAxisShape, indicesShape.Length);
+        lastAxisShape[indicesShape.Length] = numClasses;
+        var columnShape = (int[])lastAxisShape.Clone();
+        columnShape[indicesShape.Length] = 1;
 
-                for (int axis = oneHotShape.Length - 1; axis >= 0; axis--)
-                {
-                    if (axis == classAxis)
-                        continue;
-
-                    int coord = remaining % oneHotShape[axis];
-                    remaining /= oneHotShape[axis];
-                    oneHotOffset += coord * oneHotStrides[axis];
-                }
-
-                oneHotSpan[oneHotOffset + classIdx * oneHotStrides[classAxis]] = NumOps.One;
-            }
-        }
-        return oneHot;
-    }
-
-    private static int[] ComputeStrides(int[] shape)
-    {
-        var strides = new int[shape.Length];
-        int stride = 1;
-        for (int i = shape.Length - 1; i >= 0; i--)
-        {
-            strides[i] = stride;
-            stride *= shape[i];
-        }
-
-        return strides;
+        var roundedIndices = Engine.Reshape(Engine.TensorRound(indices), columnShape);
+        var classIds = Engine.TensorArange<T>(0, numClasses, 1);
+        var oneHotLast = Engine.TensorEquals(
+            Engine.TensorBroadcastTo(roundedIndices, lastAxisShape),
+            Engine.TensorBroadcastTo(classIds, lastAxisShape));
+        return Engine.TensorMoveDim(oneHotLast, indicesShape.Length, classAxis).Contiguous();
     }
 }

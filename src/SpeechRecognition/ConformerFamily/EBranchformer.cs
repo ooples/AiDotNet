@@ -45,6 +45,8 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
 [ResearchPaper("E-Branchformer: Branchformer with Enhanced Merging for Speech Recognition", "https://arxiv.org/abs/2210.00077", Year = 2022, Authors = "Kim et al.")]
 [PaperOptimizer(OptimizerKind.Adam, WeightDecay = 1e-6,
                 Source = "Kim et al. 2023: the Adam optimizer with a weight decay of 1e-6. The paper also uses label smoothing 0.1, which is a loss setting rather than an optimizer one and is not declared here.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

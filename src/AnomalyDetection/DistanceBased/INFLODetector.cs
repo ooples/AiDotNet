@@ -51,9 +51,10 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
     private Matrix<T>? _trainingData;
     [Buffer]
     private Vector<T>? _localDensities;
-    private List<int>[]? _knnLists;
-    private List<int>[]? _rknnLists;
-    private HashSet<int>[]? _influenceSpaces;
+    // [n, k] kNN of every training point (itself excluded). The influence space IS(j) = kNN(j) union RkNN(j)
+    // follows from it: i is in RkNN(j) exactly when j is in kNN(i). Held row-major as int[] so the fitted
+    // state serializes; the [n, k] tensor is rebuilt from it at scoring time.
+    private int[]? _knnIndexData;
     private int _nFeatures;
 
     /// <summary>
@@ -94,23 +95,15 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         _trainingData = X;
         _nFeatures = X.Columns;
 
-        // Build kNN and RkNN lists
-        BuildNeighborLists(X);
-
-        // Precompute influence spaces (kNN union RkNN) for each training point
+        // kNN of every training point (itself excluded by index) and its local density
+        var engine = Engine;
         int n = X.Rows;
-        _influenceSpaces = new HashSet<int>[n];
-        for (int i = 0; i < n; i++)
-        {
-            _influenceSpaces[i] = new HashSet<int>((_knnLists ?? throw new InvalidOperationException("KNN lists not computed."))[i]);
-            foreach (int rknnIdx in (_rknnLists ?? throw new InvalidOperationException("RKNN lists not computed."))[i])
-            {
-                _influenceSpaces[i].Add(rknnIdx);
-            }
-        }
+        var data = AnomalyTensorOps.ToTensor(X);
+        var distances = AnomalyTensorOps.NearestNeighbors(data, data, _k, true, out var neighbors);
+        _localDensities = LocalDensities(engine.ReduceSum(distances, new[] { 1 }, false), NumOps.FromDouble(_k)).ToVector();
 
-        // Compute local densities
-        _localDensities = ComputeLocalDensities(X);
+        // Influence spaces kNN union RkNN are derived from the kNN lists at scoring time (no [n, n] matrix)
+        _knnIndexData = neighbors.ToArray();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -138,177 +131,99 @@ public partial class INFLODetector<T> : AnomalyDetectorBase<T>
         }
 
         var localDensities = _localDensities;
-        var influenceSpaces = _influenceSpaces;
-        if (localDensities == null || influenceSpaces == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Get k-nearest neighbors from training data to this point
-            var knn = GetKNearestNeighbors(X, i);
-
-            // For new data, use the union of the precomputed influence spaces
-            // of the k-nearest training neighbors as an approximation
-            var influenceSpace = new HashSet<int>(knn);
-            foreach (int neighborIdx in knn)
-            {
-                if (neighborIdx < influenceSpaces.Length)
-                {
-                    foreach (int influenceIdx in influenceSpaces[neighborIdx])
-                    {
-                        influenceSpace.Add(influenceIdx);
-                    }
-                }
-            }
-
-            // Compute local density for this point using its k-nearest neighbors
-            T localDensity = ComputeLocalDensityForPoint(X, i, knn);
-
-            // Compute average local density of influence space
-            T avgInfluenceDensity = NumOps.Zero;
-            int validCount = 0;
-            foreach (int neighborIdx in influenceSpace)
-            {
-                if (neighborIdx < localDensities.Length)
-                {
-                    avgInfluenceDensity = NumOps.Add(avgInfluenceDensity, localDensities[neighborIdx]);
-                    validCount++;
-                }
-            }
-
-            if (validCount > 0)
-            {
-                avgInfluenceDensity = NumOps.Divide(avgInfluenceDensity, NumOps.FromDouble(validCount));
-            }
-
-            // INFLO = average influence density / local density
-            T inflo = NumOps.GreaterThan(localDensity, NumOps.Zero)
-                ? NumOps.Divide(avgInfluenceDensity, localDensity)
-                : NumOps.One;
-            scores[i] = inflo;
-        }
-
-        return scores;
-    }
-
-    private void BuildNeighborLists(Matrix<T> X)
-    {
-        int n = X.Rows;
-        _knnLists = new List<int>[n];
-        _rknnLists = new List<int>[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            _knnLists[i] = new List<int>();
-            _rknnLists[i] = new List<int>();
-        }
-
-        // Compute distances and build kNN lists using vectorized ops
-        var distances = new List<(int Index, T Distance)>[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            distances[i] = new List<(int, T)>();
-            var pointI = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
-
-                var pointJ = new Vector<T>(X.GetRowReadOnlySpan(j).ToArray());
-                var diff = Engine.Subtract(pointI, pointJ);
-                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-                distances[i].Add((j, dist));
-            }
-
-            // Sort and take k nearest
-            distances[i].Sort((a, b) => NumOps.Compare(a.Distance, b.Distance));
-            _knnLists[i] = distances[i].Take(_k).Select(x => x.Index).ToList();
-        }
-
-        // Build RkNN lists from kNN lists
-        for (int i = 0; i < n; i++)
-        {
-            foreach (int neighbor in _knnLists[i])
-            {
-                _rknnLists[neighbor].Add(i);
-            }
-        }
-    }
-
-    private Vector<T> ComputeLocalDensities(Matrix<T> X)
-    {
-        var densities = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            densities[i] = ComputeLocalDensityForPoint(X, i, (_knnLists ?? throw new InvalidOperationException("KNN lists not computed."))[i]);
-        }
-
-        return densities;
-    }
-
-    private T ComputeLocalDensityForPoint(Matrix<T> X, int pointIdx, List<int> neighbors)
-    {
-        if (neighbors.Count == 0) return NumOps.Zero;
-
-        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
-
+        var knnIndexData = _knnIndexData;
         var trainingData = _trainingData;
-        if (trainingData == null)
+        if (localDensities == null || knnIndexData == null || trainingData == null
+            || trainingData.Rows == 0 || knnIndexData.Length % trainingData.Rows != 0)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        // Local density = 1 / (average distance to k-nearest neighbors)
-        T avgDist = NumOps.Zero;
-        foreach (int neighborIdx in neighbors)
-        {
-            var neighbor = new Vector<T>(trainingData.GetRowReadOnlySpan(neighborIdx).ToArray());
-            var diff = Engine.Subtract(point, neighbor);
-            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-            avgDist = NumOps.Add(avgDist, dist);
-        }
+        var knnIndices = new Tensor<int>(knnIndexData, new[] { trainingData.Rows, knnIndexData.Length / trainingData.Rows });
 
-        avgDist = NumOps.Divide(avgDist, NumOps.FromDouble(neighbors.Count));
-
-        return NumOps.GreaterThan(avgDist, NumOps.Zero)
-            ? NumOps.Divide(NumOps.One, avgDist)
-            : NumOps.MaxValue;
+        // Query rows are scored in bounded blocks (only [block, nTraining * k] tensors are live)
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        int nTraining = trainingData.Rows;
+        int slots = Math.Min(_k, nTraining);
+        long perRow = (long)nTraining * Math.Max(1, knnIndices.Shape[1]);
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), perRow,
+            query => ScoreBlock(query, training, localDensities.AsTensor(), knnIndices, slots)).ToVector();
     }
 
-    private List<int> GetKNearestNeighbors(Matrix<T> X, int pointIdx)
+    // INFLO scores of one block of query rows.
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> localDensities, Tensor<int> knnIndices,
+        int slots)
     {
-        var point = new Vector<T>(X.Columns);
-        for (int j = 0; j < X.Columns; j++)
-        {
-            point[j] = X[pointIdx, j];
-        }
+        var engine = Engine;
+        int m = query.Shape[0];
+        int nTraining = training.Shape[0];
 
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
+        // k nearest training points at a positive distance (nearest first, by index on ties). Distances
+        // sort ascending, so after the zero distances the next (at most) k entries are the neighbours.
+        var (sorted, order) = AnomalyTensorOps.StableSortRows(
+            AnomalyTensorOps.PairwiseDistances(query, training), descending: false);
+        var positive = engine.TensorGreaterThan(sorted, NumOps.Zero);
+        var neighborMask = engine.TensorMultiply(positive,
+            engine.TensorLessThan(engine.TensorCumSum(positive, 1), NumOps.FromDouble(_k + 0.5)));
+        var count = engine.ReduceSum(neighborMask, new[] { 1 }, false);
 
-        return Enumerable.Range(0, trainingData.Rows)
-            .Select(i =>
-            {
-                var refPoint = new Vector<T>(trainingData.Columns);
-                for (int j = 0; j < trainingData.Columns; j++)
-                {
-                    refPoint[j] = trainingData[i, j];
-                }
-                return (Index: i, Dist: NumOps.ToDouble(StatisticsHelper<T>.EuclideanDistance(point, refPoint)));
-            })
-            .Where(x => x.Dist > 0)
-            .OrderBy(x => x.Dist)
-            .Take(_k)
-            .Select(x => x.Index)
-            .ToList();
+        // Local density from the neighbour distances; 0 without neighbours
+        var localDensity = engine.TensorWhere(
+            engine.TensorGreaterThan(count, NumOps.Zero),
+            LocalDensities(engine.ReduceSum(engine.TensorMultiply(neighborMask, sorted), new[] { 1 }, false), count),
+            Tensor<T>.CreateZeros(new[] { m }));
+
+        // For new data the influence space is the kNN N(q) plus the union of the influence spaces
+        // IS(j) = kNN(j) union RkNN(j) of those training neighbours j:
+        // (a) i in kNN(j) for a neighbour j: scatter the kNN lists of the (at most k) neighbours, which a stable
+        //     descending sort of the mask moves to the first slots;
+        // (b) i in RkNN(j) for a neighbour j, i.e. kNN(i) meets N(q): gather N(q) at every kNN(i) and take the max.
+        var knnMatrix = engine.TensorTakeAlongDim(neighborMask, engine.TensorArgsort(order, 1, false), 1);
+        int listLength = knnIndices.Shape[1];
+        var (slotMask, slotPositions) = AnomalyTensorOps.StableSortRows(neighborMask, descending: true);
+        var firstSlots = engine.TensorSlice(slotPositions, new[] { 0, 0 }, new[] { m, slots });
+        var neighborIndices = engine.TensorTakeAlongDim(order, firstSlots, 1);
+        var valid = engine.TensorSlice(slotMask, new[] { 0, 0 }, new[] { m, slots });
+        var neighborLists = engine.Reshape(
+            engine.TensorGather(knnIndices, engine.Reshape(neighborIndices, new[] { m * slots }), 0),
+            new[] { m, slots * listLength });
+        var listWeights = engine.Reshape(engine.TensorBroadcastTo(engine.Reshape(valid, new[] { m, slots, 1 }),
+            new[] { m, slots, listLength }), new[] { m, slots * listLength });
+        var inNeighborKnn = engine.TensorGreaterThan(
+            engine.TensorScatterAdd(Tensor<T>.CreateZeros(new[] { m, nTraining }), neighborLists, listWeights, 1), NumOps.Zero);
+        var reverse = engine.ReduceMax(engine.Reshape(
+            engine.TensorGather(knnMatrix, engine.Reshape(knnIndices, new[] { nTraining * listLength }), 1),
+            new[] { m, nTraining, listLength }), new[] { 2 }, false);
+        var membership = engine.TensorClamp(
+            engine.TensorAdd(engine.TensorAdd(knnMatrix, inNeighborKnn), reverse), NumOps.Zero, NumOps.One);
+        var influenceCount = engine.ReduceSum(membership, new[] { 1 }, false);
+        var influenceSum = engine.Reshape(
+            engine.TensorMatMul(membership, engine.Reshape(localDensities, new[] { nTraining, 1 })), new[] { m });
+        var hasInfluence = engine.TensorGreaterThan(influenceCount, NumOps.Zero);
+        var avgInfluenceDensity = engine.TensorWhere(hasInfluence,
+            engine.TensorDivide(influenceSum, engine.TensorWhere(hasInfluence, influenceCount, Tensor<T>.CreateOnes(new[] { m }))),
+            Tensor<T>.CreateZeros(new[] { m }));
+
+        // INFLO = average influence density / local density, 1 when the local density is not positive
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(localDensity, NumOps.Zero),
+            engine.TensorDivide(avgInfluenceDensity, localDensity),
+            Tensor<T>.CreateOnes(new[] { m }));
     }
+
+    // Local density 1 / (average neighbour distance) from the distance sums and neighbour counts,
+    // MaxValue when the average is 0.
+    private Tensor<T> LocalDensities(Tensor<T> distanceSums, Tensor<T> counts)
+    {
+        var engine = Engine;
+        int m = distanceSums.Length;
+        var avgDist = engine.TensorDivide(distanceSums, counts);
+        var positive = engine.TensorGreaterThan(avgDist, NumOps.Zero);
+        return engine.TensorWhere(positive,
+            engine.TensorReciprocal(engine.TensorWhere(positive, avgDist, Tensor<T>.CreateOnes(new[] { m }))),
+            engine.Fill(m, NumOps.MaxValue).AsTensor());
+    }
+
+    private Tensor<T> LocalDensities(Tensor<T> distanceSums, T count)
+        => LocalDensities(distanceSums, Engine.Fill(distanceSums.Length, count).AsTensor());
 }

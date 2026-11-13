@@ -157,35 +157,20 @@ public partial class QuantileRegression<T> : RegressionBase<T>
         double quantile = _options.Quantile;
 
         // Z = [1 | X], the design matrix including the intercept column when one is fitted.
-        var design = new Matrix<T>(n, regressionParameterCount);
         int coefficientColumn = Options.UseIntercept ? 1 : 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (Options.UseIntercept) design[i, 0] = NumOps.One;
-            for (int j = 0; j < p; j++) design[i, coefficientColumn + j] = x[i, j];
-        }
+        var design = Options.UseIntercept ? x.AddConstantColumn(NumOps.One) : x.Clone();
 
         // The solver minimizes, so the dual's maximization of yᵀa is posed as minimizing −yᵀa.
-        var objective = new Vector<T>(n);
-        for (int i = 0; i < n; i++) objective[i] = NumOps.Negate(y[i]);
+        var objective = Engine.Negate(y);
 
-        var equalityMatrix = new Matrix<T>(regressionParameterCount, n);
-        for (int r = 0; r < regressionParameterCount; r++)
-        {
-            for (int i = 0; i < n; i++) equalityMatrix[r, i] = design[i, r];
-        }
+        var equalityMatrix = Engine.MatrixTranspose(design);
 
         var equalityBounds = new Vector<T>(regressionParameterCount);
 
-        var lowerBounds = new Vector<T>(n);
-        var upperBounds = new Vector<T>(n);
         T lowerBound = NumOps.FromDouble(quantile - 1.0);
         T upperBound = NumOps.FromDouble(quantile);
-        for (int i = 0; i < n; i++)
-        {
-            lowerBounds[i] = lowerBound;
-            upperBounds[i] = upperBound;
-        }
+        var lowerBounds = Engine.Fill(n, lowerBound);
+        var upperBounds = Engine.Fill(n, upperBound);
 
         var program = new AiDotNet.Solvers.LinearProgramming.LinearProgram<T>(
             objective,
@@ -210,8 +195,7 @@ public partial class QuantileRegression<T> : RegressionBase<T>
             design, y, solution.Solution, regressionParameterCount, quantile);
 
         Intercept = Options.UseIntercept ? fitted[0] : NumOps.Zero;
-        var coefficients = new Vector<T>(p);
-        for (int j = 0; j < p; j++) coefficients[j] = fitted[coefficientColumn + j];
+        var coefficients = fitted.GetSubVector(coefficientColumn, p);
 
         // Regularization is applied to the fitted coefficients, matching every other regression in
         // the library; the intercept is deliberately left unpenalized.
@@ -255,15 +239,11 @@ public partial class QuantileRegression<T> : RegressionBase<T>
         // A dual variable is "interior" when it is strictly inside [τ−1, τ]. The tolerance is
         // relative to the interval's width so it means the same thing at any quantile.
         double interiorTolerance = 1e-7;
-        var interior = new List<int>(parameterCount);
-        for (int i = 0; i < n; i++)
-        {
-            double value = NumOps.ToDouble(dualSolution[i]);
-            if (value > quantile - 1.0 + interiorTolerance && value < quantile - interiorTolerance)
-            {
-                interior.Add(i);
-            }
-        }
+        var duals = dualSolution.GetSubVector(0, n).AsTensor();
+        var isInterior = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(duals, NumOps.FromDouble(quantile - 1.0 + interiorTolerance)),
+            Engine.TensorLessThan(duals, NumOps.FromDouble(quantile - interiorTolerance)));
+        var interior = new List<int>(Engine.TensorNonzero(isInterior).ToArray());
 
         // Too few interior points to pin the fit down: fall back to every row, which is the
         // least-absolute-deviations fit's least-squares shadow rather than a wrong answer.
@@ -271,39 +251,21 @@ public partial class QuantileRegression<T> : RegressionBase<T>
 
         // Normal equations over the selected rows. With exactly parameterCount rows this reproduces
         // the interpolation Z_h β = y_h exactly; with more it is the least-squares compromise.
-        var normal = new Matrix<T>(parameterCount, parameterCount);
-        var rightHandSide = new Vector<T>(parameterCount);
-
-        for (int r = 0; r < parameterCount; r++)
+        var selectedDesign = RegressionEngineOps2.GatherRows(design, rows);
+        if (selectedDesign.Columns != parameterCount)
         {
-            for (int c = 0; c < parameterCount; c++)
-            {
-                T accumulator = NumOps.Zero;
-                foreach (int row in rows)
-                {
-                    accumulator = NumOps.Add(
-                        accumulator, NumOps.Multiply(design[row, r], design[row, c]));
-                }
-
-                normal[r, c] = accumulator;
-            }
-
-            T target = NumOps.Zero;
-            foreach (int row in rows)
-            {
-                target = NumOps.Add(target, NumOps.Multiply(design[row, r], responses[row]));
-            }
-
-            rightHandSide[r] = target;
+            selectedDesign = selectedDesign.GetSubMatrix(0, 0, rows.Count, parameterCount);
         }
+
+        var selectedResponses = RegressionEngineOps2.Gather(responses, rows);
+        var selectedDesignT = Engine.MatrixTranspose(selectedDesign);
+        var normal = Engine.MatrixMultiply(selectedDesignT, selectedDesign);
+        var rightHandSide = Engine.MatrixVectorMultiply(selectedDesignT, selectedResponses);
 
         // A ridge term keeps a rank-deficient selection solvable; it is far below the scale of the
         // data and vanishes from a well-determined fit.
         T ridge = NumOps.FromDouble(1e-12);
-        for (int r = 0; r < parameterCount; r++)
-        {
-            normal[r, r] = NumOps.Add(normal[r, r], ridge);
-        }
+        normal = RegressionEngineOps2.AddDiagonal(normal, ridge);
 
         try
         {
@@ -341,33 +303,9 @@ public partial class QuantileRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = Predict(input.GetRow(i));
-        }
-
-        return predictions;
-    }
-
-    /// <summary>
-    /// Predicts the value for a single input vector.
-    /// </summary>
-    /// <param name="input">The input feature vector.</param>
-    /// <returns>The predicted value at the specified quantile.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method calculates the dot product of the input vector and the coefficients, then adds the intercept.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is the core prediction function that calculates the predicted value for a single example.
-    /// It multiplies each feature value by its corresponding coefficient, sums these products, and adds
-    /// the intercept term to get the final prediction.
-    /// </para>
-    /// </remarks>
-    private T Predict(Vector<T> input)
-    {
-        return NumOps.Add(Coefficients.DotProduct(input), Intercept);
+        // Coefficients . row + Intercept for every row at once.
+        return Engine.Add(
+            Engine.MatrixVectorMultiply(input, Coefficients), Engine.Fill(input.Rows, Intercept));
     }
 
     /// <summary>

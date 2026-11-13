@@ -187,10 +187,6 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
             SplitCriterion = _options.SplitCriterion
         };
 
-        // Pre-allocate reusable buffers
-        var errors = new Vector<T>(n);
-        var normalizedErrors = new Vector<T>(n);
-        var exponents = new Vector<T>(n);
 
         for (int i = 0; i < _options.NumberOfEstimators; i++)
         {
@@ -202,12 +198,10 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
             var predictions = tree.Predict(x);
 
             // Engine-accelerated: errors = |y - predictions|
-            var diff = (Vector<T>)Engine.Subtract(y, predictions);
-            for (int j = 0; j < n; j++)
-                errors[j] = NumOps.Abs(diff[j]);
+            var errors = Engine.Abs(Engine.Subtract(y, predictions));
 
             T maxError = errors.Max();
-            T averageError = CalculateAverageError(errors, sampleWeights, maxError, normalizedErrors);
+            T averageError = CalculateAverageError(errors, sampleWeights, maxError);
 
             if (NumOps.GreaterThanOrEquals(averageError, NumOps.FromDouble(0.5)))
                 break;
@@ -222,7 +216,7 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
 
             _ensemble.Add((tree, weight));
 
-            UpdateSampleWeightsInPlace(sampleWeights, errors, beta, maxError, normalizedErrors, exponents);
+            sampleWeights = UpdateSampleWeights(sampleWeights, errors, beta, maxError);
         }
 
         await CalculateFeatureImportancesAsync(x.Columns);
@@ -269,7 +263,7 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
 
         // Note: Tree-based methods handle regularization through tree structure parameters
         // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
-        var sumWeights = _ensemble.Aggregate(NumOps.Zero, (acc, e) => NumOps.Add(acc, e.Weight));
+        var sumWeights = Engine.Sum(new Vector<T>(_ensemble.Select(e => e.Weight)));
 
         // Handle case where all weights sum to 0
         if (NumOps.Equals(sumWeights, NumOps.Zero))
@@ -277,19 +271,13 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
             // Use unweighted average instead
             sumWeights = NumOps.FromDouble(_ensemble.Count);
 
-            var result0 = new T[input.Rows];
+            var result0 = Engine.FillZero<T>(input.Rows);
             foreach (var (tree, _) in _ensemble)
             {
-                var prediction = tree.Predict(input);
-                for (int i = 0; i < input.Rows; i++)
-                    result0[i] = NumOps.Add(result0[i], prediction[i]);
+                result0 = Engine.Add(result0, tree.Predict(input));
             }
-            for (int i = 0; i < input.Rows; i++)
-                result0[i] = NumOps.Divide(result0[i], sumWeights);
-            return new Vector<T>(result0);
+            return Engine.Divide(result0, sumWeights);
         }
-
-        var result = new T[input.Rows];
 
         var tasks = _ensemble.Select(treeWeight => Task.Run(() =>
         {
@@ -300,14 +288,13 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
 
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(tasks);
 
-        for (int i = 0; i < input.Rows; i++)
+        var result = Engine.FillZero<T>(input.Rows);
+        foreach (var (prediction, weight) in predictions)
         {
-            result[i] = predictions.Aggregate(NumOps.Zero, (acc, p) =>
-                NumOps.Add(acc, NumOps.Multiply(p.prediction[i], p.weight)));
-            result[i] = NumOps.Divide(result[i], sumWeights);
+            result = Engine.Add(result, Engine.Multiply(prediction, weight));
         }
 
-        return new Vector<T>(result);
+        return Engine.Divide(result, sumWeights);
     }
 
     /// <summary>
@@ -334,45 +321,35 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
     /// attention in the next round of training.
     /// </para>
     /// </remarks>
-    private T CalculateAverageError(Vector<T> errors, Vector<T> sampleWeights, T maxError,
-        Vector<T> normalizedErrors)
+    private T CalculateAverageError(Vector<T> errors, Vector<T> sampleWeights, T maxError)
     {
         if (NumOps.Equals(maxError, NumOps.Zero))
             return NumOps.Zero;
 
-        int n = errors.Length;
-        for (int i = 0; i < n; i++)
-            normalizedErrors[i] = NumOps.Divide(errors[i], maxError);
+        var normalizedErrors = Engine.Divide(errors, maxError);
 
         T weightedSum = Engine.DotProduct(normalizedErrors, sampleWeights);
         T totalWeight = sampleWeights.Sum();
         return NumOps.Divide(weightedSum, totalWeight);
     }
 
-    private void UpdateSampleWeightsInPlace(Vector<T> sampleWeights, Vector<T> errors, T beta, T maxError,
-        Vector<T> normalizedErrors, Vector<T> exponents)
+    private Vector<T> UpdateSampleWeights(Vector<T> sampleWeights, Vector<T> errors, T beta, T maxError)
     {
         if (NumOps.Equals(maxError, NumOps.Zero))
-            return;
+            return sampleWeights;
 
+        // w_i *= beta^(1 - e_i / maxError)
         int n = errors.Length;
-        for (int i = 0; i < n; i++)
-        {
-            normalizedErrors[i] = NumOps.Divide(errors[i], maxError);
-            exponents[i] = NumOps.Subtract(NumOps.One, normalizedErrors[i]);
-        }
-
-        T sumWeights = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            sampleWeights[i] = NumOps.Multiply(sampleWeights[i], NumOps.Power(beta, exponents[i]));
-            sumWeights = NumOps.Add(sumWeights, sampleWeights[i]);
-        }
+        var exponents = Engine.Subtract(Engine.Fill(n, NumOps.One), Engine.Divide(errors, maxError));
+        var factors = Engine.TensorPower(
+            Tensor<T>.FromVector(Engine.Fill(n, beta)), Tensor<T>.FromVector(exponents)).ToVector();
+        var updated = Engine.Multiply(sampleWeights, factors);
+        T sumWeights = Engine.Sum(updated);
 
         if (NumOps.Equals(sumWeights, NumOps.Zero))
-            return;
+            return updated;
 
-        sampleWeights.MultiplyInPlace(NumOps.Divide(NumOps.One, sumWeights));
+        return Engine.Multiply(updated, NumOps.Divide(NumOps.One, sumWeights));
     }
 
     /// <summary>
@@ -468,28 +445,24 @@ public partial class AdaBoostR2Regression<T> : AsyncDecisionTreeRegressionBase<T
     /// </remarks>
     protected override async Task CalculateFeatureImportancesAsync(int numFeatures)
     {
-        var importances = new T[numFeatures];
-        var totalWeight = _ensemble.Aggregate(NumOps.Zero, (acc, e) => NumOps.Add(acc, e.Weight));
+        var totalWeight = Engine.Sum(new Vector<T>(_ensemble.Select(e => e.Weight)));
 
         var tasks = _ensemble.Select(treeWeight => Task.Run(() =>
         {
             var (tree, weight) = treeWeight;
-            var treeImportances = new T[numFeatures];
-            for (int i = 0; i < numFeatures; i++)
-            {
-                treeImportances[i] = NumOps.Multiply(tree.GetFeatureImportance(i), NumOps.Divide(weight, totalWeight));
-            }
-            return treeImportances;
+            var treeImportances = new Vector<T>(Enumerable.Range(0, numFeatures).Select(i => tree.GetFeatureImportance(i)));
+            return Engine.Multiply(treeImportances, NumOps.Divide(weight, totalWeight));
         }));
 
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(tasks);
 
-        for (int i = 0; i < numFeatures; i++)
+        var importances = Engine.FillZero<T>(numFeatures);
+        foreach (var treeImportance in allImportances)
         {
-            importances[i] = allImportances.Aggregate(NumOps.Zero, (acc, imp) => NumOps.Add(acc, imp[i]));
+            importances = Engine.Add(importances, treeImportance);
         }
 
-        FeatureImportances = new Vector<T>(importances);
+        FeatureImportances = importances;
     }
 
     /// <summary>

@@ -44,6 +44,8 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
                 Source = "Gulati et al. 2020, Sec. 3: the Adam optimizer with beta1 0.9 and beta2 0.98 "
                         + "under the transformer learning rate schedule, with 10k warm-up steps, the recipe "
                         + "of the Conformer transducer this stand-in uses.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class AWSTranscribe<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

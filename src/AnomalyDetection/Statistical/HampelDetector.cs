@@ -117,63 +117,35 @@ public class HampelDetector<T> : AnomalyDetectorBase<T>
         int d = X.Columns;
         int halfWindow = _windowSize / 2;
 
-        var scores = new Vector<T>(n);
-
         T eps = NumOps.FromDouble(1e-10);
         T scaleT = NumOps.FromDouble(_scaleFactor);
-        T half = NumOps.FromDouble(0.5);
 
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var lengths = AnomalyTensorOps.SlidingWindowLengths(n, halfWindow, halfWindow);
+        var scores = Tensor<T>.CreateZeros(new[] { n });
+
+        for (int j = 0; j < d; j++)
         {
-            T maxScore = NumOps.Zero;
+            // Local window [i - halfWindow, i + halfWindow] of this feature, truncated at the ends
+            var series = engine.TensorSliceAxis(data, 1, j);
+            var windows = AnomalyTensorOps.SlidingWindows(series, halfWindow, halfWindow, out var mask);
 
-            for (int j = 0; j < d; j++)
-            {
-                // Extract local window
-                int start = Math.Max(0, i - halfWindow);
-                int end = Math.Min(n, i + halfWindow + 1);
-                int windowLen = end - start;
+            // Local median
+            var localMedian = AnomalyTensorOps.MaskedRowMedians(windows, mask, lengths);
 
-                var windowValues = new T[windowLen];
-                for (int k = start; k < end; k++)
-                {
-                    windowValues[k - start] = X[k, j];
-                }
+            // Local MAD, scaled and floored at eps
+            var absDeviations = engine.TensorAbs(
+                engine.TensorSubtract(windows, AnomalyTensorOps.BroadcastColumn(localMedian, windows.Shape[1])));
+            var localMad = AnomalyTensorOps.MaskedRowMedians(absDeviations, mask, lengths);
+            localMad = engine.TensorMax(engine.TensorMultiplyScalar(localMad, scaleT), eps);
 
-                // Compute local median
-                Array.Sort(windowValues, (a, b) => NumOps.Compare(a, b));
-                T localMedian = windowLen % 2 == 0
-                    ? NumOps.Multiply(NumOps.Add(windowValues[windowLen / 2 - 1], windowValues[windowLen / 2]), half)
-                    : windowValues[windowLen / 2];
-
-                // Compute local MAD
-                var absDeviations = new T[windowLen];
-                for (int k = 0; k < windowLen; k++)
-                {
-                    absDeviations[k] = NumOps.Abs(NumOps.Subtract(windowValues[k], localMedian));
-                }
-
-                Array.Sort(absDeviations, (a, b) => NumOps.Compare(a, b));
-                T localMad = windowLen % 2 == 0
-                    ? NumOps.Multiply(NumOps.Add(absDeviations[windowLen / 2 - 1], absDeviations[windowLen / 2]), half)
-                    : absDeviations[windowLen / 2];
-
-                localMad = NumOps.Multiply(localMad, scaleT);
-                if (NumOps.LessThan(localMad, eps)) localMad = eps;
-
-                // Compute score for this feature
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], localMedian));
-                T featureScore = NumOps.Divide(deviation, localMad);
-
-                if (NumOps.GreaterThan(featureScore, maxScore))
-                {
-                    maxScore = featureScore;
-                }
-            }
-
-            scores[i] = maxScore;
+            // Score for this feature; the point's score is the largest one (a NaN score never wins)
+            var featureScore = engine.TensorDivide(engine.TensorAbs(engine.TensorSubtract(series, localMedian)), localMad);
+            featureScore = engine.TensorMaskedFill(featureScore, engine.TensorIsNan(featureScore), NumOps.Zero);
+            scores = engine.TensorMax(scores, featureScore);
         }
 
-        return scores;
+        return scores.ToVector();
     }
 }

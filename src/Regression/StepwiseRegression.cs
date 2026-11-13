@@ -270,13 +270,8 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
         // prediction bug: when selection kept every feature the lengths matched, so Predict's fast
         // path applied those coefficients to the columns in their original order and paired every
         // one with the wrong feature.
-        var expanded = new Vector<T>(x.Columns);
-        for (int i = 0; i < _selectedFeatures.Count; i++)
-        {
-            expanded[_selectedFeatures[i]] = finalRegression.Coefficients[i];
-        }
-
-        Coefficients = expanded;
+        Coefficients = RegressionEngineOps2.ScatterToLength(
+            x.Columns, _selectedFeatures, finalRegression.Coefficients.GetSubVector(0, _selectedFeatures.Count));
         Intercept = finalRegression.Intercept;
     }
 
@@ -337,6 +332,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
         List<int> remainingFeatures = [.. Enumerable.Range(0, x.Columns)];
         _selectedFeatures.Clear();
 
+        T minImprovement = NumOps.FromDouble(_options.MinImprovement);
         while (_selectedFeatures.Count < Math.Min(_options.MaxFeatures, x.Columns))
         {
             var (bestFeaturePosition, bestScore) = EvaluateFeatures(x, y, remainingFeatures, true);
@@ -347,7 +343,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
                 _selectedFeatures.Add(bestFeature);
                 remainingFeatures.RemoveAt(bestFeaturePosition);
 
-                if (NumOps.LessThan(bestScore, NumOps.FromDouble(_options.MinImprovement)))
+                if (NumOps.LessThan(bestScore, minImprovement))
                 {
                     break;
                 }
@@ -388,6 +384,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
     {
         _selectedFeatures = [.. Enumerable.Range(0, x.Columns)];
 
+        T minImprovement = NumOps.FromDouble(_options.MinImprovement);
         while (_selectedFeatures.Count > _options.MinFeatures)
         {
             var (worstFeature, bestScore) = EvaluateFeatures(x, y, _selectedFeatures, false);
@@ -396,7 +393,7 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
             {
                 _selectedFeatures.RemoveAt(worstFeature);
 
-                if (NumOps.LessThan(bestScore, NumOps.FromDouble(_options.MinImprovement)))
+                if (NumOps.LessThan(bestScore, minImprovement))
                 {
                     break;
                 }

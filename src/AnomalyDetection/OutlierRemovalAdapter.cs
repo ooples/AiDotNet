@@ -101,24 +101,15 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
         }
 
         // Filter out outliers
-        var cleanedInputs = new List<Vector<T>>();
-        var cleanedOutputs = new List<T>();
         T one = NumOps.FromDouble(1);
+        var inliers = AnomalyTensorOps.NonzeroIndices(
+            AiDotNetEngine.Current.TensorEquals(predictions.AsTensor(), one));
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (NumOps.Equals(predictions[i], one))
-            {
-                cleanedInputs.Add(new Vector<T>(inputMatrix.GetRow(i)));
-                cleanedOutputs.Add(outputVector[i]);
-            }
-        }
-
-        // Convert back to matrix/vector
-        var cleanedInputMatrix = cleanedInputs.Count > 0
-            ? new Matrix<T>(cleanedInputs)
+        // Keep the inlier rows and their outputs, in order
+        var cleanedInputMatrix = inliers.Length > 0
+            ? AnomalyTensorOps.SelectRows(AnomalyTensorOps.ToTensor(inputMatrix), inliers).ToMatrix()
             : new Matrix<T>(0, inputMatrix.Columns);
-        var cleanedOutputVector = new Vector<T>(cleanedOutputs);
+        var cleanedOutputVector = AnomalyTensorOps.SelectElements(outputVector, inliers);
 
         // Convert back to original types
         return ConvertToOriginalTypes(cleanedInputMatrix, cleanedOutputVector, typeof(TInput), typeof(TOutput));
@@ -145,14 +136,7 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
         }
         else if (inputs is Tensor<T> tensor && tensor.Rank == 2)
         {
-            inputMatrix = new Matrix<T>(tensor.Shape[0], tensor.Shape[1]);
-            for (int i = 0; i < tensor.Shape[0]; i++)
-            {
-                for (int j = 0; j < tensor.Shape[1]; j++)
-                {
-                    inputMatrix[i, j] = tensor[i, j];
-                }
-            }
+            inputMatrix = tensor.ToMatrix();
         }
         else
         {
@@ -166,11 +150,7 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
         }
         else if (outputs is Tensor<T> tensorOut && tensorOut.Rank == 1)
         {
-            outputVector = new Vector<T>(tensorOut.Shape[0]);
-            for (int i = 0; i < tensorOut.Shape[0]; i++)
-            {
-                outputVector[i] = tensorOut[i];
-            }
+            outputVector = tensorOut.ToVector();
         }
         else
         {
@@ -193,15 +173,7 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
         }
         else if (inputType.IsGenericType && inputType.GetGenericTypeDefinition() == typeof(Tensor<>))
         {
-            var tensor = new Tensor<T>(new[] { inputMatrix.Rows, inputMatrix.Columns });
-            for (int i = 0; i < inputMatrix.Rows; i++)
-            {
-                for (int j = 0; j < inputMatrix.Columns; j++)
-                {
-                    tensor[i, j] = inputMatrix[i, j];
-                }
-            }
-            cleanedInputs = tensor;
+            cleanedInputs = Tensor<T>.FromMatrix(inputMatrix);
         }
         else
         {
@@ -214,12 +186,7 @@ public class OutlierRemovalAdapter<T, TInput, TOutput> : IOutlierRemoval<T, TInp
         }
         else if (outputType.IsGenericType && outputType.GetGenericTypeDefinition() == typeof(Tensor<>))
         {
-            var tensor = new Tensor<T>(new[] { outputVector.Length });
-            for (int i = 0; i < outputVector.Length; i++)
-            {
-                tensor[i] = outputVector[i];
-            }
-            cleanedOutputs = tensor;
+            cleanedOutputs = Tensor<T>.FromVector(outputVector);
         }
         else
         {

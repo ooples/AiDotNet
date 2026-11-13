@@ -96,46 +96,16 @@ public partial class MADDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        int n = X.Rows;
-        int d = X.Columns;
-
-        _medians = new Vector<T>(d);
-        _mads = new Vector<T>(d);
         T eps = NumOps.FromDouble(1e-10);
         T scaleT = NumOps.FromDouble(_scaleFactor);
-        T two = NumOps.FromDouble(2);
-        T half = NumOps.FromDouble(0.5);
 
-        for (int j = 0; j < d; j++)
-        {
-            // Extract column values
-            var values = new T[n];
-            for (int i = 0; i < n; i++)
-            {
-                values[i] = X[i, j];
-            }
-
-            // Compute median
-            Array.Sort(values, (a, b) => NumOps.Compare(a, b));
-            _medians[j] = n % 2 == 0
-                ? NumOps.Multiply(NumOps.Add(values[n / 2 - 1], values[n / 2]), half)
-                : values[n / 2];
-
-            // Compute MAD
-            var absDeviations = new T[n];
-            for (int i = 0; i < n; i++)
-            {
-                absDeviations[i] = NumOps.Abs(NumOps.Subtract(X[i, j], _medians[j]));
-            }
-
-            Array.Sort(absDeviations, (a, b) => NumOps.Compare(a, b));
-            T medianAbsDev = n % 2 == 0
-                ? NumOps.Multiply(NumOps.Add(absDeviations[n / 2 - 1], absDeviations[n / 2]), half)
-                : absDeviations[n / 2];
-
-            _mads[j] = NumOps.Multiply(scaleT, medianAbsDev);
-            if (NumOps.LessThan(_mads[j], eps)) _mads[j] = eps;
-        }
+        // Per-feature median and scaled MAD (floored at eps)
+        var engine = Engine;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var medians = AnomalyTensorOps.ColumnMedians(data);
+        _medians = medians.ToVector();
+        var mads = engine.TensorMultiplyScalar(AnomalyTensorOps.ColumnMads(data, medians), scaleT);
+        _mads = engine.TensorMax(mads, eps).ToVector();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -163,26 +133,7 @@ public partial class MADDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T maxScore = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], medians[j]));
-                T madScore = NumOps.Divide(deviation, mads[j]);
-
-                if (NumOps.GreaterThan(madScore, maxScore))
-                {
-                    maxScore = madScore;
-                }
-            }
-
-            scores[i] = maxScore;
-        }
-
-        return scores;
+        // Largest |x - median| / MAD across features
+        return AnomalyTensorOps.MaxStandardizedDeviation(X, medians, mads);
     }
 }

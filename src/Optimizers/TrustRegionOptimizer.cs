@@ -243,30 +243,14 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
         }
 
         // The normalized-direction expression simplifies exactly to -alpha * gradient.
-        var newParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var newParameters = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradient, alpha));
         var parameterSpan = parameters.AsSpan();
         var gradientSpan = gradient.AsSpan();
-        var newParameterSpan = newParameters.AsWritableSpan();
-        for (int i = 0; i < newParameterSpan.Length; i++)
-        {
-            newParameterSpan[i] = NumOps.Subtract(
-                parameterSpan[i],
-                NumOps.Multiply(alpha, gradientSpan[i]));
-        }
 
         // Adapt trust region radius based on gradient change (proxy for step success)
         if (_trustRegionPreviousGradient is not null && _trustRegionPreviousParameters is not null)
         {
-            T paramDiffSquaredNorm = NumOps.Zero;
-            var previousParameterSpan = _trustRegionPreviousParameters.AsSpan();
-            for (int i = 0; i < parameterSpan.Length; i++)
-            {
-                T difference = NumOps.Subtract(parameterSpan[i], previousParameterSpan[i]);
-                paramDiffSquaredNorm = NumOps.Add(
-                    paramDiffSquaredNorm,
-                    NumOps.Multiply(difference, difference));
-            }
-            var paramDiffNorm = NumOps.Sqrt(paramDiffSquaredNorm);
+            var paramDiffNorm = Engine.Norm(Engine.Subtract(parameters, _trustRegionPreviousParameters));
 
             if (NumOps.GreaterThan(paramDiffNorm, NumOps.FromDouble(1e-10)))
             {
@@ -342,12 +326,9 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
             var currentStepData = EvaluateSolution(currentSolution, inputData);
             var proposedStepData = EvaluateSolution(proposedSolution, inputData);
 
-            var actualReduction = NumOps.Subtract(currentStepData.FitnessScore, proposedStepData.FitnessScore);
             var predictedReduction = CalculatePredictedReduction(gradient, hessian, stepDirection);
 
-            var rho = NumOps.Divide(actualReduction, predictedReduction);
-
-            if (NumOps.GreaterThan(rho, NumOps.FromDouble(_options.AcceptanceThreshold)))
+            if (IsAcceptedStep(currentStepData.FitnessScore, proposedStepData.FitnessScore, predictedReduction, out var rho))
             {
                 currentSolution = proposedSolution;
                 currentStepData = proposedStepData;
@@ -402,59 +383,11 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     private Matrix<T> CalculateHessian(IFullModel<T, TInput, TOutput> currentSolution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var coefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
-        var hessian = new Matrix<T>(coefficients.Length, coefficients.Length);
-        var epsilon = NumOps.FromDouble(1e-8);
-
-        for (int i = 0; i < coefficients.Length; i++)
-        {
-            for (int j = i; j < coefficients.Length; j++)
-            {
-                var perturbed1 = currentSolution.Clone();
-                var perturbed2 = currentSolution.Clone();
-                var perturbed3 = currentSolution.Clone();
-                var perturbed4 = currentSolution.Clone();
-
-                var coeffs1 = coefficients.Clone();
-                var coeffs2 = coefficients.Clone();
-                var coeffs3 = coefficients.Clone();
-                var coeffs4 = coefficients.Clone();
-
-                coeffs1[i] = NumOps.Add(coeffs1[i], epsilon);
-                coeffs1[j] = NumOps.Add(coeffs1[j], epsilon);
-
-                coeffs2[i] = NumOps.Add(coeffs2[i], epsilon);
-                coeffs2[j] = NumOps.Subtract(coeffs2[j], epsilon);
-
-                coeffs3[i] = NumOps.Subtract(coeffs3[i], epsilon);
-                coeffs3[j] = NumOps.Add(coeffs3[j], epsilon);
-
-                coeffs4[i] = NumOps.Subtract(coeffs4[i], epsilon);
-                coeffs4[j] = NumOps.Subtract(coeffs4[j], epsilon);
-
-                perturbed1 = InterfaceGuard.Parameterizable(perturbed1).WithParameters(coeffs1);
-                perturbed2 = InterfaceGuard.Parameterizable(perturbed2).WithParameters(coeffs2);
-                perturbed3 = InterfaceGuard.Parameterizable(perturbed3).WithParameters(coeffs3);
-                perturbed4 = InterfaceGuard.Parameterizable(perturbed4).WithParameters(coeffs4);
-
-                var f11 = EvaluateSolution(perturbed1, inputData).FitnessScore;
-                var f12 = EvaluateSolution(perturbed2, inputData).FitnessScore;
-                var f21 = EvaluateSolution(perturbed3, inputData).FitnessScore;
-                var f22 = EvaluateSolution(perturbed4, inputData).FitnessScore;
-
-                var secondDerivative = NumOps.Divide(
-                    NumOps.Subtract(
-                        NumOps.Add(f11, f22),
-                        NumOps.Add(f12, f21)
-                    ),
-                    NumOps.Multiply(NumOps.FromDouble(4), NumOps.Multiply(epsilon, epsilon))
-                );
-
-                hessian[i, j] = secondDerivative;
-                hessian[j, i] = secondDerivative;
-            }
-        }
-
-        return hessian;
+        return CentralDifferenceHessian(
+            coefficients,
+            NumOps.FromDouble(1e-8),
+            point => EvaluateSolution(
+                InterfaceGuard.Parameterizable(currentSolution.Clone()).WithParameters(point), inputData).FitnessScore);
     }
 
     /// <summary>
@@ -501,39 +434,36 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
 
         var z = new Vector<T>(gradient.Length);
         var r = gradient.Clone();
-        // Vectorized negation: d = -r
-        var d = (Vector<T>)Engine.Multiply(r, NumOps.Negate(NumOps.One));
+        var d = (Vector<T>)Engine.Negate(r);
         var g0 = gradient.DotProduct(gradient);
+        var residualThreshold = NumOps.Multiply(NumOps.FromDouble(_options.CGTolerance), g0);
 
         for (int i = 0; i < _options.MaxCGIterations; i++)
         {
             var Hd = hessian.Multiply(d);
-            var dHd = d.DotProduct(Hd);
 
-            if (NumOps.LessThanOrEquals(dHd, NumOps.Zero))
+            // Negative curvature along d: go to the trust-region boundary.
+            if (!TryCgStepLength(r, d, Hd, out var alpha))
             {
                 return ComputeBoundaryStep(z, d);
             }
 
-            var alpha = NumOps.Divide(r.DotProduct(r), dHd);
-            var zNext = z.Add(d.Multiply(alpha));
+            var zNext = (Vector<T>)Engine.Add(z, Engine.Multiply(d, alpha));
 
-            if (NumOps.GreaterThan(zNext.Norm(), _trustRegionRadius))
+            if (IsOutsideTrustRegion(zNext))
             {
                 return ComputeBoundaryStep(z, d);
             }
 
             z = zNext;
-            var rNext = r.Add(Hd.Multiply(alpha));
-            var beta = NumOps.Divide(rNext.DotProduct(rNext), r.DotProduct(r));
+            var rNext = (Vector<T>)Engine.Add(r, Engine.Multiply(Hd, alpha));
 
-            // Vectorized negation: dNext = -rNext
-            var dNext = (Vector<T>)Engine.Multiply(rNext, NumOps.Negate(NumOps.One));
-            d = dNext.Add(d.Multiply(beta));
+            // d = -rNext + beta * d, with beta = rNext'rNext / r'r
+            d = (Vector<T>)Engine.Add(Engine.Negate(rNext), Engine.Multiply(d, ResidualRatio(rNext, r)));
 
             r = rNext;
 
-            if (NumOps.LessThan(r.Norm(), NumOps.Multiply(NumOps.FromDouble(_options.CGTolerance), g0)))
+            if (IsResidualBelow(r, residualThreshold))
             {
                 break;
             }
@@ -803,6 +733,41 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     /// point just measured as worse is the opposite of what a trust region does.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// rho = (current - proposed) / predicted reduction, and whether it clears the acceptance threshold.
+    /// </summary>
+    private bool IsAcceptedStep(T currentFitness, T proposedFitness, T predictedReduction, out T rho)
+    {
+        rho = NumOps.Divide(NumOps.Subtract(currentFitness, proposedFitness), predictedReduction);
+        return NumOps.GreaterThan(rho, NumOps.FromDouble(_options.AcceptanceThreshold));
+    }
+
+    /// <summary>
+    /// The CG step length alpha = r'r / d'Hd; false when d'Hd ≤ 0 (non-positive curvature along d).
+    /// </summary>
+    private bool TryCgStepLength(Vector<T> r, Vector<T> d, Vector<T> hd, out T alpha)
+    {
+        T curvature = d.DotProduct(hd);
+        if (NumOps.LessThanOrEquals(curvature, NumOps.Zero))
+        {
+            alpha = NumOps.Zero;
+            return false;
+        }
+
+        alpha = NumOps.Divide(r.DotProduct(r), curvature);
+        return true;
+    }
+
+    /// <summary>True when the step leaves the current trust region.</summary>
+    private bool IsOutsideTrustRegion(Vector<T> step) => NumOps.GreaterThan(step.Norm(), _trustRegionRadius);
+
+    /// <summary>The Fletcher-Reeves ratio next'next / current'current.</summary>
+    private T ResidualRatio(Vector<T> next, Vector<T> current)
+        => NumOps.Divide(next.DotProduct(next), current.DotProduct(current));
+
+    /// <summary>True when the residual norm has dropped below <paramref name="threshold"/>.</summary>
+    private bool IsResidualBelow(Vector<T> residual, T threshold) => NumOps.LessThan(residual.Norm(), threshold);
+
     private void ApplyTrustRegionRatioTest(
         TapeStepContext<T> context,
         Vector<T> originalParameters,
@@ -811,14 +776,9 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
         T originalLoss,
         T trialLoss)
     {
-        T gradientDotStep = NumOps.Zero;
-        T stepSquaredNorm = NumOps.Zero;
-        for (int i = 0; i < trialParameters.Length; i++)
-        {
-            T delta = NumOps.Subtract(trialParameters[i], originalParameters[i]);
-            gradientDotStep = NumOps.Add(gradientDotStep, NumOps.Multiply(gradient[i], delta));
-            stepSquaredNorm = NumOps.Add(stepSquaredNorm, NumOps.Multiply(delta, delta));
-        }
+        var delta = (Vector<T>)Engine.Subtract(trialParameters, originalParameters);
+        T gradientDotStep = Engine.DotProduct(gradient, delta);
+        T stepSquaredNorm = Engine.DotProduct(delta, delta);
 
         T predictedReduction = NumOps.Negate(NumOps.Add(
             gradientDotStep, NumOps.Multiply(NumOps.FromDouble(0.5), stepSquaredNorm)));

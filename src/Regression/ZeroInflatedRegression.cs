@@ -140,15 +140,11 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
 
         // Coerce response values to non-negative integers (count data)
         // Continuous values are rounded; negatives are clamped to zero
-        T zero = NumOps.Zero;
-        for (int i = 0; i < n; i++)
+        // (round half to even, then clamp at zero; written back into y in place).
+        if (n > 0)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            double rounded = Math.Max(0.0, Math.Round(yi));
-            if (yi != rounded)
-            {
-                y[i] = NumOps.FromDouble(rounded);
-            }
+            var counts = Engine.TensorMax(Engine.TensorRound(y.AsTensor()), NumOps.Zero).ToVector();
+            counts.AsSpan().CopyTo(y.AsWritableSpan());
         }
 
         // Initialize parameters
@@ -198,15 +194,8 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
         var (lambdas, pis) = await Task.Run(() => ComputePredictions(input));
-        var predictions = new Vector<T>(input.Rows);
-
         // Expected value = (1 - π) * λ
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = NumOps.Multiply(NumOps.Subtract(NumOps.One, pis[i]), lambdas[i]);
-        }
-
-        return predictions;
+        return Engine.Multiply(OneMinus(pis), lambdas);
     }
 
     /// <summary>
@@ -240,34 +229,27 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     public async Task<Matrix<T>> PredictPMFAsync(Matrix<T> input, int maxCount = 20)
     {
         var (lambdas, pis) = await Task.Run(() => ComputePredictions(input));
-        var pmf = new Matrix<T>(input.Rows, maxCount + 1);
-
-        for (int i = 0; i < input.Rows; i++)
+        int rows = input.Rows;
+        int columns = maxCount + 1;
+        if (rows == 0 || columns <= 0)
         {
-            T pi = pis[i];
-            T oneMinusPi = NumOps.Subtract(NumOps.One, pi);
-            double lambdaD = NumOps.ToDouble(lambdas[i]);
-
-            for (int k = 0; k <= maxCount; k++)
-            {
-                // ComputeCountProbability is a numerical recipe — boundary conversion
-                double pk = ComputeCountProbability(k, lambdaD);
-                T pkT = NumOps.FromDouble(pk);
-
-                if (k == 0)
-                {
-                    // P(Y=0) = π + (1-π) * P_count(0)
-                    pmf[i, k] = NumOps.Add(pi, NumOps.Multiply(oneMinusPi, pkT));
-                }
-                else
-                {
-                    // P(Y=k) = (1-π) * P_count(k)
-                    pmf[i, k] = NumOps.Multiply(oneMinusPi, pkT);
-                }
-            }
+            return new Matrix<T>(rows, Math.Max(columns, 0));
         }
 
-        return pmf;
+        // [rows, counts] grids of λ_i, k and (1 - π_i)
+        var shape = new[] { rows, columns };
+        var lambdaGrid = Engine.TensorBroadcastTo(Engine.Reshape(lambdas.AsTensor(), new[] { rows, 1 }), shape);
+        var kGrid = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<T>(0, columns, 1), new[] { 1, columns }), shape);
+        var oneMinusPiGrid = Engine.TensorBroadcastTo(Engine.Reshape(OneMinus(pis).AsTensor(), new[] { rows, 1 }), shape);
+
+        // P(Y=k) = (1-π) * P_count(k), and P(Y=0) additionally gets the structural-zero mass π
+        var pmf = Engine.TensorMultiply(oneMinusPiGrid, CountProbability(kGrid, lambdaGrid));
+        var piColumn = Engine.Reshape(pis.AsTensor(), new[] { rows, 1 });
+        var zeroMass = columns == 1
+            ? piColumn
+            : Engine.TensorConcatenate(new[] { piColumn, new Tensor<T>(new[] { rows, columns - 1 }) }, 1);
+        return Engine.TensorAdd(zeroMass, pmf).ToMatrix();
     }
 
     /// <summary>
@@ -276,22 +258,13 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     private void InitializeParameters(Vector<T> y)
     {
         // Proportion of zeros
-        int numZeros = 0;
-        T sumNonZero = NumOps.Zero;
-        int countNonZero = 0;
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], NumOps.Zero) == 0)
-            {
-                numZeros++;
-            }
-            else
-            {
-                sumNonZero = NumOps.Add(sumNonZero, y[i]);
-                countNonZero++;
-            }
-        }
+        var yTensor = y.AsTensor();
+        var isZero = Engine.TensorEquals(yTensor, NumOps.Zero);
+        int numZeros = y.Length == 0 ? 0 : Engine.TensorCountNonzero(isZero);
+        int countNonZero = y.Length - numZeros;
+        T sumNonZero = countNonZero > 0
+            ? Engine.TensorSum(Engine.TensorWhere(isZero, Engine.TensorZerosLike(yTensor), yTensor))
+            : NumOps.Zero;
 
         T pZero = NumOps.Divide(NumOps.FromDouble(numZeros), NumOps.FromDouble(y.Length));
         T meanNonZero = countNonZero > 0
@@ -328,61 +301,37 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     private (Vector<T> lambdas, Vector<T> pis) ComputePredictions(Matrix<T> x)
     {
         int n = x.Rows;
-        var lambdas = new Vector<T>(n);
-        var pis = new Vector<T>(n);
         T minLambda = NumOps.FromDouble(0.001);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            // Count model linear predictor using Engine.DotProduct
-            T etaCount = _countIntercept;
-            if (_countCoefficients != null)
-            {
-                var xRow = new Vector<T>(_numFeatures);
-                for (int j = 0; j < _numFeatures; j++) xRow[j] = x[i, j];
-                etaCount = NumOps.Add(etaCount, Engine.DotProduct(_countCoefficients, xRow));
-            }
-
-            // Apply count link inverse (boundary: special math functions)
-            T lambda;
-            if (_options.CountLink == ZeroInflatedCountLink.Log)
-            {
-                lambda = NumOps.Exp(etaCount);
-            }
-            else if (_options.CountLink == ZeroInflatedCountLink.SquareRoot)
-            {
-                lambda = NumOps.Multiply(etaCount, etaCount);
-            }
-            else if (_options.CountLink == ZeroInflatedCountLink.Identity)
-            {
-                lambda = NumOps.LessThan(etaCount, minLambda) ? minLambda : etaCount;
-            }
-            else
-            {
-                lambda = NumOps.Exp(etaCount);
-            }
-            lambdas[i] = lambda;
-
-            // Zero-inflation model linear predictor using Engine.DotProduct
-            T etaZero = _zeroIntercept;
-            if (_options.ModelZeroInflation && _zeroCoefficients != null)
-            {
-                var xRow2 = new Vector<T>(_numFeatures);
-                for (int j = 0; j < _numFeatures; j++) xRow2[j] = x[i, j];
-                etaZero = NumOps.Add(etaZero, Engine.DotProduct(_zeroCoefficients, xRow2));
-            }
-
-            // Apply zero link inverse (boundary: special math functions for Probit/CLogLog)
-            double etaZeroD = NumOps.ToDouble(etaZero);
-            double pi = _options.ZeroLink switch
-            {
-                ZeroInflatedZeroLink.Logit => 1 / (1 + Math.Exp(-etaZeroD)),
-                ZeroInflatedZeroLink.Probit => StandardNormalCdf(etaZeroD),
-                ZeroInflatedZeroLink.CLogLog => 1 - Math.Exp(-Math.Exp(etaZeroD)),
-                _ => 1 / (1 + Math.Exp(-etaZeroD))
-            };
-            pis[i] = NumOps.FromDouble(pi);
+            return (new Vector<T>(0), new Vector<T>(0));
         }
+
+        // Count model linear predictor
+        var etaCount = LinearPredictor(x, _countCoefficients, _countIntercept);
+
+        // Apply count link inverse
+        Vector<T> lambdas = _options.CountLink switch
+        {
+            ZeroInflatedCountLink.Log => Engine.Exp(etaCount),
+            ZeroInflatedCountLink.SquareRoot => Engine.Multiply(etaCount, etaCount),
+            ZeroInflatedCountLink.Identity => RegressionEngineOps2.ClampMin(etaCount, minLambda),
+            _ => Engine.Exp(etaCount)
+        };
+
+        // Zero-inflation model linear predictor
+        var etaZero = LinearPredictor(
+            x, _options.ModelZeroInflation ? _zeroCoefficients : null, _zeroIntercept);
+
+        // Apply zero link inverse
+        var etaZeroTensor = etaZero.AsTensor();
+        Vector<T> pis = _options.ZeroLink switch
+        {
+            ZeroInflatedZeroLink.Logit => Logistic(etaZero),
+            ZeroInflatedZeroLink.Probit => Engine.TensorNdtr(etaZeroTensor).ToVector(),
+            ZeroInflatedZeroLink.CLogLog => OneMinus(Engine.Exp(Engine.Negate(Engine.Exp(etaZero)))),
+            _ => Logistic(etaZero)
+        };
 
         return (lambdas, pis);
     }
@@ -392,53 +341,88 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     /// </summary>
     private Vector<T> ComputePosteriorZero(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
     {
-        var posterior = new Vector<T>(y.Length);
         T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            if (NumOps.Compare(y[i], NumOps.Zero) == 0)
-            {
-                // P(Z=1 | Y=0) = π / (π + (1-π) * P(Y=0|Z=0))
-                // ComputeCountProbability is a numerical recipe — boundary conversion
-                double p0 = ComputeCountProbability(0, NumOps.ToDouble(lambdas[i]));
-                T p0T = NumOps.FromDouble(p0);
-                T pi = pis[i];
-                T denom = NumOps.Add(pi, NumOps.Multiply(NumOps.Subtract(NumOps.One, pi), p0T));
-                posterior[i] = NumOps.GreaterThan(denom, NumOps.Zero)
-                    ? NumOps.Divide(pi, denom)
-                    : half;
-            }
-            else
-            {
-                // If Y > 0, definitely not a structural zero
-                posterior[i] = NumOps.Zero;
-            }
+            return new Vector<T>(0);
         }
 
-        return posterior;
+        // P(Z=1 | Y=0) = π / (π + (1-π) * P(Y=0|Z=0)), 1/2 when that denominator is not positive
+        var piTensor = pis.AsTensor();
+        var p0 = CountProbability(Engine.TensorZerosLike(piTensor), lambdas.AsTensor());
+        var denom = Engine.TensorAdd(piTensor, Engine.TensorMultiply(OneMinus(pis).AsTensor(), p0));
+        var zeroPosterior = Engine.TensorWhere(
+            Engine.TensorGreaterThan(denom, NumOps.Zero),
+            Engine.TensorDivide(piTensor, denom),
+            Engine.Fill(y.Length, half).AsTensor());
+
+        // If Y > 0, definitely not a structural zero
+        var isZero = Engine.TensorEquals(y.AsTensor(), NumOps.Zero);
+        return Engine.TensorWhere(isZero, zeroPosterior, Engine.TensorZerosLike(piTensor)).ToVector();
     }
 
     /// <summary>
-    /// Computes probability from the count distribution.
+    /// P_count(k | λ) element-wise for equally shaped k and λ tensors: the Poisson pmf
+    /// exp(-λ + k log λ - log k!) (with P = [k == 0] when λ &lt;= 0), or the negative binomial pmf
+    /// with the current dispersion r.
     /// </summary>
-    private double ComputeCountProbability(int k, double lambda)
+    private Tensor<T> CountProbability(Tensor<T> k, Tensor<T> lambda)
     {
+        var logKFactorial = Engine.TensorLgamma(Engine.TensorAddScalar(k, NumOps.One));
         if (_options.DistributionFamily == ZeroInflatedDistributionFamily.Poisson)
         {
             // Poisson PMF
-            if (lambda <= 0) return k == 0 ? 1.0 : 0.0;
-            return Math.Exp(-lambda + k * Math.Log(lambda) - LogFactorial(k));
+            var logPmf = Engine.TensorSubtract(
+                Engine.TensorAdd(Engine.TensorNegate(lambda), Engine.TensorMultiply(k, Engine.TensorLog(lambda))),
+                logKFactorial);
+            return Engine.TensorWhere(
+                Engine.TensorLessEqual(lambda, Engine.TensorZerosLike(lambda)),
+                Engine.TensorEquals(k, NumOps.Zero),
+                Engine.TensorExp(logPmf));
         }
-        else
-        {
-            // Negative Binomial PMF
-            double r = NumOps.ToDouble(_dispersion);
-            double p = r / (r + lambda);
-            return Math.Exp(LogGamma(k + r) - LogFactorial(k) - LogGamma(r) +
-                           r * Math.Log(p) + k * Math.Log(1 - p));
-        }
+
+        // Negative Binomial PMF
+        T r = _dispersion;
+        var p = Engine.TensorDivide(
+            Engine.TensorAddScalar(Engine.TensorZerosLike(lambda), r), Engine.TensorAddScalar(lambda, r));
+        T logGammaR = Engine.TensorLgamma(Engine.Fill(1, r).AsTensor())[0];
+        var logPmfNb = Engine.TensorAdd(
+            Engine.TensorAdd(
+                Engine.TensorSubtractScalar(
+                    Engine.TensorSubtract(Engine.TensorLgamma(Engine.TensorAddScalar(k, r)), logKFactorial),
+                    logGammaR),
+                Engine.TensorMultiplyScalar(Engine.TensorLog(p), r)),
+            Engine.TensorMultiply(k, Engine.TensorLog(Engine.ScalarMinusTensor(NumOps.One, p))));
+        return Engine.TensorExp(logPmfNb);
     }
+
+    /// <summary>
+    /// intercept + x[:, :numFeatures] · coefficients (just the intercept when there are no coefficients).
+    /// </summary>
+    private Vector<T> LinearPredictor(Matrix<T> x, Vector<T>? coefficients, T intercept)
+    {
+        int n = x.Rows;
+        if (coefficients is null || n == 0 || _numFeatures == 0)
+        {
+            return Engine.Fill(n, intercept);
+        }
+
+        var used = x.Columns == _numFeatures ? x : x.GetSubMatrix(0, 0, n, _numFeatures);
+        return RegressionEngineOps2.AddScalar(Engine.MatrixVectorMultiply(used, coefficients), intercept);
+    }
+
+    /// <summary>1 - v element-wise.</summary>
+    private Vector<T> OneMinus(Vector<T> values)
+    {
+        return Engine.ScalarMinusTensor(NumOps.One, values.AsTensor()).ToVector();
+    }
+
+    /// <summary>1 / (1 + exp(-eta)) element-wise.</summary>
+    private Vector<T> Logistic(Vector<T> eta)
+    {
+        return Engine.Reciprocal(RegressionEngineOps2.AddScalar(Engine.Exp(Engine.Negate(eta)), NumOps.One));
+    }
+
 
     /// <summary>
     /// Updates the count model parameters.
@@ -450,30 +434,13 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
         T minWeight = NumOps.FromDouble(1e-10);
 
         // Weighted IRLS for Poisson/NB regression
-        var weights = new Vector<T>(n);
-        var z = new Vector<T>(n);
+        var wi = RegressionEngineOps2.ClampMin(OneMinus(posteriorZero), minWeight);
+        var eta = LinearPredictor(x, _countCoefficients, _countIntercept);
+        var lambda = RegressionEngineOps2.ClampMin(Engine.Exp(eta), minWeight);
 
-        for (int i = 0; i < n; i++)
-        {
-            T wi = NumOps.Subtract(NumOps.One, posteriorZero[i]);
-            if (NumOps.LessThan(wi, minWeight)) wi = minWeight;
-
-            T eta = _countIntercept;
-            if (_countCoefficients != null)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    eta = NumOps.Add(eta, NumOps.Multiply(_countCoefficients[j], x[i, j]));
-                }
-            }
-
-            T lambda = NumOps.Exp(eta);
-            if (NumOps.LessThan(lambda, minWeight)) lambda = minWeight;
-
-            // Working weight and response for log link
-            weights[i] = NumOps.Multiply(wi, lambda);
-            z[i] = NumOps.Add(eta, NumOps.Divide(NumOps.Subtract(y[i], lambda), lambda));
-        }
+        // Working weight and response for log link
+        var weights = Engine.Multiply(wi, lambda);
+        var z = Engine.Add(eta, Engine.Divide(Engine.Subtract(y, lambda), lambda));
 
         if (_countCoefficients is null)
         {
@@ -493,32 +460,14 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
         T maxPi = NumOps.FromDouble(1 - 1e-10);
 
         // Weighted logistic regression for zero model
-        var weights = new Vector<T>(n);
-        var z = new Vector<T>(n);
+        var eta = LinearPredictor(x, _zeroCoefficients, _zeroIntercept);
 
-        for (int i = 0; i < n; i++)
-        {
-            T pZero = posteriorZero[i];
+        // Logistic function: 1 / (1 + exp(-eta))
+        var pi = Engine.Clamp(Logistic(eta), minPi, maxPi);
 
-            T eta = _zeroIntercept;
-            if (_zeroCoefficients != null)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    eta = NumOps.Add(eta, NumOps.Multiply(_zeroCoefficients[j], x[i, j]));
-                }
-            }
-
-            // Logistic function: 1 / (1 + exp(-eta))
-            T pi = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(eta))));
-            if (NumOps.LessThan(pi, minPi)) pi = minPi;
-            if (NumOps.GreaterThan(pi, maxPi)) pi = maxPi;
-
-            // Working weight and response for logit link
-            T piOneMinusPi = NumOps.Multiply(pi, NumOps.Subtract(NumOps.One, pi));
-            weights[i] = piOneMinusPi;
-            z[i] = NumOps.Add(eta, NumOps.Divide(NumOps.Subtract(pZero, pi), piOneMinusPi));
-        }
+        // Working weight and response for logit link
+        var weights = Engine.Multiply(pi, OneMinus(pi));
+        var z = Engine.Add(eta, Engine.Divide(Engine.Subtract(posteriorZero, pi), weights));
 
         if (_zeroCoefficients != null)
         {
@@ -537,15 +486,16 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
         T totalWeight = NumOps.Zero;
         T minWeight = NumOps.FromDouble(1e-10);
 
-        for (int i = 0; i < y.Length; i++)
+        // Only rows with weight 1 - posterior >= minWeight contribute.
+        var kept = KeptRows(OneMinus(posteriorZero), minWeight);
+        if (kept.Length > 0)
         {
-            T wi = NumOps.Subtract(NumOps.One, posteriorZero[i]);
-            if (NumOps.LessThan(wi, minWeight)) continue;
-
-            T diff = NumOps.Subtract(y[i], lambdas[i]);
-            sumSqDev = NumOps.Add(sumSqDev, NumOps.Multiply(wi, NumOps.Multiply(diff, diff)));
-            sumLambda = NumOps.Add(sumLambda, NumOps.Multiply(wi, lambdas[i]));
-            totalWeight = NumOps.Add(totalWeight, wi);
+            var wi = RegressionEngineOps2.Gather(OneMinus(posteriorZero), kept);
+            var keptLambdas = RegressionEngineOps2.Gather(lambdas, kept);
+            var diff = Engine.Subtract(RegressionEngineOps2.Gather(y, kept), keptLambdas);
+            sumSqDev = Engine.Sum(Engine.Multiply(wi, Engine.Multiply(diff, diff)));
+            sumLambda = Engine.Sum(Engine.Multiply(wi, keptLambdas));
+            totalWeight = Engine.Sum(wi);
         }
 
         if (NumOps.GreaterThan(totalWeight, NumOps.Zero) && NumOps.GreaterThan(sumLambda, NumOps.Zero))
@@ -581,47 +531,40 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
         var xtwx = new Matrix<T>(p + 1, p + 1);
         var xtwz = new Vector<T>(p + 1);
 
-        for (int i = 0; i < n; i++)
+        // Rows whose working weight is below minWeight are skipped.
+        var kept = KeptRows(weights, minWeight);
+        if (kept.Length > 0)
         {
-            T w = weights[i];
-            if (NumOps.LessThan(w, minWeight)) continue;
-
-            xtwx[0, 0] = NumOps.Add(xtwx[0, 0], w);
-            xtwz[0] = NumOps.Add(xtwz[0], NumOps.Multiply(w, z[i]));
-
-            for (int j = 0; j < p; j++)
+            // Design [1 | x] over the kept rows, then [1 | x]ᵀ W [1 | x] and [1 | x]ᵀ W z.
+            var keptX = RegressionEngineOps2.GatherRows(x, kept);
+            if (keptX.Columns != p)
             {
-                T wxij = NumOps.Multiply(w, x[i, j]);
-                xtwx[0, j + 1] = NumOps.Add(xtwx[0, j + 1], wxij);
-                xtwx[j + 1, 0] = NumOps.Add(xtwx[j + 1, 0], wxij);
-                xtwz[j + 1] = NumOps.Add(xtwz[j + 1], NumOps.Multiply(wxij, z[i]));
-
-                for (int k = 0; k <= j; k++)
-                {
-                    T val = NumOps.Add(xtwx[j + 1, k + 1], NumOps.Multiply(wxij, x[i, k]));
-                    xtwx[j + 1, k + 1] = val;
-                    if (k < j) xtwx[k + 1, j + 1] = val;
-                }
+                keptX = keptX.GetSubMatrix(0, 0, kept.Length, p);
             }
+
+            var design = keptX.AddConstantColumn(NumOps.One);
+            var w = RegressionEngineOps2.Gather(weights, kept);
+            var weightedDesign = Engine.TensorMultiply(
+                Tensor<T>.FromMatrix(design),
+                Engine.TensorBroadcastTo(Engine.Reshape(w.AsTensor(), new[] { kept.Length, 1 }), new[] { kept.Length, p + 1 }))
+                .ToMatrix();
+            var designT = Engine.MatrixTranspose(design);
+            xtwx = RegressionEngineOps2.SymmetricFromLower(Engine.MatrixMultiply(designT, weightedDesign));
+            xtwz = Engine.MatrixVectorMultiply(Engine.MatrixTranspose(weightedDesign), RegressionEngineOps2.Gather(z, kept));
         }
 
         // Regularization
         if (_options.UseRegularization)
         {
             T lambda = NumOps.FromDouble(_options.RegularizationStrength);
-            for (int j = 1; j <= p; j++)
-            {
-                xtwx[j, j] = NumOps.Add(xtwx[j, j], lambda);
-            }
+            xtwx = RegressionEngineOps2.AddDiagonal(
+                xtwx, Vector<T>.Concatenate(Engine.FillZero<T>(1), Engine.Fill(p, lambda)));
         }
 
         var solution = SolveSystem(xtwx, xtwz, p + 1);
 
         intercept = solution[0];
-        for (int j = 0; j < p; j++)
-        {
-            coefficients[j] = solution[j + 1];
-        }
+        coefficients = solution.GetSubVector(1, p);
     }
 
     /// <summary>
@@ -629,133 +572,61 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
     /// </summary>
     private T ComputeLogLikelihood(Vector<T> y, Vector<T> lambdas, Vector<T> pis)
     {
-        T ll = NumOps.Zero;
         T tiny = NumOps.FromDouble(1e-300);
-
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            T pi = pis[i];
-            T oneMinusPi = NumOps.Subtract(NumOps.One, pi);
-            // ComputeCountProbability is a numerical recipe — boundary conversion
-            double lambdaD = NumOps.ToDouble(lambdas[i]);
-
-            if (NumOps.Compare(y[i], NumOps.Zero) == 0)
-            {
-                double p0 = ComputeCountProbability(0, lambdaD);
-                T likelihood = NumOps.Add(pi, NumOps.Add(NumOps.Multiply(oneMinusPi, NumOps.FromDouble(p0)), tiny));
-                ll = NumOps.Add(ll, NumOps.Log(likelihood));
-            }
-            else
-            {
-                int yi = (int)NumOps.ToDouble(y[i]);
-                double pk = ComputeCountProbability(yi, lambdaD);
-                T likelihood = NumOps.Add(NumOps.Multiply(oneMinusPi, NumOps.FromDouble(pk)), tiny);
-                ll = NumOps.Add(ll, NumOps.Log(likelihood));
-            }
+            return NumOps.Zero;
         }
-        return ll;
-    }
 
-    private static double StandardNormalCdf(double z)
-    {
-        return 0.5 * (1 + Erf(z / Math.Sqrt(2)));
-    }
+        // y has already been coerced to non-negative integer counts, so it is its own count k.
+        var yTensor = y.AsTensor();
+        var piTensor = pis.AsTensor();
+        var countPart = Engine.TensorAddScalar(
+            Engine.TensorMultiply(OneMinus(pis).AsTensor(), CountProbability(yTensor, lambdas.AsTensor())), tiny);
 
-    private static double Erf(double x)
-    {
-        double sign = x < 0 ? -1.0 : 1.0;
-        x = Math.Abs(x);
-        double t = 1.0 / (1.0 + 0.3275911 * x);
-        double y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.Exp(-x * x);
-        return sign * y;
-    }
-
-    private static double LogFactorial(int n)
-    {
-        if (n <= 1) return 0;
-        return LogGamma(n + 1);
-    }
-
-    private static double LogGamma(double x)
-    {
-        if (x <= 0) return double.PositiveInfinity;
-        double[] c = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-                       -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-        double y = x, tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double ser = 1.000000000190015;
-        for (int j = 0; j < 6; j++) ser += c[j] / ++y;
-        return -tmp + Math.Log(2.5066282746310005 * ser / x);
+        // y == 0: π + ((1-π) P(0) + tiny); y > 0: (1-π) P(y) + tiny
+        var likelihood = Engine.TensorWhere(
+            Engine.TensorEquals(yTensor, NumOps.Zero), Engine.TensorAdd(piTensor, countPart), countPart);
+        return Engine.TensorSum(Engine.TensorLog(likelihood));
     }
 
     private Vector<T> SolveSystem(Matrix<T> a, Vector<T> b, int n)
     {
-        var aug = new Matrix<T>(n, n + 1);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++) aug[i, j] = a[i, j];
-            aug[i, n] = b[i];
-        }
-
         T pivotThreshold = NumOps.FromDouble(1e-10);
+        return RegressionEngineOps2.GaussJordanSolve(a, b, n, pivotThreshold);
+    }
 
-        for (int col = 0; col < n; col++)
+    /// <summary>
+    /// Positions whose weight is not below <paramref name="minWeight"/> (NaN is kept, as a
+    /// "skip when w &lt; minWeight" scan would keep it), ascending.
+    /// </summary>
+    private int[] KeptRows(Vector<T> weights, T minWeight)
+    {
+        if (weights.Length == 0)
         {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
-                    maxRow = row;
-            }
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            T pivot = aug[col, col];
-            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
-                pivot = pivotThreshold;
-            for (int j = 0; j <= n; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
-
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = aug[row, col];
-                    for (int j = 0; j <= n; j++)
-                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
-                }
-            }
+            return Array.Empty<int>();
         }
 
-        var sol = new Vector<T>(n);
-        for (int i = 0; i < n; i++) sol[i] = aug[i, n];
-        return sol;
+        var below = Engine.TensorLessThan(weights.AsTensor(), minWeight);
+        return Engine.TensorNonzero(Engine.ScalarMinusTensor(NumOps.One, below)).ToArray();
     }
 
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
-        var importances = new Vector<T>(_numFeatures);
-
-        for (int f = 0; f < _numFeatures; f++)
+        var importances = Engine.FillZero<T>(_numFeatures);
+        if (_numFeatures > 0)
         {
-            T imp = NumOps.Zero;
             if (_countCoefficients != null)
-                imp = NumOps.Add(imp, NumOps.Abs(_countCoefficients[f]));
+                importances = Engine.Add(importances, Engine.Abs(_countCoefficients.GetSubVector(0, _numFeatures)));
             if (_zeroCoefficients != null)
-                imp = NumOps.Add(imp, NumOps.Abs(_zeroCoefficients[f]));
-            importances[f] = imp;
-        }
+                importances = Engine.Add(importances, Engine.Abs(_zeroCoefficients.GetSubVector(0, _numFeatures)));
 
-        T sum = NumOps.Zero;
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            sum = NumOps.Add(sum, importances[f]);
-        }
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int f = 0; f < _numFeatures; f++)
-                importances[f] = NumOps.Divide(importances[f], sum);
+            T sum = Engine.Sum(importances);
+            if (NumOps.GreaterThan(sum, NumOps.Zero))
+            {
+                importances = Engine.Divide(importances, sum);
+            }
         }
 
         FeatureImportances = importances;
@@ -775,24 +646,4 @@ public partial class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase
             }
         };
     }
-
-    private void WriteVec(BinaryWriter w, Vector<T>? v)
-    {
-        w.Write(v != null);
-        if (v != null)
-        {
-            w.Write(v.Length);
-            for (int i = 0; i < v.Length; i++) w.Write(NumOps.ToDouble(v[i]));
-        }
-    }
-
-    private Vector<T>? ReadVec(BinaryReader r)
-    {
-        if (!r.ReadBoolean()) return null;
-        int len = r.ReadInt32();
-        var v = new Vector<T>(len);
-        for (int i = 0; i < len; i++) v[i] = NumOps.FromDouble(r.ReadDouble());
-        return v;
-    }
-
 }

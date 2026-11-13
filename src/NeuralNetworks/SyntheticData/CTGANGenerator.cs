@@ -131,11 +131,11 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
 
-    // Cached pre-activations for proper backward passes
+    // Tensor view of the transformed training matrix, rebuilt when a different matrix is passed in.
     [Scratch]
-    private readonly List<Tensor<T>> _genPreActivations = new();
+    private Matrix<T>? _realDataSource;
     [Scratch]
-    private readonly List<Tensor<T>> _discPreActivations = new();
+    private Tensor<T>? _realDataTensor;
 
     // Whether custom layers are being used (disables residual connection logic)
     private bool _usingCustomLayers;
@@ -344,11 +344,6 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         return GeneratorForwardWithResidual(input);
     }
 
-    private void UpdateNetworkParameters()
-    {
-        _generatorOptimizer.UpdateParameters(Layers);
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     #endregion
@@ -371,6 +366,21 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// </para>
     /// </remarks>
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
+    {
+        try
+        {
+            FitCore(data, columns, epochs);
+        }
+        finally
+        {
+            // The cached training rows only serve the training loop: a fitted generator, or one whose Fit failed,
+            // does not keep a copy of its training data.
+            _realDataSource = null;
+            _realDataTensor = null;
+        }
+    }
+
+    private void FitCore(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs)
     {
         int epochCount = epochs ?? _options.Epochs;
         ValidateFitInputs(data, columns, epochCount);
@@ -493,8 +503,11 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
             throw new ArgumentOutOfRangeException(nameof(numSamples), "Number of samples must be positive.");
         }
 
-        var transformedRows = new Matrix<T>(numSamples, _dataWidth);
+        int[] conditionColumns = conditionColumn is not null ? SyntheticTensorOps<T>.TruncateToInt(conditionColumn) : Array.Empty<int>();
+        int[] conditionValues = conditionValue is not null ? SyntheticTensorOps<T>.TruncateToInt(conditionValue) : Array.Empty<int>();
+        var generated = new Tensor<T>(new[] { numSamples, _dataWidth });
 
+        // Rows are generated one at a time, in order, so each row's noise and condition draws keep their RNG order.
         for (int i = 0; i < numSamples; i++)
         {
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
@@ -502,9 +515,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
             Vector<T> condVector;
             if (conditionColumn is not null && conditionValue is not null && i < conditionColumn.Length)
             {
-                int colIdx = (int)NumOps.ToDouble(conditionColumn[i]);
-                int catVal = (int)NumOps.ToDouble(conditionValue[i]);
-                condVector = _sampler.CreateConditionVector(colIdx, catVal);
+                condVector = _sampler.CreateConditionVector(conditionColumns[i], conditionValues[i]);
             }
             else
             {
@@ -512,15 +523,16 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
             }
 
             var genInput = ConcatVectors(noise, condVector);
-            var fakeRow = Predict(VectorToTensor(genInput));
-
-            for (int j = 0; j < _dataWidth && j < fakeRow.Length; j++)
-            {
-                transformedRows[i, j] = fakeRow[j];
-            }
+            SyntheticTensorOps<T>.WriteRow(generated, i, Predict(VectorToTensor(genInput)), _dataWidth);
         }
 
-        return _transformer.InverseTransform(transformedRows);
+        // sdv-dev/CTGAN samples each mode and category with gumbel_softmax and then takes the argmax: a draw from
+        // the block's distribution, not its most likely entry.
+        // Decoded in bounded blocks, so only one block's intermediates are alive at a time.
+        TabularDataTransformer<T> transformer = _transformer;
+        int columnCount = _columns.Count;
+        return SyntheticTensorOps<T>.DecodeInBlocks(generated, block => transformer.InverseTransform(
+            SyntheticTensorOps<T>.SampleCategoricalBlocks(block, transformer, columnCount, _random).ToMatrix()));
     }
 
     #endregion
@@ -550,50 +562,6 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         _fakeRowBuf = new Vector<T>(_dataWidth);
         _interpolatedBuf = new Vector<T>(_packedInputDim);
         _sampleGradBuf = new Tensor<T>([_dataWidth]);
-    }
-
-    /// <summary>
-    /// Fills a pre-allocated vector with standard normal random values (Box-Muller).
-    /// </summary>
-    private void FillStandardNormal(Vector<T> buffer)
-    {
-        for (int i = 0; i < buffer.Length; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double z = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            buffer[i] = NumOps.FromDouble(z);
-        }
-    }
-
-    /// <summary>
-    /// Fills a pre-allocated vector with a row from the data matrix.
-    /// </summary>
-    private static void FillRow(Matrix<T> data, int row, Vector<T> buffer)
-    {
-        int cols = Math.Min(data.Columns, buffer.Length);
-        for (int j = 0; j < cols; j++)
-            buffer[j] = data[row, j];
-    }
-
-    /// <summary>
-    /// Concatenates two vectors into a pre-allocated destination buffer.
-    /// </summary>
-    private static void ConcatInto(Vector<T> a, Vector<T> b, Vector<T> dest)
-    {
-        int aLen = a.Length;
-        for (int i = 0; i < aLen; i++) dest[i] = a[i];
-        int bLen = Math.Min(b.Length, dest.Length - aLen);
-        for (int i = 0; i < bLen; i++) dest[aLen + i] = b[i];
-    }
-
-    /// <summary>
-    /// Fills a pre-allocated vector from a tensor.
-    /// </summary>
-    private static void FillFromTensor(Tensor<T> src, Vector<T> dest)
-    {
-        int len = Math.Min(src.Length, dest.Length);
-        for (int i = 0; i < len; i++) dest[i] = src[i];
     }
 
     #endregion
@@ -663,15 +631,18 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// </summary>
     private (Tensor<T> Cond, Tensor<T> Mask) SampleCondMaskBatch(int batchSize)
     {
-        var cond = new Tensor<T>([batchSize, _condWidth]);
-        var mask = new Tensor<T>([batchSize, _condWidth]);
-        if (_sampler is null || _condWidth == 0) return (cond, mask);
+        if (_sampler is null || _condWidth == 0)
+            return (new Tensor<T>([batchSize, _condWidth]), new Tensor<T>([batchSize, _condWidth]));
+
+        var conds = new List<Vector<T>>(batchSize);
+        var masks = new List<Vector<T>>(batchSize);
         for (int b = 0; b < batchSize; b++)
         {
             var (cv, mv, _, _, _) = _sampler.SampleCondVecWithMask();
-            for (int j = 0; j < _condWidth; j++) { cond[b, j] = cv[j]; mask[b, j] = mv[j]; }
+            conds.Add(cv);
+            masks.Add(mv);
         }
-        return (cond, mask);
+        return (SyntheticTensorOps<T>.StackRows(conds, _condWidth), SyntheticTensorOps<T>.StackRows(masks, _condWidth));
     }
 
     /// <summary>
@@ -682,18 +653,18 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// over the batch — the term that forces the generator to actually honour the
     /// conditional vector instead of ignoring it.
     /// </summary>
-    private Tensor<T> ConditionalCrossEntropy(Tensor<T> fakeActivated, Tensor<T> condBatch, Tensor<T> maskBatch)
+    private Tensor<T> ConditionalCrossEntropy(Tensor<T> generatorLogits, Tensor<T> condBatch, Tensor<T> maskBatch)
     {
-        int batch = fakeActivated.Shape[0];
-        // Gather the generator's categorical softmax blocks in categorical-column
-        // order → [batch, condWidth], aligning with the conditional-vector layout.
+        int batch = generatorLogits.Shape[0];
+        // sdv-dev/CTGAN _cond_loss: cross-entropy of each conditioned column's category LOGITS against the requested
+        // one-hot, not the log of the (Gumbel-noised, temperature 0.2) sample. Blocks are gathered in
+        // categorical-column order -> [batch, condWidth], aligning with the conditional-vector layout.
         var blocks = new List<Tensor<T>>(_catOutputBlocks.Count);
         foreach (var (offset, width) in _catOutputBlocks)
-            blocks.Add(Engine.TensorSlice(fakeActivated, [0, offset], [batch, width]));
-        var alignedGen = blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
+            blocks.Add(Engine.TensorLogSoftmax(Engine.TensorSlice(generatorLogits, [0, offset], [batch, width]), 1));
+        var logp = blocks.Count == 1 ? blocks[0] : Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
 
-        // CE = -mean_b sum_j mask*cond*log(alignedGen + eps).
-        var logp = Engine.TensorLog(Engine.TensorAddScalar(alignedGen, NumOps.FromDouble(1e-8)));
+        // CE = -mean_b sum_j mask*cond*log_softmax(logits).
         var masked = Engine.TensorMultiply(Engine.TensorMultiply(maskBatch, condBatch), logp);
         var perRow = Engine.ReduceSum(masked, [1], keepDims: false);     // [batch]
         var meanCe = Engine.ReduceMean(perRow, [0], keepDims: false);     // scalar
@@ -730,23 +701,26 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         {
             int embedDim = _options.EmbeddingDimension;
             int condDim = _condWidth;
-            // Fused-step input encodes [noise | cond | mask] side-by-side (columns).
-            var fusedInput = Engine.TensorConcatenate([genInput, maskBatch], axis: 1);
+            // Fused-step input encodes [noise | cond | mask | Gumbel noise] side-by-side (columns), so a replayed
+            // plan draws fresh Gumbel noise each step too.
+            var gumbel = SyntheticTensorOps<T>.GumbelNoise([totalSamples, _dataWidth], _random);
+            var fusedInput = Engine.TensorConcatenate([genInput, maskBatch, gumbel], axis: 1);
             var target = new Tensor<T>(new[] { 1 });
             // Closure-captured intermediates from Fwd's single generator pass —
             // reused by Loss so we don't re-run GeneratorForwardWithResidualBatched
             // and ApplyOutputActivationsBatched for the conditional-CE term.
             // Fwd/Loss ordering is guaranteed by the fused-step contract.
-            Tensor<T>? capturedAct = null;
+            Tensor<T>? capturedHead = null;
             Tensor<T>? capturedCond = null;
             Tensor<T>? capturedMask = null;
             Tensor<T> Fwd(Tensor<T> packed)
             {
                 var gi = Engine.TensorSlice(packed, [0, 0], [totalSamples, embedDim + condDim]);
                 var faked = GeneratorForwardWithResidualBatched(gi);
-                var act = ApplyOutputActivationsBatched(faked);
+                var gumbelFromInput = Engine.TensorSlice(packed, [0, embedDim + 2 * condDim], [totalSamples, _dataWidth]);
+                var act = ApplyOutputActivationsBatched(faked, gumbelFromInput);
                 var condFromInput = Engine.TensorSlice(packed, [0, embedDim], [totalSamples, condDim]);
-                capturedAct = act;
+                capturedHead = faked;
                 capturedCond = condFromInput;
                 capturedMask = Engine.TensorSlice(packed, [0, embedDim + condDim], [totalSamples, condDim]);
                 var withCond = Engine.TensorConcatenate([act, condFromInput], axis: 1);
@@ -759,15 +733,15 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
                 var lossT = Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
                 if (_condWidth > 0 && _catOutputBlocks.Count > 0)
                 {
-                    var act = capturedAct;
+                    var head = capturedHead;
                     var condFromInput = capturedCond;
                     var maskFromInput = capturedMask;
-                    if (act is null || condFromInput is null || maskFromInput is null)
+                    if (head is null || condFromInput is null || maskFromInput is null)
                         throw new InvalidOperationException(
                             "CTGAN fused step: generator intermediates were not captured by Fwd. " +
                             "This indicates the fused-step framework called the loss closure before " +
                             "the forward closure, violating its documented Fwd-then-Loss ordering.");
-                    var ce = ConditionalCrossEntropy(act, condFromInput, maskFromInput);
+                    var ce = ConditionalCrossEntropy(head, condFromInput, maskFromInput);
                     lossT = Engine.TensorAdd(lossT, ce);
                 }
                 return lossT;
@@ -806,18 +780,17 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
 
         var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
-        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat, SyntheticTensorOps<T>.GumbelNoise(fakeFlat._shape, _random));
         // [totalSamples, dataWidth] concat [totalSamples, condWidth] -> [totalSamples, singleDim]
         var fakeSingles = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
 
         // Real-sample matrix: random rows of transformedData paired with each sample's condVector.
-        var realFlat = new Tensor<T>([totalSamples, _dataWidth]);
-        for (int s = 0; s < totalSamples; s++)
+        if (_realDataTensor is null || !ReferenceEquals(_realDataSource, transformedData))
         {
-            int rowIdx = rowIndices[s];
-            int cols = Math.Min(_dataWidth, transformedData.Columns);
-            for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIdx, j];
+            _realDataTensor = Tensor<T>.FromMatrix(transformedData);
+            _realDataSource = transformedData;
         }
+        var realFlat = SyntheticTensorOps<T>.GatherRows(_realDataTensor, rowIndices, _dataWidth);
         var realSingles = Engine.TensorConcatenate([realFlat, condBatch], axis: 1);
 
         // Pack into [numPacks, pacSize * singleDim].
@@ -844,53 +817,28 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
         var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
 
-        var noiseData = new T[totalElements];
-        var z1Arr = z1.ToArray();
-        var z2Arr = z2.ToArray();
-        for (int i = 0; i < halfElements; i++)
-        {
-            int idx = i * 2;
-            if (idx < totalElements) noiseData[idx] = z1Arr[i];
-            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
-        }
-        return new Tensor<T>(noiseData, [batchSize, embedDim]);
-    }
-
-    /// <summary>
-    /// Samples a batch of conditional vectors from the CTGAN sampler (one
-    /// per sample). The conditional vector encodes a column-condition for
-    /// training-by-sampling (Xu et al. 2019 §3.2) so the generator learns
-    /// to honour rare categories.
-    /// </summary>
-    private Tensor<T> SampleConditionalBatchTensor(int batchSize)
-    {
-        if (_sampler is null) return new Tensor<T>([batchSize, _condWidth]);
-
-        var batch = new Tensor<T>([batchSize, _condWidth]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            var (cv, _) = _sampler.SampleConditionAndRow();
-            int cols = Math.Min(_condWidth, cv.Length);
-            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
-        }
-        return batch;
+        // Interleave z1[i], z2[i] and drop the spare value when the element count is odd.
+        var interleaved = Engine.TensorStack([z1, z2], 1).Reshape([2 * halfElements]);
+        var noise = 2 * halfElements == totalElements
+            ? interleaved
+            : Engine.TensorSlice(interleaved, [0], [totalElements]);
+        return noise.Reshape([batchSize, embedDim]);
     }
 
     private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
     {
-        var batch = new Tensor<T>([batchSize, _condWidth]);
         var rowIndices = new int[batchSize];
-        if (_sampler is null) return (batch, rowIndices);
+        if (_sampler is null) return (new Tensor<T>([batchSize, _condWidth]), rowIndices);
 
+        var conds = new List<Vector<T>>(batchSize);
         for (int b = 0; b < batchSize; b++)
         {
             var (cv, rowIndex) = _sampler.SampleConditionAndRow();
-            int cols = Math.Min(_condWidth, cv.Length);
-            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+            conds.Add(cv);
             rowIndices[b] = rowIndex;
         }
 
-        return (batch, rowIndices);
+        return (SyntheticTensorOps<T>.StackRows(conds, _condWidth), rowIndices);
     }
 
     /// <summary>
@@ -923,7 +871,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     }
 
     /// <summary>
-    /// Batched, tape-tracked version of <see cref="DiscriminatorForward"/>.
+    /// Batched, tape-tracked critic forward pass.
     /// Uses <see cref="Engine.LeakyReLU"/> (alpha=0.2 per paper) and
     /// <see cref="DropoutLayer{T}"/>'s tape-tracked Forward when training.
     /// </summary>
@@ -954,54 +902,14 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// Batched per-column output activations (Xu et al. 2019 §3.1): per the
     /// VGM column encoding, continuous columns emit a Tanh-bounded mode
     /// value followed by softmax over mode probabilities; categorical
-    /// columns emit a softmax over the one-hot block. Runs through
+    /// columns emit a softmax over the one-hot block. With Gumbel noise those
+    /// softmaxes are Gumbel-softmax samples at <see cref="CTGANOptions{T}.GumbelTemperature"/>,
+    /// as sdv-dev/CTGAN's training does. Runs through
     /// tape-tracked Engine ops so backprop flows from critic to generator.
     /// </summary>
-    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
-    {
-        if (_transformer is null) return Engine.TensorTanh(output);
-
-        int batch = output.Shape[0];
-        int totalWidth = output.Shape[1];
-        var blocks = new List<Tensor<T>>(_columns.Count * 2);
-        int idx = 0;
-
-        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
-        {
-            var transform = _transformer.GetTransformInfo(col);
-            if (transform.IsContinuous)
-            {
-                var valueSlice = Engine.TensorSlice(output, [0, idx], [batch, 1]);
-                blocks.Add(Engine.TensorTanh(valueSlice));
-                idx++;
-
-                int numModes = transform.Width - 1;
-                int modeLength = Math.Min(numModes, totalWidth - idx);
-                if (modeLength > 0)
-                {
-                    var modeSlice = Engine.TensorSlice(output, [0, idx], [batch, modeLength]);
-                    blocks.Add(Engine.Softmax(modeSlice, axis: 1));
-                    idx += modeLength;
-                }
-            }
-            else
-            {
-                int blockLength = Math.Min(transform.Width, totalWidth - idx);
-                var catSlice = Engine.TensorSlice(output, [0, idx], [batch, blockLength]);
-                blocks.Add(Engine.Softmax(catSlice, axis: 1));
-                idx += blockLength;
-            }
-        }
-
-        if (idx < totalWidth)
-        {
-            var tail = Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx]);
-            blocks.Add(Engine.TensorTanh(tail));
-        }
-
-        if (blocks.Count == 1) return blocks[0];
-        return Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
-    }
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output, Tensor<T>? gumbelNoise = null)
+        => SyntheticTensorOps<T>.ApplyOutputActivationsBatched(
+            output, _transformer, _columns.Count, gumbelNoise, _options.GumbelTemperature);
 
     #endregion
 
@@ -1017,7 +925,6 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// </summary>
     private Tensor<T> GeneratorForwardWithResidual(Tensor<T> input)
     {
-        _genPreActivations.Clear();
         var current = input;
 
         // Find dense layers (skip batch norm which we handle separately)
@@ -1043,7 +950,6 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
                 current = _genBNLayers[i].Forward(current);
             }
 
-            _genPreActivations.Add(CloneTensor(current));
             current = ApplyReLU(current);
         }
 
@@ -1054,202 +960,25 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         return ApplyOutputActivations(current);
     }
 
-    /// <summary>
-    /// Discriminator forward pass with LeakyReLU and dropout.
-    /// </summary>
-    private Tensor<T> DiscriminatorForward(Tensor<T> input, bool isTraining)
-    {
-        _discPreActivations.Clear();
-        var current = input;
-        int layerIdx = 0;
-
-        for (int i = 0; i < _discLayers.Count; i++)
-        {
-            if (_discLayers[i] is DropoutLayer<T> dropout)
-            {
-                if (isTraining)
-                {
-                    current = dropout.Forward(current);
-                }
-                continue;
-            }
-
-            bool isLastDense = (layerIdx == _discLayerDims.Count - 1);
-
-            current = _discLayers[i].Forward(current);
-
-            if (!isLastDense)
-            {
-                _discPreActivations.Add(CloneTensor(current));
-                current = ApplyLeakyReLU(current);
-            }
-
-            layerIdx++;
-        }
-
-        return current;
-    }
-
     #endregion
 
     #region Backward Passes
-
-    private void UpdateGeneratorParameters(T learningRate)
-    {
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-        foreach (var bn in _genBNLayers)
-        {
-            bn.UpdateParameters(learningRate);
-        }
-    }
-
-    private void UpdateDiscriminatorParameters(T learningRate)
-    {
-        foreach (var layer in _discLayers)
-        {
-            layer.UpdateParameters(learningRate);
-        }
-    }
 
     #endregion
 
     #region Activation Functions
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        for (int i = 0; i < len; i++)
-        {
-            result[i] = NumOps.GreaterThan(preActivation[i], NumOps.Zero) ? gradOutput[i] : NumOps.Zero;
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
-    {
-        var result = new Tensor<T>(input._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double val = NumOps.ToDouble(input[i]);
-            result[i] = val > 0 ? input[i] : NumOps.Multiply(slope, input[i]);
-        }
-        return result;
-    }
-
-    private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
-    {
-        int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput._shape);
-        T slope = NumOps.FromDouble(0.2);
-        for (int i = 0; i < len; i++)
-        {
-            if (NumOps.GreaterThan(preActivation[i], NumOps.Zero))
-            {
-                result[i] = gradOutput[i];
-            }
-            else
-            {
-                result[i] = NumOps.Multiply(slope, gradOutput[i]);
-            }
-        }
-        return result;
-    }
+    private Tensor<T> ApplyReLU(Tensor<T> input) => SyntheticTensorOps<T>.ReLU(input);
 
     private Tensor<T> ApplyOutputActivations(Tensor<T> output)
     {
         if (_transformer is null) return output;
-
-        var result = new Tensor<T>(output._shape);
-        int idx = 0;
-
-        for (int col = 0; col < Columns.Count && idx < output.Length; col++)
-        {
-            var transform = _transformer.GetTransformInfo(col);
-
-            if (transform.IsContinuous)
-            {
-                if (idx < output.Length)
-                {
-                    result[idx] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(output[idx])));
-                    idx++;
-                }
-                int numModes = transform.Width - 1;
-                if (numModes > 0) ApplySoftmax(output, result, ref idx, numModes);
-            }
-            else
-            {
-                ApplySoftmax(output, result, ref idx, transform.Width);
-            }
-        }
-
-        return result;
-    }
-
-    private void ApplySoftmax(Tensor<T> input, Tensor<T> output, ref int idx, int count)
-    {
-        if (count <= 0) return;
-        int actualCount = Math.Min(count, input.Length - idx);
-        if (actualCount <= 0) return;
-        var slice = new Tensor<T>([actualCount]);
-        input.Data.Span.Slice(idx, actualCount).CopyTo(slice.Data.Span);
-        var result = Engine.Softmax(slice, -1);
-        result.Data.Span.CopyTo(output.Data.Span.Slice(idx, actualCount));
-        idx += actualCount;
+        return SyntheticTensorOps<T>.ApplyOutputActivations(output, _transformer, Columns.Count);
     }
 
     #endregion
 
     #region Gradient Safety Utilities
-
-    private void SanitizeTensor(Tensor<T> tensor)
-    {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double v = NumOps.ToDouble(tensor[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-            {
-                tensor[i] = NumOps.Zero;
-            }
-        }
-    }
-
-    private Tensor<T> ClipGradientNorm(Tensor<T> grad, double maxNorm)
-    {
-        if (maxNorm <= 0) return grad;
-
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double v = NumOps.ToDouble(grad[i]);
-            normSq += v * v;
-        }
-
-        double norm = Math.Sqrt(normSq);
-        if (norm <= maxNorm) return grad;
-
-        double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad._shape);
-        for (int i = 0; i < grad.Length; i++)
-        {
-            clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
-        }
-        return clipped;
-    }
 
     #endregion
 
@@ -1312,53 +1041,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     }
 
     private List<ColumnMetadata> PrepareColumns(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns)
-    {
-        var prepared = new List<ColumnMetadata>(columns.Count);
-        for (int col = 0; col < columns.Count; col++)
-        {
-            var meta = columns[col].Clone();
-            meta.ColumnIndex = col;
-            if (meta.IsNumerical)
-            {
-                ComputeColumnStatistics(data, col, meta);
-            }
-            else if (meta.IsCategorical && meta.NumCategories == 0)
-            {
-                var categories = new HashSet<string>();
-                for (int row = 0; row < data.Rows; row++)
-                {
-                    var val = NumOps.ToDouble(data[row, col]);
-                    categories.Add(val.ToString(System.Globalization.CultureInfo.InvariantCulture));
-                }
-                meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
-            }
-            prepared.Add(meta);
-        }
-        return prepared;
-    }
-
-    private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
-    {
-        int n = data.Rows;
-        double sum = 0, min = double.MaxValue, max = double.MinValue;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
-        }
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double diff = NumOps.ToDouble(data[row, colIndex]) - mean;
-            sumSqDiff += diff * diff;
-        }
-        double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
-        if (std < 1e-10) std = 1e-10;
-        meta.Min = min; meta.Max = max; meta.Mean = mean; meta.Std = std;
-    }
+        => SyntheticTabularGeneratorBase<T>.PrepareColumns(data, columns);
 
     #endregion
 
@@ -1383,50 +1066,11 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
 
     #region Helpers
 
-    private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++) v[j] = matrix[row, j];
-        return v;
-    }
+    private static Vector<T> ConcatVectors(Vector<T> a, Vector<T> b) => SyntheticTensorOps<T>.ConcatVectors(a, b);
 
-    private static Vector<T> ConcatVectors(Vector<T> a, Vector<T> b)
-    {
-        var result = new Vector<T>(a.Length + b.Length);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
-
-    private static Vector<T> TensorToVector(Tensor<T> t, int length)
-    {
-        var v = new Vector<T>(length);
-        int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
-    }
-
-    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b)
-    {
-        var result = new Tensor<T>([a.Length + b.Length]);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
-    }
-
-    private static Tensor<T> CloneTensor(Tensor<T> source)
-    {
-        var clone = new Tensor<T>(source._shape);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
-    }
+    private static Tensor<T> ConcatTensors(Tensor<T> a, Tensor<T> b) => SyntheticTensorOps<T>.Concat1D(a, b);
 
     #endregion
 

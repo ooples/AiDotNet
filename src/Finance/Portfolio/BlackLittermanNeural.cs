@@ -169,10 +169,7 @@ public partial class BlackLittermanNeural<T> : PortfolioOptimizerBase<T>
         // Simplified: return first half as weights.
         var vec = prediction.ToVector();
         var weights = new Vector<T>(_options.NumAssets);
-        for (int i = 0; i < _options.NumAssets; i++)
-        {
-            weights[i] = vec[i];
-        }
+        vec.AsSpan().Slice(0, _options.NumAssets).CopyTo(weights.AsWritableSpan());
         return weights; // Should normalize
     }
 

@@ -181,29 +181,7 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
 
         // Step 3: Single-chunk local self-attention + text cross-attention
         // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(encoderOut[v]);
-            double h = x * 0.8;
-            double gelu =
-                h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -235,80 +213,63 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
         int numChunks = (count + chunkSize - 1) / chunkSize;
 
         // Step 2: Process each chunk independently (local temporal processing)
-        var chunkSummaries = new double[numChunks][];
+        var engine = Engine;
+        T attnFloor = NumOps.FromDouble(1e-8);
+        var unitSum = Tensor<T>.CreateDefault([1], NumOps.One);
+        var chunkSummaries = new Tensor<T>[numChunks];
         for (int c = 0; c < numChunks; c++)
         {
             int chunkStart = c * chunkSize;
             int chunkEnd = Math.Min(chunkStart + chunkSize, count);
             int chunkFrames = chunkEnd - chunkStart;
 
-            // Encode frames in this chunk
+            // Local temporal attention within chunk: weight = exp(rms magnitude), normalized when the
+            // weights sum above 1e-8, otherwise uniform.
+            // Encode frames in this chunk; the feature width comes from the first chunk whose first
+            // frame is non-empty.
             var chunkFeatures = new Tensor<T>[chunkFrames];
             for (int f = 0; f < chunkFrames; f++)
                 chunkFeatures[f] = EncodeImage(frames[chunkStart + f]);
-
             if (dim == 0)
                 dim = chunkFeatures[0].Length;
 
-            // Local temporal attention within chunk: compute self-attention weights
-            chunkSummaries[c] = new double[dim];
-            var attnWeights = new double[chunkFrames];
-            double attnSum = 0;
-
-            for (int f = 0; f < chunkFrames; f++)
-            {
-                // Compute attention score based on feature magnitude (self-attention proxy)
-                double magnitude = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    double val = NumOps.ToDouble(chunkFeatures[f][d]);
-                    magnitude += val * val;
-                }
-                attnWeights[f] = Math.Exp(Math.Sqrt(magnitude / dim));
-                attnSum += attnWeights[f];
-            }
+            var stacked = StackLeading(chunkFeatures, chunkFrames, dim);
+            // magnitude / dim, with dim as a [1] tensor.
+            var chunkDim = engine.TensorBroadcastTo(engine.TensorArange<T>(dim, dim + 1, 1), [chunkFrames]);
+            var attnWeights = engine.TensorExp(engine.TensorSqrt(engine.TensorDivide(
+                engine.ReduceSum(engine.TensorMultiply(stacked, stacked), [1], false), chunkDim)));
+            var attnSum = engine.ReduceSum(attnWeights, [0], true);
+            var normalize = engine.TensorBroadcastTo(engine.TensorGreaterThan(attnSum, attnFloor), [chunkFrames]);
+            var normalized = engine.TensorDivide(
+                attnWeights, engine.TensorBroadcastTo(engine.TensorWhere(engine.TensorGreaterThan(attnSum, attnFloor), attnSum, unitSum), [chunkFrames]));
+            var ones = Tensor<T>.CreateDefault([chunkFrames], NumOps.One);
+            var uniform = engine.TensorDivideScalar(ones, engine.TensorSum(ones));
+            var weights = engine.TensorWhere(normalize, normalized, uniform);
 
             // Normalize and aggregate
-            for (int f = 0; f < chunkFrames; f++)
-            {
-                double weight = attnSum > 1e-8 ? attnWeights[f] / attnSum : 1.0 / chunkFrames;
-                for (int d = 0; d < dim; d++)
-                    chunkSummaries[c][d] += NumOps.ToDouble(chunkFeatures[f][d]) * weight;
-            }
+            chunkSummaries[c] = engine.TensorMatMul(weights.Reshape([1, chunkFrames]), stacked);
         }
+
+        T invDim = NumOps.FromDouble(1.0 / dim);
 
         // Step 3: Hierarchical temporal attention across chunks (global aggregation)
         // Each chunk summary attends to all other chunks based on temporal distance
-        var globalOutput = new Tensor<T>([dim]);
-        var chunkAttnWeights = new double[numChunks];
-        double chunkAttnSum = 0;
-
-        for (int c = 0; c < numChunks; c++)
-        {
-            // Temporal position weight: use recency bias for long videos
-            double temporalPos = (double)c / Math.Max(1, numChunks - 1);
-            // V-shaped attention: attend more to beginning and end of video
-            double positionalBias = 1.0 + 0.5 * (Math.Cos(temporalPos * Math.PI * 2.0) + 1.0) / 2.0;
-
-            double chunkMagnitude = 0;
-            for (int d = 0; d < dim; d++)
-                chunkMagnitude += chunkSummaries[c][d] * chunkSummaries[c][d];
-            chunkMagnitude = Math.Sqrt(chunkMagnitude / dim);
-
-            chunkAttnWeights[c] = Math.Exp(chunkMagnitude * positionalBias);
-            chunkAttnSum += chunkAttnWeights[c];
-        }
-
-        for (int c = 0; c < numChunks; c++)
-        {
-            double weight =
-                chunkAttnSum > 1e-8 ? chunkAttnWeights[c] / chunkAttnSum : 1.0 / numChunks;
-            for (int d = 0; d < dim; d++)
-            {
-                double current = NumOps.ToDouble(globalOutput[d]);
-                globalOutput[d] = NumOps.FromDouble(current + chunkSummaries[c][d] * weight);
-            }
-        }
+        var summaries = engine.TensorConcatenate(chunkSummaries, 0);
+        // V-shaped attention: attend more to beginning and end of video:
+        // bias[c] = 1 + 0.5 * (cos(2 pi c / max(1, numChunks - 1)) + 1) / 2
+        var temporalPos = engine.TensorMultiplyScalar(
+            engine.TensorArange<T>(0, numChunks, 1), NumOps.FromDouble(Math.PI * 2.0 / Math.Max(1, numChunks - 1)));
+        var positionalBias = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(temporalPos), NumOps.One), NumOps.FromDouble(0.25)),
+            NumOps.One);
+        var chunkMagnitude = engine.TensorSqrt(engine.TensorMultiplyScalar(
+            engine.ReduceSum(engine.TensorMultiply(summaries, summaries), [1], false), invDim));
+        var chunkAttnWeights = engine.TensorExp(engine.TensorMultiply(chunkMagnitude, positionalBias));
+        T chunkAttnSum = engine.TensorSum(chunkAttnWeights);
+        var chunkWeights = NumOps.GreaterThan(chunkAttnSum, NumOps.FromDouble(1e-8))
+            ? engine.TensorDivideScalar(chunkAttnWeights, chunkAttnSum)
+            : Tensor<T>.CreateDefault([numChunks], NumOps.FromDouble(1.0 / numChunks));
+        var globalOutput = engine.TensorMatMul(chunkWeights.Reshape([1, numChunks]), summaries).Reshape([dim]);
 
         // Step 4: Decode through LLM layers
         var output = globalOutput;
@@ -365,10 +326,7 @@ public partial class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageMod
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

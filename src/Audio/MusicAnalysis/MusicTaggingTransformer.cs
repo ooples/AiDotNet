@@ -130,28 +130,20 @@ public partial class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
     /// Higher confidence means the model is more sure about that tag.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<(string Tag, double Confidence)> PredictTags(Tensor<T> audio, double threshold = 0.5)
+    public IReadOnlyList<(string Tag, T Confidence)> PredictTags(Tensor<T> audio, double threshold = 0.5)
     {
         ThrowIfDisposed();
         var probs = GetTagProbabilities(audio);
-        var tags = new List<(string Tag, double Confidence)>();
 
+        // Tags whose probability is at least the threshold, by descending probability
         int numTags = Math.Min(_options.NumTags, Math.Min(probs.Length, _options.TagLabels.Length));
-        for (int i = 0; i < numTags; i++)
-        {
-            double p = NumOps.ToDouble(probs[i]);
-            if (p >= threshold)
-                tags.Add((_options.TagLabels[i], p));
-        }
-
-        tags.Sort((a, b) => b.Confidence.CompareTo(a.Confidence));
-        return tags;
+        return RankTags(probs, numTags, threshold);
     }
 
     /// <summary>
     /// Predicts music tags asynchronously.
     /// </summary>
-    public Task<IReadOnlyList<(string Tag, double Confidence)>> PredictTagsAsync(Tensor<T> audio, double threshold = 0.5, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<(string Tag, T Confidence)>> PredictTagsAsync(Tensor<T> audio, double threshold = 0.5, CancellationToken cancellationToken = default)
     {
         return Task.Run(() => PredictTags(audio, threshold), cancellationToken);
     }
@@ -167,15 +159,9 @@ public partial class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
         var features = PreprocessAudio(audio);
         Tensor<T> output = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        // Apply sigmoid (multi-label, not softmax)
+        // Apply sigmoid (multi-label, not softmax); a fresh tensor
         int numTags = Math.Min(_options.NumTags, output.Length);
-        var probs = new Tensor<T>([numTags]);
-        for (int i = 0; i < numTags; i++)
-        {
-            double v = NumOps.ToDouble(output[i]);
-            probs[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-v)));
-        }
-        return probs;
+        return AudioEngineOps.SigmoidSegment(Engine, output, 0, numTags);
     }
 
     /// <summary>
@@ -184,18 +170,46 @@ public partial class MusicTaggingTransformer<T> : AudioNeuralNetworkBase<T>
     /// <param name="audio">Audio waveform tensor.</param>
     /// <param name="k">Number of top tags to return.</param>
     /// <returns>List of (tag label, confidence) pairs, sorted by confidence descending.</returns>
-    public IReadOnlyList<(string Tag, double Confidence)> GetTopKTags(Tensor<T> audio, int k = 10)
+    public IReadOnlyList<(string Tag, T Confidence)> GetTopKTags(Tensor<T> audio, int k = 10)
     {
         ThrowIfDisposed();
         var probs = GetTagProbabilities(audio);
-        var allTags = new List<(string Tag, double Confidence)>();
 
         int numTags = Math.Min(_options.NumTags, Math.Min(probs.Length, _options.TagLabels.Length));
-        for (int i = 0; i < numTags; i++)
-            allTags.Add((_options.TagLabels[i], NumOps.ToDouble(probs[i])));
-
-        allTags.Sort((a, b) => b.Confidence.CompareTo(a.Confidence));
+        var allTags = RankTags(probs, numTags, null);
         return allTags.GetRange(0, Math.Min(k, allTags.Count));
+    }
+
+    /// <summary>
+    /// The first <paramref name="numTags"/> tags with their probabilities, keeping those at least
+    /// <paramref name="threshold"/> when one is given, ordered by descending probability (stable: the
+    /// lower tag index first on ties, NaN last).
+    /// </summary>
+    private List<(string Tag, T Confidence)> RankTags(Tensor<T> probs, int numTags, double? threshold)
+    {
+        var ranked = new List<(string Tag, T Confidence)>();
+        if (numTags <= 0) return ranked;
+
+        var values = AudioEngineOps.FitLength(Engine, probs, numTags);
+        int[] kept;
+        if (threshold.HasValue)
+        {
+            var atLeast = Engine.TensorGreaterEqual(values, Tensor<T>.CreateDefault([numTags], NumOps.FromDouble(threshold.Value)));
+            kept = Engine.TensorNonzero(atLeast).ToArray();
+        }
+        else
+        {
+            kept = new int[numTags];
+            for (int i = 0; i < numTags; i++) kept[i] = i;
+        }
+        if (kept.Length == 0) return ranked;
+
+        var keptValues = Engine.TensorIndexSelect(values, new Tensor<int>(kept, [kept.Length]), 0);
+        int[] order = AudioEngineOps.StableDescendingOrder(Engine, keptValues);
+        T[] confidences = keptValues.ToArray();
+        foreach (int o in order)
+            ranked.Add((_options.TagLabels[kept[o]], confidences[o]));
+        return ranked;
     }
 
     /// <summary>

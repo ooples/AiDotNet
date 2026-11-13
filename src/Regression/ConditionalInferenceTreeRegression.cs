@@ -261,20 +261,7 @@ public partial class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRe
     /// </remarks>
     private (Matrix<T> LeftX, Vector<T> LeftY, Matrix<T> RightX, Vector<T> RightY) SplitData(Matrix<T> x, Vector<T> y, int feature, T threshold)
     {
-        var leftIndices = new List<int>();
-        var rightIndices = new List<int>();
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (NumOps.LessThanOrEquals(x[i, feature], threshold))
-            {
-                leftIndices.Add(i);
-            }
-            else
-            {
-                rightIndices.Add(i);
-            }
-        }
+        var (leftIndices, rightIndices) = RegressionEngineOps.PartitionByThreshold(x.GetColumn(feature), threshold);
 
         return (
             x.GetRows(leftIndices),
@@ -362,51 +349,46 @@ public partial class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRe
             return null;
         }
 
-        var bestSplit = (Threshold: default(T), PValue: NumOps.MaxValue);
+        var engine = AiDotNetEngine.Current;
 
-        // Reused across thresholds: a single pass partitions the targets by the threshold, instead
-        // of the previous per-threshold LINQ (Select/Where/ToList for the left indices, then
-        // Range().Except() for the right) which allocated two index lists and a hash set on top of
-        // the two target vectors for every candidate threshold of every feature at every node.
-        // Partition order (ascending sample index) is identical, so the p-values are unchanged.
-        var leftValues = new List<T>(featureValues.Length);
-        var rightValues = new List<T>(featureValues.Length);
+        // Candidate thresholds are the midpoints of consecutive sorted unique values.
+        var sortedUnique = new Vector<T>(uniqueValues);
+        int candidateCount = sortedUnique.Length - 1;
+        var thresholds = engine.Divide(
+            engine.Add(sortedUnique.GetSubVector(0, candidateCount), sortedUnique.GetSubVector(1, candidateCount)),
+            NumOps.FromDouble(2));
 
-        for (int i = 0; i < uniqueValues.Count - 1; i++)
+        // One p-value per candidate. Splits that violate MinSamplesLeaf (prevents degenerate
+        // single-sample splits that exhaust tree depth on the strongest feature, Hothorn 2006 §3.2)
+        // get MaxValue, so they can never win. Partition order (ascending sample index) matches the
+        // previous sequential scan, so the p-values are unchanged.
+        var pValues = new List<T>(candidateCount);
+        foreach (var threshold in thresholds)
         {
-            var threshold = NumOps.Divide(NumOps.Add(uniqueValues[i], uniqueValues[i + 1]), NumOps.FromDouble(2));
-
-            leftValues.Clear();
-            rightValues.Clear();
-            for (int j = 0; j < featureValues.Length; j++)
+            var (leftIndices, rightIndices) = RegressionEngineOps.PartitionByThreshold(featureValues, threshold);
+            if (leftIndices.Length < _options.MinSamplesLeaf || rightIndices.Length < _options.MinSamplesLeaf)
             {
-                if (NumOps.LessThanOrEquals(featureValues[j], threshold))
-                {
-                    leftValues.Add(y[j]);
-                }
-                else
-                {
-                    rightValues.Add(y[j]);
-                }
-            }
-
-            // Enforce MinSamplesLeaf: prevent degenerate single-sample splits
-            // that exhaust tree depth on the strongest feature (Hothorn 2006 §3.2)
-            if (leftValues.Count < _options.MinSamplesLeaf || rightValues.Count < _options.MinSamplesLeaf)
-            {
+                pValues.Add(NumOps.MaxValue);
                 continue;
             }
 
-            var pValue = StatisticsHelper<T>.CalculatePValue(new Vector<T>(leftValues), new Vector<T>(rightValues), _options.StatisticalTest);
-
-            if (NumOps.LessThan(pValue, bestSplit.PValue))
-            {
-                bestSplit = (threshold, pValue);
-            }
+            pValues.Add(StatisticsHelper<T>.CalculatePValue(
+                RegressionEngineOps.Gather(y, leftIndices),
+                RegressionEngineOps.Gather(y, rightIndices),
+                _options.StatisticalTest));
         }
 
-        return NumOps.LessThan(bestSplit.PValue, NumOps.FromDouble(_options.SignificanceLevel))
-        ? (Feature: feature, Threshold: bestSplit.Threshold ?? NumOps.Zero, PValue: bestSplit.PValue)
+        // First strictly smallest p-value wins (argmin keeps the first of ties); NaN never wins.
+        var pTensor = Tensor<T>.FromVector(new Vector<T>(pValues));
+        pTensor = engine.TensorWhere(
+            engine.TensorIsNan(pTensor),
+            Tensor<T>.FromVector(engine.Fill(pValues.Count, NumOps.MaxValue)),
+            pTensor);
+        int best = engine.TensorArgMin(pTensor, 0).ToArray()[0];
+        T bestPValue = pTensor[best];
+
+        return NumOps.LessThan(bestPValue, NumOps.FromDouble(_options.SignificanceLevel))
+        ? (Feature: feature, Threshold: thresholds[best], PValue: bestPValue)
         : null;
     }
 

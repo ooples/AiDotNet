@@ -396,52 +396,32 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // PyTorch NAdam at constant momentum and what the fused and GPU Nadam kernels compute.
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
-        // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW/Adagrad/Lion, same reason.
-        //
-        // Replaces 16 Engine calls that each RETURNED a fresh full-length vector, including
-        // `new Vector<T>(Enumerable.Repeat(epsilon, sqrtVHat.Length))` -- a full-length constant
-        // vector built through an ENUMERATOR, one element at a time, to hold a single scalar.
-        // Measured on Adam's near-identical chain at 2,000,000 double parameters: 701.9 MB/step and
-        // ~290 ms/step before, 15.3 MB and 17.0 ms after.
+        // Whole-vector engine ops with scalar operands (no broadcast constant vectors).
         //
         // Per-element operand and association order preserved exactly (Dozat 2016), including the
         // Nesterov term built from the bias-corrected mHat and the raw gradient:
         //   m = b1*m + (1-b1)*g ;  v = b2*v + ((g*g)*(1-b2))
         //   mHatNesterov = b1*(m/bcMNext) + nesterovFactor*g   (bcMNext = 1 - b1^(t+1), nesterovFactor = (1-b1)/(1 - b1^t))
         //   out = p - (mHatNesterov*lr) / (sqrt(v/bcV) + eps)
-        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var mSpan = _m.AsWritableSpan();
-        var vSpan = _v.AsWritableSpan();
-        var outSpan = updatedParams.AsWritableSpan();
-        T learningRate = CurrentLearningRate;
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var mState = _m.AsTensor();
+        var vState = _v.AsTensor();
 
-        for (int i = 0; i < pSpan.Length; i++)
-        {
-            T g = gSpan[i];
+        var m = engine.TensorAddScaled(mState, g, beta1, oneMinusBeta1);
+        var v = engine.TensorAdd(
+            engine.TensorMultiplyScalar(vState, beta2),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), oneMinusBeta2));
+        engine.TensorCopy(m, mState);
+        engine.TensorCopy(v, vState);
 
-            T m = NumOps.Add(NumOps.Multiply(mSpan[i], beta1), NumOps.Multiply(g, oneMinusBeta1));
-            mSpan[i] = m;
+        var mHat = engine.TensorDivideScalar(m, biasCorrectionMNext);
+        var vHat = engine.TensorDivideScalar(v, biasCorrectionV);
+        var mHatNesterov = engine.TensorAddScaled(mHat, g, beta1, nesterovFactor);
 
-            T v = NumOps.Add(
-                NumOps.Multiply(vSpan[i], beta2),
-                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
-            vSpan[i] = v;
-
-            T mHat = NumOps.Divide(m, biasCorrectionMNext);
-            T vHat = NumOps.Divide(v, biasCorrectionV);
-
-            T mHatNesterov = NumOps.Add(
-                NumOps.Multiply(mHat, beta1),
-                NumOps.Multiply(g, nesterovFactor));
-
-            T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
-            T update = NumOps.Divide(NumOps.Multiply(mHatNesterov, learningRate), denominator);
-            outSpan[i] = NumOps.Subtract(pSpan[i], update);
-        }
-
-        return updatedParams;
+        var denominator = engine.TensorAddScalar(engine.TensorSqrt(vHat), epsilon);
+        var update = engine.TensorDivide(engine.TensorMultiplyScalar(mHatNesterov, CurrentLearningRate), denominator);
+        return engine.TensorSubtract(parameters.AsTensor(), update).AsVector();
     }
 
     // Per-parameter Nadam state for tape-based training
@@ -473,6 +453,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
         foreach (var param in context.Parameters)
         {
             // True sparse scatter NAdam: m + v + param at touched indices only.
@@ -486,7 +467,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 double bc2 = 1.0 - Math.Pow(_options.Beta2, _tapeStep);
                 if (SparseEmbeddingOptimizerHelpers.TryApplyNadamSparse(
                         param, mSp, vSp,
-                        NumOps.ToDouble(CurrentLearningRate),
+                        learningRateValue,
                         _options.Beta1, _options.Beta2, bc1, bc1Next, bc2,
                         _options.Epsilon, weightDecay: 0.0))
                 {
@@ -502,7 +483,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryNadamStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, 0f, _tapeStep))
+                    (float)learningRateValue, (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, 0f, _tapeStep))
                 continue;
 
             // m = beta1 * m + (1 - beta1) * grad

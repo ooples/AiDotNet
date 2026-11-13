@@ -86,16 +86,10 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value at the specified x-coordinate.</returns>
     public T Interpolate(T x)
     {
-        T result = _numOps.Zero;
-        T sum = _numOps.Zero;
-
-        for (int i = 0; i < _x.Length; i++)
-        {
-            T diff = _numOps.Subtract(x, _x[i]);
-            T lanczosValue = LanczosKernel(diff);
-            result = _numOps.Add(result, _numOps.Multiply(_y[i], lanczosValue));
-            sum = _numOps.Add(sum, lanczosValue);
-        }
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> lanczosValues = LanczosKernel(engine.ScalarMinusTensor(x, _x.AsTensor()));
+        T result = engine.TensorSum(engine.TensorMultiply(_y.AsTensor(), lanczosValues));
+        T sum = engine.TensorSum(lanczosValues);
 
         // Normalize the result
         return _numOps.Divide(result, sum);
@@ -114,24 +108,31 @@ public class LanczosInterpolation<T> : IInterpolation<T>
     /// The Lanczos kernel creates a special pattern of weights that produces smooth, high-quality
     /// interpolation results.
     /// </remarks>
-    /// <param name="x">The distance between the interpolation point and a known data point.</param>
-    /// <returns>The Lanczos kernel value for the given distance.</returns>
-    private T LanczosKernel(T x)
+    /// <param name="distance">The distances between the interpolation point and each known data point.</param>
+    /// <returns>The Lanczos kernel value for each distance.</returns>
+    private Tensor<T> LanczosKernel(Tensor<T> distance)
     {
-        if (_numOps.Equals(x, _numOps.Zero))
-        {
-            return _numOps.One;
-        }
+        var engine = AiDotNetEngine.Current;
+        T a = _numOps.FromDouble(_a);
 
-        if (_numOps.GreaterThanOrEquals(_numOps.Abs(x), _numOps.FromDouble(_a)))
-        {
-            return _numOps.Zero;
-        }
+        // 1 where the distance is exactly zero; that entry's kernel is defined as 1 rather than 0/0.
+        Tensor<T> atZero = engine.TensorEquals(distance, _numOps.Zero);
+        Tensor<T> piX = engine.TensorMultiplyScalar(distance, MathHelper.Pi<T>());
 
-        T piX = _numOps.Multiply(MathHelper.Pi<T>(), x);
-        T sinc = _numOps.Divide(MathHelper.Sin(piX), piX);
-        T sinc2 = _numOps.Divide(MathHelper.Sin(_numOps.Divide(piX, _numOps.FromDouble(_a))), _numOps.Divide(piX, _numOps.FromDouble(_a)));
+        // piX is exactly 0 wherever atZero is 1, so adding the mask only replaces the zero denominators
+        // (which the mask overrides below) and leaves every other entry unchanged.
+        Tensor<T> safePiX = engine.TensorAdd(piX, atZero);
+        Tensor<T> sinc = engine.TensorDivide(engine.TensorSin(piX), safePiX);
+        Tensor<T> scaledPiX = engine.TensorDivideScalar(safePiX, a);
+        Tensor<T> sinc2 = engine.TensorDivide(engine.TensorSin(scaledPiX), scaledPiX);
+        Tensor<T> kernel = engine.TensorMultiply(sinc, sinc2);
 
-        return _numOps.Multiply(sinc, sinc2);
+        // Outside the window |x| >= a the kernel is 0; at x = 0 it is 1 (checked last, so it takes precedence).
+        Tensor<T> absDistance = engine.TensorAbs(distance);
+        Tensor<T> outsideWindow = engine.TensorAdd(
+            engine.TensorGreaterThan(absDistance, a),
+            engine.TensorEquals(absDistance, a));
+        kernel = engine.TensorMaskedFill(kernel, engine.TensorEqScalar(outsideWindow, _numOps.One), _numOps.Zero);
+        return engine.TensorMaskedFill(kernel, engine.TensorEqScalar(atZero, _numOps.One), _numOps.One);
     }
 }

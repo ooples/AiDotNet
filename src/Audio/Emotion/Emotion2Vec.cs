@@ -133,7 +133,11 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
     {
         ThrowIfDisposed();
         var probs = GetEmotionProbabilities(audio);
-        var sorted = probs.OrderByDescending(p => NumOps.ToDouble(p.Value)).ToList();
+        var entries = probs.ToList();
+        var sorted = (entries.Count == 0
+                ? Array.Empty<int>()
+                : AudioEngineOps.StableDescendingOrder(Engine, new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count])))
+            .Select(i => entries[i]).ToList();
         string primary = sorted[0].Key;
         T confidence = sorted[0].Value;
         string? secondary = sorted.Count > 1 && NumOps.GreaterThan(sorted[1].Value, NumOps.FromDouble(0.1)) ? sorted[1].Key : null;
@@ -155,16 +159,9 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
 
         // Softmax
         var probs = new Dictionary<string, T>();
-        double sumExp = 0;
-        var expValues = new double[_options.NumClasses];
-        for (int i = 0; i < _options.NumClasses && i < logits.Length; i++)
-        {
-            double val = NumOps.ToDouble(logits[i]);
-            expValues[i] = Math.Exp(val);
-            sumExp += expValues[i];
-        }
+        T[] values = AudioEngineOps.SoftmaxOrUniform(Engine, logits, _options.NumClasses);
         for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length; i++)
-            probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / _options.NumClasses);
+            probs[_options.EmotionLabels[i]] = values[i];
 
         return probs;
     }
@@ -179,8 +176,7 @@ public partial class Emotion2Vec<T> : AudioClassifierBase<T>, IEmotionRecognizer
 
         for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
         {
-            var chunk = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < windowSamples; i++) chunk[i] = audio[start + i];
+            var chunk = Engine.TensorSlice(AudioEngineOps.Flatten(Engine, audio), [start], [windowSamples]);
             var result = RecognizeEmotion(chunk);
             results.Add(new TimedEmotionResult<T>
             {

@@ -106,23 +106,192 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Matrix<T> CreateFastSTLInputMatrix()
     {
         int n = TimeSeries.Length;
-        var matrix = new Matrix<T>(n, 3); // 3 columns: time index, original value, and preprocessed value
+        if (n == 0)
+        {
+            return new Matrix<T>(0, 3);
+        }
 
         DateTime[] dates = GetOrCreateDates();
 
-        for (int i = 0; i < n; i++)
+        // Column 0: Normalized time index i / (n - 1)
+        var positions = Engine.TensorArange<T>(0, n, 1);
+        var timeIndex = n > 1
+            ? Engine.TensorDivide(positions, Engine.TensorFullLike(positions, NumOps.FromDouble(n - 1)))
+            : Engine.TensorFullLike(positions, NumOps.FromDouble(double.NaN));
+
+        // Column 1: Original value
+        var values = Tensor<T>.FromVector(TimeSeries);
+
+        // Column 2: Preprocessed value (e.g., handling missing values, outliers)
+        var preprocessed = PreprocessSeries(values, dates);
+
+        return Engine.TensorStack(new[] { timeIndex, values, preprocessed }, 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Preprocesses every value: non-finite values are imputed from their nearest finite neighbours,
+    /// outliers are replaced by the median of the finite values in a 5-wide window, and every other
+    /// value receives the configured seasonal adjustments.
+    /// </summary>
+    private Tensor<T> PreprocessSeries(Tensor<T> values, DateTime[] dates)
+    {
+        var finite = Engine.TensorIsFinite(values);
+        bool anyFinite = Engine.TensorCountNonzero(
+            Engine.TensorWhere(finite, Engine.TensorOnesLike(values), Engine.TensorZerosLike(values))) > 0;
+
+        var outliers = anyFinite ? OutlierMask(values) : Engine.TensorZerosLike(values);
+        var adjusted = Engine.TensorWhere(
+            Engine.TensorGreaterThan(outliers, NumOps.FromDouble(0.5)), SmoothedWindowMedians(values), ApplySeasonalAdjustments(values, dates));
+        return Engine.TensorWhere(finite, adjusted, ImputedValues(values, finite));
+    }
+
+    /// <summary>1 where a value is an outlier under the configured detection method, 0 elsewhere.</summary>
+    private Tensor<T> OutlierMask(Tensor<T> values)
+    {
+        return _options.OutlierDetectionMethod switch
         {
-            // Column 0: Normalized time index
-            matrix[i, 0] = NumOps.FromDouble((double)i / (n - 1));
+            OutlierDetectionMethod.ZScore => ZScoreOutlierMask(values),
+            OutlierDetectionMethod.IQR => IqrOutlierMask(values),
+            OutlierDetectionMethod.Combined => Engine.TensorGreaterThan(
+                Engine.TensorAdd(ZScoreOutlierMask(values), IqrOutlierMask(values)), NumOps.FromDouble(0.5)),
+            _ => throw new ArgumentException("Invalid outlier detection method."),
+        };
+    }
 
-            // Column 1: Original value
-            matrix[i, 1] = TimeSeries[i];
+    private Tensor<T> ZScoreOutlierMask(Tensor<T> values)
+    {
+        T mean = CalculateSeriesMean();
+        T stdDev = CalculateSeriesStdDev();
 
-            // Column 2: Preprocessed value (e.g., handling missing values, outliers)
-            matrix[i, 2] = PreprocessValue(TimeSeries[i], i, dates[i]);
+        // Avoid division by zero
+        if (NumOps.Equals(stdDev, NumOps.Zero))
+        {
+            return Engine.TensorZerosLike(values);
         }
 
-        return matrix;
+        var zScore = Engine.TensorDivide(Engine.TensorSubtractScalar(values, mean), Engine.TensorFullLike(values, stdDev));
+        return Engine.TensorGreaterThan(Engine.TensorAbs(zScore), NumOps.FromDouble(_options.ZScoreThreshold));
+    }
+
+    private Tensor<T> IqrOutlierMask(Tensor<T> values)
+    {
+        // Quartiles of the finite values only; NaN would otherwise sort into the order statistics.
+        // Non-finite entries become +infinity, so they sort after the n finite values.
+        var series = Tensor<T>.FromVector(TimeSeries);
+        var finite = Engine.TensorIsFinite(series);
+        int n = Engine.TensorCountNonzero(
+            Engine.TensorWhere(finite, Engine.TensorOnesLike(series), Engine.TensorZerosLike(series)));
+        if (n == 0)
+        {
+            return Engine.TensorZerosLike(values);
+        }
+
+        var (sortedSeries, _) = Engine.TensorSort(
+            Engine.TensorWhere(finite, series, Engine.TensorFullLike(series, NumOps.FromDouble(double.PositiveInfinity))), 0);
+
+        T q1 = sortedSeries[n / 4];
+        T q3 = sortedSeries[3 * n / 4];
+        T iqr = NumOps.Subtract(q3, q1);
+
+        T lowerBound = NumOps.Subtract(q1, NumOps.Multiply(iqr, NumOps.FromDouble(_options.IQRMultiplier)));
+        T upperBound = NumOps.Add(q3, NumOps.Multiply(iqr, NumOps.FromDouble(_options.IQRMultiplier)));
+
+        return Engine.TensorAdd(Engine.TensorLessThan(values, lowerBound), Engine.TensorGreaterThan(values, upperBound));
+    }
+
+    /// <summary>
+    /// Average of the nearest finite values on the left and right of every position; a single
+    /// finite side is used alone, and the series mean when neither exists.
+    /// </summary>
+    private Tensor<T> ImputedValues(Tensor<T> values, Tensor<AiDotNet.Tensors.Bit> finite)
+    {
+        int n = values.Length;
+        var index = Engine.TensorArange<int>(0, n, 1);
+
+        // Nearest finite index at or before / at or after each position (-1 / n when none).
+        var left = Engine.TensorCumMax(Engine.TensorWhere(finite, index, Engine.TensorFullLike(index, -1)), 0);
+        var right = Engine.TensorFlip(
+            Engine.TensorCumMin(Engine.TensorFlip(Engine.TensorWhere(finite, index, Engine.TensorFullLike(index, n)), new[] { 0 }), 0),
+            new[] { 0 });
+
+        var leftValues = Engine.TensorIndexSelect(values, Engine.TensorClamp(left, 0, n - 1), 0);
+        var rightValues = Engine.TensorIndexSelect(values, Engine.TensorClamp(right, 0, n - 1), 0);
+        var finiteIndicator = Engine.TensorWhere(finite, Engine.TensorOnesLike(values), Engine.TensorZerosLike(values));
+        var hasLeft = Engine.TensorGreaterThan(Engine.TensorCumMax(finiteIndicator, 0), NumOps.FromDouble(0.5));
+        var hasRight = Engine.TensorGreaterThan(
+            Engine.TensorFlip(Engine.TensorCumMax(Engine.TensorFlip(finiteIndicator, new[] { 0 }), 0), new[] { 0 }),
+            NumOps.FromDouble(0.5));
+
+        var both = Engine.TensorMultiplyScalar(Engine.TensorAdd(leftValues, rightValues), NumOps.FromDouble(0.5));
+        var fallback = Engine.TensorFullLike(values, CalculateSeriesMean());
+        var oneSided = Engine.TensorWhere(hasRight, rightValues, fallback);
+        oneSided = Engine.TensorWhere(hasLeft, leftValues, oneSided);
+        return Engine.TensorWhere(Engine.TensorMultiply(hasLeft, hasRight), both, oneSided);
+    }
+
+    /// <summary>
+    /// Median of the finite values among positions [i - 2, i + 2] (clipped to the series) for every i.
+    /// </summary>
+    private Tensor<T> SmoothedWindowMedians(Tensor<T> values)
+    {
+        int windowSize = 5;
+        int half = windowSize / 2;
+        int n = values.Length;
+
+        // Windows padded with non-finite entries, which sort last as +infinity.
+        var padded = Engine.TensorConstantPad(values, new[] { half, half }, NumOps.FromDouble(double.NaN));
+        var windows = Engine.TensorUnfold(padded, 0, windowSize, 1);
+        var windowFinite = Engine.TensorIsFinite(windows);
+        var ones = Engine.TensorOnesLike(windows);
+        var finiteMask = Engine.TensorWhere(windowFinite, ones, Engine.TensorZerosLike(windows));
+        var (sorted, _) = Engine.TensorSort(
+            Engine.TensorWhere(windowFinite, windows, Engine.TensorFullLike(windows, NumOps.FromDouble(double.PositiveInfinity))), 1);
+        sorted = Engine.TensorWhere(Engine.TensorIsFinite(sorted), sorted, Engine.TensorZerosLike(sorted));
+
+        // With c finite values, the middle order statistics are at hi = floor(c / 2) and
+        // lo = floor((c - 1) / 2): with d = c - 2k, hi is where d in {0, 1} and lo where d in {1, 2}.
+        var count = Engine.ReduceSum(finiteMask, new[] { 1 }, true);
+        var k = Engine.TensorBroadcastTo(Engine.TensorArange<T>(0, windowSize, 1).Reshape(new[] { 1, windowSize }), new[] { n, windowSize });
+        var d = Engine.TensorSubtract(Engine.TensorBroadcastTo(count, new[] { n, windowSize }), Engine.TensorMultiplyScalar(k, NumOps.FromDouble(2)));
+        var hiMask = Engine.TensorMultiply(Engine.TensorGreaterThan(d, NumOps.FromDouble(-0.5)), Engine.TensorLessThan(d, NumOps.FromDouble(1.5)));
+        var loMask = Engine.TensorMultiply(Engine.TensorGreaterThan(d, NumOps.FromDouble(0.5)), Engine.TensorLessThan(d, NumOps.FromDouble(2.5)));
+        var hi = Engine.ReduceSum(Engine.TensorMultiply(sorted, hiMask), new[] { 1 }, false);
+        var lo = Engine.ReduceSum(Engine.TensorMultiply(sorted, loMask), new[] { 1 }, false);
+
+        var flatCount = count.Reshape(new[] { n });
+        var isOdd = Engine.TensorGreaterThan(
+            Engine.TensorRemainder(flatCount, Engine.TensorFullLike(flatCount, NumOps.FromDouble(2))), NumOps.FromDouble(0.5));
+        var even = Engine.TensorMultiplyScalar(Engine.TensorAdd(lo, hi), NumOps.FromDouble(0.5));
+        return Engine.TensorWhere(isOdd, hi, even);
+    }
+
+    /// <summary>Applies the enabled day-of-week, month-of-year and holiday factors to every value.</summary>
+    private Tensor<T> ApplySeasonalAdjustments(Tensor<T> values, DateTime[] dates)
+    {
+        var adjustedValue = values;
+
+        if (_options.AdjustForDayOfWeek)
+        {
+            var days = Tensor<int>.FromVector(new Vector<int>(dates.Select(date => (int)date.DayOfWeek)));
+            adjustedValue = Engine.TensorMultiply(adjustedValue, Engine.TensorIndexSelect(Tensor<T>.FromVector(_options.DayOfWeekFactors), days, 0));
+        }
+
+        if (_options.AdjustForMonthOfYear)
+        {
+            var months = Tensor<int>.FromVector(new Vector<int>(dates.Select(date => date.Month - 1)));
+            adjustedValue = Engine.TensorMultiply(adjustedValue, Engine.TensorIndexSelect(Tensor<T>.FromVector(_options.MonthOfYearFactors), months, 0));
+        }
+
+        if (_options.AdjustForHolidays)
+        {
+            T noFactor = NumOps.One;
+            bool[] isHoliday = dates.Select(date => _options.Holidays.ContainsKey(date.Date)).ToArray();
+            var factors = Tensor<T>.FromVector(new Vector<T>(
+                dates.Select(date => _options.Holidays.TryGetValue(date.Date, out T? factor) && factor is not null ? factor : noFactor)));
+            adjustedValue = Engine.TensorWhere(isHoliday, Engine.TensorMultiply(adjustedValue, factors), adjustedValue);
+        }
+
+        return adjustedValue;
     }
 
     /// <summary>
@@ -156,169 +325,19 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     }
 
     /// <summary>
-    /// Preprocesses a value to handle missing data, outliers, and apply seasonal adjustments.
-    /// </summary>
-    /// <param name="value">The original value to preprocess.</param>
-    /// <param name="index">The index of the value in the time series.</param>
-    /// <param name="date">The date associated with the value.</param>
-    /// <returns>The preprocessed value.</returns>
-    private T PreprocessValue(T value, int index, DateTime date)
-    {
-        // Handle missing values
-        if (NumOps.IsNaN(value) || NumOps.IsInfinity(value))
-        {
-            return ImputeMissingValue(index);
-        }
-
-        // Handle outliers
-        if (IsOutlier(value, index))
-        {
-            return SmoothOutlier(value, index);
-        }
-
-        // Apply any seasonal adjustments if needed
-        return ApplySeasonalAdjustment(value, date);
-    }
-
-    /// <summary>
-    /// Fills in missing values in the time series.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> When data is missing, this method estimates what the value should be.
-    /// It looks at nearby values and uses their average. If there are no valid nearby values,
-    /// it uses the average of the entire series.
-    /// </para>
-    /// </remarks>
-    /// <param name="index">The index of the missing value in the time series.</param>
-    /// <returns>An estimated value to replace the missing one.</returns>
-    private T ImputeMissingValue(int index)
-    {
-        // Simple imputation: use the average of neighboring non-missing values
-        int left = index - 1;
-        int right = index + 1;
-
-        while (left >= 0 && (NumOps.IsNaN(TimeSeries[left]) || NumOps.IsInfinity(TimeSeries[left])))
-        {
-            left--;
-        }
-
-        while (right < TimeSeries.Length && (NumOps.IsNaN(TimeSeries[right]) || NumOps.IsInfinity(TimeSeries[right])))
-        {
-            right++;
-        }
-
-        if (left >= 0 && right < TimeSeries.Length)
-        {
-            return NumOps.Divide(NumOps.Add(TimeSeries[left], TimeSeries[right]), NumOps.FromDouble(2.0));
-        }
-        else if (left >= 0)
-        {
-            return TimeSeries[left];
-        }
-        else if (right < TimeSeries.Length)
-        {
-            return TimeSeries[right];
-        }
-
-        // If no valid neighbors found, return a default value (e.g., the mean of the entire series)
-        return CalculateSeriesMean();
-    }
-
-    /// <summary>
-    /// Determines if a value is an outlier using the configured detection method.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> An outlier is a data point that's unusually different from the rest of your data.
-    /// This method checks if a value is an outlier using one of three methods:
-    /// - Z-Score: Checks how many standard deviations the value is from the average
-    /// - IQR: Checks if the value is far from the middle 50% of your data
-    /// - Combined: Uses both methods above
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The value to check.</param>
-    /// <param name="index">The index of the value in the time series.</param>
-    /// <returns>True if the value is an outlier; otherwise, false.</returns>
-    private bool IsOutlier(T value, int index)
-    {
-        return _options.OutlierDetectionMethod switch
-        {
-            OutlierDetectionMethod.ZScore => IsOutlierZScore(value),
-            OutlierDetectionMethod.IQR => IsOutlierIQR(value),
-            OutlierDetectionMethod.Combined => IsOutlierZScore(value) || IsOutlierIQR(value),
-            _ => throw new ArgumentException("Invalid outlier detection method."),
-        };
-    }
-
-    /// <summary>
-    /// Determines if a value is an outlier using the Z-Score method.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The Z-Score measures how far a value is from the average in terms of standard deviations.
-    /// Think of it like measuring how unusual a person's height is compared to the average height.
-    /// A Z-Score of 2 means the value is 2 standard deviations away from the average.
-    /// Values with high Z-Scores (typically above 2 or 3) are considered outliers.
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The value to check.</param>
-    /// <returns>True if the value is an outlier; otherwise, false.</returns>
-    private bool IsOutlierZScore(T value)
-    {
-        T mean = CalculateSeriesMean();
-        T stdDev = CalculateSeriesStdDev();
-
-        // Avoid division by zero
-        if (NumOps.Equals(stdDev, NumOps.Zero))
-        {
-            return false;
-        }
-
-        T zScore = NumOps.Divide(NumOps.Subtract(value, mean), stdDev);
-        return NumOps.GreaterThan(NumOps.Abs(zScore), NumOps.FromDouble(_options.ZScoreThreshold));
-    }
-
-    /// <summary>
-    /// Determines if a value is an outlier using the Interquartile Range (IQR) method.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The IQR method identifies outliers by looking at the middle 50% of your data.
-    /// Imagine lining up all your data points from smallest to largest:
-    /// - Q1 is the value 25% of the way through your data
-    /// - Q3 is the value 75% of the way through your data
-    /// - IQR is the range between Q1 and Q3
-    /// 
-    /// Values that fall too far outside this range (typically 1.5 × IQR below Q1 or above Q3)
-    /// are considered outliers.
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The value to check.</param>
-    /// <returns>True if the value is an outlier; otherwise, false.</returns>
-    private bool IsOutlierIQR(T value)
-    {
-        var sortedSeries = TimeSeries.OrderBy(x => x).ToList();
-        int n = sortedSeries.Count;
-
-        T q1 = sortedSeries[n / 4];
-        T q3 = sortedSeries[3 * n / 4];
-        T iqr = NumOps.Subtract(q3, q1);
-
-        T lowerBound = NumOps.Subtract(q1, NumOps.Multiply(iqr, NumOps.FromDouble(_options.IQRMultiplier)));
-        T upperBound = NumOps.Add(q3, NumOps.Multiply(iqr, NumOps.FromDouble(_options.IQRMultiplier)));
-
-        return NumOps.LessThan(value, lowerBound) || NumOps.GreaterThan(value, upperBound);
-    }
-
-    /// <summary>
     /// Calculates the mean (average) of the time series data.
     /// </summary>
     /// <returns>The mean value of the time series.</returns>
     private T CalculateSeriesMean()
     {
-        T sum = TimeSeries.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
-        return NumOps.Divide(sum, NumOps.FromDouble(TimeSeries.Length));
+        // Non-finite entries (NaN, +-Infinity) are excluded; PreprocessSeries accepts them and imputes
+        // them later, and one of them would otherwise turn the mean (and every z-score) into NaN.
+        var values = Tensor<T>.FromVector(TimeSeries);
+        var finite = Engine.TensorIsFinite(values);
+        var zeros = Engine.TensorZerosLike(values);
+        T sum = Engine.TensorSum(Engine.TensorWhere(finite, values, zeros));
+        T count = Engine.TensorSum(Engine.TensorWhere(finite, Engine.TensorOnesLike(values), zeros));
+        return NumOps.Divide(sum, count);
     }
 
     /// <summary>
@@ -338,149 +357,16 @@ public class STLTimeSeriesDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>The standard deviation of the time series.</returns>
     private T CalculateSeriesStdDev()
     {
+        // Sample standard deviation over the finite entries only (see CalculateSeriesMean).
         T mean = CalculateSeriesMean();
-        T sumSquaredDiff = TimeSeries.Aggregate(NumOps.Zero, (acc, val) =>
-            NumOps.Add(acc, NumOps.Multiply(NumOps.Subtract(val, mean), NumOps.Subtract(val, mean))));
+        var values = Tensor<T>.FromVector(TimeSeries);
+        var finite = Engine.TensorIsFinite(values);
+        var zeros = Engine.TensorZerosLike(values);
+        var deviations = Engine.TensorSubtractScalar(values, mean);
+        T sumSquaredDiff = Engine.TensorSum(Engine.TensorWhere(finite, Engine.TensorMultiply(deviations, deviations), zeros));
+        T count = Engine.TensorSum(Engine.TensorWhere(finite, Engine.TensorOnesLike(values), zeros));
 
-        T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(TimeSeries.Length - 1));
+        T variance = NumOps.Divide(sumSquaredDiff, NumOps.Subtract(count, NumOps.One));
         return NumOps.Sqrt(variance);
-    }
-
-    /// <summary>
-    /// Smooths an outlier value by replacing it with the median of nearby values.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> When we find an unusual value (outlier), we replace it with a more reasonable one.
-    /// This method looks at a small window of values around the outlier (2 values before and 2 after),
-    /// and uses the median (middle value) from this window as the replacement.
-    /// 
-    /// For example, if we have values [10, 12, 100, 11, 9] and 100 is an outlier,
-    /// we'd replace it with the median of these values, which is much closer to the others.
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The outlier value to smooth.</param>
-    /// <param name="index">The position of the value in the time series.</param>
-    /// <returns>A smoothed value to replace the outlier.</returns>
-    private T SmoothOutlier(T value, int index)
-    {
-        int windowSize = 5;
-        int start = Math.Max(0, index - windowSize / 2);
-        int end = Math.Min(TimeSeries.Length - 1, index + windowSize / 2);
-
-        var window = new List<T>();
-        for (int i = start; i <= end; i++)
-        {
-            if (!NumOps.IsNaN(TimeSeries[i]) && !NumOps.IsInfinity(TimeSeries[i]))
-            {
-                window.Add(TimeSeries[i]);
-            }
-        }
-
-        return StatisticsHelper<T>.CalculateMedian(window);
-    }
-
-    /// <summary>
-    /// Applies seasonal adjustments to a value based on its date.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Some patterns in data are due to the calendar - like higher retail sales 
-    /// during weekends or holidays. This method adjusts values to account for these patterns.
-    /// 
-    /// For example, if Mondays typically have 20% lower sales than average days, this method
-    /// would apply that adjustment factor to Monday values to make them comparable to other days.
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The value to adjust.</param>
-    /// <param name="date">The date associated with the value.</param>
-    /// <returns>The seasonally adjusted value.</returns>
-    private T ApplySeasonalAdjustment(T value, DateTime date)
-    {
-        T adjustedValue = value;
-
-        if (_options.AdjustForDayOfWeek)
-        {
-            adjustedValue = AdjustForDayOfWeek(adjustedValue, date);
-        }
-
-        if (_options.AdjustForMonthOfYear)
-        {
-            adjustedValue = AdjustForMonthOfYear(adjustedValue, date);
-        }
-
-        if (_options.AdjustForHolidays)
-        {
-            adjustedValue = AdjustForHolidays(adjustedValue, date);
-        }
-
-        return adjustedValue;
-    }
-
-    /// <summary>
-    /// Adjusts a value based on the day of the week it occurred on.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This applies a specific adjustment factor for each day of the week.
-    /// For example, if weekends typically have higher values than weekdays, this method
-    /// would apply those day-specific factors to make all days comparable.
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The value to adjust.</param>
-    /// <param name="date">The date associated with the value.</param>
-    /// <returns>The adjusted value.</returns>
-    private T AdjustForDayOfWeek(T value, DateTime date)
-    {
-        int dayOfWeek = (int)date.DayOfWeek;
-        T adjustment = _options.DayOfWeekFactors[dayOfWeek];
-
-        return NumOps.Multiply(value, adjustment);
-    }
-
-    /// <summary>
-    /// Adjusts a value based on the month of the year it occurred in.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This applies a specific adjustment factor for each month.
-    /// For example, December might have higher retail sales due to holidays,
-    /// so this method would apply a factor to make December sales comparable to other months.
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The value to adjust.</param>
-    /// <param name="date">The date associated with the value.</param>
-    /// <returns>The adjusted value.</returns>
-    private T AdjustForMonthOfYear(T value, DateTime date)
-    {
-        int month = date.Month - 1; // 0-based index
-        T adjustment = _options.MonthOfYearFactors[month];
-
-        return NumOps.Multiply(value, adjustment);
-    }
-
-    /// <summary>
-    /// Adjusts a value if it falls on a holiday.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Holidays often cause unusual patterns in data. This method checks if
-    /// a value's date is a holiday, and if so, applies a special adjustment factor for that holiday.
-    /// 
-    /// For example, retail sales might be much higher on Black Friday, so this method would
-    /// apply a factor to make Black Friday sales comparable to normal days.
-    /// </para>
-    /// </remarks>
-    /// <param name="value">The value to adjust.</param>
-    /// <param name="date">The date associated with the value.</param>
-    /// <returns>The adjusted value if the date is a holiday; otherwise, the original value.</returns>
-    private T AdjustForHolidays(T value, DateTime date)
-    {
-        if (_options.Holidays.TryGetValue(date.Date, out T? holidayFactor))
-        {
-            return NumOps.Multiply(value, holidayFactor);
-        }
-
-        return value;
     }
 }

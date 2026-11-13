@@ -228,95 +228,92 @@ public partial class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 
         int numTokens = Math.Min(visDim, 384);
 
+        var engine = Engine;
+        var tokenValues = numTokens > 0 ? CyclicTake(visualFeatures, numTokens) : new Tensor<T>([0]);
+        T invVocab = NumOps.FromDouble(1.0 / _options.VocabSize);
+        var qEmb = engine.TensorMultiplyScalar(CyclicTake(questionTokens, dim), invVocab);
+
         // Stage 1: Summary - broad global understanding
-        var summaryState = new double[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            double broadAttn = 0;
-            double wSum = 0;
-            for (int t = 0; t < numTokens; t++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                // Uniform broad attention with slight position encoding
-                double posWeight = 1.0 + Math.Sin((d + 1.0) * t * 0.001) * 0.1;
-                broadAttn += visVal * posWeight;
-                wSum += posWeight;
-            }
-            summaryState[d] = broadAttn / Math.Max(wSum, 1e-8);
-        }
+        // Uniform broad attention with slight position encoding: w[d, t] = 1 + 0.1 sin((d + 1) t 0.001)
+        var positionWeights = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(
+                engine.TensorSin(engine.TensorMultiplyScalar(
+                    engine.TensorOuter(engine.TensorArange<T>(1, dim + 1, 1), engine.TensorArange<T>(0, numTokens, 1)),
+                    NumOps.FromDouble(0.001))),
+                NumOps.FromDouble(0.1)),
+            NumOps.One);
+        var summaryState = WeightedAverage(positionWeights, tokenValues);
 
         // Stage 2: Caption - focused description with question awareness
-        var captionState = new double[dim];
-        for (int d = 0; d < dim; d++)
+        // Saliency-weighted attention w_t = exp((|vis_t| + 0.1 q[t % qLen] / vocab) * 0.4), the same for every d.
+        Tensor<T> focusAttn;
+        if (numTokens > 0)
         {
-            double focusAttn = 0;
-            double wSum = 0;
-            for (int t = 0; t < numTokens; t++)
-            {
-                double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                // Saliency-weighted attention
-                double saliency = Math.Abs(visVal);
-                // Light question conditioning (caption should be question-aware)
-                double qBias = NumOps.ToDouble(questionTokens[t % qLen]) / _options.VocabSize * 0.1;
-                double w = Math.Exp((saliency + qBias) * 0.4);
-                focusAttn += w * visVal;
-                wSum += w;
-            }
-            focusAttn /= Math.Max(wSum, 1e-8);
-            captionState[d] = focusAttn * 0.7 + summaryState[d] * 0.3;
+            var captionBias = engine.TensorMultiplyScalar(CyclicTake(questionTokens, numTokens), NumOps.FromDouble(0.1 / _options.VocabSize));
+            var captionWeights = engine.TensorExp(engine.TensorMultiplyScalar(
+                engine.TensorAdd(engine.TensorAbs(tokenValues), captionBias), NumOps.FromDouble(0.4)));
+            focusAttn = WeightedAverage(captionWeights.Reshape([1, numTokens]), tokenValues);
         }
+        else
+        {
+            focusAttn = new Tensor<T>([1]);
+        }
+        var captionState = engine.TensorAdd(
+            engine.TensorMultiplyScalar(engine.TensorBroadcastTo(focusAttn, [dim]), NumOps.FromDouble(0.7)),
+            engine.TensorMultiplyScalar(summaryState, NumOps.FromDouble(0.3)));
 
         // Stage 3: Reasoning - question-conditioned multi-step analysis
-        var reasoningState = new double[dim];
         int reasoningIterations = _options.EnableStructuredReasoning ? 3 : 1;
 
         // Initialize from caption
-        Array.Copy(captionState, reasoningState, dim);
+        var reasoningState = captionState;
+        var iterNumber = engine.TensorArange<T>(1, reasoningIterations + 1, 1);
+        var iterWeights = engine.TensorDivide(Tensor<T>.CreateDefault([reasoningIterations], NumOps.One), iterNumber);
+        var stateKeep = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(iterWeights, NumOps.FromDouble(0.3)));
+        var focusFrequency = engine.TensorMultiplyScalar(iterNumber, NumOps.FromDouble(0.01));
+        var tokenNumber = engine.TensorArange<T>(1, numTokens + 1, 1);
+        T questionScale = NumOps.FromDouble(0.4 / _options.VocabSize);
+        T focusAmplitude = NumOps.FromDouble(0.2);
+        T temperature = NumOps.FromDouble(0.35);
+        T questionWeight = NumOps.FromDouble(0.2);
 
         for (int iter = 0; iter < reasoningIterations; iter++)
         {
-            double iterWeight = 1.0 / (iter + 1);
-            for (int d = 0; d < dim; d++)
+            // Strong question conditioning, iteration-dependent focus (the same for every d):
+            // w_t = exp((vis_t + 0.4 q[(t + 7 iter) % qLen] / vocab + 0.2 sin((iter + 1)(t + 1) 0.01)) * 0.35)
+            Tensor<T> reasonAttn;
+            if (numTokens > 0)
             {
-                double reasonAttn = 0;
-                double wSum = 0;
-                for (int t = 0; t < numTokens; t++)
-                {
-                    double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                    // Strong question conditioning for reasoning
-                    double qVal =
-                        NumOps.ToDouble(questionTokens[(t + iter * 7) % qLen]) / _options.VocabSize;
-                    // Iteration-dependent focus (later iterations are more targeted)
-                    double iterFocus = Math.Sin((iter + 1.0) * (t + 1) * 0.01) * 0.2;
-                    double w = Math.Exp((visVal + qVal * 0.4 + iterFocus) * 0.35);
-                    reasonAttn += w * visVal;
-                    wSum += w;
-                }
-                reasonAttn /= Math.Max(wSum, 1e-8);
-
-                double qEmb = NumOps.ToDouble(questionTokens[d % qLen]) / _options.VocabSize;
-
-                // Residual update conditioned on question
-                reasoningState[d] =
-                    reasoningState[d] * (1.0 - iterWeight * 0.3)
-                    + (reasonAttn + qEmb * 0.2) * iterWeight;
+                var questionTerm = engine.TensorMultiplyScalar(
+                    AffineModGather(questionTokens, [numTokens], [1], iter * 7), questionScale);
+                var iterFocus = engine.TensorMultiplyScalar(
+                    engine.TensorSin(engine.TensorMultiply(tokenNumber, Pick(focusFrequency, iter))), focusAmplitude);
+                var weights = engine.TensorExp(engine.TensorMultiplyScalar(
+                    engine.TensorAdd(engine.TensorAdd(tokenValues, questionTerm), iterFocus), temperature));
+                reasonAttn = WeightedAverage(weights.Reshape([1, numTokens]), tokenValues);
             }
+            else
+            {
+                reasonAttn = new Tensor<T>([1]);
+            }
+
+            // Residual update conditioned on question
+            reasoningState = engine.TensorAdd(
+                engine.TensorMultiply(reasoningState, Pick(stateKeep, iter)),
+                engine.TensorMultiply(
+                    engine.TensorAdd(engine.TensorBroadcastTo(reasonAttn, [dim]), engine.TensorMultiplyScalar(qEmb, questionWeight)),
+                    Pick(iterWeights, iter)));
         }
 
         // Stage 4: Conclusion - synthesize all stages into final answer
-        var chainInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double qEmb = NumOps.ToDouble(questionTokens[d % qLen]) / _options.VocabSize * 0.3;
-
-            // Weighted synthesis: reasoning-heavy for CoT
-            double conclusion =
-                reasoningState[d] * 0.55
-                + captionState[d] * 0.25
-                + summaryState[d] * 0.1
-                + qEmb * 0.1;
-            chainInput[d] = NumOps.FromDouble(conclusion);
-        }
+        // Weighted synthesis: reasoning-heavy for CoT (0.1 * the 0.3-scaled question embedding).
+        var chainInput = engine.TensorAdd(
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(reasoningState, NumOps.FromDouble(0.55)),
+                engine.TensorMultiplyScalar(captionState, NumOps.FromDouble(0.25))),
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(summaryState, NumOps.FromDouble(0.1)),
+                engine.TensorMultiplyScalar(qEmb, NumOps.FromDouble(0.3 * 0.1))));
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -363,10 +360,7 @@ public partial class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

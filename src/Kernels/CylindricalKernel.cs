@@ -47,12 +47,12 @@ public class CylindricalKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Periods for each angular dimension.
     /// </summary>
-    private readonly double[] _periods;
+    private readonly Vector<T> _periods;
 
     /// <summary>
     /// Length scales for angular dimensions.
     /// </summary>
-    private readonly double[] _angularLengthScales;
+    private readonly Vector<T> _angularLengthScales;
 
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -77,7 +77,7 @@ public class CylindricalKernel<T> : IKernelFunction<T>
     ///     rbf,
     ///     regularDims: new[] { 0, 1 },
     ///     angularDims: new[] { 2, 3 },
-    ///     periods: new[] { 2 * Math.PI, 24.0 }  // Angles in radians, hours in day
+    ///     periods: new Vector&lt;double&gt;(new[] { 2 * Math.PI, 24.0 })  // Angles in radians, hours in day
     /// );
     /// </para>
     /// </remarks>
@@ -85,8 +85,8 @@ public class CylindricalKernel<T> : IKernelFunction<T>
         IKernelFunction<T> regularKernel,
         int[] regularDims,
         int[] angularDims,
-        double[]? periods = null,
-        double[]? angularLengthScales = null)
+        Vector<T>? periods = null,
+        Vector<T>? angularLengthScales = null)
     {
         if (regularKernel is null) throw new ArgumentNullException(nameof(regularKernel));
         if (regularDims is null) throw new ArgumentNullException(nameof(regularDims));
@@ -98,49 +98,38 @@ public class CylindricalKernel<T> : IKernelFunction<T>
         _regularDims = (int[])regularDims.Clone();
         _angularDims = (int[])angularDims.Clone();
 
+        _numOps = MathHelper.GetNumericOperations<T>();
+
         // Set up periods
         if (periods is null)
         {
-            _periods = new double[angularDims.Length];
-            for (int i = 0; i < _periods.Length; i++)
-            {
-                _periods[i] = 2 * Math.PI;
-            }
+            _periods = Vector<T>.CreateDefault(angularDims.Length, _numOps.FromDouble(2 * Math.PI));
         }
         else
         {
             if (periods.Length != angularDims.Length)
                 throw new ArgumentException("Periods length must match angular dimensions count.");
-            _periods = (double[])periods.Clone();
+            _periods = periods.Clone();
         }
 
         // Set up length scales
         if (angularLengthScales is null)
         {
-            _angularLengthScales = new double[angularDims.Length];
-            for (int i = 0; i < _angularLengthScales.Length; i++)
-            {
-                _angularLengthScales[i] = 1.0;
-            }
+            _angularLengthScales = Vector<T>.CreateDefault(angularDims.Length, _numOps.One);
         }
         else
         {
             if (angularLengthScales.Length != angularDims.Length)
                 throw new ArgumentException("Angular length scales length must match angular dimensions count.");
-            _angularLengthScales = (double[])angularLengthScales.Clone();
+            _angularLengthScales = angularLengthScales.Clone();
         }
 
         // Validate
-        foreach (double p in _periods)
-        {
-            if (p <= 0) throw new ArgumentException("Periods must be positive.");
-        }
-        foreach (double l in _angularLengthScales)
-        {
-            if (l <= 0) throw new ArgumentException("Length scales must be positive.");
-        }
-
-        _numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        if (_numOps.LessThanOrEquals(engine.TensorMinValue(_periods.AsTensor()), _numOps.Zero))
+            throw new ArgumentException("Periods must be positive.");
+        if (_numOps.LessThanOrEquals(engine.TensorMinValue(_angularLengthScales.AsTensor()), _numOps.Zero))
+            throw new ArgumentException("Length scales must be positive.");
     }
 
     /// <summary>
@@ -178,35 +167,25 @@ public class CylindricalKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        double result = 1.0;
+        T result = _numOps.One;
 
         // Compute regular kernel if there are regular dimensions
         if (_regularDims.Length > 0)
         {
             var reg1 = ExtractDims(x1, _regularDims);
             var reg2 = ExtractDims(x2, _regularDims);
-            result *= _numOps.ToDouble(_regularKernel.Calculate(reg1, reg2));
+            result = _regularKernel.Calculate(reg1, reg2);
         }
 
         // Compute periodic kernel for each angular dimension
-        for (int i = 0; i < _angularDims.Length; i++)
-        {
-            int dim = _angularDims[i];
-            double v1 = _numOps.ToDouble(x1[dim]);
-            double v2 = _numOps.ToDouble(x2[dim]);
-            double period = _periods[i];
-            double lengthScale = _angularLengthScales[i];
+        // Periodic kernel per angular dimension: exp(-2 * sin^2(pi * (v1 - v2) / period) / l^2)
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(ExtractDims(x1, _angularDims), ExtractDims(x2, _angularDims));
+        var sinVal = engine.Sin(engine.Divide(engine.Multiply(diff, _numOps.FromDouble(Math.PI)), _periods));
+        var exponent = engine.Divide(engine.Multiply(engine.Multiply(sinVal, sinVal), _numOps.FromDouble(-2.0)),
+            engine.Multiply(_angularLengthScales, _angularLengthScales));
 
-            // Periodic kernel: exp(-2 * sin²(π(v1-v2)/period) / l²)
-            double diff = v1 - v2;
-            double sinArg = Math.PI * diff / period;
-            double sinVal = Math.Sin(sinArg);
-            double kAngular = Math.Exp(-2.0 * sinVal * sinVal / (lengthScale * lengthScale));
-
-            result *= kAngular;
-        }
-
-        return _numOps.FromDouble(result);
+        return _numOps.Multiply(result, engine.Product(engine.Exp(exponent)));
     }
 
     /// <summary>
@@ -214,12 +193,7 @@ public class CylindricalKernel<T> : IKernelFunction<T>
     /// </summary>
     private Vector<T> ExtractDims(Vector<T> x, int[] dims)
     {
-        var result = new Vector<T>(dims.Length);
-        for (int i = 0; i < dims.Length; i++)
-        {
-            result[i] = x[dims[i]];
-        }
-        return result;
+        return x.GetElements(dims);
     }
 
     /// <summary>
@@ -241,8 +215,8 @@ public class CylindricalKernel<T> : IKernelFunction<T>
         int totalDims,
         int[] angularDimIndices,
         double regularLengthScale = 1.0,
-        double[]? periods = null,
-        double[]? angularLengthScales = null)
+        Vector<T>? periods = null,
+        Vector<T>? angularLengthScales = null)
     {
         // Determine regular dimensions (all dims not in angular)
         var angularSet = new HashSet<int>(angularDimIndices);

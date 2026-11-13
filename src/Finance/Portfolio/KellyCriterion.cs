@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -105,19 +106,12 @@ public class KellyCriterion<T> : IPositionSizer<T>
             return NumOps.Zero;
         }
 
-        var sum = NumOps.Zero;
-        foreach (var r in series)
-        {
-            sum = NumOps.Add(sum, r);
-        }
+        var engine = AiDotNetEngine.Current;
+        var values = new Tensor<T>(new[] { count }, new Vector<T>(series.ToArray()));
+        var sum = engine.TensorSum(values);
 
         var mean = NumOps.Divide(sum, NumOps.FromDouble(count));
-        var sse = NumOps.Zero;
-        foreach (var r in series)
-        {
-            var d = NumOps.Subtract(r, mean);
-            sse = NumOps.Add(sse, NumOps.Multiply(d, d));
-        }
+        var sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, mean));
 
         var variance = NumOps.Divide(sse, NumOps.FromDouble(count));
         return Fractional(Continuous(mean, variance), fraction);

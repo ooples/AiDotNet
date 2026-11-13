@@ -126,13 +126,9 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         {
             // Fang et al., Appendix C.2: U0 and V0 are the first r columns
             // of the d-by-d identity matrices.
-            for (int i = 0; i < d; i++)
-                for (int r = 0; r < rank; r++)
-                {
-                    T identityEntry = i == r ? NumOps.One : NumOps.Zero;
-                    A[i, r] = identityEntry;
-                    B[i, r] = identityEntry;
-                }
+            var identityColumns = Engine.TensorSlice(Engine.TensorEye<T>(d), new[] { 0, 0 }, new[] { d, rank });
+            A = identityColumns.ToMatrix();
+            B = identityColumns.ToMatrix();
         }
         else
         {
@@ -142,30 +138,29 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             var rng = _seed.HasValue
                 ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
                 : Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            var initialW = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    initialW[i, j] =
-                        NumOps.FromDouble((rng.NextDouble() * 2.0 - 1.0) * _initScale.Value);
+            var draws = Tensor<T>.CreateRandom(rng, d, d);
+            var initialW = Engine.TensorMultiplyScalar(
+                Engine.TensorSubtract(Engine.TensorMultiplyScalar(draws, NumOps.FromDouble(2.0)), Engine.TensorOnesLike(draws)),
+                NumOps.FromDouble(_initScale.Value)).ToMatrix();
 
             var svd = new SvdDecomposition<T>(initialW);
-            for (int i = 0; i < d; i++)
-                for (int r = 0; r < rank; r++)
-                {
-                    A[i, r] = NumOps.Multiply(svd.U[i, r], svd.S[r]);
-                    B[i, r] = svd.Vt[r, i];
-                }
+            var leading = Engine.TensorSlice(Tensor<T>.FromMatrix(svd.U), new[] { 0, 0 }, new[] { d, rank });
+            var singular = Engine.TensorSlice(Tensor<T>.FromVector(svd.S), new[] { 0 }, new[] { rank });
+            A = Engine.TensorMultiply(leading,
+                Engine.TensorBroadcastTo(singular.Reshape(new[] { 1, rank }), new[] { d, rank })).ToMatrix();
+            B = Engine.TensorTranspose(
+                Engine.TensorSlice(Tensor<T>.FromMatrix(svd.Vt), new[] { 0, 0 }, new[] { rank, d })).ToMatrix();
         }
 
         // Augmented Lagrangian with L-BFGS inner solver (per NOTEARS reference)
         T rhoT = NumOps.One;
         T alphaLag = NumOps.Zero;
         T prevH = NumOps.FromDouble(double.MaxValue);
+        T innerTolerance = NumOps.FromDouble(1e-5);
         // The library's L-BFGS optimizer, used here purely as a function minimizer (no model), so
         // the inner solver and the model-training path share one implementation of the two-loop
         // recursion and the Armijo line search.
         var optimizer = Optimizers.LBFGSOptimizer<T, Tensor<T>, Tensor<T>>.CreateForFunction();
-        int paramLen = 2 * d * rank;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
         {
@@ -179,93 +174,9 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             // Define the objective + gradient function for L-BFGS
             var optimized = optimizer.Minimize(
                 initialParams,
-                (Vector<T> p) =>
-                {
-                    // Unflatten parameters
-                    var localA = new Matrix<T>(d, rank);
-                    var localB = new Matrix<T>(d, rank);
-                    UnflattenVectorToAB(p, localA, localB, d, rank);
-                    var W = ReconstructW(localA, localB, d, rank);
-
-                    // Guard against non-finite W from an overshooting line-search
-                    // step: tr(exp(W∘W)) overflows for large |W|, the Inf/NaN then
-                    // propagates through the gradient into A/B, and Math.Sign(NaN)
-                    // below throws ArithmeticException. Returning a large finite
-                    // objective with a zero gradient makes the line search treat
-                    // the step as a failure and backtrack — the standard handling
-                    // in NOTEARS-style augmented-Lagrangian solvers.
-                    bool wFinite = true;
-                    for (int i = 0; i < d && wFinite; i++)
-                        for (int j = 0; j < d; j++)
-                        {
-                            double wij = NumOps.ToDouble(W[i, j]);
-                            if (double.IsNaN(wij) || double.IsInfinity(wij)) { wFinite = false; break; }
-                        }
-                    if (!wFinite)
-                        return (NumOps.FromDouble(1e+30), new Vector<T>(paramLen));
-
-                    // Compute augmented Lagrangian objective
-                    var (loss, lossGrad) = ComputeL2Loss(X, W);
-                    var (h, hGrad) = ComputeNOTEARSConstraint(W);
-                    if (double.IsNaN(loss) || double.IsInfinity(loss)
-                        || double.IsNaN(h) || double.IsInfinity(h))
-                        return (NumOps.FromDouble(1e+30), new Vector<T>(paramLen));
-                    T augCoeff = NumOps.Add(currentAlpha, NumOps.Multiply(currentRho, NumOps.FromDouble(h)));
-                    T obj = NumOps.FromDouble(loss
-                        + Lambda1 * ComputeL1Norm(W)
-                        + NumOps.ToDouble(currentAlpha) * h
-                        + 0.5 * NumOps.ToDouble(currentRho) * h * h);
-
-                    // Chain rule to parameter space: ∂L/∂A, ∂L/∂B
-                    var grad = new Vector<T>(paramLen);
-                    for (int i = 0; i < d; i++)
-                        for (int r = 0; r < rank; r++)
-                        {
-                            T gA = NumOps.Zero;
-                            T gB = NumOps.Zero;
-                            for (int j = 0; j < d; j++)
-                            {
-                                // ReconstructW fixes W[j,j] to zero, so diagonal
-                                // entries are constants and have no factor derivative.
-                                // Including their loss gradients here makes the
-                                // supplied gradient inconsistent with the objective.
-                                if (j == i)
-                                    continue;
-
-                                // SafeSign: the augmented Lagrangian under aggressive rho schedules
-                                // (rho *= 10 every outer iteration that fails the constraint-decrease
-                                // gate) can drive `rho * h` to overflow, propagating NaN into W. The
-                                // raw `Math.Sign(double.NaN)` throws ArithmeticException ("Function
-                                // does not accept floating point Not-a-Number values"), tearing down
-                                // L-BFGS mid-step with no chance for the outer Lagrangian schedule
-                                // to recover. Treating sign(NaN) = 0 matches the convention in
-                                // sklearn/scipy subgradient code: a NaN coordinate contributes no
-                                // L1 subgradient, the optimizer keeps stepping, and the outer
-                                // schedule's rho ceiling clamp prevents unbounded blow-up so the
-                                // run eventually settles into a meaningful structure (closes the
-                                // NOTEARSLowRank_FindsCausalStructure Integration C failure).
-                                double wij = NumOps.ToDouble(W[i, j]);
-                                double signWij = double.IsNaN(wij) ? 0.0 : Math.Sign(wij);
-                                T totalGW = NumOps.Add(
-                                    NumOps.Add(lossGrad[i, j], NumOps.Multiply(augCoeff, hGrad[i, j])),
-                                    NumOps.FromDouble(Lambda1 * signWij));
-                                gA = NumOps.Add(gA, NumOps.Multiply(totalGW, localB[j, r]));
-
-                                double wji = NumOps.ToDouble(W[j, i]);
-                                double signWji = double.IsNaN(wji) ? 0.0 : Math.Sign(wji);
-                                T totalGWT = NumOps.Add(
-                                    NumOps.Add(lossGrad[j, i], NumOps.Multiply(augCoeff, hGrad[j, i])),
-                                    NumOps.FromDouble(Lambda1 * signWji));
-                                gB = NumOps.Add(gB, NumOps.Multiply(totalGWT, localA[j, r]));
-                            }
-                            grad[i * rank + r] = gA;
-                            grad[d * rank + i * rank + r] = gB;
-                        }
-
-                    return (obj, grad);
-                },
+                (Vector<T> p) => EvaluateAugmentedLagrangian(p, X, d, rank, currentAlpha, currentRho),
                 _innerIterations,
-                NumOps.FromDouble(1e-5));
+                innerTolerance);
 
             // A rejected L-BFGS line-search point can still contain finite
             // parameters whose product overflows, or non-finite parameters if
@@ -274,9 +185,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             // finite; otherwise the final threshold pass would surface Inf.
             if (IsFiniteVector(optimized))
             {
-                var candidateA = new Matrix<T>(d, rank);
-                var candidateB = new Matrix<T>(d, rank);
-                UnflattenVectorToAB(optimized, candidateA, candidateB, d, rank);
+                var (candidateA, candidateB) = UnflattenVectorToAB(optimized, d, rank);
                 var candidateW = ReconstructW(candidateA, candidateB, d, rank);
                 if (IsFiniteMatrix(candidateW))
                 {
@@ -290,20 +199,12 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             var (hVal, _) = ComputeNOTEARSConstraint(outerW);
             if (double.IsNaN(hVal) || double.IsInfinity(hVal))
                 break;
-            T hValT = NumOps.FromDouble(hVal);
 
-            alphaLag = NumOps.Add(alphaLag, NumOps.Multiply(rhoT, hValT));
-            if (NumOps.GreaterThan(hValT, NumOps.Multiply(NumOps.FromDouble(0.25), prevH)))
-            {
-                T newRho = NumOps.Multiply(rhoT, NumOps.FromDouble(10));
-                T rhoMaxT = NumOps.FromDouble(_rhoMax);
-                rhoT = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
-            }
-            prevH = hValT;
+            bool rhoCapped = UpdateLagrangian(hVal, ref alphaLag, ref rhoT, ref prevH);
             // Do not trust the acyclicity residual until the reference's dual-ascent updates have
             // run; see MinimumDualAscentUpdates.
             if (outerIter >= MinimumDualAscentUpdates - 1 && hVal < HTolerance) break;
-            if (NumOps.ToDouble(rhoT) >= _rhoMax) break;
+            if (rhoCapped) break;
         }
 
         // Final reconstruction and thresholding (with covariance fallback)
@@ -312,32 +213,118 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     }
 
     /// <summary>
+    /// Dual ascent on alpha, and rho grows tenfold (capped at the maximum penalty) when h did not
+    /// fall below a quarter of its previous value.
+    /// </summary>
+    /// <returns><c>true</c> when rho has reached the maximum penalty.</returns>
+    private bool UpdateLagrangian(double hVal, ref T alphaLag, ref T rhoT, ref T prevH)
+    {
+        T hValT = NumOps.FromDouble(hVal);
+
+        alphaLag = NumOps.Add(alphaLag, NumOps.Multiply(rhoT, hValT));
+        if (NumOps.GreaterThan(hValT, NumOps.Multiply(NumOps.FromDouble(0.25), prevH)))
+        {
+            T newRho = NumOps.Multiply(rhoT, NumOps.FromDouble(10));
+            T rhoMaxT = NumOps.FromDouble(_rhoMax);
+            rhoT = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
+        }
+        prevH = hValT;
+        return NumOps.ToDouble(rhoT) >= _rhoMax;
+    }
+
+    /// <summary>
+    /// Augmented Lagrangian objective and its gradient with respect to the flattened factors [A; B].
+    /// </summary>
+    private (T Objective, Vector<T> Gradient) EvaluateAugmentedLagrangian(
+        Vector<T> p, Matrix<T> X, int d, int rank, T currentAlpha, T currentRho)
+    {
+        int paramLen = 2 * d * rank;
+
+        // Unflatten parameters
+        var (localA, localB) = UnflattenVectorToAB(p, d, rank);
+        var W = ReconstructW(localA, localB, d, rank);
+
+        // Guard against non-finite W from an overshooting line-search
+        // step: tr(exp(W∘W)) overflows for large |W|, the Inf/NaN then
+        // propagates through the gradient into A/B, and Math.Sign(NaN)
+        // below throws ArithmeticException. Returning a large finite
+        // objective with a zero gradient makes the line search treat
+        // the step as a failure and backtrack — the standard handling
+        // in NOTEARS-style augmented-Lagrangian solvers.
+        if (!IsFiniteMatrix(W))
+            return (NumOps.FromDouble(1e+30), new Vector<T>(paramLen));
+
+        // Compute augmented Lagrangian objective
+        var (loss, lossGrad) = ComputeL2Loss(X, W);
+        var (h, hGrad) = ComputeNOTEARSConstraint(W);
+        if (double.IsNaN(loss) || double.IsInfinity(loss)
+            || double.IsNaN(h) || double.IsInfinity(h))
+            return (NumOps.FromDouble(1e+30), new Vector<T>(paramLen));
+        T augCoeff = NumOps.Add(currentAlpha, NumOps.Multiply(currentRho, NumOps.FromDouble(h)));
+        T obj = NumOps.FromDouble(loss
+            + Lambda1 * ComputeL1Norm(W)
+            + NumOps.ToDouble(currentAlpha) * h
+            + 0.5 * NumOps.ToDouble(currentRho) * h * h);
+
+        // ∂L/∂W = lossGrad + augCoeff * hGrad + lambda1 * sign(W), where sign(NaN) = 0.
+        //
+        // SafeSign: the augmented Lagrangian under aggressive rho schedules
+        // (rho *= 10 every outer iteration that fails the constraint-decrease
+        // gate) can drive `rho * h` to overflow, propagating NaN into W. The
+        // raw `Math.Sign(double.NaN)` throws ArithmeticException ("Function
+        // does not accept floating point Not-a-Number values"), tearing down
+        // L-BFGS mid-step with no chance for the outer Lagrangian schedule
+        // to recover. Treating sign(NaN) = 0 matches the convention in
+        // sklearn/scipy subgradient code: a NaN coordinate contributes no
+        // L1 subgradient, the optimizer keeps stepping, and the outer
+        // schedule's rho ceiling clamp prevents unbounded blow-up so the
+        // run eventually settles into a meaningful structure (closes the
+        // NOTEARSLowRank_FindsCausalStructure Integration C failure).
+        var w = Tensor<T>.FromMatrix(W);
+        var zeros = Engine.TensorZerosLike(w);
+        var safeSign = Engine.TensorWhere(Engine.TensorNotEquals(w, w), zeros, Engine.TensorSign(w));
+        var totalGW = Engine.TensorAdd(
+            Engine.TensorAdd(Tensor<T>.FromMatrix(lossGrad),
+                Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(hGrad), augCoeff)),
+            Engine.TensorMultiplyScalar(safeSign, NumOps.FromDouble(Lambda1)));
+
+        // ReconstructW fixes W[j,j] to zero, so diagonal entries are constants and have no
+        // factor derivative. Including their loss gradients here makes the supplied gradient
+        // inconsistent with the objective.
+        totalGW = Engine.TensorWhere(OffDiagonalMask(d), totalGW, zeros);
+
+        // Chain rule to parameter space: ∂L/∂A = G B, ∂L/∂B = Gᵀ A
+        var gA = Engine.TensorMatMul(totalGW, Tensor<T>.FromMatrix(localB));
+        var gB = Engine.TensorMatMul(Engine.TensorTranspose(totalGW), Tensor<T>.FromMatrix(localA));
+        var grad = Engine.TensorConcatenate(
+            new[] { gA.Reshape(new[] { d * rank }), gB.Reshape(new[] { d * rank }) }, 0).ToVector();
+
+        return (obj, grad);
+    }
+
+    /// <summary>
     /// Flattens low-rank factors [A; B] into a single Vector for the optimizer.
     /// </summary>
     private static Vector<T> FlattenABToVector(Matrix<T> A, Matrix<T> B, int d, int rank)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var vec = new Vector<T>(2 * d * rank);
-        for (int i = 0; i < d; i++)
-            for (int r = 0; r < rank; r++)
-            {
-                vec[i * rank + r] = A[i, r];
-                vec[d * rank + i * rank + r] = B[i, r];
-            }
-        return vec;
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorConcatenate(new[]
+        {
+            Tensor<T>.FromMatrix(A).Reshape(new[] { d * rank }),
+            Tensor<T>.FromMatrix(B).Reshape(new[] { d * rank })
+        }, 0).ToVector();
     }
 
     /// <summary>
     /// Unflattens a parameter Vector back into A, B matrices.
     /// </summary>
-    private static void UnflattenVectorToAB(Vector<T> vec, Matrix<T> A, Matrix<T> B, int d, int rank)
+    private static (Matrix<T> A, Matrix<T> B) UnflattenVectorToAB(Vector<T> vec, int d, int rank)
     {
-        for (int i = 0; i < d; i++)
-            for (int r = 0; r < rank; r++)
-            {
-                A[i, r] = vec[i * rank + r];
-                B[i, r] = vec[d * rank + i * rank + r];
-            }
+        var engine = AiDotNetEngine.Current;
+        var flat = vec.AsTensor();
+        var A = engine.TensorSlice(flat, new[] { 0 }, new[] { d * rank }).Reshape(new[] { d, rank });
+        var B = engine.TensorSlice(flat, new[] { d * rank }, new[] { d * rank }).Reshape(new[] { d, rank });
+        return (A.ToMatrix(), B.ToMatrix());
     }
 
     /// <summary>
@@ -345,39 +332,19 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     /// </summary>
     private Matrix<T> ReconstructW(Matrix<T> A, Matrix<T> B, int d, int rank)
     {
-        var W = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                T sum = NumOps.Zero;
-                for (int r = 0; r < rank; r++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(A[i, r], B[j, r]));
-                W[i, j] = sum;
-            }
-        return W;
+        var product = Engine.TensorMatMul(Tensor<T>.FromMatrix(A), Engine.TensorTranspose(Tensor<T>.FromMatrix(B)));
+        return Engine.TensorWhere(OffDiagonalMask(d), product, Engine.TensorZerosLike(product)).ToMatrix();
     }
 
-    private bool IsFiniteVector(Vector<T> values)
-    {
-        for (int i = 0; i < values.Length; i++)
-        {
-            double value = NumOps.ToDouble(values[i]);
-            if (double.IsNaN(value) || double.IsInfinity(value))
-                return false;
-        }
-        return true;
-    }
+    private bool IsFiniteVector(Vector<T> values) => CountNonFinite(values.AsTensor()) == 0;
 
-    private bool IsFiniteMatrix(Matrix<T> values)
+    private bool IsFiniteMatrix(Matrix<T> values) => CountNonFinite(Tensor<T>.FromMatrix(values)) == 0;
+
+    /// <summary>Number of NaN or infinite entries.</summary>
+    private int CountNonFinite(Tensor<T> values)
     {
-        for (int i = 0; i < values.Rows; i++)
-            for (int j = 0; j < values.Columns; j++)
-            {
-                double value = NumOps.ToDouble(values[i, j]);
-                if (double.IsNaN(value) || double.IsInfinity(value))
-                    return false;
-            }
-        return true;
+        var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(values),
+            Engine.TensorZerosLike(values), Engine.TensorOnesLike(values));
+        return Engine.TensorCountNonzero(nonFinite);
     }
 }

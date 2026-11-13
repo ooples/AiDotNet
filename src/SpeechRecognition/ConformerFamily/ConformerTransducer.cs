@@ -47,6 +47,8 @@ namespace AiDotNet.SpeechRecognition.ConformerFamily;
                 WeightDecay = 1e-6, Schedule = LearningRateSchedulerType.Noam,
                 WarmupSteps = 10000,
                 Source = "Gulati et al. 2020, Sec. 3.3: Adam with beta1 0.9, beta2 0.98, eps 1e-9, the transformer (Noam) schedule of Vaswani et al. 2017 with 10k warmup steps, and L2 regularization of 1e-6 on all trainable weights. No learning rate is declared because the paper gives the peak as 0.05/sqrt(d), a function of the encoder dimension rather than a constant.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class ConformerTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

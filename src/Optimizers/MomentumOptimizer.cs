@@ -372,22 +372,13 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             _velocity = new Vector<T>(parameters.Length);
         }
 
-        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var parameterSpan = parameters.AsSpan();
-        var gradientSpan = gradient.AsSpan();
-        var velocitySpan = _velocity.AsWritableSpan();
-        var updatedSpan = updatedParameters.AsWritableSpan();
+        // velocity = momentum * velocity + lr * gradient; parameters -= velocity
+        var velocity = Engine.Add(
+            Engine.Multiply(_velocity, CurrentMomentum),
+            Engine.Multiply(gradient, CurrentLearningRate));
+        velocity.AsSpan().CopyTo(_velocity.AsWritableSpan());
 
-        for (int i = 0; i < updatedSpan.Length; i++)
-        {
-            T velocity = NumOps.Add(
-                NumOps.Multiply(CurrentMomentum, velocitySpan[i]),
-                NumOps.Multiply(CurrentLearningRate, gradientSpan[i]));
-            velocitySpan[i] = velocity;
-            updatedSpan[i] = NumOps.Subtract(parameterSpan[i], velocity);
-        }
-
-        return updatedParameters;
+        return Engine.Subtract(parameters, velocity);
     }
 
 
@@ -401,6 +392,8 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        double learningRate = NumOps.ToDouble(CurrentLearningRate);
+        double momentum = NumOps.ToDouble(CurrentMomentum);
 
         foreach (var param in context.Parameters)
         {
@@ -410,8 +403,8 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
                 if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
                         param, velSp,
-                        NumOps.ToDouble(CurrentLearningRate),
-                        NumOps.ToDouble(CurrentMomentum),
+                        learningRate,
+                        momentum,
                         weightDecay: 0.0))
                 {
                     continue;

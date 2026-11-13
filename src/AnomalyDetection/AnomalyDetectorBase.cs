@@ -139,17 +139,8 @@ public abstract partial class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, V
         EnsureFitted();
 
         var scores = ScoreAnomalies(X);
-        var predictions = new Vector<T>(scores.Length);
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            // Scores above threshold are anomalies (-1), below are inliers (1)
-            predictions[i] = NumOps.GreaterThan(scores[i], _threshold)
-                ? NumOps.FromDouble(-1)
-                : NumOps.FromDouble(1);
-        }
-
-        return predictions;
+        // Scores above threshold are anomalies (-1), below are inliers (1)
+        return AnomalyTensorOps.LabelsFromThreshold(scores, _threshold);
     }
 
     /// <summary>

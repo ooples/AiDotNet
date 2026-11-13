@@ -141,13 +141,11 @@ public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int p = activeIndices.Length;
 
         // Create augmented matrix with selected columns + target as last column
-        var augmented = new Matrix<T>(n, p + 1);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-                augmented[i, j] = data[i, activeIndices[j]];
-            augmented[i, p] = target[i];
-        }
+        var engine = AiDotNetEngine.Current;
+        var selectedColumns = engine.TensorIndexSelect(Tensor<T>.FromMatrix(data),
+            new Tensor<int>((int[])activeIndices.Clone(), new[] { p }), 1);
+        var augmented = engine.TensorConcatenate(
+            new[] { selectedColumns, Tensor<T>.FromVector(target).Reshape(new[] { n, 1 }) }, 1).ToMatrix();
 
         // Generate feature names
         var featureNames = new string[p + 1];
@@ -159,15 +157,13 @@ public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _causalGraph = _algorithm.DiscoverStructure(augmented, featureNames);
 
         // Compute connection strengths to target (index p)
+        // Consider both directions: feature→target and target→feature
         int targetIdx = p;
-        _connectionStrengths = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            // Consider both directions: feature→target and target→feature
-            double toTarget = _numOps.ToDouble(_causalGraph.GetEdgeWeight(j, targetIdx));
-            double fromTarget = _numOps.ToDouble(_causalGraph.GetEdgeWeight(targetIdx, j));
-            _connectionStrengths[j] = Math.Max(Math.Abs(toTarget), Math.Abs(fromTarget));
-        }
+        var adjacency = Tensor<T>.FromMatrix(_causalGraph.AdjacencyMatrix);
+        var toTarget = engine.TensorSlice(engine.TensorSliceAxis(adjacency, 1, targetIdx), new[] { 0 }, new[] { p });
+        var fromTarget = engine.TensorSlice(engine.TensorSliceAxis(adjacency, 0, targetIdx), new[] { 0 }, new[] { p });
+        _connectionStrengths = engine.TensorMax(engine.TensorAbs(toTarget), engine.TensorAbs(fromTarget))
+            .Cast<double>().ToArray();
 
         // Select top features above threshold
         int numToSelect = Math.Min(_maxFeatures, p);
@@ -209,15 +205,9 @@ public class CausalDiscoverySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("CausalDiscoverySelector has not been fitted.");
 
-        int numRows = data.Rows;
         int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return AiDotNetEngine.Current.TensorIndexSelect(Tensor<T>.FromMatrix(data),
+            new Tensor<int>((int[])_selectedIndices.Clone(), new[] { numCols }), 1).ToMatrix();
     }
 
     /// <summary>

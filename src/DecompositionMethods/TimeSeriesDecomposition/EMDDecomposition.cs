@@ -263,14 +263,18 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> AddWhiteNoise(Vector<T> signal, double amplitude)
     {
         Random random = RandomHelper.CreateSecureRandom();
-        Vector<T> noisySignal = signal.Clone();
-        for (int i = 0; i < signal.Length; i++)
+        int n = signal.Length;
+        if (n == 0)
         {
-            double noise = (random.NextDouble() * 2 - 1) * amplitude;
-            noisySignal[i] = NumOps.Add(noisySignal[i], NumOps.FromDouble(noise));
+            return signal.Clone();
         }
 
-        return noisySignal;
+        // Uniform noise in [-amplitude, amplitude): (u * 2 - 1) * amplitude with u in [0, 1).
+        var uniform = Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(random, n, 1)).Reshape(new[] { n });
+        var noise = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(uniform, NumOps.FromDouble(2)), NumOps.One),
+            NumOps.FromDouble(amplitude));
+        return Engine.TensorAdd(Tensor<T>.FromVector(signal), noise).ToVector();
     }
 
     /// <summary>
@@ -313,19 +317,17 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
 
         for (int i = 0; i < maxImfCount; i++)
         {
-            Vector<T> sum = new Vector<T>(TimeSeries.Length);
-            int count = 0;
-
+            // Mean of the i-th IMF over every ensemble member that produced one.
+            var members = new List<Tensor<T>>();
             foreach (var imfs in allImfs)
             {
                 if (i < imfs.Count)
                 {
-                    sum = sum.Add(imfs[i]);
-                    count++;
+                    members.Add(Tensor<T>.FromVector(imfs[i]));
                 }
             }
 
-            averagedImfs.Add(sum.Divide(NumOps.FromDouble(count)));
+            averagedImfs.Add(Engine.ReduceMean(Engine.TensorStack(members.ToArray(), 0), new[] { 0 }, false).ToVector());
         }
 
         return averagedImfs;
@@ -446,16 +448,24 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         List<Vector<T>> projections = new List<Vector<T>>();
         int channels = signal.Columns;
+        if (numDirections <= 0)
+        {
+            return projections;
+        }
+
+        // directions[j, i] = cos(2 pi i / numDirections + 2 pi j / channels)
+        var directionAngles = Engine.TensorMultiplyScalar(
+            Engine.TensorArange<T>(0, numDirections, 1), NumOps.FromDouble(2 * Math.PI / numDirections));
+        var channelAngles = Engine.TensorMultiplyScalar(
+            Engine.TensorArange<T>(0, channels, 1), NumOps.FromDouble(2 * Math.PI / channels));
+        var angles = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(directionAngles.Reshape(new[] { 1, numDirections }), new[] { channels, numDirections }),
+            Engine.TensorBroadcastTo(channelAngles.Reshape(new[] { channels, 1 }), new[] { channels, numDirections }));
+        Matrix<T> projected = Engine.TensorMatMul(Tensor<T>.FromMatrix(signal), Engine.TensorCos(angles)).ToMatrix();
 
         for (int i = 0; i < numDirections; i++)
         {
-            double angle = 2 * Math.PI * i / numDirections;
-            Vector<T> direction = new Vector<T>(channels);
-            for (int j = 0; j < channels; j++)
-            {
-                direction[j] = NumOps.FromDouble(Math.Cos(angle + 2 * Math.PI * j / channels));
-            }
-            projections.Add(signal.Multiply(direction));
+            projections.Add(projected.GetColumn(i));
         }
 
         return projections;
@@ -504,17 +514,8 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>True if the mean squared difference is below the threshold, false otherwise.</returns>
     private bool IsMultivariateMeanEnvelopeNearZero(Matrix<T> imf, Matrix<T> prevImf)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < imf.Rows; i++)
-        {
-            for (int j = 0; j < imf.Columns; j++)
-            {
-                T diff = NumOps.Subtract(imf[i, j], prevImf[i, j]);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-            }
-        }
-
-        T meanSquaredDiff = NumOps.Divide(sum, NumOps.FromDouble(imf.Rows * imf.Columns));
+        var diff = Engine.TensorSubtract(Tensor<T>.FromMatrix(imf), Tensor<T>.FromMatrix(prevImf));
+        T meanSquaredDiff = Engine.TensorMean(Engine.TensorMultiply(diff, diff));
 
         return NumOps.LessThan(meanSquaredDiff, NumOps.FromDouble(_threshold));
     }
@@ -554,33 +555,28 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private bool IsResidual(Vector<T> signal)
     {
-        // Check if the signal has at most one extremum
-        int extremaCount = 0;
-        for (int i = 1; i < signal.Length - 1; i++)
+        int n = signal.Length;
+        var steps = n >= 2 ? Engine.TensorDiff(Tensor<T>.FromVector(signal)) : new Tensor<T>(new[] { 0 });
+
+        // Check if the signal has at most one extremum: x[i] is a local maximum when
+        // steps[i - 1] > 0 and steps[i] < 0, a local minimum when steps[i - 1] < 0 and steps[i] > 0.
+        if (n >= 3)
         {
-            if (IsLocalMaximum(signal, i) || IsLocalMinimum(signal, i))
+            var left = Engine.TensorSlice(steps, new[] { 0 }, new[] { n - 2 });
+            var right = Engine.TensorSlice(steps, new[] { 1 }, new[] { n - 2 });
+            var maxima = Engine.TensorMultiply(Engine.TensorGreaterThan(left, NumOps.Zero), Engine.TensorLessThan(right, NumOps.Zero));
+            var minima = Engine.TensorMultiply(Engine.TensorLessThan(left, NumOps.Zero), Engine.TensorGreaterThan(right, NumOps.Zero));
+            if (Engine.TensorCountNonzero(maxima) + Engine.TensorCountNonzero(minima) > 1)
             {
-                extremaCount++;
-                if (extremaCount > 1)
-                {
-                    return false;
-                }
+                return false;
             }
         }
 
         // Check if the signal is monotonic
-        bool isIncreasing = true;
-        bool isDecreasing = true;
-        for (int i = 1; i < signal.Length; i++)
+        if (n >= 2)
         {
-            if (NumOps.LessThan(signal[i], signal[i - 1]))
-            {
-                isIncreasing = false;
-            }
-            if (NumOps.GreaterThan(signal[i], signal[i - 1]))
-            {
-                isDecreasing = false;
-            }
+            bool isIncreasing = Engine.TensorCountNonzero(Engine.TensorLessThan(steps, NumOps.Zero)) == 0;
+            bool isDecreasing = Engine.TensorCountNonzero(Engine.TensorGreaterThan(steps, NumOps.Zero)) == 0;
             if (!isIncreasing && !isDecreasing)
             {
                 return false;
@@ -628,14 +624,15 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     {
         Vector<T> h = signal.Clone();
         Vector<T> prevH;
+        T half = NumOps.FromDouble(0.5);
 
         do
         {
             prevH = h.Clone();
             Vector<T> upperEnvelope = ComputeEnvelope(h, EnvelopeType.Upper);
             Vector<T> lowerEnvelope = ComputeEnvelope(h, EnvelopeType.Lower);
-            Vector<T> mean = upperEnvelope.Add(lowerEnvelope).Divide(NumOps.FromDouble(2));
-            h = h.Subtract(mean);
+            Vector<T> mean = Engine.Multiply(Engine.Add(upperEnvelope, lowerEnvelope), half);
+            h = Engine.Subtract(h, mean);
         } while (!IsMeanEnvelopeNearZero(h, prevH));
 
         return h;
@@ -667,14 +664,10 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
         if (extremaIndices[extremaIndices.Count - 1] != signal.Length - 1)
             extremaIndices.Add(signal.Length - 1);
 
-        Vector<T> x = new Vector<T>(extremaIndices.Count);
-        Vector<T> y = new Vector<T>(extremaIndices.Count);
-
-        for (int i = 0; i < extremaIndices.Count; i++)
-        {
-            x[i] = NumOps.FromDouble(extremaIndices[i]);
-            y[i] = signal[extremaIndices[i]];
-        }
+        var knots = Tensor<int>.FromVector(new Vector<int>(extremaIndices));
+        var positions = Engine.TensorArange<T>(0, signal.Length, 1);
+        Vector<T> x = Engine.TensorIndexSelect(positions, knots, 0).ToVector();
+        Vector<T> y = Engine.TensorIndexSelect(Tensor<T>.FromVector(signal), knots, 0).ToVector();
 
         IInterpolation<T> spline = _interpolation ?? new CubicSplineInterpolation<T>(x, y);
 
@@ -748,13 +741,8 @@ public class EMDDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private bool IsMeanEnvelopeNearZero(Vector<T> h, Vector<T> prevH)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < h.Length; i++)
-        {
-            T diff = NumOps.Subtract(h[i], prevH[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-        T meanSquaredDiff = NumOps.Divide(sum, NumOps.FromDouble(h.Length));
+        var diff = Engine.TensorSubtract(Tensor<T>.FromVector(h), Tensor<T>.FromVector(prevH));
+        T meanSquaredDiff = Engine.TensorMean(Engine.TensorMultiply(diff, diff));
 
         return NumOps.LessThan(meanSquaredDiff, NumOps.FromDouble(_threshold));
     }

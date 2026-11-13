@@ -48,6 +48,8 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
                         + "increased to the peak over another 30K -- a two-stage warmup totalling 60K "
                         + "steps. The peak itself is never stated, and the paper names no optimizer, so "
                         + "neither is declared and the model keeps its own optimizer.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class OWSM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

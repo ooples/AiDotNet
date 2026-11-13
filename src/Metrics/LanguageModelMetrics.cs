@@ -41,7 +41,7 @@ public static class LanguageModelMetrics<T>
     /// <exception cref="ArgumentNullException">A required argument is null.</exception>
     /// <exception cref="ArgumentException">Shapes are inconsistent or empty.</exception>
     public static T Perplexity(Tensor<T> predictions, int[] targets, bool fromLogits = true)
-        => NumOps.FromDouble(Math.Exp(MeanCrossEntropyDouble(predictions, targets, fromLogits)));
+        => NumOps.Exp(MeanCrossEntropy(predictions, targets, fromLogits));
 
     /// <summary>
     /// Computes the mean cross-entropy (average negative log-likelihood, in nats) of the true tokens.
@@ -54,7 +54,7 @@ public static class LanguageModelMetrics<T>
     /// <c>exp</c> of this, so it is &gt;= 1 — this method overrides the inherited perplexity return text.)
     /// </returns>
     public static T CrossEntropy(Tensor<T> predictions, int[] targets, bool fromLogits = true)
-        => NumOps.FromDouble(MeanCrossEntropyDouble(predictions, targets, fromLogits));
+        => MeanCrossEntropy(predictions, targets, fromLogits);
 
     /// <summary>
     /// Computes top-k accuracy: the fraction of positions whose true token is among the model's k
@@ -73,65 +73,60 @@ public static class LanguageModelMetrics<T>
         if (k < 1 || k > v)
             throw new ArgumentException($"k must be in [1, {v}] (the vocabulary size), was {k}.", nameof(k));
 
-        int hits = 0;
-        for (int i = 0; i < n; i++)
-        {
-            int target = targets[i];
-            if (target < 0 || target >= v)
-                throw new ArgumentException($"target[{i}]={target} is outside the vocabulary [0, {v}).", nameof(targets));
+        var engine = AiDotNetEngine.Current;
+        var targetScores = TargetScores(predictions, targets, n, v);
 
-            // The true token is in the top k iff strictly fewer than k other tokens outscore it.
-            double targetScore = NumOps.ToDouble(predictions[i, target]);
-            int strictlyGreater = 0;
-            for (int j = 0; j < v; j++)
-            {
-                if (j == target) continue;
-                if (NumOps.ToDouble(predictions[i, j]) > targetScore && ++strictlyGreater >= k)
-                    break;
-            }
-            if (strictlyGreater < k) hits++;
-        }
-        return NumOps.FromDouble((double)hits / n);
+        // The true token is in the top k iff strictly fewer than k other tokens outscore it.
+        var outscores = engine.TensorGreaterThan(predictions, engine.TensorBroadcastTo(targetScores, new[] { n, v }));
+        var strictlyGreater = engine.ReduceSum(outscores, new[] { 1 }, keepDims: false);
+        T hits = engine.TensorSum(engine.TensorLessThan(strictlyGreater, NumOps.FromDouble(k)));
+        return NumOps.Divide(hits, NumOps.FromDouble(n));
     }
 
     // ---- shared numerics ----
 
-    private static double MeanCrossEntropyDouble(Tensor<T> predictions, int[] targets, bool fromLogits)
+    private static T MeanCrossEntropy(Tensor<T> predictions, int[] targets, bool fromLogits)
     {
         if (predictions is null) throw new ArgumentNullException(nameof(predictions));
         if (targets is null) throw new ArgumentNullException(nameof(targets));
         var (n, v) = ValidateShape(predictions, targets);
 
-        double sumNll = 0.0;
+        var engine = AiDotNetEngine.Current;
+        var targetScores = engine.Reshape(TargetScores(predictions, targets, n, v), new[] { n });
+
+        Tensor<T> nll;
+        if (fromLogits)
+        {
+            // Numerically stable log-softmax: nll = logSumExp(row - row[target]). Centering on the target
+            // logit before the reduction keeps the result small, so large logits (e.g. 2^24 in float)
+            // do not round the fractional loss away as logSumExp(row) - row[target] would.
+            var centered = engine.TensorSubtract(predictions,
+                engine.TensorBroadcastTo(targetScores.Reshape(new[] { n, 1 }), new[] { n, v }));
+            nll = engine.TensorLogSumExp(centered, 1, keepDims: false);
+        }
+        else
+        {
+            // Guard against log(0) for a zero-probability true token.
+            nll = engine.TensorNegate(engine.TensorLog(engine.TensorClampMin(targetScores, NumOps.FromDouble(1e-12))));
+        }
+
+        return engine.TensorMean(nll);
+    }
+
+    /// <summary>
+    /// predictions[i, targets[i]] for every row as an [N, 1] tensor, after checking each target is in the vocabulary.
+    /// </summary>
+    private static Tensor<T> TargetScores(Tensor<T> predictions, int[] targets, int n, int v)
+    {
         for (int i = 0; i < n; i++)
         {
             int target = targets[i];
             if (target < 0 || target >= v)
                 throw new ArgumentException($"target[{i}]={target} is outside the vocabulary [0, {v}).", nameof(targets));
-
-            if (fromLogits)
-            {
-                // Numerically stable log-softmax: nll = logSumExp(row) - row[target].
-                double max = double.NegativeInfinity;
-                for (int j = 0; j < v; j++)
-                {
-                    double z = NumOps.ToDouble(predictions[i, j]);
-                    if (z > max) max = z;
-                }
-                double sumExp = 0.0;
-                for (int j = 0; j < v; j++)
-                    sumExp += Math.Exp(NumOps.ToDouble(predictions[i, j]) - max);
-                double logSumExp = max + Math.Log(sumExp);
-                sumNll += logSumExp - NumOps.ToDouble(predictions[i, target]);
-            }
-            else
-            {
-                double p = NumOps.ToDouble(predictions[i, target]);
-                // Guard against log(0) for a zero-probability true token.
-                sumNll += -Math.Log(Math.Max(p, 1e-12));
-            }
         }
-        return sumNll / n;
+
+        var targetIndices = new Tensor<int>((int[])targets.Clone(), new[] { n, 1 });
+        return AiDotNetEngine.Current.TensorTakeAlongDim(predictions, targetIndices, 1);
     }
 
     private static (int n, int v) ValidateShape(Tensor<T> predictions, int[] targets)

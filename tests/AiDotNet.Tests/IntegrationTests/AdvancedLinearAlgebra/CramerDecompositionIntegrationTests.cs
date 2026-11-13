@@ -178,6 +178,37 @@ public class CramerDecompositionIntegrationTests
         Assert.Throws<InvalidOperationException>(() => cramer.Invert());
     }
 
+    [Fact]
+    public void CramerDecomposition_RankDeficient3x3_SolveAndInvert_Throw()
+    {
+        // det([[1,2,3],[4,5,6],[7,8,9]]) is exactly 0, but an LU-based determinant leaves a
+        // rounding residue near 1e-16; the singularity check must be relative to the matrix scale.
+        var A = new Matrix<double>(3, 3);
+        A[0, 0] = 1; A[0, 1] = 2; A[0, 2] = 3;
+        A[1, 0] = 4; A[1, 1] = 5; A[1, 2] = 6;
+        A[2, 0] = 7; A[2, 1] = 8; A[2, 2] = 9;
+        var b = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
+
+        var cramer = new CramerDecomposition<double>(A);
+
+        Assert.Throws<InvalidOperationException>(() => cramer.Solve(b));
+        Assert.Throws<InvalidOperationException>(() => cramer.Invert());
+    }
+
+    [Fact]
+    public void CramerDecomposition_SmallScaleNonsingular_IsNotRejected()
+    {
+        // A tiny but well-conditioned matrix must not be called singular: the check is scale-aware.
+        var A = new Matrix<double>(2, 2);
+        A[0, 0] = 1e-9; A[0, 1] = 0;
+        A[1, 0] = 0; A[1, 1] = 1e-9;
+
+        var inverse = new CramerDecomposition<double>(A).Invert();
+
+        Assert.Equal(1e9, inverse[0, 0], 1e-3);
+        Assert.Equal(1e9, inverse[1, 1], 1e-3);
+    }
+
 
     #endregion
 

@@ -679,7 +679,7 @@ public partial class CRNN<T> : OCRBase<T>
             }
         }
 
-        var perSequence = ctc.ComputeTapeLoss(Engine.TensorLogSoftmax(logits, axis: -1), encodedTargets);  // [batch]
+        var perSequence = ctc.ComputePerSequenceTapeLoss(Engine.TensorLogSoftmax(logits, axis: -1), encodedTargets);  // [batch]
         var weights = new Tensor<T>(new[] { labels.Length });
         for (int b = 0; b < labels.Length; b++)
         {

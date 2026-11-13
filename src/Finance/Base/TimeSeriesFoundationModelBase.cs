@@ -264,16 +264,23 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
         int dim = destination.Length;
         if (dim <= 0) return;
 
-        int half = Math.Max(1, dim / 2);
-        double logMaxPeriod = Math.Log(10000.0);
-        for (int i = 0; i < half; i++)
+        // A single slot gets the cosine written and then the odd-width zero, so it is always zero.
+        if (dim == 1)
         {
-            double argument = timestep * Math.Exp(-logMaxPeriod * i / half);
-            if (i < dim) destination[i] = NumOps.FromDouble(Math.Cos(argument));
-            if (half + i < dim) destination[half + i] = NumOps.FromDouble(Math.Sin(argument));
+            destination.Clear();
+            return;
         }
 
-        if ((dim % 2) != 0) destination[dim - 1] = NumOps.Zero;
+        // [cos(t * w_i) | sin(t * w_i) | 0 when dim is odd], w_i = exp(-ln(10000) * i / half), i in [0, half).
+        int half = dim / 2;
+        double logMaxPeriod = Math.Log(10000.0);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var index = Engine.TensorArange<T>(0, half, 1);
+        var frequencies = Engine.TensorExp(Engine.TensorMultiplyScalar(index, NumOps.FromDouble(-logMaxPeriod / half)));
+        var arguments = Engine.TensorMultiplyScalar(frequencies, NumOps.FromDouble(timestep));
+        Engine.TensorCos(arguments).Data.Span.Slice(0, half).CopyTo(destination.Slice(0, half));
+        Engine.TensorSin(arguments).Data.Span.Slice(0, half).CopyTo(destination.Slice(half, half));
+        if ((dim % 2) != 0) destination.Slice(dim - 1).Clear();
     }
 
 
@@ -323,30 +330,53 @@ public abstract class TimeSeriesFoundationModelBase<T> : ForecastingModelBase<T>
 
         int rows = DeterministicDenoisingObjectiveRows;
         var timesteps = new int[rows];
+        var alphaIndex = new int[rows];
+        var oneMinusIndex = new int[rows];
         var noise = new Tensor<T>(new[] { rows, outputLength });
-        var noisy = new Tensor<T>(new[] { rows, outputLength });
         var random = RandomHelper.CreateSeededRandom(DeterministicDenoisingObjectiveSeed);
 
+        // The draws keep their original row-major order, so the fixed seed reproduces the same noise.
+        var noiseValues = noise.Data.Span;
         for (int row = 0; row < rows; row++)
         {
             int step = (int)((long)row * diffusionSteps / rows);
             if (step >= diffusionSteps) step = diffusionSteps - 1;
             timesteps[row] = step;
 
-            T sqrtAlphaBar = step < sqrtAlphasCumprod.Length ? sqrtAlphasCumprod[step] : NumOps.One;
-            T sqrtOneMinus = step < sqrtOneMinusAlphasCumprod.Length ? sqrtOneMinusAlphasCumprod[step] : NumOps.Zero;
+            // A step past the end of a schedule reads the fallback slot appended to each table below
+            // (one for sqrt(alpha_bar), zero for sqrt(1 - alpha_bar)).
+            alphaIndex[row] = Math.Min(step, sqrtAlphasCumprod.Length);
+            oneMinusIndex[row] = Math.Min(step, sqrtOneMinusAlphasCumprod.Length);
 
             for (int i = 0; i < outputLength; i++)
             {
-                T epsilon = NextStandardNormal(random);
-                T clean = i < target.Length ? target[i] : NumOps.Zero;
-                int flat = row * outputLength + i;
-                noise.Data.Span[flat] = epsilon;
-                noisy.Data.Span[flat] = NumOps.Add(
-                    NumOps.Multiply(sqrtAlphaBar, clean),
-                    NumOps.Multiply(sqrtOneMinus, epsilon));
+                noiseValues[row * outputLength + i] = NextStandardNormal(random);
             }
         }
+
+        // noisy[row, i] = sqrt(alpha_bar_step) * clean[i] + sqrt(1 - alpha_bar_step) * noise[row, i], detached
+        // like the noise itself.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var alphaTable = Engine.TensorConcatenate(
+            new[] { Tensor<T>.FromVector(sqrtAlphasCumprod), Tensor<T>.FromVector(new Vector<T>(new[] { NumOps.One })) }, 0);
+        var oneMinusTable = Engine.TensorConcatenate(
+            new[] { Tensor<T>.FromVector(sqrtOneMinusAlphasCumprod), Tensor<T>.FromVector(new Vector<T>(new[] { NumOps.Zero })) }, 0);
+        var rowAlpha = Engine.Reshape(
+            Engine.TensorIndexSelect(alphaTable, new Tensor<int>(new[] { rows }, new Vector<int>(alphaIndex)), 0),
+            new[] { rows, 1 });
+        var rowOneMinus = Engine.Reshape(
+            Engine.TensorIndexSelect(oneMinusTable, new Tensor<int>(new[] { rows }, new Vector<int>(oneMinusIndex)), 0),
+            new[] { rows, 1 });
+
+        // The clean signal is the target's first outputLength values, zero-padded when the target is shorter.
+        var clean = new Tensor<T>(new[] { 1, outputLength });
+        int cleanCount = Math.Min(outputLength, target.Length);
+        if (cleanCount > 0)
+            target.Contiguous().AsSpan().Slice(0, cleanCount).CopyTo(clean.Data.Span);
+
+        var noisy = Engine.TensorAdd(
+            Engine.TensorMultiply(rowAlpha, clean),
+            Engine.TensorMultiply(rowOneMinus, noise));
 
         return (noisy, noise, timesteps);
     }

@@ -49,34 +49,33 @@ public class NegativeSiSnrLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
         int n = predicted.Length;
-        double meanP = 0, meanA = 0;
-        for (int i = 0; i < n; i++)
+        T epsilon = NumOps.FromDouble(Epsilon);
+        T minusTenOverLn10 = NumOps.FromDouble(-10.0 / Math.Log(10.0));
+        if (n == 0)
         {
-            meanP += NumOps.ToDouble(predicted[i]);
-            meanA += NumOps.ToDouble(actual[i]);
+            // No samples: every energy is zero, so only the epsilons remain.
+            return NumOps.Multiply(minusTenOverLn10, NumOps.Log(NumOps.Divide(epsilon, epsilon)));
         }
 
-        meanP /= Math.Max(n, 1);
-        meanA /= Math.Max(n, 1);
-        double dot = 0, refEnergy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double p = NumOps.ToDouble(predicted[i]) - meanP, a = NumOps.ToDouble(actual[i]) - meanA;
-            dot += p * a;
-            refEnergy += a * a;
-        }
+        // Zero-mean both signals.
+        var estimate = predicted.AsTensor();
+        var reference = actual.AsTensor();
+        var p = Engine.TensorSubtractScalar(estimate, Engine.TensorMean(estimate));
+        var a = Engine.TensorSubtractScalar(reference, Engine.TensorMean(reference));
 
-        double scale = dot / (refEnergy + Epsilon);
-        double targetEnergy = 0, noiseEnergy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double p = NumOps.ToDouble(predicted[i]) - meanP, a = NumOps.ToDouble(actual[i]) - meanA;
-            double target = scale * a;
-            targetEnergy += target * target;
-            noiseEnergy += (p - target) * (p - target);
-        }
+        // Project the estimate onto the reference: target = (<p, a> / (||a||² + eps)) · a.
+        T dot = Engine.TensorSum(Engine.TensorMultiply(p, a));
+        T refEnergy = Engine.TensorSum(Engine.TensorMultiply(a, a));
+        T scale = NumOps.Divide(dot, NumOps.Add(refEnergy, epsilon));
+        var target = Engine.TensorMultiplyScalar(a, scale);
+        var noise = Engine.TensorSubtract(p, target);
+        T targetEnergy = Engine.TensorSum(Engine.TensorMultiply(target, target));
+        T noiseEnergy = Engine.TensorSum(Engine.TensorMultiply(noise, noise));
 
-        return NumOps.FromDouble(-10.0 * Math.Log10((targetEnergy + Epsilon) / (noiseEnergy + Epsilon)));
+        // -10·log10((target + eps) / (noise + eps)) = (-10 / ln 10)·ln(...)
+        return NumOps.Multiply(
+            minusTenOverLn10,
+            NumOps.Log(NumOps.Divide(NumOps.Add(targetEnergy, epsilon), NumOps.Add(noiseEnergy, epsilon))));
     }
 
     /// <inheritdoc />

@@ -113,28 +113,11 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have same length.");
 
-        double product = 1.0;
+        // Group kernel values k_g(x1[G_g], x2[G_g]), then their product.
+        var groupValues = new Vector<T>(Enumerable.Range(0, NumGroups)
+            .Select(g => _groupKernels[g].Calculate(x1.GetElements(_featureGroups[g]), x2.GetElements(_featureGroups[g]))));
 
-        for (int g = 0; g < NumGroups; g++)
-        {
-            var indices = _featureGroups[g];
-
-            // Extract features for this group
-            var x1g = new Vector<T>(indices.Length);
-            var x2g = new Vector<T>(indices.Length);
-
-            for (int i = 0; i < indices.Length; i++)
-            {
-                x1g[i] = x1[indices[i]];
-                x2g[i] = x2[indices[i]];
-            }
-
-            // Compute group kernel
-            double kg = _numOps.ToDouble(_groupKernels[g].Calculate(x1g, x2g));
-            product *= kg;
-        }
-
-        return _numOps.FromDouble(product);
+        return AiDotNetEngine.Current.Product(groupValues);
     }
 
     /// <summary>
@@ -168,22 +151,8 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
         for (int g = 0; g < NumGroups; g++)
         {
             var X = Xgroups[g];
-            int n = X.Rows;
-            var K = new Matrix<T>(n, n);
-
-            for (int i = 0; i < n; i++)
-            {
-                var xi = GetRow(X, i);
-                for (int j = i; j < n; j++)
-                {
-                    var xj = GetRow(X, j);
-                    T kval = _groupKernels[g].Calculate(xi, xj);
-                    K[i, j] = kval;
-                    K[j, i] = kval;
-                }
-            }
-
-            kernelMatrices[g] = K;
+            var rows = Enumerable.Range(0, X.Rows).Select(i => X.GetRow(i)).ToArray();
+            kernelMatrices[g] = KernelVectorOps<T>.SymmetricGram(_groupKernels[g], rows);
         }
 
         return kernelMatrices;
@@ -235,59 +204,7 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
         if (v.Length != total)
             throw new ArgumentException($"Vector length must be {total}.");
 
-        var result = new double[total];
-        for (int i = 0; i < total; i++)
-            result[i] = _numOps.ToDouble(v[i]);
-
-        // Apply each kernel matrix
-        for (int g = NumGroups - 1; g >= 0; g--)
-        {
-            int n = sizes[g];
-            var K = groupKernelMatrices[g];
-
-            // Compute sizes before and after this group
-            int rightSize = 1;
-            for (int gg = g + 1; gg < NumGroups; gg++)
-                rightSize *= sizes[gg];
-
-            int leftSize = total / (n * rightSize);
-
-            var newResult = new double[total];
-
-            // Apply K to mode g
-            for (int left = 0; left < leftSize; left++)
-            {
-                for (int right = 0; right < rightSize; right++)
-                {
-                    // Extract fiber
-                    var fiber = new double[n];
-                    for (int i = 0; i < n; i++)
-                    {
-                        int idx = left * (n * rightSize) + i * rightSize + right;
-                        fiber[i] = result[idx];
-                    }
-
-                    // Multiply by K
-                    for (int i = 0; i < n; i++)
-                    {
-                        double sum = 0;
-                        for (int j = 0; j < n; j++)
-                            sum += _numOps.ToDouble(K[i, j]) * fiber[j];
-
-                        int idx = left * (n * rightSize) + i * rightSize + right;
-                        newResult[idx] = sum;
-                    }
-                }
-            }
-
-            result = newResult;
-        }
-
-        var output = new Vector<T>(total);
-        for (int i = 0; i < total; i++)
-            output[i] = _numOps.FromDouble(result[i]);
-
-        return output;
+        return KernelVectorOps<T>.KroneckerMultiply(groupKernelMatrices, v);
     }
 
     /// <summary>
@@ -305,7 +222,7 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
     /// This is much cheaper than computing the full determinant!
     /// </para>
     /// </remarks>
-    public double LogDeterminant(Matrix<T>[] groupKernelMatrices)
+    public T LogDeterminant(Matrix<T>[] groupKernelMatrices)
     {
         if (groupKernelMatrices.Length != NumGroups)
             throw new ArgumentException($"Expected {NumGroups} kernel matrices.");
@@ -313,38 +230,20 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
         int[] sizes = groupKernelMatrices.Select(K => K.Rows).ToArray();
         int total = sizes.Aggregate(1, (a, b) => a * b);
 
-        double logDet = 0;
-
+        // log|K_g| for every group via Cholesky: log|K| = 2 × sum(log(diag(L))).
+        var groupLogDets = new T[NumGroups];
+        T negativeInfinity = _numOps.FromDouble(double.NegativeInfinity);
         for (int g = 0; g < NumGroups; g++)
         {
-            var K = groupKernelMatrices[g];
-            int n = sizes[g];
-            int otherProduct = total / n;
-
-            // Compute log-determinant of K via Cholesky
-            try
-            {
-                var L = CholeskyDecomposition(K);
-                double logDetG = 0;
-                for (int i = 0; i < n; i++)
-                    logDetG += Math.Log(_numOps.ToDouble(L[i, i]));
-                logDetG *= 2; // log|K| = 2 × sum(log(diag(L)))
-
-                logDet += otherProduct * logDetG;
-            }
-            catch (InvalidOperationException)
+            // Weighted by N / n_g: log|K_1 ⊗ ... ⊗ K_G| = sum_g (N / n_g) × log|K_g|
+            if (!KernelVectorOps<T>.TryCholeskyLogDeterminant(groupKernelMatrices[g], total / sizes[g], out groupLogDets[g]))
             {
                 // Cholesky failed - matrix is not positive definite
-                return double.NegativeInfinity;
-            }
-            catch (ArithmeticException)
-            {
-                // Numerical issues (e.g., NaN/Inf values)
-                return double.NegativeInfinity;
+                return negativeInfinity;
             }
         }
 
-        return logDet;
+        return AiDotNetEngine.Current.Sum(new Vector<T>(groupLogDets));
     }
 
     /// <summary>
@@ -399,53 +298,4 @@ public class ProductStructureKernel<T> : IKernelFunction<T>
 
         return WithRBF(groups, Enumerable.Repeat(baseLengthscale, numFeatures).ToArray());
     }
-
-    #region Private Methods
-
-    /// <summary>
-    /// Extracts a row from a matrix.
-    /// </summary>
-    private Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-            result[j] = matrix[row, j];
-        return result;
-    }
-
-    /// <summary>
-    /// Cholesky decomposition.
-    /// </summary>
-    private Matrix<T> CholeskyDecomposition(Matrix<T> A)
-    {
-        int n = A.Rows;
-        var L = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < j; k++)
-                    sum += _numOps.ToDouble(L[i, k]) * _numOps.ToDouble(L[j, k]);
-
-                if (i == j)
-                {
-                    double diag = _numOps.ToDouble(A[i, i]) - sum;
-                    if (diag <= 0)
-                        throw new InvalidOperationException("Matrix not positive definite.");
-                    L[i, j] = _numOps.FromDouble(Math.Sqrt(diag));
-                }
-                else
-                {
-                    double ljj = _numOps.ToDouble(L[j, j]);
-                    L[i, j] = _numOps.FromDouble((_numOps.ToDouble(A[i, j]) - sum) / ljj);
-                }
-            }
-        }
-
-        return L;
-    }
-
-    #endregion
 }

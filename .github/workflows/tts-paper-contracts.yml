@@ -1,6 +1,7 @@
 name: TTS paper contracts
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/workflows/tts-paper-contracts.yml'
       - 'src/TextToSpeech/**'
@@ -32,6 +33,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: windows-latest
     timeout-minutes: 45
     env:

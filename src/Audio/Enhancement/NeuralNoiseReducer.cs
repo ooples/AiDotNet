@@ -192,13 +192,13 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     /// Input buffer for streaming mode.
     /// </summary>
     [Scratch]
-    private Vector<T> _inputBuffer = new Vector<T>(0);
+    private T[] _inputBuffer = new T[0];
 
     /// <summary>
     /// Output buffer for overlap-add.
     /// </summary>
     [Scratch]
-    private Vector<T> _outputBuffer = new Vector<T>(0);
+    private T[] _outputBuffer = new T[0];
 
     /// <summary>
     /// Current position in input buffer.
@@ -209,7 +209,7 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     /// Window function for STFT.
     /// </summary>
     [Buffer]
-    private Vector<T> _window = new Vector<T>(0);
+    private Tensor<T> _window = new Tensor<T>([0]);
 
     /// <summary>
     /// Noise profile estimate (optional).
@@ -343,21 +343,28 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
 
     private void InitializeStreamingBuffers()
     {
-        _inputBuffer = new Vector<T>(_fftSize);
-        _outputBuffer = new Vector<T>(_fftSize);
+        _inputBuffer = new T[_fftSize];
+        _outputBuffer = new T[_fftSize];
         _bufferPosition = 0;
         _window = CreateHannWindow(_fftSize);
     }
 
-    private Vector<T> CreateHannWindow(int size)
+    private Tensor<T> CreateHannWindow(int size)
     {
-        var window = new Vector<T>(size);
-        for (int i = 0; i < size; i++)
-        {
-            var value = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (size - 1)));
-            window[i] = NumOps.FromDouble(value);
-        }
-        return window;
+        return AudioEngineOps.SymmetricHannWindow<T>(Engine, size);
+    }
+
+    /// <summary>
+    /// The <see cref="_fftSize"/>-sample frame at <paramref name="start"/> multiplied by the analysis
+    /// window; samples past the end of the signal are zero.
+    /// </summary>
+    private T[] WindowedFrame(Tensor<T> signal, int start)
+    {
+        int available = Math.Max(0, Math.Min(_fftSize, signal.Length - start));
+        var samples = available > 0
+            ? AudioEngineOps.FitLength(Engine, Engine.TensorSlice(signal, [start], [available]), _fftSize)
+            : new Tensor<T>([_fftSize]);
+        return Engine.TensorMultiply(samples, _window).ToArray();
     }
 
     #endregion
@@ -410,16 +417,7 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
         var samples = audio.ToVector().ToArray();
         var enhanced = ProcessOverlapAdd(samples);
 
-        // Write straight into the tensor's flat storage. Tensor<T>.ToVector()
-        // returns a COPY (it allocates a fresh Vector<T> and flattens into it),
-        // so writing to that copy and returning `result` would discard every
-        // value and yield an all-zero tensor.
-        var result = new Tensor<T>([enhanced.Length]);
-        for (int i = 0; i < enhanced.Length; i++)
-        {
-            result[i] = enhanced[i];
-        }
-        return result;
+        return new Tensor<T>(enhanced, [enhanced.Length]);
     }
 
     /// <inheritdoc/>
@@ -582,16 +580,7 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
         var samples = audioChunk.ToVector().ToArray();
         var enhanced = ProcessStreamingChunk(samples);
 
-        // Write straight into the tensor's flat storage. Tensor<T>.ToVector()
-        // returns a COPY (it allocates a fresh Vector<T> and flattens into it),
-        // so writing to that copy and returning `result` would discard every
-        // value and yield an all-zero tensor.
-        var result = new Tensor<T>([enhanced.Length]);
-        for (int i = 0; i < enhanced.Length; i++)
-        {
-            result[i] = enhanced[i];
-        }
-        return result;
+        return new Tensor<T>(enhanced, [enhanced.Length]);
     }
 
     /// <summary>
@@ -607,8 +596,8 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     /// </summary>
     public void ResetEnhancerState()
     {
-        _inputBuffer = new Vector<T>(_fftSize);
-        _outputBuffer = new Vector<T>(_fftSize);
+        _inputBuffer = new T[_fftSize];
+        _outputBuffer = new T[_fftSize];
         _bufferPosition = 0;
     }
 
@@ -632,18 +621,16 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
             InitializeStreamingBuffers();
 
         int numFrames = (input.Length - _fftSize) / _hopSize + 1;
-        var output = new T[input.Length];
+        var signal = new Tensor<T>(input, [input.Length]);
+        var synthesized = new List<Tensor<T>>();
+        var starts = new List<int>();
 
         for (int frame = 0; frame < numFrames; frame++)
         {
             int start = frame * _hopSize;
 
-            // Extract and window frame
-            var frameData = new T[_fftSize];
-            for (int i = 0; i < _fftSize && start + i < input.Length; i++)
-            {
-                frameData[i] = NumOps.Multiply(input[start + i], _window[i]);
-            }
+            // Extract and window frame (zero beyond the end of the input)
+            var frameData = WindowedFrame(signal, start);
 
             // Compute STFT
             var (magnitudes, phases) = ComputeSTFT(frameData);
@@ -654,15 +641,12 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
             // Compute inverse STFT
             var enhanced = ComputeISTFT(enhancedMagnitudes, phases);
 
-            // Window and overlap-add
-            for (int i = 0; i < _fftSize && start + i < output.Length; i++)
-            {
-                var windowed = NumOps.Multiply(enhanced[i], _window[i]);
-                output[start + i] = NumOps.Add(output[start + i], windowed);
-            }
+            // Window for overlap-add
+            synthesized.Add(Engine.TensorMultiply(new Tensor<T>(enhanced, [enhanced.Length]), _window));
+            starts.Add(start);
         }
 
-        return output;
+        return AudioEngineOps.OverlapAdd(Engine, synthesized, starts, input.Length).ToArray();
     }
 
     /// <summary>
@@ -683,24 +667,19 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
 
             if (_bufferPosition >= _hopSize)
             {
-                // Process frame
-                var frameData = new T[_fftSize];
-                for (int j = 0; j < _fftSize; j++)
-                {
-                    int idx = (j + _bufferPosition - _hopSize) % _fftSize;
-                    frameData[j] = NumOps.Multiply(_inputBuffer[idx], _window[j]);
-                }
+                // Process frame. _bufferPosition == _hopSize here, so the frame reads the input buffer
+                // in order: frame[j] = inputBuffer[j] * window[j].
+                var frameData = Engine.TensorMultiply(new Tensor<T>(_inputBuffer, [_inputBuffer.Length]), _window).ToArray();
 
                 var (magnitudes, phases) = ComputeSTFT(frameData);
                 var enhancedMagnitudes = EnhanceSpectrum(magnitudes);
                 var enhanced = ComputeISTFT(enhancedMagnitudes, phases);
 
                 // Overlap-add to output buffer
-                for (int j = 0; j < _fftSize; j++)
-                {
-                    var windowed = NumOps.Multiply(enhanced[j], _window[j]);
-                    _outputBuffer[j] = NumOps.Add(_outputBuffer[j], windowed);
-                }
+                Engine.TensorAdd(
+                    new Tensor<T>(_outputBuffer, [_outputBuffer.Length]),
+                    Engine.TensorMultiply(new Tensor<T>(enhanced, [enhanced.Length]), _window))
+                    .CopyTo(_outputBuffer.AsSpan());
 
                 // Output hop samples
                 for (int j = 0; j < _hopSize && outputPos < output.Length; j++)
@@ -709,14 +688,8 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
                 }
 
                 // Shift output buffer
-                for (int j = 0; j < _fftSize - _hopSize; j++)
-                {
-                    _outputBuffer[j] = _outputBuffer[j + _hopSize];
-                }
-                for (int j = _fftSize - _hopSize; j < _fftSize; j++)
-                {
-                    _outputBuffer[j] = NumOps.Zero;
-                }
+                Array.Copy(_outputBuffer, _hopSize, _outputBuffer, 0, _fftSize - _hopSize);
+                Array.Clear(_outputBuffer, _fftSize - _hopSize, _hopSize);
 
                 _bufferPosition = 0;
             }
@@ -730,29 +703,22 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     /// </summary>
     private T[] EnhanceSpectrum(T[] magnitudes)
     {
-        // Apply spectral subtraction if noise profile is available
-        var processedMagnitudes = magnitudes;
-        if (_noiseProfile is not null && _noiseProfile.Length == magnitudes.Length)
+        int numBins = magnitudes.Length;
+        var magnitude = new Tensor<T>(magnitudes, [numBins]);
+
+        // Apply spectral subtraction if noise profile is available:
+        // max(0, mag - strength * noise), NaN propagating as Math.Max does.
+        var processed = magnitude;
+        if (_noiseProfile is not null && _noiseProfile.Length == numBins)
         {
-            processedMagnitudes = new T[magnitudes.Length];
-            for (int i = 0; i < magnitudes.Length; i++)
-            {
-                // Spectral subtraction: subtract estimated noise magnitude
-                double mag = NumOps.ToDouble(magnitudes[i]);
-                double noise = NumOps.ToDouble(_noiseProfile[i]);
-                double subtracted = Math.Max(0.0, mag - EnhancementStrength * noise);
-                processedMagnitudes[i] = NumOps.FromDouble(subtracted);
-            }
+            var value = Engine.TensorSubtract(
+                magnitude,
+                Engine.TensorMultiplyScalar(new Tensor<T>(_noiseProfile, [numBins]), NumOps.FromDouble(EnhancementStrength)));
+            processed = Engine.TensorWhere(Engine.TensorLessThan(value, NumOps.Zero), new Tensor<T>([numBins]), value);
         }
 
-        // Create input tensor from magnitudes. Write directly to the tensor's
-        // flat indexer — ToVector() returns a copy, so writing to it would be
-        // discarded and the model would see an all-zero spectrum.
-        var input = new Tensor<T>([1, processedMagnitudes.Length, 1]);
-        for (int i = 0; i < processedMagnitudes.Length; i++)
-        {
-            input[i] = processedMagnitudes[i];
-        }
+        // Network input [1, bins, 1]
+        var input = Engine.Reshape(processed, [1, numBins, 1]);
 
         Tensor<T> mask;
 
@@ -765,23 +731,21 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
             mask = Forward(input);
         }
 
-        // Apply mask to magnitudes with enhancement strength
-        var enhanced = new T[magnitudes.Length];
-        var maskVector = mask.ToVector().ToArray();
+        // Apply mask to magnitudes with enhancement strength (a detached copy as before).
+        // mask is in range 0-1, where 1 = keep, 0 = remove; bins past the mask keep 1.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var flatMask = AudioEngineOps.Flatten(Engine, mask);
+        var m = flatMask.Length >= numBins
+            ? AudioEngineOps.FitLength(Engine, flatMask, numBins)
+            : Engine.Concat(new[] { flatMask, Tensor<T>.CreateDefault([numBins - flatMask.Length], NumOps.One) }, 0);
 
-        for (int i = 0; i < magnitudes.Length; i++)
-        {
-            // mask is in range 0-1, where 1 = keep, 0 = remove
-            double mag = NumOps.ToDouble(processedMagnitudes[i]);
-            double m = i < maskVector.Length ? NumOps.ToDouble(maskVector[i]) : 1.0;
+        // m = 1 - strength * (1 - m)
+        T one = NumOps.One;
+        var softened = Engine.TensorAddScalar(
+            Engine.TensorNegate(Engine.TensorMultiplyScalar(Engine.TensorAddScalar(Engine.TensorNegate(m), one), NumOps.FromDouble(EnhancementStrength))),
+            one);
 
-            // Apply enhancement strength to control how aggressively we use the mask
-            m = 1.0 - EnhancementStrength * (1.0 - m);
-
-            enhanced[i] = NumOps.FromDouble(mag * m);
-        }
-
-        return enhanced;
+        return Engine.TensorMultiply(processed, softened).ToArray();
     }
 
     #endregion
@@ -793,30 +757,10 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     /// </summary>
     private (T[] Magnitudes, T[] Phases) ComputeSTFT(T[] frame)
     {
-        // Convert frame to double array for FFT
-        var frameData = new double[_fftSize];
-        for (int i = 0; i < Math.Min(frame.Length, _fftSize); i++)
-        {
-            frameData[i] = NumOps.ToDouble(frame[i]);
-        }
-
-        // Compute FFT using FftSharp (proper O(N log N) algorithm)
-        System.Numerics.Complex[] spectrum = FftSharp.FFT.Forward(frameData);
-
-        // Extract magnitude and phase for positive frequencies (N/2+1 bins)
-        int numBins = _fftSize / 2 + 1;
-        var magnitudes = new T[numBins];
-        var phases = new T[numBins];
-
-        for (int k = 0; k < numBins; k++)
-        {
-            double real = spectrum[k].Real;
-            double imag = spectrum[k].Imaginary;
-            magnitudes[k] = NumOps.FromDouble(Math.Sqrt(real * real + imag * imag));
-            phases[k] = NumOps.FromDouble(Math.Atan2(imag, real));
-        }
-
-        return (magnitudes, phases);
+        // O(N log N) complex FFT of the (zero-padded) frame; magnitude and phase of the positive
+        // frequencies (N/2+1 bins).
+        var (magnitudes, phases) = AudioEngineOps.HalfSpectrum(Engine, new Tensor<T>(frame, [frame.Length]), _fftSize);
+        return (magnitudes.ToArray(), phases.ToArray());
     }
 
     /// <summary>
@@ -824,36 +768,13 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     /// </summary>
     private T[] ComputeISTFT(T[] magnitudes, T[] phases)
     {
-        // Reconstruct full complex spectrum from magnitude/phase
-        // magnitudes/phases contain N/2+1 positive frequency bins
-        var spectrum = new System.Numerics.Complex[_fftSize];
-
-        // Fill positive frequencies
-        for (int k = 0; k < magnitudes.Length; k++)
-        {
-            double mag = NumOps.ToDouble(magnitudes[k]);
-            double phase = NumOps.ToDouble(phases[k]);
-            spectrum[k] = System.Numerics.Complex.FromPolarCoordinates(mag, phase);
-        }
-
-        // Fill negative frequencies with conjugate symmetry
-        // For real signals: X[N-k] = conj(X[k])
-        for (int k = 1; k < magnitudes.Length - 1; k++)
-        {
-            spectrum[_fftSize - k] = System.Numerics.Complex.Conjugate(spectrum[k]);
-        }
-
-        // Compute inverse FFT using FftSharp (modifies spectrum in-place)
-        FftSharp.FFT.Inverse(spectrum);
-
-        // Extract real part
-        var output = new T[_fftSize];
-        for (int n = 0; n < _fftSize; n++)
-        {
-            output[n] = NumOps.FromDouble(spectrum[n].Real);
-        }
-
-        return output;
+        // Reconstruct full complex spectrum from magnitude/phase (N/2+1 positive frequency bins,
+        // negative frequencies by conjugate symmetry X[N-k] = conj(X[k])), then the real part of the
+        // 1/N-normalised inverse FFT.
+        var phaseTensor = new Tensor<T>(phases, [phases.Length]);
+        if (phases.Length != magnitudes.Length)
+            phaseTensor = AudioEngineOps.FitLength(Engine, phaseTensor, magnitudes.Length);
+        return AudioEngineOps.InverseHalfSpectrum(Engine, new Tensor<T>(magnitudes, [magnitudes.Length]), phaseTensor, _fftSize).ToArray();
     }
 
     /// <summary>
@@ -863,34 +784,17 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     {
         int numFrames = (noiseAudio.Length - _fftSize) / _hopSize + 1;
         int numBins = _fftSize / 2 + 1;
-        var avgMagnitudes = new T[numBins];
+        var signal = new Tensor<T>(noiseAudio, [noiseAudio.Length]);
+        var sumMagnitudes = new Tensor<T>([numBins]);
 
         for (int frame = 0; frame < numFrames; frame++)
         {
-            int start = frame * _hopSize;
-            var frameData = new T[_fftSize];
-
-            for (int i = 0; i < _fftSize && start + i < noiseAudio.Length; i++)
-            {
-                frameData[i] = NumOps.Multiply(noiseAudio[start + i], _window[i]);
-            }
-
-            var (magnitudes, _) = ComputeSTFT(frameData);
-
-            for (int i = 0; i < numBins; i++)
-            {
-                avgMagnitudes[i] = NumOps.Add(avgMagnitudes[i], magnitudes[i]);
-            }
+            var (magnitudes, _) = ComputeSTFT(WindowedFrame(signal, frame * _hopSize));
+            sumMagnitudes = Engine.TensorAdd(sumMagnitudes, new Tensor<T>(magnitudes, [numBins]));
         }
 
         // Average
-        var divisor = NumOps.FromDouble(numFrames);
-        for (int i = 0; i < numBins; i++)
-        {
-            avgMagnitudes[i] = NumOps.Divide(avgMagnitudes[i], divisor);
-        }
-
-        return avgMagnitudes;
+        return Engine.TensorDivideScalar(sumMagnitudes, NumOps.FromDouble(numFrames)).ToArray();
     }
 
     #endregion
@@ -901,29 +805,21 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         // Convert to spectrogram for neural network input
-        var samples = rawAudio.ToVector().ToArray();
+        var samples = AudioEngineOps.Flatten(Engine, rawAudio);
 
-        // Apply window
-        var windowed = new T[Math.Min(samples.Length, _fftSize)];
-        for (int i = 0; i < windowed.Length; i++)
-        {
-            windowed[i] = NumOps.Multiply(samples[i], _window[i]);
-        }
+        // Apply window to the first min(length, fftSize) samples
+        int count = Math.Min(samples.Length, _fftSize);
+        var windowed = count > 0
+            ? Engine.TensorMultiply(
+                Engine.TensorSlice(samples, [0], [count]),
+                AudioEngineOps.FitLength(Engine, _window, count)).ToArray()
+            : new T[0];
 
         // Compute magnitude spectrum
         var (magnitudes, _) = ComputeSTFT(windowed);
 
-        // Reshape to [1, freq_bins, 1]. Write directly to the tensor's flat
-        // indexer — ToVector() returns a COPY, so writing to it would be
-        // discarded and the network would receive an all-zero spectrogram
-        // (the cause of the constant sigmoid(0)=0.5 degenerate output).
-        var result = new Tensor<T>([1, magnitudes.Length, 1]);
-        for (int i = 0; i < magnitudes.Length; i++)
-        {
-            result[i] = magnitudes[i];
-        }
-
-        return result;
+        // Reshape to [1, freq_bins, 1]
+        return new Tensor<T>(magnitudes, [1, magnitudes.Length, 1]);
     }
 
     /// <inheritdoc/>

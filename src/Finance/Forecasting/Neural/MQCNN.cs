@@ -751,17 +751,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
 
         // Calculate MSE and MAE for median prediction
         var medianPred = ExtractQuantilePrediction(predictions, 0.5);
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < medianPred.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(medianPred[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(medianPred, actuals);
 
         if (count > 0)
         {
@@ -907,40 +897,81 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private T CalculateQuantileLoss(Tensor<T> predictions, Tensor<T> actuals)
     {
-        T totalLoss = NumOps.Zero;
-        int count = 0;
+        // Pinball loss over the [step, quantile] entries that have both a prediction and an actual:
+        // q * e when e = actual - predicted is not negative, (q - 1) * e otherwise.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var (error, count) = QuantileErrors(predictions, actuals);
+        if (count == 0)
+            return NumOps.Zero;
+        var negative = Engine.TensorLessThan(error, NumOps.Zero);
+        var loss = Engine.TensorWhere(
+            negative,
+            Engine.TensorMultiply(QuantileRow(QuantileCoefficient.LevelMinusOne, count), error),
+            Engine.TensorMultiply(QuantileRow(QuantileCoefficient.Level, count), error));
+        return NumOps.Divide(Engine.TensorSum(loss), NumOps.FromDouble(count));
+    }
 
-        for (int t = 0; t < _forecastHorizon && t < actuals.Length; t++)
+    /// <summary>
+    /// actual[t] - predicted[t * Q + q] for the leading entries t &lt; min(horizon, actuals) whose
+    /// prediction exists (a row-major prefix of the [step, quantile] grid), and how many there are.
+    /// </summary>
+    private (Tensor<T> Error, int Count) QuantileErrors(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        int levels = _quantiles.Length;
+        int steps = Math.Min(_forecastHorizon, actuals.Length);
+        int count = levels == 0 || steps <= 0 ? 0 : Math.Min(steps * levels, predictions.Length);
+        if (count == 0)
+            return (new Tensor<T>(new[] { 0 }), 0);
+        int rows = (count + levels - 1) / levels;
+        var actualColumn = Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(actuals.Contiguous(), new[] { actuals.Length }), 0, 0, rows), new[] { rows, 1 });
+        var repeated = Engine.Reshape(Engine.TensorBroadcastTo(actualColumn, new[] { rows, levels }).Contiguous(), new[] { rows * levels });
+        var predicted = Engine.TensorNarrow(Engine.Reshape(predictions.Contiguous(), new[] { predictions.Length }), 0, 0, count);
+        return (Engine.TensorSubtract(Engine.TensorNarrow(repeated, 0, 0, count).Contiguous(), predicted.Contiguous()), count);
+    }
+
+    /// <summary>The per-level pinball coefficients, one row per <see cref="QuantileCoefficient"/>.</summary>
+    private Tensor<T>? _quantileCoefficients;
+
+    /// <summary>The quantile levels <see cref="_quantileCoefficients"/> was built from.</summary>
+    private double[] _quantileCoefficientLevels = Array.Empty<double>();
+
+    /// <summary>Rows of the cached per-level coefficient table.</summary>
+    private enum QuantileCoefficient
+    {
+        /// <summary>q</summary>
+        Level = 0,
+        /// <summary>q - 1</summary>
+        LevelMinusOne = 1,
+        /// <summary>-q</summary>
+        NegativeLevel = 2,
+        /// <summary>1 - q</summary>
+        OneMinusLevel = 3
+    }
+
+    /// <summary>A per-level coefficient tiled over the first count entries of the [step, quantile] grid.</summary>
+    private Tensor<T> QuantileRow(QuantileCoefficient coefficient, int count)
+    {
+        int levels = _quantiles.Length;
+        // Quantiles exposes the level array itself, so a caller can change a level after the table is built:
+        // rebuild whenever the levels differ from the ones it was built from.
+        if (_quantileCoefficients is null || !_quantileCoefficientLevels.SequenceEqual(_quantiles))
         {
-            T actual = actuals[t];
-
-            for (int q = 0; q < _quantiles.Length; q++)
-            {
-                int predIdx = t * _quantiles.Length + q;
-                if (predIdx >= predictions.Length)
-                    continue;
-
-                T predicted = predictions[predIdx];
-                T error = NumOps.Subtract(actual, predicted);
-                double quantile = _quantiles[q];
-
-                // Quantile loss: q * max(error, 0) + (1-q) * max(-error, 0)
-                T loss;
-                if (!NumOps.LessThan(error, NumOps.Zero))
-                {
-                    loss = NumOps.Multiply(NumOps.FromDouble(quantile), error);
-                }
-                else
-                {
-                    loss = NumOps.Multiply(NumOps.FromDouble(quantile - 1), error);
-                }
-
-                totalLoss = NumOps.Add(totalLoss, loss);
-                count++;
-            }
+            // The configured levels are converted once, with the same double arithmetic master used per use
+            // (q, q - 1, -q, 1 - q), and cast to T in one whole-table conversion.
+            var table = _quantiles
+                .Concat(_quantiles.Select(q => q - 1))
+                .Concat(_quantiles.Select(q => -q))
+                .Concat(_quantiles.Select(q => 1 - q))
+                .ToArray();
+            _quantileCoefficients = new Tensor<double>(new[] { 4, levels }, new Vector<double>(table)).Cast<T>();
+            _quantileCoefficientLevels = (double[])_quantiles.Clone();
         }
 
-        return count > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(count)) : NumOps.Zero;
+        int rows = (count + levels - 1) / levels;
+        var row = Engine.TensorNarrow(_quantileCoefficients, 0, (int)coefficient, 1);
+        var tiled = Engine.TensorBroadcastTo(row.Contiguous(), new[] { rows, levels });
+        return Engine.TensorNarrow(Engine.Reshape(tiled.Contiguous(), new[] { rows * levels }), 0, 0, count).Contiguous();
     }
 
     /// <summary>
@@ -960,38 +991,24 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateQuantileLossGradient(Tensor<T> predictions, Tensor<T> actuals)
     {
-        var gradient = new Tensor<T>(predictions._shape);
         int totalElements = _forecastHorizon * _quantiles.Length;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var (error, count) = QuantileErrors(predictions, actuals);
+        if (count == 0)
+            return new Tensor<T>(predictions._shape);
 
-        for (int t = 0; t < _forecastHorizon && t < actuals.Length; t++)
-        {
-            T actual = actuals[t];
-
-            for (int q = 0; q < _quantiles.Length; q++)
-            {
-                int predIdx = t * _quantiles.Length + q;
-                if (predIdx >= predictions.Length || predIdx >= totalElements)
-                    continue;
-
-                T predicted = predictions[predIdx];
-                double quantile = _quantiles[q];
-
-                // Gradient of quantile loss
-                T grad;
-                if (NumOps.ToDouble(NumOps.Subtract(actual, predicted)) >= 0)
-                {
-                    grad = NumOps.FromDouble(-quantile); // Under-prediction
-                }
-                else
-                {
-                    grad = NumOps.FromDouble(1 - quantile); // Over-prediction
-                }
-
-                gradient.Data.Span[predIdx] = NumOps.Divide(grad, NumOps.FromDouble(totalElements));
-            }
-        }
-
-        return gradient;
+        // -q / N where actual - predicted >= 0 (under-prediction), (1 - q) / N otherwise (NaN included).
+        var notNegative = Engine.TensorAdd(
+            Engine.TensorGreaterThan(error, NumOps.Zero), Engine.TensorEquals(error, NumOps.Zero));
+        var total = NumOps.FromDouble(totalElements);
+        var grad = Engine.TensorWhere(
+            notNegative,
+            Engine.TensorDivideScalar(QuantileRow(QuantileCoefficient.NegativeLevel, count), total),
+            Engine.TensorDivideScalar(QuantileRow(QuantileCoefficient.OneMinusLevel, count), total));
+        var flat = count == predictions.Length
+            ? grad
+            : Engine.TensorConcatenate(new[] { grad, new Tensor<T>(new[] { predictions.Length - count }) }, 0);
+        return Engine.Reshape(flat, predictions._shape);
     }
 
     /// <summary>
@@ -1055,24 +1072,22 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         var lowerPred = ExtractQuantilePrediction(predictions, lowerQuantile);
         var upperPred = ExtractQuantilePrediction(predictions, upperQuantile);
 
-        int covered = 0;
-        int total = 0;
+        int total = Math.Max(0, Math.Min(_forecastHorizon, actuals.Length));
+        if (total == 0)
+            return NumOps.Zero;
+        if (lowerPred.Length < total || upperPred.Length < total)
+            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
 
-        for (int t = 0; t < _forecastHorizon && t < actuals.Length; t++)
-        {
-            T actual = actuals[t];
-            T lower = lowerPred[t];
-            T upper = upperPred[t];
-
-            if (NumOps.GreaterThanOrEquals(actual, lower) &&
-                NumOps.LessThanOrEquals(actual, upper))
-            {
-                covered++;
-            }
-            total++;
-        }
-
-        return total > 0 ? NumOps.FromDouble((double)covered / total) : NumOps.Zero;
+        // Share of steps whose actual lies in [lower, upper] (a NaN anywhere counts as not covered).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        Tensor<T> Leading(Tensor<T> t) => Engine.TensorNarrow(Engine.Reshape(t.Contiguous(), new[] { t.Length }), 0, 0, total).Contiguous();
+        var actual = Leading(actuals);
+        var lower = Leading(lowerPred);
+        var upper = Leading(upperPred);
+        var aboveLower = Engine.TensorAdd(Engine.TensorGreaterThan(actual, lower), Engine.TensorEquals(actual, lower));
+        var belowUpper = Engine.TensorAdd(Engine.TensorGreaterThan(upper, actual), Engine.TensorEquals(upper, actual));
+        int covered = Engine.TensorCountNonzero(Engine.TensorMultiply(aboveLower, belowUpper));
+        return NumOps.FromDouble((double)covered / total);
     }
 
     #endregion
@@ -1110,10 +1125,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
 
         // Convert input to float array
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         // Create ONNX tensor using input shape
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
@@ -1132,10 +1144,7 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         // Convert back to Tensor<T>
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }

@@ -49,6 +49,7 @@ public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
 {
     private readonly ShortTimeFourierTransform<T> _stft;
     private readonly double[,] _chromaFilterbank;
+    private Tensor<T>? _chromaFilterbankTensor;
     private readonly bool _normalize;
     private readonly double _tuningFrequency;
 
@@ -86,6 +87,9 @@ public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Extract(Tensor<T> audio)
     {
+        // Features are computed from fresh values (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
         // Compute STFT magnitude
         var stftResult = _stft.Forward(audio);
 
@@ -93,65 +97,54 @@ public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
         int numFrames = stftResult.Shape[0];
         int numFreqs = stftResult.Shape[1];
 
-        // Compute power spectrum
-        var powerSpectrum = new double[numFrames, numFreqs];
-        for (int frame = 0; frame < numFrames; frame++)
+        // Compute power spectrum |X|^2
+        var real = Engine.TensorReal(stftResult);
+        var imag = Engine.TensorImag(stftResult);
+        var powerSpectrum = Engine.TensorAdd(Engine.TensorSquare(real), Engine.TensorSquare(imag));
+
+        // Apply chroma filterbank: chroma[frame, p] = sum_f fb[p, f] * power[frame, f]
+        int usedFreqs = Math.Min(numFreqs, _chromaFilterbank.GetLength(1));
+        Tensor<T> chroma;
+        if (numFrames == 0 || usedFreqs == 0)
         {
-            for (int freq = 0; freq < numFreqs; freq++)
-            {
-                var complex = stftResult[frame, freq];
-                double real = NumOps.ToDouble(complex.Real);
-                double imag = NumOps.ToDouble(complex.Imaginary);
-                powerSpectrum[frame, freq] = real * real + imag * imag;
-            }
+            chroma = new Tensor<T>([numFrames, 12]);
+        }
+        else
+        {
+            var filterbank = Engine.TensorSlice(ChromaFilterbankTensor(), [0, 0], [12, usedFreqs]);
+            chroma = Engine.TensorMatMul(
+                Engine.TensorSlice(powerSpectrum, [0, 0], [numFrames, usedFreqs]),
+                Engine.TensorTranspose(filterbank));
         }
 
-        // Apply chroma filterbank
-        var chroma = new double[numFrames, 12];
-
-        for (int frame = 0; frame < numFrames; frame++)
+        // Normalize if requested (frames whose L2 norm is not above 1e-10 are left as is)
+        if (_normalize && numFrames > 0)
         {
-            for (int pitchClass = 0; pitchClass < 12; pitchClass++)
-            {
-                double sum = 0;
-                for (int freq = 0; freq < numFreqs && freq < _chromaFilterbank.GetLength(1); freq++)
-                {
-                    sum += _chromaFilterbank[pitchClass, freq] * powerSpectrum[frame, freq];
-                }
-                chroma[frame, pitchClass] = sum;
-            }
-
-            // Normalize if requested
-            if (_normalize)
-            {
-                double norm = 0;
-                for (int p = 0; p < 12; p++)
-                {
-                    norm += chroma[frame, p] * chroma[frame, p];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm > 1e-10)
-                {
-                    for (int p = 0; p < 12; p++)
-                    {
-                        chroma[frame, p] /= norm;
-                    }
-                }
-            }
+            var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(chroma), [1], keepDims: true));
+            var divisor = Engine.TensorWhere(
+                Engine.TensorGreaterThan(norm, NumOps.FromDouble(1e-10)),
+                norm,
+                Tensor<T>.CreateDefault([numFrames, 1], NumOps.One));
+            chroma = Engine.TensorDivide(chroma, Engine.TensorBroadcastTo(divisor, [numFrames, 12]));
         }
 
-        // Convert to tensor
-        var result = new Tensor<T>([numFrames, 12]);
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            for (int p = 0; p < 12; p++)
-            {
-                result[frame, p] = NumOps.FromDouble(chroma[frame, p]);
-            }
-        }
+        return chroma;
+    }
 
-        return result;
+    /// <summary>
+    /// The fixed chroma filterbank (built once in the constructor) converted to <typeparamref name="T"/>
+    /// once, in bulk.
+    /// </summary>
+    private Tensor<T> ChromaFilterbankTensor()
+    {
+        if (_chromaFilterbankTensor is null)
+        {
+            int rows = _chromaFilterbank.GetLength(0), cols = _chromaFilterbank.GetLength(1);
+            var values = new double[rows * cols];
+            Buffer.BlockCopy(_chromaFilterbank, 0, values, 0, values.Length * sizeof(double));
+            _chromaFilterbankTensor = new Tensor<double>(values, [rows, cols]).Cast<T>();
+        }
+        return _chromaFilterbankTensor;
     }
 
     private static double[,] CreateChromaFilterbank(
@@ -253,19 +246,7 @@ public class ChromaExtractor<T> : AudioFeatureExtractorBase<T>
         if (chromaFrame.Length != 12)
             throw new ArgumentException("Chroma frame must have exactly 12 elements.", nameof(chromaFrame));
 
-        int maxIndex = 0;
-        double maxValue = NumOps.ToDouble(chromaFrame[0]);
-
-        for (int i = 1; i < 12; i++)
-        {
-            double value = NumOps.ToDouble(chromaFrame[i]);
-            if (value > maxValue)
-            {
-                maxValue = value;
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        // First index holding the strict maximum (a leading NaN wins, later NaNs never do)
+        return AudioEngineOps.FirstArgMaxSequential(Engine, new Tensor<T>(chromaFrame, [12]));
     }
 }

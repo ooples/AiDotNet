@@ -276,12 +276,12 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     public LanguageResult<T> IdentifyLanguage(Tensor<T> audio)
     {
         var probabilities = GetLanguageProbabilities(audio);
-        var topLanguage = probabilities.OrderByDescending(p => _numOps.ToDouble(p.Value)).First();
+        var sortedProbs = AudioEngineOps.OrderByDescendingValue(Engine, probabilities);
+        var topLanguage = sortedProbs.First();
 
         string altLanguage = string.Empty;
         T altProb = _numOps.Zero;
 
-        var sortedProbs = probabilities.OrderByDescending(p => _numOps.ToDouble(p.Value)).ToList();
         if (sortedProbs.Count > 1)
         {
             altLanguage = sortedProbs[1].Key;
@@ -317,8 +317,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     public IReadOnlyList<(string Language, T Probability)> GetTopLanguages(Tensor<T> audio, int topN = 5)
     {
         var probabilities = GetLanguageProbabilities(audio);
-        return probabilities
-            .OrderByDescending(p => _numOps.ToDouble(p.Value))
+        return AudioEngineOps.OrderByDescendingValue(Engine, probabilities)
             .Take(topN)
             .Select(p => (p.Key, p.Value))
             .ToList();
@@ -329,18 +328,16 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     {
         var segments = new List<LanguageSegment<T>>();
         int samplesPerWindow = (int)((double)SampleRate * windowSizeMs / 1000.0);
-        int hopSamples = samplesPerWindow / 2;
+        int hopSamples = samplesPerWindow / 2; // 50% overlap
 
-        int totalSamples = audio.Length;
+        var samples = AudioEngineOps.Flatten(Engine, audio);
+        int totalSamples = samples.Length;
         double sampleDuration = 1.0 / SampleRate;
 
         for (int start = 0; start + samplesPerWindow <= totalSamples; start += hopSamples)
         {
-            var window = new Tensor<T>([samplesPerWindow]);
-            for (int i = 0; i < samplesPerWindow; i++)
-            {
-                window[i] = audio[start + i];
-            }
+            // Extract window
+            var window = Engine.TensorSlice(samples, [start], [samplesPerWindow]);
 
             var result = IdentifyLanguage(window);
 
@@ -353,6 +350,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
             });
         }
 
+        // Merge consecutive segments with same language
         return MergeConsecutiveSegments(segments);
     }
 
@@ -602,39 +600,35 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
 
     private T[] Softmax(T[] logits)
     {
-        double maxLogit = logits.Max(x => _numOps.ToDouble(x));
-        double[] expValues = logits.Select(x => Math.Exp(_numOps.ToDouble(x) - maxLogit)).ToArray();
-        double sumExp = expValues.Sum();
-        return expValues.Select(x => _numOps.FromDouble(x / sumExp)).ToArray();
+        return AudioEngineOps.Softmax(Engine, logits);
     }
 
     private IReadOnlyList<LanguageSegment<T>> MergeConsecutiveSegments(List<LanguageSegment<T>> segments)
     {
         if (segments.Count == 0) return segments;
 
+        // Runs of consecutive segments with the same language become one segment whose confidence
+        // is the running pairwise average (c + next) / 2 of the run
         var merged = new List<LanguageSegment<T>>();
-        var current = segments[0];
-
-        for (int i = 1; i < segments.Count; i++)
+        int runStart = 0;
+        for (int i = 1; i <= segments.Count; i++)
         {
-            if (segments[i].LanguageCode == current.LanguageCode)
-            {
-                current = new LanguageSegment<T>
+            if (i < segments.Count && segments[i].LanguageCode == segments[runStart].LanguageCode)
+                continue;
+
+            var first = segments[runStart];
+            merged.Add(i - runStart == 1
+                ? first
+                : new LanguageSegment<T>
                 {
-                    StartTime = current.StartTime,
-                    EndTime = segments[i].EndTime,
-                    LanguageCode = current.LanguageCode,
-                    Confidence = _numOps.FromDouble(
-                        (_numOps.ToDouble(current.Confidence) + _numOps.ToDouble(segments[i].Confidence)) / 2)
-                };
-            }
-            else
-            {
-                merged.Add(current);
-                current = segments[i];
-            }
+                    StartTime = first.StartTime,
+                    EndTime = segments[i - 1].EndTime,
+                    LanguageCode = first.LanguageCode,
+                    Confidence = AudioEngineOps.RunningPairAverage(
+                        Engine, segments.GetRange(runStart, i - runStart).Select(s => s.Confidence).ToArray())
+                });
+            runStart = i;
         }
-        merged.Add(current);
 
         return merged;
     }

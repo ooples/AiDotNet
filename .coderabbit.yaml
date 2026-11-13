@@ -13,6 +13,10 @@ reviews:
   # review at all -- the entire reason for splitting. Opt in explicitly.
   auto_review:
     drafts: true
+    # The free OSS allowance is about 20 review passes a day, and every push to an open PR spent one
+    # (one PR used 48). The first review stays automatic; re-check a PR after fixes with
+    # `@coderabbitai review`.
+    auto_incremental_review: false
     # Auto-review defaults to the default branch ONLY, so PRs targeting the integration
     # branch would get no review at all. Entries are regex matched against the base
     # branch name; master is listed explicitly because naming any base_branches

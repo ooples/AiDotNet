@@ -57,6 +57,8 @@ namespace AiDotNet.SpeechRecognition.NeMo;
                 WarmupSteps = 1000, MinLearningRate = 1e-6, Schedule = LearningRateSchedulerType.CosineAnnealing,
                 Source = "nvidia/canary-qwen-2.5b config.json: torch.optim.AdamW with lr 5e-4, betas (0.9, 0.98) and "
                         + "weight decay 1e-3; NeMo CosineAnnealing with 1000 warm-up steps and min_lr 1e-6.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class CanaryQwen<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

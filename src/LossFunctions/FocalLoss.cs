@@ -73,29 +73,29 @@ public class FocalLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Clamp predicted values to prevent log(0) using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
+        // Clamp predicted values into [eps, 1 - eps] to prevent log(0) (NumericalStabilityHelper.ClampProbability)
+        T eps = NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon);
+        var p = Engine.TensorClamp(predicted.AsTensor(), eps, NumOps.Subtract(NumOps.One, eps));
 
-            // pt is the probability of the target class
-            T pt = NumOps.Equals(actual[i], NumOps.One) ? p : NumOps.Subtract(NumOps.One, p);
+        // Positive-class mask: 1 where actual == 1, 0 otherwise
+        var isPositive = Engine.TensorEquals(actual.AsTensor(), NumOps.One);
 
-            // alpha term handles class imbalance
-            T alphaT = NumOps.Equals(actual[i], NumOps.One) ? _alpha : NumOps.Subtract(NumOps.One, _alpha);
+        // pt is the probability of the target class
+        var pt = Engine.TensorWhere(isPositive, p, Engine.ScalarMinusTensor(NumOps.One, p));
 
-            // (1-pt)^gamma is the focusing term
-            T focusingTerm = NumOps.Power(NumOps.Subtract(NumOps.One, pt), _gamma);
+        // alpha term handles class imbalance
+        var alphaT = Engine.TensorWhere(
+            isPositive,
+            Engine.TensorFullLike(p, _alpha),
+            Engine.TensorFullLike(p, NumOps.Subtract(NumOps.One, _alpha)));
 
-            // -a(1-pt)^?log(pt) using SafeLog
-            T sampleLoss = NumOps.Multiply(
-                NumOps.Negate(alphaT),
-                NumOps.Multiply(focusingTerm, NumericalStabilityHelper.SafeLog(pt, NumericalStabilityHelper.SmallEpsilon))
-            );
+        // (1-pt)^gamma is the focusing term
+        var focusingTerm = Engine.TensorPower(Engine.ScalarMinusTensor(NumOps.One, pt), _gamma);
 
-            loss = NumOps.Add(loss, sampleLoss);
-        }
+        // -a(1-pt)^gamma log(pt), with SafeLog's floor log(max(pt, eps))
+        var logPt = Engine.TensorLog(Engine.TensorClampMin(pt, eps));
+        var sampleLoss = Engine.TensorMultiply(Engine.TensorNegate(alphaT), Engine.TensorMultiply(focusingTerm, logPt));
+        T loss = Engine.TensorSum(sampleLoss);
 
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }

@@ -420,7 +420,7 @@ public class GraphAttentionPortfolioComponentTests
         // LF = -ln(mu) + ln(sigma) = -ln(mu/sigma). Minimising it maximises the Sharpe ratio; an
         // inverted sign would train for the WORST risk-adjusted return.
         var obj = new SharpeRatioPortfolioObjective<double>();
-        var returns = new[] { 0.02, 0.01, 0.03, -0.005, 0.015 };
+        var returns = new Vector<double>(new[] { 0.02, 0.01, 0.03, -0.005, 0.015 });
 
         double sharpe = obj.SharpeRatio(returns);
         Assert.Equal(-Math.Log(sharpe), obj.Loss(returns), 8);
@@ -430,8 +430,8 @@ public class GraphAttentionPortfolioComponentTests
     public void LossDecreasesAsTheSharpeRatioImproves()
     {
         var obj = new SharpeRatioPortfolioObjective<double>();
-        var steady = new[] { 0.010, 0.011, 0.009, 0.010, 0.011 };   // same drift, low vol
-        var choppy = new[] { 0.05, -0.04, 0.06, -0.03, 0.01 };      // similar drift, high vol
+        var steady = new Vector<double>(new[] { 0.010, 0.011, 0.009, 0.010, 0.011 });   // same drift, low vol
+        var choppy = new Vector<double>(new[] { 0.05, -0.04, 0.06, -0.03, 0.01 });      // similar drift, high vol
 
         Assert.True(obj.SharpeRatio(steady) > obj.SharpeRatio(choppy));
         Assert.True(obj.Loss(steady) < obj.Loss(choppy),
@@ -445,8 +445,8 @@ public class GraphAttentionPortfolioComponentTests
         // easily. It must yield a large finite penalty, not NaN, or one bad batch poisons every
         // subsequent gradient.
         var obj = new SharpeRatioPortfolioObjective<double>();
-        var losing = new[] { -0.02, -0.01, -0.03, -0.015 };
-        var flat = new[] { 0.0, 0.0, 0.0, 0.0 };
+        var losing = new Vector<double>(new[] { -0.02, -0.01, -0.03, -0.015 });
+        var flat = new Vector<double>(new[] { 0.0, 0.0, 0.0, 0.0 });
 
         double lossLosing = obj.Loss(losing);
         double lossFlat = obj.Loss(flat);
@@ -457,7 +457,7 @@ public class GraphAttentionPortfolioComponentTests
             $"A flat portfolio produced a non-finite loss: {lossFlat}.");
 
         // And it must be worse than any profitable portfolio.
-        Assert.True(lossLosing > obj.Loss(new[] { 0.01, 0.012, 0.008, 0.011 }));
+        Assert.True(lossLosing > obj.Loss(new Vector<double>(new[] { 0.01, 0.012, 0.008, 0.011 })));
     }
 
     [Fact]
@@ -554,7 +554,7 @@ public class GraphAttentionPortfolioComponentTests
     public void ObjectiveRejectsEmptyOrMismatchedInputs()
     {
         var obj = new SharpeRatioPortfolioObjective<double>();
-        Assert.Throws<ArgumentException>(() => obj.Loss(Array.Empty<double>()));
+        Assert.Throws<ArgumentException>(() => obj.Loss(new Vector<double>(0)));
         Assert.Throws<ArgumentException>(() => obj.Allocate(new Vector<double>(0)));
         Assert.Throws<ArgumentException>(() =>
             obj.PortfolioReturns(Vec(1.0, 0.0), Panel(2, 3, (s, a) => 0.0)));

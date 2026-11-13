@@ -47,25 +47,17 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // z = y * f(x)
-            T z = NumOps.Multiply(actual[i], predicted[i]);
+        // z = y * f(x)
+        var z = Engine.TensorMultiply(actual.AsTensor(), predicted.AsTensor());
 
-            if (NumOps.GreaterThanOrEquals(z, NumOps.FromDouble(-1)))
-            {
-                // For z = -1: max(0, 1 - z)²
-                T margin = NumOps.Subtract(NumOps.One, z);
-                T hingeLoss = MathHelper.Max(NumOps.Zero, margin);
-                loss = NumOps.Add(loss, NumOps.Power(hingeLoss, NumOps.FromDouble(2)));
-            }
-            else
-            {
-                // For z < -1: -4 * z
-                loss = NumOps.Add(loss, NumOps.Multiply(NumOps.FromDouble(-4), z));
-            }
-        }
+        // For z >= -1: max(0, 1 - z)²
+        var hingeLoss = Engine.TensorMax(Engine.ScalarMinusTensor(NumOps.One, z), NumOps.Zero);
+        var squaredHinge = Engine.TensorMultiply(hingeLoss, hingeLoss);
+
+        // For z < -1: -4 * z
+        var linear = Engine.TensorMultiplyScalar(z, NumOps.FromDouble(-4));
+
+        T loss = Engine.TensorSum(Engine.TensorWhere(Engine.TensorLessThan(z, NumOps.FromDouble(-1)), linear, squaredHinge));
 
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }

@@ -121,7 +121,11 @@ public partial class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
     {
         ThrowIfDisposed();
         var probs = GetEmotionProbabilities(audio);
-        var sorted = probs.OrderByDescending(p => NumOps.ToDouble(p.Value)).ToList();
+        var entries = probs.ToList();
+        var sorted = (entries.Count == 0
+                ? Array.Empty<int>()
+                : AudioEngineOps.StableDescendingOrder(Engine, new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count])))
+            .Select(i => entries[i]).ToList();
         string primary = sorted[0].Key;
         T confidence = sorted[0].Value;
         string? secondary = sorted.Count > 1 && NumOps.GreaterThan(sorted[1].Value, NumOps.FromDouble(0.1)) ? sorted[1].Key : null;
@@ -144,8 +148,10 @@ public partial class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
             : Predict(features);
 
         var probs = new Dictionary<string, T>();
-        for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length; i++)
-            probs[_options.EmotionLabels[i]] = probabilities[i];
+        int count = Math.Min(_options.NumClasses, _options.EmotionLabels.Length);
+        T[] values = AudioEngineOps.Head(Engine, probabilities, count);
+        for (int i = 0; i < count; i++)
+            probs[_options.EmotionLabels[i]] = values[i];
 
         return probs;
     }
@@ -160,8 +166,7 @@ public partial class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
 
         for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
         {
-            var chunk = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < windowSamples; i++) chunk[i] = audio[start + i];
+            var chunk = Engine.TensorSlice(AudioEngineOps.Flatten(Engine, audio), [start], [windowSamples]);
             var result = RecognizeEmotion(chunk);
             results.Add(new TimedEmotionResult<T>
             {

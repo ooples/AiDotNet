@@ -97,16 +97,19 @@ public partial class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// </remarks>
     public T Interpolate(T x)
     {
-        T result = _coefficients[0];
-        T term = _numOps.One;
-
-        for (int i = 1; i < _coefficients.Length; i++)
+        int n = _coefficients.Length;
+        if (n == 1)
         {
-            term = _numOps.Multiply(term, _numOps.Subtract(x, _x[i - 1]));
-            result = _numOps.Add(result, _numOps.Multiply(_coefficients[i], term));
+            return _coefficients[0];
         }
 
-        return result;
+        // term[i] = (x - x[0]) * ... * (x - x[i - 1]) as a running product, then c[0] + sum c[i] * term[i]
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> factors = engine.ScalarMinusTensor(x, engine.TensorSlice(_x.AsTensor(), new[] { 0 }, new[] { n - 1 }));
+        Tensor<T> terms = engine.TensorCumProd(factors, 0);
+        Tensor<T> higherCoefficients = engine.TensorSlice(_coefficients.AsTensor(), new[] { 1 }, new[] { n - 1 });
+
+        return _numOps.Add(_coefficients[0], engine.TensorSum(engine.TensorMultiply(higherCoefficients, terms)));
     }
 
     /// <summary>
@@ -132,34 +135,28 @@ public partial class NewtonDividedDifferenceInterpolation<T> : IInterpolation<T>
     /// </remarks>
     private Vector<T> CalculateCoefficients(Vector<T> x, Vector<T> y)
     {
+        var engine = AiDotNetEngine.Current;
         int n = x.Length;
-        Vector<T> coefficients = new Vector<T>(n);
-        T[,] dividedDifferences = new T[n, n];
+        Tensor<T> xs = x.AsTensor();
 
-        // Initialize the first column with y values
-        for (int i = 0; i < n; i++)
-        {
-            dividedDifferences[i, 0] = y[i];
-        }
-
-        // Calculate divided differences
+        // Column j of the divided-difference table is (column[i + 1] - column[i]) / (x[i + j] - x[i]),
+        // and the Newton coefficients are the first entry of every column
+        Tensor<T> column = y.AsTensor();
+        var leadingEntries = new Tensor<T>[n];
+        leadingEntries[0] = engine.TensorSlice(column, new[] { 0 }, new[] { 1 });
         for (int j = 1; j < n; j++)
         {
-            for (int i = 0; i < n - j; i++)
-            {
-                dividedDifferences[i, j] = _numOps.Divide(
-                    _numOps.Subtract(dividedDifferences[i + 1, j - 1], dividedDifferences[i, j - 1]),
-                    _numOps.Subtract(x[i + j], x[i])
-                );
-            }
+            int length = n - j;
+            column = engine.TensorDivide(
+                engine.TensorSubtract(
+                    engine.TensorSlice(column, new[] { 1 }, new[] { length }),
+                    engine.TensorSlice(column, new[] { 0 }, new[] { length })),
+                engine.TensorSubtract(
+                    engine.TensorSlice(xs, new[] { j }, new[] { length }),
+                    engine.TensorSlice(xs, new[] { 0 }, new[] { length })));
+            leadingEntries[j] = engine.TensorSlice(column, new[] { 0 }, new[] { 1 });
         }
 
-        // Extract coefficients from the first row of divided differences
-        for (int i = 0; i < n; i++)
-        {
-            coefficients[i] = dividedDifferences[0, i];
-        }
-
-        return coefficients;
+        return engine.TensorConcatenate(leadingEntries, 0).ToVector();
     }
 }

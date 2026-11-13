@@ -53,7 +53,7 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
     [Buffer]
     private Matrix<T>? _trainingData;
     private int[]? _labels;
-    private T[]? _outlierScores;
+    private Vector<T>? _outlierScores;
     private T _maxCoreDistance;
     private int _nFeatures;
 
@@ -116,7 +116,7 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         // percentile against.
         var outlierScores = _outlierScores
             ?? throw new InvalidOperationException("HDBSCAN outlier scores were not computed during fit.");
-        SetThresholdFromContamination(new Vector<T>(outlierScores));
+        SetThresholdFromContamination(outlierScores);
 
         _isFitted = true;
     }
@@ -130,152 +130,98 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = trainingData.Rows;
+        var points = AnomalyTensorOps.ToTensor(trainingData);
+        var distances = AnomalyTensorOps.PairwiseDistances(points, points);
 
         // Step 1: Compute core distances
-        var coreDistances = ComputeCoreDistances();
+        var coreDistances = ComputeCoreDistances(distances);
 
         // Step 2: Compute mutual reachability distances
-        var mutualReach = ComputeMutualReachability(coreDistances);
+        var mutualReach = ComputeMutualReachability(distances, coreDistances);
 
         // Step 3: Build minimum spanning tree using Prim's algorithm
-        var mst = BuildMST(mutualReach, n);
+        var (from, to, weights) = BuildMST(mutualReach, n);
 
         // Step 4: Build cluster hierarchy and extract clusters
-        ExtractClusters(mst, coreDistances, n);
+        ExtractClusters(from, to, weights, coreDistances, n);
     }
 
-    private T[] ComputeCoreDistances()
+    // Distance to the min(minSamples, n - 1)-th nearest point (the point itself, at 0, being the 0-th).
+    private Tensor<T> ComputeCoreDistances(Tensor<T> distances)
     {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Training data not initialized.");
-        }
-
-        int n = trainingData.Rows;
-        var coreDistances = new T[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            var pointI = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-
-            // Compute distances to all points using vectorized ops
-            var distances = new T[n];
-            for (int j = 0; j < n; j++)
-            {
-                var pointJ = new Vector<T>(trainingData.GetRowReadOnlySpan(j).ToArray());
-                var diff = Engine.Subtract(pointI, pointJ);
-                distances[j] = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-            }
-
-            Array.Sort(distances, (a, b) => NumOps.Compare(a, b));
-            int k = Math.Min(_minSamples, n - 1);
-            coreDistances[i] = distances[k];
-        }
-
-        return coreDistances;
+        var engine = Engine;
+        int n = distances.Shape[0];
+        var (sorted, _) = engine.TensorSort(distances, 1, false);
+        return engine.TensorSliceAxis(sorted, 1, Math.Min(_minSamples, n - 1));
     }
 
-    private T[,] ComputeMutualReachability(T[] coreDistances)
+    // Mutual reachability = max(core_i, core_j, dist), 0 on the diagonal.
+    private Tensor<T> ComputeMutualReachability(Tensor<T> distances, Tensor<T> coreDistances)
     {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Training data not initialized.");
-        }
-
-        int n = trainingData.Rows;
-        var mutualReach = new T[n, n];
-
-        for (int i = 0; i < n; i++)
-        {
-            var pointI = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-
-            for (int j = i; j < n; j++)
-            {
-                if (i == j)
-                {
-                    mutualReach[i, j] = NumOps.Zero;
-                    continue;
-                }
-
-                var pointJ = new Vector<T>(trainingData.GetRowReadOnlySpan(j).ToArray());
-                var diff = Engine.Subtract(pointI, pointJ);
-                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-
-                // Mutual reachability = max(core_i, core_j, dist)
-                T mr = dist;
-                if (NumOps.GreaterThan(coreDistances[i], mr)) mr = coreDistances[i];
-                if (NumOps.GreaterThan(coreDistances[j], mr)) mr = coreDistances[j];
-
-                mutualReach[i, j] = mr;
-                mutualReach[j, i] = mr;
-            }
-        }
-
-        return mutualReach;
+        var engine = Engine;
+        int n = distances.Shape[0];
+        var mutualReach = engine.TensorMax(engine.TensorMax(distances, AnomalyTensorOps.BroadcastColumn(coreDistances, n)),
+            AnomalyTensorOps.BroadcastRow(coreDistances, n));
+        return engine.TensorMaskedFill(mutualReach, engine.TensorEqScalar(engine.TensorEye<T>(n), NumOps.One), NumOps.Zero);
     }
 
-    private (int from, int to, T weight)[] BuildMST(T[,] distances, int n)
+    // Prim's algorithm from vertex 0: the edges (from, to) in the order they join the tree and their weights.
+    private (int[] from, int[] to, Tensor<T> weights) BuildMST(Tensor<T> distances, int n)
     {
-        var mst = new List<(int from, int to, T weight)>();
-        var inMST = new bool[n];
-        var minEdge = new T[n];
+        var engine = Engine;
+        T maxValue = NumOps.MaxValue;
+        T one = NumOps.One;
+        var minEdge = engine.TensorIndexFill(engine.Fill(n, maxValue).AsTensor(), 0, AnomalyTensorOps.Range(1), NumOps.Zero);
+        var inMST = Tensor<T>.CreateZeros(new[] { n });
         var minEdgeFrom = new int[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            minEdge[i] = NumOps.MaxValue;
-        }
-
-        minEdge[0] = NumOps.Zero;
+        var from = new List<int>();
+        var to = new List<int>();
+        var weights = new List<Tensor<T>>();
+        var unavailable = engine.Fill(n, maxValue).AsTensor();
 
         for (int count = 0; count < n; count++)
         {
-            int u = -1;
-            T minDist = NumOps.MaxValue;
-            for (int i = 0; i < n; i++)
-            {
-                if (!inMST[i] && NumOps.LessThan(minEdge[i], minDist))
-                {
-                    minDist = minEdge[i];
-                    u = i;
-                }
-            }
+            // The vertex outside the tree with the smallest edge to it (first on ties); none below MaxValue ends
+            var candidates = engine.TensorWhere(inMST, unavailable, minEdge);
+            int u = AnomalyTensorOps.FirstArgMin(candidates);
+            var uTensor = new Tensor<int>(new[] { u }, new[] { 1 });
+            var edge = engine.TensorSlice(candidates, new[] { u }, new[] { 1 });
+            if (engine.TensorLessThan(edge, maxValue).Cast<int>().ToArray()[0] == 0) break;
 
-            if (u == -1) break;
-
-            inMST[u] = true;
+            inMST = engine.TensorIndexFill(inMST, 0, engine.Reshape(uTensor, new[] { 1 }), one);
             if (count > 0)
             {
-                mst.Add((minEdgeFrom[u], u, minEdge[u]));
+                from.Add(minEdgeFrom[u]);
+                to.Add(u);
+                weights.Add(edge);
             }
 
+            // Edges through u that improve on the current best for vertices outside the tree
+            var row = engine.TensorSliceAxis(distances, 0, u);
+            var improves = engine.TensorMultiply(engine.ScalarMinusTensor(one, inMST), engine.TensorLessThan(row, minEdge));
+            minEdge = engine.TensorWhere(improves, row, minEdge);
+            var improved = improves.Cast<int>().ToArray();
             for (int v = 0; v < n; v++)
             {
-                if (!inMST[v] && NumOps.LessThan(distances[u, v], minEdge[v]))
+                if (improved[v] != 0)
                 {
-                    minEdge[v] = distances[u, v];
                     minEdgeFrom[v] = u;
                 }
             }
         }
 
-        return mst.ToArray();
+        var weightTensor = weights.Count > 0 ? engine.TensorConcatenate(weights.ToArray(), 0) : Tensor<T>.CreateZeros(new[] { 0 });
+        return (from.ToArray(), to.ToArray(), weightTensor);
     }
 
-    private void ExtractClusters((int from, int to, T weight)[] mst, T[] coreDistances, int n)
+    private void ExtractClusters(int[] from, int[] to, Tensor<T> weights, Tensor<T> coreDistances, int n)
     {
-        _labels = new int[n];
-        _outlierScores = new T[n];
-
+        var engine = Engine;
+        var labels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            _labels[i] = -1; // Initialize as noise
+            labels[i] = -1; // Initialize as noise
         }
-
-        // Sort MST edges by weight (descending) for hierarchical processing
-        var sortedEdges = mst.OrderByDescending(e => NumOps.ToDouble(e.weight)).ToArray();
 
         var parent = new int[n];
         var rank = new int[n];
@@ -286,22 +232,28 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             clusterSize[i] = 1;
         }
 
-        int takeCount = Math.Max(1, (int)(sortedEdges.Length * _contamination));
-        T cutoff = sortedEdges.Length > 0
-            ? sortedEdges.Take(takeCount).Last().weight
-            : NumOps.MaxValue;
-
-        var ascendingEdges = mst.OrderBy(e => NumOps.ToDouble(e.weight)).ToArray();
-        foreach (var edge in ascendingEdges)
+        // Cutoff = the takeCount-th largest MST edge weight; edges above it are cut
+        int edgeCount = from.Length;
+        if (edgeCount > 0)
         {
-            if (NumOps.GreaterThan(edge.weight, cutoff)) continue;
+            int takeCount = Math.Min(Math.Max(1, (int)(edgeCount * _contamination)), edgeCount);
+            var (descending, _) = engine.TensorSort(weights, 0, true);
+            T cutoff = engine.TensorSlice(descending, new[] { takeCount - 1 }, new[] { 1 }).ToVector()[0];
 
-            int root1 = Find(parent, edge.from);
-            int root2 = Find(parent, edge.to);
-
-            if (root1 != root2)
+            // Join the kept edges in ascending weight order (stable)
+            var ascending = AnomalyTensorOps.StableOrder(weights, descending: false).ToArray();
+            var kept = engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(weights, cutoff)).Cast<int>().ToArray();
+            foreach (int e in ascending)
             {
-                Union(parent, rank, clusterSize, root1, root2);
+                if (kept[e] == 0) continue;
+
+                int root1 = Find(parent, from[e]);
+                int root2 = Find(parent, to[e]);
+
+                if (root1 != root2)
+                {
+                    Union(parent, rank, clusterSize, root1, root2);
+                }
             }
         }
 
@@ -317,31 +269,32 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
                 {
                     rootToLabel[root] = nextLabel++;
                 }
-                _labels[i] = rootToLabel[root];
+                labels[i] = rootToLabel[root];
             }
         }
 
+        _labels = labels;
+
         // Store max core distance for normalization
-        _maxCoreDistance = coreDistances[0];
-        for (int i = 1; i < coreDistances.Length; i++)
-        {
-            if (NumOps.GreaterThan(coreDistances[i], _maxCoreDistance))
-                _maxCoreDistance = coreDistances[i];
-        }
+        _maxCoreDistance = engine.TensorMaxValue(coreDistances);
         T epsilon = NumOps.FromDouble(1e-10);
         if (NumOps.LessThan(_maxCoreDistance, epsilon)) _maxCoreDistance = NumOps.One;
 
-        for (int i = 0; i < n; i++)
+        // Noise scores 1, cluster members core distance / max core distance
+        _outlierScores = engine.TensorWhere(NoiseMask(labels), Tensor<T>.CreateOnes(new[] { n }),
+            engine.TensorDivideScalar(coreDistances, _maxCoreDistance)).ToVector();
+    }
+
+    // 1 for noise points (label -1), else 0.
+    private static Tensor<T> NoiseMask(int[] labels)
+    {
+        var noise = new int[labels.Length];
+        for (int i = 0; i < labels.Length; i++)
         {
-            if (_labels[i] == -1)
-            {
-                _outlierScores[i] = NumOps.One;
-            }
-            else
-            {
-                _outlierScores[i] = NumOps.Divide(coreDistances[i], _maxCoreDistance);
-            }
+            noise[i] = labels[i] == -1 ? 1 : 0;
         }
+
+        return Tensor<int>.FromVector(Vector<int>.Wrap(noise), new[] { labels.Length }).Cast<T>();
     }
 
     private int Find(int[] parent, int i)
@@ -401,44 +354,14 @@ public partial class HDBSCANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            // Find nearest training point via vectorized distance
-            T minDist = NumOps.MaxValue;
-            int nearestIdx = 0;
-
-            for (int t = 0; t < trainingData.Rows; t++)
-            {
-                var trainPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(t).ToArray());
-                var diff = Engine.Subtract(point, trainPoint);
-                T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearestIdx = t;
-                }
-            }
-
-            T score;
-            if (labels[nearestIdx] == -1)
-            {
-                score = NumOps.One;
-            }
-            else
-            {
-                score = NumOps.Divide(minDist, _maxCoreDistance);
-            }
-
-            // Clamp to [0, 1]
-            if (NumOps.GreaterThan(score, NumOps.One)) score = NumOps.One;
-            scores[i] = score;
-        }
-
-        return scores;
+        // Nearest training point (first on ties): noise scores 1, otherwise distance / max core distance,
+        // clamped to at most 1
+        var engine = Engine;
+        var distances = AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
+        var nearestIdx = AnomalyTensorOps.FirstArgMinRows(distances);
+        var minDist = engine.TensorAmin(distances, new[] { 1 }, false);
+        var score = engine.TensorWhere(engine.TensorGather(NoiseMask(labels), nearestIdx, 0),
+            Tensor<T>.CreateOnes(new[] { X.Rows }), engine.TensorDivideScalar(minDist, _maxCoreDistance));
+        return engine.TensorMin(score, NumOps.One).ToVector();
     }
 }

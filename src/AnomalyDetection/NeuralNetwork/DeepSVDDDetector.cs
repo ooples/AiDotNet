@@ -167,44 +167,14 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                normalized[i, j] = NumOps.Divide(diff, stds[j]);
-            }
-        }
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 
     private void InitializeWeights()
@@ -213,23 +183,13 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         double scale2 = Math.Sqrt(2.0 / (_hiddenDim + _hiddenDim));
         double scale3 = Math.Sqrt(2.0 / (_hiddenDim + _outputDim));
 
+        // Biases start at zero
         _w1 = InitializeMatrix(_inputDim, _hiddenDim, scale1);
         _b1 = new Vector<T>(_hiddenDim);
         _w2 = InitializeMatrix(_hiddenDim, _hiddenDim, scale2);
         _b2 = new Vector<T>(_hiddenDim);
         _w3 = InitializeMatrix(_hiddenDim, _outputDim, scale3);
         _b3 = new Vector<T>(_outputDim);
-
-        // Initialize biases to zero
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            _b1[i] = NumOps.Zero;
-            _b2[i] = NumOps.Zero;
-        }
-        for (int i = 0; i < _outputDim; i++)
-        {
-            _b3[i] = NumOps.Zero;
-        }
     }
 
     private Matrix<T> InitializeMatrix(int rows, int cols, double scale)
@@ -248,132 +208,51 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         return matrix;
     }
 
+    // Mean network output over the rows of data.
     private Vector<T> ComputeCenter(Matrix<T> data)
     {
-        int n = data.Rows;
-        var center = new Vector<T>(_outputDim);
-
-        // Initialize center to zero
-        for (int j = 0; j < _outputDim; j++)
-        {
-            center[j] = NumOps.Zero;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            var x = data.GetRow(i);
-            var output = Forward(x);
-            for (int j = 0; j < _outputDim; j++)
-            {
-                center[j] = NumOps.Add(center[j], output[j]);
-            }
-        }
-
-        T nT = NumOps.FromDouble(n);
-        for (int j = 0; j < _outputDim; j++)
-        {
-            center[j] = NumOps.Divide(center[j], nT);
-        }
-
-        return center;
+        var (_, _, output) = Forward(AnomalyTensorOps.ToTensor(data));
+        return Engine.ReduceMean(output, new[] { 0 }, false).ToVector();
     }
 
-    private Vector<T> Forward(Vector<T> x)
+    // Batched forward pass: h1 = ReLU(x W1 + b1), h2 = ReLU(h1 W2 + b2), output = h2 W3 + b3 (linear).
+    private (Tensor<T> h1, Tensor<T> h2, Tensor<T> output) Forward(Tensor<T> x)
     {
-        // Capture nullable fields for proper null checking
         var w1 = _w1;
         var b1 = _b1;
         var w2 = _w2;
         var b2 = _b2;
         var w3 = _w3;
         var b3 = _b3;
-
         if (w1 == null || b1 == null || w2 == null || b2 == null || w3 == null || b3 == null)
         {
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
-        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var h1Pre = Engine.TensorAdd(
-            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
-            Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
-        var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
-
-        // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
-        var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
-        var h2Pre = Engine.TensorAdd(
-            Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
-            Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
-        var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
-
-        // Output layer (linear, no activation)  (SIMD)
-        var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
-        var outPre = Engine.TensorAdd(
-            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
-            Tensor<T>.FromVector(b3).Reshape(1, _outputDim));
-        var output = outPre.Reshape(_outputDim).ToVector();
-
-        return output;
-    }
-
-    private (Vector<T> h1, Vector<T> h2, Vector<T> output) ForwardWithCache(Vector<T> x)
-    {
-        // Capture nullable fields for proper null checking
-        var w1 = _w1;
-        var b1 = _b1;
-        var w2 = _w2;
-        var b2 = _b2;
-        var w3 = _w3;
-        var b3 = _b3;
-
-        if (w1 == null || b1 == null || w2 == null || b2 == null || w3 == null || b3 == null)
-        {
-            throw new InvalidOperationException("Weights not initialized.");
-        }
-
-        // Layer 1: h1 = ReLU(x @ W1 + b1)  (SIMD)
-        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
-        var h1Pre = Engine.TensorAdd(
-            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(w1)),
-            Tensor<T>.FromVector(b1).Reshape(1, _hiddenDim));
-        var h1 = Engine.ReLU(h1Pre.Reshape(_hiddenDim).ToVector());
-
-        // Layer 2: h2 = ReLU(h1 @ W2 + b2)  (SIMD)
-        var h1T = Tensor<T>.FromVector(h1).Reshape(1, _hiddenDim);
-        var h2Pre = Engine.TensorAdd(
-            Engine.TensorMatMul(h1T, Tensor<T>.FromMatrix(w2)),
-            Tensor<T>.FromVector(b2).Reshape(1, _hiddenDim));
-        var h2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
-
-        // Output layer (linear)  (SIMD)
-        var h2T = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
-        var outPre = Engine.TensorAdd(
-            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(w3)),
-            Tensor<T>.FromVector(b3).Reshape(1, _outputDim));
-        var output = outPre.Reshape(_outputDim).ToVector();
-
+        var engine = Engine;
+        int rows = x.Shape[0];
+        var h1 = engine.TensorMax(engine.TensorAdd(engine.TensorMatMul(x, Tensor<T>.FromMatrix(w1)),
+            AnomalyTensorOps.BroadcastRow(b1.AsTensor(), rows)), NumOps.Zero);
+        var h2 = engine.TensorMax(engine.TensorAdd(engine.TensorMatMul(h1, Tensor<T>.FromMatrix(w2)),
+            AnomalyTensorOps.BroadcastRow(b2.AsTensor(), rows)), NumOps.Zero);
+        var output = engine.TensorAdd(engine.TensorMatMul(h2, Tensor<T>.FromMatrix(w3)),
+            AnomalyTensorOps.BroadcastRow(b3.AsTensor(), rows));
         return (h1, h2, output);
     }
 
     private void TrainNetwork(Matrix<T> data)
     {
-        // Capture nullable fields for proper null checking
-        var w1 = _w1;
-        var b1 = _b1;
-        var w2 = _w2;
-        var b2 = _b2;
-        var w3 = _w3;
-        var b3 = _b3;
         var center = _center;
-
-        if (w1 == null || b1 == null || w2 == null || b2 == null || w3 == null || b3 == null || center == null)
+        if (_w1 == null || _b1 == null || _w2 == null || _b2 == null || _w3 == null || _b3 == null || center == null)
         {
             throw new InvalidOperationException("Weights or center not initialized.");
         }
 
+        var engine = Engine;
         int n = data.Rows;
         int batchSize = Math.Min(32, n);
+        var values = AnomalyTensorOps.ToTensor(data);
+        T two = NumOps.FromDouble(2);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
@@ -382,145 +261,42 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
             for (int batch = 0; batch < n; batch += batchSize)
             {
                 int actualBatchSize = Math.Min(batchSize, n - batch);
+                var batchRows = new int[actualBatchSize];
+                Array.Copy(indices, batch, batchRows, 0, actualBatchSize);
+                var x = AnomalyTensorOps.SelectRows(values, batchRows);
+                var (h1, h2, output) = Forward(x);
 
-                // Accumulate gradients
-                var dW1 = new Matrix<T>(_inputDim, _hiddenDim);
-                var dB1 = new Vector<T>(_hiddenDim);
-                var dW2 = new Matrix<T>(_hiddenDim, _hiddenDim);
-                var dB2 = new Vector<T>(_hiddenDim);
-                var dW3 = new Matrix<T>(_hiddenDim, _outputDim);
-                var dB3 = new Vector<T>(_outputDim);
+                // Gradient of the loss ||output - center||^2, summed over the batch, back-propagated through
+                // the output layer and the two ReLU layers
+                var dOutput = engine.TensorMultiplyScalar(AnomalyTensorOps.SubtractRow(output, center.AsTensor()), two);
+                var w2 = Tensor<T>.FromMatrix(_w2);
+                var w3 = Tensor<T>.FromMatrix(_w3);
+                var dW3 = engine.TensorMatMul(engine.TensorTranspose(h2), dOutput);
+                var dB3 = engine.ReduceSum(dOutput, new[] { 0 }, false);
+                var dH2 = engine.TensorMultiply(engine.TensorMatMul(dOutput, engine.TensorTranspose(w3)),
+                    engine.TensorGreaterThan(h2, NumOps.Zero));
+                var dW2 = engine.TensorMatMul(engine.TensorTranspose(h1), dH2);
+                var dB2 = engine.ReduceSum(dH2, new[] { 0 }, false);
+                var dH1 = engine.TensorMultiply(engine.TensorMatMul(dH2, engine.TensorTranspose(w2)),
+                    engine.TensorGreaterThan(h1, NumOps.Zero));
+                var dW1 = engine.TensorMatMul(engine.TensorTranspose(x), dH1);
+                var dB1 = engine.ReduceSum(dH1, new[] { 0 }, false);
 
-                // Initialize gradients to zero
-                InitializeToZero(dW1, dB1);
-                InitializeToZero(dW2, dB2);
-                InitializeToZero(dW3, dB3);
-
-                for (int b = 0; b < actualBatchSize; b++)
-                {
-                    int idx = indices[batch + b];
-                    var x = data.GetRow(idx);
-
-                    var (h1, h2, output) = ForwardWithCache(x);
-
-                    // Compute gradient of loss: ||output - center||^2
-                    var dOutput = new Vector<T>(_outputDim);
-                    for (int j = 0; j < _outputDim; j++)
-                    {
-                        T diff = NumOps.Subtract(output[j], center[j]);
-                        dOutput[j] = NumOps.Multiply(NumOps.FromDouble(2), diff);
-                    }
-
-                    // Backprop output layer: dH2 = W3 @ dOutput — vectorized matmul
-                    var w3Tensor = Tensor<T>.FromMatrix(w3);
-                    var dOutCol = Tensor<T>.FromVector(dOutput).Reshape(_outputDim, 1);
-                    var dH2 = Engine.TensorMatMul(w3Tensor, dOutCol).Reshape(_hiddenDim).ToVector();
-
-                    // Accumulate dW3 += h2 @ dOutput^T — vectorized outer product
-                    var h2Col = Tensor<T>.FromVector(h2).Reshape(_hiddenDim, 1);
-                    var dOutRow = Tensor<T>.FromVector(dOutput).Reshape(1, _outputDim);
-                    var dW3Sample = Engine.TensorMatMul(h2Col, dOutRow);
-                    var dW3Tensor = Tensor<T>.FromMatrix(dW3);
-                    dW3Tensor = Engine.TensorAdd(dW3Tensor, dW3Sample);
-                    for (int i = 0; i < _hiddenDim; i++)
-                        for (int j = 0; j < _outputDim; j++)
-                            dW3[i, j] = dW3Tensor[i, j];
-                    for (int j = 0; j < _outputDim; j++)
-                        dB3[j] = NumOps.Add(dB3[j], dOutput[j]);
-
-                    // ReLU derivative for h2
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        if (!NumOps.GreaterThan(h2[i], NumOps.Zero)) dH2[i] = NumOps.Zero;
-                    }
-
-                    // Backprop layer 2: dH1 = W2 @ dH2 — vectorized matmul
-                    var w2Tensor = Tensor<T>.FromMatrix(w2);
-                    var dH2Col = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
-                    var dH1 = Engine.TensorMatMul(w2Tensor, dH2Col).Reshape(_hiddenDim).ToVector();
-
-                    // Accumulate dW2 += h1 @ dH2^T — vectorized outer product
-                    var h1Col = Tensor<T>.FromVector(h1).Reshape(_hiddenDim, 1);
-                    var dH2Row = Tensor<T>.FromVector(dH2).Reshape(1, _hiddenDim);
-                    var dW2Sample = Engine.TensorMatMul(h1Col, dH2Row);
-                    var dW2Tensor = Tensor<T>.FromMatrix(dW2);
-                    dW2Tensor = Engine.TensorAdd(dW2Tensor, dW2Sample);
-                    for (int i = 0; i < _hiddenDim; i++)
-                        for (int j = 0; j < _hiddenDim; j++)
-                            dW2[i, j] = dW2Tensor[i, j];
-                    for (int j = 0; j < _hiddenDim; j++)
-                        dB2[j] = NumOps.Add(dB2[j], dH2[j]);
-
-                    // ReLU derivative for h1
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        if (!NumOps.GreaterThan(h1[i], NumOps.Zero)) dH1[i] = NumOps.Zero;
-                    }
-
-                    // Backprop layer 1: dW1 += x @ dH1^T — vectorized outer product
-                    var xCol = Tensor<T>.FromVector(x).Reshape(_inputDim, 1);
-                    var dH1Row = Tensor<T>.FromVector(dH1).Reshape(1, _hiddenDim);
-                    var dW1Sample = Engine.TensorMatMul(xCol, dH1Row);
-                    var dW1Tensor = Tensor<T>.FromMatrix(dW1);
-                    dW1Tensor = Engine.TensorAdd(dW1Tensor, dW1Sample);
-                    for (int i = 0; i < _inputDim; i++)
-                        for (int j = 0; j < _hiddenDim; j++)
-                            dW1[i, j] = dW1Tensor[i, j];
-                    for (int j = 0; j < _hiddenDim; j++)
-                        dB1[j] = NumOps.Add(dB1[j], dH1[j]);
-                }
-
-                // Update weights
+                // Update weights: w = w - lr * g with lr = learningRate / batch size
                 T lr = NumOps.FromDouble(_learningRate / actualBatchSize);
-                UpdateWeights(w1, dW1, lr);
-                UpdateWeights(b1, dB1, lr);
-                UpdateWeights(w2, dW2, lr);
-                UpdateWeights(b2, dB2, lr);
-                UpdateWeights(w3, dW3, lr);
-                UpdateWeights(b3, dB3, lr);
+                _w1 = Step(Tensor<T>.FromMatrix(_w1), dW1, lr).ToMatrix();
+                _b1 = Step(_b1.AsTensor(), dB1, lr).ToVector();
+                _w2 = Step(w2, dW2, lr).ToMatrix();
+                _b2 = Step(_b2.AsTensor(), dB2, lr).ToVector();
+                _w3 = Step(w3, dW3, lr).ToMatrix();
+                _b3 = Step(_b3.AsTensor(), dB3, lr).ToVector();
             }
         }
     }
 
-    private void InitializeToZero(Matrix<T> matrix, Vector<T> vector)
-    {
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                matrix[i, j] = NumOps.Zero;
-            }
-        }
-        for (int i = 0; i < vector.Length; i++)
-        {
-            vector[i] = NumOps.Zero;
-        }
-    }
-
-    private void UpdateWeights(Matrix<T> weights, Matrix<T> gradients, T lr)
-    {
-        for (int i = 0; i < weights.Rows; i++)
-        {
-            for (int j = 0; j < weights.Columns; j++)
-            {
-                T update = NumOps.Multiply(lr, gradients[i, j]);
-                weights[i, j] = NumOps.Subtract(weights[i, j], update);
-            }
-        }
-    }
-
-    private void UpdateWeights(Vector<T> weights, Vector<T> gradients, T lr)
-    {
-        // w = w - lr * g using Engine vectorized operations
-        var scaled = Engine.Multiply(gradients, lr);
-        var updated = Engine.Subtract(weights, scaled);
-        for (int i = 0; i < weights.Length; i++)
-        {
-            weights[i] = updated[i];
-        }
-    }
-
-    // ReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero
+    // weights - lr * gradients
+    private Tensor<T> Step(Tensor<T> weights, Tensor<T> gradients, T lr)
+        => Engine.TensorSubtract(weights, Engine.TensorMultiplyScalar(gradients, lr));
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
@@ -548,32 +324,12 @@ public partial class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters or center missing.");
         }
 
-        int n = X.Rows;
-        var scores = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            // Apply same normalization as training data
-            var x = new Vector<T>(_inputDim);
-            for (int j = 0; j < _inputDim; j++)
-            {
-                T diff = NumOps.Subtract(X[i, j], dataMeans[j]);
-                x[j] = NumOps.Divide(diff, dataStds[j]);
-            }
-
-            var output = Forward(x);
-
-            // Distance to center
-            T dist = NumOps.Zero;
-            for (int j = 0; j < _outputDim; j++)
-            {
-                T diff = NumOps.Subtract(output[j], center[j]);
-                dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-            }
-
-            scores[i] = dist;
-        }
-
-        return scores;
+        // Squared distance of the (normalized) network output to the center
+        var engine = Engine;
+        var normalized = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), dataMeans.AsTensor()), dataStds.AsTensor());
+        var (_, _, output) = Forward(normalized);
+        return engine.ReduceSum(engine.TensorSquare(AnomalyTensorOps.SubtractRow(output, center.AsTensor())),
+            new[] { 1 }, false).ToVector();
     }
 }

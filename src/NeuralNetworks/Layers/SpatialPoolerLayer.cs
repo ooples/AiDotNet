@@ -555,30 +555,23 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
         T lr = NumOps.FromDouble(LearningRate);
         T bf = NumOps.FromDouble(BoostFactor);
 
-        for (int i = 0; i < ColumnCount; i++)
+        if (_lastBinaryOutput != null)
         {
-            if (_lastBinaryOutput != null && NumOps.Equals(_lastBinaryOutput[i], NumOps.One))
-            {
-                // Strengthen connections for active columns
-                for (int j = 0; j < InputSize; j++)
-                {
-                    T delta = NumOps.Multiply(lr, NumOps.Subtract(LastInput[j], Connections[j, i]));
-                    Connections[j, i] = NumOps.Add(Connections[j, i], delta);
-                }
-            }
-        }
+            // Columns whose binary output is exactly one are active, exactly zero inactive.
+            var activeMask = Engine.Reshape(Engine.TensorEquals(_lastBinaryOutput, NumOps.One), [1, ColumnCount]);
+            var inactiveMask = Engine.Reshape(Engine.TensorEquals(_lastBinaryOutput, NumOps.Zero), [1, ColumnCount]);
+            var inputRow = Engine.Reshape(LastInput, [InputSize, 1]);
+            var onesCol = new Tensor<T>([1, ColumnCount]);
+            onesCol.Fill(NumOps.One);
+            var inputExpanded = Engine.TensorMatMul(inputRow, onesCol); // [InputSize, ColumnCount]
 
-        // Boost inactive columns
-        for (int i = 0; i < ColumnCount; i++)
-        {
-            if (_lastBinaryOutput != null && NumOps.Equals(_lastBinaryOutput[i], NumOps.Zero))
-            {
-                for (int j = 0; j < InputSize; j++)
-                {
-                    T boost = NumOps.Multiply(bf, LastInput[j]);
-                    Connections[j, i] = NumOps.Add(Connections[j, i], boost);
-                }
-            }
+            // Strengthen connections for active columns: C += lr * (x - C)
+            var deltaActive = Engine.TensorMultiplyScalar(Engine.TensorSubtract(inputExpanded, Connections), lr);
+            Connections = Engine.TensorAdd(Connections, Engine.TensorMultiply(deltaActive, activeMask));
+
+            // Boost inactive columns: C += bf * x
+            var boost = Engine.TensorMultiplyScalar(inputExpanded, bf);
+            Connections = Engine.TensorAdd(Connections, Engine.TensorMultiply(boost, inactiveMask));
         }
 
         NormalizeConnections();

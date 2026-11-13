@@ -17398,6 +17398,16 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8000 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
             }
+            else if (model.ClassName == "AudioPaLM"
+                     && model.FullyQualifiedName.IndexOf("AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal) >= 0)
+            {
+                // AudioPaLM ASR reads a 16 kHz waveform and tokenizes it at 25 Hz over the fixture's 8 audio tokens. The
+                // generic [1, 64, 32] probe is 2048 samples, two audio tokens: a waveform and its 10x scale can then
+                // quantize to the same pair (seen on CI as identical transcripts), and a decoder that never sees a
+                // different prefix cannot answer differently. Half a second is a dozen tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8000 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            }
             else
             {
                 // The generic audio fixture is [1, 64, 32], but a model whose constructor was

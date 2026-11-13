@@ -290,14 +290,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     // Calculate gradient on the batch
                     if (TryModelOwnStep(currentSolution, xBatch, yBatch))
                     {
-                        if (useTrainingLoss && currentSolution is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnModelStep)
+                        if (useTrainingLoss && currentSolution is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnModelStep
+                            && TryReadFiniteBatchLoss(nnModelStep, out double modelStepLoss))
                         {
-                            double modelStepLoss = NumOps.ToDouble(nnModelStep.GetLastLoss());
-                            if (!double.IsNaN(modelStepLoss) && !double.IsInfinity(modelStepLoss))
-                            {
-                                epochLossSum += modelStepLoss;
-                                epochBatchCount++;
-                            }
+                            epochLossSum += modelStepLoss;
+                            epochBatchCount++;
                         }
                         (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
                         OnBatchEnd();
@@ -308,14 +305,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     // Mini-batch-loss mode: read the loss the model just computed on this batch
                     // (ComputeGradients/tape step sets LastLoss) BEFORE UpdateSolution swaps the
                     // live instance. Skipped and zero-cost when the mode is off.
-                    if (useTrainingLoss && currentSolution is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnLoss)
+                    if (useTrainingLoss && currentSolution is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnLoss
+                        && TryReadFiniteBatchLoss(nnLoss, out double batchLoss))
                     {
-                        double batchLoss = NumOps.ToDouble(nnLoss.GetLastLoss());
-                        if (!double.IsNaN(batchLoss) && !double.IsInfinity(batchLoss))
-                        {
-                            epochLossSum += batchLoss;
-                            epochBatchCount++;
-                        }
+                        epochLossSum += batchLoss;
+                        epochBatchCount++;
                     }
 
                     // Update solution using Adam algorithm
@@ -343,9 +337,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 OptimizationStepData<T, TInput, TOutput> currentStepData;
                 if (useTrainingLoss)
                 {
-                    T epochLoss = epochBatchCount > 0
-                        ? NumOps.FromDouble(epochLossSum / epochBatchCount)
-                        : NumOps.FromDouble(double.MaxValue);
+                    T epochLoss = MeanEpochLoss(epochLossSum, epochBatchCount);
                     FitnessList.Add(epochLoss);
                     currentStepData = BuildTrainingLossStepData(currentSolution, epochLoss);
                 }
@@ -395,9 +387,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 // happened. From epoch 1 onward, previousStepData is the
                 // PRIOR EPOCH's post-training fitness, so |current - previous|
                 // is a meaningful per-epoch progress signal.
-                if (epoch > 0 && NumOps.LessThan(
-                    NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
-                    NumOps.FromDouble(_options.Tolerance)))
+                if (IsConvergedAgainstPreviousEpoch(epoch, currentStepData, previousStepData, _options.Tolerance))
                 {
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
@@ -428,6 +418,27 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// the whole point of the mode is to avoid the per-epoch full-dataset forward pass and the
     /// unbounded prediction/model retention it drives.
     /// </summary>
+    /// <summary>
+    /// Reads the loss the model computed on its last batch, returning false when it is NaN or infinite.
+    /// One scalar per batch (not per element).
+    /// </summary>
+    private bool TryReadFiniteBatchLoss(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> model, out double loss)
+    {
+        loss = NumOps.ToDouble(model.GetLastLoss());
+        return !double.IsNaN(loss) && !double.IsInfinity(loss);
+    }
+
+    /// <summary>
+    /// Mean of the accumulated per-batch training losses, or <see cref="double.MaxValue"/> when no batch
+    /// produced a finite loss.
+    /// </summary>
+    private T MeanEpochLoss(double lossSum, int batchCount)
+    {
+        return batchCount > 0
+            ? NumOps.FromDouble(lossSum / batchCount)
+            : NumOps.FromDouble(double.MaxValue);
+    }
+
     private OptimizationStepData<T, TInput, TOutput> BuildTrainingLossStepData(
         IFullModel<T, TInput, TOutput> solution, T loss)
     {
@@ -576,77 +587,43 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
 
-        // ONE FUSED IN-PLACE PASS.
-        //
-        // This used to be a chain of ~16 Engine.Multiply/Add/Divide/Sqrt/Subtract calls, each
-        // RETURNING a fresh full-length vector, plus a Vector<T>.CreateDefault that broadcast the
-        // scalar epsilon into a full-length constant vector purely to feed a vector-vector Add.
-        // Measured at 2,000,000 double parameters: 701.9 MB allocated PER STEP. A full-length
-        // vector is 16 MB at that size, so the step was allocating ~44 of them.
-        //
-        // PyTorch's Adam does the same arithmetic with in-place accumulator updates
-        // (exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1-beta2)), scalars passed as scalars
-        // rather than broadcast, and fused compound ops -- roughly ONE param-sized temporary per
-        // step, none in the fused path. This loop matches that: _m and _v are mutated in place,
-        // every constant stays a scalar, and the only allocation left is the returned vector, which
-        // must be fresh because callers rely on `parameters` not being mutated.
-        //
-        // The per-element operand and association order is reproduced exactly --
+        // Whole-vector engine ops in T: _m and _v (and the AMSGrad running max) are updated in place,
+        // every constant stays a scalar operand, and `parameters` is not mutated.
         // m = (m*b1) + (g*(1-b1)); v = (v*b2) + ((g*g)*(1-b2));
         // out = p - ((m/bc1) / (sqrt(vHat) + eps)) * lr.
-        //
-        // NOT bit-identical to the old path, and the direction matters: measured at T = double the
-        // results differ by 2.7e-7 RELATIVE, which is float32 epsilon (~1.19e-7), not double epsilon
-        // (~2.2e-16). The Engine chain was therefore narrowing this update to single precision even
-        // when the optimizer was instantiated at double. This loop computes in the declared T
-        // throughout, so it is strictly more accurate; it is a deliberate precision change, not a
-        // rounding coincidence, and it is why an A/B checksum will not match exactly.
-        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var mState = _m.AsTensor();
+        var vState = _v.AsTensor();
 
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var mSpan = _m.AsWritableSpan();
-        var vSpan = _v.AsWritableSpan();
-        var outSpan = updatedParameters.AsWritableSpan();
-        // AMSGrad tracks a per-coordinate running max of the second moment (Reddi 2018; raw v, corrected at use), which
-        // keeps the denominator non-decreasing and bounds Adam's post-convergence m̂/√v̂ drift on
-        // stochastic objectives (VGAE reparameterization noise, GraphGenerationModel in the #1332
-        // cluster). Updated in place here; semantics are unchanged.
-        var vMaxSpan = _options.UseAMSGrad ? (_vMaxVector ?? throw new InvalidOperationException("_vMaxVector is null where it is required.")).AsWritableSpan() : default;
-        bool amsGrad = _options.UseAMSGrad;
-        T learningRate = CurrentLearningRate;
+        var m = engine.TensorAddScaled(mState, g, beta1, oneMinusBeta1);
+        var v = engine.TensorAdd(
+            engine.TensorMultiplyScalar(vState, beta2),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), oneMinusBeta2));
+        engine.TensorCopy(m, mState);
+        engine.TensorCopy(v, vState);
 
-        for (int i = 0; i < pSpan.Length; i++)
+        Tensor<T> vHat;
+        if (_options.UseAMSGrad)
         {
-            T g = gSpan[i];
-
-            T m = NumOps.Add(NumOps.Multiply(mSpan[i], beta1), NumOps.Multiply(g, oneMinusBeta1));
-            mSpan[i] = m;
-
-            T v = NumOps.Add(
-                NumOps.Multiply(vSpan[i], beta2),
-                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
-            vSpan[i] = v;
-
-            T mHat = NumOps.Divide(m, biasCorrection1);
-            T vHat = NumOps.Divide(v, biasCorrection2);
-
-            if (amsGrad)
-            {
-                // PyTorch amsgrad=True, which the fused kernel and the float tape path implement: the running max is
-                // over the RAW second moment, and bias correction applies to that max. Maxing the corrected v-hat
-                // instead (the previous form) disagreed with both. Operand order keeps Engine.Max's NaN behavior.
-                T vMaxNew = NumOps.GreaterThan(vMaxSpan[i], v) ? vMaxSpan[i] : v;
-                vMaxSpan[i] = vMaxNew;
-                vHat = NumOps.Divide(vMaxNew, biasCorrection2);
-            }
-
-            T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
-            T update = NumOps.Divide(mHat, denominator);
-            outSpan[i] = NumOps.Subtract(pSpan[i], NumOps.Multiply(update, learningRate));
+            // PyTorch amsgrad=True, which the fused kernel and the float tape path implement: the running max is
+            // over the RAW second moment (Reddi 2018), and bias correction applies to that max.
+            var vMaxState = (_vMaxVector ?? throw new InvalidOperationException("_vMaxVector is null where it is required.")).AsTensor();
+            var vMaxNew = engine.TensorMax(vMaxState, v);
+            engine.TensorCopy(vMaxNew, vMaxState);
+            vHat = engine.TensorDivideScalar(vMaxNew, biasCorrection2);
+        }
+        else
+        {
+            vHat = engine.TensorDivideScalar(v, biasCorrection2);
         }
 
-        return updatedParameters;
+        var mHat = engine.TensorDivideScalar(m, biasCorrection1);
+        var denominator = engine.TensorAddScalar(engine.TensorSqrt(vHat), epsilon);
+        var update = engine.TensorDivide(mHat, denominator);
+        return engine.TensorSubtract(
+            parameters.AsTensor(),
+            engine.TensorMultiplyScalar(update, CurrentLearningRate)).AsVector();
     }
 
 
@@ -679,18 +656,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // Flatten matrices to vectors for vectorized operations
 
         // Flatten matrix to vector
-        var paramVec = new Vector<T>(totalSize);
-        var gradVec = new Vector<T>(totalSize);
-        int idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                paramVec[idx] = parameters[i, j];
-                gradVec[idx] = gradient[i, j];
-                idx++;
-            }
-        }
+        var paramVec = parameters.ToRowVector();
+        var gradVec = gradient.ToRowVector();
 
         T beta1 = NumOps.FromDouble(_options.Beta1);
         T beta2 = NumOps.FromDouble(_options.Beta2);
@@ -730,8 +697,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         // Compute update
         var vHatSqrt = (Vector<T>)Engine.Sqrt(vHatForDenominator);
-        var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
+        var denominator = Engine.TensorAddScalar(vHatSqrt.AsTensor(), epsilon).AsVector();
         var update = (Vector<T>)Engine.Divide(mHat, denominator);
         var scaledUpdate = (Vector<T>)Engine.Multiply(update, CurrentLearningRate);
 
@@ -740,15 +706,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         // Unflatten vector back to matrix
         var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
-        idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                updatedMatrix[i, j] = updatedVec[idx];
-                idx++;
-            }
-        }
+        updatedVec.AsSpan().CopyTo(updatedMatrix.AsWritableSpan());
 
         return updatedMatrix;
     }
@@ -1619,12 +1577,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             var grad = kvp.Value;
             if (grad is null) continue;
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = NumOps.ToDouble(span[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v)) return true;
-            }
+            if (HasNonFiniteElement(grad)) return true;
         }
         return false;
     }
@@ -1637,12 +1590,18 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private bool AnyGradientIsAnomalous(Vector<T> gradient)
     {
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            double v = NumOps.ToDouble(gradient[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v)) return true;
-        }
-        return false;
+        return HasNonFiniteElement(gradient.AsTensor());
+    }
+
+    /// <summary>
+    /// True when any element of <paramref name="tensor"/> is NaN or infinite: one engine isfinite mask and one
+    /// min-reduction read back as a single scalar.
+    /// </summary>
+    private bool HasNonFiniteElement(Tensor<T> tensor)
+    {
+        if (tensor.Length == 0) return false;
+        using var finiteMask = Engine.TensorIsFinite(tensor);
+        return Engine.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False;
     }
 
     /// <summary>

@@ -148,48 +148,26 @@ public partial class ElasticNetRegression<T> : RegressionBase<T>
         if (Options.WarmStart && Coefficients.Length > 0 && Coefficients.Length == (Options.UseIntercept ? p - 1 : p))
         {
             // Use existing coefficients as warm start
-            w = new Vector<T>(p);
-            if (Options.UseIntercept)
-            {
-                w[0] = Intercept;
-                for (int j = 0; j < Coefficients.Length; j++)
-                {
-                    w[j + 1] = Coefficients[j];
-                }
-            }
-            else
-            {
-                for (int j = 0; j < Coefficients.Length; j++)
-                {
-                    w[j] = Coefficients[j];
-                }
-            }
+            w = Options.UseIntercept
+                ? Vector<T>.Concatenate(new[] { new Vector<T>(new[] { Intercept }), Coefficients })
+                : Coefficients.Clone();
         }
         else
         {
             w = new Vector<T>(p);
         }
 
-        // Precompute X^T X diagonal and X^T for efficiency
-        var xSquaredSum = new Vector<T>(p);
+        // Precompute X^T X diagonal (column sums of squares) and the columns for efficiency
+        var xSquaredSum = Engine.ReduceSum(
+            Engine.TensorSquare(Tensor<T>.FromMatrix(xProcessed)), new[] { 0 }, keepDims: false).ToVector();
+        var columns = new Vector<T>[p];
         for (int j = 0; j < p; j++)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(xProcessed[i, j], xProcessed[i, j]));
-            }
-            xSquaredSum[j] = sum;
+            columns[j] = Engine.GetColumn(xProcessed, j);
         }
 
-        // Compute initial residuals
-        var residuals = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            var row = new Vector<T>(p);
-            for (int j2 = 0; j2 < p; j2++) row[j2] = xProcessed[i, j2];
-            residuals[i] = NumOps.Subtract(y[i], Engine.DotProduct(row, w));
-        }
+        // Compute initial residuals: residuals = y - X*w using Engine
+        var residuals = Engine.Subtract(y, Engine.MatrixVectorMultiply(xProcessed, w));
 
         T alpha = NumOps.FromDouble(Options.Alpha);
         T l1Ratio = NumOps.FromDouble(Options.L1Ratio);
@@ -207,14 +185,10 @@ public partial class ElasticNetRegression<T> : RegressionBase<T>
                 T oldW = w[j];
 
                 // Compute partial residual (add back contribution of current coefficient)
-                for (int i = 0; i < n; i++)
-                {
-                    residuals[i] = NumOps.Add(residuals[i], NumOps.Multiply(xProcessed[i, j], oldW));
-                }
+                var xCol = columns[j];
+                residuals = Engine.Add(residuals, Engine.Multiply(xCol, oldW));
 
                 // Compute correlation: rho = x[:,j]' * residuals
-                var xCol = new Vector<T>(n);
-                for (int i = 0; i < n; i++) xCol[i] = xProcessed[i, j];
                 T rho = Engine.DotProduct(xCol, residuals);
 
                 // Apply elastic net soft-thresholding (don't regularize intercept)
@@ -226,10 +200,7 @@ public partial class ElasticNetRegression<T> : RegressionBase<T>
                 w[j] = newW;
 
                 // Update residuals
-                for (int i = 0; i < n; i++)
-                {
-                    residuals[i] = NumOps.Subtract(residuals[i], NumOps.Multiply(xProcessed[i, j], newW));
-                }
+                residuals = Engine.Subtract(residuals, Engine.Multiply(xCol, newW));
 
                 // Track maximum change
                 T change = NumOps.Abs(NumOps.Subtract(newW, oldW));
@@ -250,11 +221,7 @@ public partial class ElasticNetRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             Intercept = w[0];
-            Coefficients = new Vector<T>(p - 1);
-            for (int j = 1; j < p; j++)
-            {
-                Coefficients[j - 1] = w[j];
-            }
+            Coefficients = w.GetSubVector(1, p - 1);
         }
         else
         {

@@ -1002,17 +1002,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // a full PredictionStats (which would also compute MAE, RMSE, learning curves,
         // confidence intervals, etc. that nothing in the FitDetector path consumes).
         T ssRes = NumOps.Zero;
-        T meanActual = NumOps.Zero;
-        for (int i = 0; i < actual.Length; i++) meanActual = NumOps.Add(meanActual, actual[i]);
-        if (actual.Length > 0) meanActual = NumOps.Divide(meanActual, NumOps.FromDouble(actual.Length));
-
         T ssTot = NumOps.Zero;
-        for (int i = 0; i < actual.Length; i++)
+        if (actual.Length > 0)
         {
-            T diffRes = NumOps.Subtract(actual[i], predicted[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(diffRes, diffRes));
-            T diffTot = NumOps.Subtract(actual[i], meanActual);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(diffTot, diffTot));
+            var engine = Engine;
+            T meanActual = NumOps.Divide(engine.Sum(actual), NumOps.FromDouble(actual.Length));
+            ssRes = engine.TensorSumOfSquares(engine.Subtract(actual, predicted).AsTensor());
+            ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual.AsTensor(), meanActual));
         }
         T r2 = NumOps.Equals(ssTot, NumOps.Zero)
             ? NumOps.Zero
@@ -1127,36 +1123,33 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         int rows = actualMatrix.Rows;
         int cols = actualMatrix.Columns;
 
-        // Uniform-average R²: per-column R² = 1 - SS_res/SS_tot, then the mean across columns.
-        T sumR2 = NumOps.Zero;
-        for (int c = 0; c < cols; c++)
-        {
-            T mean = NumOps.Zero;
-            for (int r = 0; r < rows; r++)
-            {
-                mean = NumOps.Add(mean, actualMatrix[r, c]);
-            }
+        // Uniform-average R²: per-column R² = 1 - SS_res/SS_tot (0 where SS_tot = 0), then the mean across columns.
+        var engine = Engine;
+        int[] shape = { rows, cols };
+        int[] rowAxis = { 0 };
+        var actualFlat = actualMatrix.ToRowVector();
+        var predictedFlat = predictedMatrix.ToRowVector();
+        var a = engine.Reshape(actualFlat.AsTensor(), shape);
+        var p = engine.Reshape(predictedFlat.AsTensor(), shape);
 
-            if (rows > 0)
-            {
-                mean = NumOps.Divide(mean, NumOps.FromDouble(rows));
-            }
+        var columnMean = rows > 0
+            ? engine.TensorDivideScalar(engine.ReduceSum(a, rowAxis), NumOps.FromDouble(rows))
+            : new Tensor<T>(new[] { cols });
+        var ones = new Vector<T>(rows);
+        ones.Fill(NumOps.One);
+        var centered = engine.TensorSubtract(a, engine.TensorOuter(ones.AsTensor(), columnMean));
+        var residual = engine.TensorSubtract(a, p);
+        var ssRes = engine.ReduceSum(engine.TensorMultiply(residual, residual), rowAxis);
+        var ssTot = engine.ReduceSum(engine.TensorMultiply(centered, centered), rowAxis);
 
-            T ssRes = NumOps.Zero;
-            T ssTot = NumOps.Zero;
-            for (int r = 0; r < rows; r++)
-            {
-                T res = NumOps.Subtract(actualMatrix[r, c], predictedMatrix[r, c]);
-                ssRes = NumOps.Add(ssRes, NumOps.Multiply(res, res));
-                T tot = NumOps.Subtract(actualMatrix[r, c], mean);
-                ssTot = NumOps.Add(ssTot, NumOps.Multiply(tot, tot));
-            }
-
-            T colR2 = NumOps.Equals(ssTot, NumOps.Zero)
-                ? NumOps.Zero
-                : NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
-            sumR2 = NumOps.Add(sumR2, colR2);
-        }
+        var zeroTotal = engine.TensorEquals(ssTot, NumOps.Zero);
+        var zeros = new Tensor<T>(new[] { cols });
+        var safeTotal = engine.TensorWhere(zeroTotal, engine.TensorAddScalar(zeros, NumOps.One), ssTot);
+        var columnR2 = engine.TensorWhere(
+            zeroTotal,
+            zeros,
+            engine.TensorAddScalar(engine.TensorNegate(engine.TensorDivide(ssRes, safeTotal)), NumOps.One));
+        T sumR2 = engine.TensorSum(columnR2);
 
         T meanR2 = cols > 0 ? NumOps.Divide(sumR2, NumOps.FromDouble(cols)) : NumOps.Zero;
 
@@ -1177,19 +1170,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         // Full path: pooled error stats over the flattened (row-major) residuals, with the uniform-average R² as
         // the authoritative selection signal (RSquaredFitnessCalculator, the default, reads PredictionStats.R2).
-        var actualFlat = new Vector<T>(rows * cols);
-        var predictedFlat = new Vector<T>(rows * cols);
-        int k = 0;
-        for (int r = 0; r < rows; r++)
-        {
-            for (int c = 0; c < cols; c++)
-            {
-                actualFlat[k] = actualMatrix[r, c];
-                predictedFlat[k] = predictedMatrix[r, c];
-                k++;
-            }
-        }
-
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
         return new DataSetStats<T, TInput, TOutput>
         {
@@ -1495,9 +1475,11 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             const int fnvPrime = 16777619;
             int hash = fnvOffsetBasis;
             int len = parameters.Length;
-            for (int i = 0; i < len; i++)
+            // Hashing, not arithmetic: each element's own hash code, read straight from the backing span.
+            var comparer = EqualityComparer<T>.Default;
+            foreach (T value in parameters.AsSpan())
             {
-                hash = (hash ^ NumOps.ToDouble(parameters[i]).GetHashCode()) * fnvPrime;
+                hash = (hash ^ (value is null ? 0 : comparer.GetHashCode(value))) * fnvPrime;
             }
             hash = (hash ^ len) * fnvPrime;
 
@@ -1809,6 +1791,15 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             CurrentMomentum = MathHelper.Max(NumOps.FromDouble(Options.MinMomentum),
                 MathHelper.Min(NumOps.FromDouble(Options.MaxMomentum), CurrentMomentum));
         }
+    }
+
+    /// <summary>
+    /// True when |previous - current| is below <paramref name="tolerance"/>: the scalar per-iteration convergence
+    /// test shared by the iterative optimizers (one comparison per iteration, not per element).
+    /// </summary>
+    protected bool FitnessChangeBelow(T previous, T current, double tolerance)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previous, current)), NumOps.FromDouble(tolerance));
     }
 
     /// <summary>
@@ -2479,11 +2470,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         if (lowerBounds.Length != upperBounds.Length)
             throw new ArgumentException("Lower and upper bounds must have the same length");
 
-        // Validate bounds
-        for (int i = 0; i < lowerBounds.Length; i++)
+        // Validate bounds: the first dimension whose range (upper - lower) is negative, if any.
+        if (lowerBounds.Length > 0)
         {
-            if (NumOps.GreaterThan(lowerBounds[i], upperBounds[i]))
+            var ranges = Engine.Subtract(upperBounds, lowerBounds).AsTensor();
+            if (NumOps.LessThan(Engine.TensorMinValue(ranges), NumOps.Zero))
             {
+                // ArgMax over the 0/1 "negative range" mask is its first 1.
+                int i = Engine.TensorArgMax(Engine.TensorLessThan(ranges, NumOps.Zero), 0).AsSpan()[0];
                 throw new ArgumentException(
                     $"Lower bound ({lowerBounds[i]}) is greater than upper bound ({upperBounds[i]}) at dimension {i}.",
                     nameof(lowerBounds));
@@ -2730,86 +2724,89 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 paramCount = features + 1;
             }
 
-            lowerBounds = new Vector<T>(paramCount);
-            upperBounds = new Vector<T>(paramCount);
+            // Per-feature range (column min/max), and the range over every feature for the extra parameters.
+            var engine = Engine;
+            int[] rowAxis = { 0 };
+            var data = engine.Reshape(matrix.ToRowVector().AsTensor(), new[] { matrix.Rows, features });
+            var featureMaxs = engine.ReduceMax(data, rowAxis, keepDims: false);
+            var featureMins = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(data), rowAxis, keepDims: false));
 
-            var featureMins = new T[features];
-            var featureMaxs = new T[features];
-            for (int col = 0; col < features; col++)
-            {
-                T initialValue = matrix[0, col];
-                T min = initialValue;
-                T max = initialValue;
-                for (int row = 1; row < matrix.Rows; row++)
-                {
-                    T value = matrix[row, col];
-                    if (NumOps.LessThan(value, min)) min = value;
-                    if (NumOps.GreaterThan(value, max)) max = value;
-                }
-                featureMins[col] = min;
-                featureMaxs[col] = max;
-            }
-
-            for (int i = 0; i < paramCount; i++)
-            {
-                if (i < features)
-                {
-                    lowerBounds[i] = featureMins[i];
-                    upperBounds[i] = featureMaxs[i];
-                }
-                else
-                {
-                    T min = featureMins[0];
-                    T max = featureMaxs[0];
-                    for (int j = 1; j < featureMins.Length; j++)
-                    {
-                        if (NumOps.LessThan(featureMins[j], min)) min = featureMins[j];
-                        if (NumOps.GreaterThan(featureMaxs[j], max)) max = featureMaxs[j];
-                    }
-                    lowerBounds[i] = min;
-                    upperBounds[i] = max;
-                }
-            }
+            lowerBounds = FilledVector(paramCount, engine.TensorMinValue(featureMins));
+            upperBounds = FilledVector(paramCount, engine.TensorMaxValue(featureMaxs));
+            featureMins.AsSpan().CopyTo(lowerBounds.AsWritableSpan());
+            featureMaxs.AsSpan().CopyTo(upperBounds.AsWritableSpan());
         }
         else if (trainingData is Vector<T> vector)
         {
             if (vector.Length == 0)
                 throw new ArgumentException("Training data vector cannot be empty", nameof(trainingData));
 
-            T initialValue = vector[0];
-            T min = initialValue;
-            T max = initialValue;
-            for (int i = 1; i < vector.Length; i++)
-            {
-                T value = vector[i];
-                if (NumOps.LessThan(value, min)) min = value;
-                if (NumOps.GreaterThan(value, max)) max = value;
-            }
-
             int paramCount = (int)parameterCount;
             if (paramCount < 1) paramCount = 1;
-            lowerBounds = new Vector<T>(paramCount);
-            upperBounds = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                lowerBounds[i] = min;
-                upperBounds[i] = max;
-            }
+            lowerBounds = FilledVector(paramCount, Engine.TensorMinValue(vector.AsTensor()));
+            upperBounds = FilledVector(paramCount, Engine.TensorMaxValue(vector.AsTensor()));
         }
         else
         {
             int paramCount = (int)parameterCount;
             if (paramCount < 1) paramCount = 1;
-            lowerBounds = new Vector<T>(paramCount);
-            upperBounds = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                lowerBounds[i] = NumOps.FromDouble(-10.0);
-                upperBounds[i] = NumOps.FromDouble(10.0);
-            }
+            lowerBounds = FilledVector(paramCount, NumOps.FromDouble(-10.0));
+            upperBounds = FilledVector(paramCount, NumOps.FromDouble(10.0));
         }
 
         return InitializeRandomSolution(lowerBounds, upperBounds);
+    }
+
+    /// <summary>
+    /// Mean absolute deviation of a population from its per-coordinate mean, averaged over every member and every
+    /// coordinate: (1 / (count * dimension)) * sum_k sum_i |x_k,i - mean_i|. The derivative-free searches stop when
+    /// this falls below their tolerance.
+    /// </summary>
+    /// <remarks>
+    /// The deviation is separable over coordinates, so it is computed over blocks of coordinates holding at most
+    /// <see cref="MaxPopulationBlockElements"/> population values; the temporaries stay bounded however many
+    /// coordinates the search has, instead of copying the whole population again.
+    /// </remarks>
+    private protected double PopulationMeanAbsoluteDeviation(IReadOnlyList<Vector<T>> points, int dimension)
+    {
+        int count = points.Count;
+        if (count == 0 || dimension <= 0) return 0.0;
+
+        var engine = Engine;
+        T countValue = NumOps.FromDouble(count);
+        int blockWidth = Math.Max(1, Math.Min(dimension, MaxPopulationBlockElements / count));
+        var buffer = new Vector<T>(count * blockWidth);
+        // The block sums stay on the engine and convert to double once, after the loop.
+        Tensor<T>? total = null;
+        for (int start = 0; start < dimension; start += blockWidth)
+        {
+            int width = Math.Min(blockWidth, dimension - start);
+            var block = width == blockWidth ? buffer : new Vector<T>(count * width);
+            var blockSpan = block.AsWritableSpan();
+            for (int k = 0; k < count; k++)
+            {
+                points[k].AsSpan().Slice(start, width).CopyTo(blockSpan.Slice(k * width, width));
+            }
+
+            var members = engine.Reshape(block.AsTensor(), new[] { count, width });
+            var mean = engine.TensorDivideScalar(engine.ReduceSum(members, new[] { 0 }, keepDims: true), countValue);
+            var centered = engine.TensorSubtract(members, engine.TensorBroadcastTo(mean, new[] { count, width }));
+            var blockTotal = engine.ReduceSum(engine.TensorAbs(centered), null);
+            total = total is null ? blockTotal : engine.TensorAdd(total, blockTotal);
+        }
+
+        return total is null ? 0.0 : NumOps.ToDouble(total.GetFlat(0)) / ((double)count * dimension);
+    }
+
+    /// <summary>Upper bound on the population values one convergence-check block copies (4 MB of doubles).</summary>
+    private const int MaxPopulationBlockElements = 1 << 19;
+
+    /// <summary>A vector of <paramref name="length"/> copies of <paramref name="value"/>.</summary>
+    private static Vector<T> FilledVector(int length, T value)
+    {
+        var vector = new Vector<T>(length);
+        vector.Fill(value);
+        return vector;
     }
 
     /// <summary>

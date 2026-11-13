@@ -147,12 +147,7 @@ public class SimpleRegression<T> : RegressionBase<T>
             var xTx = xWithInt.Transpose().Multiply(xWithInt);
             var xTy = xWithInt.Transpose().Multiply(y);
             // Scale-adaptive regularization: use relative epsilon based on diagonal magnitude
-            for (int i = 0; i < xTx.Rows; i++)
-            {
-                double diagVal = Math.Abs(NumOps.ToDouble(xTx[i, i]));
-                double eps = Math.Max(diagVal * 1e-12, 1e-30);
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(eps));
-            }
+            xTx = RegressionEngineOps2.AddRelativeDiagonalJitter(xTx, NumOps.FromDouble(1e-12), NumOps.FromDouble(1e-30));
             var solution = SolveSystem(xTx, xTy);
             Intercept = solution[0];
             Coefficients = solution.Slice(1, x.Columns);
@@ -162,12 +157,7 @@ public class SimpleRegression<T> : RegressionBase<T>
             // OLS without intercept: slope = (X'X)^(-1) X'y
             var xTx = x.Transpose().Multiply(x);
             var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-            {
-                double diagVal = Math.Abs(NumOps.ToDouble(xTx[i, i]));
-                double eps = Math.Max(diagVal * 1e-12, 1e-30);
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(eps));
-            }
+            xTx = RegressionEngineOps2.AddRelativeDiagonalJitter(xTx, NumOps.FromDouble(1e-12), NumOps.FromDouble(1e-30));
             Coefficients = SolveSystem(xTx, xTy);
             Intercept = NumOps.Zero;
         }

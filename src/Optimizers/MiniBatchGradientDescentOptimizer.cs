@@ -390,6 +390,7 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
     {
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        double learningRate = NumOps.ToDouble(CurrentLearningRate);
 
         foreach (var param in context.Parameters)
         {
@@ -398,7 +399,7 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
                         param, velocity: null,
-                        NumOps.ToDouble(CurrentLearningRate),
+                        learningRate,
                         momentum: 0.0, weightDecay: 0.0))
                 {
                     continue;
@@ -409,7 +410,7 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
             {
                 if (gpuAdam && param.Length == grad.Length
                     && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad,
-                        (float)NumOps.ToDouble(CurrentLearningRate)))
+                        (float)learningRate))
                     continue;
 
                 var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);

@@ -251,19 +251,24 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         T betaStartT = NumOps.FromDouble(_betaStart);
         T betaRangeT = NumOps.FromDouble(_betaEnd - _betaStart);
         T maxDenom = NumOps.FromDouble(Math.Max(1, _diffusionSteps - 1));
-        for (int t = 0; t < _diffusionSteps; t++)
+
+        if (_diffusionSteps == 0)
         {
-            _betas[t] = NumOps.Add(betaStartT, NumOps.Divide(NumOps.Multiply(betaRangeT, NumOps.FromDouble(t)), maxDenom));
-            _alphas[t] = NumOps.Subtract(one, _betas[t]);
+            // An empty schedule has no first alpha-bar; this is the index error the schedule always raised.
+            throw new ArgumentOutOfRangeException("index");
         }
-        _alphasCumprod[0] = _alphas[0];
-        for (int t = 1; t < _diffusionSteps; t++)
-            _alphasCumprod[t] = NumOps.Multiply(_alphasCumprod[t - 1], _alphas[t]);
-        for (int t = 0; t < _diffusionSteps; t++)
-        {
-            _sqrtAlphasCumprod[t] = NumOps.Sqrt(_alphasCumprod[t]);
-            _sqrtOneMinusAlphasCumprod[t] = NumOps.Sqrt(NumOps.Subtract(one, _alphasCumprod[t]));
-        }
+
+        // Linear betas start + range * t / max(1, n - 1), then alpha-bar as the running product of alphas.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var steps = Engine.TensorArange<T>(0, _diffusionSteps, 1);
+        var betas = Engine.TensorAddScalar(Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(steps, betaRangeT), maxDenom), betaStartT);
+        var alphas = Engine.TensorSubtract(Engine.TensorFullLike(betas, one), betas);
+        var alphasCumprod = Engine.TensorCumProd(alphas, 0);
+        _betas = betas.ToVector();
+        _alphas = alphas.ToVector();
+        _alphasCumprod = alphasCumprod.ToVector();
+        _sqrtAlphasCumprod = Engine.TensorSqrt(alphasCumprod).ToVector();
+        _sqrtOneMinusAlphasCumprod = Engine.TensorSqrt(Engine.TensorSubtract(Engine.TensorFullLike(alphasCumprod, one), alphasCumprod)).ToVector();
     }
 
     private T SampleStandardNormal(Random rand)
@@ -585,13 +590,14 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     {
         int len = Math.Max(1, input.Length);
         T mean = NumOps.Zero;
-        for (int i = 0; i < input.Length; i++) mean = NumOps.Add(mean, input[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(len));
         T variance = NumOps.Zero;
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length > 0)
         {
-            T d = NumOps.Subtract(input[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(d, d));
+            // Whole-series mean and population variance.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+            mean = NumOps.Divide(Engine.TensorSum(flat), NumOps.FromDouble(len));
+            variance = Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean));
         }
         variance = NumOps.Divide(variance, NumOps.FromDouble(len));
         T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
@@ -620,7 +626,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) { var predictions = new List<Tensor<T>>(); var currentInput = input; int stepsRemaining = steps; while (stepsRemaining > 0) { var prediction = Forecast(currentInput, null); predictions.Add(prediction); int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining); stepsRemaining -= stepsUsed; if (stepsRemaining > 0) currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed); } return ConcatenatePredictions(predictions, steps); }
 
     /// <inheritdoc />
-    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals); if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
     /// <inheritdoc />
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
@@ -678,6 +684,32 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         // Granularity levels: g=0 (coarsest, len/2^(G-1)) to g=G-1 (finest, full length)
         Tensor<T>? coarseGuidance = null;
 
+        // Per-step posterior coefficients (Ho et al. 2020, eqs. 6-7) and timestep embeddings, computed once
+        // for the whole schedule; the reverse loop reads step t from these tables.
+        T[] stepSin, coefX0Table, coefXtTable, sigmaTable;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            T eps10Table = NumOps.FromDouble(1e-10);
+            var steps = Engine.TensorArange<T>(0, _diffusionSteps, 1);
+            stepSin = Engine.TensorSin(Engine.TensorDivideScalar(
+                Engine.TensorMultiplyScalar(steps, NumOps.FromDouble(2.0 * Math.PI)),
+                NumOps.FromDouble(Math.Max(1, _diffusionSteps - 1)))).ToArray();
+
+            var betas = Tensor<T>.FromVector(_betas);
+            var alphas = Tensor<T>.FromVector(_alphas);
+            var abar = Tensor<T>.FromVector(_alphasCumprod);
+            var ones = Engine.TensorFullLike(abar, NumOps.One);
+            // alpha-bar_{t-1}, with alpha-bar_{-1} = 1.
+            var abarPrev = _diffusionSteps > 1
+                ? Engine.TensorConcatenate(new[] { Engine.TensorNarrow(ones, 0, 0, 1), Engine.TensorNarrow(abar, 0, 0, _diffusionSteps - 1) }, 0)
+                : Engine.TensorNarrow(ones, 0, 0, 1);
+            var oneMinusAbar = Engine.TensorAddScalar(Engine.TensorSubtract(ones, abar), eps10Table);
+            var oneMinusAbarPrev = Engine.TensorAddScalar(Engine.TensorSubtract(ones, abarPrev), eps10Table);
+            coefX0Table = Engine.TensorDivide(Engine.TensorMultiply(Engine.TensorSqrt(abarPrev), betas), oneMinusAbar).ToArray();
+            coefXtTable = Engine.TensorDivide(Engine.TensorMultiply(Engine.TensorSqrt(alphas), oneMinusAbarPrev), oneMinusAbar).ToArray();
+            sigmaTable = Engine.TensorSqrt(Engine.TensorDivide(Engine.TensorMultiply(betas, oneMinusAbarPrev), oneMinusAbar)).ToArray();
+        }
+
         for (int g = 0; g < _numGranularities; g++)
         {
             // Compute granularity-specific output length
@@ -724,10 +756,17 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             {
                 T guidanceWeightT = NumOps.FromDouble(_guidanceWeight);
                 int guideFill = Math.Min(granLen, segLen);
-                for (int i = 0; i < guideFill; i++)
+                if (guideFill > 0)
                 {
-                    int coarseIdx = Math.Min(i * coarseGuidance.Length / Math.Max(1, granLen), coarseGuidance.Length - 1);
-                    denoiseSpan[guideOffset + i] = NumOps.Multiply(coarseGuidance[coarseIdx], guidanceWeightT);
+                    // Nearest-index upsample of the coarse level, weighted, written into its segment.
+                    var coarseIndex = new int[guideFill];
+                    for (int i = 0; i < guideFill; i++)
+                        coarseIndex[i] = Math.Min(i * coarseGuidance.Length / Math.Max(1, granLen), coarseGuidance.Length - 1);
+                    var coarseFlat = Engine.Reshape(coarseGuidance.Contiguous(), new[] { coarseGuidance.Length });
+                    var weighted = Engine.TensorMultiplyScalar(
+                        Engine.TensorIndexSelect(coarseFlat, new Tensor<int>(new[] { guideFill }, new Vector<int>(coarseIndex)), 0),
+                        guidanceWeightT);
+                    weighted.AsSpan().CopyTo(denoiseSpan.Slice(guideOffset, guideFill));
                 }
             }
 
@@ -737,7 +776,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 // Refresh only the per-step segments: x_t (zero-padded to segLen) and the
                 // timestep embedding. The padding region [xtFill, segLen) stays zero across steps.
                 xt.Data.Span.Slice(0, xtFill).CopyTo(denoiseSpan.Slice(0, xtFill));
-                denoiseSpan[timestepOffset] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
+                denoiseSpan[timestepOffset] = stepSin[t];
 
                 // The denoising network predicts the clean sample x̂_0 (x0-parameterization,
                 // matching the training objective in ForwardForTraining), NOT the noise ε.
@@ -748,20 +787,9 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 // Posterior q(x_{t-1} | x_t, x̂_0) mean + variance (Ho et al. 2020, eqs. 6–7):
                 //   μ = (√ᾱ_{t-1}·β_t / (1-ᾱ_t))·x̂_0 + (√α_t·(1-ᾱ_{t-1}) / (1-ᾱ_t))·x_t
                 //   σ² = β_t·(1-ᾱ_{t-1}) / (1-ᾱ_t)
-                T eps10 = NumOps.FromDouble(1e-10);
-                T betaT = _betas[t];
-                T alphaT = _alphas[t];
-                T abarT = _alphasCumprod[t];
-                T abarPrev = t > 0 ? _alphasCumprod[t - 1] : NumOps.One;
-                T oneMinusAbarT = NumOps.Add(NumOps.Subtract(NumOps.One, abarT), eps10);
-                // Apply the same eps10 stabilization as oneMinusAbarT for defensive consistency:
-                // although the linear beta schedule keeps ᾱ_{t-1} < 1 for t > 0 (and the t = 0 branch
-                // forces σ_t = 0 / z = 0, so the value is unused), this guards any future schedule
-                // whose ᾱ_{t-1} → 1 underflows the numerator/denominator below.
-                T oneMinusAbarPrev = NumOps.Add(NumOps.Subtract(NumOps.One, abarPrev), eps10);
-                T coefX0 = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(abarPrev), betaT), oneMinusAbarT);
-                T coefXt = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(alphaT), oneMinusAbarPrev), oneMinusAbarT);
-                T sigmaT = t > 0 ? NumOps.Sqrt(NumOps.Divide(NumOps.Multiply(betaT, oneMinusAbarPrev), oneMinusAbarT)) : NumOps.Zero;
+                T coefX0 = coefX0Table[t];
+                T coefXt = coefXtTable[t];
+                T sigmaT = t > 0 ? sigmaTable[t] : NumOps.Zero;
 
                 // Vectorised posterior step:
                 //   mean = coefX0·x̂_0 + coefXt·x_t
@@ -804,15 +832,18 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         // Final output from finest granularity (in normalized space) — de-normalize via RevIN so
         // the forecast carries the input series' scale/offset.
         var result = coarseGuidance ?? new Tensor<T>(new[] { 1, outputLen });
-        for (int i = 0; i < result.Length; i++)
-            result.Data.Span[i] = NumOps.Add(NumOps.Multiply(result[i], inStd), inMean);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // x * std + mean over the whole forecast.
+            result = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(result, inStd), inMean);
+        }
 
         if (addedBatchDim && result.Rank == 2 && result.Shape[0] == 1) result = result.Reshape(new[] { result.Shape[1] });
         return result;
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; NumOps.ToFloatSpan(input.AsSpan().Slice(0, Math.Min(input.Length, inputData.Length)), inputData.AsSpan(0, Math.Min(input.Length, inputData.Length))); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, Math.Min(totalElements, output.Length)), output.Data.Span.Slice(0, Math.Min(totalElements, output.Length))); return output; }
 
     #endregion
 }

@@ -52,6 +52,11 @@ namespace AiDotNet.CausalDiscovery.Specialized;
 [ResearchPaper("Bayesian Network Learning with Cutting Planes", "https://auai.org/uai2012/papers/162.pdf", Year = 2012, Authors = "James Cussens")]
 public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
 {
+    /// <summary>
+    /// Parent variance at or below which the OLS weight p -> j is undefined and the edge gets weight 1.
+    /// </summary>
+    private const double MinParentVariance = 1e-10;
+
     /// <inheritdoc/>
     public override string Name => "GOBNILP";
 
@@ -91,22 +96,13 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         var bestAssignment = SolveILP(parentSets, d);
 
         // Phase 3: Convert selected parent sets to adjacency matrix with OLS weights.
-        var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
-
-        // Collect the selected parent->child edges with their OLS weights.
-        var candidates = new List<(int p, int j, T weight, double strength)>();
+        // Collect the selected parent->child edges (row-major positions p * d + j).
+        var candidates = new List<int>();
         for (int j = 0; j < d; j++)
         {
             int[] parents = bestAssignment[j];
             foreach (int p in parents)
-            {
-                T varP = cov[p, p];
-                T weight = NumOps.GreaterThan(varP, eps)
-                    ? NumOps.Divide(cov[p, j], varP)
-                    : NumOps.One;
-                candidates.Add((p, j, weight, Math.Abs(NumOps.ToDouble(weight))));
-            }
+                candidates.Add(p * d + j);
         }
 
         // The branch-and-bound ILP solver breaks cycles greedily but is capped at
@@ -116,21 +112,38 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         // inserting edges strongest-first and skipping any that would close a cycle — dropping the
         // weakest edge of each cycle keeps the higher-scoring parent choices. An already-acyclic
         // assignment (incl. the empty DAG, which is a valid ILP optimum) is preserved unchanged.
-        candidates.Sort((a, b) => b.strength.CompareTo(a.strength));
+        if (candidates.Count == 0)
+            return new Matrix<T>(d, d);
 
-        var result = new Matrix<T>(d, d);
+        // OLS weight of every p -> j: cov[p, j] / cov[p, p], or 1 when cov[p, p] is not above
+        // MinParentVariance. Computed only once some edge is selected.
+        var cov = Tensor<T>.FromMatrix(ComputeCovarianceMatrix(data));
+        var varianceRows = Engine.TensorBroadcastTo(Engine.TensorDiagonal(cov).Reshape(new[] { d, 1 }), new[] { d, d });
+        var usable = Engine.TensorGreaterThan(varianceRows, NumOps.FromDouble(MinParentVariance));
+        var olsWeights = Engine.TensorWhere(usable,
+            Engine.TensorDivide(cov, Engine.TensorWhere(usable, varianceRows, Engine.TensorOnesLike(cov))),
+            Engine.TensorOnesLike(cov));
+
+        // Strongest |weight| first; equal strengths keep their collection order.
+        var strengths = Engine.TensorIndexSelect(Engine.TensorAbs(olsWeights).Reshape(new[] { d * d }),
+            new Tensor<int>(candidates.ToArray(), new[] { candidates.Count }), 0);
+        int[] order = CausalTensorHelpers.StableArgsort(strengths, descending: true);
+
+        var kept = new List<int>();
         var adjacency = new List<int>[d];
         for (int k = 0; k < d; k++) adjacency[k] = new List<int>();
 
-        foreach (var (p, j, weight, _) in candidates)
+        foreach (int rank in order)
         {
+            int p = candidates[rank] / d, j = candidates[rank] % d;
+
             // Adding p->j closes a cycle iff j can already reach p.
             if (CanReach(adjacency, j, p, d)) continue;
-            result[p, j] = weight;
+            kept.Add(candidates[rank]);
             adjacency[p].Add(j);
         }
 
-        return result;
+        return CausalTensorHelpers.KeepPositions(olsWeights, kept);
     }
 
     /// <summary>Depth-first reachability: can <paramref name="from"/> reach <paramref name="to"/> along current directed edges?</summary>

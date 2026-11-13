@@ -82,8 +82,6 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
         var cov = ComputeCovarianceMatrix(data);
         var corr = CovarianceToCorrelation(cov);
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
-        T corrThreshold = NumOps.FromDouble(EdgeThreshold);
-        T eps = NumOps.FromDouble(1e-10);
 
         var candidates = new List<(int From, int To, T Weight, double Confidence)>();
 
@@ -91,34 +89,9 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
         for (int i = 0; i < d; i++)
             for (int j = i + 1; j < d; j++)
             {
-                T absCorr = NumOps.Abs(corr[i, j]);
-                if (!NumOps.GreaterThan(absCorr, corrThreshold)) continue;
-
-                // Train MLP i→j and compute MMD
-                T mmdIJ = TrainAndComputeMMD(data, i, j, h, n, rng);
-                // Train MLP j→i and compute MMD
-                T mmdJI = TrainAndComputeMMD(data, j, i, h, n, rng);
-
-                // Direction with lower MMD wins
-                int from, to;
-                if (NumOps.GreaterThan(mmdJI, mmdIJ))
-                {
-                    (from, to) = (i, j);
-                }
-                else
-                {
-                    (from, to) = (j, i);
-                }
-
-                T varFrom = cov[from, from];
-                if (!NumOps.GreaterThan(varFrom, eps)) continue;
-
-                T olsWeight = NumOps.Divide(cov[from, to], varFrom);
-                if (!NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1))) continue;
-
-                double confidence = Math.Abs(NumOps.ToDouble(mmdIJ) - NumOps.ToDouble(mmdJI));
-                if (double.IsNaN(confidence) || double.IsInfinity(confidence)) confidence = 0.0;
-                candidates.Add((from, to, olsWeight, confidence));
+                var candidate = OrientPair(data, cov, corr, i, j, h, n, rng);
+                if (candidate.HasValue)
+                    candidates.Add(candidate.Value);
             }
 
         // Pairwise MMD preferences are local: three individually preferred directions can still form
@@ -133,7 +106,9 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
             return byFrom != 0 ? byFrom : a.To.CompareTo(b.To);
         });
 
-        var result = new Matrix<T>(d, d);
+        // Every candidate weight exceeds 0.1 in magnitude, so an accepted edge is always a live edge
+        // for the cycle test.
+        var accepted = new bool[d, d];
 
         bool CreatesCycle(int from, int to)
         {
@@ -150,7 +125,7 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
                 seen[node] = true;
                 for (int next = 0; next < d; next++)
                 {
-                    if (next != node && NumOps.GreaterThan(NumOps.Abs(result[node, next]), eps))
+                    if (next != node && accepted[node, next])
                         pending.Push(next);
                 }
 
@@ -159,13 +134,64 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
             return false;
         }
 
+        var positions = new List<int>();
+        var weights = new List<T>();
         foreach (var candidate in candidates)
         {
             if (!CreatesCycle(candidate.From, candidate.To))
-                result[candidate.From, candidate.To] = candidate.Weight;
+            {
+                accepted[candidate.From, candidate.To] = true;
+                positions.Add(candidate.From * d + candidate.To);
+                weights.Add(candidate.Weight);
+            }
         }
 
-        return result;
+        var result = new Tensor<T>(new[] { d * d });
+        if (positions.Count > 0)
+        {
+            result = Engine.TensorScatter(result, new Tensor<int>(positions.ToArray(), new[] { positions.Count }),
+                new Tensor<T>(weights.ToArray(), new[] { weights.Count }), 0);
+        }
+
+        return result.Reshape(new[] { d, d }).ToMatrix();
+    }
+
+    /// <summary>
+    /// For a pair whose |correlation| exceeds EdgeThreshold, trains both directions and orients the edge
+    /// toward the lower MMD; returns the edge with its OLS weight and |MMD difference| confidence, or
+    /// null when the pair is uncorrelated, the source variance is not above 1e-10, or |weight| &lt;= 0.1.
+    /// </summary>
+    private (int From, int To, T Weight, double Confidence)? OrientPair(Matrix<T> data, Matrix<T> cov, Matrix<T> corr,
+        int i, int j, int h, int n, Random rng)
+    {
+        T absCorr = NumOps.Abs(corr[i, j]);
+        if (!NumOps.GreaterThan(absCorr, NumOps.FromDouble(EdgeThreshold))) return null;
+
+        // Train MLP i→j and compute MMD
+        T mmdIJ = TrainAndComputeMMD(data, i, j, h, n, rng);
+        // Train MLP j→i and compute MMD
+        T mmdJI = TrainAndComputeMMD(data, j, i, h, n, rng);
+
+        // Direction with lower MMD wins
+        int from, to;
+        if (NumOps.GreaterThan(mmdJI, mmdIJ))
+        {
+            (from, to) = (i, j);
+        }
+        else
+        {
+            (from, to) = (j, i);
+        }
+
+        T varFrom = cov[from, from];
+        if (!NumOps.GreaterThan(varFrom, NumOps.FromDouble(1e-10))) return null;
+
+        T olsWeight = NumOps.Divide(cov[from, to], varFrom);
+        if (!NumOps.GreaterThan(NumOps.Abs(olsWeight), NumOps.FromDouble(0.1))) return null;
+
+        double confidence = Math.Abs(NumOps.ToDouble(mmdIJ) - NumOps.ToDouble(mmdJI));
+        if (double.IsNaN(confidence) || double.IsInfinity(confidence)) confidence = 0.0;
+        return (from, to, olsWeight, confidence);
     }
 
     /// <summary>
@@ -175,104 +201,70 @@ public class CGNNAlgorithm<T> : DeepCausalBase<T>
     private T TrainAndComputeMMD(Matrix<T> data, int source, int target, int h, int n, Random rng)
     {
         int inputDim = 2; // source + noise
-        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / inputDim));
-        T lr = NumOps.FromDouble(LearningRate);
+        double scale = Math.Sqrt(2.0 / inputDim);
 
-        // MLP: [source, noise] -> hidden(h) -> target
-        var wh = new Matrix<T>(2, h);
-        var wo = new Matrix<T>(h, 1);
-        for (int k = 0; k < h; k++)
-        {
-            wh[0, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-            wh[1, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-            wo[k, 0] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-        }
+        // MLP: [source, noise] -> hidden(h) -> target. Draw order per hidden unit k: wh[0,k], wh[1,k], wo[k].
+        var draws = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.CreateRandom(rng, h, 3), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(scale));
+        var wh = Engine.TensorTranspose(Engine.TensorSlice(draws, new[] { 0, 0 }, new[] { h, 2 }));   // [2,h]
+        var wo = Engine.TensorSlice(draws, new[] { 0, 2 }, new[] { h, 1 });                             // [h,1]
 
-        T invN = NumOps.FromDouble(1.0 / n);
-
-        // Pre-allocate reusable buffers for ForwardMLP
-        var hiddenBuf = new Vector<T>(h);
-        var woColBuf = new Vector<T>(h);
+        var sourceColumn = Engine.GetColumn(data, source).AsTensor();
+        var targetColumn = Engine.GetColumn(data, target).AsTensor().Reshape(new[] { n, 1 });
 
         for (int step = 0; step < MaxEpochs; step++)
-        {
-            var gWh = new Matrix<T>(2, h);
-            var gWo = new Matrix<T>(h, 1);
-
-            for (int s = 0; s < n; s++)
-            {
-                T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                var (pred, hidden) = ForwardMLP(data[s, source], noise, wh, wo, h, hiddenBuf, woColBuf);
-
-                T residual = NumOps.Multiply(NumOps.Subtract(pred, data[s, target]), invN);
-
-                for (int k = 0; k < h; k++)
-                {
-                    gWo[k, 0] = NumOps.Add(gWo[k, 0], NumOps.Multiply(residual, hidden[k]));
-                    T sigD = NumOps.Multiply(hidden[k], NumOps.Subtract(NumOps.One, hidden[k]));
-                    T dH = NumOps.Multiply(residual, NumOps.Multiply(wo[k, 0], sigD));
-                    gWh[0, k] = NumOps.Add(gWh[0, k], NumOps.Multiply(dH, data[s, source]));
-                    gWh[1, k] = NumOps.Add(gWh[1, k], NumOps.Multiply(dH, noise));
-                }
-            }
-
-            for (int k = 0; k < h; k++)
-            {
-                wh[0, k] = NumOps.Subtract(wh[0, k], NumOps.Multiply(lr, gWh[0, k]));
-                wh[1, k] = NumOps.Subtract(wh[1, k], NumOps.Multiply(lr, gWh[1, k]));
-                wo[k, 0] = NumOps.Subtract(wo[k, 0], NumOps.Multiply(lr, gWo[k, 0]));
-            }
-        }
+            (wh, wo) = MmdTrainingStep(sourceColumn, targetColumn, wh, wo, n, rng);
 
         // Compute distribution distance: ||mean(predicted) - mean(actual)||^2 + |var(predicted) - var(actual)|
-        T meanPred = NumOps.Zero, meanActual = NumOps.Zero;
+        var (predictions, _) = ForwardMLP(WithNoise(sourceColumn, n, rng), wh, wo);
         T nT = NumOps.FromDouble(n);
+        T meanPred = NumOps.Divide(Engine.TensorSum(predictions), nT);
+        T meanActual = NumOps.Divide(Engine.TensorSum(targetColumn), nT);
 
-        var predictions = new T[n];
-        for (int s = 0; s < n; s++)
-        {
-            T noise = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-            var (pred, _) = ForwardMLP(data[s, source], noise, wh, wo, h, hiddenBuf, woColBuf);
-            predictions[s] = pred;
-            meanPred = NumOps.Add(meanPred, pred);
-            meanActual = NumOps.Add(meanActual, data[s, target]);
-        }
-
-        meanPred = NumOps.Divide(meanPred, nT);
-        meanActual = NumOps.Divide(meanActual, nT);
-
-        T varPred = NumOps.Zero, varActual = NumOps.Zero;
-        for (int s = 0; s < n; s++)
-        {
-            T dpred = NumOps.Subtract(predictions[s], meanPred);
-            varPred = NumOps.Add(varPred, NumOps.Multiply(dpred, dpred));
-            T dact = NumOps.Subtract(data[s, target], meanActual);
-            varActual = NumOps.Add(varActual, NumOps.Multiply(dact, dact));
-        }
+        T varPred = Engine.TensorSum(Engine.TensorSquare(Engine.TensorAddScalar(predictions, NumOps.Negate(meanPred))));
+        T varActual = Engine.TensorSum(Engine.TensorSquare(Engine.TensorAddScalar(targetColumn, NumOps.Negate(meanActual))));
 
         T meanDiff = NumOps.Subtract(meanPred, meanActual);
         T varDiff = NumOps.Subtract(NumOps.Divide(varPred, nT), NumOps.Divide(varActual, nT));
         return NumOps.Add(NumOps.Multiply(meanDiff, meanDiff), NumOps.Abs(varDiff));
     }
 
-    /// <summary>
-    /// Forward pass through the 2-input MLP: sigmoid hidden layer, linear output.
-    /// Uses pre-allocated buffers to avoid per-call allocations.
-    /// </summary>
-    private (T prediction, Vector<T> hidden) ForwardMLP(T sourceVal, T noise, Matrix<T> wh, Matrix<T> wo, int h,
-        Vector<T> hiddenBuf, Vector<T> woColBuf)
+    /// <summary>[n, 2] inputs [source, noise] with one fresh noise draw u*2 - 1 per sample, in sample order.</summary>
+    private Tensor<T> WithNoise(Tensor<T> sourceColumn, int n, Random rng)
     {
-        for (int k = 0; k < h; k++)
-        {
-            T z = NumOps.Add(NumOps.Multiply(sourceVal, wh[0, k]),
-                             NumOps.Multiply(noise, wh[1, k]));
-            double sv = NumOps.ToDouble(z);
-            hiddenBuf[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-        }
+        var noise = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(rng, n), NumOps.FromDouble(2)), NumOps.FromDouble(-1));
+        return Engine.TensorStack(new[] { sourceColumn, noise }, 1);
+    }
 
-        for (int k = 0; k < h; k++) woColBuf[k] = wo[k, 0];
-        T pred = Engine.DotProduct(hiddenBuf, woColBuf);
+    /// <summary>One full-batch gradient step on the MSE of the [source, noise] -> target MLP.</summary>
+    private (Tensor<T> Wh, Tensor<T> Wo) MmdTrainingStep(Tensor<T> sourceColumn, Tensor<T> targetColumn,
+        Tensor<T> wh, Tensor<T> wo, int n, Random rng)
+    {
+        var inputs = WithNoise(sourceColumn, n, rng);
+        var (pred, hidden) = ForwardMLP(inputs, wh, wo);
 
-        return (pred, hiddenBuf);
+        T invN = NumOps.FromDouble(1.0 / n);
+        var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, targetColumn), invN); // [n,1]
+
+        var gWo = Engine.TensorMatMul(Engine.TensorTranspose(hidden), residual);                      // [h,1]
+        var sigD = Engine.TensorMultiply(hidden, Engine.ScalarMinusTensor(NumOps.One, hidden));
+        var dH = Engine.TensorMultiply(Engine.TensorMatMul(residual, Engine.TensorTranspose(wo)), sigD); // [n,h]
+        var gWh = Engine.TensorMatMul(Engine.TensorTranspose(inputs), dH);                           // [2,h]
+
+        T lr = NumOps.FromDouble(LearningRate);
+        return (Engine.TensorSubtract(wh, Engine.TensorMultiplyScalar(gWh, lr)),
+            Engine.TensorSubtract(wo, Engine.TensorMultiplyScalar(gWo, lr)));
+    }
+
+    /// <summary>
+    /// Forward pass through the 2-input MLP for every sample: sigmoid hidden layer (saturated beyond ±20),
+    /// linear output.
+    /// </summary>
+    private (Tensor<T> Prediction, Tensor<T> Hidden) ForwardMLP(Tensor<T> inputs, Tensor<T> wh, Tensor<T> wo)
+    {
+        var hidden = ClampedSigmoid(Engine.TensorMatMul(inputs, wh), 1.0);
+        return (Engine.TensorMatMul(hidden, wo), hidden);
     }
 }

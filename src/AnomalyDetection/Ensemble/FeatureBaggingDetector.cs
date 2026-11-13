@@ -183,38 +183,17 @@ public partial class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Combine scores
-        var combinedScores = new Vector<T>(X.Rows);
         T nEst = NumOps.FromDouble(_nEstimators);
+        var stacked = Engine.TensorStack(allScores.Select(s => s.AsTensor()).ToArray(), 0);
 
-        for (int i = 0; i < X.Rows; i++)
+        if (_combination == CombinationMethod.Average)
         {
-            T combined;
-
-            if (_combination == CombinationMethod.Average)
-            {
-                combined = NumOps.Zero;
-                for (int e = 0; e < _nEstimators; e++)
-                {
-                    combined = NumOps.Add(combined, allScores[e][i]);
-                }
-                combined = NumOps.Divide(combined, nEst);
-            }
-            else // Maximum
-            {
-                combined = NumOps.MinValue;
-                for (int e = 0; e < _nEstimators; e++)
-                {
-                    if (NumOps.GreaterThan(allScores[e][i], combined))
-                    {
-                        combined = allScores[e][i];
-                    }
-                }
-            }
-
-            combinedScores[i] = combined;
+            return Engine.TensorDivideScalar(Engine.ReduceSum(stacked, new[] { 0 }, false), nEst).ToVector();
         }
 
-        return combinedScores;
+        // Maximum: a NaN score never wins the comparison, so it counts as MinValue.
+        var comparable = Engine.TensorMaskedFill(stacked, Engine.TensorIsNan(stacked), NumOps.MinValue);
+        return Engine.ReduceMax(comparable, new[] { 0 }, false).ToVector();
     }
 
     private int[] GenerateFeatureSubset(int totalFeatures, int subsetSize, int seed)
@@ -236,16 +215,6 @@ public partial class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
 
     private Matrix<T> ExtractFeatureSubset(Matrix<T> X, int[] featureIndices)
     {
-        var subset = new Matrix<T>(X.Rows, featureIndices.Length);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            for (int j = 0; j < featureIndices.Length; j++)
-            {
-                subset[i, j] = X[i, featureIndices[j]];
-            }
-        }
-
-        return subset;
+        return AnomalyTensorOps.SelectColumns(AnomalyTensorOps.ToTensor(X), featureIndices).ToMatrix();
     }
 }

@@ -86,57 +86,42 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
         var b0Coefficients = directLiNGAM.RawCoefficients ?? B0Graph.AdjacencyMatrix;
 
         // Step 3: Start the framework's 2-D summary with the instantaneous effects.
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = B0Graph.AdjacencyMatrix[i, j];
+        var result = Tensor<T>.FromMatrix(B0Graph.AdjacencyMatrix);
+        var offDiagonal = OffDiagonalMask(d);
+        var b0 = Tensor<T>.FromMatrix(b0Coefficients);
+        var identityMinusB0 = Engine.TensorSubtract(Engine.TensorEye<T>(d), b0);
+        T threshold = NumOps.FromDouble(_threshold);
+        var thresholdTensor = Engine.TensorFullLike(result, threshold);
 
         // Step 4 of Hyvarinen et al. (2010), Eq. (11): OLS estimates the reduced-form VAR
         // matrices M_tau, not the structural causal matrices. Recover each causal lag matrix as
         // B_tau = (I - B_0) M_tau before aggregating it. Matrices exposed by this framework use
-        // adjacency orientation [source, target], the transpose of the paper's [target, source].
+        // adjacency orientation [source, target], the transpose of the paper's [target, source]:
+        // structural[source, target] = M[source, target] - sum_k M[source, k] * B0[k, target].
         for (int lag = 0; lag < _maxLag; lag++)
         {
-            for (int source = 0; source < d; source++)
-            {
-                for (int target = 0; target < d; target++)
-                {
-                    // Skip self-loops: autoregressive coefficients (X on its own lag)
-                    // are not causal edges in the summary adjacency matrix
-                    if (source == target) continue;
+            var reducedForm = Engine.TensorSlice(laggedCoefs, new[] { lag * d, 0 }, new[] { d, d });
+            var structural = Engine.TensorMatMul(reducedForm, identityMinusB0);
+            var magnitude = Engine.TensorAbs(structural);
 
-                    T structuralWeight = laggedCoefs[target][lag * d + source];
-                    for (int intermediary = 0; intermediary < d; intermediary++)
-                    {
-                        structuralWeight = NumOps.Subtract(
-                            structuralWeight,
-                            NumOps.Multiply(
-                                b0Coefficients[intermediary, target],
-                                laggedCoefs[intermediary][lag * d + source]));
-                    }
-
-                    double lagWeightD = Math.Abs(NumOps.ToDouble(structuralWeight));
-                    double currentD = Math.Abs(NumOps.ToDouble(result[source, target]));
-                    if (lagWeightD >= _threshold && lagWeightD > currentD)
-                    {
-                        result[source, target] = structuralWeight;
-                    }
-                }
-            }
+            // Skip self-loops: autoregressive coefficients (X on its own lag)
+            // are not causal edges in the summary adjacency matrix
+            var replace = Engine.TensorMultiply(offDiagonal, Engine.TensorMultiply(
+                Engine.TensorGreaterEqual(magnitude, thresholdTensor),
+                Engine.TensorGreaterThan(magnitude, Engine.TensorAbs(result))));
+            result = Engine.TensorWhere(replace, structural, result);
         }
 
         // Fallback: if neither B0 nor lagged coefficients produced edges,
         // use pairwise cross-correlation to detect relationships.
         // This handles deterministic/near-deterministic data where LiNGAM's
         // non-Gaussianity assumption fails and VAR overfits.
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
-                    hasEdges = true;
+        bool hasEdges = CausalTensorHelpers.AnyAbove(
+            Engine.TensorWhere(offDiagonal, Engine.TensorAbs(result), Engine.TensorZerosLike(result)), NumOps.Zero);
 
         if (!hasEdges)
         {
+            var fallback = result.ToMatrix();
             for (int i = 0; i < d; i++)
             {
                 for (int j = i + 1; j < d; j++)
@@ -146,10 +131,12 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
                     double corr = Math.Abs(ComputeCorrelation(xi, xj));
                     if (corr >= _threshold)
                     {
-                        result[i, j] = NumOps.FromDouble(corr);
+                        fallback[i, j] = NumOps.FromDouble(corr);
                     }
                 }
             }
+
+            result = Tensor<T>.FromMatrix(fallback);
         }
 
         // A time-unrolled VAR graph may legitimately contain X_i(t-1)->X_j(t) and
@@ -157,43 +144,44 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
         // however, returns one lag-collapsed CausalGraph whose contract is a DAG. Preserve the
         // strongest estimated effects while greedily omitting only edges that would introduce a
         // cycle in that lossy 2-D summary.
-        return ProjectSummaryToDag(result, d);
+        return ProjectSummaryToDag(result.ToMatrix(), d);
     }
 
     private Matrix<T> ProjectSummaryToDag(Matrix<T> candidate, int dimension)
     {
-        var edges = new List<(int Source, int Target, T Weight, double Magnitude)>();
-        for (int source = 0; source < dimension; source++)
+        // Candidate edges: off-diagonal entries with |weight| >= threshold, in row-major (source, target) order.
+        var weights = Tensor<T>.FromMatrix(candidate);
+        var magnitude = Engine.TensorAbs(weights);
+        var isCandidate = Engine.TensorMultiply(OffDiagonalMask(dimension),
+            Engine.TensorGreaterEqual(magnitude, Engine.TensorFullLike(magnitude, NumOps.FromDouble(_threshold))));
+        int[] positions = Engine.TensorNonzero(isCandidate.Reshape(new[] { dimension * dimension })).ToArray();
+        if (positions.Length == 0)
+            return new Matrix<T>(dimension, dimension);
+
+        // Strongest first; equal magnitudes keep (source, target) order.
+        var candidateMagnitudes = Engine.TensorIndexSelect(magnitude.Reshape(new[] { dimension * dimension }),
+            new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0);
+        int[] order = CausalTensorHelpers.StableArgsort(candidateMagnitudes, descending: true);
+
+        // Every kept edge has |weight| >= threshold, so the kept edge lists are the dag's adjacency.
+        var children = new List<int>[dimension];
+        for (int node = 0; node < dimension; node++) children[node] = new List<int>();
+        var kept = new List<int>();
+        foreach (int rank in order)
         {
-            for (int target = 0; target < dimension; target++)
+            int position = positions[rank];
+            int source = position / dimension, target = position % dimension;
+            if (!WouldCreateCycle(children, source, target, dimension))
             {
-                if (source == target) continue;
-                T weight = candidate[source, target];
-                double magnitude = Math.Abs(NumOps.ToDouble(weight));
-                if (magnitude >= _threshold)
-                    edges.Add((source, target, weight, magnitude));
+                children[source].Add(target);
+                kept.Add(position);
             }
         }
 
-        edges.Sort((left, right) =>
-        {
-            int magnitudeOrder = right.Magnitude.CompareTo(left.Magnitude);
-            if (magnitudeOrder != 0) return magnitudeOrder;
-            int sourceOrder = left.Source.CompareTo(right.Source);
-            return sourceOrder != 0 ? sourceOrder : left.Target.CompareTo(right.Target);
-        });
-
-        var dag = new Matrix<T>(dimension, dimension);
-        foreach (var edge in edges)
-        {
-            if (!WouldCreateCycle(dag, edge.Source, edge.Target, dimension))
-                dag[edge.Source, edge.Target] = edge.Weight;
-        }
-
-        return dag;
+        return CausalTensorHelpers.KeepPositions(weights, kept);
     }
 
-    private bool WouldCreateCycle(Matrix<T> adjacency, int source, int target, int dimension)
+    private static bool WouldCreateCycle(List<int>[] children, int source, int target, int dimension)
     {
         // Adding source -> target closes a cycle exactly when target already reaches source.
         var visited = new bool[dimension];
@@ -207,71 +195,50 @@ public class VARLiNGAMAlgorithm<T> : FunctionalBase<T>
             if (visited[current]) continue;
             visited[current] = true;
 
-            for (int next = 0; next < dimension; next++)
-            {
-                if (next != current && Math.Abs(NumOps.ToDouble(adjacency[current, next])) >= _threshold)
-                    pending.Push(next);
-            }
+            foreach (int next in children[current])
+                pending.Push(next);
         }
 
         return false;
     }
 
-    private (Matrix<T> Residuals, Vector<T>[] LaggedCoefs) FitVARAndGetResiduals(
+    /// <summary>
+    /// OLS fit of every variable on all lags; returns the residuals [effectiveN x d] and the
+    /// coefficients [d * maxLag x d] whose row lag * d + source, column target is the coefficient of
+    /// source at lag + 1 for target.
+    /// </summary>
+    private (Matrix<T> Residuals, Tensor<T> LaggedCoefs) FitVARAndGetResiduals(
         Matrix<T> data, int n, int d, int maxLag)
     {
         int effectiveN = n - maxLag;
-        var residuals = new Matrix<T>(effectiveN, d);
-        var laggedCoefs = new Vector<T>[d];
+        int p = d * maxLag;
+        var x = Tensor<T>.FromMatrix(data);
 
+        // design[t, lag * d + col] = data[t + maxLag - lag - 1, col]; y[t, target] = data[t + maxLag, target]
+        var lagBlocks = new Tensor<T>[maxLag];
+        for (int lag = 0; lag < maxLag; lag++)
+            lagBlocks[lag] = Engine.TensorSlice(x, new[] { maxLag - lag - 1, 0 }, new[] { effectiveN, d });
+        var design = Engine.TensorConcatenate(lagBlocks, 1);
+        var y = Engine.TensorSlice(x, new[] { maxLag, 0 }, new[] { effectiveN, d });
+
+        // Solve OLS: beta = (X^T X + ridge)^{-1} X^T y, the Gram matrix mirrored so it is exactly symmetric
+        var designT = Engine.TensorTranspose(design);
+        var gram = Engine.TensorMatMul(designT, design);
+        gram = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
+        var XtX = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-4)))
+            .ToMatrix();
+        var Xty = Engine.TensorMatMul(designT, y);
+
+        var betas = new Tensor<T>[d];
         for (int target = 0; target < d; target++)
         {
-            int p = d * maxLag;
-            var design = new Matrix<T>(effectiveN, p);
-            var y = new Vector<T>(effectiveN);
-
-            for (int t = 0; t < effectiveN; t++)
-            {
-                y[t] = data[t + maxLag, target];
-                for (int lag = 0; lag < maxLag; lag++)
-                    for (int col = 0; col < d; col++)
-                        design[t, lag * d + col] = data[t + maxLag - lag - 1, col];
-            }
-
-            // Solve OLS: beta = (X^T X + ridge)^{-1} X^T y
-            var XtX = new Matrix<T>(p, p);
-            var Xty = new Vector<T>(p);
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int k = 0; k < effectiveN; k++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(design[k, i], design[k, j]));
-                    XtX[i, j] = sum;
-                }
-                T sumY = NumOps.Zero;
-                for (int k = 0; k < effectiveN; k++)
-                    sumY = NumOps.Add(sumY, NumOps.Multiply(design[k, i], y[k]));
-                Xty[i] = sumY;
-            }
-
-            // Ridge regularization
-            T ridge = NumOps.FromDouble(1e-4);
-            for (int i = 0; i < p; i++) XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
-
-            var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
-            laggedCoefs[target] = beta;
-
-            for (int t = 0; t < effectiveN; t++)
-            {
-                T pred = NumOps.Zero;
-                for (int j = 0; j < p; j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(beta[j], design[t, j]));
-                residuals[t, target] = NumOps.Subtract(y[t], pred);
-            }
+            var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX,
+                Engine.TensorSliceAxis(Xty, 1, target).ToVector(), MatrixDecompositionType.Lu);
+            betas[target] = beta.AsTensor();
         }
 
-        return (residuals, laggedCoefs);
+        var laggedCoefs = Engine.TensorStack(betas, 1);
+        var residuals = Engine.TensorSubtract(y, Engine.TensorMatMul(design, laggedCoefs));
+        return (residuals.ToMatrix(), laggedCoefs);
     }
 }

@@ -55,4 +55,36 @@ public class Adam8BitFusedSpecTests
         Assert.False(((IFusedOptimizerSpec)Make(bf16: true, adaptiveLr: true))
             .TryGetFusedOptimizerConfig(out _), "Adaptive LR must fall back to eager.");
     }
+
+    [Fact]
+    public void WriteByteVector_ChunkedWrite_KeepsTheCheckpointByteLayout()
+    {
+        // Tape-state moments are written in bounded chunks (no full-size copy); the layout must stay
+        // [present flag][int32 length][raw bytes] across chunk boundaries (ChunkBytes = 64 KiB).
+        int length = 64 * 1024 * 2 + 7;
+        var bytes = new byte[length];
+        for (int i = 0; i < length; i++)
+        {
+            bytes[i] = (byte)(i * 31 % 251);
+        }
+
+        var write = typeof(Adam8BitOptimizer<float, AiDotNet.Tensors.LinearAlgebra.Tensor<float>, AiDotNet.Tensors.LinearAlgebra.Tensor<float>>)
+            .GetMethod("WriteByteVector", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(write);
+
+        using var stream = new System.IO.MemoryStream();
+        using (var writer = new System.IO.BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            write.Invoke(null, new object[] { writer, new AiDotNet.Tensors.LinearAlgebra.Vector<byte>(bytes) });
+        }
+
+        var written = stream.ToArray();
+        Assert.Equal(1 + 4 + length, written.Length);
+        Assert.Equal(1, written[0]);
+        Assert.Equal(length, System.BitConverter.ToInt32(written, 1));
+        for (int i = 0; i < length; i++)
+        {
+            Assert.Equal(bytes[i], written[5 + i]);
+        }
+    }
 }

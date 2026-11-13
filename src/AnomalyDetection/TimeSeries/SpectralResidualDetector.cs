@@ -89,15 +89,6 @@ public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        int n = X.Rows;
-
-        // Extract values
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(X[i, 0]);
-        }
-
         // Compute baseline statistics from training data
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -125,260 +116,38 @@ public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = X.Rows;
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(X[i, 0]);
-        }
+        var engine = Engine;
 
-        // Compute saliency map
-        var saliency = ComputeSaliencyMap(values);
-
-        // Convert to scores
-        var scores = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            scores[i] = NumOps.FromDouble(saliency[i]);
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeSaliencyMap(double[] values)
-    {
-        int n = values.Length;
-
-        // Ensure length is power of 2 for FFT (pad if necessary)
+        // Zero-pad to the next power of two for the FFT.
         int fftSize = 1;
         while (fftSize < n) fftSize *= 2;
 
-        var paddedValues = new double[fftSize];
-        Array.Copy(values, paddedValues, n);
+        var values = X.GetColumn(0).AsTensor();
+        var padded = fftSize > n
+            ? engine.TensorConcatenate(new[] { values, Tensor<T>.CreateZeros(new[] { fftSize - n }) }, 0)
+            : values;
+        engine.FFT(padded, Tensor<T>.CreateZeros(new[] { fftSize }), out var real, out var imag);
 
-        // Compute FFT
-        var (real, imag) = ComputeFFT(paddedValues);
+        // Log amplitude spectrum.
+        var amplitude = engine.TensorSqrt(engine.TensorAdd(engine.TensorSquare(real), engine.TensorSquare(imag)));
+        var logAmplitude = engine.TensorLog(engine.TensorAddScalar(amplitude, NumOps.FromDouble(1e-10)));
 
-        // Compute log amplitude spectrum
-        var logAmplitude = new double[fftSize];
-        for (int i = 0; i < fftSize; i++)
-        {
-            double amplitude = Math.Sqrt(real[i] * real[i] + imag[i] * imag[i]);
-            logAmplitude[i] = Math.Log(amplitude + 1e-10);
-        }
+        // Spectral residual: log amplitude minus its centred moving average (window truncated at the ends).
+        int halfWindow = _windowSize / 2;
+        var windows = AnomalyTensorOps.SlidingWindows(logAmplitude, halfWindow, halfWindow, out var mask);
+        var avgLogAmplitude = engine.TensorDivide(
+            engine.ReduceSum(windows, new[] { 1 }, false), engine.ReduceSum(mask, new[] { 1 }, false));
+        var spectralResidual = engine.TensorSubtract(logAmplitude, avgLogAmplitude);
 
-        // Compute spectral residual (subtract averaged spectrum)
-        var avgLogAmplitude = SmoothArray(logAmplitude, _windowSize);
-        var spectralResidual = new double[fftSize];
-        for (int i = 0; i < fftSize; i++)
-        {
-            spectralResidual[i] = logAmplitude[i] - avgLogAmplitude[i];
-        }
+        // Reconstruct with the residual amplitude and the original phase, then invert.
+        var phase = engine.TensorAtan2(imag, real);
+        var newAmplitude = engine.TensorExp(spectralResidual);
+        var newReal = engine.TensorMultiply(newAmplitude, engine.TensorCos(phase));
+        var newImag = engine.TensorMultiply(newAmplitude, engine.TensorSin(phase));
+        engine.IFFT(newReal, newImag, out var saliencyReal, out _);
 
-        // Reconstruct with spectral residual amplitude
-        var newReal = new double[fftSize];
-        var newImag = new double[fftSize];
-        for (int i = 0; i < fftSize; i++)
-        {
-            double amplitude = Math.Sqrt(real[i] * real[i] + imag[i] * imag[i]);
-            double phase = Math.Atan2(imag[i], real[i]);
-            double newAmplitude = Math.Exp(spectralResidual[i]);
-
-            newReal[i] = newAmplitude * Math.Cos(phase);
-            newImag[i] = newAmplitude * Math.Sin(phase);
-        }
-
-        // Inverse FFT
-        var (saliencyReal, _) = ComputeIFFT(newReal, newImag);
-
-        // Take squared magnitude and trim to original size
-        var saliency = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            saliency[i] = saliencyReal[i] * saliencyReal[i];
-        }
-
-        return saliency;
-    }
-
-    private (double[] real, double[] imag) ComputeFFT(double[] values)
-    {
-        int n = values.Length;
-        var real = (double[])values.Clone();
-        var imag = new double[n];
-
-        // Cooley-Tukey FFT (iterative, radix-2)
-        // Bit-reverse permutation
-        int bits = (int)Math.Log(n, 2);
-        for (int i = 0; i < n; i++)
-        {
-            int j = ReverseBits(i, bits);
-            if (j > i)
-            {
-                double tempReal = real[i];
-                real[i] = real[j];
-                real[j] = tempReal;
-            }
-        }
-
-        // Butterfly computations
-        for (int len = 2; len <= n; len *= 2)
-        {
-            double angle = -2 * Math.PI / len;
-            double wReal = Math.Cos(angle);
-            double wImag = Math.Sin(angle);
-
-            for (int i = 0; i < n; i += len)
-            {
-                double curReal = 1, curImag = 0;
-                for (int j = 0; j < len / 2; j++)
-                {
-                    int u = i + j;
-                    int v = i + j + len / 2;
-
-                    double tReal = curReal * real[v] - curImag * imag[v];
-                    double tImag = curReal * imag[v] + curImag * real[v];
-
-                    real[v] = real[u] - tReal;
-                    imag[v] = imag[u] - tImag;
-                    real[u] = real[u] + tReal;
-                    imag[u] = imag[u] + tImag;
-
-                    double nextReal = curReal * wReal - curImag * wImag;
-                    double nextImag = curReal * wImag + curImag * wReal;
-                    curReal = nextReal;
-                    curImag = nextImag;
-                }
-            }
-        }
-
-        return (real, imag);
-    }
-
-    private (double[] real, double[] imag) ComputeIFFT(double[] realInput, double[] imagInput)
-    {
-        int n = realInput.Length;
-
-        // Standard IFFT: IFFT(X) = (1/N) * conj(FFT(conj(X)))
-        // Step 1: Conjugate the input (negate imaginary part)
-        var conjReal = (double[])realInput.Clone();
-        var conjImag = imagInput.Select(x => -x).ToArray();
-
-        // Step 2: Combine into a single array for FFT (real part only, with conjugated input)
-        // We need to compute FFT of the complex conjugate
-        // Use the FFT implementation which expects real input, so we need a different approach:
-        // For complex input FFT: FFT(a + bi) = FFT(a) + i*FFT(b)
-        // But our FFT takes real input. Instead, use the property:
-        // IFFT(X) = conj(FFT(conj(X))) / N
-
-        // Create combined input by interleaving real/imag into the FFT
-        // Alternative: Compute FFT with complex input by modifying the FFT to accept complex
-
-        // Simpler approach: swap real and imag, apply FFT, swap back, scale
-        // IFFT via FFT: IFFT(real, imag) = FFT(real, -imag) with result scaled and imag negated
-
-        // Correct IFFT implementation:
-        // Apply FFT to (real, -imag), then scale by 1/N and negate the imaginary result
-        var (fftReal, fftImag) = ComputeFFTComplex(conjReal, conjImag);
-
-        // Step 3: Conjugate the result and scale by 1/N
-        var resultReal = new double[n];
-        var resultImag = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            resultReal[i] = fftReal[i] / n;
-            resultImag[i] = -fftImag[i] / n;
-        }
-
-        return (resultReal, resultImag);
-    }
-
-    private (double[] real, double[] imag) ComputeFFTComplex(double[] realInput, double[] imagInput)
-    {
-        int n = realInput.Length;
-        var real = (double[])realInput.Clone();
-        var imag = (double[])imagInput.Clone();
-
-        // Cooley-Tukey FFT (iterative, radix-2) for complex input
-        // Bit-reverse permutation
-        int bits = (int)Math.Log(n, 2);
-        for (int i = 0; i < n; i++)
-        {
-            int j = ReverseBits(i, bits);
-            if (j > i)
-            {
-                double tempReal = real[i];
-                real[i] = real[j];
-                real[j] = tempReal;
-
-                double tempImag = imag[i];
-                imag[i] = imag[j];
-                imag[j] = tempImag;
-            }
-        }
-
-        // Butterfly computations
-        for (int len = 2; len <= n; len *= 2)
-        {
-            double angle = -2 * Math.PI / len;
-            double wReal = Math.Cos(angle);
-            double wImag = Math.Sin(angle);
-
-            for (int i = 0; i < n; i += len)
-            {
-                double curReal = 1, curImag = 0;
-                for (int j = 0; j < len / 2; j++)
-                {
-                    int u = i + j;
-                    int v = i + j + len / 2;
-
-                    double tReal = curReal * real[v] - curImag * imag[v];
-                    double tImag = curReal * imag[v] + curImag * real[v];
-
-                    real[v] = real[u] - tReal;
-                    imag[v] = imag[u] - tImag;
-                    real[u] = real[u] + tReal;
-                    imag[u] = imag[u] + tImag;
-
-                    double nextReal = curReal * wReal - curImag * wImag;
-                    double nextImag = curReal * wImag + curImag * wReal;
-                    curReal = nextReal;
-                    curImag = nextImag;
-                }
-            }
-        }
-
-        return (real, imag);
-    }
-
-    private static int ReverseBits(int num, int bits)
-    {
-        int result = 0;
-        for (int i = 0; i < bits; i++)
-        {
-            result = (result << 1) | (num & 1);
-            num >>= 1;
-        }
-        return result;
-    }
-
-    private double[] SmoothArray(double[] values, int windowSize)
-    {
-        int n = values.Length;
-        var smoothed = new double[n];
-        int halfWindow = windowSize / 2;
-
-        for (int i = 0; i < n; i++)
-        {
-            int start = Math.Max(0, i - halfWindow);
-            int end = Math.Min(n, i + halfWindow + 1);
-            double sum = 0;
-            for (int j = start; j < end; j++)
-            {
-                sum += values[j];
-            }
-            smoothed[i] = sum / (end - start);
-        }
-
-        return smoothed;
+        // Saliency: squared magnitude of the real part, trimmed to the original length.
+        var trimmed = fftSize > n ? engine.TensorSlice(saliencyReal, new[] { 0 }, new[] { n }) : saliencyReal;
+        return engine.TensorSquare(trimmed).ToVector();
     }
 }

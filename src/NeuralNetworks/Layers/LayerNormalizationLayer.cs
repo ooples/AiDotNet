@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 // Rescales values, never resizes. Rank-agnostic, so its axes carry no intrinsic meaning to name.
 [ElementWiseShape(Note = "Normalises over the feature axis; every dimension is carried through.")]
 [AutoParameters]
-public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
+public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract, IDetachablePreHeadLayer<T>
 {
     /// <summary>
     /// A small value added to the variance for numerical stability.
@@ -547,6 +547,28 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return output;
+    }
+
+    bool IDetachablePreHeadLayer<T>.CanForwardWithDetachedParameters => GetType() == typeof(LayerNormalizationLayer<T>);
+
+    bool IDetachablePreHeadLayer<T>.PreservesIndependentStackedBatches(int inputRank) =>
+        GetType() == typeof(LayerNormalizationLayer<T>) && inputRank >= 2;
+
+    Tensor<T> IDetachablePreHeadLayer<T>.ForwardWithDetachedParameters(Tensor<T> input, ref object? detachedState)
+    {
+        EnsureInitializedFromInput(input);
+        if (detachedState is not Tuple<Tensor<T>, Tensor<T>> pair)
+        {
+            pair = Tuple.Create(Engine.StopGradient(_gamma), Engine.StopGradient(_beta));
+            detachedState = pair;
+        }
+        return Engine.LayerNorm(
+            input,
+            pair.Item1,
+            pair.Item2,
+            NumOps.ToDouble(_epsilon),
+            out _,
+            out _);
     }
 
     /// <summary>
