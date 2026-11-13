@@ -200,17 +200,24 @@ public static class ConcertoCrossModalObjective<T>
     /// finite gradient.
     /// </summary>
     /// <remarks>
-    /// The row is first divided by its largest |entry| when that exceeds one -- the cosine is
+    /// <para>The row is first divided by its largest |entry| when that exceeds one -- the cosine is
     /// scale-invariant -- so the sum of squares cannot overflow a narrow <typeparamref name="T"/>
     /// (Half overflows once an entry passes 256). The scale carries no gradient: the result does not
-    /// depend on it.
+    /// depend on it.</para>
+    /// <para>When <typeparamref name="T"/> cannot hold eps squared (Half), every non-zero row is divided by
+    /// its largest |entry|, so its norm is at least one and the substituted floor (Half's smallest normal,
+    /// a norm floor near 0.0078) only ever applies to an all-zero row. Without that, a pooled Half feature
+    /// with a norm below 0.0078 was divided by the floor instead of its norm and its cosine shrank. Every
+    /// non-zero Half value exceeds 1e-8, so this is exactly torch's eps = 1e-8 behaviour.</para>
     /// </remarks>
     private static Tensor<T> NormalizeRows(Tensor<T> rows, T epsilonSquared)
     {
         var engine = Engine;
         int[] shape = rows.Shape.ToArray();
-        var scale = engine.StopGradient(engine.TensorClampMin(
-            engine.ReduceMax(engine.TensorAbs(rows), new[] { 1 }, true), NumOps.One));
+        var largest = engine.ReduceMax(engine.TensorAbs(rows), new[] { 1 }, true);
+        var scale = engine.StopGradient(EpsilonSquaredIsRepresentable
+            ? engine.TensorClampMin(largest, NumOps.One)
+            : engine.TensorWhere(engine.TensorGreaterThan(largest, NumOps.Zero), largest, engine.TensorFullLike(largest, NumOps.One)));
         var scaled = engine.TensorDivide(rows, engine.TensorBroadcastTo(scale, shape));
         var norm = engine.TensorSqrt(engine.TensorClampMin(
             engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, true), epsilonSquared));
@@ -221,6 +228,9 @@ public static class ConcertoCrossModalObjective<T>
     /// <paramref name="epsilon"/> as a <typeparamref name="T"/>, raised to Half's smallest normal value
     /// when <typeparamref name="T"/> flushes it to zero (Half cannot hold 1e-16).
     /// </summary>
+    private static readonly bool EpsilonSquaredIsRepresentable =
+        NumOps.GreaterThan(NumOps.FromDouble(CosineEpsilon * CosineEpsilon), NumOps.Zero);
+
     private static T RepresentableEpsilon(double epsilon)
     {
         T value = NumOps.FromDouble(epsilon);

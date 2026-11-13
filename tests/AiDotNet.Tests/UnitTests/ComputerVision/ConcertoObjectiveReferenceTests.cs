@@ -55,6 +55,18 @@ public class ConcertoObjectiveReferenceTests
     }
 
     [Fact]
+    public void IntraModalLoss_NaNTeacherLogit_PropagatesLikeTheScalarReference()
+    {
+        // The scalar reference skips a prototype only when its teacher probability is <= 0. A NaN teacher logit
+        // makes that point's probabilities NaN, which are not skipped, so the loss is NaN; selecting on "> 0"
+        // instead dropped them and reported the other point's loss as if nothing were wrong.
+        var student = T(new[] { 2, 2 }, 0.2, -0.1, 1.0, 0.0);
+        var teacher = T(new[] { 2, 2 }, double.NaN, 0.1, -0.4, 0.6);
+
+        Assert.True(double.IsNaN(ConcertoIntraModalObjective<double>.ComputeLoss(student, teacher)));
+    }
+
+    [Fact]
     public void UpdateTeacher_IsTheExponentialMovingAverageInPlace()
     {
         var teacher = new Vector<double>(new[] { 1.0, 2.0, -4.0 });
@@ -278,6 +290,33 @@ public class ConcertoObjectiveReferenceTests
         Assert.Equal(expected, (double)(float)loss, 2e-3);
         var tape = ConcertoCrossModalObjective<Half>.ComputeTapeLoss(features, coordinates, views, 0.5);
         Assert.Equal(expected, (double)(float)tape.ToArray()[0], 2e-3);
+    }
+
+    [Fact]
+    public void CrossModalLoss_Half_SmallPooledFeatureKeepsItsCosine()
+    {
+        // One visible point in patch 0 with feature (0.003, 0.004) against image feature (3, 4): cos = 1, loss 0.
+        // Half cannot hold eps^2 = 1e-16, so its squared-norm floor is 2^-14 (a norm floor near 0.0078). The pooled
+        // norm 0.005 sat below it and was divided by the floor, giving cos = 0.64 and a loss of 0.36.
+        var view = HalfGridView(2, i => i == 0 ? 3.0 : i == 1 ? 4.0 : 1.0);
+        var coordinates = HalfTensor(new[] { 1, 3 }, i => i == 2 ? 1.0 : 0.5);
+        var features = HalfTensor(new[] { 1, 2 }, i => i == 0 ? 0.003 : 0.004);
+        var views = new List<ConcertoPairedView<Half>> { view };
+
+        Half loss = ConcertoCrossModalObjective<Half>.ComputeLoss(features, coordinates, views, 0.5);
+        Assert.Equal(0.0, (double)(float)loss, 2e-3);
+        var tape = ConcertoCrossModalObjective<Half>.ComputeTapeLoss(features, coordinates, views, 0.5);
+        Assert.Equal(0.0, (double)(float)tape.ToArray()[0], 2e-3);
+    }
+
+    [Fact]
+    public void PretrainEpochLoss_Half_ManySamplesDoesNotOverflow()
+    {
+        // 10000 samples at loss 10: the raw total (100000) overflows Half; each loss is scaled by 1 / count first.
+        var losses = new Half[10000];
+        for (int i = 0; i < losses.Length; i++) losses[i] = (Half)10f;
+
+        Assert.Equal(10.0, (double)(float)Concerto<Half>.MeanOfLosses(losses), 0.02);
     }
 
     [Fact]

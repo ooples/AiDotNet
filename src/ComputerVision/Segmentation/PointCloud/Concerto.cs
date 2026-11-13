@@ -323,7 +323,7 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
             // The mean loss over the final epoch's samples.
             if (anyEpoch)
             {
-                lastEpochLoss = NumOps.Divide(Engine.Sum(new Vector<T>(sampleLosses)), NumOps.FromDouble(samples.Count));
+                lastEpochLoss = MeanOfLosses(sampleLosses);
             }
         }
         finally
@@ -338,6 +338,22 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
     #endregion
 
     #region Private Methods
+
+    /// <summary>
+    /// The mean of <paramref name="losses"/>, each pre-scaled by <c>1 / count</c> before the sum so the running
+    /// total stays near the mean: summing first overflows a narrow <typeparamref name="T"/> such as Half once the
+    /// losses add up past 65504 (6554 samples at a loss of 10).
+    /// </summary>
+    internal static T MeanOfLosses(T[] losses)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (losses.Length == 0) return numOps.Zero;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var scaled = engine.TensorMultiplyScalar(
+            new Tensor<T>(new[] { losses.Length }, new Vector<T>(losses)), numOps.FromDouble(1.0 / losses.Length));
+        return engine.TensorSum(scaled);
+    }
+
     /// <summary>
     /// Runs the encoder and the first <paramref name="decoderLevel"/> decoder layers.
     /// </summary>
