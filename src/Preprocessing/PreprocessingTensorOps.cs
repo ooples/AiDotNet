@@ -860,13 +860,19 @@ internal static class PreprocessingTensorOps
     /// <summary>
     /// The Euclidean distance of every row of <paramref name="data"/> from the column means. With
     /// <paramref name="standardize"/>, each column difference is first divided by the column's population
-    /// standard deviation (1 where that is below 1e-10).
+    /// standard deviation (1 where that is below 1e-10). Half and BFloat16 are evaluated in float and cast back:
+    /// the column mean and the differences from it pass 65504 for representable data (65504 - 21835 = 87339 for a
+    /// column [-65504, 65504, 65504]), although the standardized distances do not.
     /// </summary>
-    public static Tensor<T> CentroidDistances<T>(Matrix<T> data, bool standardize)
+    public static Tensor<T> CentroidDistances<T>(Matrix<T> data, bool standardize) =>
+        IsNarrowFloat<T>()
+            ? CentroidDistances(Tensor<T>.FromMatrix(data).Cast<float>(), standardize).Cast<T>()
+            : CentroidDistances(Tensor<T>.FromMatrix(data), standardize);
+
+    private static Tensor<T> CentroidDistances<T>(Tensor<T> x, bool standardize)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        var x = Tensor<T>.FromMatrix(data);
         var diff = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         if (standardize)
         {
