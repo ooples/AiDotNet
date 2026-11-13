@@ -241,15 +241,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         double globalNorm = ComputeGlobalNorm(gradient);
         double scale = globalNorm > 1e-12 ? _perturbationRadius / globalNorm : 0.0;
 
-        var perturbation = new Dictionary<string, T[]>(gradient.Count);
-        var scaleT = NumOps.FromDouble(scale);
-
-        foreach (var (layerName, grad) in gradient)
-        {
-            perturbation[layerName] = Engine.Multiply(Vector<T>.Wrap(grad), scaleT).ToArray();
-        }
-
-        return perturbation;
+        return ScaleLayers(gradient, scale);
     }
 
     /// <remarks>
@@ -265,15 +257,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         double combinedRadius = _perturbationRadius + _globalPerturbationRadius;
         double scale = globalNorm > 1e-12 ? combinedRadius / globalNorm : 0.0;
 
-        var perturbation = new Dictionary<string, T[]>(gradient.Count);
-        var scaleT = NumOps.FromDouble(scale);
-
-        foreach (var (layerName, grad) in gradient)
-        {
-            perturbation[layerName] = Engine.Multiply(Vector<T>.Wrap(grad), scaleT).ToArray();
-        }
-
-        return perturbation;
+        return ScaleLayers(gradient, scale);
     }
 
     private Dictionary<string, T[]> ComputeSpeedPerturbation(Dictionary<string, T[]> gradient)
@@ -284,15 +268,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         double norm = ComputeGlobalNorm(adjustedGrad);
         double scale = norm > 1e-12 ? _perturbationRadius / norm : 0.0;
 
-        var perturbation = new Dictionary<string, T[]>(adjustedGrad.Count);
-        var scaleT = NumOps.FromDouble(scale);
-
-        foreach (var (layerName, grad) in adjustedGrad)
-        {
-            perturbation[layerName] = Engine.Multiply(Vector<T>.Wrap(grad), scaleT).ToArray();
-        }
-
-        return perturbation;
+        return ScaleLayers(adjustedGrad, scale);
     }
 
     /// <remarks>
@@ -384,6 +360,18 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         var result = AdjustGradientWithHistory(currentGradient);
         UpdateGradientHistory(currentGradient);
         return result;
+    }
+
+    /// <summary>Multiplies every layer by <paramref name="scale"/> (rho / ||g||), in float for Half / BFloat16.</summary>
+    private static Dictionary<string, T[]> ScaleLayers(Dictionary<string, T[]> gradient, double scale)
+    {
+        var scaled = new Dictionary<string, T[]>(gradient.Count);
+        foreach (var (layerName, grad) in gradient)
+        {
+            scaled[layerName] = FederatedReductions.Scale(Vector<T>.Wrap(grad), scale).ToArray();
+        }
+
+        return scaled;
     }
 
     private static double ComputeGlobalNorm(Dictionary<string, T[]> gradient)

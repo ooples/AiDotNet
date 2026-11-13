@@ -184,11 +184,12 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
         // If norm exceeds clip threshold, scale down
         if (l2Norm > _clipNorm)
         {
-            var scaleFactor = NumOps.FromDouble(_clipNorm / l2Norm);
+            double scaleFactor = _clipNorm / l2Norm;
 
             foreach (var parameters in noisyModel.Values)
             {
-                Engine.Multiply(Vector<T>.Wrap(parameters), scaleFactor).AsSpan().CopyTo(parameters);
+                AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.Scale(Vector<T>.Wrap(parameters), scaleFactor)
+                    .AsSpan().CopyTo(parameters);
             }
         }
 

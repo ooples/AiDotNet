@@ -150,6 +150,20 @@ internal static class FederatedReductions
         return Engine.ReduceSum(Engine.TensorSquare(diff), new[] { 1 }, false);
     }
 
+    /// <summary>
+    /// x * factor. For Half / BFloat16 the product is formed in float: a clip or step factor such as C / ||x|| falls
+    /// below Half's smallest normal for large norms and would lose its digits (or flush to 0) as a Half scalar.
+    /// </summary>
+    public static Vector<T> Scale<T>(Vector<T> x, double factor)
+    {
+        if (IsNarrowFloat<T>())
+        {
+            return Engine.TensorMultiplyScalar(x.AsTensor().Cast<float>(), (float)factor).Cast<T>().ToVector();
+        }
+
+        return Engine.TensorMultiplyScalar(x.AsTensor(), MathHelper.GetNumericOperations<T>().FromDouble(factor)).ToVector();
+    }
+
     /// <summary>Unweighted mean of equal-length vectors.</summary>
     public static Vector<T> Mean<T>(IReadOnlyList<Vector<T>> vectors) =>
         WeightedSum(vectors, Enumerable.Repeat(1.0 / vectors.Count, vectors.Count).ToArray());

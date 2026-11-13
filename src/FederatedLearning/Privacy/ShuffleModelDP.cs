@@ -371,12 +371,13 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         double norm = squaredNorm
             ? Math.Sqrt(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SquaredNorm(flat))
             : AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SumAbs(flat.AsTensor());
-        var factor = NumOps.FromDouble(norm > _clipNorm ? _clipNorm / norm : 1.0);
+        double factor = norm > _clipNorm ? _clipNorm / norm : 1.0;
 
         var clipped = new Dictionary<string, T[]>(model.Count);
         foreach (var kvp in model)
         {
-            clipped[kvp.Key] = Engine.Multiply(Vector<T>.Wrap(kvp.Value), factor).ToArray();
+            clipped[kvp.Key] = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.Scale(
+                Vector<T>.Wrap(kvp.Value), factor).ToArray();
         }
 
         return clipped;
