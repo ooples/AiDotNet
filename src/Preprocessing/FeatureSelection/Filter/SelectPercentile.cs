@@ -77,12 +77,10 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     /// </summary>
     /// <param name="percentile">Percentage of features to keep (scikit-learn's default is 10).</param>
     /// <param name="scoreFunction">The scorer.</param>
-    /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
     public SelectPercentile(
         double percentile,
-        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction,
-        int[]? columnIndices = null)
-        : base(columnIndices)
+        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction)
+        : base(null)
     {
         if (percentile <= 0 || percentile > 100)
             throw new ArgumentException("Percentile must be between 0 and 100.", nameof(percentile));

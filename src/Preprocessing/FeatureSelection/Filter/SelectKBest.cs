@@ -85,12 +85,10 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     /// </summary>
     /// <param name="k">Number of features to select.</param>
     /// <param name="scoreFunction">The scorer.</param>
-    /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
     public SelectKBest(
         int k,
-        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction,
-        int[]? columnIndices = null)
-        : base(columnIndices)
+        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction)
+        : base(null)
     {
         if (k < 1)
             throw new ArgumentException("K must be at least 1.", nameof(k));

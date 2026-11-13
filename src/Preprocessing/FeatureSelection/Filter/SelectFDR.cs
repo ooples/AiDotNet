@@ -85,12 +85,10 @@ public class SelectFDR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     /// </summary>
     /// <param name="alpha">The false discovery rate to control.</param>
     /// <param name="scoreFunction">The scorer.</param>
-    /// <param name="columnIndices">The column indices to consider, or null for all columns.</param>
     public SelectFDR(
         double alpha,
-        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction,
-        int[]? columnIndices = null)
-        : base(columnIndices)
+        Func<Matrix<T>, Vector<T>, (Vector<T> Scores, Vector<T>? PValues)> scoreFunction)
+        : base(null)
     {
         if (alpha <= 0 || alpha >= 1)
             throw new ArgumentException("Alpha must be between 0 and 1.", nameof(alpha));
