@@ -46,7 +46,7 @@ public static class InformationCoefficient<T>
     /// </summary>
     public static T Spearman(IReadOnlyList<T> predicted, IReadOnlyList<T> realized)
     {
-        return NumOps.FromDouble(PearsonCore(Ranks(ToTensor(predicted)), Ranks(ToTensor(realized))));
+        return NumOps.FromDouble(PearsonCore(Ranks(ToNativeTensor(predicted)), Ranks(ToNativeTensor(realized))));
     }
 
     /// <summary>
@@ -89,13 +89,13 @@ public static class InformationCoefficient<T>
     // ---- internal double-precision helpers (statistical kernels) ----
 
     private static Tensor<double> ToTensor(IReadOnlyList<T> values)
+        => ToNativeTensor(values).Cast<double>();
+
+    private static Tensor<T> ToNativeTensor(IReadOnlyList<T> values)
     {
         if (values is null)
-        {
             throw new ArgumentNullException(nameof(values));
-        }
-
-        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray())).Cast<double>();
+        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray()));
     }
 
     private static double PearsonCore(Tensor<double> x, Tensor<double> y)
@@ -126,16 +126,16 @@ public static class InformationCoefficient<T>
     /// A tied block occupying sorted positions [j, k] gets (j + k) / 2 + 1. With j the count of smaller values and
     /// k + 1 the count of values not larger, that is (below + notAbove + 1) / 2, read off two binary searches.
     /// </remarks>
-    private static Tensor<double> Ranks(Tensor<double> values)
+    private static Tensor<double> Ranks(Tensor<T> values)
     {
         if (values.Length == 0)
         {
-            return values;
+            return values.Cast<double>();
         }
 
         var engine = AiDotNetEngine.Current;
         if (engine.TensorCountNonzero(engine.TensorIsNan(values)) > 0)
-            return engine.TensorFullLike(values, double.NaN);
+            return engine.TensorFullLike(values.Cast<double>(), double.NaN);
         var sorted = engine.TensorSort(values, 0, false).Values;
         var below = engine.TensorSearchSorted(sorted, values, false);
         var notAbove = engine.TensorSearchSorted(sorted, values, true);

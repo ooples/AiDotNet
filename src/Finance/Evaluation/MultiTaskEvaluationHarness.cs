@@ -216,8 +216,8 @@ public class MultiTaskEvaluationHarness<T>
             if (classCount > 0)
             {
                 var candidates = FlatPrefix(logits, classCount);
-                var comparable = Engine.TensorWhere(Engine.TensorIsNan(candidates),
-                    Engine.TensorFullLike(candidates, double.MinValue), candidates);
+                var comparable = Engine.TensorWhere(Engine.TensorGreaterThan(candidates, double.MinValue),
+                    candidates, Engine.TensorFullLike(candidates, double.MinValue));
                 predictedClass = Engine.TensorArgMax(comparable, 0).AsSpan()[0];
             }
 

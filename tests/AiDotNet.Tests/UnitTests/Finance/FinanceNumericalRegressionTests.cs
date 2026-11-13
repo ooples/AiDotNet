@@ -11,6 +11,47 @@ namespace AiDotNet.Tests.UnitTests.Finance;
 
 public class FinanceNumericalRegressionTests
 {
+    [Theory]
+    [InlineData(double.NegativeInfinity, double.NaN, 0)]
+    [InlineData(double.NaN, double.NegativeInfinity, 0)]
+    [InlineData(double.NaN, double.NaN, 0)]
+    [InlineData(double.NegativeInfinity, double.NegativeInfinity, 0)]
+    [InlineData(double.NaN, 1.0, 1)]
+    [InlineData(1.0, double.NaN, 0)]
+    [InlineData(double.PositiveInfinity, double.NaN, 0)]
+    [InlineData(double.NaN, double.PositiveInfinity, 1)]
+    [InlineData(double.MinValue, double.NaN, 0)]
+    [InlineData(double.NaN, double.MinValue, 0)]
+    public void Classification_PreservesDefaultClassWhenNoLogitBeatsTheInitialMaximum(double first, double second, int expected)
+    {
+        var model = new Mock<ITimeSeriesFoundationModel<double>>();
+        model.SetupGet(m => m.SupportedTasks).Returns(new[] { TimeSeriesFoundationModelTask.Classification });
+        model.Setup(m => m.Classify(It.IsAny<Tensor<double>>(), 2))
+            .Returns(new Tensor<double>(new[] { first, second }, new[] { 2 }));
+        var result = new MultiTaskEvaluationHarness<double>().EvaluateClassification(model.Object,
+            new[] { new Tensor<double>(new[] { 1 }) }, new[] { expected }, 2);
+        Assert.Equal(1.0, result["Accuracy"]);
+        Assert.Equal(1.0, result["Correct"]);
+    }
+
+    [Fact]
+    public void Spearman_PreservesDecimalOrderingBeforeConvertingRanks()
+    {
+        const decimal start = 10000000000000000m;
+        decimal[] values = { start, start + 1, start + 2, start + 1 };
+        Assert.Equal(1m, InformationCoefficient<decimal>.Spearman(values, new[] { 0m, 1m, 2m, 1m }));
+        Assert.Equal(-1m, InformationCoefficient<decimal>.Spearman(values, new[] { 2m, 1m, 0m, 1m }));
+    }
+
+    [Fact]
+    public void Spearman_PreservesInt64OrderingAndFractionalTieRanks()
+    {
+        long[] values = { long.MaxValue - 2, long.MaxValue - 1, long.MaxValue, long.MaxValue - 1 };
+        Assert.Equal(1L, InformationCoefficient<long>.Spearman(values, new[] { 0L, 1L, 2L, 1L }));
+        Assert.Equal(-1L, InformationCoefficient<long>.Spearman(values, new[] { 2L, 1L, 0L, 1L }));
+    }
+
+
     [Fact]
     public void HalfGiftMetrics_KeepLargeCountsFloorsAndQuantileLevelsWide()
     {
