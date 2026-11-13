@@ -33,20 +33,11 @@ public class DistMultEmbedding<T> : KGEmbeddingBase<T>
     public override bool IsDistanceBased => false;
 
     private protected override T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx)
-    {
-        var h = _entityEmbeddings[headIdx];
-        var r = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
-        int dim = EmbeddingDimension;
-
-        // Σ(h_k · r_k · t_k)
-        T score = NumOps.Zero;
-        for (int d = 0; d < dim; d++)
         {
-            score = NumOps.Add(score, NumOps.Multiply(NumOps.Multiply(h[d], r[d]), t[d]));
-        }
-
-        return score;
+        // Σ(h_k · r_k · t_k)
+        return Engine.Sum(Engine.Multiply(
+            Engine.Multiply(Row(_entityEmbeddings[headIdx]), Row(_relationEmbeddings[relationIdx])),
+            Row(_entityEmbeddings[tailIdx])));
     }
 
     private protected override double ComputeLossAndUpdateGradients(
@@ -54,8 +45,6 @@ public class DistMultEmbedding<T> : KGEmbeddingBase<T>
         int negHead, int negTail,
         double learningRate, KGEmbeddingOptions options)
     {
-        int dim = EmbeddingDimension;
-
         double posScore = NumOps.ToDouble(ScoreTripleInternal(posHead, relation, posTail));
         double negScore = NumOps.ToDouble(ScoreTripleInternal(negHead, relation, negTail));
 
@@ -70,30 +59,28 @@ public class DistMultEmbedding<T> : KGEmbeddingBase<T>
         double negGradScale = StableSigmoid(negScore);
 
         // Update positive triple
-        UpdateTripleGradients(posHead, relation, posTail, dim, learningRate * posGradScale);
+        UpdateTripleGradients(posHead, relation, posTail, learningRate * posGradScale);
         // Update negative triple
-        UpdateTripleGradients(negHead, relation, negTail, dim, learningRate * negGradScale);
+        UpdateTripleGradients(negHead, relation, negTail, learningRate * negGradScale);
 
         return loss;
     }
 
-    private void UpdateTripleGradients(int headIdx, int relationIdx, int tailIdx, int dim, double step)
-    {
+    private void UpdateTripleGradients(int headIdx, int relationIdx, int tailIdx, double step)
+        {
         var h = _entityEmbeddings[headIdx];
         var r = _relationEmbeddings[relationIdx];
         var t = _entityEmbeddings[tailIdx];
+        T scale = NumOps.FromDouble(step);
 
-        for (int d = 0; d < dim; d++)
-        {
-            double hd = NumOps.ToDouble(h[d]);
-            double rd = NumOps.ToDouble(r[d]);
-            double td = NumOps.ToDouble(t[d]);
+        // Gradients: d/dh = r*t, d/dr = h*t, d/dt = h*r, all from the pre-update embeddings.
+        var gradH = Engine.Multiply(Engine.Multiply(Row(r), Row(t)), scale);
+        var gradR = Engine.Multiply(Engine.Multiply(Row(h), Row(t)), scale);
+        var gradT = Engine.Multiply(Engine.Multiply(Row(h), Row(r)), scale);
 
-            // Gradients: d/dh = r*t, d/dr = h*t, d/dt = h*r
-            h[d] = NumOps.FromDouble(hd - step * rd * td);
-            r[d] = NumOps.FromDouble(rd - step * hd * td);
-            t[d] = NumOps.FromDouble(td - step * hd * rd);
-        }
+        SubtractFrom(h, gradH);
+        SubtractFrom(r, gradR);
+        SubtractFrom(t, gradT);
     }
 
     /// <summary>
