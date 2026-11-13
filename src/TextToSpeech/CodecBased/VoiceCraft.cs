@@ -364,6 +364,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         var layout = BuildTrainingLayout(codes);
         var logits = _network!.Forward(text, layout.Rows, layout.Masks);
         Tensor<T>? total = null;
+        var codebookWeights = new Tensor<double>(_options.CodebookLossWeights, new[] { _options.CodebookLossWeights.Length }).Cast<T>().ToArray();
         for (int q = 0; q < _options.NumCodebooks; q++)
         {
             var positions = Enumerable.Range(0, layout.Labels[q].Length)
@@ -373,7 +374,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
             var selected = Engine.TensorIndexSelect(logits[q], indices, 0);
             var labels = positions.Select(i => layout.Labels[q][i]).ToArray();
             var loss = UniAudioOps<T>.CrossEntropy(Engine, selected, labels);
-            loss = Engine.TensorMultiplyScalar(loss, NumOps.FromDouble(_options.CodebookLossWeights[q]));
+            loss = Engine.TensorMultiplyScalar(loss, codebookWeights[q]);
             total = total is null ? loss : Engine.TensorAdd(total, loss);
         }
         return total ?? new Tensor<T>(new[] { 1 });
