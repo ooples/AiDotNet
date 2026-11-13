@@ -129,11 +129,11 @@ public class SelectFdr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         // Benjamini-Hochberg: keep every feature whose adjusted p-value is at most alpha, which is
         // scikit-learn's SelectFdr rule (p_(r) <= alpha r / n for some rank r at or above the feature's)
         _adjustedPValues = StatisticalTestHelper.BenjaminiHochbergCorrection(pValues);
-        var keep = FeatureSelectionTensorOps.AtMost(FilterStatisticTensorOps.AsTensor(_adjustedPValues), NumOps.FromDouble(_alpha));
+        var keep = FeatureScoringTensorOps.AtMost(FilterStatisticTensorOps.AsTensor(_adjustedPValues), NumOps.FromDouble(_alpha));
 
         // As in scikit-learn, no feature passing the test selects none
         _selectedIndices = FilterStatisticTensorOps.MaskPositions(keep);
-        _supportMask = FeatureSelectionTensorOps.SupportMask(_selectedIndices, p);
+        _supportMask = FeatureScoringTensorOps.SupportMask(_selectedIndices, p);
 
         IsFitted = true;
     }

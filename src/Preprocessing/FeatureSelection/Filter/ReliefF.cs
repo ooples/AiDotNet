@@ -86,14 +86,14 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
 
         // Integer class labels and features scaled to [0, 1] by their range (a constant feature never differs)
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
-        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var scaled = FeatureScoringTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
 
         // Number of samples to process, drawn in the same random order as before
         int nSamplesToUse = _nSamples > 0 ? Math.Min(_nSamples, n) : n;
         var sampleIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(nSamplesToUse).ToArray();
 
         // ReliefF weights: k nearest hits against the k nearest misses of every other class
-        var weights = FeatureSelectionTensorOps.ReliefFWeights(scaled, classIndex, classCount, sampleIndices, _nNeighbors);
+        var weights = FeatureScoringTensorOps.ReliefFWeights(scaled, classIndex, classCount, sampleIndices, _nNeighbors);
         _featureWeights = weights.ToVector();
 
         // Select top features by weight

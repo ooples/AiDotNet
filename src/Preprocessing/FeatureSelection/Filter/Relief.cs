@@ -78,7 +78,7 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         int p = data.Columns;
 
         // Features scaled to [0, 1] by their range (a constant feature never differs) and integer class labels
-        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var scaled = FeatureScoringTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
         var labels = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
         var classOneHot = FilterStatisticTensorOps.ClassOneHot<T>(labels, classCount);
 
@@ -93,7 +93,7 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
 
         // W += (|x - miss| - |x - hit|) / iterations under the Manhattan distance, for the instances that have both;
         // the instance itself is no neighbour
-        var weights = FeatureSelectionTensorOps.ReliefWeights(scaled, classOneHot, sampled, 1.0, iterations);
+        var weights = FeatureScoringTensorOps.ReliefWeights(scaled, classOneHot, sampled, 1.0, iterations);
         _featureWeights = weights.ToVector();
 
         // Select top features

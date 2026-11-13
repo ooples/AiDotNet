@@ -60,7 +60,7 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var x = FilterStatisticTensorOps.AsTensor(data);
 
         // Similarity between features: exp(-||x_j1 - x_j2||^2 / (2 sigma^2 n))
-        var distances = FeatureSelectionTensorOps.SquaredDistances(Engine.TensorTranspose(x));
+        var distances = FeatureScoringTensorOps.SquaredDistances(Engine.TensorTranspose(x));
         var w = Engine.TensorExp(Engine.TensorMultiplyScalar(distances, NumOps.FromDouble(-1.0 / (2 * _sigma * _sigma * n))));
 
         var laplacian = NormalizedLaplacian(w);
@@ -85,7 +85,7 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         {
             var inCluster = PreprocessingTensorOps.ColumnVector(members, c);
             if (FilterStatisticTensorOps.MaskPositions(inCluster).Length > 0)
-                selectedList.Add(FilterStatisticTensorOps.FirstArgMax(FeatureSelectionTensorOps.KeepOrFill(variance, inCluster, excluded)));
+                selectedList.Add(FilterStatisticTensorOps.FirstArgMax(FeatureScoringTensorOps.KeepOrFill(variance, inCluster, excluded)));
         }
 
         _selectedIndices = selectedList.OrderBy(j => j).ToArray();
@@ -98,18 +98,18 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     {
         var rand = RandomHelper.CreateSecureRandom();
         var initIdx = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(k).ToArray();
-        var centroids = FeatureSelectionTensorOps.Rows(data, initIdx);
+        var centroids = FeatureScoringTensorOps.Rows(data, initIdx);
         var assignments = new int[p];
         T zero = NumOps.Zero;
         for (int iter = 0; iter < 50; iter++)
         {
             // Assign
-            var distances = FeatureSelectionTensorOps.SquaredDistancesBetween(data, centroids);
-            assignments = FeatureSelectionTensorOps.FirstArgMinRows(distances).Index;
+            var distances = FeatureScoringTensorOps.SquaredDistancesBetween(data, centroids);
+            assignments = FeatureScoringTensorOps.FirstArgMinRows(distances).Index;
 
             // Update
             var members = FilterStatisticTensorOps.ClassOneHot<T>(assignments, k);
-            var counts = FeatureSelectionTensorOps.Counts(members, 0);
+            var counts = FeatureScoringTensorOps.Counts(members, 0);
             var sums = Engine.TensorMatMul(Engine.TensorTranspose(members), data);
             var means = FilterStatisticTensorOps.GuardedDivide(sums, FilterStatisticTensorOps.ColumnBroadcast(counts, k), 0.5, zero);
             centroids = Engine.TensorWhere(FilterStatisticTensorOps.ColumnBroadcast(Engine.TensorGreaterThan(counts, zero), k), means, centroids);
@@ -127,7 +127,7 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var engine = AiDotNetEngine.Current;
         int p = w.Shape[0];
         var rootDegree = engine.TensorSqrt(engine.ReduceSum(w, new[] { 1 }, false));
-        var scale = engine.TensorAddScalar(engine.TensorOuter(rootDegree, rootDegree), FeatureSelectionTensorOps.Tiny<T>(1e-10));
+        var scale = engine.TensorAddScalar(engine.TensorOuter(rootDegree, rootDegree), FeatureScoringTensorOps.Tiny<T>(1e-10));
         return engine.TensorSubtract(engine.TensorEye<T>(p), engine.TensorDivide(w, scale));
     }
 

@@ -128,7 +128,7 @@ internal static class StatisticalTestHelper
         // F is unchanged by scaling a feature, so every feature is centred and divided by its largest deviation
         // first: the sums of squares then stay at most n (raw ones overflow Half past 256) and the zero-scatter
         // cut-off below is relative to the feature's spread; a constant feature (all zero) scores 0 with p = 1
-        var scaled = FeatureSelectionTensorOps.UnitDeviationColumns(FilterStatisticTensorOps.AsTensor(data), out _);
+        var scaled = FeatureScoringTensorOps.UnitDeviationColumns(FilterStatisticTensorOps.AsTensor(data), out _);
         var (ssBetween, ssWithin) = FilterStatisticTensorOps.AnovaSums(scaled, oneHot);
         var msBetween = engine.TensorDivideScalar(ssBetween, ops.FromDouble(dfBetween));
         var msWithin = engine.TensorDivideScalar(ssWithin, ops.FromDouble(dfWithin));
@@ -158,7 +158,7 @@ internal static class StatisticalTestHelper
 
         // r of every feature (scale-free, so its sums stay in range for Half), squared; a constant feature (max = min)
         // has an undefined correlation, scored 0 with p = 1
-        var r2 = engine.TensorSquare(FeatureSelectionTensorOps.Correlation(x, y));
+        var r2 = engine.TensorSquare(FeatureScoringTensorOps.Correlation(x, y));
         var constantFeature = engine.TensorEquals(PreprocessingTensorOps.ColumnMax(x), PreprocessingTensorOps.ColumnMin(x));
         var informative = PreprocessingTensorOps.OneMinus(constantFeature);
 
@@ -204,7 +204,7 @@ internal static class StatisticalTestHelper
 
         // observed[c, j] = sum of feature j over class c; expected = P(class c) * total of feature j
         var observed = engine.TensorMatMul(engine.TensorTranspose(oneHot), x);
-        var classProbability = engine.TensorDivideScalar(FeatureSelectionTensorOps.Counts(oneHot, 0), ops.FromDouble(n));
+        var classProbability = engine.TensorDivideScalar(FeatureScoringTensorOps.Counts(oneHot, 0), ops.FromDouble(n));
         var featureTotal = engine.ReduceSum(x, new[] { 0 }, false);
         var expected = engine.TensorOuter(classProbability, featureTotal);
 
@@ -224,7 +224,7 @@ internal static class StatisticalTestHelper
     // - mean psi(n_y + 1), the Kraskov et al. (2004) estimator 1, on features and target scaled to unit (population)
     // standard deviation. With a noise seed it first adds the tie-breaking noise of scikit-learn,
     // 1e-10 max(1, mean |v|) N(0, 1) per column and for the target (its random_state); without one the data are used
-    // as they are, so the estimate is deterministic. Rows run in blocks (see FeatureSelectionTensorOps.RowBlocks) and
+    // as they are, so the estimate is deterministic. Rows run in blocks (see FeatureScoringTensorOps.RowBlocks) and
     // the k-th neighbour distance is a partial selection, so only a block x n slice of the pair distances is held: the
     // full [n, n] grids it replaced were 3.2 GB each at 20000 rows.
     internal static Vector<T> MutualInfoRegression<T>(
@@ -257,15 +257,15 @@ internal static class StatisticalTestHelper
         for (int j = 0; j < p; j++)
             meanPsi[j] = new Tensor<T>(new[] { 1 });
 
-        foreach (var block in FeatureSelectionTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
+        foreach (var block in FeatureScoringTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
         {
             int start = block[0];
             int count = block.Length;
-            var notSelf = PreprocessingTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(block, n));
-            var dy = FeatureSelectionTensorOps.KeepOrFill(AbsoluteDifferences(y, start, count), notSelf, infinity);
+            var notSelf = PreprocessingTensorOps.OneMinus(FeatureScoringTensorOps.SelfMask<T>(block, n));
+            var dy = FeatureScoringTensorOps.KeepOrFill(AbsoluteDifferences(y, start, count), notSelf, infinity);
             for (int j = 0; j < p; j++)
             {
-                var dx = FeatureSelectionTensorOps.KeepOrFill(AbsoluteDifferences(columns[j], start, count), notSelf, infinity);
+                var dx = FeatureScoringTensorOps.KeepOrFill(AbsoluteDifferences(columns[j], start, count), notSelf, infinity);
 
                 // distance to the k-th nearest neighbour in the joint space (max norm), self excluded: the largest of
                 // the k smallest distances, from a top-k of the negated distances

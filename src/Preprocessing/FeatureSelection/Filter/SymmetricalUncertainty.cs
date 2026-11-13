@@ -72,7 +72,7 @@ public class SymmetricalUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
 
         // information gain clipped at 0, as master did
         var gain = Engine.TensorMax(info.Relevance(), NumOps.Zero);

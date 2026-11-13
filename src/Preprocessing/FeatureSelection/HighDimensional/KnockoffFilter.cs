@@ -90,8 +90,8 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
         // Step 2: absolute correlation with the target for original and knockoff features
         var y = FilterStatisticTensorOps.AsTensor(target);
-        var featureStatistics = FeatureSelectionTensorOps.AbsoluteCorrelation(x, y);
-        var knockoffStatistics = FeatureSelectionTensorOps.AbsoluteCorrelation(knockoffs, y);
+        var featureStatistics = FeatureScoringTensorOps.AbsoluteCorrelation(x, y);
+        var knockoffStatistics = FeatureScoringTensorOps.AbsoluteCorrelation(knockoffs, y);
         _featureStatistics = featureStatistics.ToVector();
         _knockoffStatistics = knockoffStatistics.ToVector();
 
@@ -151,8 +151,8 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             return Array.Empty<int>();
 
         // T = the smallest passing |W_k|; select W_j >= T
-        var passingMagnitudes = FeatureSelectionTensorOps.Entries(magnitude, candidates);
-        var threshold = FeatureSelectionTensorOps.Entries(
+        var passingMagnitudes = FeatureScoringTensorOps.Entries(magnitude, candidates);
+        var threshold = FeatureScoringTensorOps.Entries(
             passingMagnitudes, new[] { PreprocessingTensorOps.StableOrder(passingMagnitudes, descending: false)[0] });
         var atLeast = PreprocessingTensorOps.OneMinus(
             engine.TensorLessThan(w, engine.TensorBroadcastTo(threshold, new[] { p }))).Cast<int>().ToArray();

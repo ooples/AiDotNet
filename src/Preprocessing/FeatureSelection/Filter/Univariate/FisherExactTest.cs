@@ -77,7 +77,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         // 2x2 table per feature: feature at or below its split value (the sorted value at n / 2) against class 0
         var x = FilterStatisticTensorOps.AsTensor(data);
-        var split = FeatureSelectionTensorOps.Rows(Engine.TensorSort(x, 0, false).Item1, new[] { n / 2 });
+        var split = FeatureScoringTensorOps.Rows(Engine.TensorSort(x, 0, false).Item1, new[] { n / 2 });
         var low = PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(x, Engine.TensorBroadcastTo(split, new[] { n, p })));
         // the table is counted in int and the test run in double, as master did: 0/1 sums in T stop at 2048 for
         // Half, and neither the support k = 0..n nor its log-binomials are exact in Half
@@ -89,7 +89,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var b = Engine.TensorSubtract(Engine.ReduceSum(lowCounts, new[] { 0 }, false), a);
         var c = Engine.TensorNegate(Engine.TensorSubtractScalar(a, Engine.TensorSum(firstClass)));
         var d = Engine.TensorNegate(Engine.TensorSubtractScalar(Engine.TensorAdd(Engine.TensorAdd(a, b), c), n));
-        var (pValues, oddsRatios) = FeatureSelectionTensorOps.FisherExact(
+        var (pValues, oddsRatios) = FeatureScoringTensorOps.FisherExact(
             a.Cast<double>(), b.Cast<double>(), c.Cast<double>(), d.Cast<double>(), n);
         _pValues = pValues.Cast<T>().ToVector();
         _oddsRatios = oddsRatios.Cast<T>().ToVector();

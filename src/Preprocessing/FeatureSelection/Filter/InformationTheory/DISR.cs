@@ -74,7 +74,7 @@ public class DISR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
         var symmetricUncertainty = FilterStatisticTensorOps.GuardedDivide(
             Engine.TensorMultiplyScalar(relevance, NumOps.FromDouble(2)),

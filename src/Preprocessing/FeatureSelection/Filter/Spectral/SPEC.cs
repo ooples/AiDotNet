@@ -76,7 +76,7 @@ public class SPEC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         var x = FilterStatisticTensorOps.AsTensor(data);
 
         // k-nearest-neighbour graph with Gaussian weights exp(-d^2 / (2 sigma^2))
-        var W = FeatureSelectionTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (2 * _sigma * _sigma));
+        var W = FeatureScoringTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (2 * _sigma * _sigma));
         var D = engine.ReduceSum(W, new[] { 1 }, false);
 
         // normalised Laplacian L = I - D^-1/2 W D^-1/2 (rows without edges keep only the identity)

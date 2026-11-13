@@ -94,8 +94,8 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
         T infinity = NumOps.FromDouble(double.PositiveInfinity);
 
         // Features and target scaled to [0, 1] by their range (a constant one never differs)
-        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
-        var y = engine.Reshape(FeatureSelectionTensorOps.RangeScaled(
+        var scaled = FeatureScoringTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var y = engine.Reshape(FeatureScoringTensorOps.RangeScaled(
             engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { n, 1 })), new[] { n });
 
         // Sample m instances, in the same random order as before
@@ -108,16 +108,16 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
         var nDa = new Tensor<T>(new[] { p });
         var nDcDa = new Tensor<T>(new[] { p });
         T zero = NumOps.Zero;
-        foreach (var block in FeatureSelectionTensorOps.RowBlocks(sampleIndices, n))
+        foreach (var block in FeatureScoringTensorOps.RowBlocks(sampleIndices, n))
         {
-            var sampledRows = FeatureSelectionTensorOps.Rows(scaled, block);
-            var sampledY = FeatureSelectionTensorOps.Entries(y, block);
+            var sampledRows = FeatureScoringTensorOps.Rows(scaled, block);
+            var sampledY = FeatureScoringTensorOps.Entries(y, block);
 
             // k nearest neighbours by the sum of feature differences, the instance itself excluded
-            var distance = FeatureSelectionTensorOps.KeepOrFill(
+            var distance = FeatureScoringTensorOps.KeepOrFill(
                 engine.TensorCDist(sampledRows, scaled, 1.0),
-                PreprocessingTensorOps.OneMinus(FeatureSelectionTensorOps.SelfMask<T>(block, n)), infinity);
-            var neighbours = FeatureSelectionTensorOps.NearestPerRow(distance, _nNeighbors);
+                PreprocessingTensorOps.OneMinus(FeatureScoringTensorOps.SelfMask<T>(block, n)), infinity);
+            var neighbours = FeatureScoringTensorOps.NearestPerRow(distance, _nNeighbors);
 
             // every one of an instance's neighbours has the same influence d = 1 / (number of neighbours)
             var neighbourCount = new Tensor<T>(new[] { block.Length });
@@ -127,11 +127,11 @@ public class RReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
             foreach (var (index, found) in neighbours)
             {
                 var influence = FilterStatisticTensorOps.GuardedDivide(found, neighbourCount, 0.0, zero);
-                var yDiff = engine.TensorAbs(engine.TensorSubtract(sampledY, FeatureSelectionTensorOps.Entries(y, index)));
-                var featureDiff = FeatureSelectionTensorOps.NeighbourDifference(sampledRows, scaled, index);
+                var yDiff = engine.TensorAbs(engine.TensorSubtract(sampledY, FeatureScoringTensorOps.Entries(y, index)));
+                var featureDiff = FeatureScoringTensorOps.NeighbourDifference(sampledRows, scaled, index);
                 nD = engine.TensorAdd(nD, engine.ReduceSum(engine.TensorMultiply(influence, yDiff), new[] { 0 }, true));
-                nDa = engine.TensorAdd(nDa, FeatureSelectionTensorOps.WeightedRowSum(influence, featureDiff));
-                nDcDa = engine.TensorAdd(nDcDa, FeatureSelectionTensorOps.WeightedRowSum(
+                nDa = engine.TensorAdd(nDa, FeatureScoringTensorOps.WeightedRowSum(influence, featureDiff));
+                nDcDa = engine.TensorAdd(nDcDa, FeatureScoringTensorOps.WeightedRowSum(
                     engine.TensorMultiply(influence, yDiff), featureDiff));
             }
         }

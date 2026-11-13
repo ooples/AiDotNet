@@ -10,7 +10,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 /// means and per-group best members. Ties always resolve to the lowest index, like the strict-comparison loops and
 /// stable LINQ orderings they replace.
 /// </summary>
-internal static class FeatureSelectionTensorOps
+internal static class FeatureScoringTensorOps
 {
     /// <summary>
     /// <paramref name="value"/> in T as a positive guard (added to a denominator), raised to 2^-24 when it rounds
@@ -2528,7 +2528,7 @@ internal static class FeatureSelectionTensorOps
     }
 }
 
-/// <summary>Impurity used by <see cref="FeatureSelectionTensorOps.TryBestSplit{T}"/>.</summary>
+/// <summary>Impurity used by <see cref="FeatureScoringTensorOps.TryBestSplit{T}"/>.</summary>
 internal enum SplitCriterion
 {
     /// <summary>Regression: sum of squared deviations from the node mean.</summary>

@@ -100,15 +100,15 @@ public class FeatureSelectionFilterRoundFourTests
     {
         await Task.CompletedTask;
         var codes = new Tensor<int>(new[] { 0, 1, 1, 1, 2, 0 }, new[] { 3, 2 });
-        var counts = FeatureSelectionTensorOps.CodeCounts<double>(codes, 3);
+        var counts = FeatureScoringTensorOps.CodeCounts<double>(codes, 3);
         Assert.Equal(new[] { 1.0, 1.0, 1.0, 1.0, 2.0, 0.0 }, counts.ToArray());
 
         var single = new Tensor<int>(new[] { 0, 1, 1 }, new[] { 3, 1 });
         var membership = new Tensor<double>(new[] { 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 }, new[] { 3, 2 });
-        var joint = FeatureSelectionTensorOps.JointCounts(single, 2, membership);
+        var joint = FeatureScoringTensorOps.JointCounts(single, 2, membership);
         Assert.Equal(new[] { 1.0, 0.0, 0.0, 1.0 }, joint.ToArray());
 
-        var paired = FeatureSelectionTensorOps.PairedJointCounts<double>(single, 2, single, 2);
+        var paired = FeatureScoringTensorOps.PairedJointCounts<double>(single, 2, single, 2);
         Assert.Equal(new[] { 1.0, 0.0, 0.0, 2.0 }, paired.ToArray());
     }
 
@@ -120,8 +120,8 @@ public class FeatureSelectionFilterRoundFourTests
         await Task.CompletedTask;
         var x = new Tensor<Half>(new[] { (Half)(-40000), (Half)0, (Half)40000 }, new[] { 3, 1 });
 
-        var scaled = FeatureSelectionTensorOps.ScaledBins(x, 10);
-        var equalWidth = FeatureSelectionTensorOps.EqualWidthBins(x, 10);
+        var scaled = FeatureScoringTensorOps.ScaledBins(x, 10);
+        var equalWidth = FeatureScoringTensorOps.EqualWidthBins(x, 10);
 
         Assert.Equal(new[] { 0, 5, 9 }, scaled.ToArray());
         Assert.Equal(new[] { 0, 5, 9 }, equalWidth.ToArray());

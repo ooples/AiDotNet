@@ -68,7 +68,7 @@ public class GiniIndex<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         int p = data.Columns;
 
         // the target's distinct values are its classes
-        var gains = FeatureSelectionTensorOps.BestGiniReduction(
+        var gains = FeatureScoringTensorOps.BestGiniReduction(
             FilterStatisticTensorOps.AsTensor(data), StatisticalTestHelper.ClassOneHot(target, out _), _nBins);
         _giniGains = gains.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(gains, Math.Min(_nFeaturesToSelect, p));

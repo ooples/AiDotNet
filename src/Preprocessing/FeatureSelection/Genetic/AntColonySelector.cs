@@ -90,7 +90,7 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             : RandomHelper.CreateSecureRandom();
 
         // a subset's fitness is the mean absolute correlation of its features with the target
-        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(
+        var correlation = FeatureScoringTensorOps.AbsoluteCorrelation(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
@@ -113,11 +113,11 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             for (int ant = 0; ant < _nAnts; ant++)
                 solutions[ant] = ConstructSolution(rand, weights, numToSelect, p);
             var masks = Engine.TensorStack(solutions, 0);
-            var fitness = FeatureSelectionTensorOps.MeanOverMask(masks, correlation);
+            var fitness = FeatureScoringTensorOps.MeanOverMask(masks, correlation);
 
             // the first ant with this iteration's best fitness replaces the best solution when it improves on it
             int leader = FilterStatisticTensorOps.FirstArgMax(fitness);
-            var leaderFitness = FeatureSelectionTensorOps.Entries(fitness, new[] { leader });
+            var leaderFitness = FeatureScoringTensorOps.Entries(fitness, new[] { leader });
             if (Engine.TensorGreaterThan(leaderFitness, bestFitness).Cast<int>().ToArray()[0] == 1)
             {
                 bestFitness = leaderFitness;
@@ -166,7 +166,7 @@ public class AntColonySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             // the first available feature whose cumulative weight reaches the draw, else the first available one
             var pick = FilterStatisticTensorOps.MaskPositions(reached);
             int selected = pick.Length > 0 ? pick[0] : FilterStatisticTensorOps.MaskPositions(available)[0];
-            available = Engine.TensorSubtract(available, FeatureSelectionTensorOps.ScatterToFeatures(
+            available = Engine.TensorSubtract(available, FeatureScoringTensorOps.ScatterToFeatures(
                 FilterStatisticTensorOps.Filled(new[] { 1 }, one), new[] { selected }, p, zero));
         }
 

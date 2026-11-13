@@ -80,7 +80,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var signSums = new double[p];
         var tieSums = new double[p];
         double yTiedSum = 0;
-        foreach (var block in FeatureSelectionTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
+        foreach (var block in FeatureScoringTensorOps.RowBlocks(Enumerable.Range(0, n).ToArray(), n))
         {
             int start = block[0];
             var (yTied, ySign) = PairSigns(y, start, block.Length, tolerance);

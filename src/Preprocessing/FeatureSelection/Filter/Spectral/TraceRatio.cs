@@ -125,8 +125,8 @@ public class TraceRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private static T SubsetRatio(Tensor<T> sb, Tensor<T> sw, int[] subset)
     {
         var engine = AiDotNetEngine.Current;
-        var numerator = engine.Reshape(engine.ReduceSum(FeatureSelectionTensorOps.Entries(sb, subset), new[] { 0 }, false), new[] { 1 });
-        var denominator = engine.Reshape(engine.ReduceSum(FeatureSelectionTensorOps.Entries(sw, subset), new[] { 0 }, false), new[] { 1 });
+        var numerator = engine.Reshape(engine.ReduceSum(FeatureScoringTensorOps.Entries(sb, subset), new[] { 0 }, false), new[] { 1 });
+        var denominator = engine.Reshape(engine.ReduceSum(FeatureScoringTensorOps.Entries(sw, subset), new[] { 0 }, false), new[] { 1 });
         return FilterStatisticTensorOps.SeparationAwareRatio(numerator, denominator, 1e-10).ToArray()[0];
     }
 

@@ -67,13 +67,13 @@ public class WilcoxonSignedRank<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         // Signed-rank test of each feature against the target: differences within 1e-10 of 0 are dropped, the rest
         // ranked by magnitude (ties averaged), W = min(W+, W-), tie-corrected normal p-value (scipy.stats.wilcoxon)
-        var (w, pValues, nonZero) = FeatureSelectionTensorOps.WilcoxonSignedRank(
+        var (w, pValues, nonZero) = FeatureScoringTensorOps.WilcoxonSignedRank(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target), 1e-10);
 
         // fewer than 1 non-zero differences: no evidence (W = 0, p = 1)
         var enough = engine.TensorGreaterThan(nonZero, NumOps.FromDouble(1 - 0.5));
-        w = FeatureSelectionTensorOps.KeepOrFill(w, enough, NumOps.Zero);
-        pValues = FeatureSelectionTensorOps.KeepOrFill(pValues, enough, NumOps.One);
+        w = FeatureScoringTensorOps.KeepOrFill(w, enough, NumOps.Zero);
+        pValues = FeatureScoringTensorOps.KeepOrFill(pValues, enough, NumOps.One);
         _wStatistics = w.ToVector();
         _pValues = pValues.ToVector();
 

@@ -82,10 +82,10 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var x = FilterStatisticTensorOps.AsTensor(data);
 
         // |Pearson r|, 0 when the feature or the target is constant
-        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
+        var correlation = FeatureScoringTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
 
         // plug-in mutual information of the binned feature with the target classes
-        var mi = DiscreteInformation<T>.ForTarget(FeatureSelectionTensorOps.RangeBins(x, _nBins), _nBins, target).Relevance();
+        var mi = DiscreteInformation<T>.ForTarget(FeatureScoringTensorOps.RangeBins(x, _nBins), _nBins, target).Relevance();
         _correlationScores = correlation.ToVector();
         _miScores = mi.ToVector();
 
@@ -107,7 +107,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var range = Engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(asColumn), PreprocessingTensorOps.ColumnMin(asColumn));
         if (NumOps.LessThan(range.ToArray()[0], NumOps.FromDouble(1e-10)))
             return FilterStatisticTensorOps.FilledLike(scores, NumOps.FromDouble(0.5));
-        return Engine.Reshape(FeatureSelectionTensorOps.RangeScaled(asColumn), new[] { scores.Length });
+        return Engine.Reshape(FeatureScoringTensorOps.RangeScaled(asColumn), new[] { scores.Length });
     }
 
     /// <inheritdoc />

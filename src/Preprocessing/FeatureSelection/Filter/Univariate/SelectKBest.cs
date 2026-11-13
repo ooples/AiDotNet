@@ -114,11 +114,11 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // processed set score -infinity with p-value 1, processed ones have no p-value (0)
         var processed = FilterStatisticTensorOps.AsTensor(FilterStatisticTensorOps.SelectColumns(data, columnsToProcess));
         // (the deviations are scaled before squaring: the raw sum of squares overflows Half where the variance does not)
-        var variance = FeatureSelectionTensorOps.ColumnVariance(processed, n > 1 ? n - 1 : 1);
-        var scores = FeatureSelectionTensorOps.ScatterToFeatures(
+        var variance = FeatureScoringTensorOps.ColumnVariance(processed, n > 1 ? n - 1 : 1);
+        var scores = FeatureScoringTensorOps.ScatterToFeatures(
             variance, columnsToProcess, _nInputFeatures, NumOps.FromDouble(double.NegativeInfinity));
         _scores = scores.ToVector();
-        _pvalues = FeatureSelectionTensorOps.ScatterToFeatures(
+        _pvalues = FeatureScoringTensorOps.ScatterToFeatures(
             FilterStatisticTensorOps.Filled(new[] { columnsToProcess.Length }, NumOps.Zero),
             columnsToProcess, _nInputFeatures, NumOps.One).ToVector();
 
@@ -146,17 +146,17 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Score the processed columns; the others score -infinity with p-value 1
         var (scores, pValues) = StatisticalTestHelper.ComputeScores(
             FilterStatisticTensorOps.SelectColumns(data, columnsToProcess), target, _scoreFunc);
-        var allScores = FeatureSelectionTensorOps.ScatterToFeatures(
+        var allScores = FeatureScoringTensorOps.ScatterToFeatures(
             FilterStatisticTensorOps.AsTensor(scores), columnsToProcess, _nInputFeatures,
             NumOps.FromDouble(double.NegativeInfinity));
         _scores = allScores.ToVector();
         _pvalues = pValues is null
             ? null
-            : FeatureSelectionTensorOps.ScatterToFeatures(
+            : FeatureScoringTensorOps.ScatterToFeatures(
                 FilterStatisticTensorOps.AsTensor(pValues), columnsToProcess, _nInputFeatures, NumOps.One).ToVector();
 
         // Select top K features (equal scores go to the lower column)
-        _selectedFeatures = FeatureSelectionTensorOps.TopKOfColumns(allScores, columnsToProcess, _k);
+        _selectedFeatures = FeatureScoringTensorOps.TopKOfColumns(allScores, columnsToProcess, _k);
 
         IsFitted = true;
     }

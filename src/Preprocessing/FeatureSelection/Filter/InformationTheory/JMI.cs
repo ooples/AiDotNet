@@ -72,7 +72,7 @@ public class JMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
         var joint = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
         var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>

@@ -86,7 +86,7 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
             : RandomHelper.CreateSecureRandom();
 
         // a subset's fitness is the mean absolute correlation of its features with the target
-        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(
+        var correlation = FeatureScoringTensorOps.AbsoluteCorrelation(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
@@ -99,7 +99,7 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
         var fitness = new Tensor<T>[_populationSize];
         for (int i = 0; i < _populationSize; i++)
         {
-            population[i] = Engine.Reshape(FeatureSelectionTensorOps.Rows(initial, new[] { i }), new[] { p });
+            population[i] = Engine.Reshape(FeatureScoringTensorOps.Rows(initial, new[] { i }), new[] { p });
             fitness[i] = Fitness(population[i], correlation, numToSelect);
         }
 
@@ -138,7 +138,7 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
 
                 // Track feature importance
                 importances = Engine.TensorAdd(importances, Engine.TensorMultiply(
-                    FeatureSelectionTensorOps.TopKMask(population[i], numToSelect), Engine.TensorBroadcastTo(fitness[i], new[] { p })));
+                    FeatureScoringTensorOps.TopKMask(population[i], numToSelect), Engine.TensorBroadcastTo(fitness[i], new[] { p })));
             }
         }
 
@@ -159,8 +159,8 @@ public class DifferentialEvolutionSelector<T> : TransformerBase<T, Matrix<T>, Ma
     private static Tensor<T> Fitness(Tensor<T> keys, Tensor<T> correlation, int numToSelect)
     {
         int p = keys.Length;
-        var mask = AiDotNetEngine.Current.Reshape(FeatureSelectionTensorOps.TopKMask(keys, numToSelect), new[] { 1, p });
-        return FeatureSelectionTensorOps.MeanOverMask(mask, correlation);
+        var mask = AiDotNetEngine.Current.Reshape(FeatureScoringTensorOps.TopKMask(keys, numToSelect), new[] { 1, p });
+        return FeatureScoringTensorOps.MeanOverMask(mask, correlation);
     }
 
     /// <inheritdoc />

@@ -70,7 +70,7 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
-        var reductions = FeatureSelectionTensorOps.BestGiniReduction(
+        var reductions = FeatureScoringTensorOps.BestGiniReduction(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount), _nBins);
         _giniReductions = reductions.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(reductions, Math.Min(_nFeaturesToSelect, p));

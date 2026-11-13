@@ -75,8 +75,8 @@ public class MutualInformationClassification<T> : TransformerBase<T, Matrix<T>, 
         var x = FilterStatisticTensorOps.AsTensor(data);
         int levels = _nBins;
         var codes = _discreteFeatures
-            ? FeatureSelectionTensorOps.DistinctValueCodes(x, out levels)
-            : FeatureSelectionTensorOps.ScaledBins(x, _nBins);
+            ? FeatureScoringTensorOps.DistinctValueCodes(x, out levels)
+            : FeatureScoringTensorOps.ScaledBins(x, _nBins);
         var scores = Engine.TensorMax(DiscreteInformation<T>.ForTarget(codes, levels, target).Relevance(), NumOps.Zero);
         _mutualInfoScores = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

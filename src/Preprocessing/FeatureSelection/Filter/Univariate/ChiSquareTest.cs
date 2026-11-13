@@ -76,10 +76,10 @@ public class ChiSquareTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int nClasses);
-        var observed = FeatureSelectionTensorOps.JointCounts(
-            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+        var observed = FeatureScoringTensorOps.JointCounts(
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
             FilterStatisticTensorOps.ClassOneHot<T>(classIndex, nClasses));
-        var chiSquare = FeatureSelectionTensorOps.ContingencyChiSquare(observed);
+        var chiSquare = FeatureScoringTensorOps.ContingencyChiSquare(observed);
         var pValues = FilterStatisticTensorOps.ChiSquareSurvival(chiSquare, (_nBins - 1) * (nClasses - 1));
         _chiSquareStats = chiSquare.ToVector();
         _pValues = pValues.ToVector();

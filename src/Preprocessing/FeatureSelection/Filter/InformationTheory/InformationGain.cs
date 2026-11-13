@@ -72,7 +72,7 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var scores = info.Relevance();
         _informationGains = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

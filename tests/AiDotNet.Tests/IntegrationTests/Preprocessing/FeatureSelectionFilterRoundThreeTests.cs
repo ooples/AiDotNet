@@ -160,7 +160,7 @@ public class FeatureSelectionFilterRoundThreeTests
         await Task.CompletedTask;
         var observed = new Tensor<Half>(new[] { (Half)600, (Half)0, (Half)0, (Half)600 }, new[] { 1, 2, 2 });
 
-        var chi2 = FeatureSelectionTensorOps.ContingencyChiSquare(observed);
+        var chi2 = FeatureScoringTensorOps.ContingencyChiSquare(observed);
 
         Assert.Equal(1200.0, (double)chi2[0], 0);
     }
@@ -180,7 +180,7 @@ public class FeatureSelectionFilterRoundThreeTests
             classIndex[i] = 1;
         }
 
-        var reduction = FeatureSelectionTensorOps.BestGiniReduction(
+        var reduction = FeatureScoringTensorOps.BestGiniReduction(
             new Tensor<Half>(values, new[] { n, 1 }), FilterStatisticTensorOps.ClassOneHot<Half>(classIndex, 2), 10);
 
         Assert.Equal(0.5, (double)reduction[0], 3);

@@ -72,7 +72,7 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         // U statistic for class 0 from tie-averaged ranks, normalised to [0, 1] as |U0 - n0 n1 / 2| / (n0 n1 / 2) in
         // double before the cast to T (n0 n1 overflows int at 50000 rows per class, and U0 overflows Half at a few
         // hundred); every feature scores 0 when a class is empty
-        _uStatistics = FeatureSelectionTensorOps.RankSumSeparation(
+        _uStatistics = FeatureScoringTensorOps.RankSumSeparation(
             FilterStatisticTensorOps.AsTensor(data), class0, n0, n1).ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(

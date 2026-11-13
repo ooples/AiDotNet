@@ -72,11 +72,11 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
         int p = data.Columns;
 
         // the target is binned on the same equal-width grid as the features
-        var targetCodes = FeatureSelectionTensorOps.ScaledBins(
+        var targetCodes = FeatureScoringTensorOps.ScaledBins(
             Engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { n, 1 }), _nBins);
         var info = new DiscreteInformation<T>(
-            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
-            Engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(targetCodes, _nBins), new[] { n, _nBins }));
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            Engine.Reshape(FeatureScoringTensorOps.OneHot<T>(targetCodes, _nBins), new[] { n, _nBins }));
         var scores = Engine.TensorMax(info.Relevance(), NumOps.Zero);
         _mutualInfoScores = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

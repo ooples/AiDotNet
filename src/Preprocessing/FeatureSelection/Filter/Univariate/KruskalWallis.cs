@@ -71,7 +71,7 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         // Kruskal-Wallis H of every feature across the (integer) classes, tie-corrected, with chi-squared
         // p-values (scipy.stats.kruskal)
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
-        var (h, pValues) = FeatureSelectionTensorOps.KruskalWallis(
+        var (h, pValues) = FeatureScoringTensorOps.KruskalWallis(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount));
         _hStatistics = h.ToVector();
         _pValues = pValues.ToVector();

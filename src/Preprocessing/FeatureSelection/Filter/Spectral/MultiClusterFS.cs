@@ -78,7 +78,7 @@ public class MultiClusterFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
             : RandomHelper.CreateSecureRandom();
 
         // k-NN graph with Gaussian weights exp(-d^2 / (2 sigma^2)) and its normalised affinity D^-1/2 W D^-1/2
-        var W = FeatureSelectionTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (2 * _sigma * _sigma));
+        var W = FeatureScoringTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (2 * _sigma * _sigma));
         var D = engine.ReduceSum(W, new[] { 1 }, false);
         var dInvSqrt = FilterStatisticTensorOps.GuardedDivide(
             FilterStatisticTensorOps.FilledLike(D, NumOps.One), engine.TensorSqrt(D), Math.Sqrt(1e-10), NumOps.Zero);
@@ -86,8 +86,8 @@ public class MultiClusterFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
 
         // Eigenvectors by power iteration from random starts
         int k = Math.Min(_nClusters, n - 1);
-        var starts = FeatureSelectionTensorOps.CenteredUniformStarts<T>(random, Math.Max(k, 0), n);
-        var eigenvectors = FeatureSelectionTensorOps.PowerIteration(L, starts, 50, keepPreviousOnZeroNorm: true);
+        var starts = FeatureScoringTensorOps.CenteredUniformStarts<T>(random, Math.Max(k, 0), n);
+        var eigenvectors = FeatureScoringTensorOps.PowerIteration(L, starts, 50, keepPreviousOnZeroNorm: true);
 
         // standardised features (population std); score = max_k |f' v_k| / n. A constant feature is centred to 0 and
         // scores 0: keeping its raw values (as master did) scored |c sum(v)| / n, which grows with the constant c and

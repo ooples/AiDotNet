@@ -78,7 +78,7 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             throw new ArgumentException("KruskalWallisTest requires at least 2 classes.", nameof(target));
 
         _nInputFeatures = p;
-        var (h, pValues) = FeatureSelectionTensorOps.KruskalWallis(
+        var (h, pValues) = FeatureScoringTensorOps.KruskalWallis(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount));
         _hStatistics = h.ToVector();
         _pValues = pValues.ToVector();

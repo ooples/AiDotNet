@@ -74,11 +74,11 @@ public class InformationGainRatioSelector<T> : TransformerBase<T, Matrix<T>, Mat
 
         // the target is binned on the same grid as the features; the ratio is the same in bits or nats, and the
         // intrinsic-information floor of 1e-10 bits is 1e-10 ln 2 nats
-        var targetCodes = FeatureSelectionTensorOps.RangeBins(
+        var targetCodes = FeatureScoringTensorOps.RangeBins(
             Engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { n, 1 }), _nBins);
         var info = new DiscreteInformation<T>(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
-            Engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(targetCodes, _nBins), new[] { n, _nBins }));
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            Engine.Reshape(FeatureScoringTensorOps.OneHot<T>(targetCodes, _nBins), new[] { n, _nBins }));
         var ratios = FilterStatisticTensorOps.GuardedDivide(
             info.Relevance(), info.FeatureEntropy(), 1e-10 * Math.Log(2), NumOps.Zero);
         _gainRatios = ratios.ToVector();

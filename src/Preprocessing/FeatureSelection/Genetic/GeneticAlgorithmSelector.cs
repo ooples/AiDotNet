@@ -87,7 +87,7 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             : RandomHelper.CreateSecureRandom();
 
         // a subset's fitness is the mean absolute correlation of its features with the target
-        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(
+        var correlation = FeatureScoringTensorOps.AbsoluteCorrelation(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
@@ -108,10 +108,10 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         {
             // Evaluate fitness, and add each member's fitness to the importance of the features it keeps
             var masks = MaskTensor(population, p);
-            var fitness = FeatureSelectionTensorOps.MeanOverMask(masks, correlation);
+            var fitness = FeatureScoringTensorOps.MeanOverMask(masks, correlation);
             importances = Engine.TensorAdd(importances, Engine.Reshape(
                 Engine.TensorMatMul(Engine.TensorTranspose(masks), Engine.Reshape(fitness, new[] { _populationSize, 1 })), new[] { p }));
-            var rank = FeatureSelectionTensorOps.LessCounts(fitness);
+            var rank = FeatureScoringTensorOps.LessCounts(fitness);
 
             // Selection (tournament)
             var newPopulation = new bool[_populationSize][];

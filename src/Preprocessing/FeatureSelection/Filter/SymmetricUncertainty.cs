@@ -72,11 +72,11 @@ public class SymmetricUncertainty<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int p = data.Columns;
 
         // the target is binned on the same equal-width grid as the features
-        var targetCodes = FeatureSelectionTensorOps.RangeBins(
+        var targetCodes = FeatureScoringTensorOps.RangeBins(
             Engine.Reshape(FilterStatisticTensorOps.AsTensor(target), new[] { target.Length, 1 }), _nBins);
         var info = new DiscreteInformation<T>(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
-            Engine.Reshape(FeatureSelectionTensorOps.OneHot<T>(targetCodes, _nBins), new[] { target.Length, _nBins }));
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            Engine.Reshape(FeatureScoringTensorOps.OneHot<T>(targetCodes, _nBins), new[] { target.Length, _nBins }));
         var scores = info.SymmetricUncertainty();
         _uncertaintyScores = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));

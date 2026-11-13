@@ -73,7 +73,7 @@ public class JointMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
         // mean joint relevance with the selected features, kept as a running mean (see
         // DiscreteInformation.RunningMean)

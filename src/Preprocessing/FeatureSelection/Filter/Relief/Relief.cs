@@ -81,7 +81,7 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
             : RandomHelper.CreateSecureRandom();
 
         // Features scaled to [0, 1] by their range; a constant feature never differs between instances
-        var scaled = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var scaled = FeatureScoringTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
         var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
 
         // Sample m instances (without replacement), in the same random order as before
@@ -89,7 +89,7 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
 
         // W += (diff(nearest miss) - diff(nearest hit)) / m under the Euclidean distance, for the instances that have
         // both; the instance itself is no neighbour
-        var weights = FeatureSelectionTensorOps.ReliefWeights(scaled, classOneHot, sampleIndices, 2.0, m);
+        var weights = FeatureScoringTensorOps.ReliefWeights(scaled, classOneHot, sampleIndices, 2.0, m);
         _featureWeights = weights.ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));

@@ -68,8 +68,8 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         var x = FilterStatisticTensorOps.AsTensor(data);
         // |r| with the target and between features, on columns scaled to unit largest deviation: the raw centred sums
         // of squares overflow Half once a deviation passes 256 (r came out NaN); 0 for a constant column
-        var classCorrelation = FeatureSelectionTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
-        var interCorrelation = Engine.TensorAbs(FeatureSelectionTensorOps.UnitDeviationCorrelationMatrix(x));
+        var classCorrelation = FeatureScoringTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
+        var interCorrelation = Engine.TensorAbs(FeatureScoringTensorOps.UnitDeviationCorrelationMatrix(x));
         _featureClassCorrelations = classCorrelation.ToVector();
 
         // greedy forward selection; accumulators are broadcast over the [p] candidates
@@ -103,7 +103,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
 
     // entry `index` of a [p] tensor repeated p times
     private Tensor<T> Broadcast(Tensor<T> values, int index, int p) =>
-        Engine.TensorBroadcastTo(FeatureSelectionTensorOps.Entries(values, new[] { index }), new[] { p });
+        Engine.TensorBroadcastTo(FeatureScoringTensorOps.Entries(values, new[] { index }), new[] { p });
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

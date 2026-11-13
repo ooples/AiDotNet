@@ -77,7 +77,7 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         // k-NN affinity graph with heat-kernel weights exp(-d^2 / (2 sigma_i^2)), sigma_i the mean distance from
         // instance i to its k neighbours (1 when that is 0); symmetrised with the larger weight
         var distances = engine.TensorCDist(x, x, 2.0);
-        var neighbours = FeatureSelectionTensorOps.KnnMask(distances, _nNeighbors);
+        var neighbours = FeatureScoringTensorOps.KnnMask(distances, _nNeighbors);
         var neighbourCount = engine.ReduceSum(neighbours, new[] { 1 }, false);
         var sigma = FilterStatisticTensorOps.GuardedDivide(
             engine.ReduceSum(engine.TensorMultiply(distances, neighbours), new[] { 1 }, false), neighbourCount, 0.0, NumOps.Zero);
@@ -95,9 +95,9 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
-        var starts = FeatureSelectionTensorOps.CenteredUniformStarts<T>(rand, _nClusters, n);
+        var starts = FeatureScoringTensorOps.CenteredUniformStarts<T>(rand, _nClusters, n);
         var indicators = engine.TensorConcatenate(
-            FeatureSelectionTensorOps.PowerIteration(propagation, starts, 100, keepPreviousOnZeroNorm: false).ToArray(), 1);
+            FeatureScoringTensorOps.PowerIteration(propagation, starts, 100, keepPreviousOnZeroNorm: false).ToArray(), 1);
 
         // Per feature and cluster indicator the regression coefficient cov / var, soft-thresholded by alpha / n;
         // score = the norm of those coefficients over the clusters
@@ -138,7 +138,7 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         var engine = AiDotNetEngine.Current;
         int n = affinity.Shape[0];
         var degreeScale = engine.TensorReciprocal(engine.TensorSqrt(
-            engine.TensorAddScalar(engine.ReduceSum(affinity, new[] { 1 }, false), FeatureSelectionTensorOps.Tiny<T>(1e-10))));
+            engine.TensorAddScalar(engine.ReduceSum(affinity, new[] { 1 }, false), FeatureScoringTensorOps.Tiny<T>(1e-10))));
         var rows = engine.TensorMultiply(
             affinity, engine.TensorBroadcastTo(engine.Reshape(degreeScale, new[] { n, 1 }), new[] { n, n }));
         return engine.TensorMultiply(

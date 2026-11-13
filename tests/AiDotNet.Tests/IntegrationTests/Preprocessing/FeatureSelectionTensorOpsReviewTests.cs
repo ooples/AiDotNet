@@ -20,7 +20,7 @@ public class FeatureSelectionTensorOpsReviewTests
         await Task.CompletedTask;
         var codes = new Tensor<int>(new int[3000], new[] { 3000, 1 });
 
-        var counts = FeatureSelectionTensorOps.CodeCounts<Half>(codes, 2);
+        var counts = FeatureScoringTensorOps.CodeCounts<Half>(codes, 2);
 
         Assert.Equal(3000.0, (double)counts[0, 0]);
         Assert.Equal(0.0, (double)counts[0, 1]);
@@ -37,7 +37,7 @@ public class FeatureSelectionTensorOpsReviewTests
         for (int i = 0; i < 3000; i++)
             classIndex[i] = 1;
 
-        var joint = FeatureSelectionTensorOps.JointCounts(
+        var joint = FeatureScoringTensorOps.JointCounts(
             codes, 1, FilterStatisticTensorOps.ClassOneHot<Half>(classIndex, 2));
 
         Assert.Equal(1000.0, (double)joint[0, 0, 0]);
@@ -70,7 +70,7 @@ public class FeatureSelectionTensorOpsReviewTests
         var observed = new Tensor<Half>(
             new[] { (Half)200, (Half)100, (Half)100, (Half)200 }, new[] { 1, 2, 2 });
 
-        var chi2 = FeatureSelectionTensorOps.ContingencyChiSquare(observed);
+        var chi2 = FeatureScoringTensorOps.ContingencyChiSquare(observed);
 
         Assert.Equal(200.0 / 3.0, (double)chi2[0], 0);
     }
@@ -88,7 +88,7 @@ public class FeatureSelectionTensorOpsReviewTests
         var hits = new Tensor<Half>(ones, new[] { n, n });
         var misses = new Tensor<Half>(new[] { n, n });
 
-        var weight = FeatureSelectionTensorOps.NearNeighbourPairWeight(hits, misses);
+        var weight = FeatureScoringTensorOps.NearNeighbourPairWeight(hits, misses);
 
         Assert.Equal(-1.0 / 90000.0, (double)weight[0, 0], 6);
         Assert.True((double)weight[0, 0] < 0);
@@ -102,7 +102,7 @@ public class FeatureSelectionTensorOpsReviewTests
         await Task.CompletedTask;
         var x = new Tensor<double>(new[] { 0.0, 0.9, 9.0 }, new[] { 3, 1 });
 
-        var bins = FeatureSelectionTensorOps.ScaledBins(x, 10);
+        var bins = FeatureScoringTensorOps.ScaledBins(x, 10);
 
         Assert.Equal(new[] { 0, 1, 9 }, bins.ToArray());
     }
@@ -119,7 +119,7 @@ public class FeatureSelectionTensorOpsReviewTests
         values[4000] = (Half)0;
         values[4001] = (Half)0;
 
-        var (index, found) = FeatureSelectionTensorOps.FirstArgMinRows(new Tensor<Half>(values, new[] { 1, n }));
+        var (index, found) = FeatureScoringTensorOps.FirstArgMinRows(new Tensor<Half>(values, new[] { 1, n }));
 
         Assert.Equal(4000, index[0]);
         Assert.Equal(1.0, (double)found[0]);
@@ -130,7 +130,7 @@ public class FeatureSelectionTensorOpsReviewTests
     public async Task CenteredUniformStarts_DrawInMastersOrder()
     {
         await Task.CompletedTask;
-        var starts = FeatureSelectionTensorOps.CenteredUniformStarts<double>(RandomHelper.CreateSeededRandom(7), 3, 4);
+        var starts = FeatureScoringTensorOps.CenteredUniformStarts<double>(RandomHelper.CreateSeededRandom(7), 3, 4);
         var reference = RandomHelper.CreateSeededRandom(7);
 
         Assert.Equal(3, starts.Count);
@@ -158,9 +158,9 @@ public class FeatureSelectionTensorOpsReviewTests
         for (int i = 0; i < n; i++)
             xf[i] = (float)xd[i];
 
-        var (wd, pd, md) = FeatureSelectionTensorOps.WilcoxonSignedRank(
+        var (wd, pd, md) = FeatureScoringTensorOps.WilcoxonSignedRank(
             new Tensor<double>(xd, new[] { n, 1 }), new Tensor<double>(new[] { n }), 0.0);
-        var (wf, pf, mf) = FeatureSelectionTensorOps.WilcoxonSignedRank(
+        var (wf, pf, mf) = FeatureScoringTensorOps.WilcoxonSignedRank(
             new Tensor<float>(xf, new[] { n, 1 }), new Tensor<float>(new[] { n }), 0.0);
 
         Assert.Equal(100.0, md[0]);
@@ -357,8 +357,8 @@ public class FeatureSelectionTensorOpsReviewTests
             maskDouble[i] = targetDouble[i] == 0 ? 1 : 0;
         }
 
-        var (_, pHalf) = FeatureSelectionTensorOps.MannWhitney(Tensor<Half>.FromMatrix(dataHalf), maskHalf, 300, 300);
-        var (_, pDouble) = FeatureSelectionTensorOps.MannWhitney(Tensor<double>.FromMatrix(dataDouble), maskDouble, 300, 300);
+        var (_, pHalf) = FeatureScoringTensorOps.MannWhitney(Tensor<Half>.FromMatrix(dataHalf), maskHalf, 300, 300);
+        var (_, pDouble) = FeatureScoringTensorOps.MannWhitney(Tensor<double>.FromMatrix(dataDouble), maskDouble, 300, 300);
         AssertMatchesDouble(pHalf, pDouble, "p-value");
     }
 
@@ -376,8 +376,8 @@ public class FeatureSelectionTensorOpsReviewTests
             oneHotDouble[i, (int)targetDouble[i]] = 1;
         }
 
-        var (hHalf, pHalf) = FeatureSelectionTensorOps.KruskalWallis(Tensor<Half>.FromMatrix(dataHalf), oneHotHalf);
-        var (hDouble, pDouble) = FeatureSelectionTensorOps.KruskalWallis(Tensor<double>.FromMatrix(dataDouble), oneHotDouble);
+        var (hHalf, pHalf) = FeatureScoringTensorOps.KruskalWallis(Tensor<Half>.FromMatrix(dataHalf), oneHotHalf);
+        var (hDouble, pDouble) = FeatureScoringTensorOps.KruskalWallis(Tensor<double>.FromMatrix(dataDouble), oneHotDouble);
         AssertMatchesDouble(hHalf, hDouble, "H");
         AssertMatchesDouble(pHalf, pDouble, "p-value");
     }

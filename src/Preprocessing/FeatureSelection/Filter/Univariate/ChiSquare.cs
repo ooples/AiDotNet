@@ -69,10 +69,10 @@ public class ChiSquare<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int nClasses);
-        var observed = FeatureSelectionTensorOps.JointCounts(
-            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+        var observed = FeatureScoringTensorOps.JointCounts(
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
             FilterStatisticTensorOps.ClassOneHot<T>(classIndex, nClasses));
-        var chiSquare = FeatureSelectionTensorOps.ContingencyChiSquare(observed);
+        var chiSquare = FeatureScoringTensorOps.ContingencyChiSquare(observed);
         _chiSquareScores = chiSquare.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(chiSquare, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;

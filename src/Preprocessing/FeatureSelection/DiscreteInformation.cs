@@ -33,7 +33,7 @@ internal sealed class DiscreteInformation<T>
         _n = codes.Shape[0];
         _p = codes.Shape[1];
         var classCounts = _engine.ReduceSum(targetOneHot.Cast<int>(), new[] { 0 }, false);
-        TargetEntropy = _engine.TensorSum(FeatureSelectionTensorOps.CountEntropy<T>(
+        TargetEntropy = _engine.TensorSum(FeatureScoringTensorOps.CountEntropy<T>(
             _engine.Reshape(classCounts, new[] { 1, targetOneHot.Shape[1] }), _n, 1));
     }
 
@@ -74,7 +74,7 @@ internal sealed class DiscreteInformation<T>
         int target = Math.Min(count, p);
         while (selected.Count < target)
         {
-            var masked = FeatureSelectionTensorOps.KeepOrFill(
+            var masked = FeatureScoringTensorOps.KeepOrFill(
                 candidateScores(selected), new Tensor<T>((T[])available.Clone(), new[] { p }), negativeInfinity);
 
             // the best of the features still available: the -infinity mask alone does not exclude a chosen feature
@@ -112,7 +112,7 @@ internal sealed class DiscreteInformation<T>
     public Tensor<T> FeatureEntropy()
     {
         if (_featureEntropy is null)
-            _featureEntropy = FeatureSelectionTensorOps.CountEntropy<T>(FeatureSelectionTensorOps.CodeTally(_codes, _levels), _n, 1);
+            _featureEntropy = FeatureScoringTensorOps.CountEntropy<T>(FeatureScoringTensorOps.CodeTally(_codes, _levels), _n, 1);
         return _featureEntropy;
     }
 
@@ -122,8 +122,8 @@ internal sealed class DiscreteInformation<T>
         if (_featureTargetEntropy is null)
         {
             int k = _targetOneHot.Shape[1];
-            var joint = FeatureSelectionTensorOps.JointTally(_codes, _levels, _targetOneHot);
-            _featureTargetEntropy = FeatureSelectionTensorOps.CountEntropy<T>(
+            var joint = FeatureScoringTensorOps.JointTally(_codes, _levels, _targetOneHot);
+            _featureTargetEntropy = FeatureScoringTensorOps.CountEntropy<T>(
                 _engine.Reshape(joint, new[] { _p, _levels * k }), _n, 1);
         }
 
@@ -150,7 +150,7 @@ internal sealed class DiscreteInformation<T>
     public Tensor<T> FeatureSymmetricUncertainty(int s)
     {
         var hj = FeatureEntropy();
-        var hs = Broadcast(FeatureSelectionTensorOps.Entries(hj, new[] { s }));
+        var hs = Broadcast(FeatureScoringTensorOps.Entries(hj, new[] { s }));
         return FilterStatisticTensorOps.GuardedDivide(
             _engine.TensorMultiplyScalar(FeatureMutualInformation(s), _ops.FromDouble(2)),
             _engine.TensorAdd(hj, hs), 1e-10, _ops.Zero);
@@ -162,8 +162,8 @@ internal sealed class DiscreteInformation<T>
 
     /// <summary>H(X_j, X_s) for every feature j ([p]).</summary>
     public Tensor<T> PairEntropy(int s) =>
-        FeatureSelectionTensorOps.CountEntropy<T>(
-            _engine.Reshape(FeatureSelectionTensorOps.PairedJointTally(_codes, _levels, Partner(s), _levels),
+        FeatureScoringTensorOps.CountEntropy<T>(
+            _engine.Reshape(FeatureScoringTensorOps.PairedJointTally(_codes, _levels, Partner(s), _levels),
                 new[] { _p, _levels * _levels }),
             _n, 1);
 
@@ -172,15 +172,15 @@ internal sealed class DiscreteInformation<T>
     {
         int k = _targetOneHot.Shape[1];
         var combined = _engine.TensorAdd(_engine.TensorMultiplyScalar(_codes, _levels), Partner(s));
-        var joint = FeatureSelectionTensorOps.JointTally(combined, _levels * _levels, _targetOneHot);
-        return FeatureSelectionTensorOps.CountEntropy<T>(_engine.Reshape(joint, new[] { _p, _levels * _levels * k }), _n, 1);
+        var joint = FeatureScoringTensorOps.JointTally(combined, _levels * _levels, _targetOneHot);
+        return FeatureScoringTensorOps.CountEntropy<T>(_engine.Reshape(joint, new[] { _p, _levels * _levels * k }), _n, 1);
     }
 
     /// <summary>I(X_j; X_s) = H(X_j) + H(X_s) - H(X_j, X_s) for every feature j ([p]).</summary>
     public Tensor<T> FeatureMutualInformation(int s)
     {
         var hj = FeatureEntropy();
-        var hs = Broadcast(FeatureSelectionTensorOps.Entries(hj, new[] { s }));
+        var hs = Broadcast(FeatureScoringTensorOps.Entries(hj, new[] { s }));
         return _engine.TensorSubtract(_engine.TensorAdd(hj, hs), PairEntropy(s));
     }
 
@@ -190,7 +190,7 @@ internal sealed class DiscreteInformation<T>
     public Tensor<T> ConditionalFeatureMutualInformation(int s)
     {
         var hjy = FeatureTargetEntropy();
-        var hsy = Broadcast(FeatureSelectionTensorOps.Entries(hjy, new[] { s }));
+        var hsy = Broadcast(FeatureScoringTensorOps.Entries(hjy, new[] { s }));
         return _engine.TensorSubtractScalar(_engine.TensorSubtract(_engine.TensorAdd(hjy, hsy), PairTargetEntropy(s)), TargetEntropy);
     }
 
@@ -203,8 +203,8 @@ internal sealed class DiscreteInformation<T>
     /// </summary>
     public Tensor<T> RelevanceGiven(int s)
     {
-        var hs = Broadcast(FeatureSelectionTensorOps.Entries(FeatureEntropy(), new[] { s }));
-        var hsy = Broadcast(FeatureSelectionTensorOps.Entries(FeatureTargetEntropy(), new[] { s }));
+        var hs = Broadcast(FeatureScoringTensorOps.Entries(FeatureEntropy(), new[] { s }));
+        var hsy = Broadcast(FeatureScoringTensorOps.Entries(FeatureTargetEntropy(), new[] { s }));
         return _engine.TensorSubtract(
             _engine.TensorSubtract(_engine.TensorAdd(PairEntropy(s), hsy), PairTargetEntropy(s)), hs);
     }

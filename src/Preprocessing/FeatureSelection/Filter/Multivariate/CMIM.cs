@@ -72,7 +72,7 @@ public class CMIM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
         var minimum = relevance;
         var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
@@ -83,7 +83,7 @@ public class CMIM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         });
 
         // a chosen feature keeps the score it won with; the others hold their running minimum
-        var chosenMask = FeatureSelectionTensorOps.ScatterToFeatures(
+        var chosenMask = FeatureScoringTensorOps.ScatterToFeatures(
             FilterStatisticTensorOps.Filled(new[] { selected.Length }, NumOps.One), selected, p, NumOps.Zero);
         _relevanceScores = relevance.ToVector();
         _cmimScores = Engine.TensorWhere(chosenMask, FilterStatisticTensorOps.AsTensor(scores), minimum).ToVector();

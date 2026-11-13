@@ -82,7 +82,7 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 
         // the target's distinct values are its classes
         var info = new DiscreteInformation<T>(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins,
             StatisticalTestHelper.ClassOneHot(target, out _));
         var scores = info.Relevance();
         if (_useGainRatio)

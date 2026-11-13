@@ -86,7 +86,7 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         }
 
         // U statistic and tie-corrected normal p-value (scipy.stats.mannwhitneyu, asymptotic, continuity corrected)
-        var (u, pValues) = FeatureSelectionTensorOps.MannWhitney(FilterStatisticTensorOps.AsTensor(data), group0, n0, n1);
+        var (u, pValues) = FeatureScoringTensorOps.MannWhitney(FilterStatisticTensorOps.AsTensor(data), group0, n0, n1);
         _uStatistics = u.ToVector();
         _pValues = pValues.ToVector();
 

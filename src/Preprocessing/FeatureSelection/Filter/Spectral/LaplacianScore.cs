@@ -69,7 +69,7 @@ public class LaplacianScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         var x = FilterStatisticTensorOps.AsTensor(data);
 
         // k-nearest-neighbour graph with heat-kernel weights exp(-||x_i - x_j||^2 / t^2), symmetric
-        var weights = FeatureSelectionTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (_kernelWidth * _kernelWidth));
+        var weights = FeatureScoringTensorOps.KnnGaussianAffinity(x, _nNeighbors, 1.0 / (_kernelWidth * _kernelWidth));
         var degree = engine.ReduceSum(weights, new[] { 1 }, false);
 
         // f~ = f - (f'D1 / 1'D1) 1, score = f~' L f~ / f~' D f~ with L = D - W (He, Cai and Niyogi 2005)

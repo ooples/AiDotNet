@@ -127,7 +127,7 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         _pValues = pValues;
 
         // scikit-learn's percentile rule: scores above the (100 - percentile)-th percentile, then ties at it
-        _selectedIndices = FeatureSelectionTensorOps.PercentileSupport(FilterStatisticTensorOps.AsTensor(scores), _percentile);
+        _selectedIndices = FeatureScoringTensorOps.PercentileSupport(FilterStatisticTensorOps.AsTensor(scores), _percentile);
 
         IsFitted = true;
     }

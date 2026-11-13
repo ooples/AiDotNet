@@ -76,7 +76,7 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var gains = info.Relevance();
         var intrinsic = info.FeatureEntropy();
         var ratios = FilterStatisticTensorOps.GuardedDivide(gains, intrinsic, 1e-10, NumOps.Zero);

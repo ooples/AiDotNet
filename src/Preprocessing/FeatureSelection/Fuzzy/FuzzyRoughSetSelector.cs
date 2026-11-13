@@ -70,7 +70,7 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         _nInputFeatures = data.Columns;
         int p = data.Columns;
-        var x = FeatureSelectionTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var x = FeatureScoringTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
         var classOneHot = FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount);
         var decision = Engine.TensorMatMul(classOneHot, Engine.TensorTranspose(classOneHot));
@@ -108,7 +108,7 @@ public class FuzzyRoughSetSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // the first candidate with the highest dependency, if it improves on the current one
             var scores = new Tensor<T>(candidates, new[] { p });
             int bestFeature = FilterStatisticTensorOps.FirstArgMax(scores);
-            var best = FeatureSelectionTensorOps.Entries(scores, new[] { bestFeature });
+            var best = FeatureScoringTensorOps.Entries(scores, new[] { bestFeature });
             if (Engine.TensorGreaterThan(best, current).Cast<int>().ToArray()[0] == 0)
                 break;
 

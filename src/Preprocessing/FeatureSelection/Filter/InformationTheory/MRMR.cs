@@ -71,7 +71,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
         // mean redundancy with the selected features, kept as a running mean (see DiscreteInformation.RunningMean)
         var redundancy = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);

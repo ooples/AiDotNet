@@ -75,7 +75,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var x = FilterStatisticTensorOps.AsTensor(data);
 
         // Compute feature-target correlations
-        var targetCorrelations = FeatureSelectionTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
+        var targetCorrelations = FeatureScoringTensorOps.AbsoluteCorrelation(x, FilterStatisticTensorOps.AsTensor(target));
 
         // Build adjacency matrix based on feature correlations
         var adjacency = BuildAdjacencyMatrix(x, _edgeThreshold);
@@ -83,7 +83,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         // Compute centrality scores
         var centrality = _centralityMeasure switch
         {
-            GraphCentralityMeasure.Degree => FeatureSelectionTensorOps.Counts(Engine.TensorGreaterThan(adjacency, NumOps.Zero), 1),
+            GraphCentralityMeasure.Degree => FeatureScoringTensorOps.Counts(Engine.TensorGreaterThan(adjacency, NumOps.Zero), 1),
             GraphCentralityMeasure.Eigenvector => ComputeEigenvectorCentrality(adjacency, p),
             GraphCentralityMeasure.Betweenness => BetweennessCentrality(adjacency),
             _ => ComputePageRank(adjacency, p)
@@ -108,7 +108,7 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         int p = x.Shape[1];
         var centered = FilterStatisticTensorOps.CenterColumns(x);
         var norm = engine.TensorAddScalar(
-            engine.TensorSqrt(FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x)), FeatureSelectionTensorOps.Tiny<T>(1e-10));
+            engine.TensorSqrt(FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x)), FeatureScoringTensorOps.Tiny<T>(1e-10));
         var z = engine.TensorDivide(centered, engine.TensorBroadcastTo(engine.Reshape(norm, new[] { 1, p }), new[] { n, p }));
         var strength = engine.TensorAbs(engine.TensorMatMul(engine.TensorTranspose(z), z));
         var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(p));
@@ -209,9 +209,9 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             var fromV = FilterStatisticTensorOps.RowBroadcast(PreprocessingTensorOps.ColumnVector(distance, v), p);
             var onPath = engine.TensorMultiply(engine.TensorEquals(engine.TensorAdd(toV, fromV), distance), upper);
             var notEnd = engine.TensorMultiply(
-                FilterStatisticTensorOps.ColumnBroadcast(FeatureSelectionTensorOps.ScatterToFeatures(
+                FilterStatisticTensorOps.ColumnBroadcast(FeatureScoringTensorOps.ScatterToFeatures(
                     FilterStatisticTensorOps.Filled(new[] { 1 }, zero), new[] { v }, p, one), p),
-                FilterStatisticTensorOps.RowBroadcast(FeatureSelectionTensorOps.ScatterToFeatures(
+                FilterStatisticTensorOps.RowBroadcast(FeatureScoringTensorOps.ScatterToFeatures(
                     FilterStatisticTensorOps.Filled(new[] { 1 }, zero), new[] { v }, p, one), p));
             var through = engine.TensorMultiply(
                 FilterStatisticTensorOps.ColumnBroadcast(PreprocessingTensorOps.ColumnVector(paths, v), p),

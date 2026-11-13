@@ -89,7 +89,7 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             : RandomHelper.CreateSecureRandom();
 
         // a subset's fitness is the mean absolute correlation of its features with the target
-        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(
+        var correlation = FeatureScoringTensorOps.AbsoluteCorrelation(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
@@ -126,10 +126,10 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // each particle's subset is its numToSelect largest positions
             var particleMasks = new Tensor<T>[_swarmSize];
             for (int i = 0; i < _swarmSize; i++)
-                particleMasks[i] = FeatureSelectionTensorOps.TopKMask(
-                    Engine.Reshape(FeatureSelectionTensorOps.Rows(positions, new[] { i }), new[] { p }), numToSelect);
+                particleMasks[i] = FeatureScoringTensorOps.TopKMask(
+                    Engine.Reshape(FeatureScoringTensorOps.Rows(positions, new[] { i }), new[] { p }), numToSelect);
             var masks = Engine.TensorStack(particleMasks, 0);
-            var fitness = FeatureSelectionTensorOps.MeanOverMask(masks, correlation);
+            var fitness = FeatureScoringTensorOps.MeanOverMask(masks, correlation);
 
             // Update personal bests
             var improved = Engine.TensorGreaterThan(fitness, personalBestFitness);
@@ -138,11 +138,11 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Update global best: the first particle with the best fitness, when it improves on the global best
             int leader = FilterStatisticTensorOps.FirstArgMax(fitness);
-            var leaderFitness = FeatureSelectionTensorOps.Entries(fitness, new[] { leader });
+            var leaderFitness = FeatureScoringTensorOps.Entries(fitness, new[] { leader });
             if (Engine.TensorGreaterThan(leaderFitness, globalBestFitness).Cast<int>().ToArray()[0] == 1)
             {
                 globalBestFitness = leaderFitness;
-                globalBest = Engine.Reshape(FeatureSelectionTensorOps.Rows(positions, new[] { leader }), new[] { p });
+                globalBest = Engine.Reshape(FeatureScoringTensorOps.Rows(positions, new[] { leader }), new[] { p });
             }
 
             // Track feature importance

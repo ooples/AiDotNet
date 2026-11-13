@@ -78,7 +78,7 @@ public class InteractionInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
         // mean interaction with the selected features, kept as a running mean (see DiscreteInformation.RunningMean);
         // |sum| / count = |mean|
@@ -92,7 +92,7 @@ public class InteractionInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             // I(Xj; Xs; Y) = I(Xj; Y) + I(Xs; Y) - I(Xj, Xs; Y)
             var interaction = Engine.TensorSubtract(
                 Engine.TensorAdd(relevance, Engine.TensorBroadcastTo(
-                    FeatureSelectionTensorOps.Entries(relevance, new[] { last }), new[] { p })),
+                    FeatureScoringTensorOps.Entries(relevance, new[] { last }), new[] { p })),
                 info.JointRelevance(last));
             meanInteraction = DiscreteInformation<T>.RunningMean(meanInteraction, interaction, chosen.Count);
             return Engine.TensorSubtract(relevance, _preferSynergy ? meanInteraction : Engine.TensorAbs(meanInteraction));

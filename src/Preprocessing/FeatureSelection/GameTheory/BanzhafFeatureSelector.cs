@@ -85,7 +85,7 @@ public class BanzhafFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             membership[k] = rand.NextDouble() < 0.5 ? 1 : 0;
 
         // a coalition scores the mean absolute correlation of its features with the target (0 when empty)
-        var correlation = FeatureSelectionTensorOps.AbsoluteCorrelation(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
+        var correlation = FeatureScoringTensorOps.AbsoluteCorrelation(FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.AsTensor(target));
         var memberCodes = new Tensor<int>(membership, new[] { _nSamples, p });
         var inCoalition = memberCodes.Cast<T>();
         var shape = new[] { _nSamples, p };

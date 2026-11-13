@@ -97,7 +97,7 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var scores = new Tensor<T>((T[])prefixScores.Clone(), new[] { p + 1 });
             var marginal = Engine.TensorSubtract(
                 Engine.TensorSlice(scores, new[] { 1 }, new[] { p }), Engine.TensorSlice(scores, new[] { 0 }, new[] { p }));
-            totals = Engine.TensorAdd(totals, FeatureSelectionTensorOps.ScatterToFeatures(marginal, permutation, p, zero));
+            totals = Engine.TensorAdd(totals, FeatureScoringTensorOps.ScatterToFeatures(marginal, permutation, p, zero));
         }
 
         // Average over samples

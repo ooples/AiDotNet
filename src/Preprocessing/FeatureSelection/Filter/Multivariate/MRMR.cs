@@ -69,7 +69,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
         var relevance = info.Relevance();
         T one = NumOps.One;
         var sum = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);

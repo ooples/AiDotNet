@@ -199,7 +199,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Select features based on mode
         _selectedIndices = SelectFeatures(_scores, _pValues);
-        _supportMask = FeatureSelectionTensorOps.SupportMask(_selectedIndices, p);
+        _supportMask = FeatureScoringTensorOps.SupportMask(_selectedIndices, p);
 
         IsFitted = true;
     }
@@ -218,7 +218,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 return PreprocessingTensorOps.TopKIndicesSorted(scoreTensor, Math.Min(Convert.ToInt32(_param), p));
 
             case UnivariateSelectMode.Percentile:
-                return FeatureSelectionTensorOps.PercentileSupport(scoreTensor, Convert.ToDouble(_param));
+                return FeatureScoringTensorOps.PercentileSupport(scoreTensor, Convert.ToDouble(_param));
         }
 
         if (pValues is null)
@@ -233,7 +233,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 return FilterStatisticTensorOps.MaskPositions(engine.TensorLessThan(pValueTensor, alpha));
 
             case UnivariateSelectMode.Fdr:
-                return FilterStatisticTensorOps.MaskPositions(FeatureSelectionTensorOps.AtMost(
+                return FilterStatisticTensorOps.MaskPositions(FeatureScoringTensorOps.AtMost(
                     FilterStatisticTensorOps.AsTensor(StatisticalTestHelper.BenjaminiHochbergCorrection(pValues)), alpha));
 
             case UnivariateSelectMode.Fwe:

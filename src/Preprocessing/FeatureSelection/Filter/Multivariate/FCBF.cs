@@ -62,7 +62,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         _nInputFeatures = data.Columns;
         int p = data.Columns;
         var info = DiscreteInformation<T>.ForTarget(
-            FeatureSelectionTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), DiscretizationBins), DiscretizationBins, target);
+            FeatureScoringTensorOps.ScaledBins(FilterStatisticTensorOps.AsTensor(data), DiscretizationBins), DiscretizationBins, target);
         var suTarget = info.SymmetricUncertainty();
         _symmetricalUncertainties = suTarget.ToVector();
 

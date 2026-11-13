@@ -124,7 +124,7 @@ public class SelectFpr<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
 
         // As in scikit-learn, no feature passing the test selects none
         _selectedIndices = FilterStatisticTensorOps.MaskPositions(keep);
-        _supportMask = FeatureSelectionTensorOps.SupportMask(_selectedIndices, p);
+        _supportMask = FeatureScoringTensorOps.SupportMask(_selectedIndices, p);
 
         IsFitted = true;
     }
