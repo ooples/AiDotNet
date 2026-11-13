@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -204,12 +205,17 @@ public static class S6Scan<T>
         // Pre-compute A = -exp(A_log): [innerDim, stateDim]
         var negA = Engine.TensorNegate(Engine.TensorExp(aLog));
 
+        // Manual gradients written into fresh buffers, exactly as master: nothing here joins the tape.
+        using var noGrad = new NoGradScope<T>();
+        var negA3D = Engine.TensorExpandDims(negA, 0);         // [1, innerDim, stateDim]
+        var D2D = dParam.Reshape(1, innerDimension);           // [1, innerDim]
+
         // Per the Mamba paper (Gu & Dao 2023): recompute intermediate states during
         // backward rather than using cached hidden states. This ensures numerical
         // consistency between forward and backward computations.
         // First, re-run the forward scan to get consistent states.
         var recomputedStates = new Tensor<T>[seqLen + 1];
-        var h_recomp = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
+        Tensor<T> h_recomp = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
         recomputedStates[0] = h_recomp.Clone();
 
         for (int t = 0; t < seqLen; t++)
@@ -218,29 +224,18 @@ public static class S6Scan<T>
             var delta_t = delta.GetSliceAlongDimension(t, 1).Clone();
             var B_t = b.GetSliceAlongDimension(t, 1).Clone();
 
-            // Recompute A_bar and B_bar*x for this timestep
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int di = 0; di < innerDimension; di++)
-                {
-                    T dt = delta_t[new[] { bi, di }];
-                    T xv = x_t[new[] { bi, di }];
-                    for (int ni = 0; ni < stateDimension; ni++)
-                    {
-                        T a = negA[new[] { di, ni }];
-                        T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, a))));
-                        T bv = B_t[new[] { bi, ni }];
-                        T bBarX = NumOps.Multiply(NumOps.Multiply(dt, bv), xv);
-                        h_recomp[new[] { bi, di, ni }] = NumOps.Add(
-                            NumOps.Multiply(aBar, h_recomp[new[] { bi, di, ni }]), bBarX);
-                    }
-                }
-            }
+            // Recompute A_bar = exp(delta * A) and B_bar * x = delta * B * x for this timestep.
+            var dt3 = Engine.TensorExpandDims(delta_t, 2);                    // [batch, innerDim, 1]
+            var aBar = Engine.TensorExp(Engine.TensorMultiply(dt3, negA3D));  // [batch, innerDim, stateDim]
+            var bBarX = Engine.TensorMultiply(
+                Engine.TensorMultiply(dt3, Engine.TensorExpandDims(B_t, 1)),
+                Engine.TensorExpandDims(x_t, 2));
+            h_recomp = Engine.TensorAdd(Engine.TensorMultiply(aBar, h_recomp), bBarX);
             recomputedStates[t + 1] = h_recomp.Clone();
         }
 
         // Running gradient of hidden state: [batch, innerDim, stateDim]
-        var dh = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
+        Tensor<T> dh = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension, stateDimension });
 
         // Backward scan using recomputed states (per Mamba paper hardware-aware algorithm)
         for (int t = seqLen - 1; t >= 0; t--)
@@ -255,83 +250,44 @@ public static class S6Scan<T>
             var h_t = recomputedStates[t + 1];
             var h_prev = recomputedStates[t];
 
-            // Explicit per-element gradient computation to avoid Engine 3D tensor issues
-            var dX_t = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension });
-            var d_delta_t = TensorAllocator.Rent<T>(new[] { batchSize, innerDimension });
-            var d_B_t = TensorAllocator.Rent<T>(new[] { batchSize, stateDimension });
-            var d_C_t = TensorAllocator.Rent<T>(new[] { batchSize, stateDimension });
+            var dt3 = Engine.TensorExpandDims(delta_t, 2);      // [batch, innerDim, 1]
+            var x3 = Engine.TensorExpandDims(x_t, 2);           // [batch, innerDim, 1]
+            var dOut3 = Engine.TensorExpandDims(dOut_t, 2);     // [batch, innerDim, 1]
+            var B3 = Engine.TensorExpandDims(B_t, 1);           // [batch, 1, stateDim]
+            var C3 = Engine.TensorExpandDims(C_t, 1);           // [batch, 1, stateDim]
+            var dtA = Engine.TensorMultiply(dt3, negA3D);       // [batch, innerDim, stateDim]
+            var aBar = Engine.TensorExp(dtA);
 
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int di = 0; di < innerDimension; di++)
-                {
-                    T dt = delta_t[new[] { bi, di }];
-                    T xv = x_t[new[] { bi, di }];
-                    T dOutVal = dOut_t[new[] { bi, di }];
-                    T dVal = dParam[di];
+            // D skip connection: dX = D * dOut, dD += sum_b x * dOut
+            var dX_t = Engine.TensorMultiply(D2D, dOut_t);
+            dD = Engine.TensorAdd(dD, Engine.ReduceSum(Engine.TensorMultiply(x_t, dOut_t), new[] { 0 }));
 
-                    // D skip connection: dX += D * dOut, dD += x * dOut
-                    dX_t[new[] { bi, di }] = NumOps.Multiply(dVal, dOutVal);
-                    dD[di] = NumOps.Add(dD[di], NumOps.Multiply(xv, dOutVal));
+            // dh += C * dOut (output gradient to state)
+            dh = Engine.TensorAdd(dh, Engine.TensorMultiply(C3, dOut3));
 
-                    T dDeltaA = NumOps.Zero;
-                    T dDeltaBx = NumOps.Zero;
+            // dC[ni] = sum_di h[di, ni] * dOut[di]
+            var d_C_t = Engine.ReduceSum(Engine.TensorMultiply(h_t, dOut3), new[] { 1 });
 
-                    for (int ni = 0; ni < stateDimension; ni++)
-                    {
-                        T a = negA[new[] { di, ni }];
-                        T dtA = NumOps.Multiply(dt, a);
-                        T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(dtA)));
-                        T hPrev = h_prev[new[] { bi, di, ni }];
-                        T hCur = h_t[new[] { bi, di, ni }];
-                        T cVal = C_t[new[] { bi, ni }];
-                        T bVal = B_t[new[] { bi, ni }];
+            // d(A_bar) * A_bar, with d(A_bar) = dh * h_prev
+            var dAbarAbar = Engine.TensorMultiply(Engine.TensorMultiply(dh, h_prev), aBar);
 
-                        // dh[di,ni] += C[ni] * dOut[di] (output gradient to state)
-                        dh[new[] { bi, di, ni }] = NumOps.Add(
-                            dh[new[] { bi, di, ni }],
-                            NumOps.Multiply(cVal, dOutVal));
+            // d_delta = sum_n d(A_bar) * A_bar * A + sum_n dh * B * x
+            var dhB = Engine.ReduceSum(Engine.TensorMultiply(dh, B3), new[] { 2 });   // [batch, innerDim]
+            var d_delta_t = Engine.TensorAdd(
+                Engine.ReduceSum(Engine.TensorMultiply(dAbarAbar, negA3D), new[] { 2 }),
+                Engine.TensorMultiply(dhB, x_t));
 
-                        T dhVal = dh[new[] { bi, di, ni }];
+            // d_B[ni] = sum_di dh * delta * x
+            var d_B_t = Engine.ReduceSum(Engine.TensorMultiply(dh, Engine.TensorMultiply(dt3, x3)), new[] { 1 });
 
-                        // dC[ni] += h[di,ni] * dOut[di]
-                        d_C_t[new[] { bi, ni }] = NumOps.Add(
-                            d_C_t[new[] { bi, ni }],
-                            NumOps.Multiply(hCur, dOutVal));
+            // d_x from state: sum_n dh * delta * B
+            dX_t = Engine.TensorAdd(dX_t, Engine.TensorMultiply(dhB, delta_t));
 
-                        // d(A_bar) = dh * h_prev
-                        T dAbar = NumOps.Multiply(dhVal, hPrev);
+            // d_A_log: d_A_bar * A_bar * deltaA (chain through exp and -exp parameterization)
+            dALog = Engine.TensorAdd(dALog, Engine.ReduceSum(Engine.TensorMultiply(dAbarAbar, dtA), new[] { 0 }));
 
-                        // d_delta from A_bar path: d_A_bar * A_bar * A
-                        dDeltaA = NumOps.Add(dDeltaA,
-                            NumOps.Multiply(NumOps.Multiply(dAbar, aBar), a));
-
-                        // d_delta from B*x path: dh * B * x
-                        dDeltaBx = NumOps.Add(dDeltaBx,
-                            NumOps.Multiply(dhVal, NumOps.Multiply(bVal, xv)));
-
-                        // d_B[ni] += dh * delta * x (summed over innerDim in outer loop)
-                        d_B_t[new[] { bi, ni }] = NumOps.Add(
-                            d_B_t[new[] { bi, ni }],
-                            NumOps.Multiply(dhVal, NumOps.Multiply(dt, xv)));
-
-                        // d_x from state: dh * delta * B (summed over stateDim)
-                        dX_t[new[] { bi, di }] = NumOps.Add(
-                            dX_t[new[] { bi, di }],
-                            NumOps.Multiply(dhVal, NumOps.Multiply(dt, bVal)));
-
-                        // d_A_log: d_A_bar * A_bar * deltaA (chain through exp and -exp parameterization)
-                        dALog[new[] { di, ni }] = NumOps.Add(
-                            dALog[new[] { di, ni }],
-                            NumOps.Multiply(NumOps.Multiply(dAbar, aBar), dtA));
-
-                        // Propagate dh to previous timestep: dh_prev = A_bar * dh
-                        dh[new[] { bi, di, ni }] = NumOps.Multiply(aBar, dhVal);
-                    }
-
-                    d_delta_t[new[] { bi, di }] = NumOps.Add(dDeltaA, dDeltaBx);
-                }
-            }
+            // Propagate dh to previous timestep: dh_prev = A_bar * dh
+            dh = Engine.TensorMultiply(aBar, dh);
 
             // Store gradients for this timestep
             dX.SetSlice(1, t, dX_t);

@@ -63,6 +63,8 @@ namespace AiDotNet.SpeechRecognition.Foundation;
                 Source = "Chiu et al. 2022, Sec. 4.1.1: fine-tuning uses the Transformer schedule with a lower rate for "
                         + "the pre-trained encoder (0.0003 peak, 5000 warm-up steps) than for the decoder (0.001 peak, "
                         + "1500 warm-up steps). This row is the encoder's, which holds nearly all the weights.")]
+[AiDotNet.Attributes.PreprocessesInput("BestRqNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class BESTRQ<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     /// <inheritdoc />

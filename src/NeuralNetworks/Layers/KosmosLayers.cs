@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -45,12 +46,14 @@ internal static class MultiHeadAttentionMath<T>
             engine.TensorBatchMatMul<T>(qh, engine.TensorPermute(kh, new[] { 0, 2, 1 })), NumOps.FromDouble(1.0 / Math.Sqrt(dh)));
         if (causal)
         {
-            var mask = new Tensor<T>(new[] { heads, sq, sk });
-            T blocked = NumOps.FromDouble(-1e9);
             int shift = sk - sq; // queries are the LAST sq positions of the keys
-            for (int h = 0; h < heads; h++)
-                for (int i = 0; i < sq; i++)
-                    for (int j = i + shift + 1; j < sk; j++) mask[h, i, j] = blocked;
+            Tensor<T> mask;
+            using (new NoGradScope<T>())
+            {
+                // Key j is blocked for query i when j > i + shift: the strict upper triangle above diagonal shift.
+                var blocked = Tensor<T>.CreateDefault(new[] { sq, sk }, NumOps.FromDouble(-1e9));
+                mask = engine.TensorBroadcastTo(engine.TensorTriu(blocked, shift + 1), new[] { heads, sq, sk });
+            }
             scores = engine.TensorAdd(scores, mask);
         }
         var context = engine.TensorBatchMatMul<T>(engine.TensorSoftmax(scores, 2), vh);   // [H, Sq, dh]
@@ -66,28 +69,33 @@ internal static class MultiHeadAttentionMath<T>
     private static Tensor<T> XPos(Tensor<T> x, int heads, int s, int dh, bool downscale)
     {
         var engine = AiDotNetEngine.Current;
-        var cos = new Tensor<T>(new[] { 1, s, dh });
-        var sin = new Tensor<T>(new[] { 1, s, dh });
-        for (int n = 0; n < s; n++)
-            for (int i = 0; i < dh / 2; i++)
-            {
-                double theta = Math.Pow(10000, -2.0 * i / dh);
-                double zeta = ((2.0 * i / dh) + 0.4) / 1.4;
-                double scale = Math.Pow(zeta, (downscale ? -1.0 : 1.0) * n / 512.0);
-                double c = Math.Cos(n * theta) * scale, sn = Math.Sin(n * theta) * scale;
-                cos[0, n, 2 * i] = NumOps.FromDouble(c);
-                cos[0, n, (2 * i) + 1] = NumOps.FromDouble(c);
-                sin[0, n, 2 * i] = NumOps.FromDouble(sn);
-                sin[0, n, (2 * i) + 1] = NumOps.FromDouble(sn);
-            }
-        // rotate_every_two: (x0, x1) -> (-x1, x0), as a constant [dh, dh] map.
-        var rotate = new Tensor<T>(new[] { dh, dh });
-        for (int i = 0; i < dh / 2; i++)
+        int half = dh / 2;
+        Tensor<T> cos;
+        Tensor<T> sin;
+        using (new NoGradScope<T>())
         {
-            rotate[(2 * i) + 1, 2 * i] = NumOps.FromDouble(-1);
-            rotate[2 * i, (2 * i) + 1] = NumOps.One;
+            // theta_i = 10000^(-2i/dh); zeta_i = (2i/dh + 0.4) / 1.4; scale[n, i] = zeta_i^(+-n/512).
+            var positions = engine.TensorArange<T>(0, s, 1.0);                                          // [s]
+            var theta = engine.TensorLogspace<T>(0.0, -2.0 * (half - 1) / dh, half, 10000.0);           // [half]
+            var zeta = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(engine.TensorArange<T>(0, half, 1.0), NumOps.FromDouble(2.0 / dh / 1.4)),
+                NumOps.FromDouble(0.4 / 1.4));
+            var exponent = engine.TensorMultiplyScalar(positions, NumOps.FromDouble((downscale ? -1.0 : 1.0) / 512.0));
+            var scale = engine.TensorExp(engine.TensorOuter(exponent, engine.TensorLog(zeta)));        // [s, half]
+            var angle = engine.TensorOuter(positions, theta);                                          // [s, half]
+            var c = engine.TensorMultiply(engine.TensorCos(angle), scale);
+            var sn = engine.TensorMultiply(engine.TensorSin(angle), scale);
+            // Each value fills the interleaved pair (2i, 2i + 1).
+            cos = engine.Reshape(engine.TensorStack(new[] { c, c }, 2), new[] { 1, s, dh });
+            sin = engine.Reshape(engine.TensorStack(new[] { sn, sn }, 2), new[] { 1, s, dh });
         }
-        var rotated = engine.Reshape(engine.TensorMatMul(engine.Reshape(x, new[] { heads * s, dh }), rotate), new[] { heads, s, dh });
+        // rotate_every_two: (x0, x1) -> (-x1, x0) on each interleaved pair.
+        var pairs = engine.Reshape(x, new[] { heads, s, half, 2 });
+        var rotated = engine.Reshape(engine.TensorConcatenate(new[]
+        {
+            engine.TensorNegate(engine.TensorNarrow(pairs, 3, 1, 1)),
+            engine.TensorNarrow(pairs, 3, 0, 1),
+        }, 3), new[] { heads, s, dh });
         var shape = new[] { heads, s, dh };
         return engine.TensorAdd(
             engine.TensorMultiply(x, engine.TensorBroadcastTo(cos, shape)),
@@ -580,7 +588,7 @@ public partial class MagnetoDecoderLayer<T> : LayerBase<T>, IShapeContract
         // Text init_std 0.02; the padding row (pad_token_id 1) of nn.Embedding is zero.
         var random = LayerInitializationSeedScope.NextRandom();
         _embedTokens = NormalTensor(new[] { vocabSize, dim }, 0.02, random);
-        if (vocabSize > 1) for (int c = 0; c < dim; c++) _embedTokens[1, c] = NumOps.Zero;
+        if (vocabSize > 1) _embedTokens.AsWritableSpan().Slice(dim, dim).Clear();
         RegisterTrainableParameter(_embedTokens, PersistentTensorRole.Weights);
 
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
@@ -684,18 +692,13 @@ public partial class MagnetoDecoderLayer<T> : LayerBase<T>, IShapeContract
     {
         int half = _dim / 2;
         double step = Math.Log(10000) / Math.Max(1, half - 1);
-        var pe = new Tensor<T>(new[] { s, _dim });
-        for (int i = 0; i < s; i++)
-        {
-            double p = i + 2;
-            for (int j = 0; j < half; j++)
-            {
-                double angle = p * Math.Exp(-j * step);
-                pe[i, j] = NumOps.FromDouble(Math.Sin(angle));
-                pe[i, half + j] = NumOps.FromDouble(Math.Cos(angle));
-            }
-        }
-        return pe;
+        // A constant table built from fresh tensors, so it stays off the tape.
+        using var noGrad = new NoGradScope<T>();
+        var positions = Engine.TensorArange<T>(2, s + 2, 1.0);                                          // [S]
+        var frequencies = Engine.TensorExp(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, half, 1.0), NumOps.FromDouble(-step)));  // [half]
+        var angles = Engine.TensorOuter(positions, frequencies);                                       // [S, half]
+        return Engine.TensorConcatenate(new[] { Engine.TensorSin(angles), Engine.TensorCos(angles) }, 1);
     }
 
     /// <inheritdoc/>

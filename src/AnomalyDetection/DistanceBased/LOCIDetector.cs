@@ -143,170 +143,148 @@ public partial class LOCIDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
+        var trainingData = _trainingData ?? throw new InvalidOperationException("Model not properly fitted.");
+        var engine = Engine;
+        int m = X.Rows;
+        int nTraining = trainingData.Rows;
+        var training = AnomalyTensorOps.ToTensor(trainingData);
 
-        for (int i = 0; i < X.Rows; i++)
+        // Radii r = maxRadius * overshoot * step / steps (slightly beyond maxRadius to handle floating-point
+        // edge cases) and the sampling radii alpha * r
+        var radii = engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(1, NumRadiiSteps + 1, 1),
+                NumOps.Multiply(_maxRadius, NumOps.FromDouble(RadiusOvershootFactor))),
+            NumOps.FromDouble(NumRadiiSteps));
+        var samplingRadii = engine.TensorMultiplyScalar(radii, NumOps.FromDouble(_alpha));
+
+        // Counting neighbourhood sizes n(q, r) of every training point for every radius, from bounded
+        // blocks of training rows (only a [block, nTraining] distance matrix is live)
+        var trainingParts = new List<Tensor<T>>[NumRadiiSteps];
+        for (int ri = 0; ri < NumRadiiSteps; ri++)
         {
-            T maxMdef = NumOps.Zero;
-            bool hadNeighbors = false;
-
-            // Test multiple radii (use more steps for better resolution)
-            for (int ri = 1; ri <= NumRadiiSteps; ri++)
-            {
-                // Use slightly larger than _maxRadius to handle floating-point edge cases
-                T r = NumOps.Divide(
-                    NumOps.Multiply(NumOps.Multiply(_maxRadius, NumOps.FromDouble(RadiusOvershootFactor)), NumOps.FromDouble(ri)),
-                    NumOps.FromDouble(NumRadiiSteps));
-                T alphaR = NumOps.Multiply(NumOps.FromDouble(_alpha), r);
-
-                // Count points in r-neighborhood (counting neighborhood)
-                int nR = CountPointsInRadius(X, i, _trainingData ?? throw new InvalidOperationException("Model not properly fitted."), r);
-
-                if (nR < 2) continue;
-                hadNeighbors = true;
-
-                // Get points in alpha*r neighborhood (sampling neighborhood)
-                var samplingNeighbors = GetPointsInRadius(X, i, _trainingData, alphaR);
-
-                if (samplingNeighbors.Count == 0)
-                {
-                    T isolatedScore = NumOps.FromDouble(IsolatedPointScore);
-                    if (NumOps.GreaterThan(isolatedScore, maxMdef)) maxMdef = isolatedScore;
-                    continue;
-                }
-
-                // Compute average n(r) of neighbors in sampling neighborhood
-                T avgNR = NumOps.Zero;
-
-                foreach (int neighborIdx in samplingNeighbors)
-                {
-                    int neighborNR = CountPointsInRadiusFromTraining(neighborIdx, r);
-                    avgNR = NumOps.Add(avgNR, NumOps.FromDouble(neighborNR));
-                }
-                avgNR = NumOps.Divide(avgNR, NumOps.FromDouble(samplingNeighbors.Count));
-
-                // Compute variance
-                T varNR = NumOps.Zero;
-                foreach (int neighborIdx in samplingNeighbors)
-                {
-                    int neighborNR = CountPointsInRadiusFromTraining(neighborIdx, r);
-                    T diff = NumOps.Subtract(NumOps.FromDouble(neighborNR), avgNR);
-                    varNR = NumOps.Add(varNR, NumOps.Multiply(diff, diff));
-                }
-                varNR = NumOps.Divide(varNR, NumOps.FromDouble(samplingNeighbors.Count));
-
-                // MDEF = 1 - n(p,r) / avg_n(r)
-                T mdef = NumOps.GreaterThan(avgNR, NumOps.Zero)
-                    ? NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.FromDouble(nR), avgNR))
-                    : NumOps.Zero;
-
-                // Sigma-MDEF (normalized deviation)
-                T sigmaMdef = NumOps.GreaterThan(avgNR, NumOps.Zero)
-                    ? NumOps.Divide(NumOps.Sqrt(varNR), avgNR)
-                    : NumOps.Zero;
-
-                // Final score: MDEF / sigma-MDEF (or just MDEF if sigma is 0)
-                T absMdef = NumOps.Abs(mdef);
-                T lociScore = NumOps.GreaterThan(sigmaMdef, NumOps.Zero)
-                    ? NumOps.Divide(absMdef, sigmaMdef)
-                    : absMdef;
-
-                if (NumOps.GreaterThan(lociScore, maxMdef))
-                {
-                    maxMdef = lociScore;
-                }
-            }
-
-            // If the point had no neighbors at ANY tested radius, it is an extreme isolate.
-            if (!hadNeighbors)
-            {
-                maxMdef = NumOps.FromDouble(NoNeighborScore);
-            }
-
-            scores[i] = maxMdef;
+            trainingParts[ri] = new List<Tensor<T>>();
         }
 
-        return scores;
+        int rowsPerBlock = Math.Max(1, Math.Min(nTraining, LociBlockElements / Math.Max(1, nTraining)));
+        for (int first = 0; first < nTraining; first += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, nTraining - first);
+            var blockDistances = AnomalyTensorOps.PairwiseDistances(
+                engine.TensorSlice(training, new[] { first, 0 }, new[] { count, training.Shape[1] }), training);
+            for (int ri = 0; ri < NumRadiiSteps; ri++)
+            {
+                trainingParts[ri].Add(engine.ReduceSum(
+                    WithinRadius(blockDistances, engine.TensorSlice(radii, new[] { ri }, new[] { 1 })), new[] { 1 }, false));
+            }
+        }
+
+        var trainingNRs = new Tensor<T>[NumRadiiSteps];
+        for (int ri = 0; ri < NumRadiiSteps; ri++)
+        {
+            trainingNRs[ri] = trainingParts[ri].Count == 1
+                ? trainingParts[ri][0]
+                : engine.TensorConcatenate(trainingParts[ri].ToArray(), 0);
+        }
+
+        // Query rows are scored in bounded blocks: only a [block, nTraining] distance matrix is live
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), nTraining,
+            query => ScoreBlock(query, training, trainingNRs, radii, samplingRadii)).ToVector();
+    }
+
+    // Upper bound on the elements of one [rows, nTraining] block of distances.
+    private const int LociBlockElements = 1 << 22;
+
+    // LOCI scores of one block of query rows, given n(q, r) of every training point for every radius.
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T>[] trainingNRs, Tensor<T> radii,
+        Tensor<T> samplingRadii)
+    {
+        var engine = Engine;
+        int m = query.Shape[0];
+        int nTraining = training.Shape[0];
+        var queryDistances = AnomalyTensorOps.PairwiseDistances(query, training);
+        var positiveDistance = engine.TensorGreaterThan(queryDistances, NumOps.Zero);
+        var zeros = Tensor<T>.CreateZeros(new[] { m });
+        var ones = Tensor<T>.CreateOnes(new[] { m });
+        T isolatedScore = NumOps.FromDouble(IsolatedPointScore);
+        T countedFloor = NumOps.FromDouble(1.5);
+
+        var maxMdef = zeros;
+        var hadNeighbors = zeros;
+        for (int ri = 0; ri < NumRadiiSteps; ri++)
+        {
+            // Counting neighbourhood sizes n(p, r) of the points and of every training point
+            var r = engine.TensorSlice(radii, new[] { ri }, new[] { 1 });
+            var nR = engine.ReduceSum(WithinRadius(queryDistances, r), new[] { 1 }, false);
+            var trainingNR = trainingNRs[ri];
+            var counted = engine.TensorGreaterThan(nR, countedFloor);
+            hadNeighbors = engine.TensorMax(hadNeighbors, counted);
+
+            // Sampling neighbourhood: training points at a positive distance within alpha * r
+            var sampling = engine.TensorMultiply(positiveDistance,
+                WithinRadius(queryDistances, engine.TensorSlice(samplingRadii, new[] { ri }, new[] { 1 })));
+            var samplingCount = engine.ReduceSum(sampling, new[] { 1 }, false);
+            var hasSampling = engine.TensorGreaterThan(samplingCount, NumOps.Zero);
+            var safeCount = engine.TensorWhere(hasSampling, samplingCount, ones);
+
+            // Mean and (two-pass, population) variance of n(r) over the sampling neighbourhood
+            var neighborNR = AnomalyTensorOps.BroadcastRow(trainingNR, m);
+            var avgNR = engine.TensorDivide(
+                engine.ReduceSum(engine.TensorMultiply(sampling, neighborNR), new[] { 1 }, false), safeCount);
+            var deviation = engine.TensorSubtract(neighborNR, AnomalyTensorOps.BroadcastColumn(avgNR, nTraining));
+            var varNR = engine.TensorDivide(
+                engine.ReduceSum(engine.TensorMultiply(sampling, engine.TensorSquare(deviation)), new[] { 1 }, false),
+                safeCount);
+
+            // MDEF = 1 - n(p,r) / avg_n(r), sigma-MDEF = std(n(r)) / avg_n(r) (both 0 when avg_n(r) <= 0);
+            // score = |MDEF| / sigma-MDEF, or |MDEF| when sigma-MDEF is 0
+            var positiveAvg = engine.TensorGreaterThan(avgNR, NumOps.Zero);
+            var safeAvg = engine.TensorWhere(positiveAvg, avgNR, ones);
+            var mdef = engine.TensorWhere(positiveAvg,
+                engine.ScalarMinusTensor(NumOps.One, engine.TensorDivide(nR, safeAvg)), zeros);
+            var sigmaMdef = engine.TensorWhere(positiveAvg, engine.TensorDivide(engine.TensorSqrt(varNR), safeAvg), zeros);
+            var absMdef = engine.TensorAbs(mdef);
+            var positiveSigma = engine.TensorGreaterThan(sigmaMdef, NumOps.Zero);
+            var lociScore = engine.TensorWhere(positiveSigma,
+                engine.TensorDivide(absMdef, engine.TensorWhere(positiveSigma, sigmaMdef, ones)), absMdef);
+
+            // Isolated (counting neighbours but no sampling neighbours) scores IsolatedPointScore; radii
+            // with fewer than 2 counting neighbours are skipped
+            var candidate = engine.TensorWhere(hasSampling, lociScore, engine.TensorAddScalar(zeros, isolatedScore));
+            maxMdef = engine.TensorWhere(
+                engine.TensorMultiply(counted, engine.TensorGreaterThan(candidate, maxMdef)), candidate, maxMdef);
+        }
+
+        // A point with no neighbours at ANY tested radius is an extreme isolate
+        return engine.TensorWhere(hadNeighbors, maxMdef,
+            engine.TensorAddScalar(zeros, NumOps.FromDouble(NoNeighborScore)));
+    }
+
+    // 1 where distance <= radius (a [1] tensor), else 0; not-greater-than, so NaN distances count as within.
+    private Tensor<T> WithinRadius(Tensor<T> distances, Tensor<T> radius)
+    {
+        var engine = Engine;
+        var radiusB = engine.TensorBroadcastTo(engine.Reshape(radius, new[] { 1, 1 }), new[] { distances.Shape[0], distances.Shape[1] });
+        return engine.ScalarMinusTensor(NumOps.One, engine.TensorGreaterThan(distances, radiusB));
     }
 
     private T EstimateMaxRadius(Matrix<T> X)
     {
-        // Estimate maximum radius as the max distance between any two points
-        // For efficiency, sample a subset
-        T maxDist = NumOps.Zero;
+        // Estimate maximum radius as the max distance between sampled pairs of points
+        // (pairs drawn in the seeded order idx1, idx2, idx1, idx2, ...)
         int sampleSize = Math.Min(100, X.Rows);
         var random = RandomHelper.CreateSeededRandom(_randomSeed);
-
+        var first = new int[sampleSize];
+        var second = new int[sampleSize];
         for (int i = 0; i < sampleSize; i++)
         {
-            int idx1 = random.Next(X.Rows);
-            int idx2 = random.Next(X.Rows);
-
-            var p1 = new Vector<T>(X.GetRowReadOnlySpan(idx1).ToArray());
-            var p2 = new Vector<T>(X.GetRowReadOnlySpan(idx2).ToArray());
-
-            var diff = Engine.Subtract(p1, p2);
-            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-            if (NumOps.GreaterThan(dist, maxDist)) maxDist = dist;
+            first[i] = random.Next(X.Rows);
+            second[i] = random.Next(X.Rows);
         }
 
-        return maxDist;
-    }
-
-    private int CountPointsInRadius(Matrix<T> X, int pointIdx, Matrix<T> reference, T radius)
-    {
-        int count = 0;
-        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
-
-        for (int i = 0; i < reference.Rows; i++)
-        {
-            var refPoint = new Vector<T>(reference.GetRowReadOnlySpan(i).ToArray());
-            var diff = Engine.Subtract(point, refPoint);
-            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-            if (!NumOps.GreaterThan(dist, radius)) count++;
-        }
-
-        return count;
-    }
-
-    private int CountPointsInRadiusFromTraining(int trainingIdx, T radius)
-    {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        int count = 0;
-        var point = new Vector<T>(trainingData.GetRowReadOnlySpan(trainingIdx).ToArray());
-
-        for (int i = 0; i < trainingData.Rows; i++)
-        {
-            var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-            var diff = Engine.Subtract(point, refPoint);
-            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-            if (!NumOps.GreaterThan(dist, radius)) count++;
-        }
-
-        return count;
-    }
-
-    private List<int> GetPointsInRadius(Matrix<T> X, int pointIdx, Matrix<T> reference, T radius)
-    {
-        var neighbors = new List<int>();
-        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
-
-        for (int i = 0; i < reference.Rows; i++)
-        {
-            var refPoint = new Vector<T>(reference.GetRowReadOnlySpan(i).ToArray());
-            var diff = Engine.Subtract(point, refPoint);
-            T dist = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-            if (!NumOps.GreaterThan(dist, radius) && NumOps.GreaterThan(dist, NumOps.Zero))
-            {
-                neighbors.Add(i);
-            }
-        }
-
-        return neighbors;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var engine = Engine;
+        var diff = engine.TensorSubtract(AnomalyTensorOps.SelectRows(data, first), AnomalyTensorOps.SelectRows(data, second));
+        var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(diff), new[] { 1 }, false));
+        return engine.TensorMaxValue(engine.TensorMax(distances, NumOps.Zero));
     }
 }

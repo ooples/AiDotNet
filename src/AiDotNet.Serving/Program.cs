@@ -148,7 +148,9 @@ public class Program
         // API key authentication (tier enforcement)
         builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
 
-        // License key management
+        // License key management. The clock is registered so the seat lease (LicenseService.ActivationLease)
+        // reads one injectable time source.
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<ILicenseService, LicenseService>();
 
         // Stripe payment integration

@@ -215,15 +215,22 @@ public partial class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionB
         var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(input)));
         var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks, _options.MaxDegreeOfParallelism);
 
-        var result = new T[input.Rows];
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            var samplePredictions = predictions.Select(p => p[i]).OrderBy(v => v).ToList();
-            int index = (int)Math.Floor(quantile * (samplePredictions.Count - 1));
-            result[i] = samplePredictions[index];
+            return new Vector<T>(0);
         }
 
-        return new Vector<T>(result);
+        int treeCount = predictions.Count;
+        int index = (int)Math.Floor(quantile * (treeCount - 1));
+        if (index < 0 || index >= treeCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), "The forest has no trees to take a quantile over.");
+        }
+
+        // [trees, rows]: sort each row's tree predictions ascending and take the order statistic.
+        var stacked = Engine.TensorStack(predictions.Select(p => p.AsTensor()).ToArray(), 0);
+        var sorted = Engine.TensorSort(stacked, 0, false).Values;
+        return Engine.TensorSelect(sorted, 0, index).ToVector();
     }
 
     /// <summary>
@@ -273,8 +280,8 @@ public partial class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionB
             sampledIndices.Add(_random.Next(0, x.Rows));
         }
 
-        var sampledX = new Matrix<T>(sampledIndices.Select(i => x.GetRow(i)).ToList());
-        var sampledY = new Vector<T>([.. sampledIndices.Select(i => y[i])]);
+        var sampledX = RegressionEngineOps2.GatherRows(x, sampledIndices);
+        var sampledY = RegressionEngineOps2.Gather(y, sampledIndices);
 
         return (sampledX, sampledY);
     }
@@ -296,18 +303,21 @@ public partial class QuantileRegressionForests<T> : AsyncDecisionTreeRegressionB
     /// </remarks>
     protected override async Task CalculateFeatureImportancesAsync(int numFeatures)
     {
-        FeatureImportances = new Vector<T>(new T[numFeatures]);
         var importanceTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.FeatureImportances));
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks, _options.MaxDegreeOfParallelism);
 
-        for (int i = 0; i < numFeatures; i++)
+        // Sum the trees in order; a tree with fewer importances contributes zero past its length.
+        var total = Engine.FillZero<T>(numFeatures);
+        foreach (var imp in allImportances)
         {
-            FeatureImportances[i] = NumOps.Divide(
-                allImportances.Aggregate(NumOps.Zero, (acc, imp) =>
-                    NumOps.Add(acc, i < imp.Length ? imp[i] : NumOps.Zero)),
-                NumOps.FromDouble(_trees.Count)
-            );
+            int shared = Math.Min(imp.Length, numFeatures);
+            var padded = shared == numFeatures
+                ? imp.GetSubVector(0, numFeatures)
+                : Vector<T>.Concatenate(imp.GetSubVector(0, shared), Engine.FillZero<T>(numFeatures - shared));
+            total = Engine.Add(total, padded);
         }
+
+        FeatureImportances = Engine.Divide(total, NumOps.FromDouble(_trees.Count));
     }
 
     /// <summary>

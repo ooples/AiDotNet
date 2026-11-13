@@ -201,6 +201,34 @@ public class QrDecompositionIntegrationTests
 
     #region Linear System Solving Tests
 
+    [Fact]
+    public void QrDecomposition_Solve_WideMatrix_ThrowsMatrixFactorizationException()
+    {
+        // Complete Householder QR of a 2x3 matrix gives a 2x3 R; QR cannot solve the
+        // underdetermined system and must say so instead of indexing out of range.
+        var A = new Matrix<double>(2, 3);
+        A[0, 0] = 1; A[0, 1] = 2; A[0, 2] = 3;
+        A[1, 0] = 4; A[1, 1] = 5; A[1, 2] = 6;
+
+        var qr = new QrDecomposition<double>(A);
+
+        Assert.Throws<AiDotNet.Exceptions.MatrixFactorizationException>(
+            () => qr.Solve(new Vector<double>(new[] { 1.0, 2.0 })));
+    }
+
+    [Fact]
+    public void QrDecomposition_Solve_RankDeficientMatrix_ThrowsInsteadOfReturningNaN()
+    {
+        // The second column is zero, so R[1,1] = 0 and the triangular solve would divide by zero.
+        var A = new Matrix<double>(3, 2);
+        A[0, 0] = 1; A[1, 0] = 2; A[2, 0] = 3;
+
+        var qr = new QrDecomposition<double>(A);
+
+        Assert.Throws<AiDotNet.Exceptions.MatrixFactorizationException>(
+            () => qr.Solve(new Vector<double>(new[] { 1.0, 2.0, 3.0 })));
+    }
+
 
 
     #endregion

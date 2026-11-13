@@ -112,19 +112,13 @@ public partial class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// </remarks>
     private void CalculateCoefficients()
     {
-        int n = _x.Length;
-        var A = new Matrix<T>(n, n);
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                T dx = _numOps.Subtract(_x[i], _x[j]);
-                T dy = _numOps.Subtract(_y[i], _y[j]);
-                T r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(dx, dx), _numOps.Multiply(dy, dy)));
-                A[i, j] = MultiquadricBasis(r);
-            }
-        }
+        // A[i, j] = basis(distance between point i and point j)
+        Matrix<T> A = MultiquadricBasis(
+            InterpolationSearch.PairwiseDifferences(xs),
+            InterpolationSearch.PairwiseDifferences(ys)).ToMatrix();
 
         var decomposition = _decomposition ?? new LuDecomposition<T>(A);
         _coefficients = MatrixSolutionHelper.SolveLinearSystem(_z, decomposition);
@@ -157,16 +151,12 @@ public partial class MultiquadricInterpolation<T> : I2DInterpolation<T>
         if (_coefficients == null)
             throw new InvalidOperationException("Coefficients have not been calculated.");
 
-        T result = _numOps.Zero;
-        for (int i = 0; i < _x.Length; i++)
-        {
-            T dx = _numOps.Subtract(x, _x[i]);
-            T dy = _numOps.Subtract(y, _y[i]);
-            T r = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(dx, dx), _numOps.Multiply(dy, dy)));
-            result = _numOps.Add(result, _numOps.Multiply(_coefficients[i], MultiquadricBasis(r)));
-        }
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> basis = MultiquadricBasis(
+            engine.ScalarMinusTensor(x, _x.AsTensor()),
+            engine.ScalarMinusTensor(y, _y.AsTensor()));
 
-        return result;
+        return engine.TensorSum(engine.TensorMultiply(_coefficients.AsTensor(), basis));
     }
 
     /// <summary>
@@ -179,10 +169,13 @@ public partial class MultiquadricInterpolation<T> : I2DInterpolation<T>
     /// decreases with distance. The multiquadric function creates a smooth "hill" shape around each data point.
     /// The epsilon parameter controls how wide and flat these hills are.
     /// </remarks>
-    /// <param name="r">The distance from the target point to a data point.</param>
-    /// <returns>The value of the multiquadric function at the given distance.</returns>
-    private T MultiquadricBasis(T r)
+    /// <param name="dx">The x-offsets between the points being compared.</param>
+    /// <param name="dy">The y-offsets between the points being compared, with the same shape as <paramref name="dx"/>.</param>
+    /// <returns>The multiquadric function of each offset's distance, with the shape of the inputs.</returns>
+    private Tensor<T> MultiquadricBasis(Tensor<T> dx, Tensor<T> dy)
     {
-        return _numOps.Sqrt(_numOps.Add(_numOps.Multiply(r, r), _numOps.Multiply(_epsilon, _epsilon)));
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> r = engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)));
+        return engine.TensorSqrt(engine.TensorAddScalar(engine.TensorMultiply(r, r), _numOps.Multiply(_epsilon, _epsilon)));
     }
 }
