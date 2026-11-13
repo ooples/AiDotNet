@@ -428,7 +428,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return true;
     }
 
-    /// <summary>Bit-for-bit equality. A NaN anywhere reports false, which keeps the reference.</summary>
+    /// <summary>
+    /// Element-wise equality as <c>EqualityComparer&lt;T&gt;.Default</c>: 0 equals -0 and NaN equals NaN, so
+    /// the optimized route is kept only when it reproduces every reference value.
+    /// </summary>
     private static bool BitwiseEquals(Tensor<T> a, Tensor<T> b)
     {
         if (a.Length != b.Length) return false;

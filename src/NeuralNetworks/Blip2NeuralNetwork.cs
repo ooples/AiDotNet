@@ -1161,9 +1161,6 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     }
 
     /// <summary>
-    /// Projects vision features to Q-Former dimension.
-    /// </summary>
-    /// <summary>
     /// Column sums of the first rowCount rows over the first width columns, each divided by the
     /// query-token count, zero-padded to length.
     /// </summary>
@@ -1184,6 +1181,9 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         return mean;
     }
 
+    /// <summary>
+    /// Projects vision features to Q-Former dimension.
+    /// </summary>
     private Tensor<T> ProjectVisionToQformer(Tensor<T> visionFeatures)
     {
         int seqLen = visionFeatures.Shape[0];

@@ -350,13 +350,16 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
 
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            // angle[i, j] = i / 10000^(2*(j/2) / dim): column j uses its sin/cos pair index
+            // angle[i, j] = i / 10000^(2*(j/2) / dim): column j uses its sin/cos pair index. The table is
+            // a constant built in double (angles reach the position count in radians, beyond what float or
+            // Half carries to sin/cos) and rounded to T once, as the per-element double math was.
             var pairStart = Engine.TensorSlice(
-                Engine.TensorRepeatInterleave(Engine.TensorArange<T>(0, dim, 2), 2, 0), [0], [dim]);
-            var denominator = Engine.TensorExp(Engine.TensorMultiplyScalar(
-                Engine.TensorDivideScalar(pairStart, NumOps.FromDouble(dim)), NumOps.FromDouble(Math.Log(10000))));
+                Engine.TensorRepeatInterleave(Engine.TensorArange<double>(0, dim, 2), 2, 0), [0], [dim]);
+            var tenThousands = new Tensor<double>([dim]);
+            tenThousands.Fill(10000.0);
+            var denominator = Engine.TensorPower(tenThousands, Engine.TensorDivideScalar(pairStart, (double)dim));
             var angle = Engine.TensorDivide(
-                Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, positions), [positions, 1]), [positions, dim]),
+                Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<double>(0, positions), [positions, 1]), [positions, dim]),
                 Engine.TensorBroadcastTo(Engine.Reshape(denominator, [1, dim]), [positions, dim]));
 
             // Even columns take sin, odd columns cos
@@ -365,7 +368,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             {
                 evenColumn[k] = (k % dim) % 2 == 0;
             }
-            Engine.TensorWhere(evenColumn, Engine.TensorSin(angle), Engine.TensorCos(angle))
+            Engine.TensorWhere(evenColumn, Engine.TensorSin(angle), Engine.TensorCos(angle)).Cast<T>()
                 .CopyTo(embeddings.AsWritableSpan());
         }
     }

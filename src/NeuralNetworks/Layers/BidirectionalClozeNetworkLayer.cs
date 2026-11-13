@@ -125,21 +125,7 @@ public partial class BidirectionalClozeNetworkLayer<T> : LayerBase<T>, IShapeCon
             throw new ArgumentException($"BidirectionalClozeNetworkLayer was configured for modelDim={_modelDim} but got D={dim}.", nameof(input));
         int heads = _numHeads, headDim = dim / heads;
 
-        // PositionalEncoding: pe[p, 2i] = sin(p / 10000^(2i/d)), pe[p, 2i+1] = cos(p / 10000^(2i/d)).
-        // Column c uses the frequency of its even partner 2i = c - c % 2; even columns take sin, odd ones cos.
-        var pairBase = new Tensor<int>(Enumerable.Range(0, dim).Select(c => c - (c % 2)).ToArray(), new[] { dim }).Cast<T>();
-        var inverseFrequency = Engine.TensorExp(
-            Engine.TensorMultiplyScalar(pairBase, NumOps.FromDouble(-Math.Log(10000.0) / dim)));
-        var angles = Engine.TensorOuter(Engine.TensorArange<T>(0, length), inverseFrequency);   // [length, dim]
-        var oddColumns = new Tensor<int>(Enumerable.Range(0, dim).Select(c => c % 2).ToArray(), new[] { 1, dim }).Cast<T>();
-        var columnOnes = new Tensor<T>(new[] { 1, dim });
-        columnOnes.Fill(NumOps.One);
-        var evenColumns = Engine.TensorSubtract(columnOnes, oddColumns);
-        var pe = Engine.Reshape(
-            Engine.TensorAdd(
-                Engine.TensorMultiply(Engine.TensorSin(angles), evenColumns),
-                Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns)),
-            new[] { 1, length, dim });
+        var pe = Engine.Reshape(PositionalEncoding(length, dim), new[] { 1, length, dim });
         var position = Engine.TensorBroadcastTo(pe, new[] { batch, length, dim });
         var memory = Engine.TensorAdd(input, position);
         var target = position;
@@ -172,6 +158,29 @@ public partial class BidirectionalClozeNetworkLayer<T> : LayerBase<T>, IShapeCon
         }
 
         return unbatched ? Engine.Reshape(target, [length, dim]) : target;
+    }
+
+    /// <summary>The [length, dim] sinusoidal position table of the PositionalEncoding.</summary>
+    private Tensor<T> PositionalEncoding(int length, int dim)
+    {
+        // pe[p, 2i] = sin(p / 10000^(2i/d)), pe[p, 2i+1] = cos(p / 10000^(2i/d)).
+        // Column c uses the frequency of its even partner 2i = c - c % 2; even columns take sin, odd ones cos.
+        // The table is a constant built in double (angles reach the sequence length in radians, beyond
+        // what float or Half carries to sin/cos) and rounded to T once, as the per-element double math was.
+        var pairBase = new Tensor<int>(Enumerable.Range(0, dim).Select(c => c - (c % 2)).ToArray(), new[] { dim }).Cast<double>();
+        var tenThousands = new Tensor<double>(new[] { dim });
+        tenThousands.Fill(10000.0);
+        var frequencyDivisor = Engine.TensorPower(tenThousands, Engine.TensorDivideScalar(pairBase, (double)dim));
+        var angles = Engine.TensorDivide(
+            Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<double>(0, length), new[] { length, 1 }), new[] { length, dim }),
+            Engine.TensorBroadcastTo(Engine.Reshape(frequencyDivisor, new[] { 1, dim }), new[] { length, dim }));   // [length, dim]
+        var oddColumns = new Tensor<int>(Enumerable.Range(0, dim).Select(c => c % 2).ToArray(), new[] { 1, dim }).Cast<double>();
+        var columnOnes = new Tensor<double>(new[] { 1, dim });
+        columnOnes.Fill(1.0);
+        var evenColumns = Engine.TensorSubtract(columnOnes, oddColumns);
+        return Engine.TensorAdd(
+            Engine.TensorMultiply(Engine.TensorSin(angles), evenColumns),
+            Engine.TensorMultiply(Engine.TensorCos(angles), oddColumns)).Cast<T>();
     }
 
     /// <inheritdoc/>

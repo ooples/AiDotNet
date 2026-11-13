@@ -176,13 +176,16 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     {
         if (numLevels <= 0) return new T[Math.Max(numLevels, 0)];
 
-        // baseLR / 10^i = baseLR * exp(-i ln 10).
+        // baseLR / 10^i, evaluated in double and rounded to T once (an exp of an arange in T drifts, and
+        // in Half the exponent itself rounds).
         double baseLR = 0.01;
         var engine = AiDotNetEngine.Current;
-        var rates = engine.TensorMultiplyScalar(
-            engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numLevels), _numOps.FromDouble(-Math.Log(10.0)))),
-            _numOps.FromDouble(baseLR));
-        return rates.ToVector().ToArray();
+        var tens = new Tensor<double>(new[] { numLevels });
+        tens.Fill(10.0);
+        var baseRates = new Tensor<double>(new[] { numLevels });
+        baseRates.Fill(baseLR);
+        var rates = engine.TensorDivide(baseRates, engine.TensorPower(tens, engine.TensorArange<double>(0, numLevels)));
+        return rates.Cast<T>().ToVector().ToArray();
     }
 
     /// <inheritdoc />
