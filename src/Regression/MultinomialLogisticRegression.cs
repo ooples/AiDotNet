@@ -227,7 +227,13 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         _coefficients = new Matrix<T>(_numClasses, numFeatures + 1);
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
-        T jitterRelative = NumOps.FromDouble(1e-8);
+        // The relative jitter must survive being added to a diagonal entry in T: 1e-8 is below half an ulp of a float
+        // (eps 1.2e-7), so float kept the singular Hessian unchanged. Four machine epsilons of T is at least two ulps;
+        // double keeps 1e-8, which is larger.
+        double machineEpsilon = typeof(T) == typeof(float) ? Math.Pow(2, -23)
+            : typeof(T) == typeof(Half) ? Math.Pow(2, -10)
+            : Math.Pow(2, -52);
+        T jitterRelative = NumOps.FromDouble(Math.Max(1e-8, 4 * machineEpsilon));
         T jitterFloor = NumOps.FromDouble(1e-12);
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
@@ -245,16 +251,21 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
             // The full-softmax Hessian is singular by construction: the classes' parameters are identified only up to a
             // shift shared across classes, and that shift is its null space. The gradient is orthogonal to it (per
             // feature, the class residuals p - y sum to zero), so a scale-relative ridge makes the Newton system
-            // solvable without changing the step in any identified direction.
-            hessian = RegressionEngineOps2.AddRelativeDiagonalJitter(hessian, jitterRelative, jitterFloor);
+            // solvable without changing the step in any identified direction. The Hessian of the log-likelihood is
+            // negative semi-definite, so the ridge goes on -H (pushing eigenvalues away from zero) and the sign is
+            // restored; adding it to H directly could turn a small negative curvature positive and reverse the step.
+            hessian = RegressionEngineOps2.AddRelativeDiagonalJitter(hessian.Negate(), jitterRelative, jitterFloor).Negate();
 
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
 
-            // Reshape update into _coefficients shape: _numClasses × (numFeatures+1)
-            Matrix<T> updateMatrix = new Matrix<T>(_coefficients.Rows, _coefficients.Columns);
-            int copied = Math.Min(update.Length, _coefficients.Rows * _coefficients.Columns);
-            update.AsSpan().Slice(0, copied).CopyTo(updateMatrix.AsWritableSpan());
+            // The gradient (X^T (Y - P), [feature, class]) and the Hessian (xx^T kron h) both order the parameters
+            // feature-major, index = feature * classes + class, so the update is too; _coefficients is
+            // [class, feature]. Copying it straight in moved each step onto the wrong (class, feature) pairs.
+            Matrix<T> featureMajor = new Matrix<T>(_coefficients.Columns, _coefficients.Rows);
+            int copied = Math.Min(update.Length, featureMajor.Rows * featureMajor.Columns);
+            update.AsSpan().Slice(0, copied).CopyTo(featureMajor.AsWritableSpan());
+            Matrix<T> updateMatrix = featureMajor.Transpose();
 
             _coefficients = _coefficients.Subtract(updateMatrix);
 
