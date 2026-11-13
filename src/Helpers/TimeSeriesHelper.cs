@@ -95,7 +95,20 @@ public static class TimeSeriesHelper<T>
             Y[i - p] = y[i];
         }
 
-        var coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+        Vector<T> coefficients;
+        try
+        {
+            coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+        }
+        catch (AiDotNet.Exceptions.MatrixFactorizationException)
+        {
+            // The lag matrix is rank deficient (a constant or polynomial series, or more lags than its
+            // structure supports), so the least-squares problem has no unique solution and the requested
+            // factorization rejects it. statsmodels' AR least squares (OLS, method "pinv") and
+            // numpy.linalg.lstsq return the minimum-norm solution in that case; the SVD solve is that
+            // pseudo-inverse solution.
+            coefficients = new SvdDecomposition<T>(X).Solve(Y);
+        }
 
         // Enforce stationarity: |a1| + |a2| + ... + |ap| < 1 is sufficient
         // (though not necessary) for stationarity. See: #991
