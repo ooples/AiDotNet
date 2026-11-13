@@ -679,6 +679,8 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     }
 
     /// <summary>The output layer's weights, row-major <c>[inputs, classes]</c>, for tests.</summary>
+    // A view over state the registry already persists, not state of its own: the generator must not serialize it.
+    [AiDotNet.Attributes.Scratch]
     internal Vector<T> OutputWeightsForTesting
     {
         get => OutputLayer().Weights;
@@ -686,6 +688,8 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     }
 
     /// <summary>The output layer's bias, for tests.</summary>
+    // A view over state the registry already persists, not state of its own: the generator must not serialize it.
+    [AiDotNet.Attributes.Scratch]
     internal Vector<T> OutputBiasForTesting
     {
         get => OutputLayer().Bias;
@@ -693,6 +697,8 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     }
 
     /// <summary>The write gate logit alpha, for tests.</summary>
+    // A view over state the registry already persists, not state of its own: the generator must not serialize it.
+    [AiDotNet.Attributes.Scratch]
     internal Vector<T> GateLogitForTesting
     {
         get => _writeGateLogit;
