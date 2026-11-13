@@ -214,16 +214,25 @@ public class OuteTTSComponentTests
             Assert.True(Math.Abs(expected[n] - actual[n]) <= 1e-9, $"rate {rate}, sample {n}: {expected[n]} vs {actual[n]}");
     }
 
-    // ITU-R BS.1770: a 0 dBFS 997 Hz sine reads −3.01 LKFS (the K-weighting gain at 997 Hz is offset by −0.691).
+    // ITU-R BS.1770 gating over pyloudnorm's RBJ K-weighting: a 0 dBFS 997 Hz sine reads −0.691 + 10 log10 of the
+    // mean 400 ms block power of the independently filtered signal. That is −3.052 LUFS: the RBJ shelf gives 0.650 dB at
+    // 997 Hz where the BS.1770 coefficients give 0.691 dB (their −3.010), and the meter uses the RBJ filters. Every
+    // block of a full-scale sine passes both gates.
     [Fact(Timeout = 120000)]
-    public async Task IntegratedLoudness_FullScaleSineIsMinus3Point01()
+    public async Task IntegratedLoudness_FullScaleSineMatchesReferenceFilters()
     {
         await Task.Yield();
         const int rate = 48000;
         var x = new double[rate * 3];
         for (int n = 0; n < x.Length; n++) x[n] = Math.Sin(2 * Math.PI * 997 * n / rate);
+        var weighted = ReferenceLfilter(ReferenceBiquad(0.0, 0.5, 38.0, rate, false),
+            ReferenceLfilter(ReferenceBiquad(4.0, 1 / Math.Sqrt(2), 1500.0, rate, true), x));
+        int block = 2 * rate / 5, step = rate / 10, blocks = (weighted.Length - block) / step + 1;
+        double meanPower = Enumerable.Range(0, blocks)
+            .Average(b => weighted.Skip(b * step).Take(block).Average(value => value * value));
+        double expected = -0.691 + 10 * Math.Log10(meanPower);
         double lufs = LoudnessMeter.IntegratedLoudness(x, rate);
-        Assert.True(Math.Abs(lufs - -3.01) <= 0.02, $"{lufs} LUFS");
+        Assert.True(Math.Abs(lufs - expected) <= 1e-3, $"{lufs} LUFS vs reference {expected}");
         double generic = LoudnessMeter.IntegratedLoudness(new Tensor<float>(new[] { x.Length }, new Vector<float>(x.Select(v => (float)v).ToArray())), rate);
         Assert.True(Math.Abs(generic - lufs) <= 1e-3, $"float {generic} vs double {lufs}");
     }
