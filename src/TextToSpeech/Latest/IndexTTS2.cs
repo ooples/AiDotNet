@@ -100,8 +100,8 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
     private IndexTtsTokenizer? _tokenizer;
     private KaldiFbank<T>? _fbank;
     private DifferentiableMel<T>? _mel;
-    private double[][]? _emotionRows;
-    private double[][]? _speakerRows;
+    private Tensor<T>? _emotionRows;     // [rows, hidden]
+    private Tensor<T>? _speakerRows;     // [rows, style]
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
@@ -430,44 +430,44 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
         var rows = _emotionRows ?? throw new InvalidOperationException("Emotion weights need the emotion table; load it with LoadEmotionTable.");
         var groups = o.EmotionGroupSizes ?? throw new InvalidOperationException("Emotion weights need IndexTTS2Options.EmotionGroupSizes.");
         int d = o.HiddenDim, start = 0;
-        var mix = new double[d];
-        var styleValues = Doubles(style);
+        Tensor<T> Row(Tensor<T> table, int r) => Engine.Reshape(Engine.TensorSlice(table, new[] { r, 0 }, new[] { 1, table.Shape[1] }), new[] { table.Shape[1] });
+        var vectors = new Tensor<T>[groups.Length];
         for (int g = 0; g < groups.Length; g++)
         {
-            var members = Enumerable.Range(start, groups[g]).ToArray();
-            start += groups[g];
-            double[] vector;
+            int first = start, count = groups[g];
+            start += count;
             switch (o.EmotionMode)
             {
                 case IndexTts2EmotionMode.Paper:
-                    vector = new double[d];
-                    foreach (int r in members)
-                        for (int k = 0; k < d; k++) vector[k] += rows[r][k] / members.Length;
+                    vectors[g] = Engine.ReduceMean(Engine.TensorSlice(rows, new[] { first, 0 }, new[] { count, d }), new[] { 0 }, keepDims: false);
                     break;
                 case IndexTts2EmotionMode.ReleaseRandomRow:
-                    vector = rows[members[random.Next(members.Length)]];
+                    vectors[g] = Row(rows, first + random.Next(count));
                     break;
                 default:
                     var speakers = _speakerRows ?? throw new InvalidOperationException("Nearest-speaker rows need the emotion table's speaker vectors.");
-                    vector = rows[members.OrderByDescending(r => Cosine(speakers[r], styleValues)).ThenBy(r => r).First()];
+                    var candidates = Engine.TensorSlice(speakers, new[] { first, 0 }, new[] { count, speakers.Shape[1] });
+                    // The first row with the highest F.cosine_similarity to the style (each norm clamped at 1e-8).
+                    vectors[g] = Row(rows, first + FirstArgMax(CosineToRow(candidates, style)));
                     break;
             }
-            for (int k = 0; k < d; k++) mix[k] += weights[g] * vector[k];
         }
-        return new Tensor<T>(new[] { 1, d }, new Vector<T>(mix.Select(v => Ops.FromDouble(v)).ToArray()));
+        // Sum over groups of w_g * v_g as one [1, groups] x [groups, d] product; the weights are the caller's, loaded once.
+        var weightRow = new Tensor<double>(weights, new[] { 1, weights.Length }).Cast<T>();
+        return Engine.TensorMatMul(weightRow, Engine.TensorStack(vectors, 0));
     }
 
-    private static double Cosine(double[] a, double[] b)
+    // F.cosine_similarity of each row of `rows` [n, k] with `vector` (k values), each norm clamped at 1e-8.
+    private Tensor<T> CosineToRow(Tensor<T> rows, Tensor<T> vector)
     {
-        double dot = 0, na = 0, nb = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            na += a[i] * a[i];
-            nb += b[i] * b[i];
-        }
-        // F.cosine_similarity clamps each norm at 1e-8.
-        return dot / (Math.Max(Math.Sqrt(na), 1e-8) * Math.Max(Math.Sqrt(nb), 1e-8));
+        int n = rows.Shape[0], k = rows.Shape[1];
+        var column = Engine.Reshape(vector, new[] { k, 1 });
+        var dot = Engine.Reshape(Engine.TensorMatMul(rows, column), new[] { n });
+        var floor = Ops.FromDouble(1e-8);
+        var rowNorms = Engine.TensorMax(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(rows), new[] { 1 }, keepDims: false)), floor);
+        var vectorNorm = Ops.Sqrt(Engine.TensorSum(Engine.TensorSquare(column)));
+        if (Ops.LessThan(vectorNorm, floor)) vectorNorm = floor;
+        return Engine.TensorDivide(dot, Engine.TensorMultiplyScalar(rowNorms, vectorNorm));
     }
 
     /// <summary>Sets the emotion table: one emotion vector <c>[d]</c> per row (the release's <c>feat2.pt</c>), grouped by
@@ -483,8 +483,32 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
         if (emotionRows.Any(r => r.Length != o.HiddenDim)) throw new ArgumentException($"Emotion rows are {o.HiddenDim} wide.", nameof(emotionRows));
         if (speakerRows is not null && (speakerRows.Length != emotionRows.Length || speakerRows.Any(r => r.Length != o.StyleDim)))
             throw new ArgumentException($"Give one {o.StyleDim}-wide speaker row per emotion row.", nameof(speakerRows));
-        _emotionRows = emotionRows;
-        _speakerRows = speakerRows;
+        LoadEmotionTable(TableOf(emotionRows, o.HiddenDim), speakerRows is null ? null : TableOf(speakerRows, o.StyleDim));
+    }
+
+    /// <summary>Sets the emotion table from tensors: the emotion vectors <c>[rows, hidden]</c> grouped by
+    /// <see cref="IndexTTS2Options.EmotionGroupSizes"/>, and optionally the speaker vectors <c>[rows, style]</c>.</summary>
+    public void LoadEmotionTable(Tensor<T> emotionRows, Tensor<T>? speakerRows = null)
+    {
+        ThrowIfDisposed();
+        if (emotionRows is null) throw new ArgumentNullException(nameof(emotionRows));
+        var o = _options;
+        if (emotionRows.Rank != 2 || emotionRows.Shape[1] != o.HiddenDim)
+            throw new ArgumentException($"Emotion rows are {o.HiddenDim} wide.", nameof(emotionRows));
+        if (o.EmotionGroupSizes is not { } groups || groups.Sum() != emotionRows.Shape[0])
+            throw new ArgumentException("EmotionGroupSizes must sum to the table's rows.", nameof(emotionRows));
+        if (speakerRows is not null && (speakerRows.Rank != 2 || speakerRows.Shape[0] != emotionRows.Shape[0] || speakerRows.Shape[1] != o.StyleDim))
+            throw new ArgumentException($"Give one {o.StyleDim}-wide speaker row per emotion row.", nameof(speakerRows));
+        _emotionRows = emotionRows.Clone();
+        _speakerRows = speakerRows?.Clone();
+    }
+
+    // A table of equal-width double rows (a checkpoint's feat1/feat2) loaded as [rows, width] of T.
+    private static Tensor<T> TableOf(double[][] rows, int width)
+    {
+        var flat = new double[rows.Length * width];
+        for (int r = 0; r < rows.Length; r++) Array.Copy(rows[r], 0, flat, r * width, width);
+        return new Tensor<double>(flat, new[] { rows.Length, width }).Cast<T>();
     }
 
     private IndexTtsTextToEmotion<T> TextToEmotion()

@@ -22938,3 +22938,4 @@ AiDotNet.TextToSpeech.TtsModelBase<T>.RowMask(System.Collections.Generic.IReadOn
 AiDotNet.TextToSpeech.TtsModelBase<T>.DurationAlignment(int[]! durations) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.AlignmentScores(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! means, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.MonotonicDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scores) -> int[]!
+AiDotNet.TextToSpeech.Latest.IndexTTS2<T>.LoadEmotionTable(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! emotionRows, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speakerRows = null) -> void
