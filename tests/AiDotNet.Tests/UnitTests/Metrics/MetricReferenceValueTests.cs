@@ -68,6 +68,16 @@ public class MetricReferenceValueTests
     }
 
     [Fact]
+    public void FrechetDistance_NaNCovariance_IsNaN()
+    {
+        // A max-abs scale skips NaN, so an all-NaN covariance would otherwise pass as the zero matrix and
+        // return only the (zero) mean term.
+        var mean = new Vector<double>(new[] { 0.0 });
+        var missing = new Matrix<double>(new double[,] { { double.NaN } });
+        Assert.True(double.IsNaN(FrechetDistanceHelper<double>.FrechetDistance(mean, missing, mean, missing)));
+    }
+
+    [Fact]
     public void NdcgAtK_TiedScores_MatchesScikitLearnTieAveraging()
     {
         // sklearn.metrics.ndcg_score([[1, 0, 2]], [[1, 1, 0]]) = 0.6900468833579672

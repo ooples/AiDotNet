@@ -53,6 +53,11 @@ internal static class FrechetDistanceHelper<T>
 
         var sigma1 = Tensor<T>.FromMatrix(cov1);
         var sigma2 = Tensor<T>.FromMatrix(cov2);
+        // The scale below skips NaN (max(NaN, x) is x), and an all-NaN covariance would then look like a zero
+        // one and return the mean term alone. A NaN covariance has no distance: report NaN.
+        if (engine.TensorCountNonzero(engine.TensorIsNan(sigma1)) > 0
+            || engine.TensorCountNonzero(engine.TensorIsNan(sigma2)) > 0)
+            return NumOps.FromDouble(double.NaN);
         // A common covariance scale prevents the sandwich product from underflowing or overflowing.
         T scale = MathHelper.Max(engine.TensorMaxValue(engine.TensorAbs(sigma1)),
             engine.TensorMaxValue(engine.TensorAbs(sigma2)));
