@@ -1185,8 +1185,9 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         if (n > 0)
         {
             var absoluteActuals = Tensor<T>.FromVector(Engine.Abs(actuals.GetSubVector(0, n)));
+            // Compared in double: 1e-10 rounds to zero in Half, which would let exact zeros through.
             canCalculateMape = Engine.TensorCountNonzero(
-                Engine.TensorLessThan(absoluteActuals, NumOps.FromDouble(1e-10))) == 0;
+                Engine.TensorLessThan(absoluteActuals.Cast<double>(), 1e-10)) == 0;
             if (canCalculateMape)
             {
                 sumAbsolutePercentageError = Engine.TensorSum(

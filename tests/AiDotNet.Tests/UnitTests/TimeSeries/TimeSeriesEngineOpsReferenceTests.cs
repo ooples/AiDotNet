@@ -298,3 +298,30 @@ public class TimeSeriesEngineOpsCountTests
         Assert.Equal(expected, (double)(result ?? new Vector<Half>(1))[0], 6);
     }
 }
+
+public class TimeSeriesErrorMetricsHalfTests
+{
+    private sealed class MetricsProbe : ARModel<Half>
+    {
+        public MetricsProbe() : base(new ARModelOptions<Half> { AROrder = 1 })
+        {
+        }
+
+        public Dictionary<string, Half> Metrics(Vector<Half> predictions, Vector<Half> actuals)
+            => CalculateErrorMetrics(predictions, actuals);
+    }
+
+    [Fact]
+    public void CalculateErrorMetrics_Half_ZeroActualSkipsMape()
+    {
+        // An actual of exactly zero makes the percentage error undefined, so MAPE must be omitted.
+        // The 1e-10 guard rounds to zero in Half; compared in T it let the zero through and MAPE was +inf.
+        var predictions = new Vector<Half>(new[] { (Half)1, (Half)2 });
+        var actuals = new Vector<Half>(new[] { (Half)0, (Half)2 });
+
+        var metrics = new MetricsProbe().Metrics(predictions, actuals);
+
+        Assert.False(metrics.ContainsKey("MAPE"));
+        Assert.Equal(0.5, (double)metrics["MAE"], 6);
+    }
+}
