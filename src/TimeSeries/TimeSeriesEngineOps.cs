@@ -361,10 +361,29 @@ internal static class TimeSeriesEngineOps<T>
         // [rows, period] phase grid, zero-padded at the end; the padding adds exact zeros.
         int padding = rows * period - v.Length;
         var values = Tensor<T>.FromVector(Vector<T>.Concatenate(v, new Vector<T>(padding)), new[] { rows, period });
-        var ones = Tensor<T>.FromVector(
-            Vector<T>.Concatenate(Engine.Fill(v.Length, NumOps.One), new Vector<T>(padding)), new[] { rows, period });
-        return (Engine.ReduceSum(values, new[] { 0 }, keepDims: false).ToVector(),
-                Engine.ReduceSum(ones, new[] { 0 }, keepDims: false).ToVector());
+
+        // Counts are taken in int: a sum of ones in T saturates (at 2048 for Half).
+        int full = v.Length / period;
+        int extra = v.Length % period;
+        var counts = new Tensor<int>(new[] { period },
+            new Vector<int>(Enumerable.Range(0, period).Select(phase => full + (phase < extra ? 1 : 0))));
+        return (Engine.ReduceSum(values, new[] { 0 }, keepDims: false).ToVector(), counts.Cast<T>().ToVector());
+    }
+
+    /// <summary>
+    /// For each position i of a length-<paramref name="n"/> series, the number of positions of
+    /// <c>[i - half, i + half]</c> that lie inside the series, counted in int (a sum of ones in T saturates).
+    /// </summary>
+    public static Vector<T> InRangeCounts(int n, int half)
+    {
+        if (n <= 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var counts = new Tensor<int>(new[] { n }, new Vector<int>(
+            Enumerable.Range(0, n).Select(i => Math.Min(n, i + half + 1) - Math.Max(0, i - half))));
+        return counts.Cast<T>().ToVector();
     }
 
     /// <summary>Element-wise <c>(v[i] - mean) / scale</c>.</summary>

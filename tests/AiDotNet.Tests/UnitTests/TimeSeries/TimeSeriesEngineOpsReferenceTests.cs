@@ -229,3 +229,55 @@ public class SampleQuantilesNaNTests
         }
     }
 }
+/// <summary>
+/// Element counts behind the STL phase means and edge averages must be exact integers. A sum of ones in
+/// T saturates (Half stops counting at 2048), which used to make every phase mean or edge average of a
+/// long Half series divide by 2048 instead of the true count.
+/// </summary>
+public class TimeSeriesEngineOpsCountTests
+{
+    [Fact]
+    public void PhaseSums_Half_CountsBeyondHalfIntegerRange()
+    {
+        // 6000 points over 2 phases: 3000 per phase, more than a Half sum of ones can reach.
+        var (sums, counts) = TimeSeriesEngineOps<Half>.PhaseSums(new Vector<Half>(6000), 2);
+
+        Assert.Equal(2, counts.Length);
+        Assert.Equal(3000.0, (double)counts[0]);
+        Assert.Equal(3000.0, (double)counts[1]);
+        Assert.Equal(0.0, (double)sums[0]);
+    }
+
+    [Fact]
+    public void PhaseSums_UnevenPhases_CountsMatchReference()
+    {
+        var (_, counts) = TimeSeriesEngineOps<double>.PhaseSums(new Vector<double>(11), 4);
+
+        Assert.Equal(new[] { 3.0, 3.0, 3.0, 2.0 }, counts.ToArray());
+    }
+
+    [Fact]
+    public void InRangeCounts_MatchesReference()
+    {
+        var counts = TimeSeriesEngineOps<double>.InRangeCounts(7, 2);
+
+        // [i - 2, i + 2] clipped to [0, 7)
+        Assert.Equal(new[] { 3.0, 4.0, 5.0, 5.0, 5.0, 4.0, 3.0 }, counts.ToArray());
+    }
+
+    [Fact]
+    public void StlMovingAverage_Half_EdgeAverageDividesByTrueCount()
+    {
+        // Window 4999 over 5000 points: position 0 averages [0, 2499], i.e. 2500 points, one of them 1.
+        var data = new Vector<Half>(5000);
+        data[0] = (Half)1.0f;
+        var model = new STLDecomposition<Half>(new STLDecompositionOptions<Half> { SeasonalPeriod = 2 });
+        var method = typeof(STLDecomposition<Half>).GetMethod("MovingAverage", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(method);
+        var result = method?.Invoke(model, new object[] { data, 4999 }) as Vector<Half>;
+        Assert.NotNull(result);
+
+        double expected = (double)(Half)(1.0 / 2500.0);
+        Assert.Equal(expected, (double)(result ?? new Vector<Half>(1))[0], 6);
+    }
+}

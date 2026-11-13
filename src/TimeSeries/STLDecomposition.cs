@@ -320,10 +320,9 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
 
         // Edge positions (i < half or i >= n - half) average the available points of [i - half, i + half].
         var padded = Vector<T>.Concatenate(new Vector<T>(half), data, new Vector<T>(half));
-        var paddedOnes = Vector<T>.Concatenate(new Vector<T>(half), Engine.Fill(n, NumOps.One), new Vector<T>(half));
         var edgeAverages = Engine.Divide(
             TimeSeriesEngineOps<T>.WindowSums(padded, 2 * half + 1),
-            TimeSeriesEngineOps<T>.WindowSums(paddedOnes, 2 * half + 1));
+            TimeSeriesEngineOps<T>.InRangeCounts(n, half));
 
         // Interior positions average the full window of effectiveWindow points starting at i - half.
         int interior = n - 2 * half;
