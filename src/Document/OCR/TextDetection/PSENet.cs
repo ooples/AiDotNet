@@ -401,7 +401,7 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
             var polygon = ExtractConvexHull(instance);
             T[] box = DocumentTensorOps.ToT<T>(new[] { instance.Min(p => p.x), instance.Min(p => p.y), instance.Max(p => p.x), instance.Max(p => p.y) });
-            T[] corners = DocumentTensorOps.ToT<T>(polygon.SelectMany(c => new[] { c.x, c.y }).ToArray());
+            T[] corners = polygon.SelectMany(c => new[] { c.x, c.y }).Select(NumOps.FromDouble).ToArray();
             regions.Add(new TextRegion<T>
             {
                 Confidence = mean.ToArray()[0],

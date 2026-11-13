@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.Document.LayoutAware;
 using AiDotNet.Document.OCR.TextDetection;
+using AiDotNet.Document.OCR.TextRecognition;
 using AiDotNet.Document.VisionLanguage;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -128,5 +129,31 @@ public sealed class DocumentPaperReferenceTests
             options: new UDOPOptions { ImageSize = 32, PatchSize = 16, MaxSequenceLength = 16, HiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, KeyValueDim = 8, FeedForwardDim = 64, VocabSize = 64, RelativeAttentionBuckets = 8, RelativeAttentionMaxDistance = 16, RelativeAttentionMaxDistance2D = 10, Max2DPositions = 64, NumLocationBins = 16, MaxGenerationLength = 8 });
         var processed = model.PreprocessForInspection(ConstantPage(32, 1.0));
         Assert.All(processed.ToArray(), v => Assert.Equal(1.0, v, 12));
+    }
+
+    [Fact]
+    public void Svtr_CtcConfidenceIsTheMeanSoftmaxProbabilityOfTheKeptCharacters()
+    {
+        // PaddleOCR CTCLabelDecode over the softmax of the head's logits: steps 0-1 both pick 'a' (collapsed to
+        // one), step 2 picks 'b'. Averaging the raw logits instead would give (2 + 3) / 2 = 2.5.
+        using var model = new SVTR<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 100, outputSize: 3),
+            options: new SVTROptions { Charset = "ab" });
+        var logits = new Tensor<double>(new[] { 3, 3 }, new Vector<double>(new[] { 0.0, 2.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0 }));
+        var (text, confidence, perCharacter) = model.CTCDecode(logits);
+
+        double pa = Math.Exp(2) / (Math.Exp(2) + 2), pb = Math.Exp(3) / (Math.Exp(3) + 2);
+        Assert.Equal("ab", text);
+        Assert.Equal(new[] { pa, pb }, perCharacter, new Tolerance(1e-12));
+        Assert.Equal((pa + pb) / 2, confidence, 12);
+    }
+
+    private sealed class Tolerance : System.Collections.Generic.IEqualityComparer<double>
+    {
+        private readonly double _epsilon;
+        public Tolerance(double epsilon) => _epsilon = epsilon;
+        public bool Equals(double x, double y) => Math.Abs(x - y) <= _epsilon;
+        public int GetHashCode(double obj) => 0;
     }
 }

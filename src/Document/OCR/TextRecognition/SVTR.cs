@@ -441,8 +441,7 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>,
         var spatial = TokensToSpatial(tokens, batch, height, width, channels);
         spatial = convolution.Forward(spatial);
         int outputHeight = height / 2;
-        var indices = new Tensor<int>([outputHeight]);
-        for (int i = 0; i < outputHeight; i++) indices[i] = i * 2;
+        var indices = new Tensor<int>(Enumerable.Range(0, outputHeight).Select(i => i * 2).ToArray(), new[] { outputHeight });
         spatial = Engine.TensorGather(spatial, indices, axis: 2);
         return normalization.Forward(SpatialToTokens(spatial));
     }
@@ -536,14 +535,13 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>,
         var output = SqueezeSingleBatch(
             _useNativeMode ? RunNativeForward(preprocessed) : RunOnnxInference(preprocessed));
 
-        var (text, confidence) = CTCDecode(output);
+        var (text, confidence, characterConfidences) = CTCDecode(output);
 
         return new TextRecognitionResult<T>
         {
             Text = text,
-            Confidence = NumOps.FromDouble(confidence),
-            ConfidenceValue = confidence,
-            Characters = GetCharacterConfidences(output, text),
+            Confidence = confidence,
+            Characters = GetCharacterConfidences(text, characterConfidences),
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
     }
@@ -568,59 +566,49 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>,
         return Tensor<T>.CreateDefault([_numLayers, _numHeads, MaxSequenceLength, MaxSequenceLength], NumOps.Zero);
     }
 
-    private (string text, double confidence) CTCDecode(Tensor<T> output)
+    /// <summary>
+    /// PaddleOCR's <c>CTCLabelDecode</c>: the softmax of each step's logits (the CTC head's inference softmax),
+    /// its argmax and probability, consecutive repeats collapsed and the blank (index 0) dropped. The text's
+    /// confidence is the mean probability of the characters kept (0 when none), and each character carries its
+    /// own step's probability.
+    /// </summary>
+    internal (string text, T confidence, T[] characterConfidences) CTCDecode(Tensor<T> output)
     {
         var chars = new List<char>();
-        double totalConf = 0;
-        int validSteps = 0;
-        int prevIdx = -1;
-
+        var keptSteps = new List<int>();
         int seqLen = output.Shape[0];
         int vocabSize = output.Shape.Length > 1 ? output.Shape[1] : _charset.Length + 1;
+        if (seqLen == 0 || vocabSize == 0)
+            return (string.Empty, NumOps.Zero, Array.Empty<T>());
 
+        var logits = Engine.Reshape(output, new[] { seqLen, output.Length / seqLen });
+        if (logits.Shape[1] != vocabSize)
+            logits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { seqLen, vocabSize });
+        var (best, probability) = DocumentTensorOps.RowMax(Engine, Engine.Softmax(logits, 1), vocabSize);
+
+        int prevIdx = -1;
         for (int t = 0; t < seqLen; t++)
         {
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-            for (int c = 0; c < vocabSize; c++)
+            int maxIdx = best[t];
+            if (maxIdx != 0 && maxIdx != prevIdx && maxIdx - 1 < _charset.Length)
             {
-                double val = NumOps.ToDouble(output[t, c]);
-                if (val > maxVal) { maxVal = val; maxIdx = c; }
-            }
-
-            if (maxIdx != 0 && maxIdx != prevIdx)
-            {
-                if (maxIdx - 1 < _charset.Length)
-                {
-                    chars.Add(_charset[maxIdx - 1]);
-                    totalConf += maxVal;
-                    validSteps++;
-                }
+                chars.Add(_charset[maxIdx - 1]);
+                keptSteps.Add(t);
             }
             prevIdx = maxIdx;
         }
 
-        string text = new string([.. chars]);
-        double avgConf = validSteps > 0 ? totalConf / validSteps : 0;
-
-        return (text, avgConf);
+        T[] characterConfidences = DocumentTensorOps.Pick(Engine, probability, keptSteps.ToArray());
+        return (new string([.. chars]), DocumentTensorOps.Mean(Engine, characterConfidences), characterConfidences);
     }
 
-    private List<CharacterRecognition<T>> GetCharacterConfidences(Tensor<T> output, string text)
-    {
-        var result = new List<CharacterRecognition<T>>();
-        for (int i = 0; i < text.Length; i++)
+    private static List<CharacterRecognition<T>> GetCharacterConfidences(string text, T[] confidences)
+        => text.Select((c, i) => new CharacterRecognition<T>
         {
-            result.Add(new CharacterRecognition<T>
-            {
-                Character = text[i],
-                Confidence = NumOps.FromDouble(0.9),
-                ConfidenceValue = 0.9,
-                Position = i
-            });
-        }
-        return result;
-    }
+            Character = c,
+            Confidence = confidences[i],
+            Position = i
+        }).ToList();
 
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {

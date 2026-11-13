@@ -22923,3 +22923,5 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.Oblivi
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 *REMOVED*AiDotNet.Document.Interfaces.DocumentClassificationResult<T>.TopPredictions.get -> System.Collections.Generic.IList<(string! Category, double Score)>!
 AiDotNet.Document.Interfaces.DocumentClassificationResult<T>.TopPredictions.get -> System.Collections.Generic.IList<(string! Category, T Score)>!
+*REMOVED*override AiDotNet.Document.LayoutAware.LayoutLMv3<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+*REMOVED*override AiDotNet.Document.LayoutAware.LayoutLMv3<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
