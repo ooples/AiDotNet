@@ -183,17 +183,17 @@ internal partial class GatedResidualNetwork<T> : AiDotNet.Interfaces.IParameterS
     {
         int size = 1;
         foreach (var s in shape) size *= s;
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         // Box-Muller: column 0 of each row is the draw behind u1 = 1 - U, column 1 is u2, so the seeded
-        // stream is consumed in the same (u1, u2) per-element order.
-        var draws = Tensor<T>.CreateRandom(random, size, 2);
-        var u1 = Engine.ScalarMinusTensor(numOps.One, Engine.TensorSlice(draws, new[] { 0, 0 }, new[] { size, 1 }));
+        // stream is consumed in the same (u1, u2) per-element order. The draws stay in double, as in
+        // master: in Half a U within 2^-12 of 1 rounds to 1, u1 becomes 0 and log(0) makes the weight inf.
+        var draws = Tensor<double>.CreateRandom(random, size, 2);
+        var u1 = Engine.ScalarMinusTensor(1.0, Engine.TensorSlice(draws, new[] { 0, 0 }, new[] { size, 1 }));
         var u2 = Engine.TensorSlice(draws, new[] { 0, 1 }, new[] { size, 1 });
-        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), numOps.FromDouble(-2.0)));
-        var angle = Engine.TensorCos(Engine.TensorMultiplyScalar(u2, numOps.FromDouble(2.0 * Math.PI)));
-        var normal = Engine.TensorMultiplyScalar(Engine.TensorMultiply(radius, angle), numOps.FromDouble(stddev));
-        return normal.Reshape(shape);
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), -2.0));
+        var angle = Engine.TensorCos(Engine.TensorMultiplyScalar(u2, 2.0 * Math.PI));
+        var normal = Engine.TensorMultiplyScalar(Engine.TensorMultiply(radius, angle), stddev);
+        return normal.Cast<T>().Reshape(shape);
     }
 
     private static Tensor<T> CreateConstantTensor(int[] shape, double value)

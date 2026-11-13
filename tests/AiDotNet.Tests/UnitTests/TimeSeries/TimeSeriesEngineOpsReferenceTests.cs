@@ -413,4 +413,20 @@ public class TimeSeriesHalfPrecisionTests
 
         Assert.InRange(prediction, 501.0, 601.0);
     }
+
+    [Fact]
+    public void GatedResidualNetwork_Half_InitialWeightsAreFinite()
+    {
+        // Box-Muller draws u1 = 1 - U. Drawn in Half, any U within 2^-12 of 1 rounds to 1, u1 is 0 and
+        // log(0) made the weight infinite: about 4 of the ~17000 weights here. Drawn in double, all are finite.
+        for (int seed = 1; seed <= 3; seed++)
+        {
+            var grn = new AiDotNet.TimeSeries.TFT.GatedResidualNetwork<Half>(64, 64, 64, seed);
+            var parameters = grn.GetParameters();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                Assert.True(Half.IsFinite(parameters[i]), $"seed {seed}, parameter {i} is {parameters[i]}");
+            }
+        }
+    }
 }
