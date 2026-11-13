@@ -427,6 +427,23 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         var subsetLogits = GatherRows(logits, nodes, numClasses);
         var subsetLabels = GatherRows(labels, nodes, numClasses);
 
+        double avgLoss = MeanLogitCrossEntropy(subsetLogits, subsetLabels);
+
+        // Compute accuracy: compare argmax of logits vs argmax of labels
+        double accuracy = (double)CountCorrect(subsetLogits, subsetLabels) / indices.Length;
+
+        return (avgLoss, accuracy);
+    }
+
+    /// <summary>
+    /// Mean over the rows of <c>-sum_c labels[c] * logSoftmax(logits)[c]</c>, classes with a zero label skipped.
+    /// </summary>
+    internal static double MeanLogitCrossEntropy(Tensor<T> subsetLogits, Tensor<T> subsetLabels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = subsetLogits.Shape[0];
+
         // Cross-entropy on the raw logits via numerically-stable log-softmax:
         //   CE = -Σ labels · logSoftmax(logits),  logSoftmax = z - max - log Σ exp(z - max).
         // The final GCN layer emits RAW logits (no softmax activation), so the metric
@@ -434,20 +451,16 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         // for the actual training gradient. (The previous version treated the logits as
         // if they were already probabilities, which made this reported loss meaningless.)
         // Classes with a zero label are skipped, so a -inf logit there contributes nothing.
-        var max = Engine.ReduceMax(subsetLogits, [1], keepDims: true, out _);
-        var sumExp = Engine.ReduceSum(Engine.TensorExp(Engine.TensorSubtract(subsetLogits, max)), [1], keepDims: true);
-        var logSumExp = Engine.TensorAdd(Engine.TensorLog(sumExp), max);
-        var terms = Engine.TensorNegate(
-            Engine.TensorMultiply(subsetLabels, Engine.TensorSubtract(subsetLogits, logSumExp)));
-        var labelled = Engine.TensorNotEquals(subsetLabels, NumOps.Zero);
-        double totalLoss = NumOps.ToDouble(Engine.TensorSum(
-            Engine.TensorWhere(labelled, terms, Engine.TensorZerosLike(terms))));
-        double avgLoss = totalLoss / indices.Length;
-
-        // Compute accuracy: compare argmax of logits vs argmax of labels
-        double accuracy = (double)CountCorrect(subsetLogits, subsetLabels) / indices.Length;
-
-        return (avgLoss, accuracy);
+        var max = engine.ReduceMax(subsetLogits, [1], keepDims: true, out _);
+        var sumExp = engine.ReduceSum(engine.TensorExp(engine.TensorSubtract(subsetLogits, max)), [1], keepDims: true);
+        var logSumExp = engine.TensorAdd(engine.TensorLog(sumExp), max);
+        var terms = engine.TensorNegate(
+            engine.TensorMultiply(subsetLabels, engine.TensorSubtract(subsetLogits, logSumExp)));
+        var labelled = engine.TensorNotEquals(subsetLabels, ops.Zero);
+        // Mean over nodes, dividing before the sum so a Half total cannot overflow
+        var nodeShares = engine.TensorDivideScalar(
+            engine.TensorWhere(labelled, terms, engine.TensorZerosLike(terms)), ops.FromDouble(rows));
+        return ops.ToDouble(engine.TensorSum(nodeShares));
     }
 
     /// <summary>

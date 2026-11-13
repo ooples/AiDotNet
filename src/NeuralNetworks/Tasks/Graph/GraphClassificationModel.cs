@@ -416,7 +416,7 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         };
 
         var lr = NumOps.FromDouble(learningRate);
-        var probabilityFloor = NumOps.FromDouble(1e-10);
+        var trainGraphCount = NumOps.FromDouble(Math.Max(task.TrainGraphs.Count, 1));
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -446,11 +446,8 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 var probs = Softmax(logits);
 
                 // Compute cross-entropy loss: -sum(label * log(max(prob, 1e-10)))
-                var probRow = Engine.TensorNarrow(probs, 1, 0, NumClasses);
-                var floored = Engine.TensorWhere(
-                    Engine.TensorIsNan(probRow), probRow, Engine.TensorMax(probRow, probabilityFloor));
-                var weightedLog = Engine.TensorMultiply(LabelRow(task.TrainLabels, i), Engine.TensorLog(floored));
-                graphLogLikelihoods[i] = Engine.TensorSum(weightedLog);
+                graphLogLikelihoods[i] = LabelLogLikelihood(
+                    Engine.TensorNarrow(probs, 1, 0, NumClasses), LabelRow(task.TrainLabels, i));
 
                 // Accuracy
                 int predictedClass = GetPredictedClass(logits);
@@ -467,10 +464,12 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 }
             }
 
-            double epochLoss = task.TrainGraphs.Count > 0
-                ? -NumOps.ToDouble(Engine.Sum(new Vector<T>(graphLogLikelihoods)))
+            // Mean over graphs, dividing before the sum so a Half total cannot overflow
+            double avgLoss = task.TrainGraphs.Count > 0
+                ? -NumOps.ToDouble(Engine.TensorSum(Engine.TensorDivideScalar(
+                    new Tensor<T>(graphLogLikelihoods, new[] { graphLogLikelihoods.Length }),
+                    trainGraphCount)))
                 : 0.0;
-            double avgLoss = task.TrainGraphs.Count > 0 ? epochLoss / task.TrainGraphs.Count : 0.0;
             double trainAcc = task.TrainGraphs.Count > 0 ? (double)correctTrain / task.TrainGraphs.Count : 0.0;
 
             // Validation accuracy
@@ -540,6 +539,28 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         // First non-zero label entry (NaN counts as non-zero), or 0 when the row is all zero
         var nonZero = Engine.TensorNotEquals(LabelRow(labels, graphIdx), NumOps.Zero);
         return TieBreakArgMax.FirstMaxIndex(nonZero);
+    }
+
+    /// <summary>
+    /// <c>sum_c label[c] * log(max(prob[c], 1e-10))</c> for one graph, NaN probabilities passed through; the
+    /// cross-entropy is its negation.
+    /// </summary>
+    /// <remarks>
+    /// 1e-10 rounds to 0 in Half, where log(0) would make the loss infinite and 0 * log(0) NaN for the zero
+    /// labels, so a type that cannot hold 1e-10 floors at the smallest normal Half (2^-14) instead.
+    /// </remarks>
+    internal static T LabelLogLikelihood(Tensor<T> probRow, Tensor<T> labelRow)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var floor = ops.FromDouble(1e-10);
+        if (!ops.GreaterThan(floor, ops.Zero))
+        {
+            floor = ops.FromDouble(6.103515625e-05);
+        }
+
+        var floored = engine.TensorWhere(engine.TensorIsNan(probRow), probRow, engine.TensorMax(probRow, floor));
+        return engine.TensorSum(engine.TensorMultiply(labelRow, engine.TensorLog(floored)));
     }
 
     private Tensor<T> LabelRow(Tensor<T> labels, int graphIdx)
