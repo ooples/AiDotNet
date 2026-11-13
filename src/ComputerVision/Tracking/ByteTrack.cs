@@ -53,6 +53,7 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
     private readonly T _unconfirmedMatchThresh;
     private readonly T _duplicateThresh;
     private readonly bool _fuseScore;
+    private readonly BoxAreaConvention _boxAreaConvention;
     private readonly int _maxTimeLost;
     private List<STrack<T>> _trackedTracks;
     private List<STrack<T>> _lostTracks;
@@ -85,6 +86,7 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         _unconfirmedMatchThresh = byteOptions.UnconfirmedMatchThreshold;
         _duplicateThresh = byteOptions.DuplicateIouDistance;
         _fuseScore = byteOptions.FuseScore;
+        _boxAreaConvention = byteOptions.BoxAreaConvention;
         _maxTimeLost = options.MaxAge;
     }
 
@@ -242,11 +244,12 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
         }
     }
 
-    private static Tensor<T> IouDistance(List<STrack<T>> tracks, List<STrack<T>> dets)
+    private Tensor<T> IouDistance(List<STrack<T>> tracks, List<STrack<T>> dets)
     {
         return TrackingAssociation<T>.IouDistance(
             TrackingAssociation<T>.BoxesToTensor(tracks.Select(t => t.Tlbr).ToList()),
-            TrackingAssociation<T>.BoxesToTensor(dets.Select(t => t.Tlbr).ToList()));
+            TrackingAssociation<T>.BoxesToTensor(dets.Select(t => t.Tlbr).ToList()),
+            _boxAreaConvention);
     }
 
     /// <summary>
@@ -373,6 +376,13 @@ public class ByteTrackOptions<T> : TrackingOptions<T>
     /// IoU distance below which a tracked and a lost track are considered duplicates (default 0.15).
     /// </summary>
     public T DuplicateIouDistance { get; set; } = Ops.FromDouble(0.15);
+
+    /// <summary>
+    /// How box widths and heights are measured for every IoU the tracker computes. The default,
+    /// <see cref="BoxAreaConvention.PixelInclusive"/>, is the official implementation's cython_bbox
+    /// <c>bbox_ious</c> (width = x2 - x1 + 1); <see cref="BoxAreaConvention.Continuous"/> matches ultralytics.
+    /// </summary>
+    public BoxAreaConvention BoxAreaConvention { get; set; } = BoxAreaConvention.PixelInclusive;
 }
 
 /// <summary>

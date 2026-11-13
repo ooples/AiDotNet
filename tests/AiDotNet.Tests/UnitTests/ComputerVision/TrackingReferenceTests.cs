@@ -1,6 +1,7 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.ComputerVision.Tracking;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -22,8 +23,9 @@ public class TrackingReferenceTests
     [Fact]
     public void ByteTrack_FirstAssociation_MatchesWhenIouDistanceIsWithinMatchThresh()
     {
-        // Frame 1 creates track 1. Frame 2: IoU 1/3 with score 0.9 gives fused cost
-        // 1 - 0.9/3 = 0.7 <= 0.8, so the official tracker keeps track 1 (master required IoU > 0.8).
+        // Frame 1 creates track 1. Frame 2: bbox_ious (+1 pixel widths) gives IoU 66/176 = 0.375; with score 0.9
+        // the fused cost is 1 - 0.3375 = 0.6625 <= 0.8, so the official tracker keeps track 1 (master required
+        // IoU > 0.8).
         var tracker = new ByteTrack<double>(new TrackingOptions<double>());
         tracker.Update(new List<Detection<double>> { Det(0, 0, 10, 10, 0.9) });
         var result = tracker.Update(new List<Detection<double>> { Det(5, 0, 15, 10, 0.9) });
@@ -35,7 +37,7 @@ public class TrackingReferenceTests
     [Fact]
     public void ByteTrack_FirstAssociation_RejectsCostAboveMatchThresh()
     {
-        // IoU 10/190: fused cost 0.95 > 0.8. Track 1 is lost; the detection starts track 2, which is not
+        // bbox_ious IoU 22/220 = 0.1: fused cost 0.91 > 0.8. Track 1 is lost; the detection starts track 2, which is not
         // activated outside frame 1, so nothing is reported.
         var tracker = new ByteTrack<double>(new TrackingOptions<double>());
         tracker.Update(new List<Detection<double>> { Det(0, 0, 10, 10, 0.9) });
@@ -47,15 +49,68 @@ public class TrackingReferenceTests
     [Fact]
     public void ByteTrack_FuseScore_ScalesIouByDetectionScore()
     {
-        // IoU 0.25, score 0.7: fused cost 1 - 0.175 = 0.825 > 0.8 (no match); unfused 0.75 <= 0.8 (match).
+        // bbox_ious IoU 44/198 = 2/9, score 0.7: fused cost 1 - 1.4/9 = 0.844 > 0.8 (no match); unfused
+        // 7/9 = 0.778 <= 0.8 (match).
         var fused = new ByteTrack<double>(new TrackingOptions<double>());
         fused.Update(new List<Detection<double>> { Det(0, 0, 10, 10, 0.9) });
-        Assert.Empty(fused.Update(new List<Detection<double>> { Det(6, 0, 16, 10, 0.7) }).Tracks);
+        Assert.Empty(fused.Update(new List<Detection<double>> { Det(7, 0, 17, 10, 0.7) }).Tracks);
 
         var unfused = new ByteTrack<double>(new ByteTrackOptions<double> { FuseScore = false });
         unfused.Update(new List<Detection<double>> { Det(0, 0, 10, 10, 0.9) });
-        var track = Assert.Single(unfused.Update(new List<Detection<double>> { Det(6, 0, 16, 10, 0.7) }).Tracks);
+        var track = Assert.Single(unfused.Update(new List<Detection<double>> { Det(7, 0, 17, 10, 0.7) }).Tracks);
         Assert.Equal(1, track.TrackId);
+    }
+
+    [Fact]
+    public void ByteTrack_IouMatrix_PixelInclusive_MatchesCythonBboxIous()
+    {
+        // cython_bbox bbox_overlaps: iw = min(x2) - max(x1) + 1, ih likewise, union of (w + 1)(h + 1) areas.
+        // (0,0,10,10) vs (6,0,16,10): iw 5, ih 11, overlap 55, areas 121 + 121, IoU 55/187.
+        // (0,0,10,10) vs (0,0,4,10): overlap 5 * 11 = 55, areas 121 + 55, IoU 55/121.
+        var a = new Tensor<double>(new double[] { 0, 0, 10, 10 }, new[] { 1, 4 });
+        var b = new Tensor<double>(new double[] { 6, 0, 16, 10, 0, 0, 4, 10 }, new[] { 2, 4 });
+
+        var iou = TrackingAssociation<double>.IouMatrix(a, b, BoxAreaConvention.PixelInclusive);
+
+        Assert.Equal(55.0 / 187.0, iou[0, 0], Tolerance);
+        Assert.Equal(55.0 / 121.0, iou[0, 1], Tolerance);
+    }
+
+    [Fact]
+    public void ByteTrack_IouMatrix_Continuous_MatchesUltralytics()
+    {
+        // Continuous widths: overlap 4 * 10 = 40 over 100 + 100 - 40, and 4 * 10 over 100 + 40 - 40.
+        var a = new Tensor<double>(new double[] { 0, 0, 10, 10 }, new[] { 1, 4 });
+        var b = new Tensor<double>(new double[] { 6, 0, 16, 10, 0, 0, 4, 10 }, new[] { 2, 4 });
+
+        var iou = TrackingAssociation<double>.IouMatrix(a, b, BoxAreaConvention.Continuous);
+
+        Assert.Equal(0.25, iou[0, 0], Tolerance);
+        Assert.Equal(0.4, iou[0, 1], Tolerance);
+    }
+
+    [Fact]
+    public void ByteTrack_DefaultConvention_IsTheOfficialPixelInclusiveIou()
+    {
+        // (0,0,10,10) then (6,0,16,10) at score 0.7. Official bbox_ious IoU 55/187: fused cost
+        // 1 - 0.7 * 55/187 = 0.794 <= 0.8, so track 1 continues. Continuous IoU 0.25 would give 0.825 and lose it.
+        Assert.Equal(BoxAreaConvention.PixelInclusive, new ByteTrackOptions<double>().BoxAreaConvention);
+        var tracker = new ByteTrack<double>(new TrackingOptions<double>());
+        tracker.Update(new List<Detection<double>> { Det(0, 0, 10, 10, 0.9) });
+
+        var track = Assert.Single(tracker.Update(new List<Detection<double>> { Det(6, 0, 16, 10, 0.7) }).Tracks);
+        Assert.Equal(1, track.TrackId);
+    }
+
+    [Fact]
+    public void ByteTrack_ContinuousConvention_UsesUltralyticsIou()
+    {
+        // Same frames with continuous IoU 0.25: fused cost 1 - 0.175 = 0.825 > 0.8, so track 1 is lost and the
+        // new track is not activated outside frame 1; nothing is reported.
+        var tracker = new ByteTrack<double>(new ByteTrackOptions<double> { BoxAreaConvention = BoxAreaConvention.Continuous });
+        tracker.Update(new List<Detection<double>> { Det(0, 0, 10, 10, 0.9) });
+
+        Assert.Empty(tracker.Update(new List<Detection<double>> { Det(6, 0, 16, 10, 0.7) }).Tracks);
     }
 
     [Fact]

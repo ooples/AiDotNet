@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Enums;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.Solvers.Assignment;
 using AiDotNet.Tensors;
@@ -60,10 +61,41 @@ internal static class TrackingAssociation<T>
         return AiDotNetEngine.Current.BoxIou(boxesA, boxesB);
     }
 
+    /// <summary>
+    /// Pairwise IoU <c>[N, M]</c> under <paramref name="convention"/>. <see cref="BoxAreaConvention.PixelInclusive"/>
+    /// is cython_bbox's <c>bbox_overlaps</c>: overlap <c>min(x2) - max(x1) + 1</c> and areas
+    /// <c>(x2 - x1 + 1)(y2 - y1 + 1)</c>, which equals the continuous IoU of the boxes with x2 and y2 moved out by 1.
+    /// </summary>
+    internal static Tensor<T> IouMatrix(Tensor<T> boxesA, Tensor<T> boxesB, BoxAreaConvention convention)
+    {
+        return convention == BoxAreaConvention.PixelInclusive
+            ? IouMatrix(ExtendFarCorner(boxesA), ExtendFarCorner(boxesB))
+            : IouMatrix(boxesA, boxesB);
+    }
+
     /// <summary>1 - IoU <c>[N, M]</c>, the IoU distance of SORT, DeepSORT and ByteTrack.</summary>
     internal static Tensor<T> IouDistance(Tensor<T> boxesA, Tensor<T> boxesB)
     {
         return AiDotNetEngine.Current.ScalarMinusTensor(NumOps.One, IouMatrix(boxesA, boxesB));
+    }
+
+    /// <summary>1 - IoU <c>[N, M]</c> under <paramref name="convention"/>.</summary>
+    internal static Tensor<T> IouDistance(Tensor<T> boxesA, Tensor<T> boxesB, BoxAreaConvention convention)
+    {
+        return AiDotNetEngine.Current.ScalarMinusTensor(NumOps.One, IouMatrix(boxesA, boxesB, convention));
+    }
+
+    /// <summary>(x1, y1, x2, y2) to (x1, y1, x2 + 1, y2 + 1): inclusive pixel corners as continuous ones.</summary>
+    private static Tensor<T> ExtendFarCorner(Tensor<T> boxes)
+    {
+        int n = boxes.Shape[0];
+        if (n == 0)
+            return boxes;
+
+        var engine = AiDotNetEngine.Current;
+        var near = engine.TensorSlice(boxes, new[] { 0, 0 }, new[] { n, 2 });
+        var far = engine.TensorAddScalar(engine.TensorSlice(boxes, new[] { 0, 2 }, new[] { n, 2 }), NumOps.One);
+        return engine.TensorConcatenate(new[] { near, far }, 1);
     }
 
     /// <summary>Indices where a 0/1 mask tensor is non-zero, in ascending order.</summary>

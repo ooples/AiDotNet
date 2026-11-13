@@ -22598,6 +22598,8 @@ AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.MaxCosineDistance.get -> T
 AiDotNet.ComputerVision.Tracking.DeepSORT<T>.DeepSORT(AiDotNet.ComputerVision.Tracking.TrackingOptions<T>! options, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? appearanceEncoder) -> void
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.ByteTrackOptions() -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.BoxAreaConvention.get -> AiDotNet.Enums.BoxAreaConvention
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.BoxAreaConvention.set -> void
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.DuplicateIouDistance.get -> T
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.DuplicateIouDistance.set -> void
 AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.FuseScore.get -> bool
@@ -22999,3 +23001,6 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Enums.BoxAreaConvention
+AiDotNet.Enums.BoxAreaConvention.Continuous = 1 -> AiDotNet.Enums.BoxAreaConvention
+AiDotNet.Enums.BoxAreaConvention.PixelInclusive = 0 -> AiDotNet.Enums.BoxAreaConvention
