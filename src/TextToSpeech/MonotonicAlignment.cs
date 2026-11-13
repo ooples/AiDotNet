@@ -67,6 +67,70 @@ public static class MonotonicAlignment
     }
 
     /// <summary>
+    /// The most likely monotonic alignment of <paramref name="scores"/> (<c>[tokens, frames]</c> log-likelihoods),
+    /// returned as the number of frames assigned to each token — the Viterbi recursion of
+    /// <see cref="MaximumPath(double[,])"/> run frame by frame with engine operations in <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>The scores are scaled by 2<sup>−⌈log₂ frames⌉</sup> first: the arg-max path is unchanged by a positive
+    /// scale, power-of-two scaling is exact, and a path total then stays within the largest score's magnitude
+    /// (so a half-precision sum over many frames cannot overflow to −∞).</remarks>
+    /// <exception cref="ArgumentException">There are fewer frames than tokens, or a score is not finite.</exception>
+    public static int[] MaximumPath<T>(Tensor<T> scores)
+    {
+        if (scores is null) throw new ArgumentNullException(nameof(scores));
+        if (scores.Rank != 2) throw new ArgumentException("Expected [tokens, frames] scores.", nameof(scores));
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int tokens = scores.Shape[0], frames = scores.Shape[1];
+        if (tokens == 0 || frames < tokens)
+            throw new ArgumentException($"A monotonic alignment of {tokens} tokens needs at least that many frames; got {frames}.", nameof(scores));
+
+        var moves = new Tensor<T>[frames];
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // x − x is 0 for every finite x and NaN for ±∞ or NaN, so the sum is NaN exactly when a score is not finite.
+            if (ops.IsNaN(engine.TensorSum(engine.TensorSubtract(scores, scores))))
+                throw new ArgumentException("Alignment scores must be finite.", nameof(scores));
+
+            int exponent = 0;
+            while ((1 << exponent) < frames && exponent < 30) exponent++;
+            var scaled = engine.TensorMultiplyScalar(scores, ops.FromDouble(Math.Pow(2, -exponent)));
+            T negativeInfinity = ops.FromDouble(double.NegativeInfinity);
+            var none = Tensor<T>.CreateDefault(new[] { 1 }, negativeInfinity);
+            Tensor<T> Column(int frame) => engine.Reshape(
+                engine.TensorSlice(scaled, new[] { 0, frame }, new[] { tokens, 1 }), new[] { tokens });
+
+            // Frame 0 starts on the first token.
+            var previous = tokens == 1
+                ? Column(0)
+                : engine.TensorConcatenate(new[] { engine.TensorSlice(Column(0), new[] { 0 }, new[] { 1 }),
+                    Tensor<T>.CreateDefault(new[] { tokens - 1 }, negativeInfinity) }, axis: 0);
+            moves[0] = new Tensor<T>(new[] { tokens });
+            for (int frame = 1; frame < frames; frame++)
+            {
+                var step = tokens == 1
+                    ? none
+                    : engine.TensorConcatenate(new[] { none, engine.TensorSlice(previous, new[] { 0 }, new[] { tokens - 1 }) }, axis: 0);
+                moves[frame] = engine.TensorGreaterThan(step, previous);
+                previous = engine.TensorAdd(Column(frame), engine.TensorMax(previous, step));
+            }
+        }
+
+        // Backtrack on the host over the [frames, tokens] advance flags.
+        var advance = engine.TensorStack(moves, 0).Cast<int>().ToArray();
+        var durations = new int[tokens];
+        int activeToken = tokens - 1;
+        for (int frame = frames - 1; frame >= 0; frame--)
+        {
+            durations[activeToken]++;
+            if (advance[frame * tokens + activeToken] != 0) activeToken--;
+        }
+        if (activeToken != 0 || durations.Any(d => d <= 0))
+            throw new InvalidOperationException("Monotonic alignment failed to cover every token.");
+        return durations;
+    }
+
+    /// <summary>
     /// log Σ over all monotonic alignments of Π<sub>t</sub> p(y<sub>t</sub> | z<sub>align(t)</sub>), from
     /// <paramref name="logLikelihood"/> (<c>[tokens, frames]</c>), as a scalar tensor on the gradient tape.
     /// </summary>
@@ -88,14 +152,12 @@ public static class MonotonicAlignment
             engine.TensorSlice(logLikelihood, new[] { 0, frame }, new[] { tokens, 1 }), new[] { tokens });
 
         // α_1 = [log p(y_1|z_1), unreachable, ...]
-        var mask = new Tensor<T>(new[] { tokens });
-        for (int s = 1; s < tokens; s++) mask[s] = ops.FromDouble(Unreachable);
-        var keepFirst = new Tensor<T>(new[] { tokens });
-        keepFirst[0] = ops.One;
-        var alpha = engine.TensorAdd(engine.TensorMultiply(Column(0), keepFirst), mask);
+        var unreachable = Tensor<T>.CreateDefault(new[] { 1 }, ops.FromDouble(Unreachable));
+        var alpha = tokens == 1
+            ? Column(0)
+            : engine.TensorConcatenate(new[] { engine.TensorSlice(Column(0), new[] { 0 }, new[] { 1 }),
+                Tensor<T>.CreateDefault(new[] { tokens - 1 }, ops.FromDouble(Unreachable)) }, axis: 0);
 
-        var unreachable = new Tensor<T>(new[] { 1 });
-        unreachable[0] = ops.FromDouble(Unreachable);
         for (int frame = 1; frame < frames; frame++)
         {
             // α_{t-1,s-1}: shift down by one token, the first token having no predecessor.

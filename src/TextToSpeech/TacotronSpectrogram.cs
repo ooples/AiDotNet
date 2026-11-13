@@ -1,3 +1,6 @@
+using AiDotNet.Audio.Features;
+using EnginePadMode = AiDotNet.Tensors.Engines.PadMode;
+
 namespace AiDotNet.TextToSpeech;
 
 /// <summary>
@@ -16,7 +19,6 @@ namespace AiDotNet.TextToSpeech;
 /// </remarks>
 public sealed class TacotronSpectrogram
 {
-    private readonly double[] _window;
     private readonly double[,] _melBasis;
 
     /// <summary>Creates the transform. Defaults are Tacotron 2 / FastSpeech 2's LJSpeech settings.</summary>
@@ -38,12 +40,6 @@ public sealed class TacotronSpectrogram
         MelChannels = melChannels;
         ClipValue = clipValue;
 
-        // librosa 'hann' = scipy get_window('hann', N, fftbins=True): periodic, zero-padded to fftSize centred.
-        _window = new double[fftSize];
-        int offset = (fftSize - windowLength) / 2;
-        for (int i = 0; i < windowLength; i++)
-            _window[offset + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / windowLength);
-
         _melBasis = SlaneyMelBasis(sampleRate, fftSize, melChannels, minFrequency, maxFrequency);
     }
 
@@ -63,79 +59,59 @@ public sealed class TacotronSpectrogram
     /// <summary>Frame period in milliseconds (hop / sample rate), the period pitch must be extracted at to align.</summary>
     public double FramePeriodMs => 1000.0 * HopLength / SampleRate;
 
-    /// <summary>Number of frames for a signal of <paramref name="sampleCount"/> samples.</summary>
-    public int FrameCount(int sampleCount) => 1 + sampleCount / HopLength;
+    /// <summary>
+    /// Number of frames for a signal of <paramref name="sampleCount"/> samples: the reference count
+    /// <c>1 + (samples + 2 (fftSize / 2) − fftSize) / hop</c> of the reflect-padded STFT (<c>1 + samples / hop</c> for an
+    /// even FFT size).
+    /// </summary>
+    public int FrameCount(int sampleCount) => EngineStft<double>.FrameCount(sampleCount, FftSize, HopLength);
 
-    /// <summary>The STFT magnitude, <c>[frames, fftSize/2 + 1]</c>.</summary>
-    public double[,] Magnitude(double[] audio)
+    /// <summary>
+    /// The STFT magnitude, <c>[frames, fftSize/2 + 1]</c>: the signal reflect-padded by fftSize / 2 on each side, framed
+    /// at the hop, windowed by the centred periodic Hann window and transformed (librosa <c>stft(center=True,
+    /// pad_mode='reflect')</c>, Tacotron 2's <c>TacotronSTFT</c>).
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the recording.</typeparam>
+    public Tensor<T> Magnitude<T>(Tensor<T> audio)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         int pad = FftSize / 2;
         if (audio.Length <= pad)
             throw new ArgumentException($"Reflect padding needs more than {pad} samples.", nameof(audio));
-
-        var padded = new double[audio.Length + 2 * pad];
-        for (int i = 0; i < padded.Length; i++)
-        {
-            int j = i - pad;
-            if (j < 0) j = -j;
-            else if (j >= audio.Length) j = 2 * (audio.Length - 1) - j;
-            padded[i] = audio[j];
-        }
-
-        int frames = FrameCount(audio.Length);
-        int bins = FftSize / 2 + 1;
-        var re = new double[frames * FftSize];
-        for (int f = 0; f < frames; f++)
-            for (int k = 0; k < FftSize; k++)
-                re[f * FftSize + k] = padded[f * HopLength + k] * _window[k];
-
-        var tRe = new Tensor<double>(new[] { frames, FftSize }, new Vector<double>(re));
-        var tIm = new Tensor<double>(new[] { frames, FftSize });
-        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.FFT(tRe, tIm, out var outRe, out var outIm);
-        var sRe = outRe.AsSpan();
-        var sIm = outIm.AsSpan();
-
-        var magnitude = new double[frames, bins];
-        for (int f = 0; f < frames; f++)
-            for (int k = 0; k < bins; k++)
-            {
-                double a = sRe[f * FftSize + k], b = sIm[f * FftSize + k];
-                magnitude[f, k] = Math.Sqrt(a * a + b * b);
-            }
-        return magnitude;
+        return EngineStft<T>.Magnitude(audio, FftSize, HopLength, EngineStft<T>.CenteredHann(FftSize, WindowLength),
+            EnginePadMode.Reflect);
     }
 
-    /// <summary>The log mel spectrogram, <c>[frames, melChannels]</c>.</summary>
-    public double[,] LogMel(double[] audio) => LogMel(Magnitude(audio));
+    /// <summary>The log mel spectrogram of a recording, <c>[frames, melChannels]</c>.</summary>
+    /// <typeparam name="T">The numeric type of the recording.</typeparam>
+    public Tensor<T> LogMel<T>(Tensor<T> audio) => LogMelOfMagnitude(Magnitude(audio));
 
-    /// <summary>The log mel spectrogram of an STFT magnitude.</summary>
-    public double[,] LogMel(double[,] magnitude)
+    /// <summary>The log mel spectrogram <c>log(max(M S, clip))</c> of an STFT magnitude <c>[frames, fftSize/2 + 1]</c>,
+    /// <c>[frames, melChannels]</c>.</summary>
+    /// <typeparam name="T">The numeric type of the magnitude.</typeparam>
+    public Tensor<T> LogMelOfMagnitude<T>(Tensor<T> magnitude)
     {
-        int frames = magnitude.GetLength(0), bins = magnitude.GetLength(1);
-        var mel = new double[frames, MelChannels];
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < MelChannels; m++)
-            {
-                double acc = 0;
-                for (int k = 0; k < bins; k++) acc += _melBasis[m, k] * magnitude[f, k];
-                mel[f, m] = Math.Log(Math.Max(acc, ClipValue));
-            }
-        return mel;
+        if (magnitude is null) throw new ArgumentNullException(nameof(magnitude));
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var mel = engine.TensorMatMul(magnitude, engine.TensorTranspose(EngineStft<T>.Table(_melBasis)));
+        return engine.TensorLog(engine.TensorMax(mel, ops.FromDouble(ClipValue)));
     }
 
-    /// <summary>FastSpeech 2's frame energy: the L2 norm of each STFT magnitude frame.</summary>
-    public double[] Energy(double[,] magnitude)
+    /// <summary>
+    /// FastSpeech 2's frame energy: the L2 norm of each STFT magnitude frame, <c>[frames]</c>. The magnitude is scaled
+    /// by a power of two before it is squared (exact in binary floating point), so a 16-bit T cannot overflow.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the magnitude.</typeparam>
+    public Tensor<T> Energy<T>(Tensor<T> magnitude)
     {
-        int frames = magnitude.GetLength(0), bins = magnitude.GetLength(1);
-        var energy = new double[frames];
-        for (int f = 0; f < frames; f++)
-        {
-            double acc = 0;
-            for (int k = 0; k < bins; k++) acc += magnitude[f, k] * magnitude[f, k];
-            energy[f] = Math.Sqrt(acc);
-        }
-        return energy;
+        if (magnitude is null) throw new ArgumentNullException(nameof(magnitude));
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        double scale = Math.Pow(2.0, Math.Ceiling(Math.Log(FftSize, 2.0)));
+        var scaled = engine.TensorMultiplyScalar(magnitude, ops.FromDouble(1.0 / scale));
+        var sumOfSquares = engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, false);
+        return engine.TensorMultiplyScalar(engine.TensorSqrt(sumOfSquares), ops.FromDouble(scale));
     }
 
     /// <summary>The mel filterbank, <c>[melChannels, fftSize/2 + 1]</c> (librosa <c>filters.mel</c>, Slaney).</summary>
