@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.LoRA;
@@ -246,6 +248,139 @@ public class LoRAMergeReferenceTests
             Assert.True(
                 Math.Abs(expected - after[i]) <= 1e-8,
                 $"base parameter {i}: expected {expected:G12}, got {after[i]:G12}");
+        }
+    }
+    private static void AssertSameOutputs(string label, Tensor<double> expected, Tensor<double> actual)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(
+                Math.Abs(expected[i] - actual[i]) <= 1e-9 + 1e-7 * Math.Abs(expected[i]),
+                $"{label} output {i}: adapter {expected[i]:G12} vs merged {actual[i]:G12}");
+        }
+    }
+
+    public static IEnumerable<object[]> OutputMajorAdapters()
+    {
+        yield return new object[] { "Standard" };
+        yield return new object[] { "ReLoRA" };
+        yield return new object[] { "LoKr" };
+    }
+
+    /// <summary>
+    /// FullyConnectedLayer stores its weights output-major ([outputSize, inputSize]); on a non-square layer
+    /// the merge must transpose the input-major LoRA delta before adding it.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [MemberData(nameof(OutputMajorAdapters))]
+    public async Task MergeToOriginalLayer_OnOutputMajorBase_MatchesAdapterForward(string name)
+    {
+        await Task.Yield();
+        var baseLayer = new FullyConnectedLayer<double>(InputSize, OutputSize);
+        LoRAAdapterBase<double> adapter = name switch
+        {
+            "Standard" => new StandardLoRAAdapter<double>(baseLayer, Rank, 2.0 * Rank),
+            "ReLoRA" => new ReLoRAAdapter<double>(baseLayer, Rank, 2.0 * Rank),
+            "LoKr" => new LoKrAdapter<double>(baseLayer, Rank, 2.0 * Rank),
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown adapter")
+        };
+        SetNonZeroParameters(adapter);
+        var input = CreateInput(3, InputSize);
+
+        AssertSameOutputs(name, adapter.Forward(input), adapter.MergeToOriginalLayer().Forward(input));
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MultiLoRA_MergeTaskToLayer_MatchesTaskForward(bool outputMajor)
+    {
+        await Task.Yield();
+        ILayer<double> baseLayer = outputMajor
+            ? new FullyConnectedLayer<double>(InputSize, OutputSize)
+            : CreateBaseLayer(InputSize, OutputSize);
+        var adapter = new MultiLoRAAdapter<double>(baseLayer, "first", Rank, 2.0 * Rank);
+        adapter.AddTask("second", Rank + 1, 2.0 * Rank);
+        SetNonZeroParameters(adapter);
+        var input = CreateInput(3, InputSize);
+
+        foreach (var task in new[] { "first", "second" })
+        {
+            adapter.SetCurrentTask(task);
+            AssertSameOutputs(task, adapter.Forward(input), adapter.MergeTaskToLayer(task).Forward(input));
+        }
+    }
+
+    /// <summary>
+    /// The tensor-valued objective overload must train on the objective it is given. With an absolute-error
+    /// loss, the step must follow the finite-difference gradient of sum |output - target|, not of the
+    /// half squared error that the scalar overload differentiates.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task DyLoRA_TensorObjective_TrainsAlongFiniteDifferenceGradientOfThatObjective()
+    {
+        await Task.Yield();
+        const int maxRank = 4;
+        const int rank = 2;
+        const double learningRate = 0.1;
+        const double step = 1e-6;
+
+        var adapter = new DyLoRAAdapter<double>(CreateBaseLayer(InputSize, OutputSize), maxRank, new[] { rank }, alpha: 8.0);
+        var lora = adapter.LoRALayer;
+        var start = new double[lora.GetParameters().Length];
+        for (int i = 0; i < start.Length; i++)
+        {
+            start[i] = 0.05 * Math.Cos(0.61 * i + 0.2);
+        }
+        lora.SetParameters(new Vector<double>(start));
+
+        var input = CreateInput(1, InputSize);
+        var targetData = new Vector<double>(OutputSize);
+        for (int i = 0; i < OutputSize; i++)
+        {
+            targetData[i] = Math.Sin(0.9 * i + 1.1);
+        }
+        var target = new Tensor<double>(new[] { 1, OutputSize }, targetData);
+
+        double AbsoluteError(Tensor<double> output)
+        {
+            double sum = 0;
+            for (int i = 0; i < output.Length; i++) sum += Math.Abs(output[i] - target[i]);
+            return sum;
+        }
+
+        Tensor<double> AbsoluteErrorObjective(Tensor<double> output, Tensor<double> expected)
+        {
+            var engine = AiDotNetEngine.Current;
+            var difference = engine.TensorAbs(engine.TensorSubtract(output, engine.Reshape(expected, output.Shape.ToArray())));
+            return engine.ReduceSum(engine.Reshape(difference, new[] { difference.Length }), new[] { 0 }, true);
+        }
+
+        var gradient = new double[start.Length];
+        for (int i = 0; i < start.Length; i++)
+        {
+            var plus = (double[])start.Clone();
+            var minus = (double[])start.Clone();
+            plus[i] += step;
+            minus[i] -= step;
+            lora.SetParameters(new Vector<double>(plus));
+            double lossPlus = AbsoluteError(adapter.Forward(input));
+            lora.SetParameters(new Vector<double>(minus));
+            double lossMinus = AbsoluteError(adapter.Forward(input));
+            gradient[i] = (lossPlus - lossMinus) / (2 * step);
+        }
+        lora.SetParameters(new Vector<double>(start));
+
+        adapter.TrainWithNestedDropout(new[] { input }, new[] { target }, 1, learningRate, AbsoluteErrorObjective);
+        var after = lora.GetParameters();
+
+        for (int i = 0; i < start.Length; i++)
+        {
+            double expected = start[i] - learningRate * gradient[i];
+            Assert.True(
+                Math.Abs(expected - after[i]) <= 1e-7,
+                $"parameter {i}: expected {expected:G12}, got {after[i]:G12}");
         }
     }
 }

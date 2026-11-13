@@ -128,11 +128,17 @@ public class LoRAReviewRegressionTests
                     double delta = 0;
                     if (dVora)
                     {
+                        // VeRA (Kopiczko et al., 2024) eq. 2: ΔW = Λ_b B Λ_d A, with the output-sized
+                        // vector b initialized to zeros and the rank-sized vector d to d_initial = 0.1
+                        // (paper and PEFT defaults), so a fresh adapter's delta is zero.
+                        const double initialB = 0.0, initialD = 0.1;
                         var a = Shared(typeof(DVoRAAdapter<double>), "_sharedMatrixA");
                         var b = Shared(typeof(DVoRAAdapter<double>), "_sharedMatrixB");
-                        for (int r = 0; r < rank; r++) delta += 2 * a[i, r] * b[r, o];
+                        for (int r = 0; r < rank; r++) delta += 2 * a[i, r] * initialD * b[r, o] * initialB;
                     }
-                    direction[i] = weights[o, i] / magnitude + delta;
+                    // DoRA (Liu et al., 2024) eq. 5: W' = m * (W0 + ΔW) / ||W0 + ΔW||_c, so the delta is
+                    // added to the weights W0 themselves, not to the unit direction W0 / ||W0||_c.
+                    direction[i] = weights[o, i] + delta;
                 }
                 double norm = Math.Sqrt(direction.Sum(v => v * v));
                 expected[o] = parameters[inputs * outputs + o];
@@ -285,5 +291,90 @@ public class LoRAReviewRegressionTests
             Assert.True(Math.Abs(adapter.GetParameters()[0] - (initial - rate * gradient)) < 1e-8);
         }
         finally { TiedLoRAAdapter<double>.ResetSharedMatrices(); }
+    }
+    private static void SetHraSparseEntries(HRAAdapter<double> adapter, int[] rows, int[] columns, double[] values)
+    {
+        Tensor<double> Field(string name) =>
+            (Tensor<double>)(typeof(HRAAdapter<double>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(adapter)
+                ?? throw new InvalidOperationException(name));
+        var sparseValues = Field("_sparseValues");
+        var sparseRows = Field("_sparseRows");
+        var sparseColumns = Field("_sparseColumns");
+        for (int k = 0; k < values.Length; k++)
+        {
+            sparseValues[k] = values[k];
+            sparseRows[k] = rows[k];
+            sparseColumns[k] = columns[k];
+        }
+        Field("_activeSparseCount")[0] = values.Length;
+    }
+
+    private static double HraSparseScaling(HRAAdapter<double> adapter) =>
+        (double)(typeof(HRAAdapter<double>).GetField("_sparseScaling", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(adapter)
+            ?? throw new InvalidOperationException("_sparseScaling"));
+
+    /// <summary>
+    /// The sparse full-rank path must add scaling * value_k * input[col_k] to output[row_k] for every active
+    /// entry (repeated coordinates accumulate), give each value the gradient scaling * sum_b grad[b, row_k] *
+    /// input[b, col_k], merge to the same outputs, and never build a dense [outputSize, inputSize] product.
+    /// </summary>
+    [Fact]
+    public void Hra_SparsePathMatchesScalarReferenceWithoutDenseProducts()
+    {
+        const int inputs = 16, outputs = 8, batch = 2;
+        var layer = Dense(inputs, outputs);
+        var adapter = new HRAAdapter<double>(layer, rank: 2, sparsityRatio: 0.25);
+        int[] rows = { 0, 3, 7, 3, 5 };
+        int[] columns = { 15, 2, 0, 2, 9 };
+        double[] values = { 0.4, -0.3, 0.25, 0.1, -0.6 };
+        SetHraSparseEntries(adapter, rows, columns, values);
+        double scaling = HraSparseScaling(adapter);
+        var input = new Tensor<double>(
+            Enumerable.Range(0, batch * inputs).Select(i => Math.Sin(0.37 * i + 0.5)).ToArray(), new[] { batch, inputs });
+
+        // A fresh LoRA component is zero, so adapter = base + sparse
+        var expected = layer.Forward(input).ToArray();
+        for (int b = 0; b < batch; b++)
+            for (int k = 0; k < values.Length; k++)
+                expected[b * outputs + rows[k]] += scaling * values[k] * input[b * inputs + columns[k]];
+
+        var previous = AiDotNetEngine.Current;
+        var engine = new MatMulSizeEngine();
+        double[] actual;
+        try
+        {
+            AiDotNetEngine.Current = engine;
+            actual = adapter.Forward(input).ToArray();
+        }
+        finally { AiDotNetEngine.Current = previous; }
+        Close(expected, actual);
+        Assert.InRange(engine.LargestOutput, 1, batch * Math.Max(inputs, outputs));
+        Close(expected, adapter.MergeToOriginalLayer().Forward(input).ToArray());
+
+        var parameters = adapter.GetTrainableParameters();
+        var sparseValues = (Tensor<double>)(typeof(HRAAdapter<double>)
+            .GetField("_sparseValues", BindingFlags.Instance | BindingFlags.NonPublic)?.GetValue(adapter)
+            ?? throw new InvalidOperationException("_sparseValues"));
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+        var loss = Objective(adapter, input);
+        var gradients = tape.ComputeGradients(loss, parameters);
+        Assert.True(gradients.TryGetValue(sparseValues, out var valueGradient));
+        Assert.NotNull(valueGradient);
+        var expectedGradient = new double[sparseValues.Length];
+        for (int k = 0; k < values.Length; k++)
+            for (int b = 0; b < batch; b++)
+                expectedGradient[k] += scaling * expected[b * outputs + rows[k]] * input[b * inputs + columns[k]];
+        Close(expectedGradient, valueGradient.ToArray());
+    }
+
+    private sealed class MatMulSizeEngine : CpuEngine
+    {
+        internal long LargestOutput;
+        public override Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+        {
+            var result = base.TensorMatMul(a, b);
+            LargestOutput = Math.Max(LargestOutput, result.Length);
+            return result;
+        }
     }
 }

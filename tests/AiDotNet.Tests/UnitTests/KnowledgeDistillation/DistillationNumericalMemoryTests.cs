@@ -227,4 +227,75 @@ public class DistillationNumericalMemoryTests
         }
         finally { AiDotNetEngine.Current = previous; }
     }
+
+    [Fact]
+    public void Contrastive_FloatSmallTemperature_StaysFinite()
+    {
+        // Two identical unit embeddings at temperature 0.01: every logit is 100, so a direct exp overflows
+        // float, while both NT-Xent and InfoNCE equal log(e^100 / (2 e^100)) = log 2.
+        var u = new Vector<float>(new[] { 0.6f, 0.8f });
+        var embeddings = new[] { u, u };
+        var ntXent = new ContrastiveDistillationStrategy<float>(contrastiveWeight: 1, temperature: 0.01, mode: ContrastiveMode.NTXent);
+        var infoNce = new ContrastiveDistillationStrategy<float>(contrastiveWeight: 1, temperature: 0.01, mode: ContrastiveMode.InfoNCE);
+        Assert.Equal(Math.Log(2), ntXent.ComputeContrastiveLoss(embeddings, embeddings, new[] { 0, 1 }), 5);
+        Assert.Equal(Math.Log(2), infoNce.ComputeContrastiveLoss(embeddings, embeddings, new[] { 0, 1 }), 5);
+
+        var activations = new IntermediateActivations<float>();
+        activations.Add("embeddings", new Matrix<float>(new[,] { { 0.6f, 0.8f }, { 0.6f, 0.8f } }));
+        var gradient = ntXent.ComputeIntermediateGradient(activations, activations).Get("embeddings");
+        Assert.NotNull(gradient);
+        Assert.All(gradient.ToRowVector().ToArray(), x => Assert.True(!float.IsNaN(x) && !float.IsInfinity(x)));
+    }
+
+    [Fact]
+    public void Contrastive_InfoNceScoresOnlyTheSampledNegatives()
+    {
+        const int batch = 64, negatives = 4;
+        const double temperature = 0.5;
+        var students = Rows(batch, 3, 0.2, false);
+        var teachers = Rows(batch, 3, 1.8, false);
+
+        // Scalar reference: -log(e^pos / (e^pos + Σ_{j < negatives, j != i} e^neg + 1e-10)), averaged
+        double expected = 0;
+        for (int i = 0; i < batch; i++)
+        {
+            double positive = Math.Exp(Cosine(teachers[i], students[i]) / temperature);
+            double negativeSum = 0;
+            for (int j = 0; j < negatives; j++)
+                if (j != i) negativeSum += Math.Exp(Cosine(teachers[i], students[j]) / temperature);
+            expected -= Math.Log(positive / (positive + negativeSum + 1e-10));
+        }
+        expected /= batch;
+
+        var previous = AiDotNetEngine.Current;
+        var engine = new MatMulSizeEngine();
+        try
+        {
+            AiDotNetEngine.Current = engine;
+            var strategy = new ContrastiveDistillationStrategy<double>(
+                contrastiveWeight: 1, temperature: temperature, negativesSampleSize: negatives, mode: ContrastiveMode.InfoNCE);
+            Assert.Equal(expected, strategy.ComputeContrastiveLoss(students, teachers, new int[batch]), 10);
+            // No [batch, batch] score matrix: every product is at most [batch, negatives].
+            Assert.InRange(engine.LargestOutput, 1, batch * negatives);
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    private static double Cosine(Vector<double> a, Vector<double> b)
+    {
+        double dot = 0, na = 0, nb = 0;
+        for (int i = 0; i < a.Length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+        return dot / (Math.Sqrt(na) * Math.Sqrt(nb));
+    }
+
+    private sealed class MatMulSizeEngine : CpuEngine
+    {
+        internal long LargestOutput;
+        public override Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+        {
+            var result = base.TensorMatMul(a, b);
+            LargestOutput = Math.Max(LargestOutput, result.Length);
+            return result;
+        }
+    }
 }
