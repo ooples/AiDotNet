@@ -186,19 +186,21 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     // by zero.
     private (T Mean, T Std) FitScaler(Tensor<T> values)
     {
-        var finite = Engine.TensorIsFinite(values);
-        var zeros = Engine.TensorZerosLike(values);
-        int count = Engine.TensorCountNonzero(Engine.TensorWhere(finite, Engine.TensorOnesLike(values), zeros));
+        // Accumulated in double: a Half sum of the training values overflows past 65504, and the
+        // 1e-8 floor would round to zero in Half.
+        var v = values.Cast<double>();
+        var finite = Engine.TensorIsFinite(v);
+        var zeros = Engine.TensorZerosLike(v);
+        int count = Engine.TensorCountNonzero(Engine.TensorWhere(finite, Engine.TensorOnesLike(v), zeros));
         if (count == 0)
         {
             return (NumOps.Zero, NumOps.One);
         }
 
-        T countT = NumOps.FromDouble(count);
-        T mean = NumOps.Divide(Engine.TensorSum(Engine.TensorWhere(finite, values, zeros)), countT);
-        var deviations = Engine.TensorWhere(finite, Engine.TensorSubtractScalar(values, mean), zeros);
-        T std = NumOps.Sqrt(NumOps.Divide(Engine.TensorSumOfSquares(deviations), countT));
-        return (mean, NumOps.LessThan(std, NumOps.FromDouble(1e-8)) ? NumOps.One : std);
+        double mean = Engine.TensorSum(Engine.TensorWhere(finite, v, zeros)) / count;
+        var deviations = Engine.TensorWhere(finite, Engine.TensorSubtractScalar(v, mean), zeros);
+        double std = Math.Sqrt(Engine.TensorSum(Engine.TensorMultiply(deviations, deviations)) / count);
+        return (NumOps.FromDouble(mean), NumOps.FromDouble(std < 1e-8 ? 1.0 : std));
     }
 
     /// <inheritdoc />

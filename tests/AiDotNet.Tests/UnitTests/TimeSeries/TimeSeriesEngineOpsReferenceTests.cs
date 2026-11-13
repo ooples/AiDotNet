@@ -355,4 +355,30 @@ public class TimeSeriesHalfPrecisionTests
 
         Assert.InRange(prediction, 900.0, 1100.0);
     }
+
+    [Fact]
+    public void NLinear_Half_ScalerStatisticsAccumulateBeyondHalfRange()
+    {
+        // 300 rows of 1000 sum past Half's 65504: a Half sum made the scaler mean +inf and the
+        // non-finite forecast was replaced by 0. In double the mean is 1000 and the constant
+        // series forecasts itself.
+        const int rows = 300;
+        var x = new Matrix<Half>(rows, 4);
+        var y = new Vector<Half>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            y[i] = (Half)1000;
+            for (int j = 0; j < 4; j++)
+            {
+                x[i, j] = (Half)1000;
+            }
+        }
+
+        var model = new NLinearModel<Half>(new NLinearOptions<Half> { LookbackWindow = 4, Epochs = 1, BatchSize = 32 });
+        model.Train(x, y);
+
+        double prediction = (double)model.PredictSingle(new Vector<Half>(new[] { (Half)1000, (Half)1000, (Half)1000, (Half)1000 }));
+
+        Assert.InRange(prediction, 990.0, 1010.0);
+    }
 }
