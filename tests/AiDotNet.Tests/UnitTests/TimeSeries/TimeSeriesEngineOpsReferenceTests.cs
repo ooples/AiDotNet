@@ -299,7 +299,7 @@ public class TimeSeriesEngineOpsCountTests
     }
 }
 
-public class TimeSeriesErrorMetricsHalfTests
+public class TimeSeriesHalfPrecisionTests
 {
     private sealed class MetricsProbe : ARModel<Half>
     {
@@ -323,5 +323,36 @@ public class TimeSeriesErrorMetricsHalfTests
 
         Assert.False(metrics.ContainsKey("MAPE"));
         Assert.Equal(0.5, (double)metrics["MAE"], 6);
+    }
+
+    [Fact]
+    public void TiDE_Half_TargetStatisticsAccumulateBeyondHalfRange()
+    {
+        // 300 targets of 1000 sum to 300000, past Half's 65504: a Half sum made the target mean +inf,
+        // every prediction non-finite and the output guard returned 0. In double the mean is 1000.
+        const int rows = 300;
+        var x = new Matrix<Half>(rows, 4);
+        var y = new Vector<Half>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            y[i] = (Half)1000;
+            for (int j = 0; j < 4; j++)
+            {
+                x[i, j] = (Half)1000;
+            }
+        }
+
+        var model = new TiDEModel<Half>(new TiDEOptions<Half>
+        {
+            LookbackWindow = 4,
+            HiddenSize = 4,
+            Epochs = 1,
+            BatchSize = 32,
+        });
+        model.Train(x, y);
+
+        double prediction = (double)model.PredictSingle(new Vector<Half>(new[] { (Half)1000, (Half)1000, (Half)1000, (Half)1000 }));
+
+        Assert.InRange(prediction, 900.0, 1100.0);
     }
 }

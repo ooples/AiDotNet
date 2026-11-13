@@ -137,13 +137,17 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>Keeps <paramref name="std"/> where it is finite and above 1e-8, and uses 1 elsewhere.</summary>
-    private Tensor<T> GuardStd(Tensor<T> std)
+    private Tensor<double> GuardStd(Tensor<double> std)
     {
         var ones = Engine.TensorOnesLike(std);
         return Engine.TensorWhere(Engine.TensorIsFinite(std),
-            Engine.TensorWhere(Engine.TensorGreaterThan(std, NumOps.FromDouble(1e-8)), std, ones), ones);
+            Engine.TensorWhere(Engine.TensorGreaterThan(std, 1e-8), std, ones), ones);
     }
 
+    /// <summary>
+    /// Fits the input and target statistics. They accumulate in double: a Half sum of the training
+    /// values overflows past 65504, and the 1e-8 floor would round to zero in Half.
+    /// </summary>
     private void FitNormalization(Tensor<T> windows, Tensor<T> targets)
     {
         int n = windows.Shape[0];
@@ -152,13 +156,14 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         Engine.TensorFill(_inputStds, NumOps.One);
         if (n > 0)
         {
-            var means = Engine.ReduceMean(windows, new[] { 0 }, keepDims: false);
-            Engine.TensorCopyInPlace(_inputMeans, means);
+            var w = windows.Cast<double>();
+            var means = Engine.ReduceMean(w, new[] { 0 }, keepDims: false);
             var centered = Engine.TensorSubtract(
-                windows, Engine.TensorBroadcastTo(means.Reshape(new[] { 1, _l }), new[] { n, _l }));
+                w, Engine.TensorBroadcastTo(means.Reshape(new[] { 1, _l }), new[] { n, _l }));
             var variances = Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false);
-            var stds = Engine.TensorSqrt(Engine.TensorDivideScalar(variances, NumOps.FromDouble(n)));
-            Engine.TensorCopyInPlace(_inputStds, GuardStd(stds));
+            var stds = Engine.TensorSqrt(Engine.TensorDivideScalar(variances, (double)n));
+            Engine.TensorCopyInPlace(_inputMeans, means.Cast<T>());
+            Engine.TensorCopyInPlace(_inputStds, GuardStd(stds).Cast<T>());
         }
 
         // Non-finite targets are EXCLUDED from the statistics, matching NLinearModel.FitScalers.
@@ -167,22 +172,24 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         // rescues _targetStd back to 1.0, nothing rescued the mean -- every normalized target,
         // every error and every gradient then went NaN, training completed without an exception,
         // and every later prediction collapsed to 0 through the output guard. Silent and total.
-        var finite = Engine.TensorIsFinite(targets);
-        var zeros = Engine.TensorZerosLike(targets);
-        int finiteTargets = Engine.TensorCountNonzero(Engine.TensorWhere(finite, Engine.TensorOnesLike(targets), zeros));
-        _targetMean = n > 0 && finiteTargets > 0
-            ? NumOps.Divide(Engine.TensorSum(Engine.TensorWhere(finite, targets, zeros)), NumOps.FromDouble(finiteTargets))
-            : NumOps.Zero;
+        var t = targets.Cast<double>();
+        var finite = Engine.TensorIsFinite(t);
+        var zeros = Engine.TensorZerosLike(t);
+        int finiteTargets = Engine.TensorCountNonzero(Engine.TensorWhere(finite, Engine.TensorOnesLike(t), zeros));
+        double targetMean = n > 0 && finiteTargets > 0
+            ? Engine.TensorSum(Engine.TensorWhere(finite, t, zeros)) / finiteTargets
+            : 0.0;
 
-        T targetStd = NumOps.One;
+        double targetStd = 1.0;
         if (finiteTargets > 0)
         {
-            var centered = Engine.TensorWhere(finite, Engine.TensorSubtractScalar(targets, _targetMean), zeros);
-            targetStd = NumOps.Sqrt(NumOps.Divide(Engine.TensorSumOfSquares(centered), NumOps.FromDouble(finiteTargets)));
+            var centered = Engine.TensorWhere(finite, Engine.TensorSubtractScalar(t, targetMean), zeros);
+            targetStd = Math.Sqrt(Engine.TensorSum(Engine.TensorMultiply(centered, centered)) / finiteTargets);
         }
 
-        _targetStd = NumOps.GreaterThan(targetStd, NumOps.FromDouble(1e-8)) && IsFiniteValue(targetStd)
-            ? targetStd
+        _targetMean = NumOps.FromDouble(targetMean);
+        _targetStd = targetStd > 1e-8 && !double.IsNaN(targetStd) && !double.IsInfinity(targetStd)
+            ? NumOps.FromDouble(targetStd)
             : NumOps.One;
     }
 
