@@ -274,19 +274,87 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// </summary>
     private Tensor<T> KernelMatrix(Tensor<T> a, Tensor<T> aMask, Tensor<T> b, Tensor<T> bMask)
     {
-        // sum_k ma mb (a - b)^2 = (a o a) mb^T + ma (b o b)^T - 2 a b^T, the padded entries being zero. The
-        // expansion can round below zero (mostly for float and large norms), which would push k above 1 and break
-        // positive definiteness, so it is clamped at zero as scikit-learn's euclidean_distances does.
-        var expandedDistance = Engine.TensorSubtract(
-            Engine.TensorAdd(
-                Engine.TensorMatMul(Engine.TensorSquare(a), Engine.TensorTranspose(bMask)),
-                Engine.TensorMatMul(aMask, Engine.TensorTranspose(Engine.TensorSquare(b)))),
-            Engine.TensorMultiplyScalar(Engine.TensorMatMul(a, Engine.TensorTranspose(b)), NumOps.FromDouble(2.0)));
-        var squaredDistance = Engine.TensorClampMin(expandedDistance, NumOps.Zero);
-        T lengthScale = NumOps.Exp(_kernelParams[0]);
-        T scale = NumOps.Negate(NumOps.Divide(NumOps.One,
-            NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(lengthScale, lengthScale))));
-        return Engine.TensorExp(Engine.TensorMultiplyScalar(squaredDistance, scale));
+        // Direct differences preserve nearby rows with a large common offset. Bound both pair and
+        // feature axes; only the GP's output kernel requires all row pairs at once.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var wideNoGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        using var arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        const int rowBlock = 16, featureBlock = 128;
+        int rowsA = a.Shape[0], rowsB = b.Shape[0], width = a.Shape[1];
+        if (rowsA == 0 || rowsB == 0) return new Tensor<T>([rowsA, rowsB]);
+        double inverseLengthScale = Math.Exp(-NumOps.ToDouble(_kernelParams[0]));
+        var type = Type.GetTypeCode(typeof(T));
+        bool nativeDifference = type is TypeCode.Decimal or TypeCode.Byte or TypeCode.SByte or TypeCode.Int16 or
+            TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64;
+        var rowParts = new List<Tensor<T>>();
+        for (int rowA = 0; rowA < rowsA; rowA += rowBlock)
+        {
+            int countA = Math.Min(rowBlock, rowsA - rowA);
+            var columnParts = new List<Tensor<T>>();
+            for (int rowB = 0; rowB < rowsB; rowB += rowBlock)
+            {
+                int countB = Math.Min(rowBlock, rowsB - rowB);
+                var squaredDistance = new Tensor<double>([countA, countB]);
+                for (int feature = 0; feature < width; feature += featureBlock)
+                {
+                    int count = Math.Min(featureBlock, width - feature);
+                    var shape = new[] { countA, countB, count };
+                    var left = FeatureBlock(a, rowA, countA, feature, count);
+                    var right = FeatureBlock(b, rowB, countB, feature, count);
+                    var leftMask = FeatureBlock(aMask, rowA, countA, feature, count).Cast<double>();
+                    var rightMask = FeatureBlock(bMask, rowB, countB, feature, count).Cast<double>();
+                    var common = Engine.TensorMultiply(
+                        Engine.TensorBroadcastTo(Engine.Reshape(leftMask, [countA, 1, count]), shape),
+                        Engine.TensorBroadcastTo(Engine.Reshape(rightMask, [1, countB, count]), shape));
+                    var difference = nativeDifference ? NativeDifferences(left, right, countA, countB, count)
+                        : Engine.TensorSubtract(
+                            Engine.TensorBroadcastTo(Engine.Reshape(left.Cast<double>(), [countA, 1, count]), shape),
+                            Engine.TensorBroadcastTo(Engine.Reshape(right.Cast<double>(), [1, countB, count]), shape));
+                    // Mask before squaring: an absent feature must not turn 0 * infinity into NaN.
+                    difference = Engine.TensorWhere(common, difference, new Tensor<double>(shape));
+                    var normalized = Engine.TensorMultiplyScalar(difference, inverseLengthScale);
+                    squaredDistance = Engine.TensorAdd(squaredDistance,
+                        Engine.ReduceSum(Engine.TensorMultiply(normalized, normalized), [2], false));
+                }
+                columnParts.Add(Engine.TensorExp(Engine.TensorMultiplyScalar(squaredDistance, -0.5)).Cast<T>());
+            }
+            rowParts.Add(columnParts.Count == 1 ? columnParts[0] : Engine.TensorConcatenate(columnParts.ToArray(), 1));
+        }
+        return rowParts.Count == 1 ? rowParts[0] : Engine.TensorConcatenate(rowParts.ToArray(), 0);
+    }
+
+    private Tensor<T> FeatureBlock(Tensor<T> values, int row, int rows, int feature, int features)
+    {
+        int width = values.Shape[1];
+        var indices = new int[checked(rows * features)];
+        for (int i = 0; i < rows; i++)
+        for (int d = 0; d < features; d++) indices[i * features + d] = (row + i) * width + feature + d;
+        var selected = Engine.TensorIndexSelect(Engine.Reshape(values, [values.Length]), new Tensor<int>(indices, [indices.Length]), 0);
+        return Engine.Reshape(selected, [rows, features]);
+    }
+
+    private static Tensor<double> NativeDifferences(Tensor<T> left, Tensor<T> right, int rows, int columns, int width)
+    {
+        // Preserve adjacent decimal/Int64 labels before widening; casting absolute values first loses their gaps.
+        var a = left.ToArray();
+        var b = right.ToArray();
+        var differences = new double[checked(rows * columns * width)];
+        for (int i = 0; i < rows; i++)
+        for (int j = 0; j < columns; j++)
+        for (int d = 0; d < width; d++)
+        {
+            decimal first = Convert.ToDecimal(a[i * width + d]);
+            decimal second = Convert.ToDecimal(b[j * width + d]);
+            double difference;
+            try { difference = (double)(first - second); }
+            catch (OverflowException)
+            {
+                // An overflowing decimal subtraction has a large gap, so double subtraction cannot erase it.
+                difference = (double)first - (double)second;
+            }
+            differences[(i * columns + j) * width + d] = difference;
+        }
+        return new Tensor<double>(differences, [rows, columns, width]);
     }
 
     /// <summary>
