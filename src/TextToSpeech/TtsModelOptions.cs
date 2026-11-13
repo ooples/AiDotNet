@@ -133,6 +133,9 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's ESPnet ScaledPositionalEncoding extends to any length, so its text has no length bound.", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech truncates text to this length in its phoneme front end; the tensor surface takes token ids already cut, and its sinusoid positions extend to any length (ming024 FastSpeech2 get_sinusoid_encoding_table past max_seq_len).", ModelType = typeof(Classic.FastSpeech<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech 2 truncates text to this length in its phoneme front end; the tensor surface takes token ids already cut, and its sinusoid positions extend to any length (ming024 FastSpeech2 get_sinusoid_encoding_table past max_seq_len).", ModelType = typeof(Classic.FastSpeech2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("AdaSpeech truncates text to this length in its phoneme front end; the tensor surface takes token ids already cut, and its FastSpeech 2 sinusoid positions extend to any length (ming024 FastSpeech2 get_sinusoid_encoding_table past max_seq_len).", ModelType = typeof(Classic.AdaSpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("AlignTTS truncates text to this length in its character front end; the tensor surface takes token ids already cut, and its FastSpeech-style sinusoid positions extend to any length (ming024 FastSpeech2 get_sinusoid_encoding_table past max_seq_len).", ModelType = typeof(Classic.AlignTTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("ProDiff truncates text to this length in its front end (MaxTextTokens); the tensor surface takes token ids already cut, and its sinusoid positions extend to any length (NATSpeech SinusoidalPositionalEmbedding grows past init_size).", ModelType = typeof(Classic.ProDiff<>))]
     public int MaxTextLength { get; set; } = 512;
 
     /// <summary>Gets or sets the maximum output audio length in mel frames.</summary>
@@ -143,6 +146,8 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's mel length is the duration predictor's, with positions for any length (ESPnet ScaledPositionalEncoding).", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech's mel length is the duration predictor's; the decoder's sinusoid positions extend to any length (ming024 FastSpeech2 rebuilds the table past max_seq_len at inference).", ModelType = typeof(Classic.FastSpeech<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech 2's mel length is the variance adaptor's; the decoder's sinusoid positions extend to any length (ming024 FastSpeech2 rebuilds the table past max_seq_len at inference).", ModelType = typeof(Classic.FastSpeech2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("AdaSpeech's mel length is the variance adaptor's; its decoder and mel encoder sinusoid positions extend to any length (ming024 FastSpeech2 rebuilds the table past max_seq_len at inference).", ModelType = typeof(Classic.AdaSpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("AlignTTS's mel length is the duration predictor's; its decoder's sinusoid positions extend to any length (ming024 FastSpeech2 rebuilds the table past max_seq_len at inference).", ModelType = typeof(Classic.AlignTTS<>))]
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
