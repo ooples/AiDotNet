@@ -107,7 +107,7 @@ public sealed class FiganMultiScaleFlow<T>
 
         var engine = AiDotNetEngine.Current;
         int half = extent / 2;
-        var shape = tensor.Shape.ToArray();
+        var shape = tensor.Shape;
         var paired = new int[shape.Length + 1];
         for (int d = 0, k = 0; d < shape.Length; d++)
         {

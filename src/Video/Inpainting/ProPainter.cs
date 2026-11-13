@@ -608,9 +608,9 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
 
     // Recorded activations: the element transforms they replace were invisible to the tape, so the layers
     // before them received no gradient. GELU is torch's nn.GELU, as ProPainter uses.
-    private Tensor<T> ApplyReLU(Tensor<T> input) => Engine.ReLU(input);
+    internal Tensor<T> ApplyReLU(Tensor<T> input) => Engine.ReLU(input);
 
-    private Tensor<T> ApplyGELU(Tensor<T> input) => Engine.GELU(input);
+    internal Tensor<T> ApplyGELU(Tensor<T> input) => Engine.GELU(input);
 
     /// <summary>
     /// Element-wise addition of two tensors (residual connection).

@@ -640,7 +640,7 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
 
     // Recorded ReLU: the element transform it replaces was invisible to the tape, so the flow network
     // received no gradient.
-    private Tensor<T> ApplyReLU(Tensor<T> input) => Engine.ReLU(input);
+    internal Tensor<T> ApplyReLU(Tensor<T> input) => Engine.ReLU(input);
 
     private Tensor<T> ApplySigmoid(Tensor<T> input) =>
         Engine.Sigmoid(input);
@@ -705,7 +705,7 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         return BlendKnownPixels(frames, masks, Forward(stacked));
     }
 
-    private Tensor<T> BlendKnownPixels(Tensor<T> frames, Tensor<T> masks, Tensor<T> prediction)
+    internal Tensor<T> BlendKnownPixels(Tensor<T> frames, Tensor<T> masks, Tensor<T> prediction)
     {
         // Known pixels pass through, masked ones come from the prediction: m * prediction + (1 - m) * frame.
         // This used to add 1e-3 x the mean mask value to the first output pixel so different masks could not give
