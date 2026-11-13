@@ -381,4 +381,36 @@ public class TimeSeriesHalfPrecisionTests
 
         Assert.InRange(prediction, 990.0, 1010.0);
     }
+
+    [Fact]
+    public void DLinear_Half_TrainsInDoubleWithoutOverflow()
+    {
+        // Windows of 500 with targets of 600: one batch gradient is 32 * 500 * 100 = 1.6e6, past
+        // Half's 65504, and the step 1e-7 / 32 rounds to 0 in Half, so training in T made every weight
+        // NaN and the forecast fell back to 0. In double the forecast moves from 500 toward 600.
+        const int rows = 300;
+        var x = new Matrix<Half>(rows, 4);
+        var y = new Vector<Half>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            y[i] = (Half)600;
+            for (int j = 0; j < 4; j++)
+            {
+                x[i, j] = (Half)500;
+            }
+        }
+
+        var model = new DLinearModel<Half>(new DLinearOptions<Half>
+        {
+            LookbackWindow = 4,
+            MovingAverageKernel = 3,
+            LearningRate = 1e-7,
+            Epochs = 1,
+        });
+        model.Train(x, y);
+
+        double prediction = (double)model.PredictSingle(new Vector<Half>(new[] { (Half)500, (Half)500, (Half)500, (Half)500 }));
+
+        Assert.InRange(prediction, 501.0, 601.0);
+    }
 }
