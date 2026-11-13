@@ -111,12 +111,9 @@ public class GaussianKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        T squaredDistance = _numOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T diff = _numOps.Subtract(x1[i], x2[i]);
-            squaredDistance = _numOps.Add(squaredDistance, _numOps.Multiply(diff, diff));
-        }
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(x1, x2);
+        T squaredDistance = engine.DotProduct(diff, diff);
 
         T exponent = _numOps.Divide(squaredDistance, _numOps.FromDouble(2 * _sigma * _sigma));
         return _numOps.Exp(_numOps.Negate(exponent));

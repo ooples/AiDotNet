@@ -100,53 +100,22 @@ public partial class PercentileDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        int n = X.Rows;
-        int d = X.Columns;
-
-        _lowThresholds = new Vector<T>(d);
-        _highThresholds = new Vector<T>(d);
-        _ranges = new Vector<T>(d);
         T eps = NumOps.FromDouble(1e-10);
 
-        for (int j = 0; j < d; j++)
-        {
-            var values = new T[n];
-            for (int i = 0; i < n; i++)
-            {
-                values[i] = X[i, j];
-            }
-
-            Array.Sort(values, (a, b) => NumOps.Compare(a, b));
-
-            // Compute percentiles
-            _lowThresholds[j] = Percentile(values, _lowPercentile);
-            _highThresholds[j] = Percentile(values, _highPercentile);
-            _ranges[j] = NumOps.Subtract(_highThresholds[j], _lowThresholds[j]);
-            if (NumOps.LessThan(_ranges[j], eps)) _ranges[j] = eps;
-        }
+        // Per-feature percentiles of the sorted columns and the range between them (floored at eps)
+        var engine = Engine;
+        var (sorted, _) = engine.TensorSort(AnomalyTensorOps.ToTensor(X), 0, false);
+        var low = AnomalyTensorOps.SortedColumnPercentile(sorted, _lowPercentile);
+        var high = AnomalyTensorOps.SortedColumnPercentile(sorted, _highPercentile);
+        _lowThresholds = low.ToVector();
+        _highThresholds = high.ToVector();
+        _ranges = engine.TensorMax(engine.TensorSubtract(high, low), eps).ToVector();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
-    }
-
-    private T Percentile(T[] sortedValues, double percentile)
-    {
-        int n = sortedValues.Length;
-        double index = (percentile / 100.0) * (n - 1);
-        int lower = (int)Math.Floor(index);
-        int upper = (int)Math.Ceiling(index);
-
-        if (lower == upper || upper >= n)
-        {
-            return sortedValues[Math.Min(lower, n - 1)];
-        }
-
-        T fraction = NumOps.FromDouble(index - lower);
-        return NumOps.Add(sortedValues[lower],
-            NumOps.Multiply(fraction, NumOps.Subtract(sortedValues[upper], sortedValues[lower])));
     }
 
     /// <inheritdoc/>
@@ -169,42 +138,8 @@ public partial class PercentileDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T maxScore = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                T value = X[i, j];
-                T score;
-
-                if (NumOps.LessThan(value, lowThresholds[j]))
-                {
-                    // Below low percentile
-                    score = NumOps.Divide(NumOps.Subtract(lowThresholds[j], value), ranges[j]);
-                }
-                else if (NumOps.GreaterThan(value, highThresholds[j]))
-                {
-                    // Above high percentile
-                    score = NumOps.Divide(NumOps.Subtract(value, highThresholds[j]), ranges[j]);
-                }
-                else
-                {
-                    // Within normal range
-                    score = NumOps.Zero;
-                }
-
-                if (NumOps.GreaterThan(score, maxScore))
-                {
-                    maxScore = score;
-                }
-            }
-
-            scores[i] = maxScore;
-        }
-
-        return scores;
+        // Distance below the low percentile or above the high percentile, relative to the range;
+        // the point's score is the largest across features
+        return AnomalyTensorOps.MaxOutsideBand(X, lowThresholds.AsTensor(), highThresholds.AsTensor(), ranges.AsTensor());
     }
 }

@@ -122,56 +122,7 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeCholesky()
     {
-        int n = A.Rows;
-        L = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
-
-        for (int j = 0; j < n; j++)
-        {
-            // VECTORIZED: Calculate D[j] using dot product
-            T sum = NumOps.Zero;
-            if (j > 0)
-            {
-                var ljRow = new T[j];
-                var dSlice = new T[j];
-                for (int k = 0; k < j; k++)
-                {
-                    ljRow[k] = NumOps.Multiply(L[j, k], L[j, k]);
-                    dSlice[k] = D[k];
-                }
-                var ljVec = new Vector<T>(ljRow);
-                var dVec = new Vector<T>(dSlice);
-                sum = ljVec.DotProduct(dVec);
-            }
-            D[j] = NumOps.Subtract(A[j, j], sum);
-
-            L[j, j] = NumOps.One;
-
-            for (int i = j + 1; i < n; i++)
-            {
-                // VECTORIZED: Calculate L[i,j] using dot product
-                sum = NumOps.Zero;
-                if (j > 0)
-                {
-                    var liRow = new T[j];
-                    var ljRow = new T[j];
-                    var dSlice = new T[j];
-                    for (int k = 0; k < j; k++)
-                    {
-                        liRow[k] = L[i, k];
-                        ljRow[k] = L[j, k];
-                        dSlice[k] = D[k];
-                    }
-                    // Compute element-wise product then sum
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(liRow[k], ljRow[k]), dSlice[k]));
-                    }
-                }
-
-                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
-            }
-        }
+        (L, D) = ComputeUnpivotedLdl(A);
     }
 
     /// <summary>
@@ -186,56 +137,8 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeCrout()
     {
-        int n = A.Rows;
-        L = new Matrix<T>(n, n);
-        D = new Vector<T>(n);
-
-        for (int j = 0; j < n; j++)
-        {
-            // VECTORIZED: Calculate D[j] using dot product
-            T sum = NumOps.Zero;
-            if (j > 0)
-            {
-                var ljRow = new T[j];
-                var dSlice = new T[j];
-                for (int k = 0; k < j; k++)
-                {
-                    ljRow[k] = NumOps.Multiply(L[j, k], L[j, k]);
-                    dSlice[k] = D[k];
-                }
-                var ljVec = new Vector<T>(ljRow);
-                var dVec = new Vector<T>(dSlice);
-                sum = ljVec.DotProduct(dVec);
-            }
-
-            D[j] = NumOps.Subtract(A[j, j], sum);
-            L[j, j] = NumOps.One;
-
-            for (int i = j + 1; i < n; i++)
-            {
-                // VECTORIZED: Calculate L[i,j] using element-wise product and sum
-                sum = NumOps.Zero;
-                if (j > 0)
-                {
-                    var liRow = new T[j];
-                    var ljRow = new T[j];
-                    var dSlice = new T[j];
-                    for (int k = 0; k < j; k++)
-                    {
-                        liRow[k] = L[i, k];
-                        ljRow[k] = L[j, k];
-                        dSlice[k] = D[k];
-                    }
-                    // Compute element-wise product then sum
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(liRow[k], ljRow[k]), dSlice[k]));
-                    }
-                }
-
-                L[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
-            }
-        }
+        // Crout ordering computes the same unpivoted L and D as the Cholesky-style ordering.
+        (L, D) = ComputeUnpivotedLdl(A);
     }
 
     /// <summary>
@@ -259,55 +162,13 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
         if (b.Length != A.Rows)
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
 
-        // Forward substitution
-        Vector<T> y = new(b.Length);
-        for (int i = 0; i < b.Length; i++)
+        if (b.Length == 0)
         {
-            // VECTORIZED: Use dot product for sum computation
-            T sum = NumOps.Zero;
-            if (i > 0)
-            {
-                var rowSlice = new T[i];
-                var ySlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    rowSlice[k] = L[i, k];
-                    ySlice[k] = y[k];
-                }
-                var rowVec = new Vector<T>(rowSlice);
-                var yVec = new Vector<T>(ySlice);
-                sum = rowVec.DotProduct(yVec);
-            }
-            y[i] = NumOps.Subtract(b[i], sum);
+            return new Vector<T>(0);
         }
 
-        // VECTORIZED: Diagonal scaling using vector division
-        y = y.ElementwiseDivide(D);
-
-        // Backward substitution
-        Vector<T> x = new Vector<T>(b.Length);
-        for (int i = b.Length - 1; i >= 0; i--)
-        {
-            // VECTORIZED: Use dot product for sum computation
-            T sum = NumOps.Zero;
-            if (i < b.Length - 1)
-            {
-                int remaining = b.Length - i - 1;
-                var colSlice = new T[remaining];
-                var xSlice = new T[remaining];
-                for (int k = 0; k < remaining; k++)
-                {
-                    colSlice[k] = L[i + 1 + k, i];
-                    xSlice[k] = x[i + 1 + k];
-                }
-                var colVec = new Vector<T>(colSlice);
-                var xVec = new Vector<T>(xSlice);
-                sum = colVec.DotProduct(xVec);
-            }
-            x[i] = NumOps.Subtract(y[i], sum);
-        }
-
-        return x;
+        // Forward substitution (L y = b), diagonal scaling (y / D), backward substitution (L^T x = y).
+        return SolveLdlSystem(L, D, Tensor<T>.FromVector(b, new[] { b.Length, 1 }).ToMatrix()).GetColumn(0);
     }
 
     /// <summary>
@@ -329,22 +190,13 @@ public class LdlDecomposition<T> : MatrixDecompositionBase<T>
     public override Matrix<T> Invert()
     {
         int n = A.Rows;
-        Matrix<T> inverse = new(n, n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            Vector<T> ei = new(n)
-            {
-                [i] = NumOps.One
-            };
-            Vector<T> column = Solve(ei);
-            for (int j = 0; j < n; j++)
-            {
-                inverse[j, i] = column[j];
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return inverse;
+        // Solve for every column of the identity at once.
+        return SolveLdlSystem(L, D, Matrix<T>.CreateIdentity(n));
     }
 
     /// <summary>

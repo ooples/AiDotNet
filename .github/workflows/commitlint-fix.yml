@@ -8,7 +8,7 @@ on:
   # hook (so they land compliant and this fires as a no-op anyway); the commitlint.yml
   # check still enforces compliance non-destructively for anyone without the hook enabled.
   pull_request:
-    types: [opened]
+    types: [opened, ready_for_review]
 
 permissions:
   contents: write
@@ -27,7 +27,7 @@ jobs:
     # release PRs (their bot commits must not be rewritten). Merged from master's
     # guard; the old handle-dependabot job was not restored — the rewritten fixer
     # replaces that broken, lowercase-only path.
-    if: ${{ (github.actor != 'dependabot[bot]') && !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ (github.event.pull_request.draft != true) && ((github.actor != 'dependabot[bot]') && !startsWith(github.head_ref, 'release-please--')) }}
 
     steps:
       # Check out the PR's HEAD BRANCH by name (not the detached pull/N/merge ref),

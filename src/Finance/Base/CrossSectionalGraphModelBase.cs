@@ -180,10 +180,7 @@ public abstract partial class CrossSectionalGraphModelBase<T> : FinancialModelBa
         var graph = AssetGraph;
         if (graph is null)
         {
-            var identity = new Matrix<T>(assetCount, assetCount);
-            var one = MathHelper.GetNumericOperations<T>().One;
-            for (int i = 0; i < assetCount; i++) identity[i, i] = one;
-            return identity;
+            return Matrix<T>.CreateIdentity(assetCount);
         }
 
         if (graph.Rows != assetCount || graph.Columns != assetCount)

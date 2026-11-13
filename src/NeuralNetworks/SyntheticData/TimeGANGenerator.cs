@@ -109,33 +109,23 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     // Embedder (auxiliary): data → latent
     private readonly List<GRULayer<T>> _embedderLayers = new();
     private FullyConnectedLayer<T>? _embedderOutput;
-    [Scratch]
-    private readonly List<Tensor<T>> _embedderPreActs = new();
 
     // Recovery (auxiliary): latent → data
     private readonly List<FullyConnectedLayer<T>> _recoveryLayers = new();
     private FullyConnectedLayer<T>? _recoveryOutput;
-    [Scratch]
-    private readonly List<Tensor<T>> _recoveryPreActs = new();
 
-    // Generator output head and pre-activation cache (Layers = generator recurrent stack)
+    // Generator output head (Layers = generator recurrent stack)
     private FullyConnectedLayer<T>? _generatorOutput;
-    [Scratch]
-    private readonly List<Tensor<T>> _generatorPreActs = new();
 
     // Supervisor (auxiliary): latent_t → latent_{t+1}
     private readonly List<GRULayer<T>> _supervisorLayers = new();
     private FullyConnectedLayer<T>? _supervisorOutput;
-    [Scratch]
-    private readonly List<Tensor<T>> _supervisorPreActs = new();
 
     // Discriminator (auxiliary): bidirectional latent sequence → per-step real/fake
     private readonly List<GRULayer<T>> _discriminatorForwardLayers = new();
     private readonly List<GRULayer<T>> _discriminatorBackwardLayers = new();
     private readonly List<DropoutLayer<T>> _discDropoutLayers = new();
     private FullyConnectedLayer<T>? _discriminatorOutput;
-    [Scratch]
-    private readonly List<Tensor<T>> _discPreActs = new();
 
     // Whether custom layers are being used
     private bool _usingCustomLayers;
@@ -460,10 +450,9 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         int hiddenDim = _materializedHiddenDimension;
 
         int numSequences = (int)Math.Ceiling((double)numSamples / seqLen);
-        var result = new Matrix<T>(numSamples, _dataWidth);
         if (numSequences == 0)
         {
-            return result;
+            return new Matrix<T>(numSamples, _dataWidth);
         }
 
         // Generate complete sequences in one recurrent pass. Processing one vector at a time resets
@@ -473,95 +462,9 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var supervised = SupervisorForwardBatched(generated, isTraining: false);
         var recovered = RecoveryForwardBatched(supervised, isTraining: false);
 
-        for (int row = 0; row < numSamples; row++)
-        {
-            int sequence = row / seqLen;
-            int timestep = row % seqLen;
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                result[row, j] = recovered[sequence, timestep, j];
-            }
-        }
-
-        return result;
-    }
-
-    #endregion
-
-    #region Forward Passes with Manual Activation and Pre-Activation Caching
-
-    private Vector<T> EmbedderForward(Vector<T> x, bool isTraining)
-    {
-        _embedderPreActs.Clear();
-        var current = EmbedderForwardBatched(VectorToTensor(x), isTraining);
-        return TensorToVector(current, current.Length);
-    }
-
-    private Vector<T> RecoveryForward(Vector<T> h, bool isTraining)
-    {
-        _recoveryPreActs.Clear();
-        var current = RecoveryForwardBatched(VectorToTensor(h), isTraining);
-        return TensorToVector(current, current.Length);
-    }
-
-    private Vector<T> GeneratorForward(Vector<T> noise, bool isTraining)
-    {
-        _generatorPreActs.Clear();
-        var current = GeneratorForwardBatched(VectorToTensor(noise), isTraining);
-        return TensorToVector(current, current.Length);
-    }
-
-    private Vector<T> SupervisorForward(Vector<T> h, bool isTraining)
-    {
-        _supervisorPreActs.Clear();
-        var current = SupervisorForwardBatched(VectorToTensor(h), isTraining);
-        return TensorToVector(current, current.Length);
-    }
-
-    private Vector<T> DiscriminatorForward(Vector<T> h, bool isTraining)
-    {
-        _discPreActs.Clear();
-        var current = DiscriminatorForwardBatched(VectorToTensor(h), isTraining);
-        return TensorToVector(current, current.Length);
-    }
-
-    #endregion
-
-    #region Backward Passes
-
-    #endregion
-
-    #region Parameter Updates
-
-    private void UpdateEmbedder(T lr)
-    {
-        foreach (var layer in _embedderLayers) layer.UpdateParameters(lr);
-        _embedderOutput?.UpdateParameters(lr);
-    }
-
-    private void UpdateRecovery(T lr)
-    {
-        foreach (var layer in _recoveryLayers) layer.UpdateParameters(lr);
-        _recoveryOutput?.UpdateParameters(lr);
-    }
-
-    private void UpdateGenerator(T lr)
-    {
-        foreach (var layer in Layers) layer.UpdateParameters(lr);
-        _generatorOutput?.UpdateParameters(lr);
-    }
-
-    private void UpdateSupervisor(T lr)
-    {
-        foreach (var layer in _supervisorLayers) layer.UpdateParameters(lr);
-        _supervisorOutput?.UpdateParameters(lr);
-    }
-
-    private void UpdateDiscriminator(T lr)
-    {
-        foreach (var layer in _discriminatorForwardLayers) layer.UpdateParameters(lr);
-        foreach (var layer in _discriminatorBackwardLayers) layer.UpdateParameters(lr);
-        _discriminatorOutput?.UpdateParameters(lr);
+        // Row r is time step r % seqLen of sequence r / seqLen.
+        var rows = recovered.Reshape([numSequences * seqLen, recovered.Shape[2]]);
+        return Engine.TensorSlice(rows, [0, 0], [numSamples, _dataWidth]).ToMatrix();
     }
 
     #endregion
@@ -784,7 +687,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         }
 
         int sequenceLength = sequences[startIdx].Rows;
-        var batch = new Tensor<T>([batchSize, sequenceLength, _dataWidth]);
+        var members = new Tensor<T>[batchSize];
         for (int s = startIdx; s < boundedEnd; s++)
         {
             var sequence = sequences[s];
@@ -794,14 +697,20 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                     "TimeGAN recurrent batches require equal sequence lengths within a batch.");
             }
 
-            int batchIndex = s - startIdx;
-            int columns = Math.Min(_dataWidth, sequence.Columns);
-            for (int t = 0; t < sequenceLength; t++)
-                for (int j = 0; j < columns; j++)
-                    batch[batchIndex, t, j] = sequence[t, j];
+            // The first _dataWidth columns, zero-padded when the sequence is narrower.
+            var steps = Tensor<T>.FromMatrix(sequence);
+            if (sequence.Columns > _dataWidth)
+            {
+                steps = Engine.TensorSlice(steps, [0, 0], [sequenceLength, _dataWidth]);
+            }
+            else if (sequence.Columns < _dataWidth)
+            {
+                steps = Engine.TensorConcatenate([steps, new Tensor<T>([sequenceLength, _dataWidth - sequence.Columns])], 1);
+            }
+            members[s - startIdx] = steps;
         }
 
-        return batch;
+        return Engine.TensorStack(members, 0);
     }
 
     /// <summary>
@@ -986,30 +895,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #endregion
 
-    #region Discriminator Layer List
-
-    /// <summary>
-    /// Builds a combined list of discriminator layers (forward/backward GRUs + dropout + output)
-    /// for gradient-penalty and related analyses.
-    /// </summary>
-    private IReadOnlyList<ILayer<T>> BuildDiscLayerList()
-    {
-        var allLayers = new List<ILayer<T>>();
-        for (int i = 0; i < _discDropoutLayers.Count; i++)
-        {
-            allLayers.Add(_discriminatorForwardLayers[i]);
-            allLayers.Add(_discriminatorBackwardLayers[i]);
-            allLayers.Add(_discDropoutLayers[i]);
-        }
-        if (_discriminatorOutput is not null)
-        {
-            allLayers.Add(_discriminatorOutput);
-        }
-        return allLayers;
-    }
-
-    #endregion
-
     #region NeuralNetworkBase Overrides
 
     private Tensor<T> GetGeneratorNoise(Tensor<T> input)
@@ -1115,9 +1000,10 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();
+        var share = NumOps.FromDouble(1.0 / Math.Max(_columns.Count, 1));
         for (int i = 0; i < _columns.Count; i++)
         {
-            importance[_columns[i].Name] = NumOps.FromDouble(1.0 / Math.Max(_columns.Count, 1));
+            importance[_columns[i].Name] = share;
         }
         return importance;
     }
@@ -1141,65 +1027,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #endregion
 
-    #region Manual Activation Functions
-
-    private static Tensor<T> ApplySigmoid(Tensor<T> input)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double v = numOps.ToDouble(input[i]);
-            double clamped = Math.Min(Math.Max(v, -20.0), 20.0);
-            result[i] = numOps.FromDouble(1.0 / (1.0 + Math.Exp(-clamped)));
-        }
-        return result;
-    }
-
-    private static Tensor<T> ApplySigmoidDerivative(Tensor<T> grad, Tensor<T> preActivation)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(grad._shape);
-        int len = Math.Min(grad.Length, preActivation.Length);
-        for (int i = 0; i < len; i++)
-        {
-            double v = numOps.ToDouble(preActivation[i]);
-            double clamped = Math.Min(Math.Max(v, -20.0), 20.0);
-            double sig = 1.0 / (1.0 + Math.Exp(-clamped));
-            double deriv = sig * (1.0 - sig);
-            result[i] = numOps.FromDouble(numOps.ToDouble(grad[i]) * deriv);
-        }
-        return result;
-    }
-
-    private static Tensor<T> ApplyLeakyReLU(Tensor<T> input, double alpha)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double v = numOps.ToDouble(input[i]);
-            result[i] = numOps.FromDouble(v >= 0 ? v : alpha * v);
-        }
-        return result;
-    }
-
-    private static Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> grad, Tensor<T> preActivation, double alpha)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(grad._shape);
-        int len = Math.Min(grad.Length, preActivation.Length);
-        for (int i = 0; i < len; i++)
-        {
-            double pre = numOps.ToDouble(preActivation[i]);
-            double deriv = pre >= 0 ? 1.0 : alpha;
-            result[i] = numOps.FromDouble(numOps.ToDouble(grad[i]) * deriv);
-        }
-        return result;
-    }
-
-    #endregion
-
     #region Data Preparation
 
     private List<Matrix<T>> PrepareSequences(Matrix<T> data, int seqLen)
@@ -1208,100 +1035,19 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         if (data.Rows < seqLen)
         {
-            var seq = new Matrix<T>(data.Rows, data.Columns);
-            for (int i = 0; i < data.Rows; i++)
-                for (int j = 0; j < data.Columns; j++)
-                    seq[i, j] = data[i, j];
-            sequences.Add(seq);
+            sequences.Add(Tensor<T>.FromMatrix(data).ToMatrix());
             return sequences;
         }
 
+        // Every window of seqLen consecutive rows.
+        var rows = Tensor<T>.FromMatrix(data);
         int numSequences = data.Rows - seqLen + 1;
         for (int start = 0; start < numSequences; start++)
         {
-            var seq = new Matrix<T>(seqLen, data.Columns);
-            for (int t = 0; t < seqLen; t++)
-                for (int j = 0; j < data.Columns; j++)
-                    seq[t, j] = data[start + t, j];
-            sequences.Add(seq);
+            sequences.Add(Engine.TensorSlice(rows, [start, 0], [seqLen, data.Columns]).ToMatrix());
         }
 
         return sequences;
-    }
-
-    #endregion
-
-    #region Helpers
-
-    private static double SigmoidScalar(double x)
-    {
-        return 1.0 / (1.0 + Math.Exp(-Math.Min(Math.Max(x, -20.0), 20.0)));
-    }
-
-    private Vector<T> CreateStandardNormalVector(int length)
-    {
-        var v = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
-            v[i] = NumOps.FromDouble(normal);
-        }
-        return v;
-    }
-
-    private static Tensor<T> SanitizeAndClipGradient(Tensor<T> grad, double maxNorm)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        double normSq = 0;
-        for (int i = 0; i < grad.Length; i++)
-        {
-            double val = numOps.ToDouble(grad[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                grad[i] = numOps.Zero;
-                continue;
-            }
-            normSq += val * val;
-        }
-        double norm = Math.Sqrt(normSq);
-        if (norm > maxNorm)
-        {
-            double scale = maxNorm / norm;
-            for (int i = 0; i < grad.Length; i++)
-                grad[i] = numOps.FromDouble(numOps.ToDouble(grad[i]) * scale);
-        }
-        return grad;
-    }
-
-    private static Tensor<T> CloneTensor(Tensor<T> source)
-    {
-        var clone = new Tensor<T>(source._shape);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
-    }
-
-    private static Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++) v[j] = matrix[row, j];
-        return v;
-    }
-
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
-
-    private static Vector<T> TensorToVector(Tensor<T> t, int length)
-    {
-        var v = new Vector<T>(length);
-        int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
     }
 
     #endregion

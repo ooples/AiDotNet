@@ -22,9 +22,27 @@ public sealed class LicenseService : ILicenseService
 
     private readonly ServingDbContext _db;
     private readonly ILogger<LicenseService> _logger;
+    private readonly TimeProvider _clock;
+
+    /// <summary>
+    /// How long an activation holds a seat after its machine was last seen. A seat is a LEASE, renewed by every
+    /// validation from that machine, not a permanent claim: an activation that has not validated within the lease
+    /// stops counting, so machines that are gone (a rebuilt laptop, every ephemeral CI runner, each of which has a
+    /// fresh machine id) free their seat without an administrator. A lapsed machine that comes back re-activates if a
+    /// seat is free. This is how heartbeat/lease licensing (Keygen machine heartbeats, FlexLM and JetBrains floating
+    /// leases) bounds seat use; counting every activation ever seen exhausts a CI key in days.
+    /// </summary>
+    public static readonly TimeSpan ActivationLease = TimeSpan.FromDays(7);
 
     public LicenseService(ServingDbContext db, ILogger<LicenseService> logger)
+        : this(db, logger, TimeProvider.System)
     {
+    }
+
+    /// <summary>Creates the service on an explicit clock, so lease expiry is testable.</summary>
+    public LicenseService(ServingDbContext db, ILogger<LicenseService> logger, TimeProvider clock)
+    {
+        _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         Guard.NotNull(db);
         Guard.NotNull(logger);
         _db = db;
@@ -43,7 +61,7 @@ public sealed class LicenseService : ILicenseService
             throw new ArgumentException("CustomerName is required.", nameof(request));
         }
 
-        if (request.ExpiresAt is not null && request.ExpiresAt <= DateTimeOffset.UtcNow)
+        if (request.ExpiresAt is not null && request.ExpiresAt <= _clock.GetUtcNow())
         {
             throw new ArgumentException("ExpiresAt must be in the future.", nameof(request));
         }
@@ -75,7 +93,7 @@ public sealed class LicenseService : ILicenseService
                 CustomerEmail = request.CustomerEmail?.Trim(),
                 Tier = request.Tier,
                 MaxSeats = request.MaxSeats,
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = _clock.GetUtcNow(),
                 ExpiresAt = request.ExpiresAt,
                 Environment = request.Environment?.Trim(),
                 Notes = request.Notes?.Trim(),
@@ -155,66 +173,20 @@ public sealed class LicenseService : ILicenseService
             return InvalidResponse("Invalid license key.");
         }
 
-        // Check revocation
-        if (entity.RevokedAt is not null)
+        // Revocation and expiry: checked here to answer without a lock, and again by AdmitSeatAsync under the lock.
+        if (InactiveStatus(entity) is { } inactive)
         {
-            return new LicenseValidationResponse
-            {
-                Status = LicenseKeyStatus.Revoked,
-                Tier = entity.Tier.ToString(),
-                Message = "This license key has been revoked."
-            };
+            return InactiveResponse(entity, inactive);
         }
 
-        // Check expiration
-        if (entity.ExpiresAt is not null && entity.ExpiresAt <= DateTimeOffset.UtcNow)
+        var (admitted, seatsUsed, inactiveUnderLock) =
+            await AdmitSeatAsync(entity, request, cancellationToken).ConfigureAwait(false);
+        if (inactiveUnderLock is { } lockedStatus)
         {
-            return new LicenseValidationResponse
-            {
-                Status = LicenseKeyStatus.Expired,
-                Tier = entity.Tier.ToString(),
-                ExpiresAt = entity.ExpiresAt,
-                Message = "This license key has expired."
-            };
+            return InactiveResponse(entity, lockedStatus);
         }
 
-        // Count distinct active machine activations
-        int seatsUsed = await _db.LicenseActivations
-            .CountAsync(a => a.LicenseKeyId == entity.Id && a.IsActive, cancellationToken)
-            .ConfigureAwait(false);
-
-        // Check seat limit BEFORE activation to avoid over-activating under concurrency.
-        // A machine that is already active does not consume a new seat, so check for it first.
-        if (!string.IsNullOrWhiteSpace(request.MachineId))
-        {
-            bool alreadyActive = await _db.LicenseActivations
-                .AnyAsync(a => a.LicenseKeyId == entity.Id && a.MachineId == request.MachineId && a.IsActive, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!alreadyActive && seatsUsed >= entity.MaxSeats)
-            {
-                return new LicenseValidationResponse
-                {
-                    Status = LicenseKeyStatus.SeatLimitReached,
-                    Tier = entity.Tier.ToString(),
-                    ExpiresAt = entity.ExpiresAt,
-                    SeatsUsed = seatsUsed,
-                    SeatsMax = entity.MaxSeats,
-                    Message = $"Seat limit reached ({seatsUsed}/{entity.MaxSeats}). Contact your administrator."
-                };
-            }
-
-            await UpsertActivationAsync(entity.Id, request.MachineId, request.MachineName, request.Environment, cancellationToken)
-                .ConfigureAwait(false);
-
-            // Re-count after upsert to include this machine
-            seatsUsed = await _db.LicenseActivations
-                .CountAsync(a => a.LicenseKeyId == entity.Id && a.IsActive, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        // Final seat-limit guard (covers edge cases where MachineId is empty)
-        if (seatsUsed > entity.MaxSeats)
+        if (!admitted)
         {
             return new LicenseValidationResponse
             {
@@ -239,6 +211,38 @@ public sealed class LicenseService : ILicenseService
         };
     }
 
+    /// <summary>Revoked or Expired when the key can no longer be admitted, otherwise null.</summary>
+    private LicenseKeyStatus? InactiveStatus(LicenseKeyEntity entity)
+    {
+        if (entity.RevokedAt is not null)
+        {
+            return LicenseKeyStatus.Revoked;
+        }
+
+        if (entity.ExpiresAt is not null && entity.ExpiresAt <= _clock.GetUtcNow())
+        {
+            return LicenseKeyStatus.Expired;
+        }
+
+        return null;
+    }
+
+    private static LicenseValidationResponse InactiveResponse(LicenseKeyEntity entity, LicenseKeyStatus status) =>
+        status == LicenseKeyStatus.Revoked
+            ? new LicenseValidationResponse
+            {
+                Status = LicenseKeyStatus.Revoked,
+                Tier = entity.Tier.ToString(),
+                Message = "This license key has been revoked."
+            }
+            : new LicenseValidationResponse
+            {
+                Status = LicenseKeyStatus.Expired,
+                Tier = entity.Tier.ToString(),
+                ExpiresAt = entity.ExpiresAt,
+                Message = "This license key has expired."
+            };
+
     public async Task<bool> RevokeAsync(Guid licenseId, CancellationToken cancellationToken = default)
     {
         var entity = await _db.LicenseKeys
@@ -255,7 +259,7 @@ public sealed class LicenseService : ILicenseService
             return true;
         }
 
-        entity.RevokedAt = DateTimeOffset.UtcNow;
+        entity.RevokedAt = _clock.GetUtcNow();
         await _db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Revoked license key {KeyId}", entity.KeyId);
         return true;
@@ -315,6 +319,110 @@ public sealed class LicenseService : ILicenseService
         return info;
     }
 
+    /// <summary>
+    /// Decides whether this request holds a seat and, only if it does, renews its machine's lease.
+    /// </summary>
+    /// <remarks>
+    /// Serialized per license key. The count, the decision and the renewal run in one transaction that first takes
+    /// a write lock on the key's own row, so a second admission for the same key waits until the first has
+    /// committed. Without it, two lapsed machines on a one-seat key could both read a free seat and both persist a
+    /// lease. The seat limit is checked BEFORE the renewal is written, so a rejected request never extends its
+    /// lease: a machine over the limit (for instance after an administrator lowered MaxSeats) lapses instead of
+    /// holding its seat by validating repeatedly.
+    /// </remarks>
+    /// <returns>Whether a seat is held, the leased seats counted for the response, and Revoked or Expired when the
+    /// key, re-read under the lock, can no longer be admitted (a revocation or expiry while this request waited).</returns>
+    private async Task<(bool Admitted, int SeatsUsed, LicenseKeyStatus? Inactive)> AdmitSeatAsync(
+        LicenseKeyEntity entity,
+        LicenseValidateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            // A retrying strategy re-runs this whole block; an activation tracked by a failed attempt must not be
+            // saved twice.
+            foreach (var tracked in _db.ChangeTracker.Entries<LicenseActivationEntity>().ToList())
+            {
+                tracked.State = EntityState.Detached;
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await LockLicenseKeyAsync(entity.Id, cancellationToken).ConfigureAwait(false);
+
+            // Decide on the key as it is now, not as read before the lock: a revocation, expiry or MaxSeats change
+            // committed while this request waited applies to it.
+            await _db.Entry(entity).ReloadAsync(cancellationToken).ConfigureAwait(false);
+            if (InactiveStatus(entity) is { } inactive)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return (false, 0, (LicenseKeyStatus?)inactive);
+            }
+
+            // Seats held: active activations whose lease is current (see ActivationLease). Read after the lock, so
+            // a waiting request counts the lease the request ahead of it just committed.
+            int seatsUsed = await CountLeasedSeatsAsync(entity.Id, cancellationToken).ConfigureAwait(false);
+
+            if (string.IsNullOrWhiteSpace(request.MachineId))
+            {
+                // Nothing to renew: the request only reports whether the key is within its limit.
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return (seatsUsed <= entity.MaxSeats, seatsUsed, null);
+            }
+
+            // A machine whose lease is current does not take a new seat; a lapsed or new one does.
+            var leaseStart = _clock.GetUtcNow() - ActivationLease;
+            bool alreadyActive = (await _db.LicenseActivations
+                .Where(a => a.LicenseKeyId == entity.Id && a.MachineId == request.MachineId && a.IsActive)
+                .Select(a => a.LastSeenAt)
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false))
+                .Any(lastSeen => lastSeen >= leaseStart);
+
+            int seatsAfter = alreadyActive ? seatsUsed : seatsUsed + 1;
+            if (seatsAfter > entity.MaxSeats)
+            {
+                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                return (false, seatsUsed, null);
+            }
+
+            await UpsertActivationAsync(entity.Id, request.MachineId, request.MachineName, request.Environment, cancellationToken)
+                .ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return (true, seatsAfter, null);
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Takes a write lock on one license key's row, held until the enclosing transaction ends.
+    /// </summary>
+    /// <remarks>
+    /// A no-op UPDATE rather than a provider-specific lock statement: every supported provider takes a write lock
+    /// for it that is held to commit -- a row lock on PostgreSQL, SQL Server and MySQL (InnoDB), the database write
+    /// lock on SQLite -- so one statement serializes admissions on all four.
+    /// </remarks>
+    private Task<int> LockLicenseKeyAsync(Guid licenseKeyId, CancellationToken cancellationToken)
+    {
+        return _db.LicenseKeys
+            .Where(k => k.Id == licenseKeyId)
+            .ExecuteUpdateAsync(set => set.SetProperty(k => k.MaxSeats, k => k.MaxSeats), cancellationToken);
+    }
+
+    /// <summary>
+    /// Active activations seen within <see cref="ActivationLease"/>. Evaluated in memory: a key has a handful of
+    /// activations, and SQLite cannot compare <see cref="DateTimeOffset"/> columns in SQL.
+    /// </summary>
+    private async Task<int> CountLeasedSeatsAsync(Guid licenseKeyId, CancellationToken cancellationToken)
+    {
+        var leaseStart = _clock.GetUtcNow() - ActivationLease;
+        var lastSeen = await _db.LicenseActivations
+            .Where(a => a.LicenseKeyId == licenseKeyId && a.IsActive)
+            .Select(a => a.LastSeenAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return lastSeen.Count(seen => seen >= leaseStart);
+    }
+
     private async Task UpsertActivationAsync(
         Guid licenseKeyId,
         string machineId,
@@ -330,7 +438,7 @@ public sealed class LicenseService : ILicenseService
 
         if (existing is not null)
         {
-            existing.LastSeenAt = DateTimeOffset.UtcNow;
+            existing.LastSeenAt = _clock.GetUtcNow();
             existing.IsActive = true;
             if (machineName is not null)
             {
@@ -351,8 +459,8 @@ public sealed class LicenseService : ILicenseService
                 MachineId = machineId,
                 MachineName = machineName,
                 Environment = environment,
-                FirstSeenAt = DateTimeOffset.UtcNow,
-                LastSeenAt = DateTimeOffset.UtcNow,
+                FirstSeenAt = _clock.GetUtcNow(),
+                LastSeenAt = _clock.GetUtcNow(),
                 IsActive = true
             });
         }

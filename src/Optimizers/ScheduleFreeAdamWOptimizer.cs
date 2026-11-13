@@ -39,13 +39,13 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         => (ScheduleFreeAdamWOptimizerOptions<T, TInput, TOutput>)Options;
 
     /// <summary>The fast iterate, which takes the AdamW step.</summary>
-    private readonly ConcurrentDictionary<Tensor<T>, T[]> _z = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _z = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <summary>The running average of the fast iterate, and what the method converges on.</summary>
-    private readonly ConcurrentDictionary<Tensor<T>, T[]> _x = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _x = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <summary>Second moment for the AdamW step.</summary>
-    private readonly ConcurrentDictionary<Tensor<T>, T[]> _v = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _v = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     private int _step;
 
@@ -120,55 +120,76 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         double gamma,
         double averagingWeight)
     {
-        var parameterSpan = parameter.AsWritableSpan();
-        var gradientSpan = gradient.AsSpan();
-        int length = Math.Min(parameterSpan.Length, gradientSpan.Length);
+        int length = parameter.Length;
         if (length == 0) return;
+        if (gradient.Length != length)
+        {
+            throw new ArgumentException(
+                $"Gradient length ({gradient.Length}) must match parameter length ({length}).", nameof(gradient));
+        }
+
+        var engine = Engine;
+        var g = gradient._shape.SequenceEqual(parameter._shape) ? gradient : engine.Reshape(gradient, parameter._shape);
 
         // z and x both start at the initial point, which is what the parameters hold before the
         // first step. Seeding them from y afterwards would fold the interpolation into itself.
         if (!_z.TryGetValue(parameter, out var z))
         {
-            z = Snapshot(parameterSpan, length);
+            z = parameter.Clone();
             _z[parameter] = z;
         }
 
         if (!_x.TryGetValue(parameter, out var x))
         {
-            x = Snapshot(parameterSpan, length);
+            x = parameter.Clone();
             _x[parameter] = x;
         }
 
-        var v = _v.GetOrAdd(parameter, _ => new T[length]);
+        var v = _v.GetOrAdd(parameter, _ => new Tensor<T>(parameter._shape));
 
-        for (int i = 0; i < length; i++)
-        {
-            double g = NumOps.ToDouble(gradientSpan[i]);
-
-            double second = beta2 * NumOps.ToDouble(v[i]) + (1 - beta2) * g * g;
-            v[i] = NumOps.FromDouble(second);
-            double corrected = second / (1 - Math.Pow(beta2, _step));
-
-            // z takes the step. Weight decay is decoupled, so it acts on z directly rather
-            // than entering the second moment.
-            double zi = NumOps.ToDouble(z[i]);
-            zi -= gamma * g / (Math.Sqrt(corrected) + epsilon);
-            if (applyWeightDecay) zi -= gamma * decay * zi;
-            z[i] = NumOps.FromDouble(zi);
-
-            // x is the running average of z, and y is where the next gradient will be taken.
-            double xi = (1 - averagingWeight) * NumOps.ToDouble(x[i]) + averagingWeight * zi;
-            x[i] = NumOps.FromDouble(xi);
-
-            parameterSpan[i] = NumOps.FromDouble((1 - beta) * zi + beta * xi);
-        }
+        var y = ScheduleFreeStep(g, z, x, v, _step, beta, beta2, epsilon, decay, applyWeightDecay, gamma, averagingWeight);
+        engine.TensorCopy(y, parameter);
     }
 
-    private T[] Snapshot(ReadOnlySpan<T> values, int length)
+    /// <summary>
+    /// One schedule-free AdamW step on whole tensors: updates the second moment v, the iterate z (decoupled decay
+    /// acting on z) and its running average x in place, and returns y = (1 - beta) * z + beta * x, the point the
+    /// next gradient is taken at.
+    /// </summary>
+    private Tensor<T> ScheduleFreeStep(
+        Tensor<T> g,
+        Tensor<T> z,
+        Tensor<T> x,
+        Tensor<T> v,
+        int step,
+        double beta,
+        double beta2,
+        double epsilon,
+        double decay,
+        bool applyWeightDecay,
+        double gamma,
+        double averagingWeight)
     {
-        var copy = new T[length];
-        for (int i = 0; i < length; i++) copy[i] = values[i];
-        return copy;
+        var engine = Engine;
+        var second = engine.TensorAddScaled(
+            v, engine.TensorMultiply(g, g), NumOps.FromDouble(beta2), NumOps.FromDouble(1 - beta2));
+        engine.TensorCopy(second, v);
+        var corrected = engine.TensorDivideScalar(second, NumOps.FromDouble(1 - Math.Pow(beta2, step)));
+
+        // z takes the step. Weight decay is decoupled, so it acts on z directly rather
+        // than entering the second moment.
+        var newZ = engine.TensorSubtract(z, engine.TensorDivide(
+            engine.TensorMultiplyScalar(g, NumOps.FromDouble(gamma)),
+            engine.TensorAddScalar(engine.TensorSqrt(corrected), NumOps.FromDouble(epsilon))));
+        if (applyWeightDecay)
+            newZ = engine.TensorSubtract(newZ, engine.TensorMultiplyScalar(newZ, NumOps.FromDouble(gamma * decay)));
+        engine.TensorCopy(newZ, z);
+
+        // x is the running average of z, and y is where the next gradient will be taken.
+        var newX = engine.TensorAddScaled(x, newZ, NumOps.FromDouble(1 - averagingWeight), NumOps.FromDouble(averagingWeight));
+        engine.TensorCopy(newX, x);
+
+        return engine.TensorAddScaled(newZ, newX, NumOps.FromDouble(1 - beta), NumOps.FromDouble(beta));
     }
 
     /// <inheritdoc />
@@ -187,14 +208,9 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
             // A differently sized vector is a different parameter set, so its schedule restarts too: the step
             // count drives the step size, the averaging weight c = 1/t and the second-moment bias correction.
             _flatStep = 0;
-            _flatZ = new double[parameters.Length];
-            _flatX = new double[parameters.Length];
-            _flatV = new double[parameters.Length];
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                _flatZ[i] = NumOps.ToDouble(parameters[i]);
-                _flatX[i] = _flatZ[i];
-            }
+            _flatZ = parameters.Clone();
+            _flatX = parameters.Clone();
+            _flatV = new Vector<T>(parameters.Length);
         }
 
         _flatStep++;
@@ -206,27 +222,13 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         double gamma = StepSize(_flatStep);
         double c = 1.0 / _flatStep;
 
-        var updated = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            double g = NumOps.ToDouble(gradient[i]);
-
-            _flatV[i] = beta2 * _flatV[i] + (1 - beta2) * g * g;
-            double corrected = _flatV[i] / (1 - Math.Pow(beta2, _flatStep));
-
-            _flatZ[i] -= gamma * g / (Math.Sqrt(corrected) + epsilon);
-            if (applyWeightDecay) _flatZ[i] -= gamma * decay * _flatZ[i];
-
-            _flatX[i] = (1 - c) * _flatX[i] + c * _flatZ[i];
-            updated[i] = NumOps.FromDouble((1 - beta) * _flatZ[i] + beta * _flatX[i]);
-        }
-
-        return updated;
+        return ScheduleFreeStep(gradient.AsTensor(), _flatZ.AsTensor(), _flatX.AsTensor(), _flatV.AsTensor(), _flatStep,
+            beta, beta2, epsilon, decay, applyWeightDecay, gamma, c).AsVector();
     }
 
-    private double[] _flatZ = [];
-    private double[] _flatX = [];
-    private double[] _flatV = [];
+    private Vector<T> _flatZ = new Vector<T>(0);
+    private Vector<T> _flatX = new Vector<T>(0);
+    private Vector<T> _flatV = new Vector<T>(0);
 
     /// <summary>The running average, which is the point the method converges on.</summary>
     /// <remarks>
@@ -235,9 +237,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// </remarks>
     public Vector<T> AveragedParameters()
     {
-        var result = new Vector<T>(_flatX.Length);
-        for (int i = 0; i < _flatX.Length; i++) result[i] = NumOps.FromDouble(_flatX[i]);
-        return result;
+        return _flatX.Clone();
     }
 
     /// <inheritdoc />
@@ -253,9 +253,9 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         _z.Clear();
         _x.Clear();
         _v.Clear();
-        _flatZ = [];
-        _flatX = [];
-        _flatV = [];
+        _flatZ = new Vector<T>(0);
+        _flatX = new Vector<T>(0);
+        _flatV = new Vector<T>(0);
         _step = 0;
         _flatStep = 0;
         InitializeAdaptiveParameters();

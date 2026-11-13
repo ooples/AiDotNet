@@ -79,33 +79,23 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         // Standardize data to zero mean, unit variance for numerical stability.
         // Without standardization, raw data values cause the matrix exponential
         // in the acyclicity constraint to explode, preventing convergence.
-        data = StandardizeData(data, n, d);
+        var x = StandardizeData(Tensor<T>.FromMatrix(data), n, d);
 
         int effectiveN = n - MaxLag;
 
         // Build X_t: contemporaneous data matrix [effectiveN x d]
-        var Xt = new Matrix<T>(effectiveN, d);
-        for (int t = 0; t < effectiveN; t++)
-            for (int j = 0; j < d; j++)
-                Xt[t, j] = data[t + MaxLag, j];
+        var Xt = Engine.TensorSlice(x, new[] { MaxLag, 0 }, new[] { effectiveN, d });
 
         // Build Z: lagged data matrix [effectiveN x (d * MaxLag)]
         // Z = [X(t-1), X(t-2), ..., X(t-MaxLag)]
         int lagDim = d * MaxLag;
-        var Z = new Matrix<T>(effectiveN, lagDim);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            for (int lag = 1; lag <= MaxLag; lag++)
-            {
-                int colOffset = (lag - 1) * d;
-                for (int j = 0; j < d; j++)
-                    Z[t, colOffset + j] = data[t + MaxLag - lag, j];
-            }
-        }
+        var Z = Engine.TensorConcatenate(Enumerable.Range(1, MaxLag)
+            .Select(lag => Engine.TensorSlice(x, new[] { MaxLag - lag, 0 }, new[] { effectiveN, d }))
+            .ToArray(), 1);
 
         // Joint optimization of W (d x d) and A (lagDim x d) using augmented Lagrangian
-        var W = new Matrix<T>(d, d); // contemporaneous — must be DAG
-        var A = new Matrix<T>(lagDim, d); // lagged — no acyclicity constraint
+        var W = new Tensor<T>(new[] { d, d }); // contemporaneous — must be DAG
+        var A = new Tensor<T>(new[] { lagDim, d }); // lagged — no acyclicity constraint
 
         // Augmented Lagrangian parameters
         double rho = 1.0;
@@ -117,7 +107,7 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Inner optimization: minimize L(W, A) = loss + lambda1*sparsity + alpha*h(W) + rho/2 * h(W)^2
-            OptimizeInner(Xt, Z, W, A, effectiveN, d, lagDim, rho, alpha);
+            (W, A) = OptimizeInner(Xt, Z, W, A, effectiveN, d, lagDim, rho, alpha);
 
             // Evaluate acyclicity constraint on W: h(W) = tr(e^{W∘W}) - d
             double h = ComputeAcyclicity(W, d);
@@ -134,14 +124,23 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
             hPrev = h;
         }
 
-        // Threshold W and combine with A to produce summary adjacency
-        var result = new Matrix<T>(d, d);
+        return BuildSummary(Xt, W, A, d).ToMatrix();
+    }
+
+    /// <summary>
+    /// Thresholded summary adjacency: contemporaneous W entries with |w| ≥ threshold, then for each lag in
+    /// order the off-diagonal lagged entries with |a| ≥ threshold that exceed the magnitude already there;
+    /// when nothing off the diagonal survives, the pairwise |correlation| of the contemporaneous data
+    /// (i &lt; j, both sums of squares above 1e-10, |corr| ≥ threshold).
+    /// </summary>
+    private Tensor<T> BuildSummary(Tensor<T> Xt, Tensor<T> W, Tensor<T> A, int d)
+    {
+        T threshold = NumOps.FromDouble(_wThreshold);
+        var zeros = new Tensor<T>(new[] { d, d });
+        var offDiagonal = OffDiagonalMask(d);
 
         // Contemporaneous edges (from W)
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (Math.Abs(NumOps.ToDouble(W[i, j])) >= _wThreshold)
-                    result[i, j] = W[i, j];
+        var result = Engine.TensorWhere(AtLeast(Engine.TensorAbs(W), threshold), W, zeros);
 
         // Lagged edges: aggregate across lags into summary d x d matrix.
         // Skip the diagonal (i == j): a lagged self-effect A[i,i] is autoregression
@@ -153,310 +152,162 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         // diagonal previously produced spurious self-loops (e.g. result[0,0]=0.357).
         for (int lag = 1; lag <= MaxLag; lag++)
         {
-            int colOffset = (lag - 1) * d;
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue; // no structural self-edges in the summary graph
-                    double lagWeight = Math.Abs(NumOps.ToDouble(A[colOffset + i, j]));
-                    if (lagWeight >= _wThreshold)
-                    {
-                        // Take the maximum absolute lagged effect across lags
-                        double current = Math.Abs(NumOps.ToDouble(result[i, j]));
-                        if (lagWeight > current)
-                            result[i, j] = A[colOffset + i, j];
-                    }
-                }
-            }
+            var lagged = Engine.TensorSlice(A, new[] { (lag - 1) * d, 0 }, new[] { d, d });
+            var lagWeight = Engine.TensorAbs(lagged);
+            // Take the maximum absolute lagged effect across lags
+            var replace = Engine.TensorMultiply(Engine.TensorMultiply(offDiagonal, AtLeast(lagWeight, threshold)),
+                Engine.TensorGreaterThan(lagWeight, Engine.TensorAbs(result)));
+            result = Engine.TensorWhere(replace, lagged, result);
         }
 
         // Fallback: if thresholding removed all edges (e.g., near-degenerate data
         // where gradient descent produces symmetric small weights), use correlation.
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
-                    hasEdges = true;
+        var offDiagonalMagnitude = Engine.TensorMultiply(offDiagonal, Engine.TensorGreaterThan(Engine.TensorAbs(result), NumOps.Zero));
+        if (Engine.TensorCountNonzero(offDiagonalMagnitude) > 0)
+            return result;
 
-        if (!hasEdges)
-        {
-            // Use pairwise correlation on the standardized contemporaneous data
-            T nT2 = NumOps.FromDouble(effectiveN);
-            var means = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                means[j] = NumOps.Zero;
-                for (int t = 0; t < effectiveN; t++)
-                    means[j] = NumOps.Add(means[j], Xt[t, j]);
-                means[j] = NumOps.Divide(means[j], nT2);
-            }
-
-            for (int a = 0; a < d; a++)
-            {
-                for (int b = a + 1; b < d; b++)
-                {
-                    T sxy = NumOps.Zero, sxx = NumOps.Zero, syy = NumOps.Zero;
-                    for (int t = 0; t < effectiveN; t++)
-                    {
-                        T dx = NumOps.Subtract(Xt[t, a], means[a]);
-                        T dy = NumOps.Subtract(Xt[t, b], means[b]);
-                        sxy = NumOps.Add(sxy, NumOps.Multiply(dx, dy));
-                        sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
-                        syy = NumOps.Add(syy, NumOps.Multiply(dy, dy));
-                    }
-
-                    double sxxD = NumOps.ToDouble(sxx), syyD = NumOps.ToDouble(syy);
-                    if (sxxD > 1e-10 && syyD > 1e-10)
-                    {
-                        double corr = Math.Abs(NumOps.ToDouble(sxy) / Math.Sqrt(sxxD * syyD));
-                        if (corr >= _wThreshold)
-                            result[a, b] = NumOps.FromDouble(corr);
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Use pairwise correlation on the standardized contemporaneous data
+        var centered = CenterColumns(Xt);
+        var cross = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
+        var ss = Engine.TensorDiagonal(cross);
+        var corr = Engine.TensorAbs(Engine.TensorDivide(cross, Engine.TensorSqrt(Engine.TensorOuter(ss, ss))));
+        var shape = new[] { d, d };
+        T ssFloor = NumOps.FromDouble(1e-10);
+        var ssOk = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(Engine.TensorBroadcastTo(ss.Reshape(new[] { d, 1 }), shape), ssFloor),
+            Engine.TensorGreaterThan(Engine.TensorBroadcastTo(ss.Reshape(new[] { 1, d }), shape), ssFloor));
+        var keep = Engine.TensorMultiply(Engine.TensorMultiply(Engine.TensorTriu(Engine.TensorOnesLike(corr), 1), ssOk),
+            AtLeast(corr, threshold));
+        return Engine.TensorWhere(keep, corr, result);
     }
+
+    /// <summary>
+    /// 1 where value ≥ bound (false for NaN), else 0.
+    /// </summary>
+    private Tensor<T> AtLeast(Tensor<T> values, T bound)
+        => Engine.TensorAdd(Engine.TensorGreaterThan(values, bound), Engine.TensorEquals(values, bound));
 
     /// <summary>
     /// Inner optimization loop: gradient descent on the joint (W, A) objective.
     /// L(W,A) = ½n⁻¹||Xt - Xt*W - Z*A||²_F + λ₁(||W||₁ + ||A||₁) + α*h(W) + ρ/2 * h(W)²
     /// </summary>
-    private void OptimizeInner(Matrix<T> Xt, Matrix<T> Z,
-        Matrix<T> W, Matrix<T> A,
+    private (Tensor<T> W, Tensor<T> A) OptimizeInner(Tensor<T> Xt, Tensor<T> Z,
+        Tensor<T> W, Tensor<T> A,
         int n, int d, int lagDim,
         double rho, double alpha)
     {
         double learningRate = 1e-3;
         double prevLoss = double.PositiveInfinity;
 
+        var XtT = Engine.TensorTranspose(Xt);
+        var ZT = Engine.TensorTranspose(Z);
+        T nT = NumOps.FromDouble(n);
+        T two = NumOps.FromDouble(2.0);
+        T lambda = NumOps.FromDouble(_lambda1);
+        T lr = NumOps.FromDouble(learningRate);
+        T rhoT = NumOps.FromDouble(rho);
+        T alphaT = NumOps.FromDouble(alpha);
+        T notNaNBound = NumOps.FromDouble(-1.0);
+        var zeros = new Tensor<T>(new[] { d, d });
+        var offDiagonal = OffDiagonalMask(d);
+
         for (int step = 0; step < _innerIterations; step++)
         {
             // Compute residual: R = Xt - Xt*W - Z*A  [n x d]
-            var R = new Matrix<T>(n, d);
-            for (int t = 0; t < n; t++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    T val = Xt[t, j];
-                    for (int k = 0; k < d; k++)
-                        val = NumOps.Subtract(val, NumOps.Multiply(Xt[t, k], W[k, j]));
-                    for (int k = 0; k < lagDim; k++)
-                        val = NumOps.Subtract(val, NumOps.Multiply(Z[t, k], A[k, j]));
-                    R[t, j] = val;
-                }
-            }
+            var R = Engine.TensorSubtract(Engine.TensorSubtract(Xt, Engine.TensorMatMul(Xt, W)), Engine.TensorMatMul(Z, A));
 
-            // Gradient of loss w.r.t. W: -1/n * Xt' * R using Engine.DotProduct
-            T nT = NumOps.FromDouble(n);
-            var gradW = new Matrix<T>(d, d);
-            // Pre-allocate reusable column vectors
-            var colVec = new Vector<T>(n);
-            var rColVec = new Vector<T>(n);
-            for (int i = 0; i < d; i++)
-            {
-                for (int t = 0; t < n; t++) colVec[t] = Xt[t, i];
-                for (int j = 0; j < d; j++)
-                {
-                    for (int t = 0; t < n; t++) rColVec[t] = R[t, j];
-                    gradW[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(colVec, rColVec), nT));
-                }
-            }
+            // Gradients of the loss: -1/n * Xt' * R and -1/n * Z' * R
+            var gradW = Engine.TensorNegate(Engine.TensorDivideScalar(Engine.TensorMatMul(XtT, R), nT));
+            var gradA = Engine.TensorNegate(Engine.TensorDivideScalar(Engine.TensorMatMul(ZT, R), nT));
 
-            // Gradient of loss w.r.t. A: -1/n * Z' * R using Engine.DotProduct
-            var gradA = new Matrix<T>(lagDim, d);
-            for (int i = 0; i < lagDim; i++)
-            {
-                for (int t = 0; t < n; t++) colVec[t] = Z[t, i];
-                for (int j = 0; j < d; j++)
-                {
-                    for (int t = 0; t < n; t++) rColVec[t] = R[t, j];
-                    gradA[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(colVec, rColVec), nT));
-                }
-            }
+            // sign() is undefined for NaN (Math.Sign throws), so a diverged W or A fails loudly.
+            if (Engine.TensorCountNonzero(Engine.TensorGreaterThan(Engine.TensorAbs(W), notNaNBound)) < d * d ||
+                Engine.TensorCountNonzero(Engine.TensorGreaterThan(Engine.TensorAbs(A), notNaNBound)) < lagDim * d)
+                throw new ArithmeticException("Function does not accept floating point Not-a-Number values.");
 
             // Gradient of acyclicity constraint w.r.t. W: 2 * (e^{W∘W}) ∘ W
-            double h = ComputeAcyclicity(W, d);
-            var expWoW = ComputeMatrixExponentialOfHadamard(W, d);
-            T two = NumOps.FromDouble(2.0);
-            var gradH = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    gradH[i, j] = NumOps.Multiply(two, NumOps.Multiply(expWoW[i, j], W[i, j]));
+            var (expWoW, h) = ExpHadamardSquare(W, d);
+            var gradH = Engine.TensorMultiplyScalar(Engine.TensorMultiply(expWoW, W), two);
 
             // Combined gradient for W: grad_loss + lambda1*sign(W) + (alpha + rho*h) * grad_h
-            T constraintMult = NumOps.FromDouble(alpha + rho * h);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T l1Grad = NumOps.FromDouble(_lambda1 * Math.Sign(NumOps.ToDouble(W[i, j])));
-                    gradW[i, j] = NumOps.Add(gradW[i, j],
-                        NumOps.Add(l1Grad, NumOps.Multiply(constraintMult, gradH[i, j])));
-                }
+            var constraintMult = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(h, rhoT), alphaT).Reshape(new[] { 1, 1 });
+            gradW = Engine.TensorAdd(gradW, Engine.TensorAdd(Engine.TensorMultiplyScalar(Engine.TensorSign(W), lambda),
+                Engine.TensorMultiply(Engine.TensorBroadcastTo(constraintMult, new[] { d, d }), gradH)));
 
             // Combined gradient for A: grad_loss + lambda1*sign(A)
-            for (int i = 0; i < lagDim; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T l1Grad = NumOps.FromDouble(_lambda1 * Math.Sign(NumOps.ToDouble(A[i, j])));
-                    gradA[i, j] = NumOps.Add(gradA[i, j], l1Grad);
-                }
+            gradA = Engine.TensorAdd(gradA, Engine.TensorMultiplyScalar(Engine.TensorSign(A), lambda));
 
-            // Gradient descent update
-            T lr = NumOps.FromDouble(learningRate);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    W[i, j] = NumOps.Subtract(W[i, j], NumOps.Multiply(lr, gradW[i, j]));
-
-            for (int i = 0; i < lagDim; i++)
-                for (int j = 0; j < d; j++)
-                    A[i, j] = NumOps.Subtract(A[i, j], NumOps.Multiply(lr, gradA[i, j]));
-
-            // Zero diagonal of W (no self-loops)
-            for (int i = 0; i < d; i++)
-                W[i, i] = NumOps.Zero;
+            // Gradient descent update, then zero diagonal of W (no self-loops)
+            W = Engine.TensorSubtract(W, Engine.TensorMultiplyScalar(gradW, lr));
+            A = Engine.TensorSubtract(A, Engine.TensorMultiplyScalar(gradA, lr));
+            W = Engine.TensorWhere(offDiagonal, W, zeros);
 
             // Convergence check every 20 steps
             if (step % 20 == 0)
             {
-                double loss = ComputeLoss(R, n, d);
+                double loss = ComputeLoss(R, n);
                 if (Math.Abs(loss - prevLoss) < 1e-8 * (1 + Math.Abs(prevLoss)))
                     break;
                 prevLoss = loss;
             }
         }
+
+        return (W, A);
     }
 
     /// <summary>
     /// Computes h(W) = tr(e^{W∘W}) - d, the NOTEARS acyclicity constraint.
     /// Uses Taylor series approximation: e^M ≈ I + M + M²/2! + M³/3! + ...
     /// </summary>
-    private double ComputeAcyclicity(Matrix<T> W, int d)
-    {
-        // W∘W (Hadamard square)
-        var WoW = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                WoW[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
-
-        // Compute trace of matrix exponential via Taylor series
-        double trace = d; // tr(I)
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
-
-        double factorial = 1.0;
-        for (int k = 1; k <= Math.Min(d, 20); k++)
-        {
-            factorial *= k;
-            // power = power * WoW
-            var newPower = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int m = 0; m < d; m++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, m], WoW[m, j]));
-                    newPower[i, j] = sum;
-                }
-            power = newPower;
-
-            // Add tr(M^k) / k!
-            double tr = 0;
-            for (int i = 0; i < d; i++) tr += NumOps.ToDouble(power[i, i]);
-            trace += tr / factorial;
-        }
-
-        return trace - d;
-    }
+    private double ComputeAcyclicity(Tensor<T> W, int d)
+        => NumOps.ToDouble(ExpHadamardSquare(W, d).Trace.ToArray()[0]);
 
     /// <summary>
-    /// Computes e^{W∘W} via Taylor series (needed for gradient of h(W)).
+    /// e^{W∘W} by its Taylor series through min(d, 20) terms (needed for the gradient of h(W)), and
+    /// h(W) = tr(e^{W∘W}) − d (the trace of every term after the identity) as a [1] tensor.
     /// </summary>
-    private Matrix<T> ComputeMatrixExponentialOfHadamard(Matrix<T> W, int d)
+    private (Tensor<T> Exp, Tensor<T> Trace) ExpHadamardSquare(Tensor<T> w, int d)
     {
-        var WoW = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                WoW[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
+        var wow = Engine.TensorMultiply(w, w);
+        var identity = Engine.TensorEye<T>(d);
+        var series = new Tensor<T>(new[] { d, d });
+        var power = identity;
 
-        // e^M via Taylor series
-        var result = new Matrix<T>(d, d);
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            result[i, i] = NumOps.One; // I
-            power[i, i] = NumOps.One;
-        }
-
-        double factorial = 1.0;
+        // runningFactorial holds k! as a [1, 1] tensor, broadcast over the power matrix.
+        var one = Engine.TensorOnesLike(new Tensor<T>(new[] { 1, 1 }));
+        var counter = Engine.TensorZerosLike(one);
+        var runningFactorial = one;
         for (int k = 1; k <= Math.Min(d, 20); k++)
         {
-            factorial *= k;
-            T invFactorial = NumOps.FromDouble(1.0 / factorial);
-            var newPower = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int m = 0; m < d; m++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, m], WoW[m, j]));
-                    newPower[i, j] = sum;
-                }
-            power = newPower;
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    result[i, j] = NumOps.Add(result[i, j], NumOps.Multiply(power[i, j], invFactorial));
+            power = Engine.TensorMatMul(power, wow);
+            counter = Engine.TensorAdd(counter, one);
+            runningFactorial = Engine.TensorMultiply(runningFactorial, counter);
+            series = Engine.TensorAdd(series, Engine.TensorDivide(power, Engine.TensorBroadcastTo(runningFactorial, new[] { d, d })));
         }
 
-        return result;
+        var trace = Engine.ReduceSum(Engine.TensorDiagonal(series), new[] { 0 }, true);
+        return (Engine.TensorAdd(identity, series), trace);
     }
 
-    private double ComputeLoss(Matrix<T> R, int n, int d)
+    private double ComputeLoss(Tensor<T> R, int n)
+        => NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(R, R))) / (2.0 * n);
+
+    private Tensor<T> StandardizeData(Tensor<T> data, int n, int d)
     {
-        double sum = 0;
-        for (int t = 0; t < n; t++)
-            for (int j = 0; j < d; j++)
-            {
-                double r = NumOps.ToDouble(R[t, j]);
-                sum += r * r;
-            }
-        return sum / (2.0 * n);
-    }
+        // (x - mean) / sqrt(var + 1e-15) with the population variance
+        var centered = CenterColumns(data);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(
+            Engine.ReduceMean(Engine.TensorMultiply(centered, centered), new[] { 0 }, true), NumOps.FromDouble(1e-15)));
 
-    private Matrix<T> StandardizeData(Matrix<T> data, int n, int d)
-    {
-        var result = new Matrix<T>(n, d);
-        T nT = NumOps.FromDouble(n);
+        // Column-specific perturbation to break exact collinearity.
+        // When variables are exact linear transforms, standardization makes columns
+        // identical. This small scaling breaks the symmetry so gradient descent
+        // can distinguish between causal directions. Column j is scaled by 1 + 1e-4 * (j + 1).
+        var columnNumber = Engine.TensorCumSum(Engine.TensorOnesLike(new Tensor<T>(new[] { 1, d })), 1);
+        var perturb = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(columnNumber, NumOps.FromDouble(1e-4)), NumOps.One);
 
-        for (int j = 0; j < d; j++)
-        {
-            T mean = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-                mean = NumOps.Add(mean, data[i, j]);
-            mean = NumOps.Divide(mean, nT);
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, nT);
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
-
-            // Column-specific perturbation to break exact collinearity.
-            // When variables are exact linear transforms, standardization makes columns
-            // identical. This small scaling breaks the symmetry so gradient descent
-            // can distinguish between causal directions.
-            double perturbScale = 1.0 + 1e-4 * (j + 1);
-            T perturbT = NumOps.FromDouble(perturbScale);
-            for (int i = 0; i < n; i++)
-                result[i, j] = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(data[i, j], mean), std), perturbT);
-        }
-
-        return result;
+        var shape = new[] { n, d };
+        return Engine.TensorMultiply(Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape)),
+            Engine.TensorBroadcastTo(perturb, shape));
     }
 }

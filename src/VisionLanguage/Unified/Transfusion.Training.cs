@@ -345,28 +345,41 @@ public partial class Transfusion<T>
         int patchCount = _patchGridSide * _patchGridSide;
         var x = GaussianLike(new Tensor<T>([1, patchCount, _patchDim]), rng);
 
-        for (int step = steps; step >= 1; step--)
+        // The DDIM coefficients of every step, computed up front. Step k runs step = steps - k with
+        // t = step * timesteps / steps - 1 and previous = (step - 1) * timesteps / steps - 1.
+        var stepNumber = Engine.ScalarMinusTensor(steps, Engine.TensorArange<int>(0, steps, 1));
+        var timestepDivisor = Tensor<int>.CreateDefault([steps], steps);
+        var current = Engine.TensorSubtractScalar(
+            Engine.TensorFloorDivide(Engine.TensorMultiplyScalar(stepNumber, timesteps), timestepDivisor), 1);
+        var previousStep = Engine.TensorSubtractScalar(
+            Engine.TensorFloorDivide(Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(stepNumber, 1), timesteps), timestepDivisor), 1);
+        var alphaBar = CosineAlphaBars(current.Cast<T>(), timesteps);
+        // alphaBarPrev = 1 before the first timestep.
+        var alphaBarPrevious = Engine.TensorWhere(
+            Engine.TensorLessThan(previousStep.Cast<T>(), NumOps.Zero),
+            Tensor<T>.CreateDefault([steps], NumOps.One),
+            CosineAlphaBars(previousStep.Cast<T>(), timesteps));
+        var noiseScale = Engine.TensorSqrt(Engine.TensorMax(Engine.ScalarMinusTensor(NumOps.One, alphaBar), NumOps.Zero));
+        var inverseSignal = Engine.TensorDivide(
+            Tensor<T>.CreateDefault([steps], NumOps.One),
+            Engine.TensorSqrt(Engine.TensorMax(alphaBar, NumOps.FromDouble(1e-12))));
+        var previousSignal = Engine.TensorSqrt(alphaBarPrevious);
+        var previousNoise = Engine.TensorSqrt(Engine.TensorMax(Engine.ScalarMinusTensor(NumOps.One, alphaBarPrevious), NumOps.Zero));
+
+        for (int k = 0; k < steps; k++)
         {
+            int step = steps - k;
             int t = (step * timesteps / steps) - 1;
-            int previous = ((step - 1) * timesteps / steps) - 1;
-            double alphaBar = CosineAlphaBar(t, timesteps);
-            double alphaBarPrevious = previous < 0 ? 1.0 : CosineAlphaBar(previous, timesteps);
 
             var predicted = PredictPatchNoise(heads, textRows, x, Math.Max(0, t));
             // x_0 = (x_t - sqrt(1 - alphaBar) * eps) / sqrt(alphaBar), then
             // x_{t-1} = sqrt(alphaBarPrev) * x_0 + sqrt(1 - alphaBarPrev) * eps.
-            var denoised = Engine.TensorMultiplyScalar(
-                Engine.TensorSubtract(
-                    x,
-                    Engine.TensorMultiplyScalar(
-                        predicted, NumOps.FromDouble(Math.Sqrt(Math.Max(0.0, 1.0 - alphaBar))))),
-                NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(alphaBar, 1e-12))));
+            var denoised = Engine.TensorMultiply(
+                Engine.TensorSubtract(x, Engine.TensorMultiply(predicted, Pick(noiseScale, k))),
+                Pick(inverseSignal, k));
             x = Engine.TensorAdd(
-                Engine.TensorMultiplyScalar(
-                    denoised, NumOps.FromDouble(Math.Sqrt(alphaBarPrevious))),
-                Engine.TensorMultiplyScalar(
-                    predicted,
-                    NumOps.FromDouble(Math.Sqrt(Math.Max(0.0, 1.0 - alphaBarPrevious)))));
+                Engine.TensorMultiply(denoised, Pick(previousSignal, k)),
+                Engine.TensorMultiply(predicted, Pick(previousNoise, k)));
         }
 
         return x;
@@ -456,31 +469,38 @@ public partial class Transfusion<T>
 
         int rows = Math.Max(1, (height + _patchSide - 1) / _patchSide);
         int columns = Math.Max(1, (width + _patchSide - 1) / _patchSide);
-        var patches = new Tensor<T>([1, rows * columns, _patchDim]);
-        var source = image.ToVector();
-        for (int r = 0; r < rows; r++)
+        // Patches are fixed inputs read from the image, never a gradient path.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = Engine;
+        int plane = height * width;
+        // The first min(3, channels) planes of the first image; a plane that is not in the tensor reads as 0.
+        int planes = Math.Min(Math.Min(3, channels), plane > 0 ? image.Length / plane : 0);
+        int paddedHeight = rows * _patchSide;
+        int paddedWidth = columns * _patchSide;
+        Tensor<T> grid;
+        if (planes > 0)
         {
-            for (int c = 0; c < columns; c++)
-            {
-                int patch = (r * columns) + c;
-                int slot = 0;
-                for (int ch = 0; ch < Math.Min(3, channels); ch++)
-                {
-                    for (int y = 0; y < _patchSide; y++)
-                    {
-                        for (int x = 0; x < _patchSide; x++)
-                        {
-                            int pixelY = (r * _patchSide) + y;
-                            int pixelX = (c * _patchSide) + x;
-                            int index = (((ch * height) + pixelY) * width) + pixelX;
-                            bool inside = pixelY < height && pixelX < width
-                                && index < source.Length;
-                            patches[0, patch, slot++] = inside ? source[index] : NumOps.Zero;
-                        }
-                    }
-                }
-            }
+            grid = engine.TensorSlice(image.Reshape([image.Length]), [0], [planes * plane]).Reshape([planes, height, width]);
+            // Zero-pad the border patches that hang over the right and bottom edges.
+            if (paddedWidth > width)
+                grid = engine.TensorConcatenate([grid, new Tensor<T>([planes, height, paddedWidth - width])], 2);
+            if (paddedHeight > height)
+                grid = engine.TensorConcatenate([grid, new Tensor<T>([planes, paddedHeight - height, paddedWidth])], 1);
         }
+        else
+        {
+            grid = new Tensor<T>([1, paddedHeight, paddedWidth]);
+            planes = 1;
+        }
+
+        // [ch, r, y, c, x] -> [r, c, ch, y, x]: each patch row holds its channels' pixels in (ch, y, x) order.
+        var rowsOfPatches = engine.Reshape(
+            engine.TensorPermute(grid.Reshape([planes, rows, _patchSide, columns, _patchSide]), [1, 3, 0, 2, 4]),
+            [rows * columns, planes * _patchSide * _patchSide]);
+        int filled = planes * _patchSide * _patchSide;
+        if (filled < _patchDim)
+            rowsOfPatches = engine.TensorConcatenate([rowsOfPatches, new Tensor<T>([rows * columns, _patchDim - filled])], 1);
+        var patches = rowsOfPatches.Reshape([1, rows * columns, _patchDim]);
         return patches;
     }
 
@@ -500,28 +520,52 @@ public partial class Transfusion<T>
             : [0.26862954, 0.26130258, 0.27577711];
         int imageSize = Math.Max(1, _options.ImageSize);
         int patchCount = patches.Shape[1];
-        var result = new Tensor<T>([outputSize * outputSize * 3]);
-        for (int y = 0; y < outputSize; y++)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = Engine;
+        int grid = _patchGridSide;
+        int cells = grid * grid;
+        int slots = 3 * _patchSide * _patchSide;
+        int usable = Math.Min(patchCount, cells);
+
+        // Patch rows back to a [3, grid * P, grid * P] image; missing patches are zero and masked below.
+        var rowsOfPatches = engine.TensorSlice(patches, [0, 0, 0], [1, usable, slots]).Reshape([usable, slots]);
+        if (usable < cells)
+            rowsOfPatches = engine.TensorConcatenate([rowsOfPatches, new Tensor<T>([cells - usable, slots])], 0);
+        int covered = grid * _patchSide;
+        var image = engine.Reshape(
+            engine.TensorPermute(rowsOfPatches.Reshape([grid, grid, 3, _patchSide, _patchSide]), [2, 0, 3, 1, 4]),
+            [3, covered, covered]);
+
+        // Undo the normalization and clamp to [0, 1]: value = clamp(patch * std[ch] + mean[ch], 0, 1).
+        var stdPerChannel = new Tensor<T>(new[] { 3, 1, 1 },
+            new Vector<T>(new[] { NumOps.FromDouble(std[0]), NumOps.FromDouble(std[1]), NumOps.FromDouble(std[2]) }));
+        var meanPerChannel = new Tensor<T>(new[] { 3, 1, 1 },
+            new Vector<T>(new[] { NumOps.FromDouble(mean[0]), NumOps.FromDouble(mean[1]), NumOps.FromDouble(mean[2]) }));
+        image = engine.TensorAdd(
+            engine.TensorMultiply(image, engine.TensorBroadcastTo(stdPerChannel, [3, covered, covered])),
+            engine.TensorBroadcastTo(meanPerChannel, [3, covered, covered]));
+        image = engine.TensorClamp(image, NumOps.Zero, NumOps.One);
+
+        // Nearest-neighbour from the trained resolution: source = min(imageSize - 1, out * imageSize / outputSize).
+        var sourceIndex = engine.TensorMin(
+            engine.TensorFloorDivide(
+                engine.TensorMultiplyScalar(engine.TensorArange<int>(0, outputSize, 1), imageSize),
+                Tensor<int>.CreateDefault([outputSize], outputSize)),
+            imageSize - 1);
+        var sampled = engine.TensorIndexSelect(engine.TensorIndexSelect(image, sourceIndex, 1), sourceIndex, 2);
+        if (usable < cells)
         {
-            for (int x = 0; x < outputSize; x++)
-            {
-                // Nearest-neighbour from the trained resolution; the grid may cover slightly
-                // more than the image, and the padding past the border is never sampled.
-                int sourceY = Math.Min(imageSize - 1, y * imageSize / outputSize);
-                int sourceX = Math.Min(imageSize - 1, x * imageSize / outputSize);
-                int patch = ((sourceY / _patchSide) * _patchGridSide) + (sourceX / _patchSide);
-                if (patch >= patchCount) continue;
-                int withinY = sourceY % _patchSide;
-                int withinX = sourceX % _patchSide;
-                int pixel = ((y * outputSize) + x) * 3;
-                for (int ch = 0; ch < 3; ch++)
-                {
-                    int slot = (ch * _patchSide * _patchSide) + (withinY * _patchSide) + withinX;
-                    double value = (NumOps.ToDouble(patches[0, patch, slot]) * std[ch]) + mean[ch];
-                    result[pixel + ch] = NumOps.FromDouble(Math.Min(1.0, Math.Max(0.0, value)));
-                }
-            }
+            // A pixel whose patch is past the supplied patches stays 0.
+            var cellIds = engine.TensorArange<T>(0, cells, 1).Reshape([grid, 1, grid, 1]);
+            var present = engine.TensorLessThan(
+                engine.TensorBroadcastTo(cellIds, [grid, _patchSide, grid, _patchSide]).Reshape([covered, covered]),
+                NumOps.FromDouble(patchCount));
+            var presentSampled = engine.TensorIndexSelect(engine.TensorIndexSelect(present, sourceIndex, 0), sourceIndex, 1);
+            sampled = engine.TensorMultiply(sampled, engine.TensorBroadcastTo(presentSampled.Reshape([1, outputSize, outputSize]), [3, outputSize, outputSize]));
         }
+
+        // Flat interleaved RGB: [outputSize, outputSize, 3].
+        var result = engine.Reshape(engine.TensorPermute(sampled, [1, 2, 0]), [outputSize * outputSize * 3]);
         return result;
     }
 
@@ -556,49 +600,63 @@ public partial class Transfusion<T>
         return Math.Min(1.0, Math.Max(1e-8, F(timestep) / F(0.0)));
     }
 
+    /// <summary>
+    /// <see cref="CosineAlphaBar"/> for a tensor of (integer-valued) timesteps.
+    /// </summary>
+    private Tensor<T> CosineAlphaBars(Tensor<T> timestepValues, int timesteps)
+    {
+        // f(t) = cos(((t / T) + s) / (1 + s) * pi / 2)^2; alphaBar = clamp(f(t) / f(0), 1e-8, 1).
+        double scale = Math.PI / 2.0 / (1.0 + CosineScheduleOffset);
+        double f0 = Math.Cos(CosineScheduleOffset * scale);
+        f0 *= f0;
+        var angle = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(
+                Engine.TensorDivideScalar(timestepValues, NumOps.FromDouble(timesteps)), NumOps.FromDouble(CosineScheduleOffset)),
+            NumOps.FromDouble(scale));
+        var cosine = Engine.TensorCos(angle);
+        var ratio = Engine.TensorDivideScalar(Engine.TensorMultiply(cosine, cosine), NumOps.FromDouble(f0));
+        return Engine.TensorClamp(ratio, NumOps.FromDouble(1e-8), NumOps.One);
+    }
+
     /// <summary>Token ids as the <c>[1, S]</c> tensor the embedding layer indexes with.</summary>
     private Tensor<T> TokenRow(int[] ids)
     {
-        var row = new Tensor<T>([1, ids.Length]);
-        for (int i = 0; i < ids.Length; i++) row[0, i] = NumOps.FromDouble(ids[i]);
-        return row;
+        return new Tensor<int>(new[] { 1, ids.Length }, Vector<int>.FromArray(ids)).Cast<T>();
     }
 
     /// <summary>The sinusoidal timestep embedding, repeated over <paramref name="rows"/> rows.</summary>
     private Tensor<T> TimestepRows(int timestep, int rows, int width)
     {
-        var embedded = new Tensor<T>([1, rows, width]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = Engine;
         int half = Math.Max(1, width / 2);
-        for (int i = 0; i < width; i++)
-        {
-            int pair = i % half;
-            double frequency = Math.Exp(-Math.Log(10000.0) * pair / half);
-            double value = i < half
-                ? Math.Sin(timestep * frequency)
-                : Math.Cos(timestep * frequency);
-            var typed = NumOps.FromDouble(value);
-            for (int r = 0; r < rows; r++) embedded[0, r, i] = typed;
-        }
-        return embedded;
+        // frequency_i = exp(-ln(10000) * (i % half) / half); sine for i < half, cosine after.
+        var index = engine.TensorArange<T>(0, width, 1);
+        var pair = engine.TensorRemainder(index, Tensor<T>.CreateDefault([width], NumOps.FromDouble(half)));
+        var frequency = engine.TensorExp(engine.TensorMultiplyScalar(pair, NumOps.FromDouble(-Math.Log(10000.0) / half)));
+        var phase = engine.TensorMultiplyScalar(frequency, NumOps.FromDouble(timestep));
+        var value = engine.TensorWhere(
+            engine.TensorLessThan(index, NumOps.FromDouble(half)), engine.TensorSin(phase), engine.TensorCos(phase));
+        var embedded = engine.TensorBroadcastTo(value.Reshape([1, 1, width]), [1, rows, width]);        return embedded;
     }
 
     /// <summary>Sinusoidal position encoding (Vaswani et al. 2017) for the mixed sequence.</summary>
     private Tensor<T> SinusoidalPositions(int length, int width)
     {
-        var positions = new Tensor<T>([1, length, width]);
-        for (int p = 0; p < length; p++)
-        {
-            for (int i = 0; i < width; i++)
-            {
-                // The exponent is 2 * floor(i / 2) / d_model: a sine and a cosine SHARE one
-                // frequency, so the integer division is the formula, not a lost fraction.
-                int pair = i / 2;
-                double frequency = Math.Pow(10000.0, -2.0 * pair / width);
-                double value = i % 2 == 0 ? Math.Sin(p * frequency) : Math.Cos(p * frequency);
-                positions[0, p, i] = NumOps.FromDouble(value);
-            }
-        }
-        return positions;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = Engine;
+        // The exponent is 2 * floor(i / 2) / d_model: a sine and a cosine SHARE one
+        // frequency, so the integer division is the formula, not a lost fraction.
+        var index = engine.TensorArange<T>(0, width, 1);
+        var pair = engine.TensorFloor(engine.TensorMultiplyScalar(index, NumOps.FromDouble(0.5)));
+        // frequency = 10000^(-2 * pair / width)
+        var frequency = engine.TensorExp(engine.TensorMultiplyScalar(pair, NumOps.FromDouble(-2.0 * Math.Log(10000.0) / width)));
+        var phase = engine.TensorOuter(engine.TensorArange<T>(0, length, 1), frequency);
+        var even = engine.TensorEquals(
+            engine.TensorRemainder(index, Tensor<T>.CreateDefault([width], NumOps.FromDouble(2))), NumOps.Zero);
+        var value = engine.TensorWhere(
+            engine.TensorBroadcastTo(even.Reshape([1, width]), [length, width]), engine.TensorSin(phase), engine.TensorCos(phase));
+        var positions = value.Reshape([1, length, width]);        return positions;
     }
 
     /// <summary>The beginning-of-image marker id (Sec. 3, Data Representation).</summary>

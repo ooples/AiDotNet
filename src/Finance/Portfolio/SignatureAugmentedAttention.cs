@@ -138,27 +138,12 @@ public class SignatureAugmentedAttention<T>
                 $"relationalEmbeddings must be [{assets}, {assets}, {heads}, {dBeta}] to match dynamicQueries.",
                 nameof(relationalEmbeddings));
 
-        var bias = new Tensor<T>(new[] { heads, assets, assets });
-
-        for (int h = 0; h < heads; h++)
-        {
-            for (int j = 0; j < assets; j++)
-            {
-                int qOffset = ((j * heads) + h) * dBeta;
-                for (int l = 0; l < assets; l++)
-                {
-                    int bOffset = ((((j * assets) + l) * heads) + h) * dBeta;
-                    double dot = 0.0;
-                    for (int d = 0; d < dBeta; d++)
-                        dot += NumOps.ToDouble(dynamicQueries[qOffset + d]) *
-                               NumOps.ToDouble(relationalEmbeddings[bOffset + d]);
-
-                    bias[((h * assets) + j) * assets + l] = NumOps.FromDouble(dot);
-                }
-            }
-        }
-
-        return bias;
+        // bias[h, j, l] = sum_d q[j, h, d] * beta[j, l, h, d]: broadcast q over l, reduce d, move heads first.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var queries = engine.Reshape(dynamicQueries, new[] { assets, 1, heads, dBeta });
+        var dots = engine.ReduceSum(engine.TensorMultiply(queries, relationalEmbeddings), new[] { 3 }, false);
+        return engine.TensorPermute(dots, new[] { 2, 0, 1 });
     }
 
     /// <summary>
@@ -180,12 +165,10 @@ public class SignatureAugmentedAttention<T>
                 $"logits and bias must have the same element count; got {logits.Length} and {bias.Length}.",
                 nameof(bias));
 
-        double gamma = Gamma;
-        var result = new Tensor<T>(logits.Shape.ToArray());
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(logits[i]) + (gamma * NumOps.ToDouble(bias[i])));
-
-        return result;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var shapedBias = engine.Reshape(bias, logits.Shape.ToArray());
+        return engine.TensorAdd(logits, engine.TensorMultiplyScalar(shapedBias, NumOps.FromDouble(Gamma)));
     }
 
     /// <summary>
@@ -207,8 +190,6 @@ public class SignatureAugmentedAttention<T>
             throw new ArgumentException(
                 $"Key dimension mismatch: {queries.Shape[1]} vs {keys.Shape[1]}.", nameof(keys));
 
-        int nq = queries.Shape[0];
-        int nk = keys.Shape[0];
         int dk = queries.Shape[1];
 
         // A zero key dimension passes the checks above -- both ranks are 2 and the dimensions match --
@@ -219,18 +200,9 @@ public class SignatureAugmentedAttention<T>
 
         double scale = 1.0 / Math.Sqrt(dk);
 
-        var logits = new Tensor<T>(new[] { nq, nk });
-        for (int i = 0; i < nq; i++)
-        {
-            for (int j = 0; j < nk; j++)
-            {
-                double dot = 0.0;
-                for (int d = 0; d < dk; d++)
-                    dot += NumOps.ToDouble(queries[(i * dk) + d]) * NumOps.ToDouble(keys[(j * dk) + d]);
-                logits[(i * nk) + j] = NumOps.FromDouble(dot * scale);
-            }
-        }
-
-        return logits;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return engine.TensorMultiplyScalar(
+            engine.TensorMatMul(queries, engine.TensorTranspose(keys)), NumOps.FromDouble(scale));
     }
 }
