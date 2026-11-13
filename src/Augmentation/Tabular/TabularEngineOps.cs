@@ -11,21 +11,17 @@ internal static class TabularEngineOps<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// [features, columns] one-hot rows: row k has 1 at column features[k].
+    /// Upper bound on the elements of one [block, rows, columns] difference tile in
+    /// <see cref="PairwiseDistances"/>, so peak memory stays proportional to the [rows, rows] result.
     /// </summary>
-    internal static Tensor<T> FeatureSelector(int[] features, int columns)
-    {
-        var engine = AiDotNetEngine.Current;
-        int count = features.Length;
-        int[] shape = [count, columns];
-        var feature = engine.TensorBroadcastTo(new Tensor<int>((int[])features.Clone(), [count, 1]), shape);
-        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<int>(0, columns, 1), [1, columns]), shape);
-        return engine.TensorEquals(feature, column).Cast<T>();
-    }
+    private const int PairwiseTileElements = 1 << 22;
 
     /// <summary>
     /// Euclidean distance between every pair of rows, as a [rows, rows] tensor.
     /// </summary>
+    /// <remarks>
+    /// Rows are processed in bounded tiles, so only one [block, rows, columns] difference tile exists at a time.
+    /// </remarks>
     internal static Tensor<T> PairwiseDistances(Matrix<T> data)
     {
         var engine = AiDotNetEngine.Current;
@@ -37,10 +33,21 @@ internal static class TabularEngineOps<T>
         }
 
         var values = Tensor<T>.FromMatrix(data);
-        var left = engine.TensorBroadcastTo(engine.Reshape(values, [rows, 1, cols]), [rows, rows, cols]);
-        var right = engine.TensorBroadcastTo(engine.Reshape(values, [1, rows, cols]), [rows, rows, cols]);
-        var diff = engine.TensorSubtract(left, right);
-        var squared = engine.ReduceSum(engine.TensorMultiply(diff, diff), [2], false);
+        var right = engine.Reshape(values, [1, rows, cols]);
+        long perRow = Math.Max(1L, (long)rows * cols);
+        int block = (int)Math.Max(1L, Math.Min(rows, PairwiseTileElements / perRow));
+        var tiles = new List<Tensor<T>>();
+        for (int start = 0; start < rows; start += block)
+        {
+            int count = Math.Min(block, rows - start);
+            var left = engine.Reshape(engine.TensorNarrow(values, 0, start, count).Contiguous(), [count, 1, cols]);
+            int[] tileShape = [count, rows, cols];
+            var diff = engine.TensorSubtract(
+                engine.TensorBroadcastTo(left, tileShape), engine.TensorBroadcastTo(right, tileShape));
+            tiles.Add(engine.ReduceSum(engine.TensorMultiply(diff, diff), [2], false));
+        }
+
+        var squared = tiles.Count == 1 ? tiles[0] : engine.TensorConcatenate(tiles.ToArray(), 0);
         return engine.TensorSqrt(squared);
     }
 
@@ -77,7 +84,16 @@ internal static class TabularEngineOps<T>
     /// Positions of <paramref name="values"/> in stable sorted order (ties keep their original order),
     /// ascending or descending.
     /// </summary>
-    internal static int[] StableOrder(Tensor<T> values, bool descending)
+    /// <summary>
+    /// Positions of <paramref name="values"/> in stable sorted order (ties keep their original order),
+    /// ascending or descending.
+    /// </summary>
+    /// <remarks>
+    /// The engine sort is not guaranteed stable, so position j gets the unique key
+    /// (number of values sorting strictly before v[j]) * count + j, found with one sort and a binary
+    /// search; sorting those keys gives the stable order in O(count log count).
+    /// </remarks>
+    internal static int[] StableOrder<TValue>(Tensor<TValue> values, bool descending)
     {
         int count = values.Length;
         if (count == 0)
@@ -85,17 +101,17 @@ internal static class TabularEngineOps<T>
             return [];
         }
 
-        // rank[j] = #{m : v[m] sorts before v[j]} + #{m < j : v[m] == v[j]}; ranks are distinct
         var engine = AiDotNetEngine.Current;
-        int[] shape = [count, count];
-        var own = engine.TensorBroadcastTo(engine.Reshape(values, [count, 1]), shape).Contiguous();
-        var other = engine.TensorBroadcastTo(engine.Reshape(values, [1, count]), shape).Contiguous();
-        var before = descending ? engine.TensorGreaterThan(other, own) : engine.TensorLessThan(other, own);
-        var row = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<int>(0, count, 1), [count, 1]), shape);
-        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<int>(0, count, 1), [1, count]), shape);
-        var earlierTie = engine.TensorMultiply(engine.TensorEquals(other, own).Cast<int>(), engine.TensorLessThan(column, row));
-        var rank = engine.ReduceSum(engine.TensorAdd(before.Cast<int>(), earlierTie), [1], false);
-        return engine.TensorArgsort(rank, 0, false).ToArray();
+        var flat = engine.Reshape(values.Contiguous(), [count]);
+        var sorted = engine.TensorSort(flat, 0, false).Values;
+
+        // ascending: #{m : v[m] < v[j]}; descending: #{m : v[m] > v[j]} = count - #{m : v[m] <= v[j]}
+        var before = descending
+            ? engine.ScalarMinusTensor(count, engine.TensorSearchSorted(sorted, flat, true))
+            : engine.TensorSearchSorted(sorted, flat, false);
+        var position = engine.TensorArange<long>(0, count, 1);
+        var key = engine.TensorAdd(engine.TensorMultiplyScalar(before.Cast<long>(), (long)count), position);
+        return engine.TensorArgsort(key, 0, false).ToArray();
     }
 
     /// <summary>

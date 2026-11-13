@@ -73,18 +73,17 @@ public class FeatureNoise<T> : TabularAugmenterBase<T>
         // Determine which features to augment
         var featuresToAugment = FeatureIndices ?? Enumerable.Range(0, cols).ToArray();
 
-        for (int i = 0; i < rows; i++)
+        // Draw the noise in row, feature order; listed features get it added (repeats accumulate)
+        var features = featuresToAugment.Where(f => f >= 0 && f < cols).ToArray();
+        if (rows == 0 || features.Length == 0)
         {
-            foreach (int j in featuresToAugment.Where(f => f >= 0 && f < cols))
-            {
-                double originalValue = NumOps.ToDouble(result[i, j]);
-                double noise = context.SampleGaussian(0, NoiseStdDev);
-                double newValue = originalValue + noise;
-                result[i, j] = NumOps.FromDouble(newValue);
-            }
+            return result;
         }
 
-        return result;
+        var engine = Engine;
+        var values = Tensor<T>.FromMatrix(result);
+        var noise = AugmentationRandom<T>.Gaussian(context, [rows, features.Length], 0, NoiseStdDev);
+        return engine.TensorIndexAdd(values, 1, new Tensor<int>(features, [features.Length]), noise).ToMatrix();
     }
 
     /// <inheritdoc />

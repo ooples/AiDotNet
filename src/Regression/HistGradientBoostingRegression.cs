@@ -103,7 +103,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// then values 0-30 go in bin 0, 30-50 in bin 1, etc.
     /// </para>
     /// </remarks>
-    private T[][]? _binThresholds;
+    private Vector<T>[]? _binThresholds;
 
     /// <summary>
     /// Binned feature values for training data.
@@ -129,7 +129,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// <summary>
     /// Feature importance scores accumulated during training.
     /// </summary>
-    private T[]? _featureImportances;
+    private Vector<T>? _featureImportances;
 
     /// <summary>
     /// Random number generator for subsampling.
@@ -230,31 +230,18 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         // Step 1: Bin the features
         BinFeatures(x);
 
+        var engine = AiDotNetEngine.Current;
+
         // Step 2: Compute initial prediction (mean of y)
-        T sum = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            sum = NumOps.Add(sum, y[i]);
-        }
-        _initialPrediction = NumOps.Divide(sum, NumOps.FromDouble(y.Length));
+        _initialPrediction = NumOps.Divide(engine.Sum(y), NumOps.FromDouble(y.Length));
 
         // Step 3: Initialize predictions and residuals
-        var predictions = new T[y.Length];
-        var residuals = new T[y.Length];
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            predictions[i] = _initialPrediction;
-            residuals[i] = NumOps.Subtract(y[i], predictions[i]);
-        }
+        var predictions = engine.Fill(y.Length, _initialPrediction);
+        var residuals = engine.Subtract(y, predictions);
 
         // Step 4: Initialize trees and feature importances
         _trees = new List<HistTreeNode>(_options.NumberOfIterations);
-        _featureImportances = new T[_numFeatures];
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            _featureImportances[i] = NumOps.Zero;
-        }
+        _featureImportances = engine.FillZero<T>(_numFeatures);
 
         // Step 5: Build trees iteratively
         for (int iteration = 0; iteration < _options.NumberOfIterations; iteration++)
@@ -268,12 +255,10 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
 
             // Update predictions
             T lr = NumOps.FromDouble(_options.LearningRate);
-            for (int i = 0; i < y.Length; i++)
-            {
-                T treePred = PredictSingleTree(tree, i);
-                predictions[i] = NumOps.Add(predictions[i], NumOps.Multiply(lr, treePred));
-                residuals[i] = NumOps.Subtract(y[i], predictions[i]);
-            }
+            var binnedData = _binnedData ?? throw new InvalidOperationException("Binned data not computed.");
+            var treePredictions = PredictTree(tree, binnedData, y.Length);
+            predictions = engine.Add(predictions, engine.Multiply(treePredictions, lr));
+            residuals = engine.Subtract(y, predictions);
         }
 
         // Normalize feature importances
@@ -298,23 +283,17 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
+        var engine = AiDotNetEngine.Current;
         T lr = NumOps.FromDouble(_options.LearningRate);
 
-        for (int i = 0; i < input.Rows; i++)
+        // Bin the input features
+        var binnedInput = BinMatrix(input);
+
+        // Add the contribution of each tree, in tree order
+        var predictions = engine.Fill(input.Rows, _initialPrediction);
+        foreach (var tree in _trees)
         {
-            T pred = _initialPrediction;
-
-            // Bin the input features
-            var binnedRow = BinRow(input, i);
-
-            // Add contribution from each tree
-            foreach (var tree in _trees)
-            {
-                pred = NumOps.Add(pred, NumOps.Multiply(lr, PredictSingleTreeFromBins(tree, binnedRow)));
-            }
-
-            predictions[i] = pred;
+            predictions = engine.Add(predictions, engine.Multiply(PredictTree(tree, binnedInput, input.Rows), lr));
         }
 
         return predictions;
@@ -353,12 +332,14 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             return result;
         }
 
-        for (int i = 0; i < _featureImportances.Length; i++)
+        int i = 0;
+        foreach (var importance in _featureImportances)
         {
             string name = FeatureNames is not null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = _featureImportances[i];
+            result[name] = importance;
+            i++;
         }
 
         return result;
@@ -584,16 +565,10 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         var predictions = Predict(input);
 
         // Compute gradients (negative of loss derivative with respect to predictions)
-        var gradients = new Vector<T>(target.Length);
-        for (int i = 0; i < target.Length; i++)
-        {
-            // For MSE: derivative = 2 * (prediction - target)
-            // We return the negative gradient (direction of improvement)
-            var diff = NumOps.Subtract(target[i], predictions[i]);
-            gradients[i] = NumOps.Multiply(NumOps.FromDouble(2.0), diff);
-        }
-
-        return gradients;
+        // For MSE: derivative = 2 * (prediction - target)
+        // We return the negative gradient (direction of improvement)
+        var engine = AiDotNetEngine.Current;
+        return engine.Multiply(engine.Subtract(target, predictions), NumOps.FromDouble(2.0));
     }
 
     /// <summary>
@@ -613,11 +588,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         // For gradient boosting, we adjust the initial prediction based on average gradient
         if (gradients.Length > 0)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                sum = NumOps.Add(sum, gradients[i]);
-            }
+            T sum = AiDotNetEngine.Current.Sum(gradients);
             T avgGradient = NumOps.Divide(sum, NumOps.FromDouble(gradients.Length));
             T update = NumOps.Multiply(learningRate, avgGradient);
             _initialPrediction = NumOps.Add(_initialPrediction, update);
@@ -688,30 +659,21 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         int numSamples = x.Rows;
         int numFeatures = x.Columns;
 
-        _binThresholds = new T[numFeatures][];
-        _binnedData = new byte[numSamples, numFeatures];
+        var engine = AiDotNetEngine.Current;
+        _binThresholds = new Vector<T>[numFeatures];
 
         for (int f = 0; f < numFeatures; f++)
         {
             // Extract and sort feature values
-            var values = new List<double>(numSamples);
-            for (int i = 0; i < numSamples; i++)
-            {
-                values.Add(NumOps.ToDouble(x[i, f]));
-            }
-            values.Sort();
+            var column = engine.GetColumn(x, f);
+            var (sorted, _) = engine.TensorSort(Tensor<T>.FromVector(column));
 
             // Compute bin thresholds using quantiles
-            var thresholds = ComputeQuantileThresholds(values);
-            _binThresholds[f] = thresholds.Select(t => NumOps.FromDouble(t)).ToArray();
-
-            // Bin each value
-            for (int i = 0; i < numSamples; i++)
-            {
-                double val = NumOps.ToDouble(x[i, f]);
-                _binnedData[i, f] = (byte)FindBin(val, thresholds);
-            }
+            _binThresholds[f] = ComputeQuantileThresholds(sorted.ToVector());
         }
+
+        // Bin each value
+        _binnedData = BinMatrix(x);
     }
 
     /// <summary>
@@ -724,101 +686,84 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// when feature values are not uniformly distributed.
     /// </para>
     /// </remarks>
-    private List<double> ComputeQuantileThresholds(List<double> sortedValues)
+    private Vector<T> ComputeQuantileThresholds(Vector<T> sortedValues)
     {
-        var thresholds = new List<double>();
-        int n = sortedValues.Count;
+        int n = sortedValues.Length;
         int maxBins = Math.Min(_options.MaxBins, n);
 
         if (maxBins <= 1)
         {
-            return thresholds;
+            return new Vector<T>(0);
         }
 
-        // Get unique values
-        var uniqueValues = sortedValues.Distinct().ToList();
+        var engine = AiDotNetEngine.Current;
 
-        if (uniqueValues.Count <= maxBins)
+        // Get unique values (the input is sorted, so this keeps ascending order)
+        var uniqueValues = new Vector<T>(sortedValues.Distinct());
+
+        if (uniqueValues.Length <= maxBins)
         {
             // Use midpoints between unique values as thresholds
-            for (int i = 0; i < uniqueValues.Count - 1; i++)
+            int count = uniqueValues.Length - 1;
+            if (count <= 0)
             {
-                thresholds.Add((uniqueValues[i] + uniqueValues[i + 1]) / 2.0);
+                return new Vector<T>(0);
             }
+
+            return engine.Divide(
+                engine.Add(uniqueValues.GetSubVector(0, count), uniqueValues.GetSubVector(1, count)),
+                NumOps.FromDouble(2.0));
         }
-        else
+
+        // Use quantiles: the values at positions floor(i / maxBins * (n - 1)) for i = 1..maxBins-1
+        var quantileIndices = new int[maxBins - 1];
+        for (int i = 1; i < maxBins; i++)
         {
-            // Use quantiles
-            for (int i = 1; i < maxBins; i++)
-            {
-                double quantile = (double)i / maxBins;
-                int index = (int)(quantile * (n - 1));
-                double threshold = sortedValues[index];
-
-                // Avoid duplicate thresholds
-                if (thresholds.Count == 0 || threshold > thresholds[^1])
-                {
-                    thresholds.Add(threshold);
-                }
-            }
+            double quantile = (double)i / maxBins;
+            quantileIndices[i - 1] = (int)(quantile * (n - 1));
         }
 
-        return thresholds;
+        // The picked values are non-decreasing, so dropping repeats keeps exactly the strictly
+        // increasing thresholds (avoids duplicate thresholds).
+        var picked = RegressionEngineOps.Gather(sortedValues, quantileIndices);
+        return new Vector<T>(picked.Distinct());
     }
 
     /// <summary>
-    /// Finds the bin index for a given value.
+    /// Bins every value of <paramref name="x"/> against the learned per-feature thresholds.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Given a value and the bin thresholds, this finds
-    /// which bin the value belongs to using binary search for efficiency.
-    /// </para>
+    /// A value's bin is the first threshold index it does not exceed (thresholds.Length when it exceeds
+    /// all of them or is NaN), which is a left-sided sorted search.
     /// </remarks>
-    private int FindBin(double value, List<double> thresholds)
+    private byte[,] BinMatrix(Matrix<T> x)
     {
-        // Binary search for the correct bin
-        int left = 0;
-        int right = thresholds.Count;
-
-        while (left < right)
-        {
-            int mid = (left + right) / 2;
-            if (value <= thresholds[mid])
-            {
-                right = mid;
-            }
-            else
-            {
-                left = mid + 1;
-            }
-        }
-
-        return left;
-    }
-
-    /// <summary>
-    /// Bins a single row of new data for prediction.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> When making predictions on new data, we need to
-    /// bin the features using the same thresholds learned during training.
-    /// </para>
-    /// </remarks>
-    private byte[] BinRow(Matrix<T> x, int row)
-    {
-        var binned = new byte[_numFeatures];
+        var binThresholds = _binThresholds ?? throw new InvalidOperationException("Bin thresholds not computed.");
+        var engine = AiDotNetEngine.Current;
+        var binned = new byte[x.Rows, _numFeatures];
 
         for (int f = 0; f < _numFeatures; f++)
         {
-            double val = NumOps.ToDouble(x[row, f]);
-            var thresholds = (_binThresholds ?? throw new InvalidOperationException("Bin thresholds not computed."))[f].Select(t => NumOps.ToDouble(t)).ToList();
-            binned[f] = (byte)FindBin(val, thresholds);
+            var thresholds = binThresholds[f];
+            if (thresholds.Length == 0 || x.Rows == 0)
+            {
+                continue;
+            }
+
+            int[] bins = engine.TensorSearchSorted(
+                Tensor<T>.FromVector(thresholds),
+                Tensor<T>.FromVector(engine.GetColumn(x, f)),
+                right: false).ToArray();
+            for (int i = 0; i < bins.Length; i++)
+            {
+                binned[i, f] = (byte)bins[i];
+            }
         }
 
         return binned;
     }
+
+
 
     #endregion
 
@@ -865,7 +810,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// 4. Recursively build children until stopping criteria
     /// </para>
     /// </remarks>
-    private HistTreeNode BuildTree(T[] residuals, int[] sampleIndices)
+    private HistTreeNode BuildTree(Vector<T> residuals, int[] sampleIndices)
     {
         var root = new HistTreeNode(NumOps.Zero)
         {
@@ -877,13 +822,17 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         var queue = new List<HistTreeNode> { root };
         int leafCount = 1;
 
+        var importanceFeatures = new List<int>();
+        var importanceGains = new List<T>();
+
         while (queue.Count > 0)
         {
             // Find the node with the best potential gain
             int bestIdx = -1;
-            T bestGain = NumOps.MinValue;
             SplitInfo? bestSplit = null;
 
+            var candidateNodes = new List<int>();
+            var candidateSplits = new List<SplitInfo>();
             for (int i = 0; i < queue.Count; i++)
             {
                 var node = queue[i];
@@ -894,13 +843,19 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
 
                 // Find best split for this node
                 var split = FindBestSplit(node, residuals);
-
-                if (split is not null && NumOps.GreaterThan(split.Gain, bestGain))
+                if (split is not null)
                 {
-                    bestGain = split.Gain;
-                    bestSplit = split;
-                    bestIdx = i;
+                    candidateNodes.Add(i);
+                    candidateSplits.Add(split);
                 }
+            }
+
+            // The first node with the largest gain wins
+            if (candidateSplits.Count > 0)
+            {
+                int best = RegressionEngineOps.ArgMaxFirst(candidateSplits.Select(s => s.Gain));
+                bestSplit = candidateSplits[best];
+                bestIdx = candidateNodes[best];
             }
 
             // If no beneficial split found or max leaves reached, stop
@@ -926,15 +881,23 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
                 queue.Add(nodeToSplit.Right);
             }
 
-            // Update feature importance
-            if (_featureImportances is not null)
-            {
-                _featureImportances[bestSplit.FeatureIndex] = NumOps.Add(
-                    _featureImportances[bestSplit.FeatureIndex],
-                    bestSplit.Gain);
-            }
+            // Record the gain for the feature importance of the split feature
+            importanceFeatures.Add(bestSplit.FeatureIndex);
+            importanceGains.Add(bestSplit.Gain);
 
             leafCount++;
+        }
+
+        // Update feature importance
+        if (_featureImportances is not null && importanceFeatures.Count > 0)
+        {
+            var engine = AiDotNetEngine.Current;
+            var treeImportance = engine.TensorScatterAdd(
+                Tensor<T>.FromVector(engine.FillZero<T>(_featureImportances.Length)),
+                new Tensor<int>(importanceFeatures.ToArray(), new[] { importanceFeatures.Count }),
+                Tensor<T>.FromVector(new Vector<T>(importanceGains)),
+                0).ToVector();
+            _featureImportances = engine.Add(_featureImportances, treeImportance);
         }
 
         // Set leaf values for remaining nodes
@@ -965,14 +928,13 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// This reduces complexity from O(n) to O(bins).
     /// </para>
     /// </remarks>
-    private SplitInfo? FindBestSplit(HistTreeNode node, T[] residuals)
+    private SplitInfo? FindBestSplit(HistTreeNode node, Vector<T> residuals)
     {
-        SplitInfo? bestSplit = null;
-        T bestGain = NumOps.FromDouble(_options.MinGainToSplit);
-
         // Get features to consider (column subsampling)
         var featuresToConsider = GetFeaturesToConsider();
 
+        // Every returned split already beats MinGainToSplit; the first feature with the largest gain wins.
+        var splits = new List<SplitInfo>();
         foreach (int featureIdx in featuresToConsider)
         {
             // Build histogram for this feature
@@ -980,15 +942,15 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
 
             // Find best split point in histogram
             var split = FindBestSplitInHistogram(histogram, featureIdx, node.SampleIndices.Count);
-
-            if (split is not null && NumOps.GreaterThan(split.Gain, bestGain))
+            if (split is not null)
             {
-                bestGain = split.Gain;
-                bestSplit = split;
+                splits.Add(split);
             }
         }
 
-        return bestSplit;
+        return splits.Count == 0
+            ? null
+            : splits[RegressionEngineOps.ArgMaxFirst(splits.Select(s => s.Gain))];
     }
 
     /// <summary>
@@ -1030,25 +992,41 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// for each bin. This allows us to quickly compute the gain for any split point.
     /// </para>
     /// </remarks>
-    private HistogramBin[] BuildHistogram(List<int> sampleIndices, int featureIdx, T[] residuals)
+    private Histogram BuildHistogram(List<int> sampleIndices, int featureIdx, Vector<T> residuals)
     {
         int numBins = (_binThresholds ?? throw new InvalidOperationException("Bin thresholds not computed."))[featureIdx].Length + 1;
-        var histogram = new HistogramBin[numBins];
+        var binnedData = _binnedData ?? throw new InvalidOperationException("Binned data not computed.");
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < numBins; i++)
+        var bins = new int[sampleIndices.Count];
+        var counts = new int[numBins];
+        for (int k = 0; k < bins.Length; k++)
         {
-            histogram[i] = new HistogramBin(NumOps.Zero);
+            int bin = binnedData[sampleIndices[k], featureIdx];
+            bins[k] = bin;
+            counts[bin]++;
         }
 
-        foreach (int idx in sampleIndices)
+        var gradientSum = engine.FillZero<T>(numBins);
+        var hessianSum = engine.FillZero<T>(numBins);
+        if (bins.Length > 0)
         {
-            int bin = (_binnedData ?? throw new InvalidOperationException("Binned data not computed."))[idx, featureIdx];
-            histogram[bin].GradientSum = NumOps.Add(histogram[bin].GradientSum, residuals[idx]);
-            histogram[bin].HessianSum = NumOps.Add(histogram[bin].HessianSum, NumOps.One); // Squared loss has hessian = 1
-            histogram[bin].Count++;
+            var binIndex = new Tensor<int>(bins, new[] { bins.Length });
+            gradientSum = engine.TensorScatterAdd(
+                Tensor<T>.FromVector(gradientSum),
+                binIndex,
+                Tensor<T>.FromVector(RegressionEngineOps.Gather(residuals, sampleIndices.ToArray())),
+                0).ToVector();
+
+            // Squared loss has hessian = 1
+            hessianSum = engine.TensorScatterAdd(
+                Tensor<T>.FromVector(hessianSum),
+                binIndex,
+                Tensor<T>.FromVector(engine.Fill(bins.Length, NumOps.One)),
+                0).ToVector();
         }
 
-        return histogram;
+        return new Histogram(gradientSum, hessianSum, counts);
     }
 
     /// <summary>
@@ -1064,68 +1042,60 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     ///        - regularization_penalty
     /// </para>
     /// </remarks>
-    private SplitInfo? FindBestSplitInHistogram(HistogramBin[] histogram, int featureIdx, int totalCount)
+    private SplitInfo? FindBestSplitInHistogram(Histogram histogram, int featureIdx, int totalCount)
     {
-        // Compute totals
-        T totalGrad = NumOps.Zero;
-        T totalHess = NumOps.Zero;
-        foreach (var bin in histogram)
-        {
-            totalGrad = NumOps.Add(totalGrad, bin.GradientSum);
-            totalHess = NumOps.Add(totalHess, bin.HessianSum);
-        }
-
-        T bestGain = NumOps.FromDouble(_options.MinGainToSplit);
-        int bestBin = -1;
-
-        T leftGrad = NumOps.Zero;
-        T leftHess = NumOps.Zero;
-        int leftCount = 0;
-        T lambda = NumOps.FromDouble(_options.L2Regularization);
-        T half = NumOps.FromDouble(0.5);
-
-        // Try each split point
-        for (int bin = 0; bin < histogram.Length - 1; bin++)
-        {
-            leftGrad = NumOps.Add(leftGrad, histogram[bin].GradientSum);
-            leftHess = NumOps.Add(leftHess, histogram[bin].HessianSum);
-            leftCount += histogram[bin].Count;
-
-            // Check minimum samples constraint
-            int rightCount = totalCount - leftCount;
-            if (leftCount < _options.MinSamplesLeaf || rightCount < _options.MinSamplesLeaf)
-            {
-                continue;
-            }
-
-            T rightGrad = NumOps.Subtract(totalGrad, leftGrad);
-            T rightHess = NumOps.Subtract(totalHess, leftHess);
-
-            // Compute gain with L2 regularization
-            // gain = 0.5 * (leftGrad^2/(leftHess+lambda) + rightGrad^2/(rightHess+lambda) - totalGrad^2/(totalHess+lambda))
-            T leftTerm = NumOps.Divide(NumOps.Multiply(leftGrad, leftGrad), NumOps.Add(leftHess, lambda));
-            T rightTerm = NumOps.Divide(NumOps.Multiply(rightGrad, rightGrad), NumOps.Add(rightHess, lambda));
-            T totalTerm = NumOps.Divide(NumOps.Multiply(totalGrad, totalGrad), NumOps.Add(totalHess, lambda));
-            T gain = NumOps.Multiply(half, NumOps.Subtract(NumOps.Add(leftTerm, rightTerm), totalTerm));
-
-            if (NumOps.GreaterThan(gain, bestGain))
-            {
-                bestGain = gain;
-                bestBin = bin;
-            }
-        }
-
-        if (bestBin < 0)
+        // Split after bin b sends bins 0..b left; b ranges over 0..numBins-2
+        int candidates = histogram.Count.Length - 1;
+        if (candidates <= 0)
         {
             return null;
         }
 
-        // Compute left and right counts for the best split
-        int bestLeftCount = 0;
-        for (int bin = 0; bin <= bestBin; bin++)
+        var engine = AiDotNetEngine.Current;
+
+        // Compute totals
+        T totalGrad = engine.Sum(histogram.GradientSum);
+        T totalHess = engine.Sum(histogram.HessianSum);
+
+        // Running (left) sums for every split point at once
+        var leftGrad = engine.TensorCumSum(Tensor<T>.FromVector(histogram.GradientSum), 0).ToVector().GetSubVector(0, candidates);
+        var leftHess = engine.TensorCumSum(Tensor<T>.FromVector(histogram.HessianSum), 0).ToVector().GetSubVector(0, candidates);
+        var leftCounts = new int[candidates];
+        var allowed = new bool[candidates];
+        int leftCount = 0;
+        for (int bin = 0; bin < candidates; bin++)
         {
-            bestLeftCount += histogram[bin].Count;
+            leftCount += histogram.Count[bin];
+            leftCounts[bin] = leftCount;
+
+            // Check minimum samples constraint
+            int rightCount = totalCount - leftCount;
+            allowed[bin] = leftCount >= _options.MinSamplesLeaf && rightCount >= _options.MinSamplesLeaf;
         }
+
+        var rightGrad = engine.Subtract(engine.Fill(candidates, totalGrad), leftGrad);
+        var rightHess = engine.Subtract(engine.Fill(candidates, totalHess), leftHess);
+
+        // Compute gain with L2 regularization
+        // gain = 0.5 * (leftGrad^2/(leftHess+lambda) + rightGrad^2/(rightHess+lambda) - totalGrad^2/(totalHess+lambda))
+        T lambda = NumOps.FromDouble(_options.L2Regularization);
+        var lambdas = engine.Fill(candidates, lambda);
+        var leftTerm = engine.Divide(engine.Multiply(leftGrad, leftGrad), engine.Add(leftHess, lambdas));
+        var rightTerm = engine.Divide(engine.Multiply(rightGrad, rightGrad), engine.Add(rightHess, lambdas));
+        T totalTerm = NumOps.Divide(NumOps.Multiply(totalGrad, totalGrad), NumOps.Add(totalHess, lambda));
+        var gains = engine.Multiply(
+            engine.Subtract(engine.Add(leftTerm, rightTerm), engine.Fill(candidates, totalTerm)),
+            NumOps.FromDouble(0.5));
+
+        // The first split point with the largest gain wins; disallowed or NaN gains never win.
+        var (bestBin, bestGain) = RegressionEngineOps.MaskedArgMaxFirst(gains, allowed);
+        if (bestBin < 0 || !NumOps.GreaterThan(bestGain, NumOps.FromDouble(_options.MinGainToSplit)))
+        {
+            return null;
+        }
+
+        // Left and right counts for the best split
+        int bestLeftCount = leftCounts[bestBin];
 
         return new SplitInfo(NumOps.Zero)
         {
@@ -1148,7 +1118,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// 3. Sets the split threshold on the parent node
     /// </para>
     /// </remarks>
-    private void ApplySplit(HistTreeNode node, SplitInfo split, T[] residuals)
+    private void ApplySplit(HistTreeNode node, SplitInfo split, Vector<T> residuals)
     {
         var leftIndices = new List<int>();
         var rightIndices = new List<int>();
@@ -1207,7 +1177,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// becomes: sum(residuals) / (count + regularization)
     /// </para>
     /// </remarks>
-    private void SetLeafValue(HistTreeNode node, T[] residuals)
+    private void SetLeafValue(HistTreeNode node, Vector<T> residuals)
     {
         node.IsLeaf = true;
 
@@ -1217,11 +1187,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             return;
         }
 
-        T sum = NumOps.Zero;
-        foreach (int idx in node.SampleIndices)
-        {
-            sum = NumOps.Add(sum, residuals[idx]);
-        }
+        T sum = AiDotNetEngine.Current.Sum(RegressionEngineOps.Gather(residuals, node.SampleIndices.ToArray()));
 
         // Optimal leaf value with L2 regularization
         T lambda = NumOps.FromDouble(_options.L2Regularization);
@@ -1241,13 +1207,13 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// for faster prediction. This avoids re-binning at each iteration.
     /// </para>
     /// </remarks>
-    private T PredictSingleTree(HistTreeNode tree, int sampleIndex)
+    private T PredictSingleTree(HistTreeNode tree, byte[,] binnedData, int sampleIndex)
     {
         var node = tree;
 
         while (!node.IsLeaf)
         {
-            int bin = (_binnedData ?? throw new InvalidOperationException("Binned data not computed."))[sampleIndex, node.FeatureIndex];
+            int bin = binnedData[sampleIndex, node.FeatureIndex];
             if (node.Left is null || node.Right is null)
             {
                 throw new InvalidOperationException("Internal tree node has null children.");
@@ -1267,21 +1233,10 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// tree using bin indices to find the leaf prediction.
     /// </para>
     /// </remarks>
-    private T PredictSingleTreeFromBins(HistTreeNode tree, byte[] binnedRow)
+    private Vector<T> PredictTree(HistTreeNode tree, byte[,] binnedData, int rows)
     {
-        var node = tree;
-
-        while (!node.IsLeaf)
-        {
-            int bin = binnedRow[node.FeatureIndex];
-            if (node.Left is null || node.Right is null)
-            {
-                throw new InvalidOperationException("Internal tree node has null children.");
-            }
-            node = bin <= node.BinThreshold ? node.Left : node.Right;
-        }
-
-        return node.LeafValue;
+        // Each row walks the tree over its integer bin codes; the leaf values form the prediction vector.
+        return new Vector<T>(Enumerable.Range(0, rows).Select(i => PredictSingleTree(tree, binnedData, i)));
     }
 
     #endregion
@@ -1302,18 +1257,12 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     {
         if (_featureImportances is null) return;
 
-        T sum = NumOps.Zero;
-        foreach (var importance in _featureImportances)
-        {
-            sum = NumOps.Add(sum, importance);
-        }
+        var engine = AiDotNetEngine.Current;
+        T sum = engine.Sum(_featureImportances);
 
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int i = 0; i < _featureImportances.Length; i++)
-            {
-                _featureImportances[i] = NumOps.Divide(_featureImportances[i], sum);
-            }
+            _featureImportances = engine.Divide(_featureImportances, sum);
         }
     }
 
@@ -1496,19 +1445,18 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
     /// - Count: number of samples
     /// </para>
     /// </remarks>
-    private class HistogramBin
+    private sealed class Histogram
     {
-        public T GradientSum { get; set; }
-        public T HessianSum { get; set; }
-        public int Count { get; set; }
+        public Vector<T> GradientSum { get; }
+        public Vector<T> HessianSum { get; }
+        public int[] Count { get; }
 
-        public HistogramBin(T zero)
+        public Histogram(Vector<T> gradientSum, Vector<T> hessianSum, int[] count)
         {
-            GradientSum = zero;
-            HessianSum = zero;
+            GradientSum = gradientSum;
+            HessianSum = hessianSum;
+            Count = count;
         }
-
-        public HistogramBin() : this(MathHelper.GetNumericOperations<T>().Zero) { }
     }
 
     /// <summary>

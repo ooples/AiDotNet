@@ -101,6 +101,10 @@ public class PointCloudIntegrationTests
         // into the source tensor; EdgeConv and global pooling formerly treated
         // those as local reduced-axis coordinates, built empty selection masks,
         // and made every seeded point cloud produce the zero logit vector.
+        // The fallback seed is process-wide and other test classes run in parallel with this one: the model-family
+        // base pins it to 1234 for every generated test. Restore whatever was there rather than clearing it, which
+        // left concurrently constructed models on secure-random weights.
+        var priorSeed = AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride;
         AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = 1234;
         try
         {
@@ -129,7 +133,7 @@ public class PointCloudIntegrationTests
         }
         finally
         {
-            AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = null;
+            AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = priorSeed;
         }
     }
 

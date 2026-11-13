@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -9,6 +10,12 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
 public partial class CTABGANPlusGenerator<T>
 {
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _criticOptimizer;
+
+    // Tensor view of the transformed training matrix, rebuilt when a different matrix is passed in.
+    [Scratch]
+    private Matrix<T>? _realDataSource;
+    [Scratch]
+    private Tensor<T>? _realDataTensor;
 
     private Tensor<T> TrainingGenerator(Tensor<T> input)
     {
@@ -29,28 +36,9 @@ public partial class CTABGANPlusGenerator<T>
         return Layers[^1].Forward(Engine.TensorConcatenate(new[] { current, input }, 1));
     }
 
-    private Tensor<T> TrainingActivations(Tensor<T> raw)
-    {
-        var blocks = new List<Tensor<T>>();
-        int offset = 0, batch = raw.Shape[0];
-        foreach (var column in Enumerable.Range(0, _columns.Count))
-        {
-            var info = _transformer!.GetTransformInfo(column);
-            int width = info.Width;
-            if (info.IsContinuous)
-            {
-                blocks.Add(Engine.TensorTanh(Engine.TensorSlice(raw, new[] { 0, offset }, new[] { batch, 1 })));
-                offset++;
-                width--;
-            }
-            if (width > 0)
-            {
-                blocks.Add(Engine.Softmax(Engine.TensorSlice(raw, new[] { 0, offset }, new[] { batch, width }), 1));
-                offset += width;
-            }
-        }
-        return Engine.TensorConcatenate(blocks.ToArray(), 1);
-    }
+    private Tensor<T> TrainingActivations(Tensor<T> raw, Tensor<T> gumbelNoise)
+        => SyntheticTensorOps<T>.ApplyOutputActivationsBatched(
+            raw, _transformer, _columns.Count, gumbelNoise, _options.GumbelTemperature);
 
     private (Tensor<T> Scores, Tensor<T> Classes, Tensor<T> Features) TrainingCritic(Tensor<T> input, bool dropout)
     {
@@ -103,23 +91,41 @@ public partial class CTABGANPlusGenerator<T>
     private void TrainNativeBatch(Matrix<T> data, int packs, bool critic)
     {
         int count = packs * _options.PacSize;
-        var input = new Tensor<T>(new[] { count, _options.EmbeddingDimension + _condWidth });
-        var real = new Tensor<T>(new[] { count, _dataWidth });
+        int embed = _options.EmbeddingDimension;
+        var sampler = _sampler ?? throw new InvalidOperationException("CTAB-GAN+ training needs a fitted sampler.");
+        var noiseRows = new List<Vector<T>>(count);
+        var conditionRows = new List<Vector<T>>(count);
+        var maskRows = new List<Vector<T>>(count);
+        var rowIndices = new int[count];
         for (int row = 0; row < count; row++)
         {
-            var (condition, index) = _sampler!.SampleConditionAndRow();
-            for (int c = 0; c < _options.EmbeddingDimension; c++) input[row, c] = SampleStandardNormal();
-            for (int c = 0; c < _condWidth; c++) input[row, _options.EmbeddingDimension + c] = condition[c];
-            for (int c = 0; c < _dataWidth; c++) real[row, c] = data[index, c];
+            // Training-by-sampling (CTAB-GAN+ section 3, after CTGAN): one condition, its column mask and a real row
+            // holding that category, then the row's noise.
+            var (condition, mask, _, _, index) = sampler.SampleCondVecWithMask();
+            conditionRows.Add(condition);
+            maskRows.Add(mask);
+            rowIndices[row] = index;
+            noiseRows.Add(CreateStandardNormalVector(embed));
         }
-        var conditionBatch = Engine.TensorSlice(input, new[] { 0, _options.EmbeddingDimension }, new[] { count, _condWidth });
+
+        var noiseBatch = SyntheticTensorOps<T>.StackRows(noiseRows, embed);
+        var conditionBatch = SyntheticTensorOps<T>.StackRows(conditionRows, _condWidth);
+        var maskBatch = SyntheticTensorOps<T>.StackRows(maskRows, _condWidth);
+        var gumbel = SyntheticTensorOps<T>.GumbelNoise(new[] { count, _dataWidth }, _random);
+        if (_realDataTensor is null || !ReferenceEquals(_realDataSource, data))
+        {
+            _realDataTensor = Tensor<T>.FromMatrix(data);
+            _realDataSource = data;
+        }
+        var real = SyntheticTensorOps<T>.GatherRows(_realDataTensor, rowIndices, _dataWidth);
+        var generatorInput = Engine.TensorConcatenate(new[] { noiseBatch, conditionBatch }, 1);
         var realPacked = Engine.TensorConcatenate(new[] { real, conditionBatch }, 1).Reshape(new[] { packs, _packedInputDim });
         bool classification = _hasClassificationTarget && _options.ClassifierWeight > 0;
         if (critic)
         {
             Tensor<T> fakePacked;
             using (new NoGradScope<T>())
-                fakePacked = Engine.TensorConcatenate(new[] { TrainingActivations(TrainingGenerator(input)), conditionBatch }, 1)
+                fakePacked = Engine.TensorConcatenate(new[] { TrainingActivations(TrainingGenerator(generatorInput), gumbel), conditionBatch }, 1)
                     .Reshape(new[] { packs, _packedInputDim });
             var stacked = Engine.TensorConcatenate(new[] { realPacked, fakePacked }, 0);
             Tensor<T>? traced = null;
@@ -136,8 +142,10 @@ public partial class CTABGANPlusGenerator<T>
                 var loss = Engine.TensorSubtract(Mean(fakeScores), Mean(realScores));
                 if (_options.GradientPenaltyWeight > 0)
                 {
-                    var realInput = Engine.TensorSlice(traced!, new[] { 0, 0 }, new[] { packs, _packedInputDim });
-                    var fakeInput = Engine.TensorSlice(traced!, new[] { packs, 0 }, new[] { packs, _packedInputDim });
+                    var tracedBatch = traced ?? throw new InvalidOperationException(
+                        "CTAB-GAN+ critic step: the loss ran before the forward pass.");
+                    var realInput = Engine.TensorSlice(tracedBatch, new[] { 0, 0 }, new[] { packs, _packedInputDim });
+                    var fakeInput = Engine.TensorSlice(tracedBatch, new[] { packs, 0 }, new[] { packs, _packedInputDim });
                     var penalty = WassersteinCriticStep<T>.GradientPenalty(Engine, realInput, fakeInput,
                         batch => TrainingCritic(batch, true).Scores, _random);
                     loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(penalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
@@ -148,7 +156,9 @@ public partial class CTABGANPlusGenerator<T>
                         NumOps.FromDouble(_options.ClassifierWeight)));
                 return loss;
             }
-            var layers = _discLayers.Concat(new ILayer<T>[] { _classifierHead! }).ToList();
+            var classifierHead = _classifierHead ?? throw new InvalidOperationException(
+                "CTAB-GAN+ training needs the auxiliary classifier head built by Fit.");
+            var layers = _discLayers.Concat(new ILayer<T>[] { classifierHead }).ToList();
             _criticOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
             FusedTrainingStep<T>.Step(_criticOptimizer, layers.OfType<ITrainableLayer<T>>().ToList(), stacked, realPacked,
@@ -157,18 +167,36 @@ public partial class CTABGANPlusGenerator<T>
                 extraTensors: TapeTrainingStep<T>.CollectParameters(layers));
             return;
         }
+
+        // The persistent generator input packs [noise | condition | mask | Gumbel noise] so a replayed plan uses fresh
+        // draws of each every step.
+        var input = Engine.TensorConcatenate(new[] { generatorInput, maskBatch, gumbel }, 1);
+        var catBlocks = SyntheticTensorOps<T>.CategoricalOutputBlocks(_transformer, _columns.Count);
         Tensor<T>? tracedInput = null;
+        Tensor<T>? tracedHead = null;
         Tensor<T> GeneratorForward(Tensor<T> batch)
         {
             tracedInput = batch;
-            return TrainingActivations(TrainingGenerator(batch));
+            var head = TrainingGenerator(Engine.TensorSlice(batch, new[] { 0, 0 }, new[] { count, embed + _condWidth }));
+            tracedHead = head;
+            var noise = Engine.TensorSlice(batch, new[] { 0, embed + 2 * _condWidth }, new[] { count, _dataWidth });
+            return TrainingActivations(head, noise);
         }
         Tensor<T> GeneratorLoss(Tensor<T> fake, Tensor<T> targets)
         {
-            var conditions = Engine.TensorSlice(tracedInput!, new[] { 0, _options.EmbeddingDimension }, new[] { count, _condWidth });
+            var batchInput = tracedInput ?? throw new InvalidOperationException(
+                "CTAB-GAN+ generator step: the loss ran before the forward pass.");
+            var conditions = Engine.TensorSlice(batchInput, new[] { 0, embed }, new[] { count, _condWidth });
             var packed = Engine.TensorConcatenate(new[] { fake, conditions }, 1).Reshape(new[] { packs, _packedInputDim });
             var prediction = TrainingCritic(packed, false);
             var loss = Engine.TensorNegate(Mean(prediction.Scores));
+            // The conditional generator loss CTAB-GAN+ keeps from CTGAN: cross-entropy of the conditioned column's
+            // category logits against the requested one-hot.
+            if (_condWidth > 0 && catBlocks.Count > 0 && tracedHead is not null)
+            {
+                var masks = Engine.TensorSlice(batchInput, new[] { 0, embed + _condWidth }, new[] { count, _condWidth });
+                loss = Engine.TensorAdd(loss, SyntheticTensorOps<T>.ConditionalCrossEntropy(tracedHead, conditions, masks, catBlocks));
+            }
             if (classification)
                 loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(ClassLoss(prediction.Classes,
                     ClassLabels(targets.Reshape(new[] { packs, _options.PacSize * _dataWidth }))), NumOps.FromDouble(_options.ClassifierWeight)));
