@@ -86,6 +86,31 @@ public class ContinualLearningHalfPrecisionTests
         Assert.Equal(0.0, MemoryAwareSynapses<double, Tensor<double>, Tensor<double>>.StableL2Norm(new Vector<double>(3)), 12);
     }
 
+    [Fact]
+    public void ImportanceMeanMetrics_Half_AccumulateBeyondHalfRange()
+    {
+        // 70000 ones: master's double mean is exactly 1; a Half sum stops growing at 2048.
+        var ones = new Vector<Half>(70000);
+        ones.Fill((Half)1.0f);
+        var loss = new MeanSquaredErrorLoss<Half>();
+        object[] strategies =
+        {
+            new ElasticWeightConsolidation<Half, Tensor<Half>, Tensor<Half>>(loss),
+            new ExpectedGradientLength<Half, Tensor<Half>, Tensor<Half>>(loss),
+            new MemoryAwareSynapses<Half, Tensor<Half>, Tensor<Half>>(loss),
+            new SynapticIntelligence<Half, Tensor<Half>, Tensor<Half>>(loss),
+        };
+
+        foreach (var strategy in strategies)
+        {
+            var method = strategy.GetType().GetMethod("ComputeMean", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(method);
+            Assert.Equal(1.0, (double)(method?.Invoke(strategy, new object[] { ones }) ?? double.NaN), 12);
+            Assert.True(double.IsNaN((double)(method?.Invoke(strategy, new object[] { new Vector<Half>(0) }) ?? 0.0)),
+                $"{strategy.GetType().Name}: the mean of no values is 0 / 0, as in master");
+        }
+    }
+
     private static double[] Softmax(double[] logits)
     {
         double max = double.NegativeInfinity;

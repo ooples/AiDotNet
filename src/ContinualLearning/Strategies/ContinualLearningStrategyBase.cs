@@ -270,6 +270,21 @@ public abstract class ContinualLearningStrategyBase<T, TInput, TOutput> : IConti
     }
 
     /// <summary>
+    /// Mean of <paramref name="vector"/> reported as a double metric, accumulated in double as master did:
+    /// a sum in T saturates or overflows (Half stops counting at 2048 and tops out at 65504), so a Half
+    /// importance mean would be meaningless. An empty vector gives NaN, master's 0 / 0.
+    /// </summary>
+    internal static double MeanAsDouble(Vector<T> vector)
+    {
+        if (vector.Length == 0)
+        {
+            return double.NaN;
+        }
+
+        return Engine.TensorMean(vector.AsTensor().Cast<double>());
+    }
+
+    /// <summary>
     /// Returns a zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector,
     /// so engine operations can work on the same prefix an index loop bounded by <paramref name="count"/> would.
     /// Writes through the view change the vector.

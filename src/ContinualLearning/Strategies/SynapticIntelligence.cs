@@ -631,8 +631,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// </summary>
     private double ComputeMean(Vector<T> vector)
     {
-        // Reported as a double metric, like master
-        return Convert.ToDouble(Engine.Mean(vector));
+        return MeanAsDouble(vector);
     }
 
     /// <summary>
