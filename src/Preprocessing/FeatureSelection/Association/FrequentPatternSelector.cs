@@ -118,11 +118,13 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 }
             }
 
-            // score += count / n / size for every frequent pattern. The ratio is formed from the int counts: the
-            // summed counts and n * size overflow T types such as Half (max 65504), giving inf / inf = NaN.
-            var sizeScores = new Tensor<T>(Enumerable.Range(0, sizes * p)
-                .Select(k => NumOps.FromDouble((double)countSums[k] / ((double)n * (k / p + 2))))
-                .ToArray(), new[] { sizes, p });
+            // score += count / n / size for every frequent pattern. The ratio is formed from the int counts in
+            // double and converted to T in one cast: the summed counts and n * size overflow T types such as Half
+            // (max 65504), giving inf / inf = NaN, so they never exist in T.
+            var ratios = new double[sizes * p];
+            for (int k = 0; k < ratios.Length; k++)
+                ratios[k] = (double)countSums[k] / ((double)n * (k / p + 2));
+            var sizeScores = new Tensor<double>(ratios, new[] { sizes, p }).Cast<T>();
             scores = engine.TensorAdd(scores, engine.ReduceSum(sizeScores, new[] { 0 }, false));
         }
 

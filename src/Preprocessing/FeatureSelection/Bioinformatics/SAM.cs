@@ -186,13 +186,17 @@ public class SAM<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         var permutedBelow = engine.TensorSearchSorted(sortedPermuted, observed, false).AsSpan().ToArray();
         var isNumber = observedIsNumber.Cast<int>().AsSpan().ToArray();
 
-        // FDR = (false positives / nPermutations) / true positives, capped at 1; 1 when there is no true positive
-        var fdr = new Tensor<T>(Enumerable.Range(0, p).Select(j =>
+        // FDR = (false positives / nPermutations) / true positives, capped at 1; 1 when there is no true positive.
+        // The ratio of the int counts is formed in double and converted to T in one cast.
+        var fdrRatios = new double[p];
+        for (int j = 0; j < p; j++)
         {
             int truePositives = isNumber[j] != 0 ? p - observedBelow[j] : 0;
             double expectedFalsePositives = (double)(permutedCount - permutedBelow[j]) / _nPermutations;
-            return NumOps.FromDouble(truePositives > 0 ? Math.Min(expectedFalsePositives / truePositives, 1.0) : 1.0);
-        }).ToArray(), new[] { p });
+            fdrRatios[j] = truePositives > 0 ? Math.Min(expectedFalsePositives / truePositives, 1.0) : 1.0;
+        }
+
+        var fdr = new Tensor<double>(fdrRatios, new[] { p }).Cast<T>();
 
         _fdr = fdr.ToVector();
         _qValues = fdr.ToVector();
