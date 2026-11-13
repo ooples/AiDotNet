@@ -15,6 +15,8 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Validation;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -46,6 +48,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly FederatedAdvancedCapabilities<T>? _advancedCapabilities;
     private readonly Dictionary<int, double> _clientPerformanceScores = new();
     private readonly Dictionary<int, double[]> _clientEmbeddings = new();
+    private readonly ILogger _logger;
 
     public InMemoryFederatedTrainer(
         IOptimizer<T, TInput, TOutput> optimizerPrototype,
@@ -60,10 +63,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
         IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
-        FederatedAdvancedCapabilities<T>? advancedCapabilities = null)
+        FederatedAdvancedCapabilities<T>? advancedCapabilities = null,
+        ILogger? logger = null)
     {
         Guard.NotNull(optimizerPrototype);
         _optimizerPrototype = optimizerPrototype;
+        _logger = logger ?? NullLogger.Instance;
         _learningRateOverride = learningRateOverride;
         _advancedCapabilities = advancedCapabilities;
 
@@ -686,8 +691,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         return _advancedCapabilities.UnlearnClient(clientId, globalParams);
     }
 
-    /// <summary>Hashes each client's sample rows into identity strings for the private-set-intersection overlap check.</summary>
-    private Dictionary<int, IReadOnlyList<string>> ComputeClientSampleIdentities(
+    /// <summary>
+    /// Hashes each client's sample rows into identity strings for the private-set-intersection overlap check. A
+    /// client whose features cannot be read as a matrix is left out of the check, with a warning.
+    /// </summary>
+    internal Dictionary<int, IReadOnlyList<string>> ComputeClientSampleIdentities(
         Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData)
     {
         var result = new Dictionary<int, IReadOnlyList<string>>();
@@ -714,6 +722,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
+                _logger.LogWarning(ex, "Could not hash the samples of client {ClientId}; it is left out of the private set intersection.", kv.Key);
             }
         }
 
