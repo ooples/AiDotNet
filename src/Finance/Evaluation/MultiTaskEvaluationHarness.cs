@@ -42,7 +42,12 @@ public class MultiTaskEvaluationHarness<T>
 
     /// <summary>The sum of per-series scalars (zero when there are none).</summary>
     private static double SumOf(List<double> values)
-        => values.Count == 0 ? NumOps.Zero : Engine.TensorSum(new Tensor<double>(new[] { values.Count }, new Vector<double>(values.ToArray())));
+    {
+        if (values.Count == 0)
+            return NumOps.Zero;
+        using var tensor = new Tensor<double>(new[] { values.Count }, new Vector<double>(values.ToArray()));
+        return Engine.TensorSum(tensor);
+    }
 
     /// <summary>
     /// Evaluates a foundation model's forecasting performance.

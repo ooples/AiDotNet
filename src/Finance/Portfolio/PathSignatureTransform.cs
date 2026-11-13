@@ -127,9 +127,10 @@ public class PathSignatureTransform<T>
         if (_level == 2)
         {
             // Shift the cumulative sum rather than subtracting the current increment, which can cancel a small prefix.
+            using var zeroRow = new Tensor<double>([1, dim]);
             var before = steps == 2
-                ? new Tensor<double>([1, dim])
-                : engine.TensorConcatenate(new[] { new Tensor<double>([1, dim]),
+                ? zeroRow
+                : engine.TensorConcatenate(new[] { zeroRow,
                     engine.TensorNarrow(engine.TensorCumSum(increments, 0), 0, 0, steps - 2) }, 0);
             var left = engine.TensorAdd(before, engine.TensorMultiplyScalar(increments, 0.5));
             var second = engine.TensorMatMul(engine.TensorTranspose(left), increments);       // [dim, dim]
@@ -221,6 +222,7 @@ public class PathSignatureTransform<T>
         var increments = engine.TensorSubtract(engine.TensorNarrow(widePanel, 0, 1, steps - 1), head);
         var cross = engine.TensorMatMul(engine.TensorTranspose(relative), increments);        // [assets, assets]
         var areas = engine.TensorMultiplyScalar(engine.TensorSubtract(cross, engine.TensorTranspose(cross)), 0.5);
-        return engine.TensorWhere(engine.TensorEye<double>(assets), new Tensor<double>([assets, assets]), areas).Cast<T>();
+        using var zeros = new Tensor<double>([assets, assets]);
+        return engine.TensorWhere(engine.TensorEye<double>(assets), zeros, areas).Cast<T>();
     }
 }

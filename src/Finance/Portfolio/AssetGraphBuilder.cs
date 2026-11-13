@@ -205,7 +205,7 @@ public class AssetGraphBuilder<T>
     private static Tensor<double> DiagonalOf(Tensor<double> square, int size)
     {
         var engine = AiDotNetEngine.Current;
-        var indices = new Tensor<int>(System.Linq.Enumerable.Range(0, size).Select(i => checked(i * size + i)).ToArray(), [size]);
+        using var indices = new Tensor<int>(System.Linq.Enumerable.Range(0, size).Select(i => checked(i * size + i)).ToArray(), [size]);
         return engine.TensorGather(engine.Reshape(square, [square.Length]), indices, 0);
     }
 

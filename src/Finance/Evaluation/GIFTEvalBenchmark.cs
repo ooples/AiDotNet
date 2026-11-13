@@ -246,7 +246,7 @@ public class GIFTEvalBenchmark<T>
         var levelLosses = new List<Tensor<double>>();
         var absoluteTargets = new List<double>();
         int numQ = quantileLevels.Length;
-        var levelRow = new Tensor<double>(new[] { 1, numQ }, new Vector<double>(quantileLevels.ToArray()));
+        using var levelRow = new Tensor<double>(new[] { 1, numQ }, new Vector<double>(quantileLevels.ToArray()));
 
         for (int s = 0; s < testSeries.Count; s++)
         {
@@ -328,8 +328,8 @@ public class GIFTEvalBenchmark<T>
         if (levelLosses.Count == 0 || numQ == 0)
             return NumOps.FromDouble(double.NaN);
         var perLevel = Engine.ReduceSum(Engine.TensorStack(levelLosses.ToArray(), 0), new[] { 0 }, false);
-        double absoluteTotal = Engine.TensorSum(
-            new Tensor<double>(new[] { absoluteTargets.Count }, new Vector<double>(absoluteTargets.ToArray())));
+        using var targets = new Tensor<double>(new[] { absoluteTargets.Count }, new Vector<double>(absoluteTargets.ToArray()));
+        double absoluteTotal = Engine.TensorSum(targets);
         // Divide by sum|y| before applying 2 / Q, so Q * sum|y| cannot overflow T while the ratio is finite.
         return NumOps.Multiply(
             NumOps.Divide(Engine.TensorSum(perLevel), absoluteTotal), NumOps.FromDouble(2.0 / numQ));
@@ -347,7 +347,7 @@ public class GIFTEvalBenchmark<T>
     {
         if (scores.Count == 0)
             return (NumOps.FromDouble(double.NaN), 0);
-        var all = new Tensor<double>(new[] { scores.Count }, new Vector<double>(scores.ToArray()));
+        using var all = new Tensor<double>(new[] { scores.Count }, new Vector<double>(scores.ToArray()));
         // x - x is 0 exactly when x is finite (NaN and +/-infinity give NaN).
         var finite = Engine.TensorEquals(Engine.TensorSubtract(all, all), NumOps.Zero);
         int count = Engine.TensorCountNonzero(finite);
