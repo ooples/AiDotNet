@@ -87,14 +87,8 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
     /// <remarks>Tacotron 2's log-mel spectrogram (reference <c>mel2samp.py</c>).</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
-        var rows = _features!.LogMel(samples);
-        int frames = rows.GetLength(0), bands = rows.GetLength(1);
-        var mel = new Tensor<T>(new[] { 1, bands, frames });
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < bands; m++) mel[0, m, f] = NumOps.FromDouble(rows[f, m]);
-        return mel;
+        var rows = _features!.LogMel(Engine.Reshape(audio, new[] { audio.Length }));   // [frames, bands]
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, rows.Shape[1], rows.Shape[0] });
     }
 
     /// <inheritdoc />

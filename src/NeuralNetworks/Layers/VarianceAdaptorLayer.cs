@@ -229,7 +229,7 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="hidden">Phoneme hidden sequence, <c>[tokens, hidden]</c> or <c>[1, tokens, hidden]</c>.</param>
     /// <param name="targets">Ground-truth variance for training, or null at inference.</param>
     /// <param name="durationScale">Speaking-rate control applied to predicted durations (FastSpeech §3.2).</param>
-    public VarianceAdaptation<T> Adapt(Tensor<T> hidden, VarianceTargets? targets, double durationScale = 1.0)
+    public VarianceAdaptation<T> Adapt(Tensor<T> hidden, VarianceTargets<T>? targets, double durationScale = 1.0)
     {
         if (hidden is null) throw new ArgumentNullException(nameof(hidden));
         bool batched = hidden.Rank == 3;
@@ -263,7 +263,7 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
     /// <remarks>The second half of <see cref="Adapt"/>, for a hidden sequence that is already frame-level: AdaSpeech 2
     /// reconstructs untranscribed speech from a mel encoder's frame sequence through the same variance information
     /// and decoder (Yan et al. 2021, §2.3).</remarks>
-    public Tensor<T> AddFrameVariance(Tensor<T> frames, double[]? pitch, double[]? energy)
+    public Tensor<T> AddFrameVariance(Tensor<T> frames, Tensor<T>? pitch, Tensor<T>? energy)
     {
         if (frames is null) throw new ArgumentNullException(nameof(frames));
         if (frames.Rank != 2 || frames.Shape[1] != _hiddenSize)
@@ -272,7 +272,7 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
     }
 
     private (Tensor<T> Frames, Tensor<T>? PitchSpectrogram, Tensor<T>? PitchStatistics, Tensor<T>? Energy) AddVariance(
-        Tensor<T> frames, double[]? pitchTarget, double[]? energyTarget)
+        Tensor<T> frames, Tensor<T>? pitchTarget, Tensor<T>? energyTarget)
     {
         int frameCount = frames.Shape[0];
         Tensor<T>? pitchSpectrogram = null, pitchStatistics = null;
@@ -282,7 +282,7 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
             var pooled = Engine.ReduceMean(pitchHidden, new[] { 0 }, keepDims: true); // [1, filter]
             pitchStatistics = Engine.Reshape(_pitchStatistics.Forward(pooled), new[] { 2 });
 
-            double[] f0 = pitchTarget ?? PredictedF0(pitchSpectrogram, pitchStatistics);
+            var f0 = pitchTarget ?? PredictedF0(pitchSpectrogram, pitchStatistics);
             if (f0.Length != frameCount)
                 throw new ArgumentException($"Got {f0.Length} pitch values for {frameCount} frames.", nameof(pitchTarget));
             frames = Engine.TensorAdd(frames, _pitchEmbedding.Forward(Bucketize(f0, _pitchBoundaries)));
@@ -292,7 +292,7 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
         if (_energyPredictor is not null && _energyEmbedding is not null)
         {
             energy = Engine.Reshape(_energyPredictor.Forward(frames), new[] { frameCount });
-            double[] energyValues = energyTarget ?? ToDoubles(energy);
+            var energyValues = energyTarget ?? energy;
             if (energyValues.Length != frameCount)
                 throw new ArgumentException($"Got {energyValues.Length} energy values for {frameCount} frames.", nameof(energyTarget));
             frames = Engine.TensorAdd(frames, _energyEmbedding.Forward(Bucketize(energyValues, _energyBoundaries)));
@@ -310,24 +310,17 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
 
     private int[] PredictedDurations(Tensor<T> logDuration, double scale)
     {
-        var durations = new int[logDuration.Length];
-        int total = 0;
-        int longest = 0;
-        double longestContinuous = double.NegativeInfinity;
-        for (int i = 0; i < durations.Length; i++)
+        int count = logDuration.Length;
+        // max(0, (exp(l) − 1) · scale), rounded half to even.
+        var continuous = Engine.TensorMax(Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorExp(Engine.Reshape(logDuration, new[] { count })), NumOps.FromDouble(-1.0)),
+            NumOps.FromDouble(scale)), NumOps.Zero);
+        var durations = Engine.TensorRound(continuous).Cast<int>().ToArray();
+        int total = durations.Sum();
+        if (total == 0 && count > 0)
         {
-            double continuous = Math.Max(0.0, (Math.Exp(NumOps.ToDouble(logDuration[i])) - 1.0) * scale);
-            if (continuous > longestContinuous)
-            {
-                longestContinuous = continuous;
-                longest = i;
-            }
-            double d = Math.Round(continuous);
-            durations[i] = (int)Math.Max(0, d);
-            total += durations[i];
-        }
-        if (total == 0 && durations.Length > 0)
-        {
+            // The first of the longest continuous durations.
+            int longest = Engine.TensorArgMax(continuous, 0).ToArray()[0];
             // A fresh predictor may round every duration below half a frame. Preserve one frame at the most likely
             // phoneme instead of inventing one frame for every phoneme: the latter made alpha scaling non-monotonic
             // (a larger alpha could produce fewer frames once only some values crossed the rounding threshold).
@@ -336,40 +329,17 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
         return durations;
     }
 
-    private double[] PredictedF0(Tensor<T> pitchSpectrogram, Tensor<T> pitchStatistics)
+    private Tensor<T> PredictedF0(Tensor<T> pitchSpectrogram, Tensor<T> pitchStatistics)
     {
-        int frames = pitchSpectrogram.Shape[0], scales = pitchSpectrogram.Shape[1];
-        var spectrogram = new double[frames, scales];
-        for (int t = 0; t < frames; t++)
-            for (int s = 0; s < scales; s++)
-                spectrogram[t, s] = NumOps.ToDouble(pitchSpectrogram[t, s]);
-        double mean = NumOps.ToDouble(pitchStatistics[0]);
-        double std = Math.Abs(NumOps.ToDouble(pitchStatistics[1]));
-        return PitchWaveletTransform.ToF0(spectrogram, mean, std);
-    }
-
-    private double[] ToDoubles(Tensor<T> tensor)
-    {
-        var values = new double[tensor.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(tensor[i]);
-        return values;
+        var statistics = pitchStatistics.ToArray();
+        return PitchWaveletTransform.ToF0(pitchSpectrogram, statistics[0], NumOps.Abs(statistics[1]));
     }
 
     /// <summary>torch.bucketize(values, boundaries) with right=False: the index of the first boundary >= value.</summary>
-    private Tensor<T> Bucketize(double[] values, double[] boundaries)
+    private Tensor<T> Bucketize(Tensor<T> values, double[] boundaries)
     {
-        var indices = new Tensor<T>(new[] { values.Length });
-        for (int i = 0; i < values.Length; i++)
-        {
-            int lo = 0, hi = boundaries.Length;
-            while (lo < hi)
-            {
-                int mid = (lo + hi) / 2;
-                if (boundaries[mid] < values[i]) lo = mid + 1; else hi = mid;
-            }
-            indices[i] = NumOps.FromDouble(lo);
-        }
-        return indices;
+        var edges = new Tensor<double>(boundaries, new[] { boundaries.Length }).Cast<T>();
+        return Engine.TensorSearchSorted(edges, Engine.Reshape(values, new[] { values.Length }), false).Cast<T>();
     }
 
     private static double[] LogSpacedBoundaries(double min, double max, int bins)
@@ -416,14 +386,15 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
 }
 
 /// <summary>Ground-truth variance for one utterance (FastSpeech 2 teacher forcing).</summary>
-public sealed class VarianceTargets
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+public sealed class VarianceTargets<T>
 {
     /// <summary>Frames per token.</summary>
     public int[]? Durations { get; init; }
     /// <summary>F0 per frame in Hz, with unvoiced frames filled (continuous contour).</summary>
-    public double[]? Pitch { get; init; }
+    public Tensor<T>? Pitch { get; init; }
     /// <summary>Energy per frame.</summary>
-    public double[]? Energy { get; init; }
+    public Tensor<T>? Energy { get; init; }
 }
 
 /// <summary>What the variance adaptor produced for one utterance.</summary>

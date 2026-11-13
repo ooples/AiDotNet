@@ -189,12 +189,10 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// phoneme if every phoneme would vanish (reference <c>generate</c> and <c>LengthRegulator</c>).</summary>
     private int[] RoundedDurations(Tensor<T> predicted)
     {
-        var durations = new int[predicted.Length];
-        for (int i = 0; i < durations.Length; i++)
-            durations[i] = (int)Math.Floor(Math.Max(0.0, NumOps.ToDouble(predicted[i])) * _options.DurationScale + 0.5);
-        if (durations.Sum() <= 0)
-            for (int i = 0; i < durations.Length; i++) durations[i] = 2;
-        return durations;
+        var scaled = Engine.TensorMultiplyScalar(Engine.TensorMax(Engine.Reshape(predicted, new[] { predicted.Length }), NumOps.Zero),
+            NumOps.FromDouble(_options.DurationScale));
+        var durations = Engine.TensorFloor(Engine.TensorAddScalar(scaled, NumOps.FromDouble(0.5))).Cast<int>().ToArray();
+        return durations.Sum() <= 0 ? Enumerable.Repeat(2, durations.Length).ToArray() : durations;
     }
 
     /// <inheritdoc />
@@ -218,17 +216,12 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         int batch = input.Shape[0], tokens = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { tokens });
-            for (int i = 0; i < tokens; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row));
-        }
+            outputs.Add(SynthesizeOne(Engine.Reshape(Engine.TensorSlice(input, new[] { b, 0 }, new[] { 1, tokens }), new[] { tokens })));
         int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+        // Each utterance's frames zero-padded to the longest.
+        var padded = outputs.Select(o => o.Shape[0] == longest ? o
+            : Engine.PadNd(o, new[] { 0, 0, 0, longest - o.Shape[0] }, AiDotNet.Tensors.Engines.PadMode.Constant, NumOps.Zero)).ToArray();
+        return Engine.TensorStack(padded, 0);
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
@@ -297,8 +290,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
             $"{nameof(ForwardTacotron<T>)} conditions on phoneme-level pitch: supply the recording or Pitch.", nameof(sample));
 
         var (pitch, energy) = PhonemeLevelTargets(framePitch, mel, durations);
-        var durationTarget = new Tensor<T>(new[] { durations.Length });
-        for (int i = 0; i < durations.Length; i++) durationTarget[i] = NumOps.FromDouble(durations[i]);
+        var durationTarget = new Tensor<int>(durations, new[] { durations.Length }).Cast<T>();
 
         Tensor<T> Objective(Tensor<T> tokens, Tensor<T> target)
         {
@@ -319,40 +311,54 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// energy (the mean over its frames of the L2 norm of exp(mel)), normalized by the dataset statistics in the options
     /// with unvoiced phonemes kept at 0 (reference <c>extract_pitch_energy</c>, <c>normalize_values</c>).
     /// </summary>
-    private (Tensor<T> Pitch, Tensor<T> Energy) PhonemeLevelTargets(double[] framePitch, Tensor<T> mel, int[] durations)
+    /// <remarks>Sums are formed on values scaled by a power of two (exact in binary floating point, undone after the
+    /// division), so half-precision sums over long phonemes and many channels cannot overflow.</remarks>
+    private (Tensor<T> Pitch, Tensor<T> Energy) PhonemeLevelTargets(Tensor<T> framePitch, Tensor<T> mel, int[] durations)
     {
-        int tokens = durations.Length, channels = mel.Shape[1];
-        var pitch = new Tensor<T>(new[] { tokens });
-        var energy = new Tensor<T>(new[] { tokens });
-        int start = 0;
-        for (int p = 0; p < tokens; p++)
-        {
-            double pitchSum = 0, energySum = 0;
-            int voiced = 0;
-            for (int f = start; f < start + durations[p]; f++)
-            {
-                double f0 = framePitch[f];
-                if (f0 != 0 && f0 >= _options.PitchMinHz && f0 <= _options.PitchMaxHz)
-                {
-                    pitchSum += f0;
-                    voiced++;
-                }
-                double norm = 0;
-                for (int c = 0; c < channels; c++)
-                {
-                    double v = Math.Exp(NumOps.ToDouble(mel[f, c]));
-                    norm += v * v;
-                }
-                energySum += Math.Sqrt(norm);
-            }
-            double phonemePitch = voiced > 0 ? pitchSum / voiced : 0.0;
-            double phonemeEnergy = durations[p] > 0 ? energySum / durations[p] : 0.0;
-            pitch[p] = NumOps.FromDouble(phonemePitch == 0.0 ? 0.0 : (phonemePitch - _options.PitchMean) / _options.PitchStd);
-            energy[p] = NumOps.FromDouble(phonemeEnergy == 0.0 ? 0.0 : (phonemeEnergy - _options.EnergyMean) / _options.EnergyStd);
-            start += durations[p];
-        }
-        return (pitch, energy);
+        int tokens = durations.Length, frames = durations.Sum(), channels = mel.Shape[1];
+        // The phoneme each frame belongs to.
+        var owner = new int[frames];
+        for (int p = 0, f = 0; p < tokens; p++)
+            for (int k = 0; k < durations[p]; k++) owner[f++] = p;
+        var index = new[] { new Tensor<int>(owner, new[] { frames }) };
+        T zero = NumOps.Zero;
+        double segmentScale = Math.Pow(2.0, Math.Ceiling(Math.Log(Math.Max(1, durations.DefaultIfEmpty(1).Max()), 2.0)));
+        double channelScale = Math.Pow(2.0, Math.Ceiling(Math.Log(Math.Max(1, channels), 2.0)));
+
+        // Mean voiced F0 within [PitchMinHz, PitchMaxHz], 0 where none.
+        var f0 = Engine.Reshape(Engine.TensorSlice(Engine.Reshape(framePitch, new[] { framePitch.Length }), new[] { 0 }, new[] { frames }), new[] { frames });
+        // f0 ≠ 0, ¬(f0 < min) and ¬(f0 > max), as 0/1 products.
+        var inRange = Engine.TensorMultiply(Engine.TensorMultiply(Engine.TensorNotEquals(f0, zero),
+            Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorLessThan(f0, NumOps.FromDouble(_options.PitchMinHz))), NumOps.One)),
+            Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorGreaterThan(f0, NumOps.FromDouble(_options.PitchMaxHz))), NumOps.One));
+        var voicedPitch = Engine.TensorWhere(inRange, Engine.TensorMultiplyScalar(f0, NumOps.FromDouble(1.0 / segmentScale)), new Tensor<T>(new[] { frames }));
+        var pitchSum = Engine.TensorIndexPut(new Tensor<T>(new[] { tokens }), index, voicedPitch, true);
+        var voiced = Engine.TensorIndexPut(new Tensor<int>(new[] { tokens }), index, inRange.Cast<int>(), true);
+        var hasVoiced = Engine.TensorGreaterThan(voiced, 0).Cast<T>();
+        var safeVoiced = Engine.TensorMax(voiced, 1).Cast<T>();
+        var phonemePitch = Engine.TensorWhere(hasVoiced,
+            Engine.TensorMultiplyScalar(Engine.TensorDivide(pitchSum, safeVoiced), NumOps.FromDouble(segmentScale)), new Tensor<T>(new[] { tokens }));
+
+        // Mean over the phoneme's frames of ||exp(mel)||.
+        var frameMel = Engine.TensorSlice(mel, new[] { 0, 0 }, new[] { frames, channels });
+        var scaledExp = Engine.TensorMultiplyScalar(Engine.TensorExp(frameMel), NumOps.FromDouble(1.0 / channelScale));
+        var norm = Engine.TensorMultiplyScalar(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(scaledExp), new[] { 1 }, false)),
+            NumOps.FromDouble(channelScale));
+        var energySum = Engine.TensorIndexPut(new Tensor<T>(new[] { tokens }), index,
+            Engine.TensorMultiplyScalar(norm, NumOps.FromDouble(1.0 / segmentScale)), true);
+        var counts = new Tensor<int>(durations, new[] { tokens });
+        var phonemeEnergy = Engine.TensorWhere(Engine.TensorGreaterThan(counts, 0).Cast<T>(),
+            Engine.TensorMultiplyScalar(Engine.TensorDivide(energySum, Engine.TensorMax(counts, 1).Cast<T>()), NumOps.FromDouble(segmentScale)),
+            new Tensor<T>(new[] { tokens }));
+
+        return (Normalized(phonemePitch, _options.PitchMean, _options.PitchStd), Normalized(phonemeEnergy, _options.EnergyMean, _options.EnergyStd));
     }
+
+    // (v − mean) / std, with 0 kept at 0 (reference normalize_values).
+    private Tensor<T> Normalized(Tensor<T> values, double mean, double std)
+        => Engine.TensorWhere(Engine.TensorNotEquals(values, NumOps.Zero),
+            Engine.TensorDivideScalar(Engine.TensorSubtractScalar(values, NumOps.FromDouble(mean)), NumOps.FromDouble(std)),
+            new Tensor<T>(values._shape));
 
     private Tensor<T> MeanAbsolute(Tensor<T> prediction, Tensor<T> target)
     {

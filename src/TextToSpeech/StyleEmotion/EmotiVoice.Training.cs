@@ -96,8 +96,8 @@ public partial class EmotiVoice<T>
         public Tensor<T> Style = default!;
         public Tensor<T> Content = default!;
         public Tensor<T> Mel = default!;       // [T, mels] the alignment's target
-        public double[] Pitch = Array.Empty<double>();   // [T], normalized
-        public double[] Energy = Array.Empty<double>();
+        public Tensor<T> Pitch = new(new[] { 0 });     // [T], normalized
+        public Tensor<T> Energy = new(new[] { 0 });
         public int Start;                      // the vocoder segment's first frame
         public Tensor<T> Wave = default!;      // [segment · hop]
     }
@@ -153,8 +153,8 @@ public partial class EmotiVoice<T>
     private Step Prepare(TtsTrainingSample<T> sample, int seed, bool training)
     {
         var o = _options;
-        var audio = (sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on the recording; set Audio.", nameof(sample)))
-            .ToVector().Select(v => NumOps.ToDouble(v)).ToArray();
+        var recording = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on the recording; set Audio.", nameof(sample));
+        var audio = Engine.Reshape(recording, new[] { recording.Length });
         if (o.TrimSilence) audio = Trim(audio);
         var p = new Step
         {
@@ -165,91 +165,74 @@ public partial class EmotiVoice<T>
         p.Style = StyleEmbedding(DescriptionIds(sample.Description ?? throw new ArgumentException($"{GetType().Name} trains with the emotion prompt; set Description.", nameof(sample))));
         p.Content = StyleEmbedding(sample.Transcript is null ? StyleTokens(string.Empty) : DescriptionIds(sample.Transcript));
         _targetMel ??= new TacotronSpectrogram(o.SampleRate, o.FftSize, o.HopSize, o.WindowLength, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency);
-        var mel = _targetMel.LogMel(audio);
-        int frames = mel.GetLength(0);
-        p.Mel = new Tensor<T>(new[] { frames, o.MelChannels });
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < o.MelChannels; m++) p.Mel[f, m] = NumOps.FromDouble(mel[f, m]);
-        p.Pitch = Fit(ContinuousPitch(new WorldPitchDetector<T>(o.SampleRate).EstimateF0(audio, 1000.0 * o.HopSize / o.SampleRate).F0), frames)
-            .Select(v => (v - o.PitchMean) / o.PitchStd).ToArray();
-        p.Energy = Fit(FrameEnergy(audio), frames).Select(v => (v - o.EnergyMean) / o.EnergyStd).ToArray();
+        p.Mel = _targetMel.LogMel(audio);                                      // [frames, mels]
+        int frames = p.Mel.Shape[0];
+        p.Pitch = Standardized(Fit(ContinuousPitch(new WorldPitchDetector<T>(o.SampleRate).EstimateF0(audio, 1000.0 * o.HopSize / o.SampleRate).F0), frames),
+            o.PitchMean, o.PitchStd);
+        p.Energy = Standardized(Fit(FrameEnergy(audio), frames), o.EnergyMean, o.EnergyStd);
         // The vocoder's random segment (get_random_segments: ⌊U · (T − segment)⌋), zero-padded when the utterance is
         // shorter.
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         int segment = o.SegmentFrames;
         p.Start = training ? (int)(random.NextDouble() * Math.Max(0, frames - segment)) : 0;
-        p.Wave = new Tensor<T>(new[] { segment * o.HopSize });
-        for (int i = 0; i < segment * o.HopSize; i++)
-        {
-            int index = p.Start * o.HopSize + i;
-            if (index < audio.Length) p.Wave[i] = NumOps.FromDouble(audio[index]);
-        }
+        int samples = segment * o.HopSize, from = p.Start * o.HopSize;
+        int available = Math.Max(0, Math.Min(samples, audio.Length - from));
+        p.Wave = Fit(available > 0 ? Engine.TensorSlice(audio, new[] { from }, new[] { available }) : new Tensor<T>(new[] { 0 }), samples);
         return p;
     }
 
-    private int[] DescriptionIds(Tensor<T> ids) => ids.ToVector().Select(v => (int)Math.Round(NumOps.ToDouble(v))).ToArray();
+    private int[] DescriptionIds(Tensor<T> ids) => Engine.TensorRound(ids).Cast<int>().ToArray();
 
     /// <summary>The loader's trim: from the first to the last sample above 0.5 % of the peak, then 50 ms of silence each side.</summary>
-    internal double[] Trim(double[] audio)
+    internal Tensor<T> Trim(Tensor<T> audio)
     {
-        double peak = audio.Max(Math.Abs), threshold = peak * 0.005;
-        int start = Array.FindIndex(audio, v => Math.Abs(v) > threshold), end = Array.FindLastIndex(audio, v => Math.Abs(v) > threshold);
-        if (start < 0) return audio;
+        var magnitude = Engine.TensorAbs(Engine.Reshape(audio, new[] { audio.Length }));
+        T threshold = NumOps.Multiply(Engine.TensorMaxValue(magnitude), NumOps.FromDouble(0.005));
+        int[] above = Engine.TensorNonzero(Engine.TensorGreaterThan(magnitude, threshold)).ToArray();
+        if (above.Length == 0) return audio;
+        int start = above[0], end = above[above.Length - 1];
         int pad = _options.SampleRate / 20;
-        var trimmed = new double[end - start + 2 * pad];
         // wav[start:end] — the last sample above the threshold excluded, as the reference slices.
-        Array.Copy(audio, start, trimmed, pad, end - start);
-        return trimmed;
+        var kept = end > start ? Engine.TensorSlice(Engine.Reshape(audio, new[] { audio.Length }), new[] { start }, new[] { end - start })
+            : new Tensor<T>(new[] { 0 });
+        return Engine.PadNd(kept, new[] { pad, pad }, AiDotNet.Tensors.Engines.PadMode.Constant, NumOps.Zero);
     }
 
     /// <summary>The pitch made continuous (feats.Pitch: leading and trailing zeros take the first and last voiced value,
     /// gaps linearly interpolated).</summary>
-    internal static double[] ContinuousPitch(double[] pitch)
-    {
-        if (pitch.All(v => v == 0)) return pitch;
-        int first = Array.FindIndex(pitch, v => v != 0), last = Array.FindLastIndex(pitch, v => v != 0);
-        var result = (double[])pitch.Clone();
-        for (int i = 0; i < first; i++) result[i] = pitch[first];
-        for (int i = last + 1; i < pitch.Length; i++) result[i] = pitch[last];
-        int previous = first;
-        for (int i = first + 1; i <= last; i++)
-        {
-            if (pitch[i] == 0) continue;
-            for (int j = previous + 1; j < i; j++) result[j] = pitch[previous] + (pitch[i] - pitch[previous]) * (j - previous) / (i - previous);
-            previous = i;
-        }
-        return result;
-    }
+    internal static Tensor<T> ContinuousPitch(Tensor<T> pitch) => PitchWaveletTransform.FillUnvoiced(pitch);
 
     /// <summary>feats.Energy: the L2 norm of each frame of librosa's centred STFT magnitude.</summary>
-    internal double[] FrameEnergy(double[] audio)
+    /// <remarks>The spectrum is scaled by 2<sup>−⌈log₂ fftSize⌉</sup> before it is squared and the norm scaled back
+    /// (exact in binary floating point), so a half-precision power sum cannot overflow; the 1e-10 floor is scaled with
+    /// it.</remarks>
+    internal Tensor<T> FrameEnergy(Tensor<T> audio)
     {
         var o = _options;
         _energyStft ??= new CenteredComplexStft<T>(Engine, o.FftSize, o.HopSize, o.WindowLength);
         using var _ = new NoGradScope<T>();
-        var (re, im) = _energyStft.Forward(new Tensor<T>(new[] { audio.Length }, new Vector<T>(audio.Select(v => NumOps.FromDouble(v)).ToArray())));
-        int bins = re.Shape[1], frames = re.Shape[2];
-        var energy = new double[frames];
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            for (int k = 0; k < bins; k++)
-            {
-                double a = NumOps.ToDouble(re[0, k, f]), b = NumOps.ToDouble(im[0, k, f]);
-                sum += a * a + b * b;
-            }
-            energy[f] = Math.Sqrt(Math.Max(sum, 1e-10));
-        }
-        return energy;
+        var (re, im) = _energyStft.Forward(Engine.Reshape(audio, new[] { audio.Length }));
+        int frames = re.Shape[2];
+        double scale = Math.Pow(2.0, Math.Ceiling(Math.Log(o.FftSize, 2.0)));
+        T down = NumOps.FromDouble(1.0 / scale);
+        var power = Engine.TensorAdd(Engine.TensorSquare(Engine.TensorMultiplyScalar(re, down)), Engine.TensorSquare(Engine.TensorMultiplyScalar(im, down)));
+        var sum = Engine.ReduceSum(power, new[] { 1 }, false);
+        var norm = Engine.TensorSqrt(Engine.TensorMax(sum, NumOps.FromDouble(1e-10 / (scale * scale))));
+        return Engine.Reshape(Engine.TensorMultiplyScalar(norm, NumOps.FromDouble(scale)), new[] { frames });
     }
 
     // The collated targets: truncated or zero-padded to the mel frames.
-    private static double[] Fit(double[] values, int frames)
+    private Tensor<T> Fit(Tensor<T> values, int frames)
     {
-        var fitted = new double[frames];
-        Array.Copy(values, fitted, Math.Min(frames, values.Length));
-        return fitted;
+        int length = values.Length, kept = Math.Min(frames, length);
+        var flat = Engine.Reshape(values, new[] { length });
+        if (kept < length) flat = Engine.TensorSlice(flat, new[] { 0 }, new[] { kept });
+        return kept < frames ? Engine.PadNd(flat, new[] { 0, frames - kept }, AiDotNet.Tensors.Engines.PadMode.Constant, NumOps.Zero) : flat;
     }
+
+    // (v − mean) / std.
+    private Tensor<T> Standardized(Tensor<T> values, double mean, double std)
+        => Engine.TensorDivideScalar(Engine.TensorSubtractScalar(values, NumOps.FromDouble(mean)), NumOps.FromDouble(std));
 
     // ---------------------------------------------------------------- the generator's pass and losses
 
@@ -260,14 +243,12 @@ public partial class EmotiVoice<T>
         public Tensor<T> Conditioned = default!;
         public Tensor<T> LogP = default!;
         public int[] Durations = Array.Empty<int>();
-        public double[] PitchTargets = Array.Empty<double>();
-        public double[] EnergyTargets = Array.Empty<double>();
+        public Tensor<T> PitchTargets = new(new[] { 0 });
+        public Tensor<T> EnergyTargets = new(new[] { 0 });
         public Tensor<T> PitchOut = default!, EnergyOut = default!, DurationOut = default!;
         public Tensor<T> Latent = default!;
         public Tensor<T>? Mel, Duration, Pitch, Energy, ForwardSum, Binarization;
     }
-
-    private Tensor<T> ValuesOf(double[] values) => new(new[] { values.Length }, new Vector<T>(values.Select(v => NumOps.FromDouble(v)).ToArray()));
 
     /// <summary>
     /// The joint generator's step (<c>JETSGenerator</c> and <c>train_am_vocoder_joint.py</c>): the alignment's
@@ -283,27 +264,27 @@ public partial class EmotiVoice<T>
         var x = Encode(p.Phonemes, p.Speaker, p.Style, p.Content, training, random);
         int n = p.Phonemes.Length, frames = p.Mel.Shape[0];
         var logP = AlignmentNetwork.Forward(x, p.Mel);
+        // EmotiVoiceAlignment.Viterbi is a double[,] reference port; the scores cross into it once.
         var matrix = new double[frames, n];
-        for (int t = 0; t < frames; t++)
-            for (int i = 0; i < n; i++) matrix[t, i] = NumOps.ToDouble(logP[t, i]);
+        Buffer.BlockCopy(logP.Cast<double>().ToArray(), 0, matrix, 0, frames * n * sizeof(double));
         var path = EmotiVoiceAlignment<T>.Viterbi(matrix);
         var durations = EmotiVoiceAlignment<T>.Durations(path, n);
-        var pitchTargets = new double[n];
-        var energyTargets = new double[n];
-        int frame = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int f = 0; f < durations[i]; f++)
-            {
-                pitchTargets[i] += p.Pitch[frame + f] / durations[i];
-                energyTargets[i] += p.Energy[frame + f] / durations[i];
-            }
-            frame += durations[i];
-        }
+        // Each phoneme's mean pitch and energy over its frames, accumulated as Σ v_f / d in frame order.
+        int covered = durations.Sum();
+        var owner = new int[covered];
+        for (int i = 0, f = 0; i < n; i++)
+            for (int k = 0; k < durations[i]; k++) owner[f++] = i;
+        var ownerIndex = new Tensor<int>(owner, new[] { covered });
+        var frameDuration = Engine.TensorIndexSelect(new Tensor<int>(durations, new[] { n }), ownerIndex, 0).Cast<T>();
+        Tensor<T> PhonemeMean(Tensor<T> values) => Engine.TensorIndexPut(new Tensor<T>(new[] { n }), new[] { ownerIndex },
+            Engine.TensorDivide(Engine.TensorSlice(Engine.Reshape(values, new[] { values.Length }), new[] { 0 }, new[] { covered }), frameDuration), true);
+        var pitchTargets = PhonemeMean(p.Pitch);
+        var energyTargets = PhonemeMean(p.Energy);
+        var durationValues = new Tensor<int>(durations, new[] { n }).Cast<T>();
         var pitchOut = PitchPredictor.Forward(x, training, random);
         var energyOut = EnergyPredictor.Forward(x, training, random);
         var durationOut = DurationPredictor.Forward(x, training, random);
-        var latent = DecodeLatent(x, ValuesOf(pitchTargets), ValuesOf(energyTargets), ValuesOf(durations.Select(v => (double)v).ToArray()), frames, training, random);
+        var latent = DecodeLatent(x, pitchTargets, energyTargets, durationValues, frames, training, random);
         // The segment of the latent the vocoder reads, zero-padded past the end.
         int segment = o.SegmentFrames;
         int available = Math.Min(segment, frames - p.Start);
@@ -319,10 +300,10 @@ public partial class EmotiVoice<T>
         if (!withLosses) return pass;
 
         var mel = L1(TrainingMel(wave), TrainingMel(p.Wave));
-        var logDurations = ValuesOf(durations.Select(v => Math.Log(v + 1.0)).ToArray());
+        var logDurations = Engine.TensorLog(Engine.TensorAddScalar(durationValues, NumOps.One));
         var duration = L1(durationOut, logDurations);
-        var pitch = L1(pitchOut, ValuesOf(pitchTargets));
-        var energy = L1(energyOut, ValuesOf(energyTargets));
+        var pitch = L1(pitchOut, pitchTargets);
+        var energy = L1(energyOut, energyTargets);
         var forwardSum = AlignmentNetwork.ForwardSumLoss(logP);
         var binarization = AlignmentNetwork.BinarizationLoss(logP, path);
         (pass.Mel, pass.Duration, pass.Pitch, pass.Energy, pass.ForwardSum, pass.Binarization) = (mel, duration, pitch, energy, forwardSum, binarization);
@@ -370,8 +351,9 @@ public partial class EmotiVoice<T>
         int fft = o.FftSize, hop = o.HopSize, bins = fft / 2 + 1;
         if (_lossCos is null)
         {
-            _lossCos = new Tensor<T>(new[] { fft, bins });
-            _lossSin = new Tensor<T>(new[] { fft, bins });
+            // The windowed DFT tables [fft, bins] (fixed constants).
+            var cos = new double[fft, bins];
+            var sin = new double[fft, bins];
             int offset = (fft - o.WindowLength) / 2;
             for (int i = 0; i < o.WindowLength; i++)
             {
@@ -379,21 +361,22 @@ public partial class EmotiVoice<T>
                 for (int k = 0; k < bins; k++)
                 {
                     double a = 2 * Math.PI * (offset + i) * k / fft;
-                    _lossCos[offset + i, k] = NumOps.FromDouble(w * Math.Cos(a));
-                    _lossSin![offset + i, k] = NumOps.FromDouble(-w * Math.Sin(a));
+                    cos[offset + i, k] = w * Math.Cos(a);
+                    sin[offset + i, k] = -w * Math.Sin(a);
                 }
             }
-            var basis = new TacotronSpectrogram(o.SampleRate, fft, hop, o.WindowLength, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency).MelBasis;
-            _lossMel = new Tensor<T>(new[] { o.MelChannels, bins });
-            for (int m = 0; m < o.MelChannels; m++)
-                for (int k = 0; k < bins; k++) _lossMel[m, k] = NumOps.FromDouble(basis[m, k]);
+            _lossCos = AiDotNet.Audio.Features.EngineStft<T>.Table(cos);
+            _lossSin = AiDotNet.Audio.Features.EngineStft<T>.Table(sin);
+            _lossMel = AiDotNet.Audio.Features.EngineStft<T>.Table(new TacotronSpectrogram(o.SampleRate, fft, hop, o.WindowLength, o.MelChannels,
+                o.MelMinFrequency, o.MelMaxFrequency).MelBasis);
         }
         int pad = (fft - hop) / 2;
         var padded = VocoderOps.ReflectPad(Engine, Engine.Reshape(audio, new[] { 1, 1, audio.Length }), pad, pad);
         int length = padded.Shape[2], frames = 1 + (length - fft) / hop;
-        var index = new Tensor<int>(new[] { frames * fft });
+        var starts = new int[frames * fft];
         for (int f = 0; f < frames; f++)
-            for (int i = 0; i < fft; i++) index[f * fft + i] = f * hop + i;
+            for (int i = 0; i < fft; i++) starts[f * fft + i] = f * hop + i;
+        var index = new Tensor<int>(starts, new[] { frames * fft });
         var framed = Engine.Reshape(Engine.TensorIndexSelect(Engine.Reshape(padded, new[] { length, 1 }), index, 0), new[] { frames, fft });
         var re = Engine.TensorMatMul(framed, _lossCos);
         var im = Engine.TensorMatMul(framed, _lossSin!);

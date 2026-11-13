@@ -180,7 +180,9 @@ public partial class NaturalSpeech3<T>
         for (; frame < frames; frame++) phones[frame] = phonemes[^1];
         var audio = Engine.TensorSlice(Engine.Reshape(recording, new[] { recording.Length }), new[] { 0 }, new[] { frames * o.HopSize });
         var pitch = sample.Pitch is { } given ? given : new WorldPitchDetector<T>(o.SampleRate).EstimateF0(audio, 1000.0 * o.HopSize / o.SampleRate).F0;
-        var f0 = Enumerable.Range(0, frames).Select(f => f < pitch.Length ? pitch[f] : 0.0).ToArray();
+        // The codec utterance's prosody targets are a double[] reference port; the contour crosses into it once.
+        var contour = pitch.Cast<double>().ToArray();
+        var f0 = Enumerable.Range(0, frames).Select(f => f < contour.Length ? contour[f] : 0.0).ToArray();
         var voiced = f0.Select(v => v > 0).ToArray();
         // The z-score of F0 over the voiced frames (§3.2.2's normalized F0).
         var values = f0.Where(v => v > 0).ToArray();

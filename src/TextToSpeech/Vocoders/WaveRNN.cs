@@ -123,14 +123,8 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     /// <remarks>Tacotron 2's log-mel spectrogram.</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
-        var rows = _features!.LogMel(samples);
-        int frames = rows.GetLength(0), bands = rows.GetLength(1);
-        var mel = new Tensor<T>(new[] { 1, bands, frames });
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < bands; m++) mel[0, m, f] = NumOps.FromDouble(rows[f, m]);
-        return mel;
+        var rows = _features!.LogMel(Engine.Reshape(audio, new[] { audio.Length }));   // [frames, bands]
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, rows.Shape[1], rows.Shape[0] });
     }
 
     /// <summary>The 16-bit value (0..65535) of a sample in [−1, 1].</summary>
@@ -139,21 +133,37 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     /// <summary>The sample in [−1, 1] of a 16-bit value.</summary>
     internal static double FromSixteenBit(int s) => s / 32767.5 - 1;
 
-    // A byte scaled to [−1, 1] (§2: "encoded as scalars in [0, 255] and scaled to the interval [−1, 1]").
-    private static double Scaled(int b) => b / 127.5 - 1;
-
     /// <summary>The coarse (high) and fine (low) bytes of a waveform <c>[samples]</c>.</summary>
+    /// <remarks>The 16-bit value round((x + 1) · 32767.5) is assembled in integers from y = x · 32767.5, which stays
+    /// within ±32767.5 (representable in every T, half precision included): with n = ⌊y⌋, y + 32767.5 lies in
+    /// (n + 32767, n + 32768] and rounds (half to even) to n + 32768, except at a tie (y = n) with n odd.</remarks>
     public (int[] Coarse, int[] Fine) Split(Tensor<T> audio)
     {
-        var coarse = new int[audio.Length];
-        var fine = new int[audio.Length];
-        for (int i = 0; i < audio.Length; i++)
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
+        var y = Engine.TensorMultiplyScalar(Engine.TensorClamp(Engine.Reshape(audio, new[] { audio.Length }),
+            NumOps.FromDouble(-1), NumOps.One), NumOps.FromDouble(32767.5));
+        var floor = Engine.TensorFloor(y);
+        var whole = floor.Cast<int>().ToArray();
+        var exact = Engine.TensorEquals(y, floor).Cast<int>().ToArray();
+        var coarse = new int[whole.Length];
+        var fine = new int[whole.Length];
+        for (int i = 0; i < whole.Length; i++)
         {
-            int s = ToSixteenBit(NumOps.ToDouble(audio[i]));
+            int n = whole[i];
+            int s = Math.Max(0, Math.Min(65535, n + 32768 - (exact[i] != 0 && (n & 1) != 0 ? 1 : 0)));
             coarse[i] = s >> 8;
             fine[i] = s & 255;
         }
         return (coarse, fine);
+    }
+
+    // Byte b scaled to [−1, 1] (§2: "encoded as scalars in [0, 255] and scaled to the interval [−1, 1]"),
+    // gathered from the 256-entry table of b / 127.5 − 1.
+    private Tensor<T> ScaledBytes(int[] bytes, int[] shape)
+    {
+        var table = Engine.TensorAddScalar(Engine.TensorDivideScalar(Engine.TensorArange<T>(0, 256, 1), NumOps.FromDouble(127.5)),
+            NumOps.FromDouble(-1));
+        return Engine.Reshape(Engine.TensorIndexSelect(table, new Tensor<int>(bytes, new[] { bytes.Length }), 0), shape);
     }
 
     private Tensor<T> Condition(Tensor<T> mel, int samples)
@@ -166,15 +176,15 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         mel = MelInput(mel);
         var (coarse, fine) = Split(Flat(audio));
         int n = coarse.Length;
-        var previous = new Tensor<T>(new[] { 1, 2, n });
-        var current = new Tensor<T>(new[] { 1, 1, n });
         int silence = ToSixteenBit(0);
-        for (int t = 0; t < n; t++)
-        {
-            previous[0, 0, t] = NumOps.FromDouble(Scaled(t > 0 ? coarse[t - 1] : silence >> 8));
-            previous[0, 1, t] = NumOps.FromDouble(Scaled(t > 0 ? fine[t - 1] : silence & 255));
-            current[0, 0, t] = NumOps.FromDouble(Scaled(coarse[t]));
-        }
+        // The previous sample's bytes: silence, then the waveform shifted by one.
+        var previousBytes = new int[2 * n];
+        previousBytes[0] = silence >> 8;
+        previousBytes[n] = silence & 255;
+        Array.Copy(coarse, 0, previousBytes, 1, n - 1);
+        Array.Copy(fine, 0, previousBytes, n + 1, n - 1);
+        var previous = ScaledBytes(previousBytes, new[] { 1, 2, n });
+        var current = ScaledBytes(coarse, new[] { 1, 1, n });
         var inputs = _core!.Inputs(previous, current, Condition(mel, n));
         var h = new Tensor<T>(new[] { 1, _core.Hidden, 1 });
         var states = new Tensor<T>[n];
@@ -205,26 +215,29 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         var condition = Condition(mel, samples);
         var core = _core!;
         var h = new Tensor<T>(new[] { 1, core.Hidden, 1 });
-        var wave = new Tensor<T>(new[] { 1, 1, samples });
+        var coarse = new int[samples];
+        var fine = new int[samples];
         int silence = ToSixteenBit(0), previousCoarse = silence >> 8, previousFine = silence & 255;
         for (int t = 0; t < samples; t++)
         {
-            var previous = new Tensor<T>(new[] { 1, 2, 1 });
-            previous[0, 0, 0] = NumOps.FromDouble(Scaled(previousCoarse));
-            previous[0, 1, 0] = NumOps.FromDouble(Scaled(previousFine));
+            var previous = ScaledBytes(new[] { previousCoarse, previousFine }, new[] { 1, 2, 1 });
             var column = Engine.TensorSlice(condition, new[] { 0, 0, t }, new[] { 1, mel.Shape[1], 1 });
             // The current coarse byte reaches only the fine half, so any value gives the coarse half's state.
             var blind = core.Step(h, core.Inputs(previous, new Tensor<T>(new[] { 1, 1, 1 }), column));
             int c = SampleClass(core.CoarseLogits(blind), random);
-            var current = new Tensor<T>(new[] { 1, 1, 1 });
-            current[0, 0, 0] = NumOps.FromDouble(Scaled(c));
-            h = core.Step(h, core.Inputs(previous, current, column));
+            h = core.Step(h, core.Inputs(previous, ScaledBytes(new[] { c }, new[] { 1, 1, 1 }), column));
             int f = SampleClass(core.FineLogits(h), random);
-            wave[0, 0, t] = NumOps.FromDouble(FromSixteenBit((c << 8) | f));
+            coarse[t] = c;
+            fine[t] = f;
             previousCoarse = c;
             previousFine = f;
         }
-        return wave;
+        // (256 c + f) / 32767.5 - 1, as (128 c + f / 2) / 16383.75 - 1: halving both sides is exact, and the halved
+        // value stays below half precision's 65504.
+        var halved = Engine.TensorAdd(Engine.TensorMultiplyScalar(new Tensor<int>(coarse, new[] { samples }).Cast<T>(), NumOps.FromDouble(128)),
+            Engine.TensorMultiplyScalar(new Tensor<int>(fine, new[] { samples }).Cast<T>(), NumOps.FromDouble(0.5)));
+        var wave = Engine.TensorAddScalar(Engine.TensorDivideScalar(halved, NumOps.FromDouble(16383.75)), NumOps.FromDouble(-1));
+        return Engine.Reshape(wave, new[] { 1, 1, samples });
     }
 
     /// <summary>The fraction of the recurrent weights that are zero.</summary>
@@ -233,9 +246,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         get
         {
             var kernel = _core!.Recurrent.Kernel();
-            int zeros = 0;
-            for (int i = 0; i < kernel.Length; i++) if (NumOps.ToDouble(kernel[i]) == 0) zeros++;
-            return zeros / (double)kernel.Length;
+            return (kernel.Length - Engine.TensorCountNonzero(kernel)) / (double)kernel.Length;
         }
     }
 
@@ -267,29 +278,21 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         int hidden = _core.Hidden, br = o.PruneBlockRows, bc = o.PruneBlockColumns;
         if (hidden % br != 0 || hidden % bc != 0)
             throw new InvalidOperationException($"The pruning block {br}x{bc} must tile the {hidden}x{hidden} gate matrices.");
-        var mask = new Tensor<T>(kernel._shape);
-        for (int i = 0; i < mask.Length; i++) mask[i] = NumOps.One;
         int rowsOfBlocks = hidden / br, colsOfBlocks = hidden / bc, blocks = rowsOfBlocks * colsOfBlocks;
         int pruned = (int)Math.Floor(z * blocks);
+        // Summed |w| of each block, [gate, block row, block column] in block order.
+        var blocked = Engine.Reshape(Engine.TensorAbs(kernel), new[] { 3, rowsOfBlocks, br, colsOfBlocks, bc });
+        var sums = Engine.ReduceSum(blocked, new[] { 2, 4 }, false).ToArray();
+        var prune = new int[3 * blocks];
         for (int gate = 0; gate < 3; gate++)
         {
-            var magnitude = new (double Value, int Index)[blocks];
-            for (int b = 0; b < blocks; b++)
-            {
-                int r0 = gate * hidden + b / colsOfBlocks * br, c0 = b % colsOfBlocks * bc;
-                double sum = 0;
-                for (int r = 0; r < br; r++)
-                    for (int c = 0; c < bc; c++) sum += Math.Abs(NumOps.ToDouble(kernel[(r0 + r) * hidden + c0 + c]));
-                magnitude[b] = (sum, b);
-            }
-            foreach (var (_, b) in magnitude.OrderBy(m => m.Value).ThenBy(m => m.Index).Take(pruned))
-            {
-                int r0 = gate * hidden + b / colsOfBlocks * br, c0 = b % colsOfBlocks * bc;
-                for (int r = 0; r < br; r++)
-                    for (int c = 0; c < bc; c++) mask[(r0 + r) * hidden + c0 + c] = NumOps.Zero;
-            }
+            int offset = gate * blocks;
+            foreach (int b in Enumerable.Range(0, blocks).OrderBy(b => sums[offset + b]).ThenBy(b => b).Take(pruned))
+                prune[offset + b] = 1;
         }
-        return mask;
+        var keep = Engine.TensorAddScalar(Engine.TensorNegate(
+            new Tensor<int>(prune, new[] { 3, rowsOfBlocks, 1, colsOfBlocks, 1 }).Cast<T>()), NumOps.One);
+        return Engine.Reshape(Engine.TensorBroadcastTo(keep, new[] { 3, rowsOfBlocks, br, colsOfBlocks, bc }), kernel._shape);
     }
 
     /// <inheritdoc />

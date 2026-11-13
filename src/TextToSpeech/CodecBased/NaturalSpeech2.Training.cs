@@ -99,7 +99,8 @@ public partial class NaturalSpeech2<T>
         if (durations.Any(d => d < 0)) throw new ArgumentException("Durations are not negative.", nameof(sample));
         var codes = sample.CodecTokens is { } tokens ? CodesOf(tokens, nameof(sample))
             : Encode(sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on the recording or its codec tokens.", nameof(sample)));
-        var pitch = sample.Pitch is { } given ? (double[])given.Clone()
+        // The utterance's pitch path (Interpolated, the core's bucket embedding) is a double[] reference port.
+        var pitch = sample.Pitch is { } given ? given.Cast<double>().ToArray()
             : sample.Audio is { } audio ? ExtractPitch(audio)
             : throw new ArgumentException($"{GetType().Name} needs the pitch per frame, or the recording to extract it from.", nameof(sample));
 
@@ -177,7 +178,7 @@ public partial class NaturalSpeech2<T>
     {
         var detector = new WorldPitchDetector<T>(_options.SampleRate);
         var (f0, _) = detector.EstimateF0(Engine.Reshape(audio, new[] { audio.Length }), 1000.0 * _options.HopSize / _options.SampleRate);
-        return f0;
+        return f0.Cast<double>().ToArray();
     }
 
     /// <summary>

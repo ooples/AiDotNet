@@ -1506,8 +1506,8 @@ AiDotNet.TextToSpeech.Latest.OuteTTSSpeaker
 AiDotNet.TextToSpeech.Latest.OuteTTSSpeaker.OuteTTSSpeaker() -> void
 AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>
 AiDotNet.TextToSpeech.LengthRegulator
-AiDotNet.NeuralNetworks.Layers.VarianceTargets
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.VarianceTargets() -> void
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>.VarianceTargets() -> void
 AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>
 AiDotNet.NeuralNetworks.Layers.VariancePredictorLayer<T>
 AiDotNet.NeuralNetworks.Layers.WeightNormConv1DLayer<T>
@@ -2435,6 +2435,9 @@ AiDotNet.Audio.Foundations.W2vBert<T>.ExtractWeightedFeatures(AiDotNet.Tensors.L
 override AiDotNet.Audio.Foundations.Wav2Vec2<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
 AiDotNet.Audio.Foundations.W2vBert<T>.FitSemanticTokenizer(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! recordings) -> void
 static AiDotNet.Audio.Pitch.PitchWaveletTransform.ContinuousLogF0(double[]! f0) -> (double[]! Unvoiced, double[]! ContinuousLogF0)
+static AiDotNet.Audio.Pitch.PitchWaveletTransform.ContinuousLogF0<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! f0) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Unvoiced, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! ContinuousLogF0)
+static AiDotNet.Audio.Pitch.PitchWaveletTransform.Forward<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Audio.Pitch.PitchWaveletTransform.ToF0<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! spectrogram, T logF0Mean, T logF0Std) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 static AiDotNet.Audio.Pitch.PitchWaveletTransform.Forward(double[]! signal) -> double[,]!
 AiDotNet.Audio.Foundations.HuBERT<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 AiDotNet.Audio.Foundations.W2vBert<T>.SemanticTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording) -> int[]!
@@ -13103,10 +13106,10 @@ override AiDotNet.TextToSpeech.Classic.GlowTTS<T>.TryApplyLearningRule(AiDotNet.
 override AiDotNet.TextToSpeech.Classic.GlowTTS<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.Classic.GlowTTS<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.Classic.GradTTS<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
-AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.TrainUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, double[]? pitch = null, double[]? energy = null) -> T
+AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.TrainUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? pitch = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? energy = null) -> T
 override AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.ConditionForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int[]! durations) -> AiDotNet.TextToSpeech.AcousticConditioning<T>!
 AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.TrainUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int speakerId) -> T
-AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.EvaluateUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, double[]? pitch = null, double[]? energy = null) -> T
+AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.EvaluateUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? pitch = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? energy = null) -> T
 override AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.ConditionForInference(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden) -> AiDotNet.TextToSpeech.AcousticConditioning<T>!
 override AiDotNet.TextToSpeech.Classic.GradTTS<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 override AiDotNet.TextToSpeech.Classic.AlignTTS<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
@@ -13438,12 +13441,12 @@ AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>.Durations.get -> int[]!
 AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>.PitchSpectrogram.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>.Energy.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>.PitchStatistics.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Durations.get -> int[]?
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Durations.init -> void
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Pitch.get -> double[]?
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Pitch.init -> void
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Energy.get -> double[]?
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Energy.init -> void
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>.Durations.get -> int[]?
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>.Durations.init -> void
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>.Pitch.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>.Pitch.init -> void
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>.Energy.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>.Energy.init -> void
 override AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.SupportsTraining.get -> bool
 AiDotNet.NeuralNetworks.Layers.WeightNormConv1DLayer<T>.WeightNormConv1DLayer(int inChannels, int outChannels, int kernelSize, int dilation, int padding, double initStandardDeviation = 0) -> void
 AiDotNet.NeuralNetworks.Layers.WeightNormConv1DLayer<T>.OutChannels.get -> int
@@ -13485,8 +13488,8 @@ override AiDotNet.NeuralNetworks.Layers.WeightNormConv1DLayer<T>.ResetState() ->
 override AiDotNet.NeuralNetworks.Layers.VariancePredictorLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
 override AiDotNet.NeuralNetworks.Layers.VariancePredictorLayer<T>.HasCompleteConstructionObjectState.get -> bool
 override AiDotNet.NeuralNetworks.Layers.VariancePredictorLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
-AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.Adapt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.NeuralNetworks.Layers.VarianceTargets? targets, double durationScale = 1) -> AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>!
-AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.AddFrameVariance(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames, double[]? pitch, double[]? energy) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.Adapt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.NeuralNetworks.Layers.VarianceTargets<T>? targets, double durationScale = 1) -> AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>!
+AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.AddFrameVariance(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? pitch, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? energy) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.NeuralNetworks.Layers.WeightNormConv1DLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
 override AiDotNet.NeuralNetworks.Layers.WeightNormConv1DLayer<T>.HasCompleteConstructionObjectState.get -> bool
 override AiDotNet.NeuralNetworks.Layers.WeightNormConv1DLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
