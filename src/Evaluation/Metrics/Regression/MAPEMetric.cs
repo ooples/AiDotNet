@@ -53,16 +53,14 @@ public class MAPEMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        // Only samples with |actual| > epsilon count
-        var valid = engine.TensorGreaterThan(engine.TensorAbs(actual), NumOps.FromDouble(_epsilon));
-        int validCount = EvaluationTensorOps<T>.Count(valid);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var valid = engine.TensorGreaterThan(engine.TensorAbs(actual), _epsilon);
+        int validCount = EvaluationTensorOps<double>.Count(valid);
         if (validCount == 0) return NumOps.Zero;
-
         var relative = engine.TensorAbs(engine.TensorDivide(engine.TensorSubtract(actual, pred), actual));
-        T sum = engine.TensorSum(engine.TensorWhere(valid, relative, engine.TensorZerosLike(relative)));
-        return NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(100.0), sum), NumOps.FromDouble(validCount));
+        double sum = engine.TensorSum(engine.TensorWhere(valid, relative, engine.TensorZerosLike(relative)));
+        return NumOps.FromDouble(100.0 * sum / validCount);
     }
 
     /// <inheritdoc />

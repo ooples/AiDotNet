@@ -49,14 +49,10 @@ public class WAPEMetric<T> : ITimeSeriesMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        T totalAbsError = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
-        T totalAbsActual = engine.TensorSum(engine.TensorAbs(actual));
-
-        if (NumOps.LessThan(totalAbsActual, tolerance)) return NumOps.Zero;
-        return NumOps.Divide(totalAbsError, totalAbsActual);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double totalAbsError = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
+        double totalAbsActual = engine.TensorSum(engine.TensorAbs(actual));
+        return totalAbsActual < 1e-10 ? NumOps.Zero : NumOps.FromDouble(totalAbsError / totalAbsActual);
     }
 }

@@ -64,16 +64,13 @@ public class QuantileLossMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         var error = engine.TensorSubtract(actual, pred);
-
-        // Pinball loss: asymmetric penalty, quantile * e for e >= 0 and (quantile - 1) * e otherwise (NaN included)
-        var over = engine.TensorMultiplyScalar(error, NumOps.FromDouble(_quantile));
-        var under = engine.TensorMultiplyScalar(error, NumOps.FromDouble(_quantile - 1));
+        var over = engine.TensorMultiplyScalar(error, _quantile);
+        var under = engine.TensorMultiplyScalar(error, _quantile - 1);
         var nonNegative = engine.TensorGreaterEqual(error, engine.TensorZerosLike(error));
-
-        return engine.TensorMean(engine.TensorWhere(nonNegative, over, under));
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorWhere(nonNegative, over, under)));
     }
 
     /// <inheritdoc />

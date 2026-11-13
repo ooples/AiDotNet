@@ -81,16 +81,13 @@ internal class PinballLossMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         var diff = engine.TensorSubtract(actual, pred);
-
-        // tau * diff for diff >= 0, else (1 - tau) * (-diff); a NaN diff takes the second branch
-        var over = engine.TensorMultiplyScalar(diff, NumOps.FromDouble(_tau));
-        var under = engine.TensorMultiplyScalar(engine.TensorNegate(diff), NumOps.FromDouble(1 - _tau));
+        var over = engine.TensorMultiplyScalar(diff, _tau);
+        var under = engine.TensorMultiplyScalar(engine.TensorNegate(diff), 1 - _tau);
         var nonNegative = engine.TensorGreaterEqual(diff, engine.TensorZerosLike(diff));
-
-        return engine.TensorMean(engine.TensorWhere(nonNegative, over, under));
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorWhere(nonNegative, over, under)));
     }
 
     /// <inheritdoc/>

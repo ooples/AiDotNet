@@ -49,19 +49,15 @@ public class SMAPEMetric<T> : ITimeSeriesMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // |actual - pred| / ((|actual| + |pred|) / 2) over the samples whose denominator exceeds 1e-10
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         var denominator = engine.TensorMultiplyScalar(
-            engine.TensorAdd(engine.TensorAbs(actual), engine.TensorAbs(pred)), NumOps.FromDouble(0.5));
-        var valid = engine.TensorGreaterThan(denominator, tolerance);
-        int validCount = EvaluationTensorOps<T>.Count(valid);
+            engine.TensorAdd(engine.TensorAbs(actual), engine.TensorAbs(pred)), 0.5);
+        var valid = engine.TensorGreaterThan(denominator, 1e-10);
+        int validCount = EvaluationTensorOps<double>.Count(valid);
         if (validCount == 0) return NumOps.Zero;
-
         var relative = engine.TensorDivide(engine.TensorAbs(engine.TensorSubtract(actual, pred)), denominator);
-        T sum = engine.TensorSum(engine.TensorWhere(valid, relative, engine.TensorZerosLike(relative)));
-        return NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(100.0), sum), NumOps.FromDouble(validCount));
+        double sum = engine.TensorSum(engine.TensorWhere(valid, relative, engine.TensorZerosLike(relative)));
+        return NumOps.FromDouble(100.0 * sum / validCount);
     }
 }

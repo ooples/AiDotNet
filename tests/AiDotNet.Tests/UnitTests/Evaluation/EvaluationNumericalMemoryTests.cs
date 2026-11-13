@@ -15,6 +15,63 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 public class EvaluationNumericalMemoryTests
 {
     [Fact]
+    public void HalfPercentageMetrics_KeepCountsErrorsAndPercentageScalingWide()
+    {
+        var actual = Enumerable.Repeat((Half)60000, 70000).ToArray();
+        var predicted = new Half[actual.Length];
+        Assert.Equal((Half)100, new MAPEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)200, new SymmetricMAPEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)100, new WeightedMAPEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)200, new AiDotNet.Evaluation.Metrics.TimeSeries.SMAPEMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)1, new AiDotNet.Evaluation.Metrics.TimeSeries.WAPEMetric<Half>().Compute(predicted, actual));
+        Half[] opposite = { (Half)(-60000) };
+        Half[] positive = { (Half)60000 };
+        Assert.Equal((Half)200, new SymmetricMAPEMetric<Half>().Compute(opposite, positive));
+        Assert.Equal((Half)200, new WeightedMAPEMetric<Half>().Compute(opposite, positive));
+        Assert.Equal((Half)2, new AiDotNet.Evaluation.Metrics.TimeSeries.WAPEMetric<Half>().Compute(opposite, positive));
+        Assert.Equal((Half)0, new MAPEMetric<Half>().Compute(new Half[1], new Half[1]));
+        Assert.Equal((Half)0, new WeightedMAPEMetric<Half>().Compute(new Half[1], new Half[1]));
+        Assert.Equal((Half)0, new AiDotNet.Evaluation.Metrics.TimeSeries.WAPEMetric<Half>().Compute(new Half[1], new Half[1]));
+    }
+
+    [Fact]
+    public void HalfMeanBias_AllowsCancellationBeforeNarrowing()
+    {
+        Half[] predicted = { (Half)60000, (Half)(-60000) };
+        Half[] actual = { (Half)(-60000), (Half)60000 };
+        Assert.Equal((Half)0, new MeanBiasErrorMetric<Half>().Compute(predicted, actual));
+    }
+
+    [Fact]
+    public void HalfLogMetrics_KeepSmallErrorsUntilTheFinalReduction()
+    {
+        Half[] predicted = { (Half)0.0001 };
+        var actual = new Half[1];
+        double logError = Math.Log(1 + (double)predicted[0]);
+        Assert.Equal((Half)logError, new RMSLEMetric<Half>().Compute(predicted, actual));
+        predicted = Enumerable.Repeat((Half)60000, 70000).ToArray();
+        actual = new Half[predicted.Length];
+        logError = Math.Log(60001);
+        Assert.Equal((Half)(logError * logError), new MeanSquaredLogErrorMetric<Half>().Compute(predicted, actual));
+        Assert.Equal((Half)logError, new RMSLEMetric<Half>().Compute(predicted, actual));
+        Assert.True(double.IsNaN(new RMSLEMetric<double>().Compute(new[] { double.NaN }, new[] { 0.0 })));
+    }
+
+    [Theory]
+    [InlineData(1e-9, -60000, 60000)]
+    [InlineData(0.999999999, 60000, -60000)]
+    public void HalfQuantileMetrics_PreserveSmallWeightsAndWideDifferences(double quantile, double prediction, double actual)
+    {
+        Half[] predicted = { (Half)prediction };
+        Half[] observed = { (Half)actual };
+        double difference = actual - prediction;
+        Half expected = (Half)(difference >= 0 ? quantile * difference : (quantile - 1) * difference);
+        Assert.Equal(expected, new QuantileLossMetric<Half>(quantile).Compute(predicted, observed));
+        Assert.Equal(expected, new PinballLossMetric<Half>(quantile).Compute(predicted, observed));
+    }
+
+
+    [Fact]
     public void PlattScaling_PublicFitMatchesSmoothedClosedForm()
     {
         double[] scores = { 0, 0, 1, 1 };

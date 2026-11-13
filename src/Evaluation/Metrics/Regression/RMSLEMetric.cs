@@ -49,14 +49,12 @@ public class RMSLEMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        // log(1 + max(0, x)) of both sides; Math.Max keeps NaN
-        var zero = NumOps.Zero;
-        var logActual = engine.TensorLog1p(EvaluationTensorOps<T>.MaxPreservingNaN(actual, zero));
-        var logPred = engine.TensorLog1p(EvaluationTensorOps<T>.MaxPreservingNaN(pred, zero));
-        T meanSquaredLogError = engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(logActual, logPred)));
-        return NumOps.Sqrt(meanSquaredLogError);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var logActual = engine.TensorLog1p(EvaluationTensorOps<double>.MaxPreservingNaN(actual, 0.0));
+        var logPred = engine.TensorLog1p(EvaluationTensorOps<double>.MaxPreservingNaN(pred, 0.0));
+        double meanSquaredLogError = engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(logActual, logPred)));
+        return NumOps.FromDouble(Math.Sqrt(meanSquaredLogError));
     }
 
     /// <inheritdoc />
