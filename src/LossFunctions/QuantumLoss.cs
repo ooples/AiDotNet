@@ -32,18 +32,28 @@ public class QuantumLoss<T> : LossFunctionBase<T>
         if (predicted.Length != expected.Length)
             throw new ArgumentException("Predicted and expected vectors must have the same length.");
 
-        var complexOps = MathHelper.GetNumericOperations<Complex<T>>();
-        T fidelity = NumOps.Zero;
+        // Interleaved [re0, im0, re1, im1, ...]: an odd length has no imaginary part for its last element.
+        if (predicted.Length % 2 != 0)
+            throw new ArgumentOutOfRangeException(nameof(predicted), "Interleaved complex vectors must have an even length.");
 
-        for (int i = 0; i < predicted.Length; i += 2)
-        {
-            Complex<T> predictedComplex = new(predicted[i], predicted[i + 1]);
-            Complex<T> expectedComplex = new(expected[i], expected[i + 1]);
+        // Split into real/imaginary columns: p = a + bi, e = c + di.
+        int pairs = predicted.Length / 2;
+        var pairShape = new[] { pairs, 2 };
+        var p = Engine.Reshape(predicted.AsTensor(), pairShape);
+        var e = Engine.Reshape(expected.AsTensor(), pairShape);
+        var a = Engine.TensorSelect(p, 1, 0);
+        var b = Engine.TensorSelect(p, 1, 1);
+        var c = Engine.TensorSelect(e, 1, 0);
+        var d = Engine.TensorSelect(e, 1, 1);
 
-            Complex<T> product = complexOps.Multiply(predictedComplex, expectedComplex.Conjugate());
-            T magnitude = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(product.Real, product.Real), NumOps.Multiply(product.Imaginary, product.Imaginary)));
-            fidelity = NumOps.Add(fidelity, magnitude);
-        }
+        // p * conj(e) = (ac + bd) + (bc - ad)i
+        var real = Engine.TensorAdd(Engine.TensorMultiply(a, c), Engine.TensorMultiply(b, d));
+        var imaginary = Engine.TensorSubtract(Engine.TensorMultiply(b, c), Engine.TensorMultiply(a, d));
+
+        // fidelity = Σ |p * conj(e)|
+        var magnitude = Engine.TensorSqrt(Engine.TensorAdd(
+            Engine.TensorMultiply(real, real), Engine.TensorMultiply(imaginary, imaginary)));
+        T fidelity = Engine.TensorSum(magnitude);
 
         // Quantum fidelity loss: 1 - fidelity
         return NumOps.Subtract(NumOps.One, fidelity);

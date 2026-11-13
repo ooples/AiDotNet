@@ -221,40 +221,52 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         if (_diffusionSteps <= 0)
             throw new ArgumentOutOfRangeException(nameof(_diffusionSteps), "DiffusionSteps must be positive.");
 
-        _betas = new Vector<T>(_diffusionSteps);
-        _alphas = new Vector<T>(_diffusionSteps);
-        _alphasCumprod = new Vector<T>(_diffusionSteps);
-        _alphasCumprodPrev = new Vector<T>(_diffusionSteps);
-        _sqrtAlphasCumprod = new Vector<T>(_diffusionSteps);
-        _sqrtOneMinusAlphasCumprod = new Vector<T>(_diffusionSteps);
+        int steps = _diffusionSteps;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        T one = NumOps.One;
 
-        double cumulative = 1.0;
-        double rawPrevious = CosineAlphaBar(0);
-        for (int k = 0; k < _diffusionSteps; k++)
-        {
-            double raw = CosineAlphaBar(k + 1);
-            double beta = rawPrevious > 0.0 ? 1.0 - raw / rawPrevious : _betaEnd;
-            if (beta < _betaStart) beta = _betaStart;
-            if (beta > _betaEnd) beta = _betaEnd;
-            rawPrevious = raw;
+        // Squared-cosine alpha-bar at steps 0..K; beta_k = 1 - raw(k+1)/raw(k), the end beta when
+        // raw(k) is not positive, clipped to [betaStart, betaEnd].
+        var raw = CosineAlphaBar(Engine.TensorArange<T>(0, steps + 1, 1));
+        var next = Engine.TensorNarrow(raw, 0, 1, steps);
+        var previous = Engine.TensorNarrow(raw, 0, 0, steps);
+        var ratioBeta = Engine.TensorSubtract(Engine.TensorFullLike(next, one), Engine.TensorDivide(next, previous));
+        var betas = Engine.TensorClamp(
+            Engine.TensorWhere(
+                Engine.TensorGreaterThan(previous, NumOps.Zero),
+                ratioBeta,
+                Engine.TensorFullLike(ratioBeta, NumOps.FromDouble(_betaEnd))),
+            NumOps.FromDouble(_betaStart),
+            NumOps.FromDouble(_betaEnd));
 
-            _betas[k] = NumOps.FromDouble(beta);
-            _alphas[k] = NumOps.FromDouble(1.0 - beta);
-            _alphasCumprodPrev[k] = NumOps.FromDouble(cumulative);
-            cumulative *= 1.0 - beta;
-            _alphasCumprod[k] = NumOps.FromDouble(cumulative);
-            _sqrtAlphasCumprod[k] = NumOps.FromDouble(Math.Sqrt(cumulative));
-            _sqrtOneMinusAlphasCumprod[k] = NumOps.FromDouble(Math.Sqrt(Math.Max(0.0, 1.0 - cumulative)));
-        }
+        var alphas = Engine.TensorSubtract(Engine.TensorFullLike(betas, one), betas);
+        var alphasCumprod = Engine.TensorCumProd(alphas, 0);
+        var leadingOne = Engine.TensorFullLike(Engine.TensorNarrow(alphasCumprod, 0, 0, 1), one);
+        var alphasCumprodPrev = steps == 1
+            ? leadingOne
+            : Engine.TensorConcatenate(new[] { leadingOne, Engine.TensorNarrow(alphasCumprod, 0, 0, steps - 1) }, 0);
+        _betas = betas.ToVector();
+        _alphas = alphas.ToVector();
+        _alphasCumprod = alphasCumprod.ToVector();
+        _alphasCumprodPrev = alphasCumprodPrev.ToVector();
+        _sqrtAlphasCumprod = Engine.TensorSqrt(alphasCumprod).ToVector();
+        _sqrtOneMinusAlphasCumprod = Engine.TensorSqrt(Engine.TensorMax(
+            Engine.TensorSubtract(Engine.TensorFullLike(alphasCumprod, one), alphasCumprod), NumOps.Zero)).ToVector();
     }
 
     /// <summary>The unnormalized cosine alpha_bar of Nichol and Dhariwal 2021, Equation 17.</summary>
-    private double CosineAlphaBar(int step)
+    private Tensor<T> CosineAlphaBar(Tensor<T> steps)
     {
         const double Offset = 0.008;
-        double angle = ((double)step / _diffusionSteps + Offset) / (1.0 + Offset) * Math.PI / 2.0;
-        double cosine = Math.Cos(angle);
-        return cosine * cosine;
+        var angle = Engine.TensorDivideScalar(
+            Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(
+                    Engine.TensorAddScalar(Engine.TensorDivideScalar(steps, NumOps.FromDouble(_diffusionSteps)), NumOps.FromDouble(Offset)),
+                    NumOps.FromDouble(1.0 + Offset)),
+                NumOps.FromDouble(Math.PI)),
+            NumOps.FromDouble(2.0));
+        var cosine = Engine.TensorCos(angle);
+        return Engine.TensorMultiply(cosine, cosine);
     }
 
     private T SampleStandardNormal(Random rand)
@@ -476,13 +488,12 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         var fullForecast = Forecast(input, null);
         if (steps >= fullForecast.Length) return fullForecast;
         var result = new Tensor<T>(new[] { steps });
-        for (int i = 0; i < steps; i++)
-            result.Data.Span[i] = fullForecast[i];
+        fullForecast.AsSpan().Slice(0, steps).CopyTo(result.Data.Span);
         return result;
     }
 
     /// <inheritdoc />
-    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals); if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
     /// <inheritdoc />
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
@@ -550,32 +561,53 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         T one = NumOps.One;
         T guard = NumOps.FromDouble(1e-10);
         var step = new int[1];
+
+        // Equation 18's per-step coefficients, computed once for the whole schedule.
+        T[] coefficientXkTable, coefficientX0Table, sigmaTable;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var betas = Tensor<T>.FromVector(_betas);
+            var abar = Tensor<T>.FromVector(_alphasCumprod);
+            var abarPrev = Tensor<T>.FromVector(_alphasCumprodPrev);
+            var ones = Engine.TensorFullLike(abar, one);
+            var oneMinusBar = Engine.TensorAddScalar(Engine.TensorSubtract(ones, abar), guard);
+            var oneMinusPrev = Engine.TensorSubtract(ones, abarPrev);
+            coefficientXkTable = Engine.TensorDivide(
+                Engine.TensorMultiply(Engine.TensorSqrt(Tensor<T>.FromVector(_alphas)), oneMinusPrev), oneMinusBar).ToArray();
+            coefficientX0Table = Engine.TensorDivide(Engine.TensorMultiply(Engine.TensorSqrt(abarPrev), betas), oneMinusBar).ToArray();
+            sigmaTable = Engine.TensorSqrt(Engine.TensorDivide(Engine.TensorMultiply(oneMinusPrev, betas), oneMinusBar)).ToArray();
+        }
         for (int k = _diffusionSteps - 1; k >= 0; k--)
         {
             step[0] = k;
             var predicted = DenoiserForward(xk, mixed, autoregressiveInit, step, 1, outputLen);
 
-            T alphaBarPrev = _alphasCumprodPrev[k];
-            T oneMinusBar = NumOps.Add(NumOps.Subtract(one, _alphasCumprod[k]), guard);
-            T coefficientXk = NumOps.Divide(
-                NumOps.Multiply(NumOps.Sqrt(_alphas[k]), NumOps.Subtract(one, alphaBarPrev)),
-                oneMinusBar);
-            T coefficientX0 = NumOps.Divide(
-                NumOps.Multiply(NumOps.Sqrt(alphaBarPrev), _betas[k]),
-                oneMinusBar);
-            T sigma = k > 0
-                ? NumOps.Sqrt(NumOps.Divide(
-                    NumOps.Multiply(NumOps.Subtract(one, alphaBarPrev), _betas[k]), oneMinusBar))
-                : NumOps.Zero;
+            T coefficientXk = coefficientXkTable[k];
+            T coefficientX0 = coefficientX0Table[k];
+            T sigma = k > 0 ? sigmaTable[k] : NumOps.Zero;
 
-            for (int i = 0; i < outputLen; i++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                T x0Hat = i < predicted.Length ? predicted[i] : NumOps.Zero;
-                T mean = NumOps.Add(
-                    NumOps.Multiply(coefficientXk, xk[i]),
-                    NumOps.Multiply(coefficientX0, x0Hat));
-                T z = k > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                xk.Data.Span[i] = NumOps.Add(mean, NumOps.Multiply(sigma, z));
+                // x_hat_0 is the prediction's first outputLen values (zero past its end).
+                var gridShape = new[] { 1, outputLen };
+                int usedLen = Math.Min(predicted.Length, outputLen);
+                var x0Hat = new Tensor<T>(gridShape);
+                if (usedLen > 0)
+                    predicted.Contiguous().AsSpan().Slice(0, usedLen).CopyTo(x0Hat.Data.Span.Slice(0, usedLen));
+                var mean = Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(xk, coefficientXk),
+                    Engine.TensorMultiplyScalar(x0Hat, coefficientX0));
+
+                // Noise in the same order; none is drawn at the last step.
+                var z = new Tensor<T>(gridShape);
+                if (k > 0)
+                {
+                    var zSpan = z.Data.Span;
+                    for (int i = 0; i < outputLen; i++)
+                        zSpan[i] = SampleStandardNormal(rand);
+                }
+
+                xk = Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(z, sigma));
             }
         }
 
@@ -584,7 +616,7 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Shape[0]; int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length; int features = input.Shape.Length > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
+    protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Shape[0]; int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length; int features = input.Shape.Length > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; NumOps.ToFloatSpan(input.AsSpan().Slice(0, Math.Min(input.Length, inputData.Length)), inputData.AsSpan(0, Math.Min(input.Length, inputData.Length))); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, Math.Min(totalElements, output.Length)), output.Data.Span.Slice(0, Math.Min(totalElements, output.Length))); return output; }
 
     /// <summary>
     /// Runs the denoiser once over <paramref name="rows"/> rows: packs

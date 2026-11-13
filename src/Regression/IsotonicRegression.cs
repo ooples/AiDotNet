@@ -168,36 +168,26 @@ public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
         {
             // Compute OLS coefficients: beta = (X'X + λI)^-1 X'y
             var xWithInt = x.AddConstantColumn(NumOps.One);
+            var engine = AiDotNetEngine.Current;
             var xTx = xWithInt.Transpose().Multiply(xWithInt);
             var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            xTx = engine.MatrixAdd(xTx, Matrix<T>.CreateDiagonal(engine.Fill(xTx.Rows, NumOps.FromDouble(1e-10))));
             var solution = xTx.Inverse().Multiply(xTy);
             _olsIntercept = solution[0];
             _olsCoefficients = solution.Slice(1, x.Columns);
 
             // Project training data: x_proj = X * beta + intercept
-            xProjection = new Vector<T>(x.Rows);
-            for (int i = 0; i < x.Rows; i++)
-            {
-                T val = _olsIntercept;
-                for (int j = 0; j < x.Columns; j++)
-                    val = NumOps.Add(val, NumOps.Multiply(x[i, j], _olsCoefficients[j]));
-                xProjection[i] = val;
-            }
+            xProjection = ProjectRows(x, _olsCoefficients, x.Columns);
         }
 
-        // Sort by projected x values for PAV algorithm
-        var indices = Enumerable.Range(0, xProjection.Length)
-            .OrderBy(i => NumOps.ToDouble(xProjection[i]))
+        // Sort by projected x values for PAV algorithm (stable: tied values keep sample order)
+        var indices = xProjection
+            .Select((value, index) => (Value: value, Index: index))
+            .OrderBy(p => p.Value, Comparer<T>.Default)
+            .Select(p => p.Index)
             .ToArray();
-        _xValues = new Vector<T>(xProjection.Length);
-        _yValues = new Vector<T>(y.Length);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            _xValues[i] = xProjection[indices[i]];
-            _yValues[i] = y[indices[i]];
-        }
+        _xValues = RegressionEngineOps.Gather(xProjection, indices);
+        _yValues = RegressionEngineOps.Gather(y, indices);
 
         OptimizeModel(x, _yValues);
     }
@@ -326,13 +316,75 @@ public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
+        if (Alphas.Length == 0 || input.Rows == 0)
         {
-            predictions[i] = PredictSingle(input.GetRow(i));
+            return new Vector<T>(input.Rows);
         }
 
-        return predictions;
+        // Project every row to 1D using the same OLS projection used during training
+        Vector<T> projected = _olsCoefficients is not null
+            ? ProjectRows(input, _olsCoefficients, Math.Min(input.Columns, _olsCoefficients.Length))
+            : AiDotNetEngine.Current.GetColumn(input, 0); // Single-feature fallback
+
+        return PredictProjected(projected);
+    }
+
+    /// <summary>
+    /// Computes intercept + X[:, 0..featureCount) * coefficients[0..featureCount) for every row.
+    /// </summary>
+    private Vector<T> ProjectRows(Matrix<T> x, Vector<T> coefficients, int featureCount)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (featureCount <= 0)
+        {
+            return engine.Fill(x.Rows, _olsIntercept);
+        }
+
+        var features = featureCount == x.Columns ? x : x.GetSubMatrix(0, 0, x.Rows, featureCount);
+        var beta = featureCount == coefficients.Length ? coefficients : coefficients.GetSubVector(0, featureCount);
+        return engine.Add(engine.Fill(x.Rows, _olsIntercept), engine.MatrixVectorMultiply(features, beta));
+    }
+
+    /// <summary>
+    /// Looks up the fitted isotonic value for every projected input at once.
+    /// </summary>
+    /// <remarks>
+    /// For each value the upper-bound position p (the number of support points &lt;= x, capped at the last
+    /// point) is found with a sorted search. Point p wins when p &gt; 0 and point p-1 is strictly farther
+    /// away; otherwise point max(0, p-1) wins.
+    /// </remarks>
+    private Vector<T> PredictProjected(Vector<T> xs)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = SupportVectors.Rows;
+        int lastAlpha = Alphas.Length - 1;
+        var supportPoints = SupportVectors.GetColumn(0);
+
+        int[] upper = engine.TensorSearchSorted(
+            Tensor<T>.FromVector(supportPoints), Tensor<T>.FromVector(xs), right: true).ToArray();
+        var current = new int[upper.Length];
+        var previous = new int[upper.Length];
+        var hasPrevious = new bool[upper.Length];
+        for (int k = 0; k < upper.Length; k++)
+        {
+            int left = n == 1 ? 0 : Math.Min(upper[k], n - 1);
+            current[k] = left;
+            previous[k] = Math.Max(0, left - 1);
+            hasPrevious[k] = left > 0;
+        }
+
+        var currentDistance = engine.Abs(engine.Subtract(RegressionEngineOps.Gather(supportPoints, current), xs));
+        var previousDistance = engine.Abs(engine.Subtract(RegressionEngineOps.Gather(supportPoints, previous), xs));
+        var takeCurrent = engine.TensorGreaterThan(
+            Tensor<T>.FromVector(previousDistance), Tensor<T>.FromVector(currentDistance));
+
+        var currentAlpha = Tensor<T>.FromVector(
+            RegressionEngineOps.Gather(Alphas, current.Select(i => Math.Min(i, lastAlpha)).ToArray()));
+        var previousAlpha = Tensor<T>.FromVector(
+            RegressionEngineOps.Gather(Alphas, previous.Select(i => Math.Min(i, lastAlpha)).ToArray()));
+
+        var nearest = engine.TensorWhere(takeCurrent, currentAlpha, previousAlpha);
+        return engine.TensorWhere(hasPrevious, nearest, previousAlpha).ToVector();
     }
 
     /// <summary>
@@ -365,63 +417,19 @@ public partial class IsotonicRegression<T> : NonLinearRegressionBase<T>
         T x;
         if (_olsCoefficients is not null)
         {
-            x = _olsIntercept;
             int featureCount = Math.Min(input.Length, _olsCoefficients.Length);
-            for (int j = 0; j < featureCount; j++)
-                x = NumOps.Add(x, NumOps.Multiply(input[j], _olsCoefficients[j]));
+            x = featureCount <= 0
+                ? _olsIntercept
+                : NumOps.Add(_olsIntercept, AiDotNetEngine.Current.DotProduct(
+                    input.GetSubVector(0, featureCount), _olsCoefficients.GetSubVector(0, featureCount)));
         }
         else
         {
             x = input[0]; // Single-feature fallback
         }
 
-        int index = FindNearestIndex(x);
-        index = Math.Max(0, Math.Min(index, Alphas.Length - 1));
-        return Alphas[index];
-    }
-
-    /// <summary>
-    /// Finds the index of the nearest support vector to the given input value.
-    /// </summary>
-    /// <param name="x">The input value.</param>
-    /// <returns>The index of the nearest support vector.</returns>
-    private int FindNearestIndex(T x)
-    {
-        // Handle edge case: single support vector
-        if (SupportVectors.Rows == 1)
-        {
-            return 0;
-        }
-
-        int left = 0;
-        int right = SupportVectors.Rows - 1;
-
-        while (left < right)
-        {
-            int mid = (left + right) / 2;
-            if (NumOps.LessThanOrEquals(SupportVectors[mid, 0], x))
-            {
-                left = mid + 1;
-            }
-            else
-            {
-                right = mid;
-            }
-        }
-
-        // Ensure index is within bounds
-        if (left >= SupportVectors.Rows)
-        {
-            return SupportVectors.Rows - 1;
-        }
-
-        if (left > 0 && NumOps.GreaterThan(NumOps.Abs(NumOps.Subtract(SupportVectors[left - 1, 0], x)),
-                                           NumOps.Abs(NumOps.Subtract(SupportVectors[left, 0], x))))
-        {
-            return left;
-        }
-
-        return Math.Max(0, left - 1);
+        var result = PredictProjected(new Vector<T>(new[] { x }));
+        return result[0];
     }
 
     /// <inheritdoc />

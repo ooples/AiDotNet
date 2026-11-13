@@ -120,64 +120,24 @@ public partial class KNNDetector<T> : AnomalyDetectorBase<T>
         // Self-exclusion by index is only meaningful when X IS the training set, which the caller states.
         bool isSameAsTraining = excludeSelf;
 
-        var scores = new Vector<T>(X.Rows);
+        var trainingData = _trainingData ?? throw new InvalidOperationException("_trainingData is null where it is required.");
+        var engine = Engine;
+        int nTrain = trainingData.Rows;
 
-        for (int i = 0; i < X.Rows; i++)
+        // Self-exclusion: push each row's own entry past every real distance so it sorts last.
+        bool excludeOwnRow = isSameAsTraining && X.Rows == nTrain;
+        int available = excludeOwnRow ? nTrain - 1 : nTrain;
+
+        // Average of the k smallest remaining distances (the sum does not depend on how ties order),
+        // reduced per bounded block of query rows so the [X.Rows, nTrain] matrix is never built.
+        int count = Math.Min(_k, available);
+        if (count <= 0)
         {
-            // Get distances to all training points
-            var distances = ComputeDistances(X, i, (_trainingData ?? throw new InvalidOperationException("_trainingData is null where it is required.")));
-
-            // Sort and get k-nearest
-            // Sort distances while keeping index for self-exclusion
-            var sortedDistances = distances.ToArray()
-                .Select((d, idx) => (Distance: d, Index: idx))
-                .OrderBy(x => NumOps.ToDouble(x.Distance))
-                .ToList();
-
-            // Take k nearest neighbors, excluding self by index when scoring training data
-            T avgDistance = NumOps.Zero;
-            int count = 0;
-
-            foreach (var (distance, idx) in sortedDistances)
-            {
-                if (count >= _k) break;
-
-                if (isSameAsTraining && idx == i)
-                {
-                    continue;
-                }
-
-                avgDistance = NumOps.Add(avgDistance, distance);
-                count++;
-            }
-
-            scores[i] = count > 0 ? NumOps.Divide(avgDistance, NumOps.FromDouble(count)) : NumOps.Zero;
+            return new Vector<T>(X.Rows);
         }
 
-        return scores;
-    }
-
-    private Vector<T> ComputeDistances(Matrix<T> X, int rowIndex, Matrix<T> reference)
-    {
-        var distances = new Vector<T>(reference.Rows);
-        var queryPoint = new Vector<T>(X.Columns);
-
-        for (int j = 0; j < X.Columns; j++)
-        {
-            queryPoint[j] = X[rowIndex, j];
-        }
-
-        for (int i = 0; i < reference.Rows; i++)
-        {
-            var refPoint = new Vector<T>(reference.Columns);
-            for (int j = 0; j < reference.Columns; j++)
-            {
-                refPoint[j] = reference[i, j];
-            }
-
-            distances[i] = StatisticsHelper<T>.EuclideanDistance(queryPoint, refPoint);
-        }
-
-        return distances;
+        var nearest = AnomalyTensorOps.NearestNeighbors(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData),
+            count, excludeOwnRow, out _);
+        return engine.TensorDivideScalar(engine.ReduceSum(nearest, new[] { 1 }, false), NumOps.FromDouble(count)).ToVector();
     }
 }

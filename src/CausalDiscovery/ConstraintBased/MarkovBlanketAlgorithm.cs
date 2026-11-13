@@ -157,42 +157,38 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 
     private int[,] DiscretizeData(Matrix<T> data, int n, int d)
     {
+        var x = Tensor<T>.FromMatrix(data);
+        var finite = Engine.TensorIsFinite(x);
+        var shape = new[] { n, d };
+
+        // Column min/max over the finite entries only; NaN/Infinity are skipped.
+        var lowest = Engine.TensorFullLike(x, NumOps.MinValue);
+        var max = Engine.ReduceMax(Engine.TensorWhere(finite, x, lowest), new[] { 0 }, true);
+        var min = Engine.TensorNegate(
+            Engine.ReduceMax(Engine.TensorWhere(finite, Engine.TensorNegate(x), lowest), new[] { 0 }, true));
+        // The range and the offsets from the minimum are formed from halved values: max/2 - min/2 and
+        // x/2 - min/2 are finite for every finite x in T, where max - min can overflow (e.g. Half with
+        // -40000 and 40000). Halving scales numerator and denominator alike, so the bins are unchanged.
+        T half = NumOps.FromDouble(0.5);
+        var halfMin = Engine.TensorMultiplyScalar(min, half);
+        var halfRange = Engine.TensorSubtract(Engine.TensorMultiplyScalar(max, half), halfMin);
+
+        // A column with no finite values (min > max) or a range at most MinDiscretizationRange maps to bin 0.
+        var spread = Engine.TensorGreaterThan(halfRange, NumOps.FromDouble(MinDiscretizationRange * 0.5));
+        var safeRange = Engine.TensorWhere(spread, halfRange, Engine.TensorOnesLike(halfRange));
+        var scaled = Engine.TensorMultiplyScalar(
+            Engine.TensorDivide(
+                Engine.TensorSubtract(Engine.TensorMultiplyScalar(x, half), Engine.TensorBroadcastTo(halfMin, shape)),
+                Engine.TensorBroadcastTo(safeRange, shape)),
+            NumOps.FromDouble(_nBins - 1));
+        var bins = Engine.TensorMin(Engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
+
+        var zeros = Engine.TensorZerosLike(x);
+        bins = Engine.TensorWhere(finite, bins, zeros);
+        bins = Engine.TensorWhere(Engine.TensorBroadcastTo(spread, shape), bins, zeros);
+
         var result = new int[n, d];
-        for (int j = 0; j < d; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (double.IsNaN(val) || double.IsInfinity(val))
-                    continue;
-                min = Math.Min(min, val);
-                max = Math.Max(max, val);
-            }
-
-            // If all values were NaN/Infinity, assign bin 0
-            if (min > max)
-            {
-                for (int i = 0; i < n; i++)
-                    result[i, j] = 0;
-                continue;
-            }
-
-            double range = max - min;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (double.IsNaN(val) || double.IsInfinity(val))
-                {
-                    result[i, j] = 0;
-                    continue;
-                }
-                result[i, j] = range > MinDiscretizationRange
-                    ? Math.Min((int)((val - min) / range * (_nBins - 1)), _nBins - 1)
-                    : 0;
-            }
-        }
-
+        Buffer.BlockCopy(bins.Cast<int>().ToArray(), 0, result, 0, n * d * sizeof(int));
         return result;
     }
 

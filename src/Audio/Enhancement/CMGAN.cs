@@ -174,14 +174,7 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Apply spectral subtraction if noise profile is available (per-bin, handles length differences)
         if (_noiseProfile is not null)
-        {
-            int len = Math.Min(stft.Length, _noiseProfile.Length);
-            for (int i = 0; i < len; i++)
-            {
-                T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
-                stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
-            }
-        }
+            stft = AudioEngineOps.SubtractNoiseClampPrefix(Engine, stft, _noiseProfile);
 
         Tensor<T> decoded;
         if (IsOnnxMode && OnnxEncoder is not null)
@@ -200,10 +193,7 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             T s = NumOps.FromDouble(strength);
             T inv = NumOps.FromDouble(1.0 - strength);
-            for (int i = 0; i < result.Length && i < audio.Length; i++)
-            {
-                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
-            }
+            result = AudioEngineOps.BlendPrefix(Engine, result, audio, s, inv);
         }
 
         return result;
@@ -222,11 +212,10 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         ThrowIfDisposed();
         _streamingBuffer ??= [];
-        for (int i = 0; i < audioChunk.Length; i++) _streamingBuffer.Add(audioChunk[i]);
+        _streamingBuffer.AddRange(audioChunk.ToArray());
         int frameSize = _options.FftSize;
         if (_streamingBuffer.Count < frameSize) return new Tensor<T>([0]);
-        var frame = new Tensor<T>([frameSize]);
-        for (int i = 0; i < frameSize; i++) frame[i] = _streamingBuffer[i];
+        var frame = new Tensor<T>(_streamingBuffer.GetRange(0, frameSize).ToArray(), [frameSize]);
         _streamingBuffer.RemoveRange(0, _options.HopLength);
         return Enhance(frame);
     }
@@ -328,15 +317,7 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         if (Math.Abs(exponent - 1.0) <= ExponentComparisonTolerance) return values;
 
-        var result = new Tensor<T>(values._shape);
-        for (int i = 0; i < values.Length; i++)
-        {
-            double v = NumOps.ToDouble(values.Data.Span[i]);
-            double magnitude = Math.Pow(Math.Abs(v), exponent);
-            result.Data.Span[i] = NumOps.FromDouble(v < 0 ? -magnitude : magnitude);
-        }
-
-        return result;
+        return AudioEngineOps.SignedPower(Engine, values, exponent);
     }
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
@@ -347,10 +328,7 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         if (stft.Length == mask.Length && stft._shape.SequenceEqual(mask._shape))
             return Engine.TensorMultiply(stft, mask);
 
-        var result = new Tensor<T>(stft._shape);
-        for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
-            result[i] = NumOps.Multiply(stft[i], mask[i]);
-        return result;
+        return AudioEngineOps.MultiplyPrefix(Engine, stft, mask);
     }
 
     private Tensor<T> ComputeISTFT(Tensor<T> magnitude, int originalLength)
@@ -400,30 +378,25 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         }
 
         // Magnitude branch: mask the noisy magnitude, keep the noisy phase.
-        var maskedMagnitude = new Tensor<T>(noisyMagnitude._shape);
-        for (int t = 0; t < frames; t++)
-        {
-            int outBase = t * f;
-            int decBase = t * 3 * f;
-            for (int k = 0; k < f; k++)
-                maskedMagnitude[outBase + k] = NumOps.Multiply(decoded[decBase + k], noisyMagnitude[outBase + k]);
-        }
+        // Decoder layout per frame: [mask (F) | interleaved real/imag pairs (2F)].
+        int span = frames * f;
+        var decodedRows = Engine.Reshape(
+            Engine.TensorSlice(AudioEngineOps.Flatten(Engine, decoded), [0], [frames * 3 * f]), [frames, 3 * f]);
+        var maskHead = Engine.Reshape(Engine.TensorSlice(decodedRows, [0, 0], [frames, f]), [span]);
+        var pairs = Engine.Reshape(Engine.TensorSlice(decodedRows, [0, f], [frames, 2 * f]), [frames, f, 2]);
+        var realHead = Engine.Reshape(Engine.TensorSlice(pairs, [0, 0, 0], [frames, f, 1]), [span]);
+        var imagHead = Engine.Reshape(Engine.TensorSlice(pairs, [0, 0, 1], [frames, f, 1]), [span]);
+
+        // Bins past frames * F (if any) stay zero, as before.
+        var maskedMagnitude = Engine.Reshape(
+            AudioEngineOps.FitLength(Engine, Engine.TensorMultiply(maskHead, AudioEngineOps.FitLength(Engine, noisyMagnitude, span)), noisyMagnitude.Length),
+            noisyMagnitude.Shape.ToArray());
 
         var spectrogram = ShortTimeFourierTransform<T>.PolarToComplex(maskedMagnitude, _lastPhase);
 
         // Complex branch: add the directly-predicted real/imaginary pair.
-        for (int t = 0; t < frames; t++)
-        {
-            int specBase = t * f;
-            int decBase = t * 3 * f + f;
-            for (int k = 0; k < f; k++)
-            {
-                var current = spectrogram[specBase + k];
-                spectrogram[specBase + k] = new Complex<T>(
-                    NumOps.Add(current.Real, decoded[decBase + (2 * k)]),
-                    NumOps.Add(current.Imaginary, decoded[decBase + (2 * k) + 1]));
-            }
-        }
+        var real = AudioEngineOps.MapPrefix(Engine, Engine.TensorReal(spectrogram), span, head => Engine.TensorAdd(head, realHead));
+        var imag = AudioEngineOps.MapPrefix(Engine, Engine.TensorImag(spectrogram), span, head => Engine.TensorAdd(head, imagHead));
 
         // Undo the power-law compression applied in ComputeSTFT. Everything above operates in
         // the compressed domain (the mask scales a compressed magnitude and the complex head is
@@ -434,22 +407,16 @@ public partial class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             Math.Abs(c) > ExponentComparisonTolerance)
         {
             double inverseExponent = 1.0 / c;
-            for (int i = 0; i < spectrogram.Length; i++)
-            {
-                var bin = spectrogram[i];
-                double re = NumOps.ToDouble(bin.Real);
-                double im = NumOps.ToDouble(bin.Imaginary);
-                double compressedMagnitude = Math.Sqrt((re * re) + (im * im));
-                if (compressedMagnitude <= 0) continue;
+            var compressedMagnitude = Engine.TensorSqrt(Engine.TensorAdd(Engine.TensorSquare(real), Engine.TensorSquare(imag)));
+            var gain = Engine.TensorDivide(Engine.TensorPower(compressedMagnitude, NumOps.FromDouble(inverseExponent)), compressedMagnitude);
 
-                double gain = Math.Pow(compressedMagnitude, inverseExponent) / compressedMagnitude;
-                spectrogram[i] = new Complex<T>(
-                    NumOps.FromDouble(re * gain),
-                    NumOps.FromDouble(im * gain));
-            }
+            // A zero-magnitude bin is left as is (its gain would be 0/0).
+            var silent = Engine.TensorEquals(compressedMagnitude, NumOps.Zero);
+            real = Engine.TensorWhere(silent, real, Engine.TensorMultiply(real, gain));
+            imag = Engine.TensorWhere(silent, imag, Engine.TensorMultiply(imag, gain));
         }
 
-        return _stft.Inverse(spectrogram, originalLength);
+        return _stft.Inverse(Engine.TensorComplex(real, imag), originalLength);
     }
 
     private static int NextPowerOfTwo(int v)

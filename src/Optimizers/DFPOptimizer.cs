@@ -419,16 +419,11 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         }
 
         // Compute search direction: d = -H * g
-        var direction = _inverseHessian.Multiply(gradient);
-        var directionSpan = direction.AsWritableSpan();
+        var engine = Engine;
+        var scaledDirection = (Vector<T>)engine.Multiply(
+            (Vector<T>)engine.Negate(_inverseHessian.Multiply(gradient)), _adaptiveLearningRate);
+        var direction = (Vector<T>)engine.Add(parameters, scaledDirection);
         var parameterSpan = parameters.AsSpan();
-        for (int i = 0; i < directionSpan.Length; i++)
-        {
-            T scaledDirection = NumOps.Multiply(
-                NumOps.Negate(directionSpan[i]),
-                _adaptiveLearningRate);
-            directionSpan[i] = NumOps.Add(parameterSpan[i], scaledDirection);
-        }
 
         // Store state for next iteration
         if (_previousParameters is null || _previousParameters.Length != parameters.Length)
@@ -511,42 +506,20 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     private sealed class DfpDirection : ISearchDirectionRule
     {
         private readonly DFPOptimizer<T, TInput, TOutput> _owner;
-        private T[,] _inverse = new T[0, 0];
-        private int _size;
+        private Matrix<T> _inverse = new Matrix<T>(0, 0);
 
         public DfpDirection(DFPOptimizer<T, TInput, TOutput> owner) => _owner = owner;
 
         public void Reset(int parameterCount)
         {
-            _size = parameterCount;
-            _inverse = new T[parameterCount, parameterCount];
-
-            for (int i = 0; i < parameterCount; i++)
-            {
-                for (int j = 0; j < parameterCount; j++)
-                {
-                    _inverse[i, j] = i == j ? _owner.NumOps.One : _owner.NumOps.Zero;
-                }
-            }
+            _inverse = Matrix<T>.CreateIdentity(parameterCount);
         }
 
         public Vector<T> ComputeDirection(Vector<T> gradient)
         {
-            var numOps = _owner.NumOps;
-            var direction = new Vector<T>(_size);
-
-            for (int i = 0; i < _size; i++)
-            {
-                T total = numOps.Zero;
-                for (int j = 0; j < _size; j++)
-                {
-                    total = numOps.Add(total, numOps.Multiply(_inverse[i, j], gradient[j]));
-                }
-
-                direction[i] = numOps.Negate(total);
-            }
-
-            return direction;
+            // d = -H g
+            var engine = _owner.Engine;
+            return (Vector<T>)engine.Negate(engine.MatrixVectorMultiply(_inverse, gradient));
         }
 
         public void Observe(
@@ -561,40 +534,19 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             }
 
             // H y, and then y' H y.
-            var product = new T[_size];
-            T quadratic = numOps.Zero;
-
-            for (int i = 0; i < _size; i++)
-            {
-                T total = numOps.Zero;
-                for (int j = 0; j < _size; j++)
-                {
-                    total = numOps.Add(total, numOps.Multiply(_inverse[i, j], gradientChange[j]));
-                }
-
-                product[i] = total;
-                quadratic = numOps.Add(quadratic, numOps.Multiply(gradientChange[i], total));
-            }
+            var engine = _owner.Engine;
+            var product = engine.MatrixVectorMultiply(_inverse, gradientChange);
+            T quadratic = engine.DotProduct(gradientChange, product);
 
             if (!numOps.GreaterThan(quadratic, numOps.FromDouble(1e-12)))
             {
                 return;
             }
 
-            for (int i = 0; i < _size; i++)
-            {
-                for (int j = 0; j < _size; j++)
-                {
-                    T outer = numOps.Divide(
-                        numOps.Multiply(step[i], step[j]), curvature);
-
-                    T correction = numOps.Divide(
-                        numOps.Multiply(product[i], product[j]), quadratic);
-
-                    _inverse[i, j] = numOps.Subtract(
-                        numOps.Add(_inverse[i, j], outer), correction);
-                }
-            }
+            // H + s s' / (y's) - (H y)(H y)' / (y' H y)
+            var outer = engine.MatrixMultiplyScalar(engine.OuterProduct(step, step), numOps.Divide(numOps.One, curvature));
+            var correction = engine.MatrixMultiplyScalar(engine.OuterProduct(product, product), numOps.Divide(numOps.One, quadratic));
+            _inverse = engine.MatrixSubtract(engine.MatrixAdd(_inverse, outer), correction);
         }
     }
 

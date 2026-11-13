@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -36,7 +37,7 @@ public static class InformationCoefficient<T>
     /// </summary>
     public static T Pearson(IReadOnlyList<T> predicted, IReadOnlyList<T> realized)
     {
-        return NumOps.FromDouble(PearsonDouble(ToDoubles(predicted), ToDoubles(realized)));
+        return PearsonCore(ToTensor(predicted), ToTensor(realized));
     }
 
     /// <summary>
@@ -45,9 +46,7 @@ public static class InformationCoefficient<T>
     /// </summary>
     public static T Spearman(IReadOnlyList<T> predicted, IReadOnlyList<T> realized)
     {
-        var p = ToDoubles(predicted);
-        var r = ToDoubles(realized);
-        return NumOps.FromDouble(PearsonDouble(Ranks(p), Ranks(r)));
+        return PearsonCore(Ranks(ToTensor(predicted)), Ranks(ToTensor(realized)));
     }
 
     /// <summary>
@@ -76,112 +75,83 @@ public static class InformationCoefficient<T>
             return (NumOps.Zero, NumOps.Zero, NumOps.Zero);
         }
 
-        double sum = 0.0;
-        for (int i = 0; i < periods; i++)
-        {
-            sum += NumOps.ToDouble(perPeriodIcs[i]);
-        }
-
-        double mean = sum / periods;
-
-        double sse = 0.0;
-        for (int i = 0; i < periods; i++)
-        {
-            double d = NumOps.ToDouble(perPeriodIcs[i]) - mean;
-            sse += d * d;
-        }
+        var engine = AiDotNetEngine.Current;
+        var ics = ToTensor(perPeriodIcs);
+        T mean = engine.TensorMean(ics);
+        T sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(ics, mean));
 
         // Sample standard deviation (n-1), consistent with the rest of the Finance utilities.
-        double std = Math.Sqrt(sse / (periods - 1));
-        double icir = std > 0.0 ? mean / std * Math.Sqrt(periods) : 0.0;
-        return (NumOps.FromDouble(mean), NumOps.FromDouble(std), NumOps.FromDouble(icir));
+        T std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(periods - 1)));
+        T icir = NumOps.GreaterThan(std, NumOps.Zero)
+            ? NumOps.Multiply(NumOps.Divide(mean, std), NumOps.Sqrt(NumOps.FromDouble(periods)))
+            : NumOps.Zero;
+        return (mean, std, icir);
     }
 
     // ---- internal double-precision helpers (statistical kernels) ----
 
-    private static double[] ToDoubles(IReadOnlyList<T> values)
+    private static Tensor<T> ToTensor(IReadOnlyList<T> values)
     {
-        var result = new double[values.Count];
-        for (int i = 0; i < values.Count; i++)
+        if (values is null)
         {
-            result[i] = NumOps.ToDouble(values[i]);
+            throw new ArgumentNullException(nameof(values));
         }
 
-        return result;
+        return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray()));
     }
 
-    private static double PearsonDouble(double[] x, double[] y)
+    private static T PearsonCore(Tensor<T> x, Tensor<T> y)
     {
         int n = Math.Min(x.Length, y.Length);
         if (n < 2)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
-        double mx = 0.0, my = 0.0;
-        for (int i = 0; i < n; i++)
+        var engine = AiDotNetEngine.Current;
+        var xs = n == x.Length ? x : engine.TensorSlice(x, new[] { 0 }, new[] { n });
+        var ys = n == y.Length ? y : engine.TensorSlice(y, new[] { 0 }, new[] { n });
+        var dx = engine.TensorSubtractScalar(xs, engine.TensorMean(xs));
+        var dy = engine.TensorSubtractScalar(ys, engine.TensorMean(ys));
+        T sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
+        T sxx = engine.TensorSumOfSquares(dx);
+        T syy = engine.TensorSumOfSquares(dy);
+
+        T denom = NumOps.Sqrt(NumOps.Multiply(sxx, syy));
+        if (NumOps.LessThanOrEquals(denom, NumOps.Zero))
         {
-            mx += x[i];
-            my += y[i];
+            return NumOps.Zero;
         }
 
-        mx /= n;
-        my /= n;
-
-        double sxy = 0.0, sxx = 0.0, syy = 0.0;
-        for (int i = 0; i < n; i++)
+        T r = NumOps.Divide(sxy, denom);
+        // Clamp to [-1, 1] to absorb floating-point overshoot; NaN passes through as before.
+        T minusOne = NumOps.Negate(NumOps.One);
+        if (NumOps.LessThan(r, minusOne))
         {
-            double dx = x[i] - mx;
-            double dy = y[i] - my;
-            sxy += dx * dy;
-            sxx += dx * dx;
-            syy += dy * dy;
+            return minusOne;
         }
 
-        double denom = Math.Sqrt(sxx * syy);
-        if (denom <= 0.0)
-        {
-            return 0.0;
-        }
-
-        double r = sxy / denom;
-        // Clamp to [-1, 1] to absorb floating-point overshoot (net471-safe: no Math.Clamp).
-        return Math.Max(-1.0, Math.Min(1.0, r));
+        return NumOps.GreaterThan(r, NumOps.One) ? NumOps.One : r;
     }
 
     /// <summary>Tie-averaged ("fractional") ranks of a sample, 1-based.</summary>
-    private static double[] Ranks(double[] values)
+    /// <remarks>
+    /// A tied block occupying sorted positions [j, k] gets (j + k) / 2 + 1. With j the count of smaller values and
+    /// k + 1 the count of values not larger, that is (below + notAbove + 1) / 2, read off two binary searches.
+    /// </remarks>
+    private static Tensor<T> Ranks(Tensor<T> values)
     {
-        int n = values.Length;
-        var idx = new int[n];
-        for (int i = 0; i < n; i++)
+        if (values.Length == 0)
         {
-            idx[i] = i;
+            return values;
         }
 
-        Array.Sort(idx, (a, b) => values[a].CompareTo(values[b]));
-
-        var ranks = new double[n];
-        int j = 0;
-        while (j < n)
-        {
-            int k = j;
-            while (k + 1 < n && values[idx[k + 1]] == values[idx[j]])
-            {
-                k++;
-            }
-
-            // Average rank for the tied block [j, k] (1-based ranks => +1).
-            double avg = (j + k) / 2.0 + 1.0;
-            for (int t = j; t <= k; t++)
-            {
-                ranks[idx[t]] = avg;
-            }
-
-            j = k + 1;
-        }
-
-        return ranks;
+        var engine = AiDotNetEngine.Current;
+        var sorted = engine.TensorSort(values, 0, false).Values;
+        var below = engine.TensorSearchSorted(sorted, values, false);
+        var notAbove = engine.TensorSearchSorted(sorted, values, true);
+        var doubled = engine.TensorAddScalar(engine.TensorAdd(below, notAbove), 1).Cast<T>();
+        return engine.TensorMultiplyScalar(doubled, NumOps.FromDouble(0.5));
     }
 
     private static (double T, double P) SignificanceDouble(double ic, int n)

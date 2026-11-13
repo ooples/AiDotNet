@@ -140,4 +140,34 @@ public class PATEGANPaperTests
         var after = trained.Predict(z);
         Assert.True(Enumerable.Range(0, z.Length).Max(i => Math.Abs(after[i] - before[i])) > 1e-3);
     }
+    [Fact(Timeout = 60000)]
+    public async Task Encoding_GivesANegativeIndexColumnItsOwnSlot()
+    {
+        await Task.Yield();
+        // A categorical column with no listed categories whose indices are all negative still gets one slot: the
+        // row's one-hot lands in that column's block, not in the slot of the column before it.
+        var data = new Matrix<double>(6, 2);
+        for (int i = 0; i < 6; i++)
+        {
+            data[i, 0] = i;
+            data[i, 1] = -1;
+        }
+        var columns = new List<ColumnMetadata>
+        {
+            new("Value", ColumnDataType.Continuous, columnIndex: 0),
+            new("Index", ColumnDataType.Categorical, Array.Empty<string>(), columnIndex: 1),
+        };
+        var generator = new PATEGANGenerator<double>(Architecture(), new PATEGANOptions<double> { Seed = 1, NumTeachers = 2, BatchSize = 4 });
+        generator.Fit(data, columns, epochs: 0);
+
+        Assert.Equal(2, generator.EncodedWidth);
+        var encoded = generator.EncodeRows(data);
+        for (int i = 0; i < 6; i++)
+        {
+            Assert.Equal(i / 5.0, encoded[i, 0], 12);
+            Assert.Equal(1.0, encoded[i, 1]);
+        }
+        var decoded = generator.Generate(4);
+        for (int i = 0; i < 4; i++) Assert.Equal(0.0, decoded[i, 1]);
+    }
 }
