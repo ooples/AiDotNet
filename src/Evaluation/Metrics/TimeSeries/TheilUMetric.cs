@@ -52,19 +52,12 @@ public class TheilUMetric<T> : ITimeSeriesMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // Numerator: Sum of squared forecast errors
-        T sumSquaredError = engine.TensorSumOfSquares(engine.TensorSubtract(pred, actual));
-
-        // Denominator: Sum of squared actual changes (naive no-change forecast error)
-        T sumSquaredChange = engine.TensorSumOfSquares(engine.TensorDiff(actual, 1, 0));
-
-        if (NumOps.LessThan(sumSquaredChange, tolerance))
-            return NumOps.LessThan(sumSquaredError, tolerance) ? NumOps.Zero : NumOps.MaxValue;
-
-        return NumOps.Sqrt(NumOps.Divide(sumSquaredError, sumSquaredChange));
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double sumSquaredError = engine.TensorSumOfSquares(engine.TensorSubtract(pred, actual));
+        double sumSquaredChange = engine.TensorSumOfSquares(engine.TensorDiff(actual, 1, 0));
+        if (sumSquaredChange < 1e-10)
+            return sumSquaredError < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
+        return NumOps.FromDouble(Math.Sqrt(sumSquaredError / sumSquaredChange));
     }
 }

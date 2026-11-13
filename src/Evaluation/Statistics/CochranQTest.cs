@@ -65,16 +65,16 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
         var predicted = EvaluationTensorOps<T>.GreaterOrEqualMask(EvaluationTensorOps<T>.StackRows(predictions, n), half);
         var actualPositive = EvaluationTensorOps<T>.GreaterOrEqualMask(new Tensor<T>(actuals, new[] { n }), half);
         var X = EvaluationTensorOps<T>.PairEqualMask(
-            predicted, engine.TensorBroadcastTo(engine.Reshape(actualPositive, new[] { 1, n }), new[] { k, n }));
+            predicted, engine.TensorBroadcastTo(engine.Reshape(actualPositive, new[] { 1, n }), new[] { k, n })).Cast<double>();
 
         // Row (sample) and column (classifier) totals
         var rowTotals = engine.ReduceSum(X, new[] { 0 }, false);
         var colTotals = engine.ReduceSum(X, new[] { 1 }, false);
-        int grandTotal = EvaluationTensorOps<T>.Count(X);
+        int grandTotal = EvaluationTensorOps<double>.Count(X);
 
         // Cochran's Q statistic
-        double sumColSquares = NumOps.ToDouble(engine.TensorSumOfSquares(colTotals));
-        double sumRowSquares = NumOps.ToDouble(engine.TensorSumOfSquares(rowTotals));
+        double sumColSquares = engine.TensorSumOfSquares(colTotals);
+        double sumRowSquares = engine.TensorSumOfSquares(rowTotals);
         double sumRowTotals = grandTotal;
 
         double numerator = (k - 1) * (k * sumColSquares - (double)grandTotal * grandTotal);
@@ -98,7 +98,7 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
         double pValue = 1 - ChiSquareCDF(Q, df);
 
         // Compute accuracy for each classifier
-        var accuracies = engine.TensorDivideScalar(colTotals, NumOps.FromDouble(n));
+        var accuracies = engine.TensorDivideScalar(colTotals, (double)n);
 
         return new StatisticalTestResult<T>
         {

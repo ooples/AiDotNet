@@ -484,5 +484,110 @@ public class EvaluationNumericalMemoryTests
         Assert.Equal(1, EvaluationTensorOps<decimal>.CompareScanBestIndex(values, true));
         Assert.Equal(3, EvaluationTensorOps<decimal>.CompareScanBestIndex(values, false));
     }
+
+    [Fact]
+    public void HalfDirectionalAccuracy_CountsFlatAndExtremeChangesCorrectly()
+    {
+        var constant = Enumerable.Repeat((Half)60000, 70000).ToArray();
+        Assert.Equal((Half)1, new MeanDirectionalAccuracyMetric<Half>().Compute(constant, constant));
+        Half[] rising = { (Half)(-60000), (Half)0, (Half)60000 };
+        Half[] falling = { (Half)60000, (Half)0, (Half)(-60000) };
+        Assert.Equal((Half)1, new MeanDirectionalAccuracyMetric<Half>().Compute(rising, rising));
+        Assert.Equal((Half)0, new MeanDirectionalAccuracyMetric<Half>().Compute(rising, falling));
+    }
+
+    [Fact]
+    public void HalfTimeSeriesScaling_PreservesFiniteRatiosAndZeroBaselines()
+    {
+        const int count = 70000;
+        var actual = Enumerable.Range(0, count).Select(i => i % 2 == 0 ? (Half)(-60000) : (Half)60000).ToArray();
+        var predicted = new Half[count];
+        var mase = new AiDotNet.Evaluation.Metrics.TimeSeries.MASEMetric<Half>();
+        var seasonal = new AiDotNet.Evaluation.Metrics.TimeSeries.MASESeasonalMetric<Half>(1);
+        var theil = new AiDotNet.Evaluation.Metrics.TimeSeries.TheilUMetric<Half>();
+        Assert.Equal((Half)0.5, mase.Compute(predicted, actual));
+        Assert.Equal((Half)0.5, seasonal.Compute(predicted, actual));
+        Assert.Equal((Half)Math.Sqrt((double)count / (4 * (count - 1))), theil.Compute(predicted, actual));
+        var zeros = new Half[3];
+        Half[] ones = { (Half)1, (Half)1, (Half)1 };
+        Assert.Equal((Half)0, mase.Compute(zeros, zeros));
+        Assert.Equal((Half)0, seasonal.Compute(zeros, zeros));
+        Assert.Equal((Half)0, theil.Compute(zeros, zeros));
+        Assert.Equal(Half.MaxValue, mase.Compute(ones, zeros));
+        Assert.Equal(Half.MaxValue, seasonal.Compute(ones, zeros));
+        Assert.Equal(Half.MaxValue, theil.Compute(ones, zeros));
+    }
+
+    [Fact]
+    public void HalfPoissonDeviance_PreservesPositiveFloorAndLargeReduction()
+    {
+        var metric = new PoissonDevianceMetric<Half>();
+        Assert.Equal((Half)(2 * (Math.Log(1e10) - (1 - 1e-10))),
+            metric.Compute(new Half[1], new[] { (Half)1 }));
+        var predicted = Enumerable.Repeat((Half)1, 70000).ToArray();
+        var actual = Enumerable.Repeat((Half)2, predicted.Length).ToArray();
+        Assert.Equal((Half)(2 * (2 * Math.Log(2) - 1)), metric.Compute(predicted, actual));
+    }
+
+    [Theory]
+    [InlineData(1.0, 1.0)]
+    [InlineData(1.5, 0.0001)]
+    [InlineData(2.0, 0.000000059604644775390625)]
+    public void HalfTweedieLoss_PreservesFloorAcrossDistributionBranches(double power, double label)
+    {
+        Half observed = (Half)label;
+        double y = (double)observed, mu = 1e-10;
+        double expected = power == 1
+            ? 2 * (y * Math.Log(y / mu) - (y - mu))
+            : power == 2
+                ? 2 * ((y - mu) / mu - Math.Log(y / mu))
+                : 2 * (Math.Max(1e-10, Math.Pow(y, 2 - power)) / ((1 - power) * (2 - power))
+                    - y * Math.Pow(mu, 1 - power) / (1 - power)
+                    + Math.Pow(mu, 2 - power) / (2 - power));
+        Assert.True(Half.IsFinite((Half)expected));
+        Assert.Equal((Half)expected, new TweedieLossMetric<Half>(power).Compute(new Half[1], new[] { observed }));
+    }
+
+    [Fact]
+    public void HalfTweedieNormal_KeepsLargeSquaredErrorsUntilMean()
+    {
+        var predicted = new Half[70000];
+        predicted[0] = (Half)60000;
+        Assert.Equal((Half)(3600000000.0 / predicted.Length),
+            new TweedieLossMetric<Half>(0).Compute(predicted, new Half[predicted.Length]));
+    }
+
+    [Fact]
+    public void HalfCochranQ_ReducesLargeSuccessCountsWithoutOverflow()
+    {
+        const int count = 70000;
+        var first = Enumerable.Range(0, count).Select(i => i < 35100 ? (Half)0 : (Half)1).ToArray();
+        var second = Enumerable.Range(0, count).Select(i => i < 35000 ? (Half)0 : (Half)1).ToArray();
+        var metric = new CochranQTest<Half>();
+        var result = metric.Test(new[] { first, second }, new Half[count]);
+        Assert.Equal((Half)100, result.Statistic);
+        Assert.True(result.IsSignificant);
+        Assert.Equal((Half)0, result.PValue);
+        var identical = metric.Test(new[] { first, first }, new Half[count]);
+        Assert.Equal((Half)0, identical.Statistic);
+        Assert.Equal((Half)1, identical.PValue);
+    }
+
+    [Fact]
+    public void HalfPairedT_KeepsDifferencesAndVarianceWide()
+    {
+        var metric = new PairedTTest<Half>();
+        Half[] first = { (Half)60000, (Half)60000, (Half)60000 };
+        Half[] second = { (Half)(-60000), (Half)0, (Half)60000 };
+        var result = metric.Test(first, second);
+        Assert.Equal((Half)Math.Sqrt(3), result.Statistic);
+        Assert.Equal((Half)1, result.EffectSize);
+        var symmetric = metric.Test(new[] { (Half)(-60000), (Half)0, (Half)60000 },
+            new[] { (Half)60000, (Half)0, (Half)(-60000) });
+        Assert.Equal((Half)0, symmetric.Statistic);
+        Assert.Equal((Half)0, symmetric.EffectSize);
+        Assert.Equal((Half)1, symmetric.PValue);
+    }
+
 }
 #endif

@@ -65,51 +65,43 @@ public class TweedieLossMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var y = actual;
-        var mu = EvaluationTensorOps<T>.MaxPreservingNaN(pred, NumOps.FromDouble(1e-10));
-        var two = NumOps.FromDouble(2.0);
+        var y = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var mu = EvaluationTensorOps<double>.MaxPreservingNaN(
+            EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>(), 1e-10);
         var zeros = engine.TensorZerosLike(y);
-        var yPositive = engine.TensorGreaterThan(y, NumOps.Zero);
-        Tensor<T> loss;
+        var yPositive = engine.TensorGreaterThan(y, 0.0);
+        Tensor<double> loss;
 
-        if (Math.Abs(_power) < 1e-10) // Normal (p = 0)
+        if (Math.Abs(_power) < 1e-10)
         {
             loss = engine.TensorSquare(engine.TensorSubtract(y, mu));
         }
-        else if (Math.Abs(_power - 1) < 1e-10) // Poisson (p = 1)
+        else if (Math.Abs(_power - 1) < 1e-10)
         {
-            // y > 0 ? 2 * (y * log(y / mu) - (y - mu)) : 2 * mu
             var positive = engine.TensorMultiplyScalar(
                 engine.TensorSubtract(engine.TensorMultiply(y, engine.TensorLog(engine.TensorDivide(y, mu))), engine.TensorSubtract(y, mu)),
-                two);
-            loss = engine.TensorWhere(yPositive, positive, engine.TensorMultiplyScalar(mu, two));
+                2.0);
+            loss = engine.TensorWhere(yPositive, positive, engine.TensorMultiplyScalar(mu, 2.0));
         }
-        else if (Math.Abs(_power - 2) < 1e-10) // Gamma (p = 2)
+        else if (Math.Abs(_power - 2) < 1e-10)
         {
-            // y > 0 ? 2 * (-log(y / mu) + (y - mu) / mu) : 0
             var positive = engine.TensorMultiplyScalar(
                 engine.TensorSubtract(engine.TensorDivide(engine.TensorSubtract(y, mu), mu), engine.TensorLog(engine.TensorDivide(y, mu))),
-                two);
+                2.0);
             loss = engine.TensorWhere(yPositive, positive, zeros);
         }
-        else // General case
+        else
         {
-            // 2 * (max(1e-10, y^(2-p)) / ((1-p)(2-p)) - y * mu^(1-p) / (1-p) + mu^(2-p) / (2-p))
             var a = engine.TensorMultiplyScalar(
-                EvaluationTensorOps<T>.MaxPreservingNaN(engine.TensorPower(y, NumOps.FromDouble(2 - _power)), NumOps.FromDouble(1e-10)),
-                NumOps.FromDouble(1.0 / ((1 - _power) * (2 - _power))));
+                EvaluationTensorOps<double>.MaxPreservingNaN(engine.TensorPower(y, 2 - _power), 1e-10),
+                1.0 / ((1 - _power) * (2 - _power)));
             var b = engine.TensorMultiplyScalar(
-                engine.TensorMultiply(y, engine.TensorPower(mu, NumOps.FromDouble(1 - _power))),
-                NumOps.FromDouble(1.0 / (1 - _power)));
-            var c = engine.TensorMultiplyScalar(engine.TensorPower(mu, NumOps.FromDouble(2 - _power)), NumOps.FromDouble(1.0 / (2 - _power)));
-            loss = engine.TensorMultiplyScalar(engine.TensorAdd(engine.TensorSubtract(a, b), c), two);
+                engine.TensorMultiply(y, engine.TensorPower(mu, 1 - _power)), 1.0 / (1 - _power));
+            var c = engine.TensorMultiplyScalar(engine.TensorPower(mu, 2 - _power), 1.0 / (2 - _power));
+            loss = engine.TensorMultiplyScalar(engine.TensorAdd(engine.TensorSubtract(a, b), c), 2.0);
         }
-
-        // Only finite losses are averaged
-        var (totalLoss, validCount) = EvaluationTensorOps<T>.FiniteSumAndCount(loss);
-        return validCount > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(validCount)) : NumOps.Zero;
+        var (totalLoss, validCount) = EvaluationTensorOps<double>.FiniteSumAndCount(loss);
+        return validCount > 0 ? NumOps.FromDouble(totalLoss / validCount) : NumOps.Zero;
     }
 
     /// <inheritdoc />

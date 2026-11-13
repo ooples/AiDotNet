@@ -50,12 +50,12 @@ public class MeanDirectionalAccuracyMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         var actualChange = engine.TensorDiff(actual, 1, 0);
         var predChange = engine.TensorDiff(pred, 1, 0);
         var zeros = engine.TensorZerosLike(actualChange);
-        var tolerance = engine.TensorFullLike(actualChange, NumOps.FromDouble(1e-10));
+        var tolerance = engine.TensorFullLike(actualChange, 1e-10);
 
         // Directions match when both rise, both fall, or both stay (within 1e-10)
         var bothUp = engine.TensorMultiply(engine.TensorGreaterThan(actualChange, zeros), engine.TensorGreaterThan(predChange, zeros));
@@ -65,7 +65,7 @@ public class MeanDirectionalAccuracyMetric<T> : IRegressionMetric<T>
             engine.TensorLessThan(engine.TensorAbs(predChange), tolerance));
         var match = engine.TensorMax(engine.TensorMax(bothUp, bothDown), bothFlat);
 
-        int correct = EvaluationTensorOps<T>.Count(match);
+        int correct = EvaluationTensorOps<double>.Count(match);
         int total = actualChange.Length;
         return total > 0 ? NumOps.FromDouble((double)correct / total) : NumOps.FromDouble(0.5);
     }

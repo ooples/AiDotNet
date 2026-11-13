@@ -54,26 +54,19 @@ public class MASEMetric<T> : ITimeSeriesMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var tolerance = NumOps.FromDouble(1e-10);
-
-        // Calculate MAE of predictions
-        T mae = engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
-
-        // Calculate MAE of the naive forecast y[t - period] over t = period .. n - 1
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double mae = engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(actual, pred)));
         int naiveCount = Math.Max(0, n - period);
-        T maeNaive = NumOps.Zero;
+        double maeNaive = 0;
         if (naiveCount > 0)
         {
             var current = engine.TensorSlice(actual, new[] { period }, new[] { naiveCount });
             var lagged = engine.TensorSlice(actual, new[] { 0 }, new[] { naiveCount });
             maeNaive = engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(current, lagged)));
         }
-
-        if (naiveCount == 0 || NumOps.LessThan(maeNaive, tolerance))
-            return NumOps.LessThan(mae, tolerance) ? NumOps.Zero : NumOps.MaxValue;
-
-        return NumOps.Divide(mae, NumOps.Divide(maeNaive, NumOps.FromDouble(naiveCount)));
+        if (naiveCount == 0 || maeNaive < 1e-10)
+            return mae < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
+        return NumOps.FromDouble(mae / (maeNaive / naiveCount));
     }
 }

@@ -57,20 +57,16 @@ public class PoissonDevianceMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        var y = EvaluationTensorOps<T>.MaxPreservingNaN(actual, NumOps.Zero);
-        var mu = EvaluationTensorOps<T>.MaxPreservingNaN(pred, NumOps.FromDouble(1e-10));
-        var two = NumOps.FromDouble(2.0);
-
-        // 2 * (y * log(y / mu) - (y - mu)) where y > 0, else 2 * mu; only finite deviances are averaged
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var y = EvaluationTensorOps<double>.MaxPreservingNaN(actual, 0.0);
+        var mu = EvaluationTensorOps<double>.MaxPreservingNaN(pred, 1e-10);
         var positive = engine.TensorMultiplyScalar(
             engine.TensorSubtract(engine.TensorMultiply(y, engine.TensorLog(engine.TensorDivide(y, mu))), engine.TensorSubtract(y, mu)),
-            two);
-        var deviance = engine.TensorWhere(engine.TensorGreaterThan(y, NumOps.Zero), positive, engine.TensorMultiplyScalar(mu, two));
-
-        var (totalDeviance, validCount) = EvaluationTensorOps<T>.FiniteSumAndCount(deviance);
-        return validCount > 0 ? NumOps.Divide(totalDeviance, NumOps.FromDouble(validCount)) : NumOps.Zero;
+            2.0);
+        var deviance = engine.TensorWhere(engine.TensorGreaterThan(y, 0.0), positive, engine.TensorMultiplyScalar(mu, 2.0));
+        var (totalDeviance, validCount) = EvaluationTensorOps<double>.FiniteSumAndCount(deviance);
+        return validCount > 0 ? NumOps.FromDouble(totalDeviance / validCount) : NumOps.Zero;
     }
 
     /// <inheritdoc />
