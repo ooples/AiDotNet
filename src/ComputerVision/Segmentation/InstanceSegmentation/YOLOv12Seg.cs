@@ -9,7 +9,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 

@@ -712,11 +712,17 @@ internal static class CvTensorOps<T>
     /// Copies <paramref name="input"/> into a new ONNX Runtime <c>float</c> tensor of the same shape, converting
     /// the whole buffer in one bulk call.
     /// </summary>
+    /// <remarks>
+    /// Reads the logical, row-major values: a strided view (the models batch their input with a reshape that
+    /// accepts one) is made contiguous first. The read goes through the read-only span, so a shared copy-on-write
+    /// input is not privatized just to be read, as the writable <c>Data</c> accessor would.
+    /// </remarks>
     public static Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float> ToOnnxFloat(Tensor<T> input)
     {
-        var data = new float[input.Length];
-        NumOps.ToFloatSpan(input.Data.Span, data);
-        return new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float>(data, input._shape);
+        var source = input.IsContiguous ? input : input.Contiguous();
+        var data = new float[source.Length];
+        NumOps.ToFloatSpan(source.AsSpan(), data);
+        return new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float>(data, source.Shape.ToArray());
     }
 
     /// <summary>

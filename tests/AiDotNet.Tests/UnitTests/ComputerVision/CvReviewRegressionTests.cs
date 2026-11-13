@@ -188,6 +188,35 @@ public sealed class CvReviewRegressionTests
         Assert.Equal(256.0, mean);
     }
 
+    [Fact]
+    public void GaussianMask_HalfWiderThan2048_UsesExactPixelCoordinates()
+    {
+        // The column ramp was held in T: half precision rounds column 2049 to 2048 and 2051 to 2052, so with the
+        // centre on column 2050 both read a distance of 2 instead of 1.
+        const double sigma = 1.0;
+        var mask = SegmentationTensorOps.GaussianMask<Half>(1, 2052, 2050, 0, sigma);
+
+        double oneAway = Math.Exp(-0.5);
+        Assert.Equal(oneAway, (double)mask[0, 2049], 3);
+        Assert.Equal(1.0, (double)mask[0, 2050], 3);
+        Assert.Equal(oneAway, (double)mask[0, 2051], 3);
+    }
+
+    [Fact]
+    public void ToOnnxFloat_StridedView_ReadsLogicalOrder()
+    {
+        // The ONNX input was read through the writable Data accessor, which throws on a strided view; the models
+        // batch their input with a reshape that accepts one.
+        var owner = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
+        var view = owner.Transpose(new[] { 1, 0 });
+        Assert.False(view.IsContiguous);
+
+        var onnx = CvTensorOps<double>.ToOnnxFloat(view);
+
+        Assert.Equal(new[] { 3, 2 }, onnx.Dimensions.ToArray());
+        Assert.Equal(new float[] { 1, 4, 2, 5, 3, 6 }, onnx.Buffer.ToArray());
+    }
+
     private static void AssertHalfMatchesDouble(
         LossFunctionBase<Half> halfLoss, LossFunctionBase<double> doubleLoss, double[] predicted, double[] actual)
     {
