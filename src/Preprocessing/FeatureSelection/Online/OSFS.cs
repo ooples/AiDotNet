@@ -211,7 +211,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var unit = engine.TensorSlice(
             engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye<T>(order), new[] { 1, order, order }), new[] { count, order, order }),
             new[] { 0, 0, 0 }, new[] { count, order, 2 });
-        var (inverse, info) = LinalgDispatch<T>.SolveEx(blocks, unit);
+        var (inverse, info) = PreprocessingTensorOps.SolveEx(blocks, unit);
         var solved = engine.TensorEquals(info, 0).Cast<T>();
 
         var p00 = engine.Reshape(engine.TensorSlice(inverse, new[] { 0, 0, 0 }, new[] { count, 1, 1 }), new[] { count });

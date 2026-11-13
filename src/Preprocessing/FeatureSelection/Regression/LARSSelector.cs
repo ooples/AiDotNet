@@ -117,7 +117,7 @@ public class LARSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             var xa = engine.TensorMultiply(engine.TensorIndexSelect(x, activeIndex, 1),
                 engine.Reshape(signs, new[] { 1, active.Length }));
             var gram = engine.TensorMatMul(engine.TensorTranspose(xa), xa);
-            var ginvOnes = LinalgDispatch<T>.Solve(gram, PreprocessingTensorOps.Filled(new[] { active.Length, 1 }, one));
+            var ginvOnes = PreprocessingTensorOps.Solve(gram, PreprocessingTensorOps.Filled(new[] { active.Length, 1 }, one));
             var aa = engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { 1 }, one),
                 engine.TensorSqrt(engine.Reshape(engine.ReduceSum(ginvOnes, new[] { 0, 1 }, false), new[] { 1 })));
             var u = engine.TensorMultiply(engine.TensorMatMul(xa, ginvOnes), aa);

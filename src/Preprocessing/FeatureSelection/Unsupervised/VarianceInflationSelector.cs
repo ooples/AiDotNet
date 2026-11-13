@@ -111,7 +111,7 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int k = z.Shape[1];
         var gram = engine.TensorAdd(
             engine.TensorMatMul(engine.TensorTranspose(z), z), engine.TensorMultiplyScalar(engine.TensorEye<T>(k), ridge));
-        var inverse = LinalgDispatch<T>.Inv(gram);
+        var inverse = PreprocessingTensorOps.Inverse(gram);
         var diagonal = engine.TensorDiagonal(inverse);
         var diagonalSquared = engine.TensorMultiply(diagonal, diagonal);
         var offDiagonalSquared = engine.TensorSubtract(

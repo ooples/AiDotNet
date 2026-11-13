@@ -29,6 +29,25 @@ internal static class PreprocessingTensorOps
         typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
 
     /// <summary>
+    /// Linear solve <c>a x = b</c> with per-system failure info (<c>Linalg.SolveEx</c>) for any T, widened as
+    /// <see cref="Solve{T}"/> is: Half and BFloat16 to float, any other non-native T to double.
+    /// </summary>
+    public static (Tensor<T> Result, Tensor<int> Info) SolveEx<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return AiDotNet.Helpers.LinalgDispatch<T>.SolveEx(a, b);
+
+        if (IsNarrowFloat<T>())
+        {
+            var (floatResult, floatInfo) = AiDotNet.Helpers.LinalgDispatch<float>.SolveEx(a.Cast<float>(), b.Cast<float>());
+            return (floatResult.Cast<T>(), floatInfo);
+        }
+
+        var (result, info) = AiDotNet.Helpers.LinalgDispatch<double>.SolveEx(a.Cast<double>(), b.Cast<double>());
+        return (result.Cast<T>(), info);
+    }
+
+    /// <summary>
     /// Linear solve <c>a x = b</c> (<c>Linalg.Solve</c>, batched like it) for any T. The tensor library's
     /// factorizations run only in float and double (torch.linalg.solve likewise rejects float16), so Half and
     /// BFloat16 systems are widened to float, any other T (decimal) to double, solved there and cast back once.
