@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.NumericOperations;
+
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>
@@ -37,7 +39,29 @@ internal static class ExampleRows
     /// systems). A matrix that is not numerically positive definite falls back to a pivoted LU solve, and a
     /// singular one gives x = 0.
     /// </summary>
+    /// <remarks>
+    /// float and double factor in T. A Half or BFloat16 Cholesky is numerically useless (torch.linalg.cholesky
+    /// rejects float16) and the tensor library's factorizations only take float or double, so those systems are
+    /// widened to float, and any other T (decimal) to double, factored and solved there, and cast back once.
+    /// </remarks>
     internal static Tensor<T> SolveSymmetricPositiveDefinite<T>(Tensor<T> a, Tensor<T> b)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+        {
+            return SolveInT(a, b);
+        }
+
+        return typeof(T) == typeof(Half) || typeof(T) == typeof(BFloat16)
+            ? SolveWidened<T, float>(a, b)
+            : SolveWidened<T, double>(a, b);
+    }
+
+    /// <summary>Casts the system to <typeparamref name="TWide"/> as whole tensors, solves it there, and casts
+    /// the solution back to <typeparamref name="T"/>.</summary>
+    private static Tensor<T> SolveWidened<T, TWide>(Tensor<T> a, Tensor<T> b)
+        => SolveInT(a.Cast<TWide>(), b.Cast<TWide>()).Cast<T>();
+
+    private static Tensor<T> SolveInT<T>(Tensor<T> a, Tensor<T> b)
     {
         var (factor, info) = LinalgDispatch<T>.CholeskyEx(a);
         if (info.ToArray().All(code => code == 0))

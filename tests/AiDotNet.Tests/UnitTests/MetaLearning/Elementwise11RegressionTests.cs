@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Reflection;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
@@ -9,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.NumericOperations;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
@@ -132,5 +134,57 @@ public class Elementwise11RegressionTests
         var loss = (Tensor<Half>)(method.Invoke(algorithm, new object[] { projections, new[] { 0, 0, 0 } })
             ?? throw new InvalidOperationException("Missing loss."));
         Assert.InRange((double)loss[0], Math.Log(2) - 0.02, Math.Log(2) + 0.02);
+    }
+
+    // RBF kernel of 4 close points (length 1) plus 1e-3 noise: valid SPD but cond ~4e3, the DKT GP system
+    private static double[] IllConditionedKernel()
+    {
+        var x = new[] { 0.0, 0.25, 0.5, 0.75 };
+        var a = new double[16];
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 4; j++)
+                a[i * 4 + j] = Math.Exp(-(x[i] - x[j]) * (x[i] - x[j]) / 2) + (i == j ? 1e-3 : 0);
+        return a;
+    }
+
+    // Double reference solve of the system exactly as T stores it
+    private static double[] ReferenceSolve<T>(Tensor<T> a, Tensor<T> b)
+        => LinalgDispatch<double>.Solve(a.Cast<double>(), b.Cast<double>()).ToArray();
+
+    private static void AssertMatchesReference<T>(Tensor<T> a, Tensor<T> b, double relativeTolerance)
+    {
+        var reference = ReferenceSolve(a, b);
+        var solution = ExampleRows.SolveSymmetricPositiveDefinite(a, b).Cast<double>().ToArray();
+        double scale = reference.Max(v => Math.Abs(v));
+        Assert.True(scale > 50, "Fixture should give a large GP weight vector.");
+        Assert.Equal(reference.Length, solution.Length);
+        for (int i = 0; i < reference.Length; i++)
+            Assert.InRange(solution[i], reference[i] - relativeTolerance * scale, reference[i] + relativeTolerance * scale);
+    }
+
+    [Fact]
+    public void HalfSpdSolve_IllConditionedKernel_MatchesDoubleReference()
+    {
+        var a = new Tensor<Half>(IllConditionedKernel().Select(v => (Half)v).ToArray(), new[] { 4, 4 });
+        var b = new Tensor<Half>(new[] { (Half)1, (Half)0, (Half)0, (Half)1 }, new[] { 4, 1 });
+        AssertMatchesReference(a, b, 1e-3);
+    }
+
+    [Fact]
+    public void BFloat16SpdSolve_IllConditionedKernel_MatchesDoubleReference()
+    {
+        var a = new Tensor<BFloat16>(IllConditionedKernel().Select(v => BFloat16.FromFloat((float)v)).ToArray(),
+            new[] { 4, 4 });
+        var b = new Tensor<BFloat16>(new[] { BFloat16.One, BFloat16.Zero, BFloat16.Zero, BFloat16.One },
+            new[] { 4, 1 });
+        AssertMatchesReference(a, b, 8e-3);
+    }
+
+    [Fact]
+    public void DecimalSpdSolve_IllConditionedKernel_MatchesDoubleReference()
+    {
+        var a = new Tensor<decimal>(IllConditionedKernel().Select(v => (decimal)v).ToArray(), new[] { 4, 4 });
+        var b = new Tensor<decimal>(new[] { 1m, 0m, 0m, 1m }, new[] { 4, 1 });
+        AssertMatchesReference(a, b, 1e-9);
     }
 }
