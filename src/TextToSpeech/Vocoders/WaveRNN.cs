@@ -127,18 +127,11 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
         var features = _features ?? throw new InvalidOperationException("The WaveRNN network has not been created.");
-        return MelTensor(features.LogMel(TensorCopyHelper.CastLogical<T, double>(audio).ToArray()));
-    }
-
-    /// <summary>A <c>[frames, bands]</c> feature matrix as the <c>[1, bands, frames]</c> mel tensor.</summary>
-    private static Tensor<T> MelTensor(double[,] rows)
-    {
-        int frames = rows.GetLength(0), bands = rows.GetLength(1);
-        var flat = new double[rows.Length];
-        Buffer.BlockCopy(rows, 0, flat, 0, rows.Length * sizeof(double));
-        var engine = AiDotNetEngine.Current;
+        // Computed in double and narrowed once, whatever T is.
+        var rows = features.LogMel(TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(audio, new[] { audio.Length })));
+        int frames = rows.Shape[0], bands = rows.Shape[1];                                     // [frames, bands]
         return TensorCopyHelper.CastLogical<double, T>(
-            engine.Reshape(engine.TensorTranspose(new Tensor<double>(flat, new[] { frames, bands })), new[] { 1, bands, frames }));
+            Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, bands, frames }));
     }
 
     /// <summary>The 16-bit value (0..65535) of a sample in [−1, 1].</summary>
