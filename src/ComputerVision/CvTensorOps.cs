@@ -230,23 +230,26 @@ internal static class CvTensorOps<T>
 
         if (causal)
         {
-            // Additive mask: a large negative score gives the masked key an attention weight that
-            // underflows to exactly zero after the softmax, matching a loop that skips j > i.
-            // Key j is blocked for query i exactly when j > i: compare a column ramp against a row ramp.
-            var rowIndex = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, lq, 1), new[] { lq, 1 }), new[] { lq, lk });
-            var colIndex = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, lk, 1), new[] { 1, lk }), new[] { lq, lk });
-            var blockedMask = Engine.TensorGreaterThan(colIndex, rowIndex);
-            var mask = Engine.Reshape(
-                Engine.TensorWhere(blockedMask, Fill(new[] { lq, lk }, NumOps.FromDouble(-1e30)), new Tensor<T>(new[] { lq, lk })),
-                new[] { 1, 1, lq, lk });
-
-            scores = Engine.TensorAdd(scores, Engine.TensorBroadcastTo(mask, Dims(scores)));
+            scores = Engine.TensorAdd(scores, Engine.TensorBroadcastTo(CausalMask(lq, lk), Dims(scores)));
         }
 
         var weights = Engine.Softmax(scores, -1);
         var attended = Engine.TensorMatMul(weights, v); // [N, H, Lq, hd]
         return Engine.Reshape(Engine.TensorPermute(attended, new[] { 0, 2, 1, 3 }), new[] { n, lq, d });
     }
+
+    /// <summary>
+    /// The additive causal mask <c>[1, 1, Lq, Lk]</c>: a large negative score where key <c>j &gt; i</c> for query
+    /// <c>i</c>, else zero. The large negative gives a blocked key an attention weight that underflows to exactly
+    /// zero after the softmax, matching a loop that skips <c>j &gt; i</c>.
+    /// </summary>
+    /// <remarks>
+    /// The upper triangle above the diagonal is selected by integer position (<c>triu</c> with diagonal 1), never by
+    /// comparing index ramps held in <typeparamref name="T"/>: half precision cannot hold every index above 2048, so
+    /// such a comparison unblocks future keys in long sequences.
+    /// </remarks>
+    internal static Tensor<T> CausalMask(int lq, int lk)
+        => Engine.Reshape(Engine.TensorTriu(Fill(new[] { lq, lk }, NumOps.FromDouble(-1e30)), 1), new[] { 1, 1, lq, lk });
 
     private static Tensor<T> SplitHeads(Tensor<T> x, int numHeads, int headDim)
     {
@@ -629,21 +632,22 @@ internal static class CvTensorOps<T>
 
     private static (int[] Lo, int[] Hi, Tensor<T> WeightLo, Tensor<T> WeightHi) BilinearTaps(int src, int dst)
     {
+        // The source position i * src / dst splits exactly, in integers, into the tap lo = floor(i * src / dst) and
+        // the remainder r = i * src - lo * dst, so frac = r / dst. Only that final division happens in T: forming
+        // the position itself in T (a ramp scaled by src / dst) loses whole pixels in half precision.
         var lo = new int[dst];
         var hi = new int[dst];
+        var remainder = new int[dst];
         for (int i = 0; i < dst; i++)
         {
-            double s = (double)i / dst * src;
-            int i0 = (int)Math.Floor(s);
+            long scaled = (long)i * src;
+            int i0 = (int)(scaled / dst);
             lo[i] = i0;
             hi[i] = Math.Min(i0 + 1, src - 1);
+            remainder[i] = (int)(scaled - ((long)i0 * dst));
         }
 
-        // frac = i / dst * src - lo, evaluated for every output position at once. Subtracting the
-        // integer tap (rather than flooring again) keeps each weight pair consistent with its taps.
-        var position = Engine.TensorMultiplyScalar(
-            Engine.TensorDivideScalar(Engine.TensorArange<T>(0, dst, 1), NumOps.FromDouble(dst)), NumOps.FromDouble(src));
-        var wHi = Engine.TensorSubtract(position, IndicesAsValues(lo, Math.Max(src, 1)));
+        var wHi = Engine.TensorDivideScalar(IndicesAsValues(remainder, dst), NumOps.FromDouble(dst));
         var wLo = Engine.ScalarMinusTensor(NumOps.One, wHi);
         return (lo, hi, wLo, wHi);
     }
@@ -672,6 +676,26 @@ internal static class CvTensorOps<T>
     /// <inheritdoc cref="IndicesAsValues(int[], int)"/>
     public static Tensor<T> IndicesAsValues(Tensor<int> indices, int count)
         => Engine.TensorGather(Engine.TensorArange<T>(0, Math.Max(count, 1), 1), indices, 0);
+
+    /// <summary>
+    /// The mean of every element of <paramref name="values"/> (zero when empty), with each element divided by
+    /// <c>sqrt(n)</c> before the sum and the sum divided by <c>sqrt(n)</c> again.
+    /// </summary>
+    /// <remarks>
+    /// Summing first overflows half precision once the total passes 65504 (for example 40 000 box losses near 2), and
+    /// dividing every element by <c>n</c> first drops small terms into subnormals. The square-root split keeps both
+    /// the terms and the partial sums in range.
+    /// </remarks>
+    public static T Mean(Tensor<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var root = NumOps.FromDouble(Math.Sqrt(values.Length));
+        return NumOps.Divide(Engine.TensorSum(Engine.TensorDivideScalar(values, root)), root);
+    }
 
     /// <summary>A new tensor of the given shape with every element set to <paramref name="value"/>.</summary>
     public static Tensor<T> Fill(int[] shape, T value)
