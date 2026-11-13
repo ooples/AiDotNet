@@ -174,20 +174,21 @@ public abstract partial class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         int maskedPixelCount = Engine.TensorCountNonzero(masked);
         if (maskedPixelCount == 0) return double.PositiveInfinity;
 
+        // In double, as the per-element loop was: a float difference such as 3e38 - (-3e38) overflows T
         int size = numFrames * channels * height * width;
-        var diff = Engine.TensorSubtract(
-            Engine.Reshape(Engine.TensorNarrow(Engine.Reshape(inpainted, [inpainted.Length]), 0, 0, size), masked._shape),
-            Engine.Reshape(Engine.TensorNarrow(Engine.Reshape(groundTruth, [groundTruth.Length]), 0, 0, size), masked._shape));
-        var maskedDiff = Engine.TensorWhere(masked, diff, Engine.TensorZerosLike(diff));
+        Tensor<double> Leading(Tensor<T> source) => TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(source, [source.Length]), 0, 0, size), masked._shape));
+        var diff = Engine.TensorSubtract(Leading(inpainted), Leading(groundTruth));
+        var maskedDiff = Engine.TensorWhere(
+            TensorCopyHelper.CastLogical<T, double>(masked), diff, Engine.TensorZerosLike(diff));
 
-        // Sum of squares scaled by the largest error so it cannot overflow T
-        double scale = NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(maskedDiff)));
-        double mse = double.IsNaN(scale) ? double.NaN : 0;
-        if (scale > 0)
+        // Sum of squares scaled by the largest error so it cannot overflow
+        double scale = Engine.TensorMaxValue(Engine.TensorAbs(maskedDiff));
+        double mse = double.IsNaN(scale) || double.IsInfinity(scale) ? scale : 0;
+        if (scale > 0 && !double.IsInfinity(scale))
         {
-            var scaled = Engine.TensorMultiplyScalar(maskedDiff, NumOps.FromDouble(1.0 / scale));
-            mse = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(scaled, scaled))) * scale * scale
-                / maskedPixelCount;
+            var scaled = Engine.TensorMultiplyScalar(maskedDiff, 1.0 / scale);
+            mse = Engine.TensorSum(Engine.TensorMultiply(scaled, scaled)) * scale * scale / maskedPixelCount;
         }
 
         if (mse < 1e-10) return 100.0;

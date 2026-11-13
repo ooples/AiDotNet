@@ -237,6 +237,26 @@ public class VideoWarpAndMaskReferenceTests
         }
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task MaskedPsnrIsComputedInDouble()
+    {
+        // The masked error 3e38 - (-3e38) = 6e38 overflows float; in double MSE = 3.6e77 over the one masked
+        // pixel and PSNR = 10 log10(1 / 3.6e77). The unmasked pixel's error is ignored.
+        await Task.Yield();
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3);
+        var model = new E2FGVI<float>(arch);
+        var inpainted = new Tensor<float>(new[] { 3e38f, 5f }, new[] { 1, 1, 1, 2 });
+        var groundTruth = new Tensor<float>(new[] { -3e38f, 0f }, new[] { 1, 1, 1, 2 });
+        var masks = new Tensor<float>(new[] { 1f, 0f }, new[] { 1, 1, 1, 2 });
+
+        double psnr = model.ComputeMaskedPSNR(inpainted, groundTruth, masks);
+
+        Assert.Equal(10.0 * Math.Log10(1.0 / 3.6e77), psnr, 6);
+    }
+
     private static double[] Varied(int length, double phase)
     {
         var values = new double[length];
