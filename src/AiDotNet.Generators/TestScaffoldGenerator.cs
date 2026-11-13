@@ -631,9 +631,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
     /// </summary>
     /// <remarks>
     /// Prototypical networks (Snell et al. 2017) take the ways from the labels: one prototype per class present.
+    /// P>M>F (Hu et al. 2022) is a prototypical classifier over a pre-trained backbone, so it takes them the same way.
     /// </remarks>
     private static readonly System.Collections.Generic.HashSet<string> ClassifierMetaLearnersWithoutClassCount =
-        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "ProtoNetsAlgorithm" };
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "ProtoNetsAlgorithm",
+            "PMFAlgorithm",
+        };
 
     /// <summary>
     /// Whether a meta-learner classifies: its options declare a class count, or it is a known classifier that
