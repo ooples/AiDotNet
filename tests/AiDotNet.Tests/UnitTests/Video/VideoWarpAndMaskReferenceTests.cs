@@ -178,31 +178,39 @@ public class VideoWarpAndMaskReferenceTests
     public async Task GmFlowOcclusionUsesThePaperMotionScaledTolerance()
     {
         await Task.Yield();
-        // occluded <=> |f + b(x + f)|^2 > 0.01 (|f|^2 + |b(x + f)|^2) + 0.5 (forward_backward_consistency_check)
+        // gmflow/geometry.py forward_backward_consistency_check: occluded <=> |f + b(x + f)| > 0.01 (|f| + |b(x)|) + 0.5,
+        // unsquared norms, with the backward magnitude taken at x (not at x + f).
         const int height = 4, width = 64;
         var model = new GMFlow<double>(Arch());
 
-        Tensor<double> Flow(double dx)
+        Tensor<double> Flow(Func<int, double> dxAt)
         {
             var values = new double[2 * height * width];
-            for (int p = 0; p < height * width; p++) values[p] = dx;
+            for (int p = 0; p < height * width; p++) values[p] = dxAt(p % width);
             return new Tensor<double>(values, new[] { 1, 2, height, width });
         }
 
+        Tensor<double> Uniform(double dx) => Flow(_ => dx);
         double MaskAt(Tensor<double> mask, int x) => mask.ToArray()[(1 * width) + x];
 
-        // Large motion, 2-pixel round-trip error: 4 < 0.01 (400 + 324) + 0.5 = 7.74, consistent (the old fixed
-        // 1-pixel threshold called it occluded).
-        var largeMotion = model.ComputeOcclusionMask(Flow(20.0), Flow(-18.0));
-        Assert.Equal(0.0, MaskAt(largeMotion, 5));
+        // Large motion, 2-pixel round-trip error: 2 > 0.01 (20 + 18) + 0.5 = 0.88, occluded. The squared form
+        // (4 < 0.01 (400 + 324) + 0.5 = 7.74) called it consistent.
+        Assert.Equal(1.0, MaskAt(model.ComputeOcclusionMask(Uniform(20.0), Uniform(-18.0)), 5));
 
-        // Small motion, 1-pixel error: 1 > 0.01 (1 + 0) + 0.5 = 0.51, occluded (the old strict 1-pixel test
-        // was not exceeded).
-        var smallMotion = model.ComputeOcclusionMask(Flow(1.0), Flow(0.0));
-        Assert.Equal(1.0, MaskAt(smallMotion, 5));
+        // Small motion, 0.7-pixel error: 0.7 > 0.01 (0.7 + 0) + 0.5 = 0.507, occluded. The squared form
+        // (0.49 < 0.0049 + 0.5) called it consistent.
+        Assert.Equal(1.0, MaskAt(model.ComputeOcclusionMask(Uniform(0.7), Uniform(0.0)), 5));
 
-        // A perfect round trip whose target leaves the image samples a zero backward flow: 400 > 4.5, occluded.
-        var leaving = model.ComputeOcclusionMask(Flow(20.0), Flow(-20.0));
+        // Sub-tolerance error: 0.3 < 0.01 (30 + 29.7) + 0.5 = 1.097, consistent.
+        Assert.Equal(0.0, MaskAt(model.ComputeOcclusionMask(Uniform(30.0), Uniform(-29.7)), 5));
+
+        // |b| is read at x: b(5) = -60 while b(15) = -9, so the error is 1 < 0.01 (10 + 60) + 0.5 = 1.2,
+        // consistent; using the warped magnitude (0.01 (10 + 9) + 0.5 = 0.69) would call it occluded.
+        var mixed = model.ComputeOcclusionMask(Uniform(10.0), Flow(x => x == 5 ? -60.0 : -9.0));
+        Assert.Equal(0.0, MaskAt(mixed, 5));
+
+        // A perfect round trip whose target leaves the image samples a zero backward flow: 20 > 0.9, occluded.
+        var leaving = model.ComputeOcclusionMask(Uniform(20.0), Uniform(-20.0));
         Assert.Equal(0.0, MaskAt(leaving, 5));
         Assert.Equal(1.0, MaskAt(leaving, width - 2));
     }

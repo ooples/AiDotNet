@@ -522,9 +522,11 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
     }
 
     /// <summary>
-    /// GMFlow's forward-backward consistency check (<c>forward_backward_consistency_check</c>, alpha1 = 0.01,
-    /// alpha2 = 0.5): a pixel is occluded when <c>|f + warp(b, f)|² &gt; alpha1·(|f|² + |warp(b, f)|²) + alpha2</c>,
-    /// where <c>warp(b, f)</c> bilinearly samples the backward flow at <c>x + f(x)</c>.
+    /// GMFlow's forward-backward consistency check (<c>forward_backward_consistency_check</c> in gmflow/geometry.py,
+    /// alpha = 0.01, beta = 0.5): a pixel is occluded when
+    /// <c>‖f + warp(b, f)‖ &gt; alpha·(‖f‖ + ‖b‖) + beta</c>, with unsquared norms, where <c>warp(b, f)</c>
+    /// bilinearly samples the backward flow at <c>x + f(x)</c> (zeros padding) and <c>‖b‖</c> is the backward
+    /// flow at <c>x</c> itself, not the warped one.
     /// </summary>
     /// <remarks>
     /// This used to look the backward flow up at the truncated (not interpolated) target pixel and compare the
@@ -532,28 +534,31 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
     /// </remarks>
     internal Tensor<T> ComputeOcclusionMask(Tensor<T> forward, Tensor<T> backward)
     {
-        const double Alpha1 = 0.01;
-        const double Alpha2 = 0.5;
+        const double Alpha = 0.01;
+        const double Beta = 0.5;
         int batchSize = forward.Shape[0];
         int height = forward.Shape[2];
         int width = forward.Shape[3];
 
         var fwd = Engine.TensorNarrow(forward, 1, 0, 2);
-        var bwdWarped = BilinearWarp(Engine.TensorNarrow(backward, 1, 0, 2), fwd);
+        var bwd = Engine.TensorNarrow(backward, 1, 0, 2);
+        var bwdWarped = BilinearWarp(bwd, fwd);
 
-        // Magnitudes scaled by the largest flow component before squaring, so the comparison cannot overflow
+        // Every vector is scaled by the largest flow component before squaring so the norms cannot overflow;
+        // the comparison is homogeneous of degree one, so only beta is rescaled.
         double peak = Math.Max(1.0, Math.Max(
             NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(fwd))),
-            NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(bwdWarped)))));
+            NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(bwd)))));
         var inverse = NumOps.FromDouble(1.0 / peak);
         var f = Engine.TensorMultiplyScalar(fwd, inverse);
+        var b = Engine.TensorMultiplyScalar(bwd, inverse);
         var bw = Engine.TensorMultiplyScalar(bwdWarped, inverse);
-        Tensor<T> SquaredNorm(Tensor<T> v) => Engine.ReduceSum(Engine.TensorMultiply(v, v), [1], true);
+        Tensor<T> Norm(Tensor<T> v) => Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(v, v), [1], true));
 
-        var roundTrip = SquaredNorm(Engine.TensorAdd(f, bw));
+        var roundTrip = Norm(Engine.TensorAdd(f, bw));
         var tolerance = Engine.TensorAddScalar(
-            Engine.TensorMultiplyScalar(Engine.TensorAdd(SquaredNorm(f), SquaredNorm(bw)), NumOps.FromDouble(Alpha1)),
-            NumOps.FromDouble(Alpha2 / (peak * peak)));
+            Engine.TensorMultiplyScalar(Engine.TensorAdd(Norm(f), Norm(b)), NumOps.FromDouble(Alpha)),
+            NumOps.FromDouble(Beta / peak));
         return Engine.Reshape(Engine.TensorGreaterThan(roundTrip, tolerance), [batchSize, 1, height, width]);
     }
 
