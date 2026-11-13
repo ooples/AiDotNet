@@ -41,8 +41,9 @@ internal sealed class EmaTeacher<T>
     {
         var teacher = Synchronized();
         var rate = NumOps.FromDouble(1 - Momentum);
+        // The teacher outlives the step: copy each result out of the engine, whose buffers may be per-step arena scratch.
         for (int i = 0; i < _layers.Count; i++)
-            teacher[i] = _engine.Lerp(teacher[i], _layers[i].GetParameters(), rate);
+            teacher[i] = Copy(_engine.Lerp(teacher[i], _layers[i].GetParameters(), rate));
     }
 
     /// <summary>Runs <paramref name="forward"/> with the teacher's parameters and no gradient recording.</summary>
