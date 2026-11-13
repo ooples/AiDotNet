@@ -64,13 +64,11 @@ public partial class AudioGenModel<T>
     {
         var ratios = new List<int>();
         int remaining = hop;
-        foreach (int ratio in PaperUpsampleRatios)
+        // The filter reads the running remainder, so it is evaluated lazily as each ratio is taken.
+        foreach (int ratio in PaperUpsampleRatios.Where(r => remaining % r == 0))
         {
-            if (remaining % ratio == 0)
-            {
-                ratios.Add(ratio);
-                remaining /= ratio;
-            }
+            ratios.Add(ratio);
+            remaining /= ratio;
         }
 
         for (int factor = 2; remaining > 1; factor++)
