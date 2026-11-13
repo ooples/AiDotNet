@@ -29,13 +29,13 @@ public class AutomaticParameterOwnershipTests
             outcome[row] = 0.4 * features[row, 0] - 0.2 * features[row, 1] + 1.5 * treatment[row];
         }
 
-        var sLearner = new SLearner<double>(maxIterations: 3);
+        var sLearner = new SLearner<double>();
         sLearner.Fit(features, treatment, outcome);
-        AssertFreshRestoreRoundTrip(sLearner, new SLearner<double>(maxIterations: 3));
+        AssertFreshRestoreRoundTrip(sLearner, new SLearner<double>());
 
-        var xLearner = new XLearner<double>(maxIterations: 3);
+        var xLearner = new XLearner<double>();
         xLearner.Fit(features, treatment, outcome);
-        AssertFreshRestoreRoundTrip(xLearner, new XLearner<double>(maxIterations: 3));
+        AssertFreshRestoreRoundTrip(xLearner, new XLearner<double>());
     }
 
     [Fact]
