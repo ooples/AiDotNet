@@ -120,4 +120,21 @@ public class SelfSupervisedHalfPrecisionTests
 
         Assert.InRange(r2, 0.999, 1.0);
     }
+
+    [Fact]
+    public void MaeNormalizedPatchTargets_Half_VarianceBeyondHalfRange()
+    {
+        // One 8-value patch alternating 0 and 400: mean 200, deviations ±200, variance 40000, targets ±1.
+        // The squared deviations sum to 320000, past Half's 65504: the variance was +inf and every target 0.
+        var patches = new Tensor<Half>(new[] { 1, 1, 8 });
+        for (int d = 0; d < 8; d++)
+        {
+            patches[0, 0, d] = (Half)(d % 2 == 0 ? 0.0f : 400.0f);
+        }
+
+        var target = AiDotNet.SelfSupervisedLearning.MAE<Half>.NormalizedPatchTargets(patches);
+
+        Assert.Equal(-1.0, (double)target[0, 0, 0], 3);
+        Assert.Equal(1.0, (double)target[0, 0, 1], 3);
+    }
 }

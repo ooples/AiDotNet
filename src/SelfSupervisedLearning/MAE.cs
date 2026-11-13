@@ -198,14 +198,8 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
             throw new InvalidOperationException(
                 $"MAE without a decoder needs the encoder to output a patch ({patchDim} values); it outputs {embed}.");
 
-        // Per-patch normalized target (Sec. 3, "normalized pixels"): (x - mean) / sqrt(var + 1e-6) over each patch.
-        var patchDimT = NumOps.FromDouble(patchDim);
-        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(patches, new[] { 2 }, keepDims: true), patchDimT);
-        var centered = Engine.TensorSubtract(patches, mean);
-        var variance = Engine.TensorDivideScalar(
-            Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 2 }, keepDims: true), patchDimT);
-        var target = Engine.TensorDivide(centered,
-            Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-6))));
+        // Per-patch normalized target (Sec. 3, "normalized pixels").
+        var target = NormalizedPatchTargets(patches);
 
         var diff = Engine.TensorSubtract(reconstruction, target);
         var perPatch = Engine.TensorDivideScalar(
@@ -226,6 +220,23 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
     /// <inheritdoc />
     /// <remarks>The paper trains with AdamW (Table 8).</remarks>
     protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
+
+    /// <summary>
+    /// (x - mean) / sqrt(var + 1e-6) over each patch of [B, N, P] patches, computed in double as master did:
+    /// in Half the squared deviations of pixel-scale patches overflow past 65504.
+    /// </summary>
+    internal static Tensor<T> NormalizedPatchTargets(Tensor<T> patches)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        double patchDim = patches.Shape[2];
+        var values = patches.Cast<double>();
+        var mean = engine.TensorDivideScalar(engine.ReduceSum(values, new[] { 2 }, keepDims: true), patchDim);
+        var centered = engine.TensorSubtract(values, mean);
+        var variance = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 2 }, keepDims: true), patchDim);
+        return engine.TensorDivide(centered, engine.TensorSqrt(engine.TensorAddScalar(variance, 1e-6))).Cast<T>();
+    }
 
     private Tensor<T> Patchify(Tensor<T> images)
     {
