@@ -208,10 +208,18 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         var supportLabels = ReadLabels(task.SupportOutput);
         var episode = PrototypeEpisode<T>.Build(supportLabels, ReadLabels(task.QueryOutput));
         var slots = RelationScorer<T>.ShotSlots(supportLabels);
-        var target = RelationScorer<T>.OneHot(episode.QueryTarget, episode.ClassSlots.Length);
         var stackedInput = ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput);
         var stackedTarget = ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { episode.Rows, 1 }));
-        var scorer = CreateScorer(training);
+
+        // The target and the scorer's dropout masks are read again after ComputeGradients resets the step arena,
+        // which reissues arena tensors by element count under other shapes (a [4, 2] target came back as [2, 4]).
+        Tensor<T> target;
+        RelationScorer<T> scorer;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            target = RelationScorer<T>.OneHot(episode.QueryTarget, episode.ClassSlots.Length);
+            scorer = CreateScorer(training);
+        }
 
         // The embedding module's gradient: every relation score rebuilt from the embeddings on the tape. The
         // comparison's weights are constants here.
