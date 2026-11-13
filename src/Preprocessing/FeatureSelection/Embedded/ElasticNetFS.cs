@@ -31,7 +31,7 @@ public class ElasticNetFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +41,7 @@ public class ElasticNetFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     public double L1Ratio => _l1Ratio;
     public int MaxIterations => _maxIterations;
     public double Tolerance => _tolerance;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -87,98 +87,28 @@ public class ElasticNetFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize features and target
-        var xMeans = new double[p];
-        var xStds = new double[p];
-        var xStandardized = new double[n, p];
+        var engine = Engine;
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                xMeans[j] += NumOps.ToDouble(data[i, j]);
-            xMeans[j] /= n;
+        // Standardize features (population std; a near-zero std is replaced by 1) and center the target
+        var xStandardized = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out var xStds);
+        var yCentered = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - xMeans[j];
-                xStds[j] += diff * diff;
-            }
-            xStds[j] = Math.Sqrt(xStds[j] / n);
-            if (xStds[j] < 1e-10) xStds[j] = 1;
-
-            for (int i = 0; i < n; i++)
-                xStandardized[i, j] = (NumOps.ToDouble(data[i, j]) - xMeans[j]) / xStds[j];
-        }
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var yCentered = new double[n];
-        for (int i = 0; i < n; i++)
-            yCentered[i] = NumOps.ToDouble(target[i]) - yMean;
-
-        // Coordinate descent for Elastic Net
-        _coefficients = new double[p];
-        var residual = new double[n];
-        Array.Copy(yCentered, residual, n);
-
-        double l1Penalty = _alpha * _l1Ratio * n;
-        double l2Penalty = _alpha * (1 - _l1Ratio) * n;
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            for (int j = 0; j < p; j++)
-            {
-                double oldCoef = _coefficients[j];
-
-                // Add back the effect of current coefficient
-                for (int i = 0; i < n; i++)
-                    residual[i] += oldCoef * xStandardized[i, j];
-
-                // Compute raw update
-                double rho = 0;
-                for (int i = 0; i < n; i++)
-                    rho += xStandardized[i, j] * residual[i];
-                rho /= n;
-
-                // Soft thresholding with L2 denominator
-                double newCoef;
-                if (rho > l1Penalty)
-                    newCoef = (rho - l1Penalty) / (1 + l2Penalty);
-                else if (rho < -l1Penalty)
-                    newCoef = (rho + l1Penalty) / (1 + l2Penalty);
-                else
-                    newCoef = 0;
-
-                _coefficients[j] = newCoef;
-
-                // Update residual
-                for (int i = 0; i < n; i++)
-                    residual[i] -= newCoef * xStandardized[i, j];
-
-                maxChange = Math.Max(maxChange, Math.Abs(newCoef - oldCoef));
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
+        // Coordinate descent for Elastic Net on the 1/(2n)-scaled objective (as in sklearn ElasticNet):
+        // beta_j = S(x_j . r / n, alpha * l1Ratio) / (1 + alpha * (1 - l1Ratio)) for standardized x_j
+        T count = NumOps.FromDouble(n);
+        T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio);
+        T l2Scale = NumOps.FromDouble(1 + _alpha * (1 - _l1Ratio));
+        var coefficients = FeatureScoringTensorOps.CoordinateDescent(xStandardized, yCentered, _maxIterations, _tolerance,
+            (rho, j) => engine.TensorDivideScalar(
+                FeatureScoringTensorOps.SoftThreshold(engine.TensorDivideScalar(rho, count), l1Penalty), l2Scale), out _);
 
         // Rescale coefficients back to original scale
-        for (int j = 0; j < p; j++)
-            _coefficients[j] /= xStds[j];
+        coefficients = engine.TensorDivide(coefficients, xStds);
+        _coefficients = coefficients.ToVector();
 
         // Select features with largest absolute coefficients
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_coefficients[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(coefficients), numToSelect);
         IsFitted = true;
     }
 
@@ -195,15 +125,7 @@ public class ElasticNetFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("ElasticNetFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

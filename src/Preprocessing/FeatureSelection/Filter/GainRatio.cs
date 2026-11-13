@@ -27,15 +27,15 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _gainRatios;
-    private double[]? _informationGains;
+    private Vector<T>? _gainRatios;
+    private Vector<T>? _informationGains;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? GainRatios => _gainRatios;
-    public double[]? InformationGains => _informationGains;
+    public Vector<T>? GainRatios => _gainRatios;
+    public Vector<T>? InformationGains => _informationGains;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,112 +71,36 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         int n = data.Rows;
         int p = data.Columns;
 
-        // Get class distribution
-        var classCounts = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classCounts.ContainsKey(label))
-                classCounts[label] = 0;
-            classCounts[label]++;
-        }
+        var engine = Engine;
 
-        int nClasses = classCounts.Count;
-        var classes = classCounts.Keys.OrderBy(x => x).ToArray();
-        var classIndex = classes.Select((c, i) => (c, i)).ToDictionary(x => x.c, x => x.i);
+        // Class distribution (rounded target values) and target entropy (nats)
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        // Counts, entropies and ratios are in double and only the scores cast to T: Half counts past 65504 are
+        // infinite (two separated classes of 70,000 rows gave a gain ratio of 0 instead of 1)
+        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length).Cast<double>();
+        double targetEntropy = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
 
-        // Target entropy
-        double targetEntropy = 0;
-        foreach (var count in classCounts.Values)
-        {
-            double prob = (double)count / n;
-            if (prob > 0)
-                targetEntropy -= prob * Math.Log(prob);
-        }
+        // Bin every feature: min(trunc((x - min) / range * bins), bins - 1), one bin for a constant feature
+        var featureBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins).Cast<double>();
+        var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 
-        _informationGains = new double[p];
-        _gainRatios = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Bin the feature
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                minVal = Math.Min(minVal, val);
-                maxVal = Math.Max(maxVal, val);
-            }
-
-            double range = maxVal - minVal;
-            if (range < 1e-10) range = 1;
-
-            var binCounts = new int[_nBins];
-            var binClassCounts = new int[_nBins, nClasses];
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                int bin = Math.Min((int)(((val - minVal) / range) * _nBins), _nBins - 1);
-                int classIdx = classIndex[(int)Math.Round(NumOps.ToDouble(target[i]))];
-
-                binCounts[bin]++;
-                binClassCounts[bin, classIdx]++;
-            }
-
-            // Conditional entropy H(Y|X)
-            double conditionalEntropy = 0;
-            for (int b = 0; b < _nBins; b++)
-            {
-                if (binCounts[b] == 0) continue;
-
-                double binProb = (double)binCounts[b] / n;
-                double binEntropy = 0;
-
-                for (int c = 0; c < nClasses; c++)
-                {
-                    if (binClassCounts[b, c] > 0)
-                    {
-                        double prob = (double)binClassCounts[b, c] / binCounts[b];
-                        binEntropy -= prob * Math.Log(prob);
-                    }
-                }
-
-                conditionalEntropy += binProb * binEntropy;
-            }
-
-            // Information gain
-            double ig = Math.Max(0, targetEntropy - conditionalEntropy);
-            _informationGains[j] = ig;
-
-            // Intrinsic information (feature entropy)
-            double intrinsicInfo = 0;
-            for (int b = 0; b < _nBins; b++)
-            {
-                if (binCounts[b] > 0)
-                {
-                    double prob = (double)binCounts[b] / n;
-                    intrinsicInfo -= prob * Math.Log(prob);
-                }
-            }
-
-            // Gain ratio = IG / IV
-            _gainRatios[j] = intrinsicInfo > 1e-10 ? ig / intrinsicInfo : 0;
-        }
+        // Information gain max(0, H(Y) - H(Y|X)) and gain ratio IG / H(X) (0 when H(X) is not above 1e-10)
+        var intrinsicInfo = FeatureScoringTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
+        var informationGains = engine.TensorMax(
+            engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, -targetEntropy)), 0.0);
+        var usable = engine.TensorGreaterThan(intrinsicInfo, 1e-10);
+        var gainRatios = engine.TensorWhere(usable, engine.TensorDivide(informationGains,
+            engine.TensorWhere(usable, intrinsicInfo, PreprocessingTensorOps.Filled(new[] { p }, 1.0))),
+            new Tensor<double>(new[] { p })).Cast<T>();
+        _informationGains = informationGains.Cast<T>().ToVector();
+        _gainRatios = gainRatios.ToVector();
 
         // Select top features
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _gainRatios
-            .Select((gr, idx) => (GR: gr, Index: idx))
-            .OrderByDescending(x => x.GR)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(gainRatios, nToSelect);
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -190,15 +114,7 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
         if (_selectedIndices is null)
             throw new InvalidOperationException("GainRatio has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

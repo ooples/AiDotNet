@@ -28,21 +28,21 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nRepeats;
-    private readonly Func<Matrix<T>, Vector<T>, double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, T>? _scorer;
     private readonly int? _randomState;
 
-    private double[]? _importances;
-    private double[]? _importanceStds;
+    private Vector<T>? _importances;
+    private Vector<T>? _importanceStds;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double _baselineScore;
+    private T _baselineScore = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NRepeats => _nRepeats;
-    public double[]? Importances => _importances;
-    public double[]? ImportanceStds => _importanceStds;
-    public double BaselineScore => _baselineScore;
+    public Vector<T>? Importances => _importances;
+    public Vector<T>? ImportanceStds => _importanceStds;
+    public T BaselineScore => _baselineScore;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -51,7 +51,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public PermutationImportance(
         int nFeaturesToSelect = 10,
         int nRepeats = 5,
-        Func<Matrix<T>, Vector<T>, double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, T>? scorer = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -93,126 +93,89 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Compute baseline score
         _baselineScore = scorer(data, target);
 
-        _importances = new double[p];
-        _importanceStds = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var shape = new[] { n, p };
+        var identity = engine.TensorEye<T>(p);
 
-        // For each feature, permute and measure score decrease
+        // For each feature, permute it (one permutation per repeat, in order) and measure score decrease
+        var permutedScores = new T[p * _nRepeats];
         for (int j = 0; j < p; j++)
         {
-            var scores = new double[_nRepeats];
+            var column = PreprocessingTensorOps.ColumnVector(X, j);
+            var columnMask = engine.TensorBroadcastTo(PreprocessingTensorOps.Row(identity, j), shape);
 
             for (int r = 0; r < _nRepeats; r++)
             {
                 // Create permuted data
-                var permutedData = CreatePermutedData(data, j, n, p, random);
-                double permutedScore = scorer(permutedData, target);
-                scores[r] = _baselineScore - permutedScore;
+                var indices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
+                var shuffled = engine.TensorIndexSelect(column, new Tensor<int>(indices, new[] { n }), 0);
+                var permutedData = engine.TensorWhere(columnMask,
+                    engine.TensorBroadcastTo(engine.Reshape(shuffled, new[] { n, 1 }), shape), X).ToMatrix();
+                permutedScores[j * _nRepeats + r] = scorer(permutedData, target);
             }
-
-            _importances[j] = scores.Average();
-            _importanceStds[j] = scores.Length > 1
-                ? Math.Sqrt(scores.Select(s => (s - _importances[j]) * (s - _importances[j])).Sum() / (scores.Length - 1))
-                : 0;
         }
+
+        // Mean and sample standard deviation of the score decreases per feature
+        var decreases = engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p, _nRepeats }, _baselineScore),
+            new Tensor<T>(permutedScores, new[] { p, _nRepeats }));
+        var importances = engine.ReduceMean(decreases, new[] { 1 }, false);
+        _importances = importances.ToVector();
+        _importanceStds = _nRepeats > 1
+            ? engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(
+                decreases, engine.TensorBroadcastTo(engine.Reshape(importances, new[] { p, 1 }), new[] { p, _nRepeats }))),
+                new[] { 1 }, false), NumOps.FromDouble(_nRepeats - 1))).ToVector()
+            : new Vector<T>(p);
 
         // Select top features by importance
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _importances
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
     }
 
-    private Matrix<T> CreatePermutedData(Matrix<T> data, int featureIdx, int n, int p, Random random)
+    private T DefaultScorer(Matrix<T> data, Vector<T> target)
     {
-        var result = new T[n, p];
-
-        // Copy all data
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                result[i, j] = data[i, j];
-
-        // Shuffle the target feature column
-        var indices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
-        for (int i = 0; i < n; i++)
-            result[i, featureIdx] = data[indices[i], featureIdx];
-
-        return new Matrix<T>(result);
-    }
-
-    private double DefaultScorer(Matrix<T> data, Vector<T> target)
-    {
-        // Simple R² score using correlation-based prediction
+        // Simple R² score of the averaged correlation predictor yMean + sum_j r_j * z_j * yStd / p
+        var engine = Engine;
         int n = data.Rows;
         int p = data.Columns;
+        var shape = new[] { n, p };
+        var featureShape = new[] { p };
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
 
-        // Compute means
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var xMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                xMeans[j] += NumOps.ToDouble(data[i, j]);
-            xMeans[j] /= n;
-        }
-
-        // Compute correlations
-        var correlations = new double[p];
-        var xStds = new double[p];
-        double yStd = 0;
-
-        for (int j = 0; j < p; j++)
-        {
-            double sxy = 0, sxx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMeans[j];
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-            }
-            xStds[j] = Math.Sqrt(sxx / n);
-            correlations[j] = sxx > 1e-10 ? sxy / Math.Sqrt(sxx) : 0;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            yStd += yDiff * yDiff;
-        }
-        yStd = Math.Sqrt(yStd / n);
+        // Means, standard deviations and Pearson correlations (0 for a constant feature or target)
+        var xMeans = engine.ReduceMean(X, new[] { 0 }, true);
+        var xDiff = engine.TensorSubtract(X, engine.TensorBroadcastTo(xMeans, shape));
+        var yMean = engine.ReduceMean(y, new[] { 0 }, true);
+        var yDiff = engine.TensorSubtract(y, engine.TensorBroadcastTo(yMean, new[] { n }));
+        var sxy = engine.ReduceSum(engine.TensorMultiply(xDiff,
+            engine.TensorBroadcastTo(engine.Reshape(yDiff, new[] { n, 1 }), shape)), new[] { 0 }, false);
+        var sxx = engine.ReduceSum(engine.TensorSquare(xDiff), new[] { 0 }, false);
+        var syy = engine.ReduceSum(engine.TensorSquare(yDiff), new[] { 0 }, true);
+        var xStds = engine.TensorSqrt(engine.TensorDivideScalar(sxx, NumOps.FromDouble(n)));
+        var yStd = engine.TensorBroadcastTo(engine.TensorSqrt(engine.TensorDivideScalar(syy, NumOps.FromDouble(n))), featureShape);
+        var ones = PreprocessingTensorOps.Filled(featureShape, NumOps.One);
+        var zeros = new Tensor<T>(featureShape);
+        var usable = engine.TensorMultiply(engine.TensorGreaterThan(xStds, floor), engine.TensorGreaterThan(yStd, floor));
+        var denominators = engine.TensorWhere(usable,
+            engine.TensorMultiply(engine.TensorSqrt(sxx), engine.TensorBroadcastTo(engine.TensorSqrt(syy), featureShape)), ones);
+        var weights = engine.TensorWhere(usable, engine.TensorDivideScalar(
+            engine.TensorMultiply(engine.TensorDivide(sxy, denominators), yStd), NumOps.FromDouble(p)), zeros);
 
         // Predict and compute R²
-        double ssTot = 0, ssRes = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double pred = yMean;
-            for (int j = 0; j < p; j++)
-            {
-                if (xStds[j] > 1e-10 && yStd > 1e-10)
-                {
-                    double zScore = (NumOps.ToDouble(data[i, j]) - xMeans[j]) / xStds[j];
-                    pred += (correlations[j] / Math.Sqrt(n)) * zScore * yStd / p;
-                }
-            }
+        var safeStds = engine.TensorWhere(usable, xStds, ones);
+        var zScores = engine.TensorDivide(xDiff, engine.TensorBroadcastTo(engine.Reshape(safeStds, new[] { 1, p }), shape));
+        var predictions = engine.TensorAdd(engine.TensorBroadcastTo(yMean, new[] { n }), engine.ReduceSum(
+            engine.TensorMultiply(zScores, engine.TensorBroadcastTo(engine.Reshape(weights, new[] { 1, p }), shape)),
+            new[] { 1 }, false));
+        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, predictions));
+        T ssTot = engine.TensorSumOfSquares(yDiff);
 
-            double actual = NumOps.ToDouble(target[i]);
-            ssRes += (actual - pred) * (actual - pred);
-            ssTot += (actual - yMean) * (actual - yMean);
-        }
-
-        return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
+        return PreprocessingTensorOps.IsAbove(ssTot, floor) ? NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot)) : NumOps.Zero;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -226,15 +189,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("PermutationImportance has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

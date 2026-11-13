@@ -25,14 +25,14 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
 
-    private double[]? _lofContributions;
+    private Vector<T>? _lofContributions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
-    public double[]? LOFContributions => _lofContributions;
+    public Vector<T>? LOFContributions => _lofContributions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,116 +58,85 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
         int k = Math.Min(_nNeighbors, n - 1);
 
-        _lofContributions = new double[p];
-
         // Compute LOF scores using all features
-        var lofAll = ComputeLOF(X, n, p, k);
-        double lofVarianceAll = ComputeVariance(lofAll);
+        var lofVarianceAll = ComputeVariance(ComputeLOF(X, n, k));
 
         // For each feature, compute LOF without it and measure change
+        var contributions = new Tensor<T>[p];
         for (int excludeJ = 0; excludeJ < p; excludeJ++)
         {
-            var XReduced = new double[n, p - 1];
-            int col = 0;
-            for (int j = 0; j < p; j++)
-            {
-                if (j == excludeJ) continue;
-                for (int i = 0; i < n; i++)
-                    XReduced[i, col] = X[i, j];
-                col++;
-            }
+            int excluded = excludeJ;
+            var kept = Enumerable.Range(0, p).Where(j => j != excluded).ToArray();
+            var XReduced = engine.TensorIndexSelect(X, new Tensor<int>(kept, new[] { kept.Length }), 1);
 
-            var lofReduced = ComputeLOF(XReduced, n, p - 1, k);
-            double lofVarianceReduced = ComputeVariance(lofReduced);
+            var lofVarianceReduced = ComputeVariance(ComputeLOF(XReduced, n, k));
 
             // Feature importance = how much LOF variance changes when removed
-            _lofContributions[excludeJ] = Math.Abs(lofVarianceAll - lofVarianceReduced);
+            contributions[excludeJ] = engine.TensorAbs(engine.TensorSubtract(lofVarianceAll, lofVarianceReduced));
         }
 
+        var scores = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(contributions, 0);
+        _lofContributions = scores.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _lofContributions[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeLOF(double[,] X, int n, int p, int k)
+    private Tensor<T> ComputeLOF(Tensor<T> X, int n, int k)
     {
+        var engine = Engine;
+
         // Compute distance matrix
-        var distances = new double[n, n];
+        var distances = X.Shape[1] == 0
+            ? new Tensor<T>(new[] { n, n })
+            : engine.TensorSqrt(FeatureScoringTensorOps.SquaredDistances(X, X));
+
+        // Find k-nearest neighbors (closest first, lower index among ties) and k-distance
+        var maxed = engine.TensorWhere(engine.TensorEye<T>(n),
+            PreprocessingTensorOps.Filled(new[] { n, n }, NumOps.MaxValue), distances);
+        var neighborFlags = new int[n * n];
+        var kthNeighbor = new int[n];
         for (int i = 0; i < n; i++)
         {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int f = 0; f < p; f++)
-                {
-                    double diff = X[i, f] - X[j, f];
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
+            var order = PreprocessingTensorOps.StableOrder(PreprocessingTensorOps.RowVector(maxed, i), descending: false);
+            for (int r = 0; r < k; r++)
+                neighborFlags[i * n + order[r]] = 1;
+            kthNeighbor[i] = i * n + order[k - 1];
         }
 
-        // Find k-nearest neighbors and k-distance
-        var kDistances = new double[n];
-        var neighbors = new List<int>[n];
-        for (int i = 0; i < n; i++)
-        {
-            var dists = Enumerable.Range(0, n)
-                .Where(j => j != i)
-                .OrderBy(j => distances[i, j])
-                .ToList();
-            neighbors[i] = dists.Take(k).ToList();
-            kDistances[i] = distances[i, dists[k - 1]];
-        }
+        var neighbors = new Tensor<int>(neighborFlags, new[] { n, n }).Cast<T>();
+        var kDistances = engine.TensorIndexSelect(
+            engine.Reshape(distances, new[] { n * n }), new Tensor<int>(kthNeighbor, new[] { n }), 0);
 
-        // Compute reachability distances
-        double[,] reachDist = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                if (i != j)
-                    reachDist[i, j] = Math.Max(kDistances[j], distances[i, j]);
+        // Compute reachability distances: max(k-distance of j, d(i, j))
+        var reachDist = engine.TensorMax(
+            engine.TensorBroadcastTo(engine.Reshape(kDistances, new[] { 1, n }), new[] { n, n }), distances);
 
         // Compute local reachability density (LRD)
-        var lrd = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            foreach (int j in neighbors[i])
-                sum += reachDist[i, j];
-            lrd[i] = k / (sum + 1e-10);
-        }
+        T kScalar = NumOps.FromDouble(k);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var reachSums = engine.ReduceSum(engine.TensorMultiply(neighbors, reachDist), new[] { 1 }, false);
+        var lrd = engine.TensorDivide(
+            PreprocessingTensorOps.Filled(new[] { n }, kScalar), engine.TensorAddScalar(reachSums, epsilon));
 
         // Compute LOF
-        var lof = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            foreach (int j in neighbors[i])
-                sum += lrd[j] / (lrd[i] + 1e-10);
-            lof[i] = sum / k;
-        }
-
-        return lof;
+        var neighborLrd = engine.Reshape(engine.TensorMatMul(neighbors, engine.Reshape(lrd, new[] { n, 1 })), new[] { n });
+        return engine.TensorDivideScalar(engine.TensorDivide(neighborLrd, engine.TensorAddScalar(lrd, epsilon)), kScalar);
     }
 
-    private double ComputeVariance(double[] values)
+    private Tensor<T> ComputeVariance(Tensor<T> values)
     {
-        double mean = values.Average();
-        return values.Sum(v => (v - mean) * (v - mean)) / values.Length;
+        var engine = Engine;
+        var deviations = engine.TensorSubtract(values, engine.TensorBroadcastTo(
+            engine.ReduceMean(values, new[] { 0 }, true), values.Shape.ToArray()));
+        return engine.ReduceMean(engine.TensorSquare(deviations), new[] { 0 }, true);
     }
 
     /// <inheritdoc />
@@ -176,15 +145,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         if (_selectedIndices is null)
             throw new InvalidOperationException("LOFBasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

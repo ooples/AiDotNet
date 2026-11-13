@@ -28,16 +28,16 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
 {
     private readonly int _nIterations;
     private readonly double _percentile;
-    private readonly Func<Matrix<T>, Vector<T>, double[]>? _getImportances;
+    private readonly Func<Matrix<T>, Vector<T>, Vector<T>>? _getImportances;
     private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NIterations => _nIterations;
     public double Percentile => _percentile;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -46,7 +46,7 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
     public BorutaFS(
         int nIterations = 100,
         double percentile = 99.0,
-        Func<Matrix<T>, Vector<T>, double[]>? getImportances = null,
+        Func<Matrix<T>, Vector<T>, Vector<T>>? getImportances = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -85,51 +85,47 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
 
         var getImportances = _getImportances ?? DefaultGetImportances;
 
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var columns = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+            columns[j] = PreprocessingTensorOps.ColumnVector(X, j);
+        T zero = NumOps.Zero;
+
         // Track hit counts (feature beats max shadow)
         var hits = new int[p];
-        _featureImportances = new double[p];
+        var importanceSums = new Tensor<T>(new[] { p });
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            // Create shadow features by shuffling original
-            var extendedData = new T[n, p * 2];
+            // Create shadow features by shuffling original, one permutation per feature in order
+            var shadows = new Tensor<T>[p];
             for (int j = 0; j < p; j++)
             {
-                // Original feature
-                for (int i = 0; i < n; i++)
-                    extendedData[i, j] = data[i, j];
-
-                // Shadow feature (shuffled)
                 var shuffledIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
-                for (int i = 0; i < n; i++)
-                    extendedData[i, p + j] = data[shuffledIndices[i], j];
+                shadows[j] = engine.Reshape(
+                    engine.TensorIndexSelect(columns[j], new Tensor<int>(shuffledIndices, new[] { n }), 0), new[] { n, 1 });
             }
 
-            var extendedMatrix = new Matrix<T>(extendedData);
+            var extendedMatrix = engine.TensorConcatenate(new[] { X, engine.TensorConcatenate(shadows, 1) }, 1).ToMatrix();
 
             // Get importances for all features
-            var importances = getImportances(extendedMatrix, target);
+            var importances = Tensor<T>.FromVector(getImportances(extendedMatrix, target));
+            var original = engine.TensorSlice(importances, new[] { 0 }, new[] { p });
 
-            // Find max shadow importance
-            double maxShadow = 0;
-            for (int j = p; j < 2 * p; j++)
-            {
-                if (importances[j] > maxShadow)
-                    maxShadow = importances[j];
-            }
+            // Find max shadow importance (at least 0)
+            T maxShadow = PreprocessingTensorOps.ScalarMax(zero,
+                engine.TensorMaxValue(engine.TensorSlice(importances, new[] { p }, new[] { p })));
 
             // Count hits (original feature > max shadow)
-            for (int j = 0; j < p; j++)
-            {
-                if (importances[j] > maxShadow)
-                    hits[j]++;
-                _featureImportances[j] += importances[j];
-            }
+            foreach (int j in PreprocessingTensorOps.MaskPositions(engine.TensorGreaterThan(original, maxShadow)))
+                hits[j]++;
+            importanceSums = engine.TensorAdd(importanceSums, original);
         }
 
         // Average importances
-        for (int j = 0; j < p; j++)
-            _featureImportances[j] /= _nIterations;
+        var featureImportances = engine.TensorDivideScalar(importanceSums, NumOps.FromDouble(_nIterations));
+        _featureImportances = featureImportances.ToVector();
 
         // Compute threshold using binomial test approximation
         // Feature is confirmed if hits significantly exceed 50%
@@ -144,62 +140,31 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
         // Select confirmed features
         _selectedIndices = Enumerable.Range(0, p)
             .Where(j => hits[j] >= threshold)
-            .OrderByDescending(j => _featureImportances[j])
-            .OrderBy(x => x)
             .ToArray();
 
         // If no features confirmed, take top by importance
         if (_selectedIndices.Length == 0)
         {
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _featureImportances[j])
-                .Take(Math.Min(10, p))
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureImportances, Math.Min(10, p));
         }
 
         IsFitted = true;
     }
 
-    private double[] DefaultGetImportances(Matrix<T> data, Vector<T> target)
+    private Vector<T> DefaultGetImportances(Matrix<T> data, Vector<T> target)
     {
-        // Use correlation as simple importance measure
-        int n = data.Rows;
-        int p = data.Columns;
-        var importances = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-            importances[j] = Math.Abs(corr);
-        }
-
-        return importances;
+        // Use absolute Pearson correlation as simple importance measure (0 for a constant feature or target)
+        return Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target))).ToVector();
     }
 
-    private double NormalInverse(double p)
+    /// <summary>
+    /// Inverse standard normal CDF by Acklam's rational approximation (relative error below 1.2e-9):
+    /// a central rational function in <c>(p - 0.5)^2</c> for <c>0.02425 &lt;= p &lt;= 0.97575</c> and a tail rational
+    /// function in <c>sqrt(-2 ln(min(p, 1 - p)))</c> beyond.
+    /// </summary>
+    private static double NormalInverse(double p)
     {
-        // Approximation of inverse normal CDF
         if (p <= 0) return double.NegativeInfinity;
         if (p >= 1) return double.PositiveInfinity;
 
@@ -212,26 +177,30 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
             -5.447609879822406e+01, 1.615858368580409e+02,
             -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01
         ];
+        double[] c = [
+            -7.784894002430293e-03, -3.223964580411365e-01,
+            -2.400758277161838e+00, -2.549732539343734e+00,
+            4.374664141464968e+00, 2.938163982698783e+00
+        ];
+        double[] d = [
+            7.784695709041462e-03, 3.224671290700398e-01,
+            2.445134137142996e+00, 3.754408661907416e+00
+        ];
+        const double pLow = 0.02425;
 
-        double q = p - 0.5;
-        double r;
-
-        if (Math.Abs(q) <= 0.425)
+        if (p < pLow || p > 1 - pLow)
         {
-            r = 0.180625 - q * q;
-            return q * (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) /
-                       (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+            double tail = Math.Sqrt(-2 * Math.Log(p < pLow ? p : 1 - p));
+            double result = (((((c[0] * tail + c[1]) * tail + c[2]) * tail + c[3]) * tail + c[4]) * tail + c[5]) /
+                            ((((d[0] * tail + d[1]) * tail + d[2]) * tail + d[3]) * tail + 1);
+            return p < pLow ? result : -result;
         }
 
-        r = q < 0 ? p : 1 - p;
-        r = Math.Sqrt(-Math.Log(r));
-
-        double result = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) /
-                        (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
-
-        return q < 0 ? -result : result;
+        double q = p - 0.5;
+        double r = q * q;
+        return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+               (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -245,15 +214,7 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervised
         if (_selectedIndices is null)
             throw new InvalidOperationException("BorutaFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

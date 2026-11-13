@@ -27,7 +27,7 @@ public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nBins;
     private readonly double _alpha;
 
-    private double[]? _renyiEntropies;
+    private Vector<T>? _renyiEntropies;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public double Alpha => _alpha;
-    public double[]? RenyiEntropies => _renyiEntropies;
+    public Vector<T>? RenyiEntropies => _renyiEntropies;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,54 +65,28 @@ public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        const double floor = 1e-10;
 
-        _renyiEntropies = new double[p];
+        // Discretize: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when the column is constant. The
+        // probabilities, powers and normalization are in double and only the entropies cast to T: in Half,
+        // alpha = 1.0001 rounds to 1 while 1 - alpha stays nonzero, which made every entropy 0.
+        var counts = FeatureScoringTensorOps.BinCounts(
+            FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins), _nBins).Cast<double>();
+        var probabilities = engine.TensorDivideScalar(counts, (double)n);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Discretize
-            double xMin = col.Min();
-            double xMax = col.Max();
-            double xRange = xMax - xMin;
-            var bins = new int[_nBins];
-
-            for (int i = 0; i < n; i++)
-            {
-                int binIdx = xRange > 1e-10
-                    ? Math.Min(_nBins - 1, (int)((col[i] - xMin) / xRange * _nBins))
-                    : 0;
-                bins[binIdx]++;
-            }
-
-            // Compute Renyi entropy: H_alpha(X) = 1/(1-alpha) * log(sum(p^alpha))
-            double sumPowAlpha = 0;
-            for (int b = 0; b < _nBins; b++)
-            {
-                double p_b = (double)bins[b] / n;
-                if (p_b > 1e-10)
-                    sumPowAlpha += Math.Pow(p_b, _alpha);
-            }
-
-            _renyiEntropies[j] = sumPowAlpha > 1e-10
-                ? Math.Log(sumPowAlpha) / Math.Log(2) / (1 - _alpha)
-                : 0;
-        }
-
+        // Compute Renyi entropy: H_alpha(X) = 1/(1-alpha) * log2(sum(p^alpha)) over bins with p above 1e-10
+        var shape = new[] { p, _nBins };
+        var sumPowAlpha = engine.ReduceSum(engine.TensorWhere(engine.TensorGreaterThan(probabilities, floor),
+            engine.TensorPower(probabilities, _alpha), new Tensor<double>(shape)), new[] { 1 }, false);
+        var usable = engine.TensorGreaterThan(sumPowAlpha, floor);
+        var safeSum = engine.TensorWhere(usable, sumPowAlpha, PreprocessingTensorOps.Filled(new[] { p }, 1.0));
+        var renyiEntropies = engine.TensorWhere(usable,
+            engine.TensorDivideScalar(engine.TensorLog2(safeSum), 1 - _alpha), new Tensor<double>(new[] { p })).Cast<T>();
+        _renyiEntropies = renyiEntropies.ToVector();
         // Select features with highest entropy (most informative)
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _renyiEntropies[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(renyiEntropies, numToSelect);
 
         IsFitted = true;
     }
@@ -129,15 +103,7 @@ public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("RenyiEntropySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

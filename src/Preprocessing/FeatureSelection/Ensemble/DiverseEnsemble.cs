@@ -29,13 +29,13 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     private readonly int _nFeaturesToSelect;
     private readonly int? _randomState;
 
-    private double[]? _aggregatedScores;
+    private Vector<T>? _aggregatedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? AggregatedScores => _aggregatedScores;
+    public Vector<T>? AggregatedScores => _aggregatedScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -75,286 +75,113 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var allScores = new List<double[]>();
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var allScores = new List<Tensor<T>>();
 
         // Method 1: Correlation-based
-        allScores.Add(ComputeCorrelationScores(data, target, n, p));
+        allScores.Add(engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y)));
 
         // Method 2: Mutual Information-based
-        allScores.Add(ComputeMutualInformationScores(data, target, n, p));
+        allScores.Add(ComputeMutualInformationScores(X, y, n, p));
 
         // Method 3: F-statistic (ANOVA)
-        allScores.Add(ComputeFScores(data, target, n, p));
+        allScores.Add(ComputeFScores(X, target, n, p));
 
-        // Method 4: Variance-based
-        allScores.Add(ComputeVarianceScores(data, n, p));
+        // Method 4: Variance-based (population variance)
+        allScores.Add(engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(X,
+            engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }))), new[] { 0 }, false));
 
         // Method 5: Distance correlation
-        allScores.Add(ComputeDistanceCorrelationScores(data, target, n, p, random));
+        allScores.Add(ComputeDistanceCorrelationScores(X, y, n, random));
 
-        // Aggregate scores (normalize and average)
-        _aggregatedScores = new double[p];
+        // Aggregate scores (normalize each method to [0, 1], 0 when its range is not above 1e-10, and average)
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var aggregatedScores = new Tensor<T>(new[] { p });
 
         foreach (var scores in allScores)
         {
-            // Normalize to [0, 1]
-            double minScore = scores.Min();
-            double maxScore = scores.Max();
-            double range = maxScore - minScore;
-
-            for (int j = 0; j < p; j++)
-            {
-                double normalizedScore = range > 1e-10 ? (scores[j] - minScore) / range : 0;
-                _aggregatedScores[j] += normalizedScore;
-            }
+            var shifted = engine.TensorSubtractScalar(scores, engine.TensorMinValue(scores));
+            T range = engine.TensorMaxValue(shifted);
+            if (PreprocessingTensorOps.IsAbove(range, floor))
+                aggregatedScores = engine.TensorAdd(aggregatedScores, engine.TensorDivideScalar(shifted, range));
         }
 
         // Average across methods
-        for (int j = 0; j < p; j++)
-            _aggregatedScores[j] /= allScores.Count;
+        aggregatedScores = engine.TensorDivideScalar(aggregatedScores, NumOps.FromDouble(allScores.Count));
+        _aggregatedScores = aggregatedScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _aggregatedScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(aggregatedScores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeCorrelationScores(Matrix<T> data, Vector<T> target, int n, int p)
+    private Tensor<T> ComputeMutualInformationScores(Tensor<T> X, Tensor<T> y, int n, int p)
     {
-        var scores = new double[p];
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeMutualInformationScores(Matrix<T> data, Vector<T> target, int n, int p)
-    {
-        var scores = new double[p];
+        // 10 range-scaled bins per feature and for the target; MI in nats over the non-empty joint cells
         int nBins = 10;
-
-        for (int j = 0; j < p; j++)
-        {
-            var values = new double[n];
-            double minVal = double.MaxValue, maxVal = double.MinValue;
-
-            for (int i = 0; i < n; i++)
-            {
-                values[i] = NumOps.ToDouble(data[i, j]);
-                minVal = Math.Min(minVal, values[i]);
-                maxVal = Math.Max(maxVal, values[i]);
-            }
-
-            double range = maxVal - minVal;
-            var xBins = new int[n];
-            for (int i = 0; i < n; i++)
-                xBins[i] = range > 1e-10 ? Math.Min((int)((values[i] - minVal) / range * (nBins - 1)), nBins - 1) : 0;
-
-            // Discretize target
-            var yVals = new double[n];
-            double yMin = double.MaxValue, yMax = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                yVals[i] = NumOps.ToDouble(target[i]);
-                yMin = Math.Min(yMin, yVals[i]);
-                yMax = Math.Max(yMax, yVals[i]);
-            }
-
-            double yRange = yMax - yMin;
-            var yBins = new int[n];
-            for (int i = 0; i < n; i++)
-                yBins[i] = yRange > 1e-10 ? Math.Min((int)((yVals[i] - yMin) / yRange * (nBins - 1)), nBins - 1) : 0;
-
-            // Compute mutual information
-            var jointCounts = new Dictionary<(int, int), int>();
-            var xCounts = new int[nBins];
-            var yCounts = new int[nBins];
-
-            for (int i = 0; i < n; i++)
-            {
-                var key = (xBins[i], yBins[i]);
-                jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
-                xCounts[xBins[i]]++;
-                yCounts[yBins[i]]++;
-            }
-
-            double mi = 0;
-            foreach (var kvp in jointCounts)
-            {
-                double pxy = (double)kvp.Value / n;
-                double px = (double)xCounts[kvp.Key.Item1] / n;
-                double py = (double)yCounts[kvp.Key.Item2] / n;
-
-                if (pxy > 0 && px > 0 && py > 0)
-                    mi += pxy * Math.Log(pxy / (px * py));
-            }
-
-            scores[j] = mi;
-        }
-
-        return scores;
+        var xBins = PreprocessingTensorOps.RangeScaledBinOneHot(X, nBins);
+        var yBins = PreprocessingTensorOps.RangeScaledBinOneHot(Engine.Reshape(y, new[] { n, 1 }), nBins);
+        var mi = PreprocessingTensorOps.HistogramMutualInformation(xBins, yBins, nBins, bits: false, logEpsilon: 0, clampAtZero: false);
+        return Engine.Reshape(mi, new[] { p });
     }
 
-    private double[] ComputeFScores(Matrix<T> data, Vector<T> target, int n, int p)
+    private Tensor<T> ComputeFScores(Tensor<T> X, Vector<T> target, int n, int p)
     {
-        var scores = new double[p];
+        var engine = Engine;
 
         // Group by target class
-        var classes = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classes.ContainsKey(label))
-                classes[label] = new List<int>();
-            classes[label].Add(i);
-        }
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        if (k < 2)
+            return new Tensor<T>(new[] { p });
 
-        if (classes.Count < 2)
-            return scores;
+        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        // Class sizes and means counted exactly (a Half sum of the 0/1 membership stops at 2048)
+        var classMeans = FeatureScoringTensorOps.GroupMeans(membership, X, out var counts);
+        var grandMean = engine.ReduceMean(X, new[] { 0 }, true);
 
-        for (int j = 0; j < p; j++)
-        {
-            double grandMean = 0;
-            for (int i = 0; i < n; i++)
-                grandMean += NumOps.ToDouble(data[i, j]);
-            grandMean /= n;
+        // Between-class and within-class sums of squares
+        var ssb = engine.ReduceSum(engine.TensorMultiply(
+            engine.TensorSquare(engine.TensorSubtract(classMeans, engine.TensorBroadcastTo(grandMean, new[] { k, p }))),
+            engine.TensorBroadcastTo(engine.Reshape(counts, new[] { k, 1 }), new[] { k, p })), new[] { 0 }, false);
+        var rowMeans = engine.TensorIndexSelect(classMeans, new Tensor<int>(classIndex, new[] { n }), 0);
+        var ssw = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(X, rowMeans)), new[] { 0 }, false);
 
-            double ssb = 0, ssw = 0;
+        int dfb = k - 1;
+        int dfw = n - k;
+        if (dfw <= 0)
+            return new Tensor<T>(new[] { p });
 
-            foreach (var kvp in classes)
-            {
-                double classMean = kvp.Value.Average(i => NumOps.ToDouble(data[i, j]));
-                ssb += kvp.Value.Count * Math.Pow(classMean - grandMean, 2);
-
-                foreach (int i in kvp.Value)
-                    ssw += Math.Pow(NumOps.ToDouble(data[i, j]) - classMean, 2);
-            }
-
-            int dfb = classes.Count - 1;
-            int dfw = n - classes.Count;
-
-            scores[j] = (ssw > 1e-10 && dfw > 0) ? (ssb / dfb) / (ssw / dfw) : 0;
-        }
-
-        return scores;
+        var usable = engine.TensorGreaterThan(ssw, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var safeSsw = engine.TensorWhere(usable, ssw, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        return engine.TensorWhere(usable, engine.TensorDivide(
+            engine.TensorDivideScalar(ssb, NumOps.FromDouble(dfb)), engine.TensorDivideScalar(safeSsw, NumOps.FromDouble(dfw))),
+            new Tensor<T>(new[] { p }));
     }
 
-    private double[] ComputeVarianceScores(Matrix<T> data, int n, int p)
+    private Tensor<T> ComputeDistanceCorrelationScores(Tensor<T> X, Tensor<T> y, int n, Random random)
     {
-        var scores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-                variance += Math.Pow(NumOps.ToDouble(data[i, j]) - mean, 2);
-            variance /= n;
-
-            scores[j] = variance;
-        }
-
-        return scores;
-    }
-
-    private double[] ComputeDistanceCorrelationScores(Matrix<T> data, Vector<T> target, int n, int p, Random random)
-    {
-        var scores = new double[p];
+        var engine = Engine;
 
         // Use a sample for computational efficiency
         int sampleSize = Math.Min(100, n);
         var sampleIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(sampleSize).ToArray();
+        var rows = new Tensor<int>(sampleIndices, new[] { sampleSize });
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute distance matrices
-            var dx = new double[sampleSize, sampleSize];
-            var dy = new double[sampleSize, sampleSize];
-
-            for (int i1 = 0; i1 < sampleSize; i1++)
-            {
-                for (int i2 = 0; i2 < sampleSize; i2++)
-                {
-                    dx[i1, i2] = Math.Abs(NumOps.ToDouble(data[sampleIndices[i1], j]) - NumOps.ToDouble(data[sampleIndices[i2], j]));
-                    dy[i1, i2] = Math.Abs(NumOps.ToDouble(target[sampleIndices[i1]]) - NumOps.ToDouble(target[sampleIndices[i2]]));
-                }
-            }
-
-            // Double-center
-            DoubleCenterMatrix(dx, sampleSize);
-            DoubleCenterMatrix(dy, sampleSize);
-
-            // Compute distance covariance
-            double dcov = 0;
-            for (int i1 = 0; i1 < sampleSize; i1++)
-                for (int i2 = 0; i2 < sampleSize; i2++)
-                    dcov += dx[i1, i2] * dy[i1, i2];
-            dcov /= (double)sampleSize * sampleSize;
-
-            scores[j] = Math.Sqrt(Math.Max(0, dcov));
-        }
-
-        return scores;
+        // Distance correlation dCor = sqrt(dCov^2 / sqrt(dVar^2(x) dVar^2(y))), 0 when a distance variance is 0
+        var dcov2 = FeatureScoringTensorOps.SquaredDistanceCovariances(
+            engine.TensorIndexSelect(X, rows, 0), engine.TensorIndexSelect(y, rows, 0), out var xVariances, out T yVariance);
+        int p = dcov2.Length;
+        // sqrt(a) sqrt(b) rather than sqrt(a b): the product of the two variances overflows Half's 65504 maximum
+        var denominators = engine.TensorMultiplyScalar(engine.TensorSqrt(xVariances), NumOps.Sqrt(yVariance));
+        var usable = engine.TensorGreaterThan(denominators, NumOps.Zero);
+        var safe = engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        return engine.TensorWhere(usable,
+            engine.TensorSqrt(engine.TensorMax(engine.TensorDivide(dcov2, safe), NumOps.Zero)), new Tensor<T>(new[] { p }));
     }
-
-    private void DoubleCenterMatrix(double[,] matrix, int n)
-    {
-        var rowMeans = new double[n];
-        var colMeans = new double[n];
-        double grandMean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                rowMeans[i] += matrix[i, j];
-                colMeans[j] += matrix[i, j];
-            }
-            rowMeans[i] /= n;
-        }
-
-        for (int j = 0; j < n; j++)
-        {
-            colMeans[j] /= n;
-            grandMean += colMeans[j];
-        }
-        grandMean /= n;
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                matrix[i, j] = matrix[i, j] - rowMeans[i] - colMeans[j] + grandMean;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -368,15 +195,7 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("DiverseEnsemble has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

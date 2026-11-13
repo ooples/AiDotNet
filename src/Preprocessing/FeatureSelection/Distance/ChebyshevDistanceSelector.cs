@@ -24,13 +24,13 @@ public class ChebyshevDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _distanceScores;
+    private Vector<T>? _distanceScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DistanceScores => _distanceScores;
+    public Vector<T>? DistanceScores => _distanceScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,64 +64,47 @@ public class ChebyshevDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+
+        // Compute min and max of every feature for each class
+        var classMin = new Tensor<T>[k];
+        var classMax = new Tensor<T>[k];
+        for (int c = 0; c < k; c++)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            var rows = FeatureScoringTensorOps.Rows(X, FeatureScoringTensorOps.GroupMembers(classIndex, c));
+            classMin[c] = PreprocessingTensorOps.ColumnMin(rows);
+            classMax[c] = PreprocessingTensorOps.ColumnMax(rows);
         }
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _distanceScores = new double[p];
-
-        for (int j = 0; j < p; j++)
+        // Maximum separation between class ranges
+        T zero = NumOps.Zero;
+        var maxSeparation = new Tensor<T>(new[] { p });
+        for (int ci = 0; ci < k; ci++)
         {
-            // Compute min and max for each class
-            var classRanges = new Dictionary<int, (double min, double max)>();
-            foreach (var c in classes)
+            for (int cj = ci + 1; cj < k; cj++)
             {
-                var values = classIndices[c].Select(i => X[i, j]).ToList();
-                classRanges[c] = (values.Min(), values.Max());
+                // Gap between ranges
+                var gap = engine.TensorMax(engine.TensorMax(
+                    engine.TensorSubtract(classMin[ci], classMax[cj]),
+                    engine.TensorSubtract(classMin[cj], classMax[ci])), zero);
+
+                // Or use maximum absolute difference
+                var maxDiff = engine.TensorMax(
+                    engine.TensorAbs(engine.TensorSubtract(classMax[ci], classMin[cj])),
+                    engine.TensorAbs(engine.TensorSubtract(classMax[cj], classMin[ci])));
+
+                maxSeparation = engine.TensorMax(maxSeparation,
+                    engine.TensorWhere(engine.TensorGreaterThan(gap, zero), gap, maxDiff));
             }
-
-            // Maximum separation between class ranges
-            double maxSeparation = 0;
-            for (int ci = 0; ci < classes.Count; ci++)
-            {
-                for (int cj = ci + 1; cj < classes.Count; cj++)
-                {
-                    var range1 = classRanges[classes[ci]];
-                    var range2 = classRanges[classes[cj]];
-
-                    // Gap between ranges
-                    double gap = Math.Max(0, Math.Max(
-                        range1.min - range2.max,
-                        range2.min - range1.max));
-
-                    // Or use maximum absolute difference
-                    double maxDiff = Math.Max(
-                        Math.Abs(range1.max - range2.min),
-                        Math.Abs(range2.max - range1.min));
-
-                    maxSeparation = Math.Max(maxSeparation, gap > 0 ? gap : maxDiff);
-                }
-            }
-
-            _distanceScores[j] = maxSeparation;
         }
+
+        _distanceScores = maxSeparation.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _distanceScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(maxSeparation, numToSelect);
 
         IsFitted = true;
     }
@@ -139,15 +122,7 @@ public class ChebyshevDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("ChebyshevDistanceSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

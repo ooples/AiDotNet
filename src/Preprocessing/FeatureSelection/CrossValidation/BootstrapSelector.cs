@@ -28,7 +28,7 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly double _sampleRatio;
     private readonly int? _randomState;
 
-    private double[]? _stabilityScores;
+    private Vector<T>? _stabilityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -36,7 +36,7 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBootstraps => _nBootstraps;
     public double SampleRatio => _sampleRatio;
-    public double[]? StabilityScores => _stabilityScores;
+    public Vector<T>? StabilityScores => _stabilityScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -80,17 +80,15 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
 
         int sampleSize = (int)(n * _sampleRatio);
         var selectionCounts = new int[p];
+        T count = NumOps.FromDouble(sampleSize);
+        T varianceFloor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var zeros = new Tensor<T>(new[] { p });
 
         for (int b = 0; b < _nBootstraps; b++)
         {
@@ -98,58 +96,40 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             var sampleIndices = new int[sampleSize];
             for (int i = 0; i < sampleSize; i++)
                 sampleIndices[i] = rand.Next(n);
+            var rows = new Tensor<int>(sampleIndices, new[] { sampleSize });
+            var xs = engine.TensorIndexSelect(X, rows, 0);
+            var ys = engine.TensorIndexSelect(y, rows, 0);
 
-            // Compute correlation with target for each feature on bootstrap sample
-            var correlations = new double[p];
-
-            double ySum = 0, ySumSq = 0;
-            for (int i = 0; i < sampleSize; i++)
-            {
-                ySum += y[sampleIndices[i]];
-                ySumSq += y[sampleIndices[i]] * y[sampleIndices[i]];
-            }
-            double yMean = ySum / sampleSize;
-            double yVar = ySumSq / sampleSize - yMean * yMean;
-
-            for (int j = 0; j < p; j++)
-            {
-                double xSum = 0, xySumProd = 0, xSumSq = 0;
-                for (int i = 0; i < sampleSize; i++)
-                {
-                    int idx = sampleIndices[i];
-                    xSum += X[idx, j];
-                    xSumSq += X[idx, j] * X[idx, j];
-                    xySumProd += X[idx, j] * y[idx];
-                }
-
-                double xMean = xSum / sampleSize;
-                double xVar = xSumSq / sampleSize - xMean * xMean;
-                double covar = xySumProd / sampleSize - xMean * yMean;
-
-                correlations[j] = (xVar > 1e-10 && yVar > 1e-10)
-                    ? Math.Abs(covar / Math.Sqrt(xVar * yVar))
-                    : 0;
-            }
+            // Compute |correlation| with target for each feature on bootstrap sample (raw-moment form)
+            var yMean = engine.TensorBroadcastTo(engine.ReduceMean(ys, new[] { 0 }, true), new[] { p });
+            var yVar = engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.ReduceMean(engine.TensorSquare(ys), new[] { 0 }, true), new[] { p }),
+                engine.TensorSquare(yMean));
+            var xMean = engine.TensorDivideScalar(engine.ReduceSum(xs, new[] { 0 }, false), count);
+            var xVar = engine.TensorSubtract(
+                engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(xs), new[] { 0 }, false), count),
+                engine.TensorSquare(xMean));
+            var xyMean = engine.TensorDivideScalar(engine.Reshape(
+                engine.TensorMatMul(engine.TensorTranspose(xs), engine.Reshape(ys, new[] { sampleSize, 1 })), new[] { p }), count);
+            var covar = engine.TensorSubtract(xyMean, engine.TensorMultiply(xMean, yMean));
+            var usable = engine.TensorMultiply(
+                engine.TensorGreaterThan(xVar, varianceFloor), engine.TensorGreaterThan(yVar, varianceFloor));
+            var correlations = engine.TensorWhere(usable,
+                engine.TensorAbs(engine.TensorDivide(covar,
+                    engine.TensorMultiply(engine.TensorSqrt(xVar), engine.TensorSqrt(yVar)))), zeros);
 
             // Select top features for this bootstrap
-            var topFeatures = Enumerable.Range(0, p)
-                .OrderByDescending(j => correlations[j])
-                .Take(_nFeaturesToSelect)
-                .ToHashSet();
-
-            foreach (int j in topFeatures)
+            foreach (int j in PreprocessingTensorOps.TopKIndicesSorted(correlations, _nFeaturesToSelect))
                 selectionCounts[j]++;
         }
 
         // Stability score = proportion of bootstraps where feature was selected
-        _stabilityScores = selectionCounts.Select(c => (double)c / _nBootstraps).ToArray();
+        var stability = engine.TensorDivideScalar(
+            new Tensor<int>(selectionCounts, new[] { p }).Cast<T>(), NumOps.FromDouble(_nBootstraps));
+        _stabilityScores = stability.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _stabilityScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(stability, numToSelect);
 
         IsFitted = true;
     }
@@ -167,15 +147,7 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("BootstrapSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
