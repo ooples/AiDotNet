@@ -734,25 +734,28 @@ internal static class RLTensorOps
             throw new ArgumentNullException(nameof(series));
         }
 
-        var enumerators = new IEnumerator<T>[series.Length];
-        for (int k = 0; k < series.Length; k++)
-        {
-            enumerators[k] = ((IEnumerable<T>)series[k].Values).GetEnumerator();
-        }
-
+        // An array of enumerators has no using form; each is created inside the try so one that throws during
+        // creation still releases the ones before it.
+        var enumerators = new IEnumerator<T>?[series.Length];
         try
         {
+            for (int k = 0; k < series.Length; k++)
+            {
+                enumerators[k] = ((IEnumerable<T>)series[k].Values).GetEnumerator();
+            }
+
             for (int index = 0; index < count; index++)
             {
                 string suffix = index.ToString(System.Globalization.CultureInfo.InvariantCulture);
                 for (int k = 0; k < series.Length; k++)
                 {
-                    if (!enumerators[k].MoveNext())
+                    var enumerator = enumerators[k];
+                    if (enumerator is null || !enumerator.MoveNext())
                     {
                         throw new ArgumentException($"Metric series '{series[k].Prefix}' has fewer than {count} elements.", nameof(series));
                     }
 
-                    metrics[series[k].Prefix + suffix] = enumerators[k].Current;
+                    metrics[series[k].Prefix + suffix] = enumerator.Current;
                 }
             }
         }
@@ -760,7 +763,7 @@ internal static class RLTensorOps
         {
             foreach (var enumerator in enumerators)
             {
-                enumerator.Dispose();
+                enumerator?.Dispose();
             }
         }
     }

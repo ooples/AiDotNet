@@ -1135,9 +1135,6 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Create a matrix with a single row for the prediction
-        Matrix<T> inputMatrix = Matrix<T>.CreateFromVector(input);
-
         // Make sure we have some volatility estimate to work with
         if (_conditionalVariances.Length == 0)
         {

@@ -91,7 +91,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     // Appendix D: "a separate set of parameters specifies the log standard deviation of each element" (continuous).
     private Vector<T> _logStd;
 
-    private List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done, bool truncated)> _trajectoryBuffer;
+    private readonly List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done, bool truncated)> _trajectoryBuffer;
     private int _updateCount;
     private double _lastKl, _lastImprovement;
 
