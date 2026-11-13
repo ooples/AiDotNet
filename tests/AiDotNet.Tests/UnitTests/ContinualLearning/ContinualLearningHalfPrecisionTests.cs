@@ -159,6 +159,27 @@ public class ContinualLearningHalfPrecisionTests
         Assert.Equal(new[] { 1.5, -0.25, 300.0 }, written[0]);
     }
 
+    [Fact]
+    public void VariationalUpdateVariance_Half_ZeroGradientKeepsFiniteLogVariance()
+    {
+        // logVar <- 0.9 logVar + 0.1 log(max(g^2 + 1e-8, 1e-10)). With g = 0, 1e-8 rounds to 0 in Half, so
+        // master's floor gives 0.9 (-3) + 0.1 ln 1e-10 = -5.0026 rather than -infinity.
+        var vcl = new AiDotNet.ContinualLearning.VariationalContinualLearning<Half>();
+        var field = vcl.GetType().GetField("_posteriorLogVar", BindingFlags.NonPublic | BindingFlags.Instance);
+        Assert.NotNull(field);
+        field?.SetValue(vcl, new Vector<Half>(new[] { (Half)(-3.0f), (Half)(-3.0f) }));
+
+        vcl.UpdateVariance(new Vector<Half>(2), 0.1);
+
+        var logVar = field?.GetValue(vcl) as Vector<Half>;
+        Assert.NotNull(logVar);
+        double expected = 0.9 * -3.0 + 0.1 * Math.Log(1e-10);
+        for (int i = 0; i < 2; i++)
+        {
+            Assert.InRange((double)(logVar ?? new Vector<Half>(2))[i], expected - 0.02, expected + 0.02);
+        }
+    }
+
     private static double[] Softmax(double[] logits)
     {
         double max = double.NegativeInfinity;

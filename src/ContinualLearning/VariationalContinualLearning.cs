@@ -300,10 +300,16 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         // Higher gradients indicate more uncertainty
         var lr = _numOps.FromDouble(learningRate);
 
-        // log(g^2 + 1e-8): the argument is at least 1e-8, so the 1e-10 floor of Log(T) never applies.
+        // log(max(g^2 + 1e-8, 1e-10)), master's floored log. The floor still matters: 1e-8 rounds to zero
+        // in Half, so a zero gradient reaches the log as 0. It is applied in the log domain because
+        // 1e-10 is not representable in Half while log 1e-10 is.
         var g = gradients.AsTensor();
         var gradSq = Engine.TensorMultiply(g, g);
-        var logGradSq = Engine.TensorLog(Engine.TensorAddScalar(gradSq, _numOps.FromDouble(1e-8)));
+        var argument = Engine.TensorAddScalar(gradSq, _numOps.FromDouble(1e-8));
+        var logGradSq = Engine.TensorWhere(
+            Engine.TensorGreaterThan(argument, _numOps.FromDouble(1e-10)),
+            Engine.TensorLog(argument),
+            Engine.TensorFullLike(argument, _numOps.FromDouble(Math.Log(1e-10))));
 
         // Exponential moving average, written back in place
         var alpha = _numOps.FromDouble(0.1);
