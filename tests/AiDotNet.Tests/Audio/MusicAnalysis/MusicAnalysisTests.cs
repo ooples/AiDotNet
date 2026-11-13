@@ -113,8 +113,8 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
             var result = tracker.Track(audio);
 
             // Assert
-            Assert.True(result.ConfidenceScore >= 0 && result.ConfidenceScore <= 1,
-                $"Confidence {result.ConfidenceScore} should be in [0, 1]");
+            Assert.True(result.TempoConfidence >= 0 && result.TempoConfidence <= 1,
+                $"Confidence {result.TempoConfidence} should be in [0, 1]");
         }
 
         [Fact(Timeout = 60000)]
@@ -129,7 +129,7 @@ namespace AiDotNet.Tests.Audio.MusicAnalysis
 
             // Assert
             double expectedInterval = 60.0 / result.Tempo;
-            Assert.Equal(expectedInterval, result.AverageBeatInterval, 3);
+            Assert.Equal(expectedInterval, result.BeatInterval, 3);
         }
 
         // ChordRecognizer Tests

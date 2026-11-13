@@ -153,12 +153,14 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     {
         int i = FindInterval(x);
         T dx = _numOps.Subtract(x, _x[i]);
-        T result = _y[i];
+        T dx2 = _numOps.Multiply(dx, dx);
+        T dx3 = _numOps.Multiply(dx2, dx);
 
-        for (int j = 1; j < 4; j++)
-        {
-            result = _numOps.Add(result, _numOps.Multiply(_coefficients[j][i], Power(dx, j)));
-        }
+        // y[i] + b*dx + c*dx^2 + d*dx^3, accumulated in that order
+        T result = _y[i];
+        result = _numOps.Add(result, _numOps.Multiply(_coefficients[1][i], dx));
+        result = _numOps.Add(result, _numOps.Multiply(_coefficients[2][i], dx2));
+        result = _numOps.Add(result, _numOps.Multiply(_coefficients[3][i], dx3));
 
         return result;
     }
@@ -182,51 +184,51 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// </remarks>
     private void CalculateCoefficients()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
-        Matrix<T> A = new Matrix<T>(n, n);
-        Vector<T> b = new Vector<T>(n);
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
+        T two = _numOps.FromDouble(2);
+        T six = _numOps.FromDouble(6);
 
-        // Set up the system of equations
-        for (int i = 1; i < n - 1; i++)
-        {
-            T h_prev = _numOps.Subtract(_x[i], _x[i - 1]);
-            T h_next = _numOps.Subtract(_x[i + 1], _x[i]);
+        // Interval widths h[i] = x[i + 1] - x[i] and secant slopes (y[i + 1] - y[i]) / h[i]
+        Tensor<T> h = engine.TensorSubtract(Slice(xs, 1, n - 1), Slice(xs, 0, n - 1));
+        Tensor<T> slope = engine.TensorDivide(engine.TensorSubtract(Slice(ys, 1, n - 1), Slice(ys, 0, n - 1)), h);
 
-            A[i, i - 1] = h_prev;
-            A[i, i] = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Add(h_prev, h_next));
-            A[i, i + 1] = h_next;
+        // Set up the tridiagonal system: row i reads h[i - 1], 2 (h[i - 1] + h[i]), h[i], where the clamped end rows
+        // have no h[-1] or h[n - 1] term
+        Tensor<T> zero = Tensor<T>.FromScalar(_numOps.Zero);
+        Tensor<T> diagonal = engine.TensorMultiplyScalar(
+            engine.TensorAdd(
+                engine.TensorConcatenate(new[] { zero, h }, 0),
+                engine.TensorConcatenate(new[] { h, zero }, 0)),
+            two);
+        Matrix<T> A = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorDiagEmbed(h, -1), engine.TensorDiagEmbed(diagonal, 0)),
+            engine.TensorDiagEmbed(h, 1)).ToMatrix();
 
-            T dy_prev = _numOps.Divide(_numOps.Subtract(_y[i], _y[i - 1]), h_prev);
-            T dy_next = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h_next);
-            b[i] = _numOps.Multiply(_numOps.FromDouble(6), _numOps.Subtract(dy_next, dy_prev));
-        }
-
-        // Apply clamped spline conditions
-        T h_first = _numOps.Subtract(_x[1], _x[0]);
-        T h_last = _numOps.Subtract(_x[n - 1], _x[n - 2]);
-
-        A[0, 0] = _numOps.Multiply(_numOps.FromDouble(2), h_first);
-        A[0, 1] = h_first;
-        b[0] = _numOps.Multiply(_numOps.FromDouble(6), _numOps.Subtract(_numOps.Divide(_numOps.Subtract(_y[1], _y[0]), h_first), _startSlope));
-
-        A[n - 1, n - 2] = h_last;
-        A[n - 1, n - 1] = _numOps.Multiply(_numOps.FromDouble(2), h_last);
-        b[n - 1] = _numOps.Multiply(_numOps.FromDouble(6), _numOps.Subtract(_endSlope, _numOps.Divide(_numOps.Subtract(_y[n - 1], _y[n - 2]), h_last)));
+        // Right-hand side 6 (s[i] - s[i - 1]) over the slopes s extended by the clamped end slopes
+        Tensor<T> extendedSlopes = engine.TensorConcatenate(
+            new[] { Tensor<T>.FromScalar(_startSlope), slope, Tensor<T>.FromScalar(_endSlope) }, 0);
+        Vector<T> b = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(Slice(extendedSlopes, 1, n), Slice(extendedSlopes, 0, n)),
+            six).ToVector();
 
         // Solve the system
         var decomposition = _decomposition ?? new LuDecomposition<T>(A);
-        Vector<T> m = MatrixSolutionHelper.SolveLinearSystem(b, decomposition);
+        Tensor<T> m = MatrixSolutionHelper.SolveLinearSystem(b, decomposition).AsTensor();
+        Tensor<T> mLeft = Slice(m, 0, n - 1);
+        Tensor<T> mRight = Slice(m, 1, n - 1);
 
         // Calculate the coefficients
-        for (int i = 0; i < n - 1; i++)
-        {
-            T h = _numOps.Subtract(_x[i + 1], _x[i]);
-            _coefficients[0][i] = _y[i];
-            _coefficients[1][i] = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h);
-            _coefficients[1][i] = _numOps.Subtract(_coefficients[1][i], _numOps.Multiply(_numOps.Divide(h, _numOps.FromDouble(6)), _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), m[i]), m[i + 1])));
-            _coefficients[2][i] = _numOps.Divide(m[i], _numOps.FromDouble(2));
-            _coefficients[3][i] = _numOps.Divide(_numOps.Subtract(m[i + 1], m[i]), _numOps.Multiply(_numOps.FromDouble(6), h));
-        }
+        _coefficients[0] = Slice(ys, 0, n - 1).ToVector();
+        _coefficients[1] = engine.TensorSubtract(
+            slope,
+            engine.TensorMultiply(
+                engine.TensorDivideScalar(h, six),
+                engine.TensorAdd(engine.TensorMultiplyScalar(mLeft, two), mRight))).ToVector();
+        _coefficients[2] = engine.TensorDivideScalar(mLeft, two).ToVector();
+        _coefficients[3] = engine.TensorDivide(engine.TensorSubtract(mRight, mLeft), engine.TensorMultiplyScalar(h, six)).ToVector();
     }
 
     /// <summary>
@@ -248,40 +250,14 @@ public class ClampedSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the interval containing the x-coordinate.</returns>
     private int FindInterval(T x)
     {
-        for (int i = 0; i < _x.Length - 1; i++)
-        {
-            if (_numOps.LessThanOrEquals(x, _x[i + 1]))
-                return i;
-        }
-
-        return _x.Length - 2;
+        return InterpolationSearch.FirstSegmentReaching(_x, x, 0, _x.Length - 2);
     }
 
     /// <summary>
-    /// Raises a value to the specified power through repeated multiplication.
+    /// Returns <paramref name="length"/> consecutive elements of a vector tensor starting at <paramref name="start"/>.
     /// </summary>
-    /// <remarks>
-    /// This method calculates x raised to the power of 'power' by multiplying
-    /// x by itself 'power' times.
-    /// 
-    /// <b>For Beginners:</b> This is a simple way to calculate powers. For example:
-    /// - Power(x, 2) means x² (x squared)
-    /// - Power(x, 3) means x³ (x cubed)
-    /// 
-    /// This is needed because cubic splines use polynomial equations that include
-    /// terms like x², x³, etc.
-    /// </remarks>
-    /// <param name="x">The base value.</param>
-    /// <param name="power">The exponent (power) to raise the base to.</param>
-    /// <returns>The result of x raised to the specified power.</returns>
-    private T Power(T x, int power)
+    private static Tensor<T> Slice(Tensor<T> values, int start, int length)
     {
-        T result = _numOps.One;
-        for (int i = 0; i < power; i++)
-        {
-            result = _numOps.Multiply(result, x);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorSlice(values, new[] { start }, new[] { length });
     }
 }

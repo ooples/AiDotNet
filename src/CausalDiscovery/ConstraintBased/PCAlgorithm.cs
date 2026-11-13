@@ -122,30 +122,12 @@ public class PCAlgorithm<T> : ConstraintBasedBase<T>
         ApplyMeekRules(adj, oriented, d);
 
         // Step 4: Build weighted adjacency matrix using Matrix<T>
-        var W = new Matrix<T>(d, d);
+        // Oriented i → j and unoriented edges keep |corr|; an edge oriented j → i is skipped.
+        var edgeMask = new bool[d * d];
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                if (!adj[i, j]) continue;
-
-                if (oriented[i, j])
-                {
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-                }
-                else if (oriented[j, i])
-                {
-                    // Edge is j → i, skip i → j direction
-                    continue;
-                }
-                else
-                {
-                    // Unoriented: assign weight (both i→j and j→i are set in symmetric loop iterations)
-                    double weight = Math.Abs(ComputePartialCorr(data, i, j, []));
-                    W[i, j] = NumOps.FromDouble(weight);
-                }
-            }
-        }
+                edgeMask[i * d + j] = adj[i, j] && (oriented[i, j] || !oriented[j, i]);
+        var W = ApplyEdgeMask(edgeMask, ComputeAbsoluteCorrelationMatrix(data));
 
         return W;
     }

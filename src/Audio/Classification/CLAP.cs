@@ -581,56 +581,10 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events)
-    {
-        if (events.Count == 0) return events;
-        var m = new List<AudioEvent<T>>();
-        foreach (var g in events.GroupBy(e => e.EventType))
-        {
-            var sorted = g.OrderBy(e => e.StartTime).ToList();
-            var cur = sorted[0];
-            for (int i = 1; i < sorted.Count; i++)
-            {
-                var next = sorted[i];
-                if (next.StartTime <= cur.EndTime + 0.1)
-                {
-                    double cc = NumOps.ToDouble(cur.Confidence);
-                    double nc = NumOps.ToDouble(next.Confidence);
-                    cur = new AudioEvent<T>
-                    {
-                        EventType = cur.EventType,
-                        StartTime = cur.StartTime,
-                        EndTime = Math.Max(cur.EndTime, next.EndTime),
-                        Confidence = cc > nc ? cur.Confidence : next.Confidence,
-                        PeakTime = cc > nc ? cur.PeakTime : next.PeakTime
-                    };
-                }
-                else
-                {
-                    m.Add(cur);
-                    cur = next;
-                }
-            }
-            m.Add(cur);
-        }
-        return m.OrderBy(e => e.StartTime).ToList();
-    }
+        => AudioEventDetectionOps.MergeEvents(Engine, events, 0.1);
 
     private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events)
-    {
-        var s = new Dictionary<string, EventStatistics<T>>();
-        foreach (var g in events.GroupBy(e => e.EventType))
-        {
-            var l = g.ToList();
-            s[g.Key] = new EventStatistics<T>
-            {
-                Count = l.Count,
-                TotalDuration = l.Sum(e => e.Duration),
-                AverageConfidence = NumOps.FromDouble(l.Average(e => NumOps.ToDouble(e.Confidence))),
-                MaxConfidence = NumOps.FromDouble(l.Max(e => NumOps.ToDouble(e.Confidence)))
-            };
-        }
-        return s;
-    }
+        => AudioEventDetectionOps.ComputeEventStatistics(Engine, events);
 
     #endregion
 

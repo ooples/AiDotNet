@@ -111,28 +111,11 @@ public class SmoteTomekAugmenter<T> : TabularAugmenterBase<T>
 
     private Dictionary<int, int> GetClassCounts(Vector<T> labels, out List<T> classLabels)
     {
+        TabularEngineOps<T>.ClassIndices(labels, out classLabels, out var perClass);
         var counts = new Dictionary<int, int>();
-        classLabels = new List<T>();
-
-        for (int i = 0; i < labels.Length; i++)
+        for (int c = 0; c < perClass.Length; c++)
         {
-            int classIdx = -1;
-            for (int c = 0; c < classLabels.Count; c++)
-            {
-                if (NumOps.Compare(classLabels[c], labels[i]) == 0)
-                {
-                    classIdx = c;
-                    break;
-                }
-            }
-
-            if (classIdx < 0)
-            {
-                classIdx = classLabels.Count;
-                classLabels.Add(labels[i]);
-                counts[classIdx] = 0;
-            }
-            counts[classIdx]++;
+            counts[c] = perClass[c];
         }
         return counts;
     }
@@ -179,28 +162,8 @@ public class SmoteTomekAugmenter<T> : TabularAugmenterBase<T>
 
     private (Matrix<T>, Vector<T>) ExtractClassSamples(Matrix<T> data, Vector<T> labels, T targetClass)
     {
-        var indices = new List<int>();
-        for (int i = 0; i < labels.Length; i++)
-        {
-            if (NumOps.Compare(labels[i], targetClass) == 0)
-            {
-                indices.Add(i);
-            }
-        }
-
-        var extractedData = new Matrix<T>(indices.Count, data.Columns);
-        var extractedLabels = new Vector<T>(indices.Count);
-
-        for (int i = 0; i < indices.Count; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                extractedData[i, j] = data[indices[i], j];
-            }
-            extractedLabels[i] = labels[indices[i]];
-        }
-
-        return (extractedData, extractedLabels);
+        var indices = TabularEngineOps<T>.IndicesEqualTo(labels, targetClass);
+        return TabularEngineOps<T>.SelectRows(data, labels, indices);
     }
 
     private (Matrix<T>, Vector<T>) CombineDatasets(
@@ -213,31 +176,8 @@ public class SmoteTomekAugmenter<T> : TabularAugmenterBase<T>
                 $"Cannot combine datasets with different column counts: {data1.Columns} vs {data2.Columns}.");
         }
 
-        int totalRows = data1.Rows + data2.Rows;
-        int cols = data1.Columns;
-
-        var combined = new Matrix<T>(totalRows, cols);
-        var labels = new Vector<T>(totalRows);
-
-        // Copy first dataset
-        for (int i = 0; i < data1.Rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                combined[i, j] = data1[i, j];
-            }
-            labels[i] = labels1[i];
-        }
-
-        // Copy second dataset
-        for (int i = 0; i < data2.Rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                combined[data1.Rows + i, j] = data2[i, j];
-            }
-            labels[data1.Rows + i] = labels2[i];
-        }
+        var combined = TabularEngineOps<T>.ConcatenateRows(data1, data2);
+        var labels = TabularEngineOps<T>.ConcatenateLabels(labels1, data1.Rows, labels2, data2.Rows);
 
         return (combined, labels);
     }

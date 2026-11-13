@@ -68,13 +68,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         bool hasWd = weightDecay > 0.0;
 
         // ‖p‖₂ via full reduction.
-        double pNormSq = 0.0;
-        for (int i = 0; i < param.Length; i++)
-        {
-            double pi = ops.ToDouble(param[i]);
-            pNormSq += pi * pi;
-        }
-        double pNorm = Math.Sqrt(pNormSq);
+        double pNorm = Math.Sqrt(SumOfSquares(param));
 
         // Stage updates + collect ‖update‖₂² at touched indices.
         int totalSlots = 0;

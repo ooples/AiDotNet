@@ -215,36 +215,40 @@ public class SpectralMixtureKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        double result = 0.0;
-
         // Spectral Mixture kernel: k(x,x') = Σ_q w_q * Π_d [exp(-2π²τ_d²σ_q²) * cos(2πτ_d*μ_q)]
         // Sum over mixture components, product over dimensions (separable kernel)
-        for (int q = 0; q < _numComponents; q++)
-        {
-            double weight = _weights[q];
-            double mu = _frequencies[q];
-            double sigma = _bandwidths[q];
+        var componentValues = new Vector<T>(Enumerable.Range(0, _numComponents)
+            .Select(q => WeightedComponent(x1, x2, q)));
 
-            // Product over dimensions for this component
-            double componentKernel = 1.0;
-            for (int d = 0; d < x1.Length; d++)
-            {
-                double tau = _numOps.ToDouble(x1[d]) - _numOps.ToDouble(x2[d]);
-                double tau2 = tau * tau;
+        return AiDotNetEngine.Current.Sum(componentValues);
+    }
 
-                // Envelope: exp(-2π²τ²σ²)
-                double envelope = Math.Exp(-2.0 * Math.PI * Math.PI * tau2 * sigma * sigma);
+    /// <summary>
+    /// w_q * Π_d exp(-2π²τ_d²σ_q²) cos(2πτ_d μ_q) for mixture component q.
+    /// </summary>
+    private T WeightedComponent(Vector<T> x1, Vector<T> x2, int q)
+    {
+        return _numOps.Multiply(_numOps.FromDouble(_weights[q]),
+            SeparableComponent(x1, x2, _frequencies[q], _bandwidths[q]));
+    }
 
-                // Oscillation: cos(2πτμ)
-                double oscillation = Math.Cos(2.0 * Math.PI * tau * mu);
+    /// <summary>
+    /// Π_d exp(-2π²τ_d²σ²) cos(2πτ_d μ) with τ = x1 - x2, computed with engine ops.
+    /// </summary>
+    internal static T SeparableComponent(Vector<T> x1, Vector<T> x2, double frequency, double bandwidth)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        var tau = engine.Subtract(x1, x2);
 
-                componentKernel *= envelope * oscillation;
-            }
+        // Envelope: exp(-2π²τ²σ²)
+        var envelope = engine.Exp(engine.Multiply(engine.Multiply(tau, tau),
+            numOps.FromDouble(-2.0 * Math.PI * Math.PI * bandwidth * bandwidth)));
 
-            result += weight * componentKernel;
-        }
+        // Oscillation: cos(2πτμ)
+        var oscillation = engine.Cos(engine.Multiply(tau, numOps.FromDouble(2.0 * Math.PI * frequency)));
 
-        return _numOps.FromDouble(result);
+        return engine.Product(engine.Multiply(envelope, oscillation));
     }
 
     /// <summary>

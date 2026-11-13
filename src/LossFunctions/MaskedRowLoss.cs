@@ -102,11 +102,8 @@ public sealed class MaskedRowLoss<T> : LossFunctionBase<T>
 
     private Tensor<int> BuildIndexTensor()
     {
-        var indices = new Tensor<int>([_selectedRows.Length]);
-        for (int i = 0; i < _selectedRows.Length; i++)
-        {
-            indices[i] = _selectedRows[i];
-        }
+        // FromArray copies, so the returned tensor never aliases the mask's row list.
+        var indices = Vector<int>.FromArray(_selectedRows).AsTensor();
 
         return indices;
     }
@@ -129,18 +126,10 @@ public sealed class MaskedRowLoss<T> : LossFunctionBase<T>
         }
 
         int valuesPerRow = predicted.Length / _totalRows;
-        var selectedPredicted = new Vector<T>(_selectedRows.Length * valuesPerRow);
-        var selectedActual = new Vector<T>(_selectedRows.Length * valuesPerRow);
-        for (int i = 0; i < _selectedRows.Length; i++)
-        {
-            int sourceBase = _selectedRows[i] * valuesPerRow;
-            int targetBase = i * valuesPerRow;
-            for (int j = 0; j < valuesPerRow; j++)
-            {
-                selectedPredicted[targetBase + j] = predicted[sourceBase + j];
-                selectedActual[targetBase + j] = actual[sourceBase + j];
-            }
-        }
+        var rowShape = new[] { _totalRows, valuesPerRow };
+        var rowIndices = BuildIndexTensor();
+        var selectedPredicted = Engine.TensorIndexSelect(Engine.Reshape(predicted.AsTensor(), rowShape), rowIndices, 0).ToVector();
+        var selectedActual = Engine.TensorIndexSelect(Engine.Reshape(actual.AsTensor(), rowShape), rowIndices, 0).ToVector();
 
         return (selectedPredicted, selectedActual);
     }

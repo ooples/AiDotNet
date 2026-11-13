@@ -36,6 +36,12 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ResearchPaper("Gradient-Based Neural DAG Learning", "https://openreview.net/forum?id=rklbKA4YDS", Year = 2020, Authors = "Sebastien Lachapelle, Philippe Brouillard, Tristan Deleu, Simon Lacoste-Julien")]
 public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [rows, d, h] hidden-activation block in a training step; samples are
+    /// processed in blocks of at most this many entries.
+    /// </summary>
+    private const int MaxSampleBlockElements = 1 << 22;
+
     /// <inheritdoc/>
     public override string Name => "GraN-DAG";
 
@@ -70,41 +76,41 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // well), so the default net-outflow source score leaves true edges unoriented; the variance
         // cue supplies the missing orientation. The RANKING is invariant to uniform data scaling
         // (all variances scale by the same factor), preserving DiscoverStructure_IsInvariantToDataScaling.
-        var rawVariance = new double[d];
-        for (int col = 0; col < d; col++)
-        {
-            double mean = 0;
-            for (int r = 0; r < n; r++) mean += NumOps.ToDouble(data[r, col]);
-            mean /= n;
-            double var = 0;
-            for (int r = 0; r < n; r++) { double dv = NumOps.ToDouble(data[r, col]) - mean; var += dv * dv; }
-            rawVariance[col] = var / n;
-        }
+        var rawData = Tensor<T>.FromMatrix(data);
+        var rawCentered = CenterColumns(rawData);
+        var rawVariance = Engine.ReduceMean(Engine.TensorMultiply(rawCentered, rawCentered), new[] { 0 }, false);
 
         data = StandardizeColumns(data);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
+        T half = NumOps.FromDouble(0.5);
 
-        // Per-variable MLPs: W1[j] is d x h, W2[j] is h x 1
-        var W1 = new Matrix<T>[d];
-        var W2 = new Matrix<T>[d];
+        // Per-variable MLPs: W1 is [d (input i), d (variable j), h] holding W1[j][i, :], W2 is [d (variable j), h].
+        // Per variable j the draws are scale * (U[0,1) - 0.5): W1[j][i, :] for every i != j in order, then W2[j].
+        var w1Columns = new Tensor<T>[d];
+        var w2Rows = new Tensor<T>[d];
         for (int j = 0; j < d; j++)
         {
-            W1[j] = new Matrix<T>(d, h);
-            W2[j] = new Matrix<T>(h, 1);
-            for (int i = 0; i < d; i++)
-                if (i != j)
-                    for (int k = 0; k < h; k++)
-                        W1[j][i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-            for (int k = 0; k < h; k++)
-                W2[j][k, 0] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+            var draws = Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(Tensor<T>.CreateRandom(rng, d, h), half), scale);
+            var inputs = new List<Tensor<T>>();
+            if (j > 0) inputs.Add(Engine.TensorSlice(draws, new[] { 0, 0 }, new[] { j, h }));
+            inputs.Add(new Tensor<T>(new[] { 1, h }));
+            if (j < d - 1) inputs.Add(Engine.TensorSlice(draws, new[] { j, 0 }, new[] { d - 1 - j, h }));
+            w1Columns[j] = Engine.TensorConcatenate(inputs.ToArray(), 0);
+            w2Rows[j] = Engine.TensorSliceAxis(draws, 0, d - 1);
         }
+        var W1 = Engine.TensorStack(w1Columns, 1);
+        var W2 = Engine.TensorStack(w2Rows, 0);
 
         T lr = NumOps.FromDouble(LearningRate);
-        T alpha = NumOps.Zero;
-        T rho = NumOps.One;
+        var alpha = new Tensor<T>(new[] { 1 });
+        var rho = Engine.TensorOnesLike(alpha);
         T rhoMax = NumOps.FromDouble(1e+16);
+        T ten = NumOps.FromDouble(10);
+        T clipHi = NumOps.FromDouble(10.0);
+        T clipLo = NumOps.FromDouble(-10.0);
+        T edgeFloor = NumOps.FromDouble(1e-12);
         double hPrev = double.PositiveInfinity;
 
         // Upload the standardized design matrix once — it is constant across every inner/outer step.
@@ -113,66 +119,49 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // mathematically identical — the same Gaussian-NLL score, standard logistic activation and
         // path-norm gradient that GraN-DAG (Lachapelle et al. 2020) specifies — but issues a handful of
         // BLAS-backed GEMMs per step instead of millions of scalar dot products, which was the dominant cost.
+        // All d per-variable MLPs share the input, so one [n x d] * [d x (d h)] GEMM computes every hidden layer.
         T invN = NumOps.FromDouble(1.0 / n);
-        var Xt = new Tensor<T>(new[] { n, d });
-        for (int s = 0; s < n; s++)
-            for (int i = 0; i < d; i++)
-                Xt[s, i] = data[s, i];
-        var XtT = Engine.TensorTranspose(Xt);                 // [d,n], reused every step
-        var targetCols = new Tensor<T>[d];
-        for (int j = 0; j < d; j++)
-        {
-            targetCols[j] = new Tensor<T>(new[] { n, 1 });
-            for (int s = 0; s < n; s++) targetCols[j][s, 0] = data[s, j];
-        }
+        var Xt = Tensor<T>.FromMatrix(data);
+        // Samples are processed in blocks so the [rows, d, h] hidden activations stay bounded
+        // (MaxSampleBlockElements) however large n and d are; the gradients accumulate across blocks.
+        int blockRows = Math.Max(1, Math.Min(n, MaxSampleBlockElements / Math.Max(1, d * h)));
+        var offDiagonal = OffDiagonalMask(d);
+        var weightMask = Engine.TensorBroadcastTo(offDiagonal.Reshape(new[] { d, d, 1 }), new[] { d, d, h });
+        var zerosW1 = new Tensor<T>(new[] { d, d, h });
 
         for (int outer = 0; outer < MaxEpochs; outer++)
         {
             for (int inner = 0; inner < 20; inner++)
             {
-                // Compute loss gradients per sample per variable
-                var gW1 = new Matrix<T>[d];
-                var gW2 = new Matrix<T>[d];
-                for (int j = 0; j < d; j++)
+                // Batched forward / backward over all n samples and all d variables:
+                // H_j = sigmoid(X * W1[j]), pred_j = H_j * W2[j], and the Gaussian-NLL residual
+                // (pred_j - x_j)/n backpropagated to gW1[j] = X^T * dH_j and gW2[j] = H_j^T * resid_j.
+                var w1ByInput = W1.Reshape(new[] { d, d * h });
+                var gW2 = new Tensor<T>(new[] { d, h });
+                var gW1Flat = new Tensor<T>(new[] { d, d * h });
+                for (int b0 = 0; b0 < n; b0 += blockRows)
                 {
-                    gW1[j] = new Matrix<T>(d, h);
-                    gW2[j] = new Matrix<T>(h, 1);
+                    int rows = Math.Min(blockRows, n - b0);
+                    var cube = new[] { rows, d, h };
+                    var xb = Engine.TensorSlice(Xt, new[] { b0, 0 }, new[] { rows, d });
+                    var H = Engine.Sigmoid(Engine.TensorMatMul(xb, w1ByInput)).Reshape(cube);                 // [rows,d,h]
+                    var w2Spread = Engine.TensorBroadcastTo(W2.Reshape(new[] { 1, d, h }), cube);
+                    var pred = Engine.ReduceSum(Engine.TensorMultiply(H, w2Spread), new[] { 2 }, false);       // [rows,d]
+                    var resid = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, xb), invN);            // [rows,d]
+                    var residSpread = Engine.TensorBroadcastTo(resid.Reshape(new[] { rows, d, 1 }), cube);
+
+                    gW2 = Engine.TensorAdd(gW2, Engine.ReduceSum(Engine.TensorMultiply(H, residSpread), new[] { 0 }, false)); // [d,h]
+                    var dPred = Engine.TensorMultiply(residSpread, w2Spread);                                 // [rows,d,h]
+                    var oneMinusH = Engine.TensorSubtract(Engine.TensorOnesLike(H), H);
+                    var dH = Engine.TensorMultiply(Engine.TensorMultiply(dPred, H), oneMinusH);               // [rows,d,h]
+                    gW1Flat = Engine.TensorAdd(gW1Flat,
+                        Engine.TensorMatMul(Engine.TensorTranspose(xb), dH.Reshape(new[] { rows, d * h })));
                 }
+                var gW1 = gW1Flat.Reshape(new[] { d, d, h });                                                 // [i,j,h]
 
-                for (int j = 0; j < d; j++)
-                {
-                    // Upload the current per-variable MLP weights (d->h->1) and run the batched forward /
-                    // backward. Identical math to the former per-sample loop, expressed over all n samples
-                    // at once: H = sigmoid(X * W1), pred = H * W2, and the Gaussian-NLL residual
-                    // (pred - x_j)/n backpropagated to gW1 = X^T * dH and gW2 = H^T * resid.
-                    var W1t = new Tensor<T>(new[] { d, h });
-                    for (int i = 0; i < d; i++)
-                        for (int k = 0; k < h; k++)
-                            W1t[i, k] = W1[j][i, k];
-                    var W2t = new Tensor<T>(new[] { h, 1 });
-                    for (int k = 0; k < h; k++) W2t[k, 0] = W2[j][k, 0];
-
-                    var H = Engine.Sigmoid(Engine.TensorMatMul(Xt, W1t));                     // [n,h]
-                    var pred = Engine.TensorMatMul(H, W2t);                                   // [n,1]
-                    var resid = Engine.TensorMultiplyScalar(
-                        Engine.TensorSubtract(pred, targetCols[j]), invN);                   // [n,1]
-
-                    var gW2t = Engine.TensorMatMul(Engine.TensorTranspose(H), resid);         // [h,1]
-                    var dPred = Engine.TensorMatMul(resid, Engine.TensorTranspose(W2t));      // [n,h]
-                    var oneMinusH = Engine.TensorAddScalar(
-                        Engine.TensorMultiplyScalar(H, NumOps.FromDouble(-1.0)), NumOps.One);  // [n,h]
-                    var dH = Engine.TensorMultiply(Engine.TensorMultiply(dPred, H), oneMinusH); // [n,h]
-                    var gW1t = Engine.TensorMatMul(XtT, dH);                                  // [d,h]
-
-                    for (int i = 0; i < d; i++)
-                        for (int k = 0; k < h; k++)
-                            gW1[j][i, k] = gW1t[i, k];
-                    for (int k = 0; k < h; k++) gW2[j][k, 0] = gW2t[k, 0];
-                }
-
-                // Acyclicity gradient on adjacency A[i,j] = ||W1[j][:,i]||_2
+                // Acyclicity gradient on adjacency A[i,j] = Σ_k |W1[j][i,k]| |W2[j][k]|
                 var A = ExtractAdjacency(W1, W2, d, h);
-                T hVal = ComputeTraceExpConstraint(A, d);
+                var (hTensor, hGrad) = ComputeExpGradient(A, d);
 
                 // Numerical stabilization. Unlike BCD-Nets' clamped edge logits,
                 // GraN-DAG's raw MLP weights are unbounded: when the dual ratchet
@@ -184,9 +173,9 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 // strong but finite) and bail to the last finite state if h has
                 // already gone non-finite. Reference implementations of
                 // NOTEARS-family solvers apply the same guards.
-                double hD = NumOps.ToDouble(hVal);
+                double hD = ScalarValue(hTensor);
                 if (double.IsNaN(hD) || double.IsInfinity(hD)) break;
-                double augD = NumOps.ToDouble(alpha) + NumOps.ToDouble(rho) * hD;
+                double augD = ScalarValue(alpha) + ScalarValue(rho) * hD;
                 if (augD > 1e+6) augD = 1e+6;
                 // Warm-start: for the first third of training run PURE data-fit (no acyclicity force).
                 // The augmented-Lagrangian gradient (augCoeff up to 1e6, clipped to |g|<=10 => ~lr*10
@@ -196,54 +185,24 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 // data fit establish a sharp connectivity first, then ramping acyclicity to PRUNE it,
                 // is the intended NOTEARS/GraN-DAG order (fit, then enforce the constraint).
                 if (outer < MaxEpochs / 3) augD = 0.0;
-                T augCoeff = NumOps.FromDouble(augD);
 
-                // Chain rule: dh/dW1 via dh/dA * dA/dW1
-                var (_, hGrad) = ComputeExpGradient(A, d);
-                for (int j = 0; j < d; j++)
-                    for (int i = 0; i < d; i++)
-                    {
-                        if (i == j) continue;
-                        T aij = A[i, j];
-                        if (!NumOps.GreaterThan(aij, NumOps.FromDouble(1e-12))) continue;
-
-                        T dhda = NumOps.Multiply(augCoeff, hGrad[i, j]);
-                        for (int k = 0; k < h; k++)
-                        {
-                            T w1val = W1[j][i, k];
-                            T grad = NumOps.Divide(NumOps.Multiply(dhda, w1val), aij);
-                            gW1[j][i, k] = NumOps.Add(gW1[j][i, k], grad);
-                        }
-                    }
+                // Chain rule: dh/dW1 via dh/dA * dA/dW1, for i != j with A[i,j] > 1e-12
+                var dhda = Engine.TensorMultiply(ScalarTensor(augD, d), hGrad);
+                var dhdaSpread = Engine.TensorBroadcastTo(dhda.Reshape(new[] { d, d, 1 }), new[] { d, d, h });
+                var aSpread = Engine.TensorBroadcastTo(A.Reshape(new[] { d, d, 1 }), new[] { d, d, h });
+                var active = Engine.TensorMultiply(weightMask, Engine.TensorGreaterThan(aSpread, edgeFloor));
+                var chain = Engine.TensorDivide(Engine.TensorMultiply(dhdaSpread, W1), aSpread);
+                gW1 = Engine.TensorAdd(gW1, Engine.TensorWhere(active, chain, zerosW1));
 
                 // Update with per-element gradient clipping (|g| <= 10): bounds
                 // the per-step weight change to 10*lr so a transiently large
                 // acyclicity force cannot launch the unbounded MLP weights into
                 // the exp-overflow regime (see the stabilization note above).
-                T clipHi = NumOps.FromDouble(10.0);
-                T clipLo = NumOps.FromDouble(-10.0);
-                for (int j = 0; j < d; j++)
-                {
-                    for (int i = 0; i < d; i++)
-                        for (int k = 0; k < h; k++)
-                        {
-                            T g = gW1[j][i, k];
-                            if (NumOps.GreaterThan(g, clipHi)) g = clipHi;
-                            else if (NumOps.GreaterThan(clipLo, g)) g = clipLo;
-                            W1[j][i, k] = NumOps.Subtract(W1[j][i, k], NumOps.Multiply(lr, g));
-                        }
-                    for (int k = 0; k < h; k++)
-                    {
-                        T g = gW2[j][k, 0];
-                        if (NumOps.GreaterThan(g, clipHi)) g = clipHi;
-                        else if (NumOps.GreaterThan(clipLo, g)) g = clipLo;
-                        W2[j][k, 0] = NumOps.Subtract(W2[j][k, 0], NumOps.Multiply(lr, g));
-                    }
+                W1 = Engine.TensorSubtract(W1, Engine.TensorMultiplyScalar(Clip(gW1, clipLo, clipHi), lr));
+                W2 = Engine.TensorSubtract(W2, Engine.TensorMultiplyScalar(Clip(gW2, clipLo, clipHi), lr));
 
-                    // Zero diagonal
-                    for (int k = 0; k < h; k++)
-                        W1[j][j, k] = NumOps.Zero;
-                }
+                // Zero diagonal
+                W1 = Engine.TensorWhere(weightMask, W1, zerosW1);
             }
 
             // Outer: update augmented Lagrangian per the NOTEARS dual schedule
@@ -262,34 +221,28 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             if (outer >= MaxEpochs / 3)
             {
                 var Afinal = ExtractAdjacency(W1, W2, d, h);
-                T hFinal = ComputeTraceExpConstraint(Afinal, d);
-                double hNow = NumOps.ToDouble(hFinal);
+                var hFinal = ComputeTraceExpConstraint(Afinal, d);
+                double hNow = ScalarValue(hFinal);
                 if (double.IsNaN(hNow) || double.IsInfinity(hNow)) break;
                 if (hNow > 1e-8)
                 {
-                    alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hFinal));
+                    alpha = Engine.TensorAdd(alpha, Engine.TensorMultiply(rho, hFinal));
                     if (!double.IsPositiveInfinity(hPrev) && hNow > 0.25 * hPrev)
-                        rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                        rho = Engine.TensorMultiplyScalar(rho, ten);
                 }
                 hPrev = hNow;
-                if (NumOps.GreaterThan(rho, rhoMax)) break;
+                if (Engine.TensorCountNonzero(Engine.TensorGreaterThan(rho, rhoMax)) > 0) break;
                 if (hNow <= 1e-8) break;
             }
         }
 
         var rawAdj = ExtractAdjacency(W1, W2, d, h);
         // Use raw adjacency magnitudes as learned edge probabilities (normalize to [0,1])
-        double maxNorm = 0;
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j)
-                    maxNorm = Math.Max(maxNorm, NumOps.ToDouble(rawAdj[i, j]));
-
-        var learnedP = new double[d, d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j && maxNorm > 0)
-                    learnedP[i, j] = NumOps.ToDouble(rawAdj[i, j]) / maxNorm;
+        var offDiagonalAdj = Engine.TensorWhere(offDiagonal, rawAdj, Engine.TensorZerosLike(rawAdj));
+        T maxNorm = Engine.TensorMaxValue(offDiagonalAdj);
+        var normalized = NumOps.GreaterThan(maxNorm, NumOps.Zero)
+            ? Engine.TensorDivideScalar(offDiagonalAdj, maxNorm)
+            : Engine.TensorZerosLike(rawAdj);
 
         var cov = ComputeCovarianceMatrix(data);
         // Guarantee an acyclic output. BuildFinalAdjacency's direction tie-break only rules out
@@ -297,10 +250,30 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // DiscoverStructure_OutputIsAcyclic failure (topological sort visited 0/4 nodes). ProjectToDag
         // imposes a strict source-score topological order and keeps only forward edges, so the result
         // is a DAG by construction. Mirrors the sibling DAGGNNAlgorithm, which already routes through it.
-        return BuildFinalAdjacency(ProjectToDag(learnedP, d, rawVariance), cov, d);
+        return BuildFinalAdjacency(ProjectToDag(normalized, d, rawVariance), cov, d);
     }
 
-    private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, Matrix<T>[] W2, int d, int h)
+    /// <summary>
+    /// g clipped to [lo, hi] (NaN stays NaN).
+    /// </summary>
+    private Tensor<T> Clip(Tensor<T> g, T lo, T hi)
+    {
+        var upper = Engine.TensorWhere(Engine.TensorGreaterThan(g, hi), Engine.TensorFullLike(g, hi), g);
+        return Engine.TensorWhere(Engine.TensorLessThan(upper, lo), Engine.TensorFullLike(g, lo), upper);
+    }
+
+    /// <summary>
+    /// The single value of a [1] tensor as a double.
+    /// </summary>
+    private double ScalarValue(Tensor<T> value) => NumOps.ToDouble(value.ToArray()[0]);
+
+    /// <summary>
+    /// A [d x d] tensor filled with <paramref name="value"/>.
+    /// </summary>
+    private Tensor<T> ScalarTensor(double value, int d)
+        => Engine.TensorFullLike(new Tensor<T>(new[] { d, d }), NumOps.FromDouble(value));
+
+    private Tensor<T> ExtractAdjacency(Tensor<T> W1, Tensor<T> W2, int d, int h)
     {
         // GraN-DAG connectivity (Lachapelle et al. 2020 §2.2): the path product of absolute
         // weights across ALL layers, NOT the first-layer norm alone. For the per-variable
@@ -310,93 +283,21 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
         // output. The previous ||W1[:,i]||_2 measure ignored W2, so a large first-layer weight into
         // a hidden unit that does NOT affect the output (|W2|≈0) still inflated a spurious edge,
         // producing a diffuse/partly-reversed adjacency that the DAG projection then mis-ordered.
-        var A = new Matrix<T>(d, d);
-        for (int j = 0; j < d; j++)
-            for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
-                T sum = NumOps.Zero;
-                for (int k = 0; k < h; k++)
-                {
-                    T contrib = NumOps.Multiply(NumOps.Abs(W1[j][i, k]), NumOps.Abs(W2[j][k, 0]));
-                    sum = NumOps.Add(sum, contrib);
-                }
-                A[i, j] = sum;
-            }
-        return A;
+        var w2Spread = Engine.TensorBroadcastTo(Engine.TensorAbs(W2).Reshape(new[] { 1, d, h }), new[] { d, d, h });
+        var A = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorAbs(W1), w2Spread), new[] { 2 }, false);
+        return Engine.TensorWhere(OffDiagonalMask(d), A, Engine.TensorZerosLike(A));
     }
 
-    private T ComputeTraceExpConstraint(Matrix<T> A, int d)
+    private Tensor<T> ComputeTraceExpConstraint(Tensor<T> A, int d)
+        => ComputeExpGradient(A, d).h;
+
+    private (Tensor<T> h, Tensor<T> grad) ComputeExpGradient(Tensor<T> A, int d)
     {
-        // h(A) = tr(e^(A∘A)) - d using power series: exp(M) = I + M + M^2/2! + ...
-        var AA = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
-
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
-        var expM = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++) expM[i, i] = NumOps.One;
-
-        for (int p = 1; p <= 10; p++)
-        {
-            // power = power * AA (unscaled M^p)
-            power = MatMul(power, AA);
-            T fact = NumOps.FromDouble(1.0 / Factorial(p));
-            // expM += power / p!
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    expM[i, j] = NumOps.Add(expM[i, j], NumOps.Multiply(power[i, j], fact));
-        }
-
-        T trace = NumOps.Zero;
-        for (int i = 0; i < d; i++)
-            trace = NumOps.Add(trace, expM[i, i]);
-        return NumOps.Subtract(trace, NumOps.FromDouble(d));
-    }
-
-    private (T h, Matrix<T> grad) ComputeExpGradient(Matrix<T> A, int d)
-    {
+        // h(A) = tr(e^(A∘A)) - d using power series: exp(M) = I + M + M^2/2! + ... (10 terms)
         // Gradient: dh/dA[i,j] = 2 * A[i,j] * (e^(A∘A))^T[i,j]
-        var AA = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                AA[i, j] = NumOps.Multiply(A[i, j], A[i, j]);
-
-        var expM = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++) expM[i, i] = NumOps.One;
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
-
-        for (int p = 1; p <= 10; p++)
-        {
-            // power = power * AA (unscaled M^p)
-            power = MatMul(power, AA);
-            T fact = NumOps.FromDouble(1.0 / Factorial(p));
-            // expM += power / p!
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    expM[i, j] = NumOps.Add(expM[i, j], NumOps.Multiply(power[i, j], fact));
-        }
-
-        T trace = NumOps.Zero;
-        for (int i = 0; i < d; i++)
-            trace = NumOps.Add(trace, expM[i, i]);
-        T h = NumOps.Subtract(trace, NumOps.FromDouble(d));
-
-        var grad = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                grad[i, j] = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(A[i, j], expM[j, i]));
-
+        var expM = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(A, A).ToMatrix(), d, 10));
+        var h = Engine.TensorSubtractScalar(Engine.ReduceSum(Engine.TensorDiagonal(expM), new[] { 0 }, true), NumOps.FromDouble(d));
+        var grad = Engine.TensorMultiplyScalar(Engine.TensorMultiply(A, Engine.TensorTranspose(expM)), NumOps.FromDouble(2));
         return (h, grad);
-    }
-
-    private static double Factorial(int n)
-    {
-        double result = 1;
-        for (int i = 2; i <= n; i++) result *= i;
-        return result;
     }
 }

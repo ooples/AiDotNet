@@ -1145,28 +1145,8 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
             return gradients; // Return zeros
         }
 
-        int samplesPerParam = Math.Max(1, (sampleGradients.Length + paramCount - 1) / paramCount);
-
-        for (int paramIdx = 0; paramIdx < paramCount; paramIdx++)
-        {
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            // Aggregate gradients for samples mapped to this parameter
-            int startIdx = paramIdx * samplesPerParam;
-            int endIdx = Math.Min((paramIdx + 1) * samplesPerParam, sampleGradients.Length);
-
-            for (int sampleIdx = startIdx; sampleIdx < endIdx; sampleIdx++)
-            {
-                sum = NumOps.Add(sum, sampleGradients[sampleIdx]);
-                count++;
-            }
-
-            // Average the gradients for this parameter bucket
-            gradients[paramIdx] = count > 0
-                ? NumOps.Divide(sum, NumOps.FromDouble(count))
-                : NumOps.Zero;
-        }
+        RegressionEngineOps.ContiguousBucketMeans(sampleGradients, paramCount)
+            .AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }

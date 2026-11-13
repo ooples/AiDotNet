@@ -52,6 +52,8 @@ namespace AiDotNet.SpeechRecognition.Streaming;
                 Source = "Yao et al. 2024, section 3.5, and icefall's LibriSpeech zipformer/train.py: ScaledAdam with base learning rate "
                         + "0.045 and clipping scale 2.0, under the Eden schedule (lr_batches 7500, lr_epochs 3.5, warmup start 0.1). "
                         + "Eden is not a scheduler type here, so the rate is held at its base value.")]
+[AiDotNet.Attributes.PreprocessesInput("ZipformerNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class StreamingZipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

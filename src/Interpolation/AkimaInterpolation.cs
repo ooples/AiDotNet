@@ -151,45 +151,63 @@ public partial class AkimaInterpolation<T> : IInterpolation<T>
     /// </remarks>
     private void CalculateCoefficients()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
-        Vector<T> m = new Vector<T>(n + 3);
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
+        T two = _numOps.FromDouble(2);
 
-        // Calculate slopes
-        for (int i = 0; i < n - 1; i++)
+        // Calculate slopes: m[i + 2] is the secant slope of interval i
+        Tensor<T> h = engine.TensorSubtract(Slice(xs, 1, n - 1), Slice(xs, 0, n - 1));
+        Tensor<T> secants = engine.TensorDivide(engine.TensorSubtract(Slice(ys, 1, n - 1), Slice(ys, 0, n - 1)), h);
+
+        // Set up the first and last two slopes by linear extrapolation
+        T m2 = secants[0];
+        T m3 = secants[1];
+        T mN = secants[n - 2];
+        T mNMinus1 = secants[n - 3];
+        T m1 = _numOps.Add(m2, _numOps.Subtract(m2, m3));
+        T m0 = _numOps.Add(m1, _numOps.Subtract(m1, m2));
+        T mNPlus1 = _numOps.Add(mN, _numOps.Subtract(mN, mNMinus1));
+        T mNPlus2 = _numOps.Add(mNPlus1, _numOps.Subtract(mNPlus1, mN));
+        Tensor<T> m = engine.TensorConcatenate(new[]
         {
-            m[i + 2] = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), _numOps.Subtract(_x[i + 1], _x[i]));
-        }
+            Tensor<T>.FromScalar(m0), Tensor<T>.FromScalar(m1), secants,
+            Tensor<T>.FromScalar(mNPlus1), Tensor<T>.FromScalar(mNPlus2)
+        }, 0);
 
-        // Set up the first and last two slopes
-        m[1] = _numOps.Add(m[2], _numOps.Subtract(m[2], m[3]));
-        m[0] = _numOps.Add(m[1], _numOps.Subtract(m[1], m[2]));
-        m[n + 1] = _numOps.Add(m[n], _numOps.Subtract(m[n], m[n - 1]));
-        m[n + 2] = _numOps.Add(m[n + 1], _numOps.Subtract(m[n + 1], m[n]));
+        // Calculate Akima weights (slopes at all n data points) from the four slopes around each point
+        Tensor<T> mPrev2 = Slice(m, 0, n);
+        Tensor<T> mPrev1 = Slice(m, 1, n);
+        Tensor<T> mNext1 = Slice(m, 2, n);
+        Tensor<T> mNext2 = Slice(m, 3, n);
+        Tensor<T> w1 = engine.TensorAbs(engine.TensorSubtract(mNext2, mNext1));
+        Tensor<T> w2 = engine.TensorAbs(engine.TensorSubtract(mPrev1, mPrev2));
+        Tensor<T> weightSum = engine.TensorAdd(w1, w2);
 
-        // Calculate Akima weights (slopes at all n data points)
-        for (int i = 0; i < n; i++)
-        {
-            T w1 = _numOps.Abs(_numOps.Subtract(m[i + 3], m[i + 2]));
-            T w2 = _numOps.Abs(_numOps.Subtract(m[i + 1], m[i]));
-
-            if (_numOps.Equals(w1, _numOps.Zero) && _numOps.Equals(w2, _numOps.Zero))
-            {
-                _b[i] = m[i + 2];
-            }
-            else
-            {
-                _b[i] = _numOps.Divide(_numOps.Add(_numOps.Multiply(w1, m[i + 1]), _numOps.Multiply(w2, m[i + 2])), _numOps.Add(w1, w2));
-            }
-        }
+        // Where both weights are zero the slope is m[i + 2]; adding that 1/0 mask to the weight sum only replaces
+        // those zero denominators, whose quotient the mask discards.
+        Tensor<T> bothZero = engine.TensorMultiply(engine.TensorEquals(w1, _numOps.Zero), engine.TensorEquals(w2, _numOps.Zero));
+        Tensor<T> weighted = engine.TensorDivide(
+            engine.TensorAdd(engine.TensorMultiply(w1, mPrev1), engine.TensorMultiply(w2, mNext1)),
+            engine.TensorAdd(weightSum, bothZero));
+        Tensor<T> b = engine.TensorWhere(bothZero, mNext1, weighted);
 
         // Calculate remaining coefficients
-        for (int i = 0; i < n - 1; i++)
-        {
-            T h = _numOps.Subtract(_x[i + 1], _x[i]);
-            T slope = _numOps.Divide(_numOps.Subtract(_y[i + 1], _y[i]), h);
-            _c[i] = _numOps.Divide(_numOps.Subtract(_numOps.Multiply(_numOps.FromDouble(3), slope), _numOps.Add(_numOps.Multiply(_numOps.FromDouble(2), _b[i]), _b[i + 1])), h);
-            _d[i] = _numOps.Divide(_numOps.Subtract(_numOps.Add(_b[i], _b[i + 1]), _numOps.Multiply(_numOps.FromDouble(2), slope)), _numOps.Multiply(h, h));
-        }
+        Tensor<T> bLeft = Slice(b, 0, n - 1);
+        Tensor<T> bRight = Slice(b, 1, n - 1);
+        Tensor<T> c = engine.TensorDivide(
+            engine.TensorSubtract(
+                engine.TensorMultiplyScalar(secants, _numOps.FromDouble(3)),
+                engine.TensorAdd(engine.TensorMultiplyScalar(bLeft, two), bRight)),
+            h);
+        Tensor<T> d = engine.TensorDivide(
+            engine.TensorSubtract(engine.TensorAdd(bLeft, bRight), engine.TensorMultiplyScalar(secants, two)),
+            engine.TensorMultiply(h, h));
+
+        b.AsSpan().CopyTo(_b.AsWritableSpan());
+        c.AsSpan().CopyTo(_c.AsWritableSpan());
+        d.AsSpan().CopyTo(_d.AsWritableSpan());
     }
 
     /// <summary>
@@ -216,18 +234,14 @@ public partial class AkimaInterpolation<T> : IInterpolation<T>
         if (_numOps.GreaterThanOrEquals(x, _x[_x.Length - 1]))
             return _x.Length - 2;
 
-        int low = 0;
-        int high = _x.Length - 1;
+        return InterpolationSearch.LastKnotAtOrBelow(_x, x, 0, _x.Length - 2);
+    }
 
-        while (low < high - 1)
-        {
-            int mid = (low + high) / 2;
-            if (_numOps.LessThanOrEquals(_x[mid], x))
-                low = mid;
-            else
-                high = mid;
-        }
-
-        return low;
+    /// <summary>
+    /// Returns <paramref name="length"/> consecutive elements of a vector tensor starting at <paramref name="start"/>.
+    /// </summary>
+    private static Tensor<T> Slice(Tensor<T> values, int start, int length)
+    {
+        return AiDotNetEngine.Current.TensorSlice(values, new[] { start }, new[] { length });
     }
 }

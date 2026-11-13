@@ -230,6 +230,27 @@ $fleet = @((New-Runner 'online' @('self-hosted', 'cpu-a')), (New-Runner 'online'
 $plan = Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet
 Assert-True ($plan.Count -eq 10 -and $plan.Label -ceq 'cpu-a' -and -not $plan.Warning) `
     'Two online runners at five shards each should take ten.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet -Pending 4).Count -eq 6) `
+    'Jobs already queued for the label did not reduce the routed count.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet -Pending 25).Count -eq 0) `
+    'A backlog larger than the capacity still routed shards.'
+Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners $fleet -Pending -3).Count -eq 10) `
+    'A negative pending count raised the routed count.'
+Assert-True ((Get-SelfHostedPendingJobs -Repository 'o/r' -Token '' -Label 'cpu-a') -eq 0) 'A missing token produced a pending count.'
+# Second pages count: run 101 sits on the second page of queued runs, and run 1's matching job on the second page
+# of its jobs. Each holds one pending cpu-a job; every other job is completed or on another label.
+$fakeGet = { param([string] $Uri)
+    if ($Uri -match 'runs\?status=queued&per_page=100&page=1$') { return @{ workflow_runs = @(1..100 | ForEach-Object { @{ id = $_ } }) } }
+    if ($Uri -match 'runs\?status=queued&per_page=100&page=2$') { return @{ workflow_runs = @(@{ id = 101 }) } }
+    if ($Uri -match 'runs\?status=') { return @{ workflow_runs = @() } }
+    if ($Uri -match 'runs/1/jobs\?.*page=1$') { return @{ jobs = @(1..30 | ForEach-Object { @{ status = 'completed'; labels = @('cpu-a') } }) } }
+    if ($Uri -match 'runs/1/jobs\?.*page=2$') { return @{ jobs = @(@{ status = 'queued'; labels = @('cpu-a') }) } }
+    if ($Uri -match 'runs/101/jobs\?') { return @{ jobs = @(@{ status = 'in_progress'; labels = @('cpu-a') }, @{ status = 'queued'; labels = @('gpu') }) } }
+    return @{ jobs = @() } }
+$paged = Get-SelfHostedPendingJobs -Repository 'o/r' -Token 't' -Label 'cpu-a' -Get $fakeGet
+Assert-True ($paged -eq 2) "Pending jobs on second pages were not counted (got $paged, expected 2)."
+Assert-True ((Get-SelfHostedPendingJobs -Repository 'o/r' -Token 't' -Label 'cpu-a' -Get $fakeGet -BudgetSeconds 0) -eq 0) `
+    'An exhausted scan budget did not fall back to 0.'
 Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"CPU-A","shardsPerRunner":5}' -Runners $fleet).Count -eq 0) `
     'A label matched a runner label of another case.'
 Assert-True ((Get-SelfHostedShardPlan -Config '{"label":"cpu-a","shardsPerRunner":5}' -Runners @()).Count -eq 0) `
