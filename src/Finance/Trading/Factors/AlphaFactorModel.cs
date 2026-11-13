@@ -774,7 +774,6 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
         NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, output.AsWritableSpan());
 
         return output;
-        return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
     #endregion
