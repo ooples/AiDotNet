@@ -291,6 +291,18 @@ public static class DeserializationHelper
             return generatedAsLayer;
         }
 
+        // A checkpoint written before ObliviousDecisionTreeLayer had choice functions carries no "choiceFunction"
+        // key, so the generated factory declines it. It must be rebuilt here, before the registry: the registry's
+        // reflection tier rebuilds through the widest constructor it can supply, which is the optional-argument
+        // convenience constructor, and that one selects NODE's Entmax15 rather than the softmax/sigmoid the
+        // checkpoint was trained with.
+        if (genericDefForValidation == typeof(ObliviousDecisionTreeLayer<>))
+        {
+            var legacyTree = CreateLegacyObliviousDecisionTree<T>(additionalParams, layerType);
+            PreResolveLazyShape(legacyTree, inputShape);
+            return legacyTree;
+        }
+
         // The registry, for the same reason the clone path consults it (LayerCloning.cs:309): the
         // generated table above is compiled from AiDotNet's own source, so it can only ever name
         // layers AiDotNet ships. A layer in a consumer's assembly has no entry and never can.
@@ -371,26 +383,6 @@ public static class DeserializationHelper
                 TryGetDouble(additionalParams, "MarginY") ?? 0.05,
                 TryGetDouble(additionalParams, "LocalizationMargin") ?? 0.01)
                 ?? throw new MissingLayerCtorException("Cannot construct SVTRThinPlateSplineLayer.");
-        }
-        else if (genericDef == typeof(ObliviousDecisionTreeLayer<>))
-        {
-            // Reached only when the generated factory declined, which it does when a [LayerState] key is
-            // absent. A checkpoint written before the choice functions existed carries no
-            // "choiceFunction" key and was trained with softmax feature choice and sigmoid splits, so it
-            // is rebuilt with those and master's optional-argument defaults. With the key present, the
-            // generated factory could only have declined over a missing architectural key: a damaged file.
-            var state = new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType);
-            if (state.Has("choiceFunction"))
-            {
-                throw new InvalidOperationException(
-                    "ObliviousDecisionTreeLayer metadata names a choiceFunction but lacks depth, outputDim or initScale.");
-            }
-
-            instance = new ObliviousDecisionTreeLayer<T>(
-                state.Int32("depth", 6),
-                state.Int32("outputDim", 1),
-                state.Double("initScale", 0.01),
-                ObliviousTreeChoiceFunction.SoftmaxSigmoid);
         }
         else if (genericDef == typeof(PatchGANDiscriminator<>))
         {
@@ -3833,6 +3825,32 @@ public static class DeserializationHelper
         PreResolveLazyShape((ILayer<T>)instance, inputShape);
 
         return (ILayer<T>)instance;
+    }
+
+    /// <summary>
+    /// Rebuilds an <see cref="ObliviousDecisionTreeLayer{T}"/> whose metadata the generated factory declined.
+    /// </summary>
+    /// <remarks>
+    /// The generated factory declines only when a [LayerState] key is absent. A checkpoint written before the choice
+    /// functions existed carries no "choiceFunction" key and was trained with softmax feature choice and sigmoid
+    /// splits, so it is rebuilt with those and the optional-argument defaults of that release. With the key present,
+    /// the factory could only have declined over a missing architectural key: a damaged file.
+    /// </remarks>
+    private static ObliviousDecisionTreeLayer<T> CreateLegacyObliviousDecisionTree<T>(
+        Dictionary<string, object>? additionalParams, string layerType)
+    {
+        var state = new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType);
+        if (state.Has("choiceFunction"))
+        {
+            throw new InvalidOperationException(
+                "ObliviousDecisionTreeLayer metadata names a choiceFunction but lacks depth, outputDim or initScale.");
+        }
+
+        return new ObliviousDecisionTreeLayer<T>(
+            state.Int32("depth", 6),
+            state.Int32("outputDim", 1),
+            state.Double("initScale", 0.01),
+            ObliviousTreeChoiceFunction.SoftmaxSigmoid);
     }
 
     /// <summary>
