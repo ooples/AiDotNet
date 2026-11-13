@@ -108,8 +108,13 @@ public sealed class GroupedSpatialTemporalShift<T>
 
         int half = c / 2;
         var engine = AiDotNetEngine.Current;
-        return (engine.TensorNarrow(features, 2, 0, half), engine.TensorNarrow(features, 2, half, half));
+        // Detached copies, as before: the groups are handed to callers, so they must not alias the input
+        return (Detached(engine.TensorNarrow(features, 2, 0, half)),
+            Detached(engine.TensorNarrow(features, 2, half, half)));
     }
+
+    /// <summary>A fresh dense copy of <paramref name="view"/> that shares no storage with its source.</summary>
+    private static Tensor<T> Detached(Tensor<T> view) => new Tensor<T>(view.ToArray(), view.Shape.ToArray());
 
     /// <summary>
     /// Shifts a feature map spatially by <paramref name="dx"/>, <paramref name="dy"/>.
@@ -126,6 +131,12 @@ public sealed class GroupedSpatialTemporalShift<T>
         if (features.Shape.Length != 3)
             throw new ArgumentException(
                 $"Expected [height, width, channels]; got rank {features.Shape.Length}.", nameof(features));
+
+        if (dx == 0 && dy == 0)
+        {
+            // A zero shift still returns a new map, never the caller's tensor
+            return Detached(features);
+        }
 
         var engine = AiDotNetEngine.Current;
         return ShiftAxis(engine, ShiftAxis(engine, features, 0, dy), 1, dx);
@@ -274,7 +285,10 @@ public sealed class GroupedSpatialTemporalShift<T>
             return 0.0;
         }
 
+        // In double: the result is a double, and a float difference such as 3e38 - (-3e38) overflows T
         var engine = AiDotNetEngine.Current;
-        return Ops.ToDouble(engine.Mean(engine.Abs(engine.Subtract(predicted, target))));
+        return engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(
+            TensorCopyHelper.CastLogical<T, double>(predicted.AsTensor()),
+            TensorCopyHelper.CastLogical<T, double>(target.AsTensor()))));
     }
 }
