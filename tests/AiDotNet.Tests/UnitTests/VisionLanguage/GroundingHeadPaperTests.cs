@@ -71,8 +71,14 @@ public class GroundingHeadPaperTests
         Assert.Equal(new[] { 3, 3 }, prediction.Logits.Shape.ToArray());
         var selected = prediction.Selected.ToArray();
         Assert.Equal(3, selected.Distinct().Count());
-        // Six backbone tokens (a 1 x 6 grid) make a two-level pyramid: 2 x 12 upsampled plus the 1 x 6 map, 30 tokens.
-        Assert.All(selected, s => Assert.InRange(s, 0, 29));
+        // Six backbone tokens (a 1 x 6 grid) make four levels: 2 x 12 (transposed convolution), 1 x 6, then two
+        // stride-2 convolutions (the map is too thin to pool), 1 x 3 and 1 x 2: 35 tokens.
+        Assert.All(selected, s => Assert.InRange(s, 0, 34));
+        Assert.Equal(2, prediction.LayerBoxes.Count);
+        Assert.Equal(2, prediction.LayerLogits.Count);
+        Assert.Same(prediction.Boxes, prediction.LayerBoxes[1]);
+        Assert.Equal(new[] { 3, 4 }, prediction.EncoderBoxes.Shape.ToArray());
+        Assert.Equal(new[] { 3, 3 }, prediction.EncoderLogits.Shape.ToArray());
         Assert.All(prediction.Boxes.ToArray(), v => Assert.True(v > 0 && v < 1));
     }
 
@@ -84,7 +90,8 @@ public class GroundingHeadPaperTests
 
         var prediction = head.Forward(Random(2, 4, 5), null);
 
-        // Four backbone tokens (2 x 2) make 4 x 4 + 2 x 2 + 1 x 1 = 21 multi-scale tokens, enough for the ten queries.
+        // Four backbone tokens (2 x 2) make 4 x 4 + 2 x 2 + 1 x 1 (pooled) + 1 x 1 (stride-2 convolution) = 22
+        // multi-scale tokens, enough for the ten queries.
         Assert.Equal(new[] { 10, 4 }, prediction.Boxes.Shape.ToArray());
         Assert.Equal(new[] { 10, 1 }, prediction.Logits.Shape.ToArray());
     }
@@ -129,26 +136,57 @@ public class GroundingHeadPaperTests
         if (prediction.Objectness is not null) Assert.Equal(new[] { 9 }, prediction.Objectness.Shape.ToArray());
     }
 
-    [Fact]
-    public void CoordinateDecoder_AllowsOnlyWellFormedBoxes()
+    // The decoder's characters: digits 0-9, then '.', ',', '[', ']', ';' and the end of the answer.
+    private static double[] Characters(params int[] allowed)
     {
-        // Bins 5: tokens 0-4 are coordinates, 5 separates boxes, 6 ends the answer.
-        var decoder = new CoordinateTokenDecoder<double>(Engine, new List<ILayer<double>>(),
-            new CoordinateTokenDecoderConfiguration(8, 32, 4, Bins: 5, Divisor: 4));
+        var row = new double[16];
+        foreach (int a in allowed) row[a] = 1;
+        return row;
+    }
 
-        Assert.Equal(new double[] { 1, 1, 1, 1, 1, 0, 1 }, decoder.Allowed(Array.Empty<int>(), 2).ToArray());
-        Assert.Equal(new double[] { 1, 1, 1, 1, 1, 0, 0 }, decoder.Allowed(new[] { 1 }, 2).ToArray());
-        Assert.Equal(new double[] { 1, 1, 1, 1, 1, 0, 0 }, decoder.Allowed(new[] { 1, 2, 3 }, 2).ToArray());
-        Assert.Equal(new double[] { 0, 0, 0, 0, 0, 1, 1 }, decoder.Allowed(new[] { 1, 2, 3, 4 }, 2).ToArray());
-        Assert.Equal(new double[] { 1, 1, 1, 1, 1, 0, 1 }, decoder.Allowed(new[] { 1, 2, 3, 4, 5 }, 2).ToArray());
-        Assert.Equal(new double[] { 0, 0, 0, 0, 0, 0, 1 }, decoder.Allowed(new[] { 1, 2, 3, 4, 5, 0, 1, 2, 3, 5 }, 2).ToArray());
+    private const int Point = 10, Comma = 11, Open = 12, Close = 13, Semicolon = 14, End = 15;
+
+    [Fact]
+    public void CoordinateDecoder_SpellsWholeNumbers_DigitByDigit_InWellFormedBoxes()
+    {
+        // Ferret's spelling: the values 0-11 as whole numbers.
+        var decoder = new CoordinateTokenDecoder<double>(Engine, new List<ILayer<double>>(),
+            new CoordinateTokenDecoderConfiguration(8, 32, 4, Bins: 12, Divisor: 10, CoordinateSpelling.Integer));
+        var digits = Enumerable.Range(0, 10).ToArray();
+        int[] Box(params int[] values) => new[] { Open }.Concat(values.SelectMany((v, i) => (i > 0 ? new[] { Comma } : Array.Empty<int>())
+            .Concat(v.ToString(System.Globalization.CultureInfo.InvariantCulture).Select(ch => ch - '0')))).Concat(new[] { Close }).ToArray();
+
+        Assert.Equal(Characters(Open, End), decoder.Allowed(Array.Empty<int>(), 2).ToArray());
+        Assert.Equal(Characters(digits), decoder.Allowed(new[] { Open }, 2).ToArray());
+        // "1" is a value and also starts "10" and "11"; "0" has no longer spelling.
+        Assert.Equal(Characters(0, 1, Comma), decoder.Allowed(new[] { Open, 1 }, 2).ToArray());
+        Assert.Equal(Characters(Comma), decoder.Allowed(new[] { Open, 0 }, 2).ToArray());
+        Assert.Equal(Characters(Close), decoder.Allowed(new[] { Open, 1, Comma, 2, Comma, 3, Comma, 4 }, 2).ToArray());
+        var one = Box(1, 2, 3, 11);
+        Assert.Equal(Characters(Semicolon, End), decoder.Allowed(one, 2).ToArray());
+        Assert.Equal(Characters(Open), decoder.Allowed(one.Concat(new[] { Semicolon }).ToArray(), 2).ToArray());
+        Assert.Equal(Characters(End), decoder.Allowed(one.Concat(new[] { Semicolon }).Concat(Box(0, 0, 10, 10)).ToArray(), 2).ToArray());
     }
 
     [Fact]
-    public void CoordinateDecoder_WritesBoxesAsCoordinateTokens_ScoredByTheirProbability()
+    public void CoordinateDecoder_SpellsDecimalFractions_AsShikraDoes()
+    {
+        // Shikra's spelling with one decimal place: 0.0, 0.1, ..., 1.0.
+        var decoder = new CoordinateTokenDecoder<double>(Engine, new List<ILayer<double>>(),
+            new CoordinateTokenDecoderConfiguration(8, 32, 4, Bins: 11, Divisor: 10, CoordinateSpelling.DecimalFraction));
+
+        Assert.Equal(Characters(0, 1), decoder.Allowed(new[] { Open }, 1).ToArray());
+        Assert.Equal(Characters(Point), decoder.Allowed(new[] { Open, 1 }, 1).ToArray());
+        Assert.Equal(Characters(0), decoder.Allowed(new[] { Open, 1, Point }, 1).ToArray());
+        Assert.Equal(Characters(Enumerable.Range(0, 10).ToArray()), decoder.Allowed(new[] { Open, 0, Point }, 1).ToArray());
+        Assert.Equal(Characters(Comma), decoder.Allowed(new[] { Open, 0, Point, 7 }, 1).ToArray());
+    }
+
+    [Fact]
+    public void CoordinateDecoder_WritesBoxesAsText_ScoredByTheirProbability()
     {
         var decoder = new CoordinateTokenDecoder<double>(Engine, new List<ILayer<double>>(),
-            new CoordinateTokenDecoderConfiguration(8, 32, 4, Bins: 5, Divisor: 4));
+            new CoordinateTokenDecoderConfiguration(8, 32, 4, Bins: 11, Divisor: 10, CoordinateSpelling.DecimalFraction));
 
         // A stand-in language model that passes its input through.
         var (boxes, scores) = decoder.Ground(Random(4, 3, 8), new[] { 1, 2 }, rows => rows, maxBoxes: 3);
@@ -156,8 +194,8 @@ public class GroundingHeadPaperTests
         int count = scores.Length;
         Assert.InRange(count, 0, 3);
         Assert.Equal(new[] { count, 4 }, boxes.Shape.ToArray());
-        // Every coordinate is a bin over the divisor: 0, 0.25, ..., 1.
-        Assert.All(boxes.ToArray(), v => Assert.Equal(0.0, v * 4 - Math.Round(v * 4), Tolerance));
+        // Every coordinate is a tenth: 0, 0.1, ..., 1.
+        Assert.All(boxes.ToArray(), v => Assert.Equal(0.0, v * 10 - Math.Round(v * 10), 1e-9));
         Assert.All(scores.ToArray(), s => Assert.InRange(s, 0.0, 1.0));
     }
 
@@ -400,6 +438,82 @@ public class GroundingHeadPaperTests
             for (int d = 0; d < 16; d++)
                 Assert.Equal(before[p, d], after[p, d], Tolerance);
         Assert.Contains(Enumerable.Range(0, 16), d => Math.Abs(before[2, d] - after[2, d]) > 1e-12);
+    }
+
+    // A three-layer decoder's outputs on one image: distinct boxes and logits per layer and for the encoder.
+    private static GroundingQueryPrediction<double> ThreeLayerPrediction()
+    {
+        Tensor<double> Boxes(int seed) => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorSigmoid(Random(seed, 4, 4)), 0.5), 0.1);
+        var layerBoxes = new[] { Boxes(20), Boxes(21), Boxes(22) };
+        var layerLogits = new[] { Random(23, 4, 3), Random(24, 4, 3), Random(25, 4, 3) };
+        return new GroundingQueryPrediction<double>(layerBoxes[2], layerLogits[2], new Tensor<int>(new[] { 4 }),
+            layerBoxes, layerLogits, Boxes(26), Random(27, 4, 3));
+    }
+
+    private static readonly Tensor<double> TargetBoxes = Matrix(2, 4, 0.3, 0.3, 0.2, 0.2, 0.7, 0.6, 0.3, 0.4);
+    private static readonly Tensor<double> TargetTokens = Matrix(2, 3, 1, 1, 0, 0, 0, 1);
+
+    private static double SetLossOf(Tensor<double> boxes, Tensor<double> logits)
+        => new GroundingSetLoss<double>(Engine).Compute(boxes, logits, TargetBoxes, TargetTokens).Total.ToArray()[0];
+
+    [Fact]
+    public void DetectorLoss_IncludesTheLastDecoderLayersSetLoss()
+    {
+        var p = ThreeLayerPrediction();
+        var loss = new GroundingSetLoss<double>(Engine).Compute(p, TargetBoxes, TargetTokens);
+
+        double final = SetLossOf(p.Boxes, p.Logits);
+        Assert.True(final > 0);
+        Assert.Equal(final, loss.Final.Total.ToArray()[0], 1e-12);
+        Assert.Equal(final, loss.Total.ToArray()[0] - SetLossOf(p.LayerBoxes[0], p.LayerLogits[0])
+            - SetLossOf(p.LayerBoxes[1], p.LayerLogits[1]) - SetLossOf(p.EncoderBoxes, p.EncoderLogits), 1e-9);
+    }
+
+    [Fact]
+    public void DetectorLoss_IncludesEveryEarlierDecoderLayersAuxiliarySetLoss()
+    {
+        var p = ThreeLayerPrediction();
+        var loss = new GroundingSetLoss<double>(Engine).Compute(p, TargetBoxes, TargetTokens);
+
+        double auxiliary = SetLossOf(p.LayerBoxes[0], p.LayerLogits[0]) + SetLossOf(p.LayerBoxes[1], p.LayerLogits[1]);
+        Assert.Equal(2, loss.Auxiliary.Count);
+        Assert.True(auxiliary > 0);
+        Assert.Equal(auxiliary, loss.Total.ToArray()[0] - SetLossOf(p.Boxes, p.Logits) - SetLossOf(p.EncoderBoxes, p.EncoderLogits), 1e-9);
+    }
+
+    [Fact]
+    public void DetectorLoss_IncludesTheEncoderProposalsSetLoss()
+    {
+        var p = ThreeLayerPrediction();
+        var loss = new GroundingSetLoss<double>(Engine).Compute(p, TargetBoxes, TargetTokens);
+
+        double encoder = SetLossOf(p.EncoderBoxes, p.EncoderLogits);
+        Assert.True(encoder > 0);
+        Assert.Equal(encoder, loss.Total.ToArray()[0] - SetLossOf(p.Boxes, p.Logits)
+            - SetLossOf(p.LayerBoxes[0], p.LayerLogits[0]) - SetLossOf(p.LayerBoxes[1], p.LayerLogits[1]), 1e-9);
+    }
+
+    [Fact]
+    public void Pyramid_NormalizesEachLevelsChannelsOverTheMap_AsDinosGroupNorm()
+    {
+        var probe = new HeadProbe();
+        // Width 4 splits into 4 groups of one channel, so each channel is normalized over its level's whole map
+        // (a layer norm would normalize each token over its channels instead).
+        var levels = probe.Pyramid(probe.PyramidOf(4, 4), Random(28, 4, 3));
+
+        Assert.Equal(new[] { (4, 4), (2, 2), (1, 1), (1, 1) }, levels.Shapes);
+        for (int level = 0; level < 2; level++)
+        {
+            int start = levels.Starts[level], count = levels.Shapes[level].H * levels.Shapes[level].W;
+            for (int d = 0; d < 4; d++)
+            {
+                var values = Enumerable.Range(start, count).Select(t => levels.Tokens[t, d]).ToArray();
+                double mean = values.Average();
+                double variance = values.Select(v => (v - mean) * (v - mean)).Average();
+                Assert.Equal(0.0, mean, 1e-9);
+                Assert.InRange(variance, 0.99, 1.0);
+            }
+        }
     }
 
     [Fact]
