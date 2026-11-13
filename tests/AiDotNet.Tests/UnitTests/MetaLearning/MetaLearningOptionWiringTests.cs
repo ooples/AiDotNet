@@ -195,6 +195,9 @@ public class MetaLearningOptionWiringTests
                 LearningRateSchedule = type,
                 ScheduleWarmupEpisodes = 4,
                 NumMetaIterations = 12,
+                // The paper's per-parameter rates are drawn at random; one seed makes every learner built here
+                // start from the same alpha, so two learners differ only in the option under test.
+                RandomSeed = 17,
             });
 
     [Theory]
