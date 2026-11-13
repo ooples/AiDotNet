@@ -774,7 +774,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
             return Engine.Fill(paramCount, NumOps.FromDouble(1.0));
         }
 
-        var omega = Engine.Fill(paramCount, NumOps.Zero);
+        Vector<T> omega;
 
         // For Hebbian importance, we measure how active each part of the network is
         // Since we don't have direct access to layer activations, we use a proxy:

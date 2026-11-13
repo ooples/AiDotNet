@@ -672,13 +672,10 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
     {
         var taskIds = new List<int>();
         var values = new List<double>();
-        foreach (var prop in json.Properties())
+        foreach (var prop in json.Properties().Where(p => int.TryParse(p.Name, out _)))
         {
-            if (int.TryParse(prop.Name, out var taskId))
-            {
-                taskIds.Add(taskId);
-                values.Add(prop.Value.Value<double>());
-            }
+            taskIds.Add(int.Parse(prop.Name));
+            values.Add(prop.Value.Value<double>());
         }
 
         if (taskIds.Count == 0)

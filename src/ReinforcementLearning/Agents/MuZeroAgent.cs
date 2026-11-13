@@ -419,7 +419,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // Compute the backed-up value first (reward + gamma * child_value)
         // This is the value we'll use to update Q
-        T backedUpValue = value;
+        T backedUpValue;
         if (pathNode.Rewards.ContainsKey(pathAction))
         {
             var reward = pathNode.Rewards[pathAction];
