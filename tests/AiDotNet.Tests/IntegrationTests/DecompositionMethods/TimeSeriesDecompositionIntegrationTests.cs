@@ -478,8 +478,15 @@ public class TimeSeriesDecompositionIntegrationTests
         // With s < 2 the sum over seasonal frequencies j = 1 .. s - 1 is empty, so the filter is
         // zero; scaling it by 1 / (s - 1) gave 0 * Infinity = NaN for s = 1.
         var decomp = new SEATSDecomposition<double>(CreateSeasonalTimeSeries());
-        var model = new AiDotNet.TimeSeries.SARIMAModel<double>(
-            new SARIMAOptions<double> { SeasonalPeriod = seasonalPeriod });
+        // SARIMA rejects s = 1 at construction (TimeSeriesModelBase.ValidateOptions; statsmodels raises
+        // "Seasonal periodicity must be greater than 1." likewise), so the s = 1 model is built non-seasonal
+        // and its stored period set directly: the filter must still be zero for a period that reaches it.
+        var model = new AiDotNet.TimeSeries.SARIMAModel<double>(new SARIMAOptions<double> { SeasonalPeriod = 0 });
+        var period = typeof(AiDotNet.TimeSeries.SARIMAModel<double>).GetField(
+            "_m", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(period);
+        period.SetValue(model, seasonalPeriod);
+        Assert.Equal(seasonalPeriod, model.GetSeasonalPeriod());
         var design = typeof(SEATSDecomposition<double>).GetMethod(
             "DesignCanonicalSeasonalFilter",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
