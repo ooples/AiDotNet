@@ -161,9 +161,9 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
 
     // Betweenness centrality (Freeman 1977) of the unweighted graph: sum over pairs s < t, both other than v, of
     // the share of shortest s-t paths through v, sigma_sv sigma_vt / sigma_st when d(s, v) + d(v, t) = d(s, t)
-    // (networkx.betweenness_centrality, normalized=False). Path counts and distances come from powers of the
-    // adjacency: the number of walks of length d(s, t) is the number of shortest paths. Run in double, as master
-    // did: walk counts grow like degree^length and overflow Half, and its distances are not exact past 2048.
+    // (networkx.betweenness_centrality, normalized=False). Distances and shortest-path counts come from a breadth-first
+    // expansion of all sources at once, one adjacency product per distance until no new pair is reached. Run in
+    // double, as master did: path counts overflow Half, and its distances are not exact past 2048.
     internal static Tensor<T> BetweennessCentrality(Tensor<T> adjacency) =>
         ComputeBetweennessCentrality(adjacency.Cast<double>(), adjacency.Shape[0]).Cast<T>();
 
@@ -177,14 +177,25 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var distance = engine.TensorWhere(engine.TensorEye<TN>(p),
             FilterStatisticTensorOps.Filled(new[] { p, p }, zero), FilterStatisticTensorOps.Filled(new[] { p, p }, unreachable));
         var paths = engine.TensorEye<TN>(p);
-        var walks = engine.TensorEye<TN>(p);
-        var steps = engine.TensorArange<TN>(1, p, 1).ToArray();
-        foreach (TN step in steps)
+        // the distance levels 0 .. p - 1 as TN, so the loop compares against stored values
+        var levels = engine.TensorArange<TN>(0, p, 1).ToArray();
+        for (int step = 1; step < p; step++)
         {
-            walks = engine.TensorMatMul(walks, linked);
+            // the shortest s-t paths of length step end with an edge from a u at distance step - 1:
+            // sigma_st = sum_u sigma_su [d(s, u) = step - 1] A_ut. Extending only those keeps the counts at the number
+            // of shortest paths; extending every walk let the counts grow like degree^step, which overflowed double on
+            // a dense graph with a long tail, and inf * 0 = NaN then hid every pair first reached after that
+            var frontier = engine.TensorMultiply(paths, engine.TensorEquals(distance, levels[step - 1]));
+            var walks = engine.TensorMatMul(frontier, linked);
             var reachedNow = engine.TensorMultiply(
                 engine.TensorGreaterThan(walks, zero), engine.TensorEquals(distance, unreachable));
-            distance = engine.TensorWhere(reachedNow, FilterStatisticTensorOps.Filled(new[] { p, p }, step), distance);
+
+            // no pair at this distance: none is farther either (a farther shortest path passes through one)
+            if (engine.TensorCountNonzero(reachedNow) == 0)
+                break;
+
+            distance = engine.TensorWhere(
+                reachedNow, FilterStatisticTensorOps.Filled(new[] { p, p }, levels[step]), distance);
             paths = engine.TensorWhere(reachedNow, walks, paths);
         }
 

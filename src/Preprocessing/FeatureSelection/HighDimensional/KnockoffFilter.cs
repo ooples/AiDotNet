@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -82,55 +83,29 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Step 1: Generate knockoff features (simplified second-order knockoffs)
+        // Step 1: second-order Gaussian knockoffs with the equicorrelated construction (Barber and Candes 2015;
+        // Candes, Fan, Janson and Lv 2018)
         var x = FilterStatisticTensorOps.AsTensor(data);
-        var knockoffs = GenerateKnockoffs(x, random);
+        var knockoffs = GaussianKnockoffs(x, random.Next());
 
         // Step 2: absolute correlation with the target for original and knockoff features
         var y = FilterStatisticTensorOps.AsTensor(target);
-        var featureStatistics = AbsoluteCorrelation(x, y);
-        var knockoffStatistics = AbsoluteCorrelation(knockoffs, y);
+        var featureStatistics = FeatureSelectionTensorOps.AbsoluteCorrelation(x, y);
+        var knockoffStatistics = FeatureSelectionTensorOps.AbsoluteCorrelation(knockoffs, y);
         _featureStatistics = featureStatistics.ToVector();
         _knockoffStatistics = knockoffStatistics.ToVector();
 
         // Step 3: W = |Z_j| - |Z_knockoff_j|
         var w = Engine.TensorSubtract(featureStatistics, knockoffStatistics);
 
-        // Step 4: knockoff+ threshold. For every candidate tau = W_k: #{j : W_j >= tau} and #{j : W_j <= -tau}
-        var order = PreprocessingTensorOps.StableOrder(w, descending: true);
-        var wj = FilterStatisticTensorOps.RowBroadcast(w, p);
-        var tau = FilterStatisticTensorOps.ColumnBroadcast(w, p);
-        var positives = Engine.ReduceSum(PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(wj, tau)), new[] { 1 }, false);
-        var negatives = Engine.ReduceSum(
-            PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(wj, Engine.TensorNegate(tau))), new[] { 1 }, false);
+        // Step 4: the knockoff+ selection {j : W_j >= T}, at most the requested number
+        var selected = KnockoffPlusSelection(w, _fdrThreshold);
 
-        // estimated FDP = (1 + negatives) / max(1, positives)
-        var fdp = Engine.TensorDivide(Engine.TensorAddScalar(negatives, NumOps.One), Engine.TensorMax(positives, NumOps.One));
-        var controlled = PreprocessingTensorOps.OneMinus(Engine.TensorGreaterThan(fdp, NumOps.FromDouble(_fdrThreshold)))
-            .Cast<int>().ToArray();
-        var positive = Engine.TensorGreaterThan(w, NumOps.Zero).Cast<int>().ToArray();
-
-        var selected = new List<int>();
-        for (int k = 0; k < order.Length && _nFeaturesToSelect > 0; k++)
+        // If FDR control selects nothing, fall back to the top W scores
+        if (selected.Length == 0)
         {
-            int candidate = order[k];
-            if (positive[candidate] == 0)
-                break;
-
-            if (controlled[candidate] == 1)
-            {
-                // Select all features with W >= tau: in descending order these are the ones not below W_candidate
-                var atLeast = PreprocessingTensorOps.OneMinus(Engine.TensorLessThan(
-                    w, Engine.TensorBroadcastTo(FeatureSelectionTensorOps.Entries(w, new[] { candidate }), new[] { p })))
-                    .Cast<int>().ToArray();
-                selected.AddRange(order.Where(j => atLeast[j] == 1));
-                break;
-            }
-        }
-
-        // If FDR control doesn't select enough, fall back to top W scores
-        if (selected.Count == 0)
-        {
+            var order = PreprocessingTensorOps.StableOrder(w, descending: true);
+            var positive = Engine.TensorGreaterThan(w, NumOps.Zero).Cast<int>().ToArray();
             _selectedIndices = order.Where(j => positive[j] == 1).Take(_nFeaturesToSelect).OrderBy(j => j).ToArray();
             if (_selectedIndices.Length == 0)
                 _selectedIndices = order.Take(_nFeaturesToSelect).OrderBy(j => j).ToArray();
@@ -142,48 +117,104 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         IsFitted = true;
     }
 
-    // Each knockoff column is its feature permuted (rows ordered by one random key each, ties by row) plus uniform
-    // noise of half-width std / 4, where std is the population standard deviation. Per column the n permutation keys
-    // are drawn before the n noise draws, as the original generator did.
-    private Tensor<T> GenerateKnockoffs(Tensor<T> x, Random random)
+    /// <summary>
+    /// The knockoff+ selection of Barber and Candes (2015): the threshold
+    /// <c>T = min { t &gt; 0 : (1 + #{j : W_j &lt;= -t}) / max(1, #{j : W_j &gt;= t}) &lt;= q }</c> over the candidate
+    /// values <c>t</c> in <c>{|W_j|} \ {0}</c>, and the features with <c>W_j &gt;= T</c> in descending W order (ties to
+    /// the lower index); none when no candidate passes. The estimated FDP is not monotone in t, so the smallest passing
+    /// t is searched among all of them.
+    /// </summary>
+    internal static int[] KnockoffPlusSelection(Tensor<T> w, double q)
     {
-        int n = x.Shape[0];
-        int p = x.Shape[1];
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = w.Length;
         if (p == 0)
-            return x;
+            return Array.Empty<int>();
 
-        var noise = new double[p * n];
-        var columns = new Tensor<T>[p];
-        for (int j = 0; j < p; j++)
-        {
-            var keys = new int[n];
-            for (int i = 0; i < n; i++)
-                keys[i] = random.Next();
-            for (int i = 0; i < n; i++)
-                noise[j * n + i] = random.NextDouble();
-            var shuffled = Enumerable.Range(0, n).OrderBy(i => keys[i]).ToArray();
-            columns[j] = Engine.TensorGather(PreprocessingTensorOps.ColumnVector(x, j), new Tensor<int>(shuffled, new[] { n }), 0);
-        }
+        // for every candidate t_k = |W_k| (rows) and every feature j (columns): W_j >= t_k and W_j <= -t_k, counted in int
+        var magnitude = engine.TensorAbs(w);
+        var tau = FilterStatisticTensorOps.ColumnBroadcast(magnitude, p);
+        var wj = FilterStatisticTensorOps.RowBroadcast(w, p);
+        var positives = engine.ReduceSum(
+            PreprocessingTensorOps.OneMinus(engine.TensorLessThan(wj, tau)).Cast<int>(), new[] { 1 }, false).Cast<double>();
+        var negatives = engine.ReduceSum(PreprocessingTensorOps.OneMinus(
+            engine.TensorGreaterThan(wj, engine.TensorNegate(tau))).Cast<int>(), new[] { 1 }, false).Cast<double>();
 
-        var permuted = Engine.TensorStack(columns, 1);
-        var std = Engine.TensorSqrt(FilterStatisticTensorOps.ColumnPopulationVariance(x));
-        var uniform = Engine.TensorTranspose(new Tensor<double>(noise, new[] { p, n }).Cast<T>());
-        var offset = Engine.TensorMultiply(
-            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(uniform, NumOps.FromDouble(0.5)), NumOps.FromDouble(0.5)),
-            FilterStatisticTensorOps.RowBroadcast(std, n));
-        return Engine.TensorAdd(permuted, offset);
+        // estimated FDP = (1 + negatives) / max(1, positives); t = 0 is no candidate
+        var fdp = engine.TensorDivide(engine.TensorAddScalar(negatives, 1.0), engine.TensorMax(positives, 1.0));
+        var passing = engine.TensorMultiply(
+            PreprocessingTensorOps.OneMinus(engine.TensorGreaterThan(fdp, q)),
+            engine.TensorGreaterThan(magnitude, ops.Zero).Cast<double>());
+        var candidates = FilterStatisticTensorOps.MaskPositions(passing);
+        if (candidates.Length == 0)
+            return Array.Empty<int>();
+
+        // T = the smallest passing |W_k|; select W_j >= T
+        var passingMagnitudes = FeatureSelectionTensorOps.Entries(magnitude, candidates);
+        var threshold = FeatureSelectionTensorOps.Entries(
+            passingMagnitudes, new[] { PreprocessingTensorOps.StableOrder(passingMagnitudes, descending: false)[0] });
+        var atLeast = PreprocessingTensorOps.OneMinus(
+            engine.TensorLessThan(w, engine.TensorBroadcastTo(threshold, new[] { p }))).Cast<int>().ToArray();
+        return PreprocessingTensorOps.StableOrder(w, descending: true).Where(j => atLeast[j] == 1).ToArray();
     }
 
-    // |Pearson r| of every column with the target; 0 when the column or the target is (near) constant
-    private Tensor<T> AbsoluteCorrelation(Tensor<T> x, Tensor<T> y)
+    /// <summary>
+    /// Second-order Gaussian model-X knockoffs with the equicorrelated construction (Candes, Fan, Janson and Lv 2018,
+    /// section 3.4; Barber and Candes 2015). On the standardised features Z with correlation matrix
+    /// <c>S = V diag(lambda) V'</c> and <c>s = min(2 lambda_min, 1)</c>, the knockoffs are
+    /// <c>Z (I - s S^-1) + G C</c> with G standard normal and <c>C'C = 2 s I - s^2 S^-1</c>, i.e.
+    /// <c>Z V diag(1 - s / lambda) V' + G diag(sqrt(2 s - s^2 / lambda)) V'</c>, mapped back to the feature scale.
+    /// They have the correlation matrix S, and correlation <c>S_jk</c> with every original feature k other than their
+    /// own (<c>1 - s</c> with that), which is what makes W symmetric under the null and the knockoff+ threshold control
+    /// the FDR. A constant feature is its own knockoff. The normal draws use the engine's seeded generator.
+    /// </summary>
+    internal static Tensor<T> GaussianKnockoffs(Tensor<T> x, int seed)
     {
-        var (sxx, sxy, syy) = FilterStatisticTensorOps.CenteredCrossSums(x, y);
-        T tolerance = NumOps.FromDouble(1e-10);
-        if (!NumOps.GreaterThan(syy, tolerance))
-            return FilterStatisticTensorOps.FilledLike(sxx, NumOps.Zero);
-        var correlation = Engine.TensorAbs(FilterStatisticTensorOps.GuardedDivide(
-            sxy, Engine.TensorMultiplyScalar(Engine.TensorSqrt(sxx), NumOps.Sqrt(syy)), 0, NumOps.Zero));
-        return FeatureSelectionTensorOps.KeepOrFill(correlation, Engine.TensorGreaterThan(sxx, tolerance), NumOps.Zero);
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        if (n == 0 || p == 0)
+            return x;
+
+        // standardised features; a constant one stays 0 and takes a unit diagonal so S stays a correlation matrix
+        var mean = FilterStatisticTensorOps.ColumnMeans(x);
+        var std = engine.TensorSqrt(FilterStatisticTensorOps.ColumnPopulationVariance(x));
+        var varying = engine.TensorGreaterThan(std, ops.Zero);
+        var safeStd = engine.TensorWhere(varying, std, FilterStatisticTensorOps.FilledLike(std, ops.One));
+        var z = engine.TensorMultiply(
+            engine.TensorDivide(engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(mean, n)),
+                FilterStatisticTensorOps.RowBroadcast(safeStd, n)),
+            FilterStatisticTensorOps.RowBroadcast(varying, n));
+        var correlation = engine.TensorAdd(
+            engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(z), z), ops.FromDouble(n)),
+            engine.TensorDiag(PreprocessingTensorOps.OneMinus(varying)));
+
+        // S = V diag(lambda) V'; s = min(2 lambda_min, 1), at least 0
+        var (lambda, vectors) = LinalgDispatch<T>.Eigh(correlation);
+        T twiceSmallest = ops.Multiply(ops.FromDouble(2), engine.TensorMinValue(lambda));
+        T s = ops.LessThan(twiceSmallest, ops.One) ? twiceSmallest : ops.One;
+        if (ops.LessThan(s, ops.Zero))
+            s = ops.Zero;
+
+        // s / lambda (0 where lambda is not positive; s is 0 there too)
+        var ratio = FilterStatisticTensorOps.GuardedDivide(
+            FilterStatisticTensorOps.FilledLike(lambda, s), lambda, 0.0, ops.Zero);
+        var keep = PreprocessingTensorOps.OneMinus(ratio);
+        var spread = engine.TensorSqrt(engine.TensorMax(
+            engine.TensorSubtract(FilterStatisticTensorOps.FilledLike(lambda, ops.Multiply(ops.FromDouble(2), s)),
+                engine.TensorMultiplyScalar(ratio, s)), ops.Zero));
+        var vectorsT = engine.TensorTranspose(vectors);
+        var shrink = engine.TensorMatMul(engine.TensorMultiply(vectors, FilterStatisticTensorOps.RowBroadcast(keep, p)), vectorsT);
+        var noiseMap = engine.TensorMultiply(vectorsT, FilterStatisticTensorOps.ColumnBroadcast(spread, p));
+        var noise = engine.TensorRandnLike(z, seed);
+        var knockoffZ = engine.TensorAdd(engine.TensorMatMul(z, shrink), engine.TensorMatMul(noise, noiseMap));
+
+        // back to the feature scale (a constant feature has std 0 and returns to its constant)
+        return engine.TensorAdd(
+            engine.TensorMultiply(knockoffZ, FilterStatisticTensorOps.RowBroadcast(std, n)),
+            FilterStatisticTensorOps.RowBroadcast(mean, n));
     }
 
     /// <inheritdoc />
