@@ -376,7 +376,7 @@ public class MultiFidelityAndDomainDecompositionTests
 
         // Act & Assert
         Assert.Throws<ArgumentException>(() =>
-            pinn.GetGlobalSolution(new double[] { 2.0, 2.0 }));
+            pinn.GetGlobalSolution(new Vector<double>(new double[] { 2.0, 2.0 })));
     }
 
     [Fact(Timeout = 60000)]
@@ -405,7 +405,7 @@ public class MultiFidelityAndDomainDecompositionTests
         var pinn = new DomainDecompositionPINN<double>(architecture, pde, boundaryConditions, subdomains, options: new DomainDecompositionPINNOptions { NumCollocationPointsPerSubdomain = 100 });
 
         // Act
-        var solution = pinn.GetGlobalSolution(new double[] { 0.5, 0.5 });
+        var solution = pinn.GetGlobalSolution(new Vector<double>(new double[] { 0.5, 0.5 }));
 
         // Assert
         Assert.NotNull(solution);

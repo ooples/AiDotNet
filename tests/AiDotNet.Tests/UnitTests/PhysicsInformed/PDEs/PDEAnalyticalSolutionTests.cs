@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using System;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PDEs;
@@ -112,7 +113,7 @@ public class PDEAnalyticalSolutionTests
     public async Task PoissonEquation_QuadraticSolution_ReturnsZeroResidual()
     {
         // f(x) = 2, so u(x) = x² satisfies ∂²u/∂x² = 2
-        Func<double[], double> sourceFunction = x => 2.0;
+        Func<Tensor<double>, Tensor<double>> sourceFunction = x => Tensor<double>.CreateDefault(new[] { x.Shape[0] }, 2.0);
         var pde = new PoissonEquation<double>(sourceFunction, spatialDimension: 1);
 
         double x = 0.5;
@@ -141,7 +142,9 @@ public class PDEAnalyticalSolutionTests
     public void PoissonEquation_SinusoidalSolution_ReturnsZeroResidual(double k)
     {
         // u(x) = sin(k*x), so ∂²u/∂x² = -k²*sin(k*x)
-        Func<double[], double> sourceFunction = inputs => -k * k * Math.Sin(k * inputs[0]);
+        var engine = AiDotNetEngine.Current;
+        Func<Tensor<double>, Tensor<double>> sourceFunction = inputs => engine.TensorMultiplyScalar(
+            engine.TensorSin(engine.TensorMultiplyScalar(engine.TensorSelect(inputs, 1, 0), k)), -k * k);
         var pde = new PoissonEquation<double>(sourceFunction, spatialDimension: 1);
 
         double x = 0.5;

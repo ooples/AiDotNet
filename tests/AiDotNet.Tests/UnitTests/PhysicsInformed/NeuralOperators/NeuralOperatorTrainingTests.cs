@@ -1,3 +1,4 @@
+using AiDotNet.Tests.Helpers;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
@@ -67,7 +68,9 @@ public class NeuralOperatorTrainingTests
         var targetValues = new double[,] { { 0.5 } };
 
         var before = model.GetParameters().ToArray();
-        var history = model.Train(inputFunctions, queryLocations, targetValues, epochs: 1, learningRate: 0.01, verbose: false);
+        var history = model.Train(
+            PdeTestTensors.From(inputFunctions), PdeTestTensors.From(queryLocations), PdeTestTensors.From(targetValues),
+            epochs: 1, learningRate: 0.01, verbose: false);
         var after = model.GetParameters().ToArray();
 
         Assert.Single(history.Losses);

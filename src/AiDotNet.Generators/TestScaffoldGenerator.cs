@@ -9302,7 +9302,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 2, outputSize: 1), " +
-                    "energyFunctional: AiDotNet.PhysicsInformed.PINNs.DeepRitzEnergy<double>.Poisson(1.0), " +
+                    "energyFunctional: AiDotNet.PhysicsInformed.PINNs.DeepRitzEnergy<double>.Poisson(1), " +
                     "options: new AiDotNet.PhysicsInformed.Options.DeepRitzMethodOptions { NumQuadraturePoints = 64 })";
             }
             else if (model.ClassName == "VariationalPINN" && model.TypeParameterCount == 1)
@@ -9313,7 +9313,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 2, outputSize: 1), " +
-                    "weakFormResidual: AiDotNet.PhysicsInformed.PINNs.VariationalWeakForm<double>.Poisson(1.0), " +
+                    "weakFormResidual: AiDotNet.PhysicsInformed.PINNs.VariationalWeakForm<double>.Poisson(1), " +
                     "options: new AiDotNet.PhysicsInformed.Options.VariationalPINNOptions { NumQuadraturePoints = 64, NumTestFunctions = 4 })";
             }
             else if (model.ClassName == "DeepOperatorNetwork" && model.TypeParameterCount == 1)

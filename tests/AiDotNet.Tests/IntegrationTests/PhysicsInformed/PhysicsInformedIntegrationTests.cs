@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.PhysicsInformed.Options;
 using System;
 using System.Collections.Generic;
@@ -418,7 +419,7 @@ public class PhysicsInformedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PoissonEquation_Constructor_Valid()
     {
-        Func<double[], double> source = x => 2.0;
+        Func<Tensor<double>, Tensor<double>> source = x => Tensor<double>.CreateDefault(new[] { x.Shape[0] }, 2.0);
         var pde = new PoissonEquation<double>(source, spatialDimension: 1);
 
         Assert.Equal(1, pde.InputDimension);
@@ -430,7 +431,7 @@ public class PhysicsInformedIntegrationTests
     public async Task PoissonEquation_ComputeResidual_QuadraticSolution_ZeroResidual()
     {
         // f(x) = 2, u(x) = x² satisfies ∂²u/∂x² = 2
-        Func<double[], double> source = x => 2.0;
+        Func<Tensor<double>, Tensor<double>> source = x => Tensor<double>.CreateDefault(new[] { x.Shape[0] }, 2.0);
         var pde = new PoissonEquation<double>(source, spatialDimension: 1);
 
         double x = 0.5;
@@ -663,7 +664,7 @@ public class PhysicsInformedIntegrationTests
         var pde = new HeatEquation<double>(1.0);
         var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
-        var point = new double[] { 0.5, 0.1 };
+        var point = new Vector<double>(new double[] { 0.5, 0.1 });
         var solution = pinn.GetSolution(point);
 
         Assert.Single(solution);
@@ -678,7 +679,7 @@ public class PhysicsInformedIntegrationTests
         var pde = new HeatEquation<double>(1.0);
         var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 10 });
 
-        var point = new double[] { 0.5, 0.1 };
+        var point = new Vector<double>(new double[] { 0.5, 0.1 });
         var residual = pinn.EvaluatePDEResidual(point);
 
         Assert.False(double.IsNaN(residual));
@@ -728,7 +729,7 @@ public class PhysicsInformedIntegrationTests
         }
 
         // Should not throw
-        pinn.SetCollocationPoints(customPoints);
+        pinn.SetCollocationPoints(PdeTestTensors.From(customPoints));
     }
 
     [Fact(Timeout = 120000)]
@@ -741,7 +742,7 @@ public class PhysicsInformedIntegrationTests
         var wrongDimPoints = new double[5, 3]; // Wrong dimension
 
         Assert.Throws<ArgumentException>(() =>
-            pinn.SetCollocationPoints(wrongDimPoints));
+            pinn.SetCollocationPoints(PdeTestTensors.From(wrongDimPoints)));
     }
 
     [Fact(Timeout = 120000)]
@@ -783,8 +784,10 @@ public class PhysicsInformedIntegrationTests
     public async Task VariationalPINN_Constructor_ValidParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
-        Func<double[], double[], double[,], double[], double[,], double> weakForm =
-            (x, u, gradU, v, gradV) => (u[0] - x[0]) * v[0];
+        var engine = AiDotNetEngine.Current;
+        Func<Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>> weakForm =
+            (x, u, gradU, v, gradV) => engine.TensorMultiply(
+                engine.TensorSubtract(engine.TensorSelect(u, 1, 0), engine.TensorSelect(x, 1, 0)), v);
 
         var vpinn = new VariationalPINN<double>(
             architecture,
@@ -801,22 +804,24 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
         Assert.Throws<ArgumentNullException>(() =>
-            new VariationalPINN<double>(architecture, global::AiDotNet.Tests.TestNull.Of<System.Func<double[], double[], double[,], double[], double[,], double>>()));
+            new VariationalPINN<double>(architecture, global::AiDotNet.Tests.TestNull.Of<System.Func<Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>>>()));
     }
 
     [Fact(Timeout = 120000)]
     public async Task VariationalPINN_GetSolution_ReturnsOutput()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
-        Func<double[], double[], double[,], double[], double[,], double> weakForm =
-            (x, u, gradU, v, gradV) => (u[0] - x[0]) * v[0];
+        var engine = AiDotNetEngine.Current;
+        Func<Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>> weakForm =
+            (x, u, gradU, v, gradV) => engine.TensorMultiply(
+                engine.TensorSubtract(engine.TensorSelect(u, 1, 0), engine.TensorSelect(x, 1, 0)), v);
 
         var vpinn = new VariationalPINN<double>(
             architecture,
             weakForm,
             options: new VariationalPINNOptions { NumQuadraturePoints = 10, NumTestFunctions = 2 });
 
-        var point = new double[] { 0.5 };
+        var point = new Vector<double>(new double[] { 0.5 });
         var solution = vpinn.GetSolution(point);
 
         Assert.Single(solution);
@@ -828,8 +833,10 @@ public class PhysicsInformedIntegrationTests
     public async Task VariationalPINN_ComputeWeakResidual_ReturnsFiniteValue()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
-        Func<double[], double[], double[,], double[], double[,], double> weakForm =
-            (x, u, gradU, v, gradV) => (u[0] - x[0]) * v[0];
+        var engine = AiDotNetEngine.Current;
+        Func<Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>> weakForm =
+            (x, u, gradU, v, gradV) => engine.TensorMultiply(
+                engine.TensorSubtract(engine.TensorSelect(u, 1, 0), engine.TensorSelect(x, 1, 0)), v);
 
         var vpinn = new VariationalPINN<double>(
             architecture,
@@ -850,8 +857,9 @@ public class PhysicsInformedIntegrationTests
     public async Task DeepRitzMethod_Constructor_ValidParameters()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
-        Func<double[], double[], double[,], double> energyFunctional =
-            (x, u, gradU) => u[0] * u[0];
+        var engine = AiDotNetEngine.Current;
+        Func<Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>> energyFunctional =
+            (x, u, gradU) => engine.TensorMultiply(engine.TensorSelect(u, 1, 0), engine.TensorSelect(u, 1, 0));
 
         var drm = new DeepRitzMethod<double>(
             architecture,
@@ -868,22 +876,23 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
 
         Assert.Throws<ArgumentNullException>(() =>
-            new DeepRitzMethod<double>(architecture, global::AiDotNet.Tests.TestNull.Of<System.Func<double[], double[], double[,], double>>()));
+            new DeepRitzMethod<double>(architecture, global::AiDotNet.Tests.TestNull.Of<System.Func<Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>>>()));
     }
 
     [Fact(Timeout = 120000)]
     public async Task DeepRitzMethod_GetSolution_ReturnsOutput()
     {
         var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
-        Func<double[], double[], double[,], double> energyFunctional =
-            (x, u, gradU) => u[0] * u[0];
+        var engine = AiDotNetEngine.Current;
+        Func<Tensor<double>, Tensor<double>, Tensor<double>, Tensor<double>> energyFunctional =
+            (x, u, gradU) => engine.TensorMultiply(engine.TensorSelect(u, 1, 0), engine.TensorSelect(u, 1, 0));
 
         var drm = new DeepRitzMethod<double>(
             architecture,
             energyFunctional,
             options: new DeepRitzMethodOptions { NumQuadraturePoints = 10 });
 
-        var point = new double[] { 0.5 };
+        var point = new Vector<double>(new double[] { 0.5 });
         var solution = drm.GetSolution(point);
 
         Assert.Single(solution);
@@ -940,7 +949,7 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
-        var state = new double[] { 0.5, 0.3 }; // [q, p]
+        var state = new Vector<double>(new double[] { 0.5, 0.3 }); // [q, p]
         var hamiltonian = hnn.ComputeHamiltonian(state);
 
         Assert.False(double.IsNaN(hamiltonian));
@@ -954,7 +963,7 @@ public class PhysicsInformedIntegrationTests
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
         Assert.Throws<ArgumentNullException>(() =>
-            hnn.ComputeHamiltonian(global::AiDotNet.Tests.TestNull.Of<double[]>()));
+            hnn.ComputeHamiltonian(global::AiDotNet.Tests.TestNull.Of<Vector<double>>()));
     }
 
     [Fact(Timeout = 120000)]
@@ -964,7 +973,7 @@ public class PhysicsInformedIntegrationTests
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
         Assert.Throws<ArgumentException>(() =>
-            hnn.ComputeHamiltonian(new double[] { 0.5 })); // Wrong length
+            hnn.ComputeHamiltonian(new Vector<double>(new double[] { 0.5 }))); // Wrong length
     }
 
     [Fact(Timeout = 120000)]
@@ -973,7 +982,7 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
-        var state = new double[] { 0.5, 0.3 };
+        var state = new Vector<double>(new double[] { 0.5, 0.3 });
         var derivative = hnn.ComputeTimeDerivative(state);
 
         Assert.Equal(2, derivative.Length);
@@ -987,14 +996,14 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
-        var initialState = new double[] { 1.0, 0.0 };
+        var initialState = new Vector<double>(new double[] { 1.0, 0.0 });
         var dt = 0.01;
         var numSteps = 10;
 
         var trajectory = hnn.Simulate(initialState, NumOps().FromDouble(dt), numSteps);
 
-        Assert.Equal(numSteps + 1, trajectory.GetLength(0));
-        Assert.Equal(2, trajectory.GetLength(1));
+        Assert.Equal(numSteps + 1, trajectory.Shape[0]);
+        Assert.Equal(2, trajectory.Shape[1]);
 
         // Initial state should be preserved
         Assert.Equal(initialState[0], trajectory[0, 0], LooseTolerance);
@@ -1007,7 +1016,7 @@ public class PhysicsInformedIntegrationTests
         var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
         var hnn = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
-        var initialState = new double[] { 1.0, 0.0 };
+        var initialState = new Vector<double>(new double[] { 1.0, 0.0 });
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             hnn.Simulate(initialState, NumOps().FromDouble(0.01), numSteps: 0));
@@ -1268,7 +1277,7 @@ public class PhysicsInformedIntegrationTests
 
         var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, Array.Empty<IBoundaryCondition<double>>(), options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 1 });
 
-        var point = new double[] { 0.5, 0.1 };
+        var point = new Vector<double>(new double[] { 0.5, 0.1 });
         var solution = pinn.GetSolution(point);
 
         Assert.Single(solution);
@@ -1341,11 +1350,11 @@ public class PhysicsInformedIntegrationTests
         hnn.Train(input, output);
 
         // Simulate
-        var initialState = new double[] { 1.0, 0.0, 0.0, 1.0 };
+        var initialState = new Vector<double>(new double[] { 1.0, 0.0, 0.0, 1.0 });
         var trajectory = hnn.Simulate(initialState, NumOps().FromDouble(0.1), numSteps: 5);
 
-        Assert.Equal(6, trajectory.GetLength(0)); // numSteps + 1
-        Assert.Equal(4, trajectory.GetLength(1));
+        Assert.Equal(6, trajectory.Shape[0]); // numSteps + 1
+        Assert.Equal(4, trajectory.Shape[1]);
     }
 
     #endregion
