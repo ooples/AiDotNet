@@ -29,12 +29,49 @@ public class FilterStatisticTensorOpsCountTests
     [Fact(Timeout = 60000)]
     public async Task AnovaSums_Half_UsesExactClassSizes()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var membership = FilterStatisticTensorOps.ClassOneHot<Half>(ClassIndex(), 2);
 
         var (between, within) = FilterStatisticTensorOps.AnovaSums(ClassOneColumn(1.0), membership);
 
         Assert.Equal(768.0, (double)between.ToArray()[0]);
         Assert.Equal(0.0, (double)within.ToArray()[0]);
+    }
+
+    // [200, -200, 200, -200] has population variance 40,000, which Half holds; its sum of squared deviations,
+    // 160,000, does not, so dividing the Half sum gave inf.
+    [Fact(Timeout = 60000)]
+    public async Task ColumnPopulationVariance_Half_SumPast65504()
+    {
+        await Task.Yield();
+        var x = new Tensor<Half>(new[] { (Half)200, (Half)(-200), (Half)200, (Half)(-200) }, new[] { 4, 1 });
+
+        Assert.Equal(40000.0, (double)FilterStatisticTensorOps.ColumnPopulationVariance(x).ToArray()[0]);
+    }
+
+    // 3072 class-0 rows of 32 and 1024 class-1 rows of 33: overall mean 32.25, SSB = 3072 * 0.25^2 + 1024 * 0.75^2 =
+    // 768 and SSW = 0. The Half class-0 sum 98,304 overflowed before the class mean was formed.
+    [Fact(Timeout = 60000)]
+    public async Task AnovaSums_Half_ClassSumPast65504()
+    {
+        await Task.Yield();
+        var membership = FilterStatisticTensorOps.ClassOneHot<Half>(ClassIndex(), 2);
+        var x = new Tensor<Half>(ClassIndex().Select(c => c == 1 ? (Half)33 : (Half)32).ToArray(), new[] { Rows, 1 });
+
+        var (between, within) = FilterStatisticTensorOps.AnovaSums(x, membership);
+
+        Assert.Equal(768.0, (double)between.ToArray()[0]);
+        Assert.Equal(0.0, (double)within.ToArray()[0]);
+    }
+
+    // scipy.stats.f.sf(1, 1000, 1000) = 0.5 (F(d, d) has median 1). The continued fraction with a = b = 500 forms
+    // 501 * 1001 and 502 * 503, past Half's 65504 (inf / inf = NaN).
+    [Fact(Timeout = 60000)]
+    public async Task FSurvival_Half_LargeDegreesOfFreedom()
+    {
+        await Task.Yield();
+        var f = new Tensor<Half>(new[] { (Half)1 }, new[] { 1 });
+
+        Assert.Equal(0.5, (double)FilterStatisticTensorOps.FSurvival(f, 1000, 1000).ToArray()[0], 1e-3);
     }
 }

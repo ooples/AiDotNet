@@ -161,10 +161,16 @@ internal static class FilterStatisticTensorOps
     public static Tensor<T> ColumnQuantile<T>(Tensor<T> x, double q) =>
         AiDotNetEngine.Current.TensorQuantile(x, q, 0, false, QuantileInterpolation.Linear);
 
-    /// <summary>Column variances of an [n, p] tensor with divisor n (numpy.var, ddof = 0) ([p]).</summary>
+    /// <summary>
+    /// Column variances of an [n, p] tensor with divisor n (numpy.var, ddof = 0) ([p]). Half and BFloat16 are
+    /// evaluated in float: the sum of squared deviations of [200, -200, 200, -200] is 160,000, past Half's 65504,
+    /// although the variance 40,000 is representable.
+    /// </summary>
     public static Tensor<T> ColumnPopulationVariance<T>(Tensor<T> x) =>
-        AiDotNetEngine.Current.TensorDivideScalar(
-            ColumnSumOfSquaredDeviations(x), MathHelper.GetNumericOperations<T>().FromDouble(x.Shape[0]));
+        PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? ColumnPopulationVariance(x.Cast<float>()).Cast<T>()
+            : AiDotNetEngine.Current.TensorDivideScalar(
+                ColumnSumOfSquaredDeviations(x), MathHelper.GetNumericOperations<T>().FromDouble(x.Shape[0]));
 
     // Upper bound on the elements of one block of the DFT basis built by ColumnDftPower.
     private const int DftBlockElements = 1 << 22;
@@ -257,6 +263,14 @@ internal static class FilterStatisticTensorOps
     /// </summary>
     public static (Tensor<T> SsBetween, Tensor<T> SsWithin) AnovaSums<T>(Tensor<T> x, Tensor<T> classOneHot)
     {
+        // Half and BFloat16 are evaluated in float: a class sum (3072 rows of 32 is 98,304) passes Half's 65504
+        // before it is divided into the class mean
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var (between, within) = AnovaSums(x.Cast<float>(), classOneHot.Cast<float>());
+            return (between.Cast<T>(), within.Cast<T>());
+        }
+
         var engine = AiDotNetEngine.Current;
         int p = x.Shape[1];
         int k = classOneHot.Shape[1];
@@ -299,6 +313,11 @@ internal static class FilterStatisticTensorOps
     /// </summary>
     public static Tensor<T> RegularizedIncompleteBeta<T>(Tensor<T> a, Tensor<T> b, Tensor<T> x, Tensor<T> oneMinusX)
     {
+        // Half and BFloat16 are evaluated in float: the continued fraction forms products such as 501 * 1001 for
+        // a = b = 500, past Half's 65504 (inf / inf = NaN), and Half rounds the 1e-30 Lentz floor to 0
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return RegularizedIncompleteBeta(a.Cast<float>(), b.Cast<float>(), x.Cast<float>(), oneMinusX.Cast<float>()).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         T one = ops.One;
