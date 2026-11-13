@@ -527,6 +527,54 @@ public class UniVSTComponentTests
             new UniVSTOptions { DdimSteps = 0 }.Validate());
     }
 
+    [Fact]
+    public void AdaIn_Half_LargeActivationsKeepTheirStatistics()
+    {
+        // Centred values of +-300 square to 90,000, past Half's 65,504: a squared deviation would be infinite and
+        // the scale sigma(y) / sigma(x) zero, collapsing the output to the style mean.
+        var content = HalfTensor(new[] { 1, 4 }, 300.0, -300.0, 100.0, -100.0);
+        var style = HalfTensor(new[] { 1, 4 }, 1.0, 2.0, 3.0, 4.0);
+
+        var result = new UniVSTAdaInStylization<Half>().AdaIn(content, style);
+
+        // mu(x) = 0, sigma(x) = sqrt(50000); mu(y) = 2.5, sigma(y) = sqrt(1.25): x * sigma(y) / sigma(x) + 2.5.
+        double scale = Math.Sqrt(1.25) / Math.Sqrt(50000.0);
+        var expected = new[] { (300.0 * scale) + 2.5, (-300.0 * scale) + 2.5, (100.0 * scale) + 2.5, (-100.0 * scale) + 2.5 };
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], HalfOps.ToDouble(result[i]), tolerance: 1e-2);
+    }
+
+    [Fact]
+    public void MaskPropagation_Half_NormalizesRowsWhoseSquaredNormOverflows()
+    {
+        // 256 channels of magnitude 20: the squared norm 102,400 overflows Half, which used to zero the whole row.
+        const int channels = 256;
+        var values = new double[2 * channels];
+        for (int c = 0; c < channels; c++)
+        {
+            values[c] = c % 2 == 0 ? 20.0 : -20.0;
+            values[channels + c] = c < channels / 2 ? 30.0 : 0.0;
+        }
+
+        var rows = UniVSTMaskPropagation<Half>.NormalizeRows(HalfTensor(new[] { 1, 2, channels }, values), 2, channels);
+
+        for (int c = 0; c < channels; c++)
+        {
+            Assert.Equal((c % 2 == 0 ? 1.0 : -1.0) / Math.Sqrt(channels), HalfOps.ToDouble(rows[c]), tolerance: 1e-3);
+            Assert.Equal(c < channels / 2 ? 1.0 / Math.Sqrt(channels / 2) : 0.0, HalfOps.ToDouble(rows[channels + c]), tolerance: 1e-3);
+        }
+    }
+
+    private static readonly AiDotNet.Tensors.Interfaces.INumericOperations<Half> HalfOps =
+        AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+    private static Tensor<Half> HalfTensor(int[] shape, params double[] values)
+    {
+        var data = new Half[values.Length];
+        for (int i = 0; i < values.Length; i++) data[i] = HalfOps.FromDouble(values[i]);
+        return new Tensor<Half>(shape, new Vector<Half>(data));
+    }
+
     private static (double Mean, double Std) MeanStd(Tensor<double> t, int offset, int count)
     {
         double mean = 0.0;

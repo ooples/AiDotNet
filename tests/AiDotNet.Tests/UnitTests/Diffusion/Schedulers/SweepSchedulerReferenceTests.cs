@@ -678,6 +678,115 @@ public class SweepSchedulerReferenceTests
 
     #endregion
 
+    #region Review fixes
+
+    private static readonly AiDotNet.Tensors.Interfaces.INumericOperations<Half> HalfOps =
+        AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+    private static Vector<Half> HalfVec(params double[] values)
+    {
+        var data = new Half[values.Length];
+        for (int i = 0; i < values.Length; i++)
+            data[i] = HalfOps.FromDouble(values[i]);
+        return new Vector<Half>(data);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void SigmaSpaceVPrediction_Half_SigmaAbove255_KeepsBothTerms(bool heun)
+    {
+        // sigma^2 + 1 = 90,001 overflows Half, which zeroed both x / (sigma^2 + 1) and v * sigma / sqrt(sigma^2 + 1).
+        var config = new SchedulerConfig<Half>(1000, HalfOps.FromDouble(0.00085), HalfOps.FromDouble(0.012),
+            BetaSchedule.ScaledLinear, predictionType: DiffusionPredictionType.VPrediction);
+        var x = new[] { 2.0, -1.0 };
+        var v = new[] { 0.3, 0.6 };
+        Half sigma = HalfOps.FromDouble(300.0);
+
+        var x0 = heun
+            ? new HeunDiscreteScheduler<Half>(config).ConvertToPredOriginal(HalfVec(v), HalfVec(x), sigma, 0)
+            : new LMSDiscreteScheduler<Half>(config).ConvertToPredOriginal(HalfVec(v), HalfVec(x), sigma, 0);
+
+        for (int k = 0; k < x.Length; k++)
+        {
+            double expected = (x[k] / 90001.0) - (v[k] * 300.0 / Math.Sqrt(90001.0));
+            Assert.Equal(expected, HalfOps.ToDouble(x0[k]), tolerance: 1e-3);
+        }
+    }
+
+    [Fact]
+    public void LogSnrImportanceSampling_ZeroTerminalSnr_SamplesTheSameForEveryElementType()
+    {
+        // alpha = 0 has log-SNR -inf; the sampled range must end at the same finite bound (-ln(1e10), the value of
+        // the original 1e-10 guard) for double and float, not at a bound tied to each type's epsilon.
+        var alphas = new[] { 0.99, 0.5, 0.0 };
+        const int draws = 2000;
+        double LogSnr(double a)
+        {
+            a = Math.Max(a, 1e-10);
+            return Math.Log(a / (1.0 - a + 1e-10));
+        }
+
+        var logSnr = alphas.Select(LogSnr).ToArray();
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var expected = new int[draws];
+        for (int b = 0; b < draws; b++)
+        {
+            double target = logSnr[2] + (random.NextDouble() * (logSnr[0] - logSnr[2]));
+            int best = 0;
+            for (int i = 1; i < alphas.Length; i++)
+                if (Math.Abs(logSnr[i] - target) < Math.Abs(logSnr[best] - target))
+                    best = i;
+            expected[b] = best;
+        }
+
+        var asDouble = new LogSNRImportanceSampling<double>().SampleTimesteps(
+            draws, Vec(alphas), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11));
+        var asFloat = new LogSNRImportanceSampling<float>().SampleTimesteps(
+            draws, new Vector<float>(alphas.Select(a => (float)a).ToArray()), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11));
+
+        Assert.Equal(expected, asDouble);
+        Assert.Equal(expected, asFloat);
+    }
+
+    [Fact]
+    public void StableVideoDiffusion_AddTimeProjection_MatchesDiffusersTimesteps()
+    {
+        // diffusers Timesteps(256, flip_sin_to_cos=True, downscale_freq_shift=0): [cos(v f_i), sin(v f_i)],
+        // f_i = exp(-ln(10000) i / 128).
+        const double value = 127.0;
+        var projected = StableVideoDiffusion<double>.ProjectConditioningValue(value, 256).ToArray();
+        var projectedHalf = StableVideoDiffusion<Half>.ProjectConditioningValue(value, 256).ToArray();
+
+        Assert.Equal(256, projected.Length);
+        for (int i = 0; i < 128; i++)
+        {
+            double phase = value * Math.Exp(-Math.Log(10000.0) * i / 128.0);
+            Assert.Equal(Math.Cos(phase), projected[i], tolerance: 1e-12);
+            Assert.Equal(Math.Sin(phase), projected[128 + i], tolerance: 1e-12);
+            // Half holds the rounded exact feature: the phase itself is never formed in Half.
+            Assert.Equal(Math.Cos(phase), HalfOps.ToDouble(projectedHalf[i]), tolerance: 1e-3);
+            Assert.Equal(Math.Sin(phase), HalfOps.ToDouble(projectedHalf[128 + i]), tolerance: 1e-3);
+        }
+    }
+
+    [Fact]
+    public void VideoCrafter_MotionModulation_Half_LongEmbeddingStaysExact()
+    {
+        // Element i gains 0.1 * sin(0.001 * i * motion). As a Half index, i stops being exact at 2048 and becomes
+        // infinite at 65,520, which made the modulation NaN.
+        const int size = 70000;
+        var image = new Tensor<Half>(new[] { size });
+        var motion = new Tensor<Half>(new[] { 1 }, HalfVec(1.0));
+
+        var result = AiDotNet.Diffusion.Video.VideoCrafterModel<Half>.CombineImageAndMotion(image, motion).ToArray();
+
+        foreach (int i in new[] { 0, 1000, 2049, 4097, 40001, 65519, 65520, 69999 })
+            Assert.Equal(0.1 * Math.Sin(0.001 * i), HalfOps.ToDouble(result[i]), tolerance: 1e-3);
+    }
+
+    #endregion
+
     private static double Lagrange(double[] nodes, int j, double x)
     {
         double value = 1.0;

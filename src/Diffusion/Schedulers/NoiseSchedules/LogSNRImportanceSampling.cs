@@ -32,6 +32,12 @@ public class LogSNRImportanceSampling<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// The largest |log-SNR| used for sampling, ln(1e10): the value log(alpha / (1 - alpha)) takes at alpha = 0 and
+    /// alpha = 1 under a 1e-10 guard.
+    /// </summary>
+    internal static readonly double LogSnrBound = Math.Log(1e10);
+
+    /// <summary>
     /// Samples timesteps with importance weighting based on log-SNR distribution.
     /// </summary>
     /// <param name="batchSize">Number of timesteps to sample.</param>
@@ -43,11 +49,14 @@ public class LogSNRImportanceSampling<T>
         var engine = AiDotNetEngine.Current;
         int numTimesteps = alphasCumprod.Length;
 
-        // log-SNR = log(alpha / (1 - alpha)) per timestep, with alpha kept a type-aware epsilon away from 0 and 1
-        // so zero-terminal-SNR schedules give a finite range.
-        T epsilon = NumOps.FromDouble(Math.Pow(2.0, -NumOps.PrecisionBits));
-        var alphas = engine.TensorClamp(alphasCumprod.AsTensor(), epsilon, NumOps.Subtract(NumOps.One, epsilon));
-        var logSnr = engine.TensorSubtract(engine.TensorLog(alphas), engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, alphas)));
+        // log-SNR = log(alpha / (1 - alpha)) per timestep, clamped to +-ln(1e10) so zero-terminal-SNR schedules
+        // (alpha = 0, log-SNR = -inf) and alpha = 1 give a finite range. The bound is the log-SNR the 1e-10 guard
+        // assigns to alpha = 0 and alpha = 1, fixed in value rather than tied to the element type's epsilon, so
+        // the sampled distribution does not change with T.
+        var alphas = alphasCumprod.AsTensor();
+        var logSnr = engine.TensorClamp(
+            engine.TensorSubtract(engine.TensorLog(alphas), engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, alphas))),
+            NumOps.FromDouble(-LogSnrBound), NumOps.FromDouble(LogSnrBound));
 
         // Sample uniformly in log-SNR space. The seeded uniform draws stay one per batch element in master's order
         // (no engine op consumes a caller Random).

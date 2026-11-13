@@ -622,21 +622,24 @@ public partial class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Combines image embedding with motion embedding for temporal conditioning.
     /// </summary>
-    private Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
+    internal static Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
     {
         // Add motion modulation to image embedding: element i gains 0.1 * sin(0.001 * i * motion[i mod L]).
+        var engine = AiDotNetEngine.Current;
         int size = imageEmbedding.Length;
         int motionLen = motionEmbedding.Length;
         if (size == 0 || motionLen == 0)
             return imageEmbedding.Clone();
 
-        var motionFlat = motionEmbedding.Reshape(new[] { motionLen });
+        // The phases are formed in double and only the modulation is converted to T. The element index i is not
+        // representable in Half past 2048 and overflows it past 65504 (turning the modulation into NaN), and even
+        // the ramp 0.001 * i is resolved only to 0.06 rad near 70 in Half.
+        var motionFlat = motionEmbedding.Reshape(new[] { motionLen }).Cast<double>();
         int repeats = (size + motionLen - 1) / motionLen;
-        var motion = Engine.TensorNarrow(Engine.TensorTile(motionFlat, new[] { repeats }), 0, 0, size);
-        var phase = Engine.TensorMultiplyScalar(
-            Engine.TensorMultiply(Engine.TensorArange<T>(0, size, 1), motion), NumOps.FromDouble(0.001));
-        var modulation = Engine.TensorMultiplyScalar(Engine.TensorSin(phase), NumOps.FromDouble(0.1));
-        return Engine.TensorAdd(imageEmbedding, modulation.Reshape(imageEmbedding._shape));
+        var motion = engine.TensorNarrow(engine.TensorTile(motionFlat, new[] { repeats }), 0, 0, size);
+        var ramp = engine.TensorArange<double>(0.0, (size - 0.5) * 0.001, 0.001);
+        var modulation = engine.TensorMultiplyScalar(engine.TensorSin(engine.TensorMultiply(ramp, motion)), 0.1);
+        return engine.TensorAdd(imageEmbedding, modulation.Cast<T>().Reshape(imageEmbedding._shape));
     }
 
     /// <summary>

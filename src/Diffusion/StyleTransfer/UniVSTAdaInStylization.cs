@@ -77,10 +77,10 @@ public class UniVSTAdaInStylization<T>
         var styleRows = style.Reshape(new[] { channels, stylePer });
         var contentMean = engine.ReduceMean(contentRows, axis, true);
         var centered = engine.TensorSubtract(contentRows, engine.TensorBroadcastTo(contentMean, new[] { channels, contentPer }));
-        var contentStd = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), axis, true));
+        var contentStd = PopulationStd(engine, centered, channels, contentPer);
         var styleMean = engine.ReduceMean(styleRows, axis, true);
         var styleCentered = engine.TensorSubtract(styleRows, engine.TensorBroadcastTo(styleMean, new[] { channels, stylePer }));
-        var styleStd = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(styleCentered), axis, true));
+        var styleStd = PopulationStd(engine, styleCentered, channels, stylePer);
 
         // Epsilon in T; if 1e-8 underflows the element type, the smallest relative step of T is used instead.
         T epsilon = NumOps.FromDouble(Epsilon);
@@ -199,6 +199,22 @@ public class UniVSTAdaInStylization<T>
             engine.TensorMultiply(weights, editedRows),
             engine.TensorMultiply(engine.ScalarMinusTensor(NumOps.One, weights), contentRows));
         return blended.Reshape(edited.Shape.ToArray());
+    }
+
+    /// <summary>
+    /// The per-row population standard deviation [rows, 1] of the mean-centred rows [rows, width]:
+    /// <c>peak * sqrt(mean((x / peak)^2))</c> with <c>peak = max |x|</c> per row, so no square exceeds 1
+    /// (squaring a centred value above 255 overflows Half and would make the deviation infinite).
+    /// </summary>
+    private static Tensor<T> PopulationStd(IEngine engine, Tensor<T> centered, int rows, int width)
+    {
+        var grid = new[] { rows, width };
+        var peaks = engine.ReduceMax(engine.TensorAbs(centered), new[] { 1 }, true);
+        var safePeaks = engine.TensorWhere(engine.TensorGreaterThan(peaks, NumOps.Zero), peaks,
+            Tensor<T>.CreateDefault(new[] { rows, 1 }, NumOps.One));
+        var scaled = engine.TensorDivide(centered, engine.TensorBroadcastTo(safePeaks, grid));
+        var unitStd = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(scaled), new[] { 1 }, true));
+        return engine.TensorMultiply(unitStd, peaks);
     }
 
     /// <summary>

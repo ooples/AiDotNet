@@ -45,6 +45,37 @@ internal static class SchedulerTensorOps
     }
 
     /// <summary>
+    /// The data prediction of a v-prediction model whose sample lives in sigma space (x_t / sqrt(alpha_cumprod)), as
+    /// in diffusers' Euler/LMS/Heun schedulers: x0 = sample / (sigma^2 + 1) - v * sigma / sqrt(sigma^2 + 1).
+    /// </summary>
+    /// <remarks>
+    /// For sigma &gt; 1 the scales are formed from r = 1 / sigma as r^2 / (1 + r^2) and 1 / sqrt(1 + r^2), so sigma^2
+    /// is never materialized: it overflows Half (65504) once sigma passes 255, which would zero both terms.
+    /// </remarks>
+    internal static Vector<T> SigmaSpaceVPredictionToSample<T>(Vector<T> modelOutput, Vector<T> sample, T sigma)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T sampleScale;
+        T outputScale;
+        if (ops.GreaterThan(sigma, ops.One))
+        {
+            T r = ops.Divide(ops.One, sigma);
+            T onePlusRSquared = ops.Add(ops.One, ops.Multiply(r, r));
+            sampleScale = ops.Multiply(r, ops.Divide(r, onePlusRSquared));
+            outputScale = ops.Divide(ops.One, ops.Sqrt(onePlusRSquared));
+        }
+        else
+        {
+            T sigmaSquaredPlusOne = ops.Add(ops.Multiply(sigma, sigma), ops.One);
+            sampleScale = ops.Divide(ops.One, sigmaSquaredPlusOne);
+            outputScale = ops.Divide(sigma, ops.Sqrt(sigmaSquaredPlusOne));
+        }
+
+        return engine.Subtract(engine.Multiply(sample, sampleScale), engine.Multiply(modelOutput, outputScale));
+    }
+
+    /// <summary>
     /// The values L_j(x) = prod_{k != j} (x - s_k) / (s_j - s_k) of the Lagrange basis polynomials
     /// of the (distinct) <paramref name="nodes"/> s at the point <paramref name="x"/>.
     /// </summary>

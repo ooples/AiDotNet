@@ -487,20 +487,27 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// </summary>
     /// <param name="value">The conditioning value.</param>
     /// <param name="embedDim">Embedding dimension for this value.</param>
-    /// <returns>[sin(value * f_i), cos(value * f_i)] with f_i = exp(-i * ln(10000) / (embedDim / 2 - 1)).</returns>
-    private Tensor<T> ProjectConditioningValue(double value, int embedDim)
+    /// <returns>
+    /// [cos(value * f_i), sin(value * f_i)] with f_i = exp(-i * ln(10000) / (embedDim / 2)), zero-padded to an odd
+    /// <paramref name="embedDim"/>: diffusers' <c>Timesteps(addition_time_embed_dim, flip_sin_to_cos=True,
+    /// downscale_freq_shift=0)</c> that SVD's <c>add_time_proj</c> applies to each add_time_id.
+    /// </returns>
+    /// <remarks>
+    /// The phases reach the motion bucket id (up to 255), so they are formed in double and only the features are
+    /// converted to T, as diffusers computes this projection in float32 whatever the model dtype.
+    /// </remarks>
+    internal static Tensor<T> ProjectConditioningValue(double value, int embedDim)
     {
-        // Use sinusoidal embedding similar to timestep embedding
-        // This is then typically passed through linear layers in the actual model
+        var engine = AiDotNetEngine.Current;
         int halfDim = embedDim / 2;
-        double embScale = Math.Log(10000.0) / (halfDim - 1);
+        double exponentStep = -Math.Log(10000.0) / halfDim;
 
-        var frequencies = Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, halfDim, 1), NumOps.FromDouble(-embScale)));
-        var phase = Engine.TensorMultiplyScalar(frequencies, NumOps.FromDouble(value));
-        var pieces = new List<Tensor<T>> { Engine.TensorSin(phase), Engine.TensorCos(phase) };
+        var frequencies = engine.TensorExp(engine.TensorArange<double>(0.0, (halfDim - 0.5) * exponentStep, exponentStep));
+        var phase = engine.TensorMultiplyScalar(frequencies, value);
+        var pieces = new List<Tensor<double>> { engine.TensorCos(phase), engine.TensorSin(phase) };
         if (embedDim > 2 * halfDim)
-            pieces.Add(new Tensor<T>(new[] { embedDim - 2 * halfDim }));
-        return Engine.TensorConcatenate(pieces.ToArray(), 0);
+            pieces.Add(new Tensor<double>(new[] { embedDim - 2 * halfDim }));
+        return engine.TensorConcatenate(pieces.ToArray(), 0).Cast<T>();
     }
 
     /// <summary>

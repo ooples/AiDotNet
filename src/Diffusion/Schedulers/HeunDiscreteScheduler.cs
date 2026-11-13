@@ -207,7 +207,7 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Converts model output to predicted original sample based on prediction type.
     /// </summary>
-    private Vector<T> ConvertToPredOriginal(Vector<T> modelOutput, Vector<T> sample, T sigma, int timestep)
+    internal Vector<T> ConvertToPredOriginal(Vector<T> modelOutput, Vector<T> sample, T sigma, int timestep)
     {
         switch (Config.PredictionType)
         {
@@ -216,11 +216,8 @@ public sealed class HeunDiscreteScheduler<T> : NoiseSchedulerBase<T>
 
             case DiffusionPredictionType.VPrediction:
                 // The sample lives in sigma space (x_t / sqrt(alpha_cumprod)), so as in diffusers
-                // x0 = sample / (sigma^2 + 1) - v * sigma / sqrt(sigma^2 + 1).
-                T sigmaSqPlusOne = NumOps.Add(NumOps.Multiply(sigma, sigma), NumOps.One);
-                var vX0 = Engine.Divide(sample, sigmaSqPlusOne);
-                var vEps = Engine.Multiply(modelOutput, NumOps.Divide(sigma, NumOps.Sqrt(sigmaSqPlusOne)));
-                return Engine.Subtract(vX0, vEps);
+                // x0 = sample / (sigma^2 + 1) - v * sigma / sqrt(sigma^2 + 1), formed without sigma^2.
+                return SchedulerTensorOps.SigmaSpaceVPredictionToSample(modelOutput, sample, sigma);
 
             default: // Epsilon
                 var scaledNoise = Engine.Multiply(modelOutput, sigma);

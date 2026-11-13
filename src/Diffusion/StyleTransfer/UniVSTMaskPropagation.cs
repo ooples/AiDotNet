@@ -273,15 +273,24 @@ public class UniVSTMaskPropagation<T>
     /// Row-normalizes a [height, width, channels] feature map into a [points, channels] matrix, so a
     /// cosine similarity reduces to a dot product and the comparison can be done as a matmul.
     /// </summary>
-    private static Tensor<T> NormalizeRows(Tensor<T> features, int points, int channels)
+    internal static Tensor<T> NormalizeRows(Tensor<T> features, int points, int channels)
     {
         var engine = AiDotNetEngine.Current;
         var rows = features.Reshape(new[] { points, channels });
-        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(rows), new[] { 1 }, true));
+        var grid = new[] { points, channels };
+        var ones = Tensor<T>.CreateDefault(new[] { points, 1 }, NumOps.One);
+
+        // Each row is first divided by its largest magnitude, so the squares summed below are at most 1 each:
+        // squaring the raw features overflows Half (65504) once a row's sum of squares passes it. x / |x| is
+        // unchanged by the pre-scaling.
+        var peaks = engine.ReduceMax(engine.TensorAbs(rows), new[] { 1 }, true);
+        var safePeaks = engine.TensorWhere(engine.TensorGreaterThan(peaks, NumOps.Zero), peaks, ones);
+        var scaled = engine.TensorDivide(rows, engine.TensorBroadcastTo(safePeaks, grid));
+
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, true));
         // A zero-length feature vector has no direction; leaving it zero makes its similarity to
         // everything 0 rather than NaN, so it simply never wins a vote (its norm is replaced by 1).
-        var safeNorms = engine.TensorWhere(engine.TensorGreaterThan(norms, NumOps.Zero), norms,
-            Tensor<T>.CreateDefault(new[] { points, 1 }, NumOps.One));
-        return engine.TensorDivide(rows, engine.TensorBroadcastTo(safeNorms, new[] { points, channels }));
+        var safeNorms = engine.TensorWhere(engine.TensorGreaterThan(norms, NumOps.Zero), norms, ones);
+        return engine.TensorDivide(scaled, engine.TensorBroadcastTo(safeNorms, grid));
     }
 }
