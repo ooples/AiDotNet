@@ -96,7 +96,7 @@ public class SPEC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         }
         else
         {
-            var (values, vectors) = LinalgDispatch<T>.Eigh(L);
+            var (values, vectors) = PreprocessingTensorOps.SymmetricEigh(L);
             var index = engine.TensorArange<int>(1, k, 1);
             var xi = engine.TensorIndexSelect(vectors, index, 1);
             var weight = engine.TensorSubtract(

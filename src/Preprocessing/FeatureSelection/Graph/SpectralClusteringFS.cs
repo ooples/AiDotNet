@@ -67,7 +67,7 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
         // Bottom k eigenvectors (eigenvalues ascending)
         int k = Math.Min(_nClusters, p);
-        var (_, vectors) = LinalgDispatch<T>.Eigh(laplacian);
+        var (_, vectors) = PreprocessingTensorOps.SymmetricEigh(laplacian);
         var embedding = Engine.TensorSlice(vectors, new[] { 0, 0 }, new[] { p, k });
 
         // K-means on eigenvector embedding

@@ -141,7 +141,7 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var index = new Tensor<int>((int[])subset.Clone(), new[] { k });
             var gram = engine.TensorIndexSelect(engine.TensorIndexSelect(_gram, index, 0), index, 1);
             var system = engine.TensorAdd(gram, engine.TensorMultiplyScalar(engine.TensorEye<T>(k), ops.FromDouble(1e-6)));
-            var beta = LinalgDispatch<T>.Solve(system, engine.Reshape(engine.TensorIndexSelect(_cross, index, 0), new[] { k, 1 }));
+            var beta = PreprocessingTensorOps.Solve(system, engine.Reshape(engine.TensorIndexSelect(_cross, index, 0), new[] { k, 1 }));
             var columns = engine.TensorIndexSelect(_x, index, 1);
             var fitted = engine.Reshape(engine.TensorMatMul(columns, beta), new[] { _x.Shape[0] });
             T residual = engine.TensorSumOfSquares(engine.TensorSubtract(_centered, fitted));

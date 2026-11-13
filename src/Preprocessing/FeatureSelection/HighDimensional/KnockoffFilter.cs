@@ -192,7 +192,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             engine.TensorDiag(PreprocessingTensorOps.OneMinus(varying)));
 
         // S = V diag(lambda) V'; s = min(2 lambda_min, 1), at least 0
-        var (lambda, vectors) = LinalgDispatch<T>.Eigh(correlation);
+        var (lambda, vectors) = PreprocessingTensorOps.SymmetricEigh(correlation);
         T twiceSmallest = ops.Multiply(ops.FromDouble(2), engine.TensorMinValue(lambda));
         T s = ops.LessThan(twiceSmallest, ops.One) ? twiceSmallest : ops.One;
         if (ops.LessThan(s, ops.Zero))
