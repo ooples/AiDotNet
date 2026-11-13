@@ -574,13 +574,13 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
 
                 if (useCFG && negativeEmbedding != null)
                 {
-                    var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding, promptAdded);
-                    var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding, negativeAdded);
+                    var condPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
+                    var uncondPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, negativeEmbedding, negativeAdded);
                     noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
                 }
                 else
                 {
-                    noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding, promptAdded);
+                    noisePrediction = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
                 }
 
                 // Scheduler step
@@ -786,13 +786,13 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
                 // PredictNoise's queue submission overlaps with the first's
                 // tail kernels.
                 // The add-embedding enters through the synchronous overload, which runs the two branches in turn.
-                var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding, promptAdded);
-                var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding, negativeAdded);
+                var condPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
+                var uncondPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, negativeEmbedding, negativeAdded);
                 noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
             }
             else
             {
-                noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding, promptAdded);
+                noisePrediction = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
             }
 
             var latentVector = latents.ToVector();
@@ -881,13 +881,13 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
             Tensor<T> noisePrediction;
             if (useCFG && negativeEmbedding != null)
             {
-                var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding, promptAdded);
-                var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding, negativeAdded);
+                var condPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
+                var uncondPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, negativeEmbedding, negativeAdded);
                 noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
             }
             else
             {
-                noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding, promptAdded);
+                noisePrediction = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
             }
 
             var latentVector = latents.ToVector();
@@ -1131,20 +1131,24 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// downscale_freq_shift=0)</c>: <c>[cos(v f_i), sin(v f_i)]</c> with <c>f_i = exp(-ln(10000) i / (dim / 2))</c>,
     /// flattened condition by condition into [1, count * dim].
     /// </summary>
+    /// <remarks>
+    /// The phases v * f_i reach the image sizes (1024 and more), so they are formed and reduced in double and only
+    /// the features are converted to T, as diffusers computes this projection in float32 whatever the model dtype:
+    /// in Half a phase near 1024 is only resolved to 0.5 rad and the features would be noise.
+    /// </remarks>
     internal static Tensor<T> FourierEmbedConditions(Tensor<T> conditions, int dim)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int half = dim / 2;
         int count = conditions.Length;
         var grid = new[] { count, half };
-        var frequencies = engine.TensorExp(engine.TensorMultiplyScalar(
-            engine.TensorArange<T>(0.0, half, 1.0), ops.FromDouble(-Math.Log(10000.0) / half)));
+        var frequencies = engine.TensorExp(engine.TensorArange<double>(0.0, (half - 0.5) * (-Math.Log(10000.0) / half),
+            -Math.Log(10000.0) / half));
         var arguments = engine.TensorMultiply(
-            engine.TensorBroadcastTo(conditions.Reshape(new[] { count, 1 }), grid),
+            engine.TensorBroadcastTo(conditions.Cast<double>().Reshape(new[] { count, 1 }), grid),
             engine.TensorBroadcastTo(frequencies.Reshape(new[] { 1, half }), grid));
         var features = engine.TensorConcatenate(new[] { engine.TensorCos(arguments), engine.TensorSin(arguments) }, 1);
-        return features.Reshape(new[] { 1, count * 2 * half });
+        return features.Reshape(new[] { 1, count * 2 * half }).Cast<T>();
     }
 
     #endregion

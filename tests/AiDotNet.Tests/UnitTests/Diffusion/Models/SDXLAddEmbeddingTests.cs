@@ -58,6 +58,31 @@ public class SDXLAddEmbeddingTests
     }
 
     [Fact]
+    public void FourierEmbedConditions_Half_FormsThePhasesInFullPrecision()
+    {
+        // Size conditions of 1024 give phases near 1024, which Half resolves only to 0.5 rad: forming them in Half
+        // turned the features into noise. diffusers computes the projection in float32 for any model dtype.
+        var half = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var values = new double[] { 1024, 768, 3 };
+        var conditions = new Tensor<Half>(new[] { 1, 3 },
+            new Vector<Half>(values.Select(v => half.FromDouble(v)).ToArray()));
+        const int dim = 256;
+
+        var features = SDXLModel<Half>.FourierEmbedConditions(conditions, dim).ToArray();
+
+        Assert.Equal(3 * dim, features.Length);
+        for (int c = 0; c < values.Length; c++)
+        {
+            for (int i = 0; i < dim / 2; i++)
+            {
+                double frequency = Math.Exp(-Math.Log(10000.0) * i / (dim / 2));
+                Assert.Equal(Math.Cos(values[c] * frequency), half.ToDouble(features[(c * dim) + i]), tolerance: 1e-3);
+                Assert.Equal(Math.Sin(values[c] * frequency), half.ToDouble(features[(c * dim) + (dim / 2) + i]), tolerance: 1e-3);
+            }
+        }
+    }
+
+    [Fact]
     public void AdditionTimeEmbedDim_IsOneFifthOfTimeEmbedding()
     {
         Assert.Equal(256, SDXLModel<double>.AdditionTimeEmbedDim(1280));
@@ -106,11 +131,11 @@ public class SDXLAddEmbeddingTests
             latents[i] = Math.Cos(i * 0.11);
 
         var plain = unet.PredictNoise(latents, 500, null).ToArray();
-        var zero = unet.PredictNoise(latents, 500, null, new Tensor<double>(new[] { 1, unet.TimeEmbeddingDim })).ToArray();
+        var zero = unet.PredictNoiseWithAddedTimeEmbedding(latents, 500, null, new Tensor<double>(new[] { 1, unet.TimeEmbeddingDim })).ToArray();
         var shifted = new Tensor<double>(new[] { 1, unet.TimeEmbeddingDim });
         for (int i = 0; i < shifted.Length; i++)
             shifted[i] = 0.5;
-        var moved = unet.PredictNoise(latents, 500, null, shifted).ToArray();
+        var moved = unet.PredictNoiseWithAddedTimeEmbedding(latents, 500, null, shifted).ToArray();
 
         for (int i = 0; i < plain.Length; i++)
             Assert.Equal(plain[i], zero[i], 10);

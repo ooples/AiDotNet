@@ -517,7 +517,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// The embedding to add, with <see cref="TimeEmbeddingDim"/> values per batch item ([1, dim] or [batch, dim]).
     /// </param>
     /// <returns>The predicted noise.</returns>
-    public Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning, Tensor<T> addedTimeEmbedding)
+    public Tensor<T> PredictNoiseWithAddedTimeEmbedding(
+        Tensor<T> noisySample, int timestep, Tensor<T>? conditioning, Tensor<T> addedTimeEmbedding)
     {
         if (addedTimeEmbedding is null)
             throw new ArgumentNullException(nameof(addedTimeEmbedding));

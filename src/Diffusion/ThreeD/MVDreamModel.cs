@@ -1309,7 +1309,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
         for (int v = 0; v < numViews; v++)
         {
             var viewInput = ExtractView(multiViewInput, v);
-            viewPredictions[v] = _baseUNet.PredictNoise(viewInput, timestep, viewConditions[v], cameraEmbeddings[v]);
+            viewPredictions[v] = _baseUNet.PredictNoiseWithAddedTimeEmbedding(viewInput, timestep, viewConditions[v], cameraEmbeddings[v]);
         }
 
         // Apply multi-view attention for consistency
