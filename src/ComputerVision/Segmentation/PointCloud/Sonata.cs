@@ -12,30 +12,39 @@ using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 
 /// <summary>
-/// Sonata: A Mamba-based 3D point cloud backbone for efficient segmentation.
+/// Sonata: self-supervised learning of reliable point representations (point self-distillation on a
+/// Point Transformer V3 encoder).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Efficient 3D point cloud segmentation. Large-scale LiDAR scene understanding.
-///
-/// Common use cases:
-/// - Efficient 3D point cloud segmentation
-/// - Large-scale LiDAR scene understanding
-/// - Real-time 3D perception for robotics
-/// - Memory-efficient 3D processing
+/// <b>For Beginners:</b> Sonata is a way to pretrain a 3D point cloud network without labels so that its point
+/// features are useful on their own; a simple linear layer on top of them already segments a scene well.
 /// </para>
 /// <para>
-/// <b>Technical Details:</b>
-/// - Mamba (State Space Model) for linear-complexity point cloud processing
-/// - Serialized point cloud input via space-filling curves
-/// - Scales to millions of points without quadratic attention cost
-/// - Competitive with transformer-based methods at lower compute
+/// <b>Reference:</b> Wu et al., "Sonata: Self-Supervised Learning of Reliable Point Representations",
+/// CVPR 2025 (arXiv:2503.16429).
 /// </para>
 /// <para>
-/// <b>Reference:</b> Wu et al., "Sonata and Concerto: Mamba for 3D Point Clouds", arXiv 2024.
+/// <b>Migration in progress: this class does not yet implement that paper.</b> Its attribution was
+/// previously wrong twice over: a reference to a paper that does not exist ("Sonata and Concerto: Mamba for
+/// 3D Point Clouds") and a <c>[ResearchPaper]</c> attribute pointing at Mamba3D (arXiv:2404.14966), an
+/// unrelated model. The citation now names the real Sonata.
 /// </para>
-/// </remarks>
+/// <para>
+/// What the published method is, and what still has to be built here:
+/// </para>
+/// <list type="bullet">
+/// <item><b>Backbone.</b> A Point Transformer V3 encoder (serialized patch attention over space-filling-curve
+/// orderings, grid pooling, LayerNorm instead of BatchNorm), depths [3, 3, 3, 12, 3] and widths
+/// [48, 96, 192, 384, 512]. The current backbone is a strided 2D convolution stack with BatchNorm over an
+/// image-shaped grid, not PTv3.</item>
+/// <item><b>Pretraining.</b> Point self-distillation without a decoder: an EMA teacher (momentum 0.994 to 1),
+/// 2 global, 4 local and 2 masked views, online clustering heads with Sinkhorn-Knopp centering and KoLeo
+/// regularization, and encoder features up-cast two levels before the loss. None of this runs here yet.</item>
+/// <item><b>Downstream.</b> Linear probe, decoder probe or full fine-tuning on the pretrained encoder. The
+/// current class trains its 3-convolution segmentation head end to end instead.</item>
+/// </list>
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
@@ -61,7 +70,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Mamba3D: Enhancing Local Features for 3D Point Cloud Analysis via State Space Model", "https://arxiv.org/abs/2404.14966", Year = 2024, Authors = "Xu Han, Yuan Tang, Zhaoxuan Wang, Xianzhi Li")]
+[ResearchPaper("Sonata: Self-Supervised Learning of Reliable Point Representations", "https://arxiv.org/abs/2503.16429", Year = 2025, Authors = "Xiaoyang Wu, Daniel DeTone, Duncan Frost, Tianwei Shen, Chris Xie, Nan Yang, Jakob Engel, Richard Newcombe, Hengshuang Zhao, Julian Straub")]
 public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly SonataOptions _options;
