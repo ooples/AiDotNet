@@ -112,30 +112,22 @@ public partial class IQRDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         int nFeatures = X.Columns;
-        _q1 = new Vector<T>(nFeatures);
-        _q3 = new Vector<T>(nFeatures);
-        _iqr = new Vector<T>(nFeatures);
-        _lowerBounds = new Vector<T>(nFeatures);
-        _upperBounds = new Vector<T>(nFeatures);
-
         T multiplierT = NumOps.FromDouble(_multiplier);
 
         // Calculate quartiles for each feature
-        for (int j = 0; j < nFeatures; j++)
-        {
-            var column = X.GetColumn(j);
-            var quartile = new Quartile<T>(column);
+        var engine = Engine;
+        var (sorted, _) = engine.TensorSort(AnomalyTensorOps.ToTensor(X), 0, false);
+        var q1 = AnomalyTensorOps.SortedColumnQuantile(sorted, 0.25);
+        var q3 = AnomalyTensorOps.SortedColumnQuantile(sorted, 0.75);
+        var iqr = engine.TensorSubtract(q3, q1);
+        var spread = engine.TensorMultiplyScalar(iqr, multiplierT);
+        _q1 = q1.ToVector();
+        _q3 = q3.ToVector();
+        _iqr = iqr.ToVector();
 
-            _q1[j] = quartile.Q1;
-            _q3[j] = quartile.Q3;
-            _iqr[j] = NumOps.Subtract(_q3[j], _q1[j]);
-
-            // Lower bound = Q1 - k * IQR
-            _lowerBounds[j] = NumOps.Subtract(_q1[j], NumOps.Multiply(multiplierT, _iqr[j]));
-
-            // Upper bound = Q3 + k * IQR
-            _upperBounds[j] = NumOps.Add(_q3[j], NumOps.Multiply(multiplierT, _iqr[j]));
-        }
+        // Lower bound = Q1 - k * IQR, upper bound = Q3 + k * IQR
+        _lowerBounds = engine.TensorSubtract(q1, spread).ToVector();
+        _upperBounds = engine.TensorAdd(q3, spread).ToVector();
 
         // Calculate anomaly scores for training data and set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -155,49 +147,11 @@ public partial class IQRDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
+        var iqr = _iqr ?? throw new InvalidOperationException("_iqr has not been initialized.");
+        var lowerBounds = _lowerBounds ?? throw new InvalidOperationException("_lowerBounds has not been initialized.");
+        var upperBounds = _upperBounds ?? throw new InvalidOperationException("_upperBounds has not been initialized.");
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Calculate how far outside the IQR bounds each point is
-            // Score = max deviation from bounds normalized by IQR
-            T maxScore = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                T value = X[i, j];
-                T score = NumOps.Zero;
-
-                // Skip features with zero IQR (constant features)
-                if (NumOps.Equals((_iqr ?? throw new InvalidOperationException("_iqr has not been initialized."))[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                if (NumOps.LessThan(value, (_lowerBounds ?? throw new InvalidOperationException("_lowerBounds has not been initialized."))[j]))
-                {
-                    // How far below lower bound, normalized by IQR
-                    score = NumOps.Divide(
-                        NumOps.Subtract(_lowerBounds[j], value),
-                        _iqr[j]);
-                }
-                else if (NumOps.GreaterThan(value, (_upperBounds ?? throw new InvalidOperationException("_upperBounds has not been initialized."))[j]))
-                {
-                    // How far above upper bound, normalized by IQR
-                    score = NumOps.Divide(
-                        NumOps.Subtract(value, _upperBounds[j]),
-                        _iqr[j]);
-                }
-
-                if (NumOps.GreaterThan(score, maxScore))
-                {
-                    maxScore = score;
-                }
-            }
-
-            scores[i] = maxScore;
-        }
-
-        return scores;
+        // Score = max deviation outside the IQR bounds normalized by IQR (constant, zero-IQR features skipped)
+        return AnomalyTensorOps.MaxOutsideBand(X, lowerBounds.AsTensor(), upperBounds.AsTensor(), iqr.AsTensor());
     }
 }

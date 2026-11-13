@@ -186,19 +186,9 @@ public partial class LSTMDetector<T> : AnomalyDetectorBase<T>
         // single tape pass per epoch — many more effective updates than a single
         // full-sequence step, without thousands of Train() calls.
         int numWindows = n - _seqLength;
-        var inputTensor = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
-        var targetTensor = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
-        for (int w = 0; w < numWindows; w++)
-        {
-            for (int t = 0; t < _seqLength; t++)
-            {
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    inputTensor[new[] { w, t, j }] = normalizedSeries[w + t, j];
-                    targetTensor[new[] { w, t, j }] = normalizedSeries[w + t + 1, j];
-                }
-            }
-        }
+        var series = AnomalyTensorOps.ToTensor(normalizedSeries);
+        var inputTensor = Windows(series, numWindows, 0);
+        var targetTensor = Windows(series, numWindows, 1);
 
         for (int epoch = 0; epoch < _epochs; epoch++)
             _forecaster.Train(inputTensor, targetTensor);
@@ -217,12 +207,7 @@ public partial class LSTMDetector<T> : AnomalyDetectorBase<T>
         int numWindows = n - _seqLength;
         if (numWindows < 1) return null;
 
-        var batch = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
-        for (int w = 0; w < numWindows; w++)
-            for (int t = 0; t < _seqLength; t++)
-                for (int j = 0; j < _inputDim; j++)
-                    batch[new[] { w, t, j }] = series[w + t, j];
-
+        var batch = Windows(AnomalyTensorOps.ToTensor(series), numWindows, 0);
         return _forecaster.Predict(batch);
     }
 
@@ -231,6 +216,37 @@ public partial class LSTMDetector<T> : AnomalyDetectorBase<T>
     /// <paramref name="steps"/> positions. Position 0 has no history so it returns the actual
     /// first value; position t (t&gt;=1) is the model's forecast of the learned series at t.
     /// </summary>
+    // The windows series[w + offset .. w + offset + seqLength) for w < count, as [count, seqLength, features].
+    private Tensor<T> Windows(Tensor<T> series, int count, int offset)
+    {
+        var engine = Engine;
+        int length = _seqLength;
+        var rows = new int[count * length];
+        for (int w = 0; w < count; w++)
+        {
+            for (int t = 0; t < length; t++)
+            {
+                rows[w * length + t] = w + t + offset;
+            }
+        }
+
+        int features = series.Shape[1];
+        var gathered = engine.TensorGather(series, Tensor<int>.FromVector(Vector<int>.Wrap(rows), new[] { rows.Length }), 0);
+        return engine.Reshape(gathered, new[] { count, length, features });
+    }
+
+    // The forecast at the last position of every window ([numWindows, features]): window w forecasts
+    // position w + seqLength.
+    private Tensor<T> LastStep(Tensor<T> windowOut)
+    {
+        var engine = Engine;
+        int count = windowOut.Shape[0];
+        int features = windowOut.Shape[2];
+        return engine.Reshape(
+            engine.TensorSlice(windowOut, new[] { 0, _seqLength - 1, 0 }, new[] { count, 1, features }),
+            new[] { count, features });
+    }
+
     private Vector<T> ForecastInSample(int steps)
     {
         var series = _normalizedSeries;
@@ -239,36 +255,41 @@ public partial class LSTMDetector<T> : AnomalyDetectorBase<T>
         if (_forecaster is null || series is null || means is null || stds is null)
             return new Vector<T>(steps);
 
+        var engine = Engine;
         int n = series.Rows;
         int numWindows = n - _seqLength;
         var windowForecasts = PredictWindows();
 
-        var result = new Vector<T>(steps);
+        // Candidates: the actual series values (feature 0) followed by the window forecasts (feature 0)
+        var seriesValues = engine.TensorSliceAxis(AnomalyTensorOps.ToTensor(series), 1, 0);
+        var candidates = windowForecasts is null
+            ? seriesValues
+            : engine.TensorConcatenate(new[] { seriesValues, engine.TensorSliceAxis(LastStep(windowForecasts), 1, 0) }, 0);
+
+        var pick = new int[steps];
         for (int p = 0; p < steps; p++)
         {
-            T normValue;
             if (p < _seqLength || windowForecasts is null)
             {
                 // No full window of history yet — the actual value is the best available
                 // estimate (a 0-error warm-up, the standard one-step-ahead convention).
-                normValue = series[Math.Min(p, n - 1), 0];
+                pick[p] = Math.Min(p, n - 1);
             }
             else if (p - _seqLength < numWindows)
             {
-                // windowForecasts[p - _seqLength, last] forecasts series position p.
-                normValue = windowForecasts[new[] { p - _seqLength, _seqLength - 1, 0 }];
+                // The forecast of window p - _seqLength is for series position p.
+                pick[p] = n + p - _seqLength;
             }
             else
             {
                 // Beyond the learned horizon: hold the final window's forecast.
-                normValue = windowForecasts[new[] { numWindows - 1, _seqLength - 1, 0 }];
+                pick[p] = n + numWindows - 1;
             }
-
-            // Denormalize feature 0 back to the original scale.
-            result[p] = NumOps.Add(NumOps.Multiply(normValue, stds[0]), means[0]);
         }
 
-        return result;
+        // Denormalize feature 0 back to the original scale.
+        var normValues = engine.TensorGather(candidates, Tensor<int>.FromVector(Vector<int>.Wrap(pick), new[] { steps }), 0);
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(normValues, stds[0]), means[0]).ToVector();
     }
 
     private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
@@ -285,89 +306,41 @@ public partial class LSTMDetector<T> : AnomalyDetectorBase<T>
         if (_forecaster is null || means is null || stds is null)
             throw new InvalidOperationException("Model not properly fitted.");
 
+        var engine = Engine;
         int n = X.Rows;
 
         // Normalize the incoming data with the learned statistics.
-        var normalized = new Matrix<T>(n, _inputDim);
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < _inputDim; j++)
-                normalized[i, j] = NumOps.Divide(NumOps.Subtract(X[i, j], means[j]), stds[j]);
+        var normalized = AnomalyTensorOps.DivideRow(
+            AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), means.AsTensor()), stds.AsTensor());
+
+        // Insufficient history (and no forecaster windows): score by distance from the (normalized) mean.
+        var squaredNorm = engine.ReduceSum(engine.TensorSquare(normalized), new[] { 1 }, false);
 
         // Forecast each position i (>= _seqLength) from its preceding window and batch the
         // whole set of windows into one Predict() call. windowOut[w, last] predicts position
-        // w + _seqLength.
+        // w + _seqLength; the score is the squared forecast error ||normalized[i] - forecast(i)||^2.
         int numWindows = n - _seqLength;
-        Tensor<T>? windowOut = null;
-        if (numWindows >= 1)
+        if (numWindows < 1)
         {
-            var batch = new Tensor<T>(new[] { numWindows, _seqLength, _inputDim });
-            for (int w = 0; w < numWindows; w++)
-                for (int t = 0; t < _seqLength; t++)
-                    for (int j = 0; j < _inputDim; j++)
-                        batch[new[] { w, t, j }] = normalized[w + t, j];
-            windowOut = _forecaster.Predict(batch);
+            return squaredNorm.ToVector();
         }
 
-        var scores = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            T score = NumOps.Zero;
-            if (i < _seqLength || windowOut is null)
-            {
-                // Insufficient history: score by distance from the (normalized) mean.
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    T val = normalized[i, j];
-                    score = NumOps.Add(score, NumOps.Multiply(val, val));
-                }
-            }
-            else
-            {
-                // Squared forecast error: ||normalized[i] - forecast(i)||^2.
-                for (int j = 0; j < _inputDim; j++)
-                {
-                    T diff = NumOps.Subtract(normalized[i, j], windowOut[new[] { i - _seqLength, _seqLength - 1, j }]);
-                    score = NumOps.Add(score, NumOps.Multiply(diff, diff));
-                }
-            }
-            scores[i] = score;
-        }
-
-        return scores;
+        var windowOut = _forecaster.Predict(Windows(normalized, numWindows, 0));
+        var actual = engine.TensorSlice(normalized, new[] { _seqLength, 0 }, new[] { numWindows, _inputDim });
+        var errors = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(actual, LastStep(windowOut))), new[] { 1 }, false);
+        var warmUp = engine.TensorSlice(squaredNorm, new[] { 0 }, new[] { _seqLength });
+        return engine.TensorConcatenate(new[] { warmUp, errors }, 0).ToVector();
     }
 
     private (Matrix<T> normalized, Vector<T> means, Vector<T> stds) NormalizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-
-        var means = new Vector<T>(d);
-        var stds = new Vector<T>(d);
-
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-                sum = NumOps.Add(sum, data[i, j]);
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], means[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
-            T eps = NumOps.FromDouble(1e-10);
-            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
-            stds[j] = stdVal;
-        }
-
-        var normalized = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                normalized[i, j] = NumOps.Divide(NumOps.Subtract(data[i, j], means[j]), stds[j]);
-
-        return (normalized, means, stds);
+        // Per-feature mean and population std (std below 1e-10 replaced by 1), then (x - mean) / std
+        var engine = Engine;
+        var values = AnomalyTensorOps.ToTensor(data);
+        var (std, mean) = engine.TensorStdMean(values, new[] { 0 }, 0, false);
+        var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-10));
+        var stds = engine.TensorWhere(tiny, Tensor<T>.CreateOnes(new[] { data.Columns }), std);
+        var normalized = AnomalyTensorOps.DivideRow(AnomalyTensorOps.SubtractRow(values, mean), stds);
+        return (normalized.ToMatrix(), mean.ToVector(), stds.ToVector());
     }
 }

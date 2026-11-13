@@ -677,16 +677,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         var metrics = new Dictionary<string, T>();
 
         // Calculate MSE
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = Math.Min(predictions.Data.Length, actuals.Data.Length);
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], actuals.Data.Span[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         mse = NumOps.Divide(mse, NumOps.FromDouble(count));
         mae = NumOps.Divide(mae, NumOps.FromDouble(count));
@@ -838,10 +829,7 @@ public partial class S4<T> : ForecastingModelBase<T>
 
         var flatInput = FlattenInput(input);
         var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(flatInput.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(flatInput.Data.Span.Slice(0, flatInput.Data.Length), inputData.AsSpan(0, flatInput.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData,
@@ -856,10 +844,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         var outputTensor = results[0].AsTensor<float>();
 
         var output = new Tensor<T>(new[] { _forecastHorizon });
-        for (int i = 0; i < _forecastHorizon; i++)
-        {
-            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, _forecastHorizon), output.Data.Span.Slice(0, _forecastHorizon));
 
         return output;
     }
@@ -932,10 +917,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         }
 
         var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-        {
-            flattened.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
     }
@@ -967,6 +949,31 @@ public partial class S4<T> : ForecastingModelBase<T>
         int lowerIdx = (int)(samples.Count * alpha / 2);
         int upperIdx = samples.Count - 1 - lowerIdx;
 
+        if (horizonLength > 0 && lowerIdx >= 0 && upperIdx >= 0 && lowerIdx < samples.Count && upperIdx < samples.Count)
+        {
+            // Stack the samples, average them, and read the sorted rows at the two interval indices.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var rows = new Tensor<T>[samples.Count];
+            for (int s = 0; s < samples.Count; s++)
+                rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s].Contiguous(), new[] { samples[s].Length }), 0, 0, horizonLength);
+            var grid = Engine.TensorStack(rows, 0);
+            if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) == 0)
+            {
+                // Any infinite mean (a T sum that overflowed, e.g. float samples near 1e38) takes the reference
+                // path, which accumulates in double: it keeps a finite mean finite and an infinite one infinite.
+                var meanForecast = Engine.TensorDivideScalar(Engine.ReduceSum(grid, new[] { 0 }, false), NumOps.FromDouble(samples.Count));
+                if (Engine.TensorCountNonzero(Engine.TensorIsInf(meanForecast)) == 0)
+                {
+                    var sorted = Engine.TensorSort(grid, 0, false).Values;
+                    return (
+                        meanForecast,
+                        Engine.Reshape(Engine.TensorNarrow(sorted, 0, lowerIdx, 1).Contiguous(), new[] { horizonLength }),
+                        Engine.Reshape(Engine.TensorNarrow(sorted, 0, upperIdx, 1).Contiguous(), new[] { horizonLength }));
+                }
+            }
+        }
+
+        // NaN samples (sorted first by the double ordering) or out-of-range indices: the reference path.
         for (int t = 0; t < horizonLength; t++)
         {
             var values = new List<double>();
@@ -1080,61 +1087,47 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ComputeHippoMatrix(int n, string method)
     {
-        var A = new Tensor<T>(new[] { n, n });
+        if (method != "legs" && method != "legt")
+        {
+            return ComputeHippoMatrix(n, "legs"); // Default to legs
+        }
+
+        // s_i = sqrt(2i + 1); the HiPPO matrices are signed/masked copies of the outer product s s^T.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (n == 0)
+            return new Tensor<T>(new[] { 0, 0 });
+        var root = Engine.TensorSqrt(Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(2.0)), NumOps.One));
+        var outer = Engine.TensorMatMul(Engine.Reshape(root, new[] { n, 1 }), Engine.Reshape(root, new[] { 1, n }));
+        var negOuter = Engine.TensorNegate(outer);
+        var below = new int[n * n];
+        var diagonal = new int[n * n];
+        var sign = new int[n * n];
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+            {
+                below[i * n + j] = i > j ? 1 : 0;
+                diagonal[i * n + j] = i == j ? i + 1 : 0;
+                sign[i * n + j] = (i - j) % 2 == 0 ? 1 : -1;
+            }
+        var square = new[] { n, n };
+        var belowMask = new Tensor<int>(square, new Vector<int>(below)).Cast<T>();
+        var diagonalShift = new Tensor<int>(square, new Vector<int>(diagonal)).Cast<T>();
+        var diagonalMask = Engine.TensorGreaterThan(diagonalShift, NumOps.Zero);
 
         if (method == "legs")
         {
             // Legendre polynomial basis (HiPPO-LegS)
             // A[i,j] = -sqrt(2i+1) * sqrt(2j+1) if i > j else -sqrt(2i+1) * sqrt(2j+1) - (i+1) if i == j
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    double sqrtI = Math.Sqrt(2.0 * i + 1);
-                    double sqrtJ = Math.Sqrt(2.0 * j + 1);
-
-                    if (i > j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-sqrtI * sqrtJ);
-                    }
-                    else if (i == j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-sqrtI * sqrtJ - (i + 1));
-                    }
-                    else
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(0);
-                    }
-                }
-            }
-        }
-        else if (method == "legt")
-        {
-            // Translated Legendre (HiPPO-LegT)
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    double sqrtI = Math.Sqrt(2.0 * i + 1);
-                    double sqrtJ = Math.Sqrt(2.0 * j + 1);
-
-                    if (i >= j)
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(-sqrtI * sqrtJ);
-                    }
-                    else
-                    {
-                        A.Data.Span[i * n + j] = NumOps.FromDouble(sqrtI * sqrtJ * Math.Pow(-1, i - j));
-                    }
-                }
-            }
-        }
-        else // Default to legs
-        {
-            return ComputeHippoMatrix(n, "legs");
+            var onDiagonal = Engine.TensorSubtract(negOuter, diagonalShift);
+            return Engine.TensorWhere(belowMask, negOuter,
+                Engine.TensorWhere(diagonalMask, onDiagonal, Engine.TensorZerosLike(outer)));
         }
 
-        return A;
+        // Translated Legendre (HiPPO-LegT): -s_i s_j on and below the diagonal, (-1)^(i-j) s_i s_j above.
+        var signed = Engine.TensorMultiply(outer, new Tensor<int>(square, new Vector<int>(sign)).Cast<T>());
+        var onOrBelow = Engine.TensorAdd(belowMask, Engine.TensorGreaterThan(diagonalShift, NumOps.Zero));
+        return Engine.TensorWhere(onOrBelow, negOuter, signed);
     }
 
     #endregion

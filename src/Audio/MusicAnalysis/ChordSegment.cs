@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.Audio.MusicAnalysis;
 
 /// <summary>
@@ -6,7 +8,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// <remarks>
 /// <para><b>For Beginners:</b> ChordSegment provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-public class ChordSegment
+/// <typeparam name="T">The numeric type of the model that produced the result.</typeparam>
+public class ChordSegment<T>
 {
     /// <summary>
     /// Gets or sets the chord name (e.g., "C", "Am", "G7").
@@ -31,5 +34,5 @@ public class ChordSegment
     /// <summary>
     /// Gets or sets the confidence score (0-1).
     /// </summary>
-    public double Confidence { get; set; }
+    public T Confidence { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 }

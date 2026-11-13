@@ -239,97 +239,113 @@ public partial class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T
 
         // Step 2: Compute enrichment scores (same as GenerateFromImage)
         int numTokens = Math.Min(visDim, 512);
-        var tokenScores = new double[numTokens];
-        for (int t = 0; t < numTokens; t++)
+        var engine = Engine;
+        var tokenValues = numTokens > 0 ? CyclicTake(visualFeatures, numTokens) : new Tensor<T>([0]);
+        var tokenScores = new Tensor<T>([0]);
+        if (numTokens > 0)
         {
-            double val = NumOps.ToDouble(visualFeatures[t % visDim]);
-            double prevVal = t > 0 ? NumOps.ToDouble(visualFeatures[(t - 1) % visDim]) : val;
-            double nextVal =
-                t < numTokens - 1 ? NumOps.ToDouble(visualFeatures[(t + 1) % visDim]) : val;
-            tokenScores[t] =
-                Math.Abs(val) + (Math.Abs(val - prevVal) + Math.Abs(val - nextVal)) * 2.0;
-        }
+            // score = |v| + 2 (|v - prev| + |v - next|); the first token's prev and the last token's next are itself.
+            var prev = numTokens > 1
+                ? engine.TensorConcatenate([engine.TensorSlice(tokenValues, [0], [1]), engine.TensorSlice(tokenValues, [0], [numTokens - 1])], 0)
+                : tokenValues;
+            var next = numTokens > 1
+                ? engine.TensorConcatenate([engine.TensorSlice(tokenValues, [1], [numTokens - 1]), engine.TensorSlice(tokenValues, [numTokens - 1], [1])], 0)
+                : tokenValues;
+            tokenScores = engine.TensorAdd(
+                engine.TensorAbs(tokenValues),
+                engine.TensorMultiplyScalar(
+                    engine.TensorAdd(
+                        engine.TensorAbs(engine.TensorSubtract(tokenValues, prev)),
+                        engine.TensorAbs(engine.TensorSubtract(tokenValues, next))),
+                    NumOps.FromDouble(2.0)));
 
-        // Normalize
-        double maxS = double.MinValue,
-            minS = double.MaxValue;
-        for (int t = 0; t < numTokens; t++)
-        {
-            if (tokenScores[t] > maxS)
-                maxS = tokenScores[t];
-            if (tokenScores[t] < minS)
-                minS = tokenScores[t];
+            // Normalize to [0, 1) by the (NaN-skipping) min and max.
+            var nanMask = engine.TensorIsNan(tokenScores);
+            T maxS = engine.TensorMaxValue(engine.TensorWhere(
+                nanMask, Tensor<T>.CreateDefault([numTokens], NumOps.FromDouble(double.NegativeInfinity)), tokenScores));
+            T minS = engine.TensorMinValue(engine.TensorWhere(
+                nanMask, Tensor<T>.CreateDefault([numTokens], NumOps.FromDouble(double.PositiveInfinity)), tokenScores));
+            T range = NumOps.Add(NumOps.Subtract(maxS, minS), NumOps.FromDouble(1e-8));
+            tokenScores = engine.TensorDivideScalar(engine.TensorSubtractScalar(tokenScores, minS), range);
         }
-        double range = maxS - minS + 1e-8;
-        for (int t = 0; t < numTokens; t++)
-            tokenScores[t] = (tokenScores[t] - minS) / range;
 
         // Step 3: Encode question
         var questionTokens = TokenizeText(question);
         int qLen = questionTokens.Length;
 
         // Step 4: Cross-modal iterative reasoning with transferred text patterns
-        var reasoningState = new double[dim];
-        double prevConfidence = 0;
+        var reasoningState = new Tensor<T>([dim]);
+        var prevConfidence = new Tensor<T>([1]);
+        var qEmb = engine.TensorMultiplyScalar(CyclicTake(questionTokens, dim), NumOps.FromDouble(1.0 / _options.VocabSize));
+        // enrichWeight = 0.3 + 0.7 score (the same every step)
+        var enrichWeight = engine.TensorAddScalar(engine.TensorMultiplyScalar(tokenScores, NumOps.FromDouble(0.7)), NumOps.FromDouble(0.3));
+        // Attention phase (d + 1)(t + 1) 0.004, shifted by step * 0.5 each step.
+        var basePhase = engine.TensorMultiplyScalar(
+            engine.TensorOuter(engine.TensorArange<T>(1, dim + 1, 1), engine.TensorArange<T>(1, numTokens + 1, 1)),
+            NumOps.FromDouble(0.004));
+        var stepIndex = engine.TensorArange<T>(0, numReasoningSteps, 1);
+        var phaseShift = engine.TensorMultiplyScalar(stepIndex, NumOps.FromDouble(0.5));
+        // Step-dependent attention: early steps = broad, late steps = focused: exp(-0.3 step) * 0.5 + 0.5
+        var stepFocus = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorExp(engine.TensorMultiplyScalar(stepIndex, NumOps.FromDouble(-0.3))), NumOps.FromDouble(0.5)),
+            NumOps.FromDouble(0.5));
+        var stepWeights = engine.TensorDivide(
+            Tensor<T>.CreateDefault([numReasoningSteps], NumOps.One), engine.TensorArange<T>(1, numReasoningSteps + 1, 1));
+        var stateKeep = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(stepWeights, NumOps.FromDouble(0.3)));
+        var valueScale = engine.TensorMultiplyScalar(
+            engine.TensorBroadcastTo(tokenValues.Reshape([1, numTokens]), [dim, numTokens]), NumOps.FromDouble(0.3));
+        T epsilon = NumOps.FromDouble(1e-8);
+        T questionWeight = NumOps.FromDouble(0.2);
+        T consistencyWeight = NumOps.FromDouble(0.3);
+        T consistencyBase = NumOps.FromDouble(0.7);
+        T invDim = NumOps.FromDouble(1.0 / dim);
+        T convergence = NumOps.FromDouble(0.001);
 
         for (int step = 0; step < numReasoningSteps; step++)
         {
-            double stepWeight = 1.0 / (step + 1);
+            // Cross-modal attention with step-specific focus:
+            // w[d, t] = exp(vis_t * sin((d + 1)(t + 1) 0.004 + 0.5 step) * 0.3) * enrichWeight_t * stepFocus
+            var phase = engine.TensorAdd(basePhase, engine.TensorBroadcastTo(Pick(phaseShift, step), [dim, numTokens]));
+            var weights = engine.TensorMultiply(
+                engine.TensorExp(engine.TensorMultiply(valueScale, engine.TensorSin(phase))),
+                engine.TensorBroadcastTo(engine.TensorMultiply(enrichWeight, Pick(stepFocus, step)).Reshape([1, numTokens]), [dim, numTokens]));
+            var visAttn = WeightedAverage(weights, tokenValues);
 
-            // Reasoning-context-dependent attention mask
-            // Each step focuses on different visual aspects
-            for (int d = 0; d < dim; d++)
+            // Cross-modal consistency: compare visual attention with reasoning state
+            Tensor<T> consistency;
+            if (step > 0)
             {
-                // Cross-modal attention with step-specific focus
-                double visAttn = 0;
-                double attnSum = 0;
-                for (int t = 0; t < numTokens; t++)
-                {
-                    double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
-                    double enrichWeight = 0.3 + 0.7 * tokenScores[t];
-                    // Step-dependent attention: early steps = broad, late steps = focused
-                    double stepFocus = Math.Exp(-step * 0.3) * 0.5 + 0.5;
-                    double attnScore =
-                        visVal * Math.Sin((d + 1.0) * (t + 1) * 0.004 + step * 0.5) * 0.3;
-                    double w = Math.Exp(attnScore) * enrichWeight * stepFocus;
-                    visAttn += w * visVal;
-                    attnSum += w;
-                }
-                visAttn /= Math.Max(attnSum, 1e-8);
-
-                // Question conditioning
-                double qEmb = NumOps.ToDouble(questionTokens[d % qLen]) / _options.VocabSize;
-
-                // Cross-modal consistency: compare visual attention with reasoning state
-                double consistency =
-                    step > 0
-                        ? 1.0
-                            - Math.Abs(visAttn - reasoningState[d])
-                                / (Math.Abs(visAttn) + Math.Abs(reasoningState[d]) + 1e-8)
-                        : 1.0;
-
-                // Residual update with consistency weighting
-                reasoningState[d] =
-                    reasoningState[d] * (1.0 - stepWeight * 0.3)
-                    + (visAttn + qEmb * 0.2) * stepWeight * (0.7 + 0.3 * consistency);
+                consistency = engine.ScalarMinusTensor(
+                    NumOps.One,
+                    engine.TensorDivide(
+                        engine.TensorAbs(engine.TensorSubtract(visAttn, reasoningState)),
+                        engine.TensorAddScalar(engine.TensorAdd(engine.TensorAbs(visAttn), engine.TensorAbs(reasoningState)), epsilon)));
+            }
+            else
+            {
+                consistency = Tensor<T>.CreateDefault([dim], NumOps.One);
             }
 
+            // Residual update with consistency weighting
+            reasoningState = engine.TensorAdd(
+                engine.TensorMultiply(reasoningState, Pick(stateKeep, step)),
+                engine.TensorMultiply(
+                    engine.TensorMultiply(
+                        engine.TensorAdd(visAttn, engine.TensorMultiplyScalar(qEmb, questionWeight)), Pick(stepWeights, step)),
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(consistency, consistencyWeight), consistencyBase)));
+
             // Confidence estimation (average magnitude of reasoning state)
-            double confidence = 0;
-            for (int d = 0; d < dim; d++)
-                confidence += Math.Abs(reasoningState[d]);
-            confidence /= dim;
+            var confidence = engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorAbs(reasoningState), [0], true), invDim);
 
             // Early stopping if confidence converges
-            if (step > 1 && Math.Abs(confidence - prevConfidence) < 0.001)
+            var converged = engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtract(confidence, prevConfidence)), convergence);
+            if (step > 1 && engine.TensorSum(converged.Cast<int>()) > 0)
                 break;
             prevConfidence = confidence;
         }
 
         // Step 5: Final answer
-        var chainInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-            chainInput[d] = NumOps.FromDouble(reasoningState[d]);
+        var chainInput = reasoningState;
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -376,10 +392,7 @@ public partial class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

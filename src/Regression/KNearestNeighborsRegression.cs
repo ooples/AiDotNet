@@ -209,13 +209,7 @@ public partial class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Note: KNN is a distance-based method - no data transformation is applied
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return predictions;
+        return new Vector<T>(input.GetRows().Select(PredictSingle));
     }
 
     /// <summary>
@@ -245,18 +239,16 @@ public partial class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        var distances = new List<(int index, T distance)>();
+        var engine = AiDotNetEngine.Current;
+        var distanceVector = CalculateDistances(input);
 
-        for (int i = 0; i < _xTrain.Rows; i++)
-        {
-            T distance = CalculateDistance(input, _xTrain.GetRow(i));
-            distances.Add((i, distance));
-        }
-
-        var nearestNeighbors = distances
-            .OrderBy(x => x.distance)
+        // Stable ordering: equal distances keep the lower training index first
+        var nearestNeighbors = distanceVector
+            .Select((distance, index) => (index, distance))
+            .OrderBy(x => x.distance, Comparer<T>.Default)
             .Take(_options.K)
             .ToList();
+        var neighborIndices = nearestNeighbors.Select(nb => nb.index).ToArray();
 
         // Fit a local OLS model among the K nearest neighbors for better extrapolation
         int k = nearestNeighbors.Count;
@@ -265,103 +257,60 @@ public partial class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         // If enough neighbors for OLS, use local linear fit
         if (k > p + 1)
         {
-            // Build local X and y
-            var localX = new double[k, p + 1]; // +1 for intercept
-            var localY = new double[k];
-            for (int ni = 0; ni < k; ni++)
-            {
-                int idx = nearestNeighbors[ni].index;
-                localX[ni, 0] = 1.0; // intercept
-                for (int j = 0; j < p; j++)
-                    localX[ni, j + 1] = NumOps.ToDouble(_xTrain[idx, j]);
-                localY[ni] = NumOps.ToDouble(_yTrain[idx]);
-            }
+            // Build local X (intercept column first) and y
+            var localX = _xTrain.GetRows(neighborIndices).AddConstantColumn(NumOps.One);
+            var localY = RegressionEngineOps.Gather(_yTrain, neighborIndices);
 
-            // Solve (X'X)^-1 X'y for local coefficients
-            int cols = p + 1;
-            var xTx = new double[cols, cols];
-            var xTy2 = new double[cols];
-            for (int i2 = 0; i2 < k; i2++)
-            {
-                for (int a = 0; a < cols; a++)
-                {
-                    xTy2[a] += localX[i2, a] * localY[i2];
-                    for (int b = 0; b < cols; b++)
-                        xTx[a, b] += localX[i2, a] * localX[i2, b];
-                }
-            }
-            // Add ridge
-            for (int i2 = 0; i2 < cols; i2++)
-                xTx[i2, i2] += 1e-8;
+            // Solve (X'X + ridge I) beta = X'y for local coefficients
+            var localXt = engine.MatrixTranspose(localX);
+            var xTx = engine.MatrixMultiply(localXt, localX);
+            var xTy = engine.MatrixVectorMultiply(localXt, localY);
+            xTx = engine.MatrixAdd(xTx, Matrix<T>.CreateDiagonal(engine.Fill(xTx.Rows, NumOps.FromDouble(1e-8))));
+            var coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Lu);
 
-            // Simple Gauss elimination for small system
-            var aug = new double[cols, cols + 1];
-            for (int i2 = 0; i2 < cols; i2++)
-            {
-                for (int j = 0; j < cols; j++)
-                    aug[i2, j] = xTx[i2, j];
-                aug[i2, cols] = xTy2[i2];
-            }
-            for (int i2 = 0; i2 < cols; i2++)
-            {
-                double pivot = aug[i2, i2];
-                if (Math.Abs(pivot) < 1e-15) continue;
-                for (int j = i2; j <= cols; j++)
-                    aug[i2, j] /= pivot;
-                for (int r = 0; r < cols; r++)
-                {
-                    if (r == i2) continue;
-                    double factor = aug[r, i2];
-                    for (int j = i2; j <= cols; j++)
-                        aug[r, j] -= factor * aug[i2, j];
-                }
-            }
             // Predict: intercept + sum(coeff * input)
-            double pred = aug[0, cols]; // intercept
-            for (int j = 0; j < p; j++)
-                pred += aug[j + 1, cols] * NumOps.ToDouble(input[j]);
-            return NumOps.FromDouble(pred);
+            T intercept = coefficients[0];
+            return NumOps.Add(intercept, engine.DotProduct(coefficients.GetSubVector(1, p), input));
         }
 
-        // Fallback: inverse-distance weighting
-        T weightedSum = NumOps.Zero;
-        T totalWeight = NumOps.Zero;
-        foreach (var (index, distance) in nearestNeighbors)
+        // Fallback: inverse-distance weighting, w = 1/d (1e10 for d < 1e-10)
+        if (k == 0)
         {
-            double d = NumOps.ToDouble(distance);
-            double w = d < 1e-10 ? 1e10 : 1.0 / d;
-            T weight = NumOps.FromDouble(w);
-            weightedSum = NumOps.Add(weightedSum, NumOps.Multiply(weight, _yTrain[index]));
-            totalWeight = NumOps.Add(totalWeight, weight);
+            return NumOps.Divide(NumOps.Zero, NumOps.Zero);
         }
+
+        var neighborDistances = Tensor<T>.FromVector(RegressionEngineOps.Gather(distanceVector, neighborIndices));
+        var weights = engine.TensorWhere(
+            engine.TensorLessThan(neighborDistances, NumOps.FromDouble(1e-10)),
+            Tensor<T>.FromVector(engine.Fill(k, NumOps.FromDouble(1e10))),
+            engine.TensorReciprocal(neighborDistances)).ToVector();
+        T weightedSum = engine.DotProduct(weights, RegressionEngineOps.Gather(_yTrain, neighborIndices));
+        T totalWeight = engine.Sum(weights);
 
         return NumOps.Divide(weightedSum, totalWeight);
     }
 
     /// <summary>
-    /// Calculates the Euclidean distance between two feature vectors.
+    /// Calculates the Euclidean distance from a feature vector to every training sample.
     /// </summary>
-    /// <param name="v1">The first feature vector.</param>
-    /// <param name="v2">The second feature vector.</param>
-    /// <returns>The Euclidean distance between the two vectors.</returns>
-    /// <exception cref="ArgumentException">Thrown when vectors have different dimensions.</exception>
-    private T CalculateDistance(Vector<T> v1, Vector<T> v2)
+    /// <param name="input">The query feature vector.</param>
+    /// <returns>The Euclidean distance to each training row, in training order.</returns>
+    /// <exception cref="ArgumentException">Thrown when the vector dimension differs from the training data.</exception>
+    private Vector<T> CalculateDistances(Vector<T> input)
     {
-        if (v1.Length != v2.Length)
+        if (_xTrain.Rows == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        if (input.Length != _xTrain.Columns)
         {
             throw new ArgumentException(
-                $"Feature vectors must have the same dimension. Expected {v1.Length} features but got {v2.Length}. " +
+                $"Feature vectors must have the same dimension. Expected {input.Length} features but got {_xTrain.Columns}. " +
                 "Ensure the input features match the training data dimensions.");
         }
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            T diff = NumOps.Subtract(v1[i], v2[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Sqrt(sum);
+        return AiDotNetEngine.Current.Sqrt(RegressionEngineOps.RowSquaredDistances(_xTrain, input));
     }
 
     /// <summary>

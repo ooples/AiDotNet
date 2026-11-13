@@ -560,17 +560,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -762,10 +752,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         }
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
@@ -781,10 +768,7 @@ public partial class Mamba<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -817,6 +801,9 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         }
 
         SetTrainingMode(false);
+
+        if (TrySortedSampleQuantiles(samples, quantiles, _forecastHorizon, out var sortedQuantiles))
+            return sortedQuantiles;
 
         var result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
 
@@ -891,9 +878,9 @@ public partial class Mamba<T> : ForecastingModelBase<T>
         foreach (var pred in predictions)
         {
             int toCopy = Math.Min(pred.Length, totalSteps - position);
-            for (int i = 0; i < toCopy; i++)
+            if (toCopy > 0)
             {
-                result.Data.Span[position + i] = pred.Data.Span[i];
+                pred.Data.Span.Slice(0, toCopy).CopyTo(result.Data.Span.Slice(position, toCopy));
             }
             position += toCopy;
         }

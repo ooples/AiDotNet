@@ -108,7 +108,9 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
         // Calculate how many synthetic samples to generate
         int numSynthetic = (int)Math.Ceiling(rows * SamplingRatio);
 
-        var syntheticSamples = new Matrix<T>(numSynthetic, cols);
+        var sources = new int[numSynthetic];
+        var targets = new int[numSynthetic];
+        var gaps = new Vector<T>(numSynthetic);
         int syntheticIndex = 0;
 
         // Compute pairwise distances for k-NN
@@ -128,18 +130,14 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
             // Generate synthetic sample by interpolating
             double gap = context.Random.NextDouble();
 
-            for (int c = 0; c < cols; c++)
-            {
-                double val1 = NumOps.ToDouble(minorityData[sampleIdx, c]);
-                double val2 = NumOps.ToDouble(minorityData[neighborIdx, c]);
-                double synthetic = val1 + gap * (val2 - val1);
-                syntheticSamples[syntheticIndex, c] = NumOps.FromDouble(synthetic);
-            }
+            sources[syntheticIndex] = sampleIdx;
+            targets[syntheticIndex] = neighborIdx;
+            gaps[syntheticIndex] = NumOps.FromDouble(gap);
 
             syntheticIndex++;
         }
 
-        return syntheticSamples;
+        return TabularEngineOps<T>.InterpolateRows(minorityData, sources, targets, gaps, numSynthetic);
     }
 
     /// <summary>
@@ -163,89 +161,35 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
         }
 
         int originalRows = GetSampleCount(minorityData);
-        int cols = GetFeatureCount(minorityData);
-
-        // Combine original and synthetic data
-        var combinedData = new Matrix<T>(originalRows + numSynthetic, cols);
-        var combinedLabels = new Vector<T>(originalRows + numSynthetic);
-
-        // Copy original data
-        for (int i = 0; i < originalRows; i++)
-        {
-            for (int c = 0; c < cols; c++)
-            {
-                combinedData[i, c] = minorityData[i, c];
-            }
-            combinedLabels[i] = minorityLabels[i];
-        }
 
         // Copy synthetic data with same label as minority class
         T minorityLabel = minorityLabels[0];
 
         // Validate that all minority labels have the same value
-        for (int i = 1; i < minorityLabels.Length; i++)
+        var engine = Engine;
+        var labelTensor = minorityLabels.AsTensor();
+        int matching = (int)NumOps.ToDouble(engine.TensorSum(engine.TensorEquals(labelTensor, minorityLabel)));
+        if (matching != minorityLabels.Length)
         {
-            if (NumOps.Compare(minorityLabels[i], minorityLabel) != 0)
-            {
-                throw new ArgumentException("All minority labels must have the same value.", nameof(minorityLabels));
-            }
+            throw new ArgumentException("All minority labels must have the same value.", nameof(minorityLabels));
         }
 
-        for (int i = 0; i < numSynthetic; i++)
-        {
-            for (int c = 0; c < cols; c++)
-            {
-                combinedData[originalRows + i, c] = syntheticData[i, c];
-            }
-            combinedLabels[originalRows + i] = minorityLabel;
-        }
+        // Combine original and synthetic data
+        var combinedData = TabularEngineOps<T>.ConcatenateRows(minorityData, syntheticData);
+        var combinedLabels = TabularEngineOps<T>.ConcatenateLabels(
+            minorityLabels, originalRows, TabularEngineOps<T>.Filled(numSynthetic, minorityLabel), numSynthetic);
 
         return (combinedData, combinedLabels);
     }
 
-    private double[,] ComputeDistanceMatrix(Matrix<T> data)
+    private static Tensor<T> ComputeDistanceMatrix(Matrix<T> data)
     {
-        int rows = GetSampleCount(data);
-        int cols = GetFeatureCount(data);
-        var distances = new double[rows, rows];
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = i + 1; j < rows; j++)
-            {
-                double dist = 0;
-                for (int c = 0; c < cols; c++)
-                {
-                    double diff = NumOps.ToDouble(data[i, c]) - NumOps.ToDouble(data[j, c]);
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
-
-        return distances;
+        return TabularEngineOps<T>.PairwiseDistances(data);
     }
 
-    private int[] GetKNearestNeighbors(double[,] distances, int sampleIdx, int k)
+    private static int[] GetKNearestNeighbors(Tensor<T> distances, int sampleIdx, int k)
     {
-        int rows = distances.GetLength(0);
-        var indexedDistances = new List<(int Index, double Distance)>();
-
-        for (int i = 0; i < rows; i++)
-        {
-            if (i != sampleIdx)
-            {
-                indexedDistances.Add((i, distances[sampleIdx, i]));
-            }
-        }
-
-        return indexedDistances
-            .OrderBy(x => x.Distance)
-            .Take(k)
-            .Select(x => x.Index)
-            .ToArray();
+        return TabularEngineOps<T>.NearestNeighbors(distances, sampleIdx, k);
     }
 
     /// <inheritdoc />
