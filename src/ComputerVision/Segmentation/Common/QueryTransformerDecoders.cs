@@ -63,8 +63,15 @@ internal readonly struct KMaXDecoderShape
     /// <param name="classes">Class-head outputs, the classes plus void.</param>
     /// <param name="pixelHeadDim">Width of the pixel-space head's 1x1 convolution after its 5x5 depthwise convolution
     /// (<c>pixel_space_head.head_channels</c>, 256).</param>
-    internal KMaXDecoderShape(int pixelDim, int queryDim, int heads, int feedForwardDim, int classes, int pixelHeadDim)
+    /// <param name="voidPriorProbability">The void probability the fixed class-logit bias gives an uninformative class
+    /// head (deeplab2's <c>add_bias_towards_void</c>, <c>void_prior_prob=0.9</c>); must lie in (0, 1).</param>
+    internal KMaXDecoderShape(int pixelDim, int queryDim, int heads, int feedForwardDim, int classes, int pixelHeadDim,
+        double voidPriorProbability)
     {
+        if (!(voidPriorProbability > 0 && voidPriorProbability < 1))
+            throw new ArgumentOutOfRangeException(nameof(voidPriorProbability), "The void prior must lie in (0, 1).");
+        if (classes < 2) throw new ArgumentOutOfRangeException(nameof(classes), "The class head needs a class and void.");
+        VoidPriorProbability = voidPriorProbability;
         PixelDim = pixelDim;
         QueryDim = queryDim;
         Heads = heads;
@@ -79,6 +86,15 @@ internal readonly struct KMaXDecoderShape
     internal int FeedForwardDim { get; }
     internal int Classes { get; }
     internal int PixelHeadDim { get; }
+    internal double VoidPriorProbability { get; }
+
+    /// <summary>
+    /// The fixed bias added to the void (last) class logit, <c>log((C - 1) * p / (1 - p))</c> with <c>C</c> the
+    /// class-head outputs (void included) and <c>p</c> the void prior: deeplab2 model/decoder/max_deeplab.py L91-L96
+    /// at 64bc1c1a (<c>add_bias_towards_void</c>, applied at L343-L344) and the PyTorch port's
+    /// kmax_transformer_decoder.py L49-L54 (applied at L108). With equal raw logits the softmax gives void exactly p.
+    /// </summary>
+    internal double VoidLogitBias => Math.Log((Classes - 1) * VoidPriorProbability / (1 - VoidPriorProbability));
 
     /// <summary>Key width: base_filters * key_expansion = 128 * 1, half the 256-wide bottleneck.</summary>
     internal int KeyDim => QueryDim / 2;
@@ -245,7 +261,7 @@ internal static class KMaXTransformerDecoder
         int final = start + 1 + stages * StageLayerCount;
         var classEmbeddings = engine.TensorGELU(ProjectNorm(layers[final], layers[final + 1], centers));
         var maskEmbeddings = engine.TensorGELU(ProjectNorm(layers[final + 2], layers[final + 3], centers));
-        predictions.Add(Predict(layers, final + 4, classEmbeddings, maskEmbeddings,
+        predictions.Add(Predict(layers, final + 4, shape, classEmbeddings, maskEmbeddings,
             engine.TensorPermute(finest, new[] { 0, 2, 1 }), finestHeight, finestWidth));
         return predictions;
     }
@@ -260,7 +276,7 @@ internal static class KMaXTransformerDecoder
         var pixelSpace = engine.TensorGELU(ProjectNorm(layers[start], layers[start + 1], pixels));          // [B, hw, Dq]
         var querySpace = engine.TensorGELU(ProjectNorm(layers[start + 2], layers[start + 3], centers));     // [B, N, Dq]
         var pixelValue = ProjectNorm(layers[start + 4], layers[start + 5], pixelSpace);                     // [B, hw, Dv]
-        var prediction = Predict(layers, start + 6, querySpace, querySpace, pixelSpace, height, width);
+        var prediction = Predict(layers, start + 6, shape, querySpace, querySpace, pixelSpace, height, width);
 
         // k-means cross-attention: cluster-wise argmax of the cluster logits, then the assigned values summed into
         // each cluster center.
@@ -301,8 +317,8 @@ internal static class KMaXTransformerDecoder
     /// pixel-space head (5x5 depthwise conv, BN, GELU; 1x1 conv, BN, GELU; biased 1x1 key projection, BN; L2 norm).
     /// </summary>
     internal static KMaXPrediction<T> Predict<T>(
-        IReadOnlyList<ILayer<T>> layers, int start, Tensor<T> classEmbeddings, Tensor<T> maskEmbeddings,
-        Tensor<T> pixels, int height, int width)
+        IReadOnlyList<ILayer<T>> layers, int start, KMaXDecoderShape shape, Tensor<T> classEmbeddings,
+        Tensor<T> maskEmbeddings, Tensor<T> pixels, int height, int width)
     {
         var engine = AiDotNetEngine.Current;
         int b = pixels.Shape[0], hw = pixels.Shape[1], c = pixels.Shape[2], n = maskEmbeddings.Shape[1];
@@ -316,8 +332,22 @@ internal static class KMaXTransformerDecoder
         var kernel = ProjectNorm(layers[start + 6], layers[start + 7], maskEmbeddings);                          // [B, N, Dp]
         var logits = engine.TensorMatMul(kernel, keyT);                                                          // [B, N, hw]
         logits = engine.Reshape(layers[start + 8].Forward(engine.Reshape(logits, new[] { b * n * hw, 1 })), new[] { b, n, hw });
-        var classLogits = Rows(layers[start + 9], classEmbeddings);
+        var classLogits = AddVoidBias(Rows(layers[start + 9], classEmbeddings), shape);
         return new KMaXPrediction<T>(classLogits, logits, keyT, height, width);
+    }
+
+    /// <summary>
+    /// Adds <see cref="KMaXDecoderShape.VoidLogitBias"/> to the void (last) logit of <c>[B, N, C]</c> class logits, a
+    /// constant (not a parameter) as in deeplab2's <c>add_bias_towards_void</c>.
+    /// </summary>
+    internal static Tensor<T> AddVoidBias<T>(Tensor<T> classLogits, KMaXDecoderShape shape)
+    {
+        var engine = AiDotNetEngine.Current;
+        int c = classLogits.Shape[2];
+        var bias = new double[c];
+        bias[c - 1] = shape.VoidLogitBias;
+        var row = engine.Reshape(new Tensor<double>(new[] { c }, new Vector<double>(bias)).Cast<T>(), new[] { 1, 1, c });
+        return engine.TensorAdd(classLogits, engine.TensorBroadcastTo(row, classLogits.Shape.ToArray()));
     }
 
     /// <summary>

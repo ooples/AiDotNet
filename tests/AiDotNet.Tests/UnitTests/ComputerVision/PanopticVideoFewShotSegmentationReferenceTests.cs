@@ -595,7 +595,8 @@ public class PanopticVideoFewShotSegmentationReferenceTests
     /// A small kMaX decoder: pixel width 4, query width 8 (keys 4, values 8), 2 heads, FFN 16, 2 classes + void and a
     /// 6-wide pixel-space head.
     /// </summary>
-    private static readonly KMaXDecoderShape SmallKMaX = new(pixelDim: 4, queryDim: 8, heads: 2, feedForwardDim: 16, classes: 3, pixelHeadDim: 6);
+    private static readonly KMaXDecoderShape SmallKMaX = new(pixelDim: 4, queryDim: 8, heads: 2, feedForwardDim: 16, classes: 3, pixelHeadDim: 6,
+        voidPriorProbability: 0.9);
 
     /// <summary>
     /// The trainable parameters of one small kMaX predictor reading <paramref name="inputChannels"/>-wide pixels, from
@@ -821,17 +822,41 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         foreach (var layer in layers) layer.SetTrainingMode(false);                 // BN on running statistics: per pixel
         var embeddings = Pattern(61, 1, 3, 8);
         var pixels = Pattern(62, 1, 36, 4);                                         // a 6 x 6 map
-        var before = KMaXTransformerDecoder.Predict<double>(layers, 0, embeddings, embeddings, pixels, 6, 6).MaskLogits.ToArray();
+        var before = KMaXTransformerDecoder.Predict<double>(layers, 0, SmallKMaX, embeddings, embeddings, pixels, 6, 6).MaskLogits.ToArray();
         var changed = pixels.ToArray();
         for (int c = 0; c < 4; c++) changed[c] += 1.0;                              // pixel (0, 0)
         var after = KMaXTransformerDecoder.Predict<double>(
-            layers, 0, embeddings, embeddings, T(new[] { 1, 36, 4 }, changed), 6, 6).MaskLogits.ToArray();
+            layers, 0, SmallKMaX, embeddings, embeddings, T(new[] { 1, 36, 4 }, changed), 6, 6).MaskLogits.ToArray();
 
         double Change(int pixel) => Enumerable.Range(0, 3).Max(n => Math.Abs(after[n * 36 + pixel] - before[n * 36 + pixel]));
         Assert.True(Change(2 * 6 + 2) > 1e-9, "Pixel (2, 2) is inside the 5x5 window of (0, 0).");
         Assert.Equal(0.0, Change(3 * 6 + 3), 12);
         Assert.Equal(0.0, Change(0 * 6 + 3), 12);
         Assert.Equal(SmallKMaXPredictorParameters(4), PixelHeadParameters(layers));
+    }
+
+    [Fact]
+    public void KMaXPredictor_ClassHeadStartsAtTheVoidPrior()
+    {
+        // deeplab2's add_bias_towards_void (model/decoder/max_deeplab.py L91-L96): with the class head's weights and
+        // bias at zero, the logits are (0, 0, log((3 - 1) * 0.9 / 0.1)) = (0, 0, ln 18), so the softmax is
+        // (1/20, 1/20, 18/20): void 0.9 and each class 0.05. (Without the bias it was 1/3 each.)
+        var layers = KMaXTransformerDecoder.CreatePredictorLayers<double>(SmallKMaX, 4).ToList();
+        foreach (var layer in layers) layer.SetTrainingMode(false);
+        var embeddings = Pattern(63, 1, 3, 8);
+        var pixels = Pattern(64, 1, 4, 4);
+        KMaXTransformerDecoder.Predict<double>(layers, 0, SmallKMaX, embeddings, embeddings, pixels, 2, 2); // sizes the lazy layers
+        foreach (var parameter in TapeTrainingStep<double>.CollectParameters(new[] { layers[9] }, -1))
+        {
+            parameter.Fill(0.0);
+            AiDotNetEngine.Current.InvalidatePersistentTensor(parameter);
+        }
+
+        var classLogits = KMaXTransformerDecoder.Predict<double>(layers, 0, SmallKMaX, embeddings, embeddings, pixels, 2, 2).ClassLogits;
+        var probabilities = AiDotNetEngine.Current.TensorSoftmax(classLogits, 2);
+
+        AssertValues(probabilities, 0.05, 0.05, 0.9, 0.05, 0.05, 0.9, 0.05, 0.05, 0.9);
+        Assert.Equal(Math.Log(18), SmallKMaX.VoidLogitBias, 12);
     }
 
     private static int PixelHeadParameters(IReadOnlyList<ILayer<double>> layers)
@@ -924,6 +949,7 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         Assert.Equal(256, options.SemanticDecoderDimension);
         Assert.Equal(new[] { 64, 32 }, options.SemanticLowLevelProjections);
         Assert.Equal(256, options.SemanticHeadDimension);
+        Assert.Equal(0.9, options.VoidPriorProbability);
         Assert.Equal(0.75, KMaXLossSettings.Default.PositiveWeight);
     }
 

@@ -336,6 +336,8 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
             throw new ArgumentException("FeedForwardDimension must be positive.", nameof(options));
         if (options.PixelHeadDimension < 1)
             throw new ArgumentException("PixelHeadDimension must be positive.", nameof(options));
+        if (!(options.VoidPriorProbability > 0 && options.VoidPriorProbability < 1))
+            throw new ArgumentException("VoidPriorProbability must lie in (0, 1).", nameof(options));
         if (options.SemanticAtrousRates is null || options.SemanticLowLevelProjections is null)
             throw new ArgumentException("SemanticAtrousRates and SemanticLowLevelProjections must be set.", nameof(options));
         if (options.SemanticLowLevelProjections.Length > PyramidLevels)
@@ -351,7 +353,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (options.InstanceDiscriminationSampleCount < 1 || options.SemanticSampleCount < 1)
             throw new ArgumentException("The auxiliary losses must sample at least one pixel.", nameof(options));
         var shape = new Common.KMaXDecoderShape(pixelDim, options.QueryDimension, options.NumAttentionHeads,
-            options.FeedForwardDimension, options.NumClasses + 1, options.PixelHeadDimension);
+            options.FeedForwardDimension, options.NumClasses + 1, options.PixelHeadDimension, options.VoidPriorProbability);
         // The shape validates the semantic decoder widths, rates and dropout.
         var semantic = new Common.SemanticDecoderShape(options.SemanticAsppDimension, options.SemanticAtrousRates,
             options.SemanticDecoderDimension, options.SemanticLowLevelProjections, options.SemanticHeadDimension,

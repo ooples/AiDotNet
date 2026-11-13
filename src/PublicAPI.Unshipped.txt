@@ -22970,6 +22970,8 @@ AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticSampleT
 AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticSampleTemperature.set -> void
 AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelHeadDimension.get -> int
 AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelHeadDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.VoidPriorProbability.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.VoidPriorProbability.set -> void
 AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAsppDimension.get -> int
 AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAsppDimension.set -> void
 AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAtrousRates.get -> int[]!

@@ -55,6 +55,7 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
         SemanticSampleCount = other.SemanticSampleCount;
         SemanticSampleTemperature = other.SemanticSampleTemperature;
         PixelHeadDimension = other.PixelHeadDimension;
+        VoidPriorProbability = other.VoidPriorProbability;
         SemanticAsppDimension = other.SemanticAsppDimension;
         SemanticAtrousRates = (int[])other.SemanticAtrousRates.Clone();
         SemanticAsppDropRate = other.SemanticAsppDropRate;
@@ -100,6 +101,14 @@ public class KMaXDeepLabOptions : SegmentationModelOptions
     /// PyTorch port's <c>_pixel_space_head_conv1bnact</c>).
     /// </summary>
     public int PixelHeadDimension { get; set; } = 256;
+
+    /// <summary>
+    /// Gets or sets the void-class prior of the class head: a fixed bias <c>log((C - 1) * p / (1 - p))</c> on the void
+    /// logit (C the classes plus void) makes an uninformative class head predict void with probability p. Default: 0.9
+    /// (deeplab2 model/decoder/max_deeplab.py L60 <c>add_bias_towards_void(..., void_prior_prob=0.9)</c>, the bias at
+    /// L91-L96; the PyTorch port's kmax_transformer_decoder.py L49-L54). Must lie in (0, 1).
+    /// </summary>
+    public double VoidPriorProbability { get; set; } = 0.9;
 
     /// <summary>
     /// Gets or sets the number of kMaX transformer decoder stages (each a k-means cross-attention, a self-attention
