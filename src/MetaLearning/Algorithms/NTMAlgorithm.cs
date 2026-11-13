@@ -271,6 +271,151 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
     }
 
+    // Identifies an NTM checkpoint written by Save, and its layout version.
+    private const int CheckpointMagic = unchecked((int)0x4E544D31); // "NTM1"
+    private const int CheckpointVersion = 1;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Saves what the NTM trains and what it needs to predict after a load: the controller type and the
+    /// configuration that shapes it, the controller's resolved input width and its parameters, and the
+    /// meta-iteration count. It used to save only the supplied meta-model, which the NTM never trains, and so
+    /// dropped the controller entirely (and threw when the meta-model could not serialize itself).
+    /// </para>
+    /// <para>
+    /// Memory and recurrent state are not saved: every episode, Adapt included, starts from the initial memory
+    /// and a reset controller. Optimizer state is not saved either and is reset by <see cref="Load"/>.
+    /// </para>
+    /// </remarks>
+    public override void Save(string filePath)
+    {
+        Guard.NotNull(filePath);
+        var parameters = _controller.GetParameters();
+
+        using var stream = System.IO.File.Create(filePath);
+        using var writer = new System.IO.BinaryWriter(stream);
+        writer.Write(CheckpointMagic);
+        writer.Write(CheckpointVersion);
+        writer.Write(typeof(T).FullName ?? typeof(T).Name);
+        writer.Write(_controller.GetType().FullName ?? _controller.GetType().Name);
+        WriteShape(writer);
+        writer.Write((_controller as INTMControllerLayout)?.ResolvedInputWidth ?? -1);
+        writer.Write(_currentIteration);
+        writer.Write(parameters.Length);
+
+        // Stored as double, which holds every Half, float and double value exactly.
+        foreach (double value in Tensor<T>.FromVector(parameters).Cast<double>().ToArray())
+        {
+            writer.Write(value);
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Restores a checkpoint written by <see cref="Save"/> into an algorithm built with the same controller type
+    /// and shape options; anything else is rejected rather than loaded into the wrong layout. The controller is
+    /// resolved to the saved input width before its parameters are written, so a freshly built algorithm loads
+    /// a trained one. Optimizer state is reset, since it is not saved.
+    /// </remarks>
+    /// <exception cref="System.IO.InvalidDataException">The file is not an NTM checkpoint, or it was saved from
+    /// a different numeric type, controller or configuration.</exception>
+    public override void Load(string filePath)
+    {
+        Guard.NotNull(filePath);
+
+        using var stream = System.IO.File.OpenRead(filePath);
+        using var reader = new System.IO.BinaryReader(stream);
+        if (reader.ReadInt32() != CheckpointMagic)
+        {
+            throw new System.IO.InvalidDataException("The file is not an NTM checkpoint.");
+        }
+
+        int version = reader.ReadInt32();
+        if (version != CheckpointVersion)
+        {
+            throw new System.IO.InvalidDataException($"NTM checkpoint version {version} is not supported.");
+        }
+
+        Expect(reader.ReadString(), typeof(T).FullName ?? typeof(T).Name, "numeric type");
+        Expect(reader.ReadString(), _controller.GetType().FullName ?? _controller.GetType().Name, "controller");
+        var shape = ShapeValues();
+        for (int i = 0; i < shape.Length; i++)
+        {
+            int saved = reader.ReadInt32();
+            if (saved != shape[i].Value)
+            {
+                throw new System.IO.InvalidDataException(
+                    $"The checkpoint was saved with {shape[i].Name} = {saved}, but this algorithm has {shape[i].Value}.");
+            }
+        }
+
+        int inputWidth = reader.ReadInt32();
+        int iteration = reader.ReadInt32();
+        int count = reader.ReadInt32();
+        if (count < 0)
+        {
+            throw new System.IO.InvalidDataException("The checkpoint's parameter count is negative.");
+        }
+
+        var values = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            values[i] = reader.ReadDouble();
+        }
+
+        var parameters = new Tensor<double>(values, new[] { count }).Cast<T>().ToVector();
+
+        if (inputWidth >= 0 && _controller is INTMControllerLayout layout)
+        {
+            layout.ResolveInputWidth(inputWidth);
+        }
+
+        int expected = _controller.GetParameters().Length;
+        if (count != expected)
+        {
+            throw new System.IO.InvalidDataException(
+                $"The checkpoint holds {count} controller parameters, but this controller has {expected}.");
+        }
+
+        SetControllerParameters(parameters);
+        _currentIteration = iteration;
+        ResetMemoryState();
+
+        // The optimizer's moments belong to the parameters it was stepping; SetMetaModel resets them.
+        SetMetaModel(MetaModel);
+    }
+
+    /// <summary>The options that fix the controller's and memory's shapes, in checkpoint order.</summary>
+    private (string Name, int Value)[] ShapeValues() => new[]
+    {
+        (nameof(NTMOptions<T, TInput, TOutput>.ControllerType), (int)_ntmOptions.ControllerType),
+        (nameof(NTMOptions<T, TInput, TOutput>.MemorySize), _ntmOptions.MemorySize),
+        (nameof(NTMOptions<T, TInput, TOutput>.MemoryWidth), _ntmOptions.MemoryWidth),
+        (nameof(NTMOptions<T, TInput, TOutput>.NumReadHeads), _ntmOptions.NumReadHeads),
+        (nameof(NTMOptions<T, TInput, TOutput>.ControllerHiddenSize), _ntmOptions.ControllerHiddenSize),
+        (nameof(NTMOptions<T, TInput, TOutput>.NumClasses), _ntmOptions.NumClasses),
+        (nameof(NTMOptions<T, TInput, TOutput>.ShiftRange), _ntmOptions.ShiftRange),
+        (nameof(NTMOptions<T, TInput, TOutput>.PresentPreviousLabel), _ntmOptions.PresentPreviousLabel ? 1 : 0),
+    };
+
+    private void WriteShape(System.IO.BinaryWriter writer)
+    {
+        foreach (var (_, value) in ShapeValues())
+        {
+            writer.Write(value);
+        }
+    }
+
+    private static void Expect(string saved, string live, string what)
+    {
+        if (!string.Equals(saved, live, StringComparison.Ordinal))
+        {
+            throw new System.IO.InvalidDataException(
+                $"The checkpoint was saved with {what} '{saved}', but this algorithm uses '{live}'.");
+        }
+    }
+
     /// <summary>The controller the algorithm trains, shared with every adapted model.</summary>
     internal INTMController<T> Controller => _controller;
 
@@ -1595,6 +1740,20 @@ internal interface INTMControllerState
 }
 
 /// <summary>
+/// A controller whose first-layer input width is resolved at its first forward, so a checkpoint can record the
+/// width and a fresh controller can be shaped to it before its parameters are restored.
+/// </summary>
+internal interface INTMControllerLayout
+{
+    /// <summary>The resolved input width, or null before the first forward.</summary>
+    int? ResolvedInputWidth { get; }
+
+    /// <summary>Shapes the first layer to <paramref name="width"/> inputs (zero weights, to be overwritten) and
+    /// marks the width resolved.</summary>
+    void ResolveInputWidth(int width);
+}
+
+/// <summary>
 /// Projections and parameter layout shared by the NTM controllers.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
@@ -1720,7 +1879,7 @@ internal static class NTMControllerMath<T>
 /// </code>
 /// </para>
 /// </remarks>
-public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>, INTMControllerState
+public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>, INTMControllerState, INTMControllerLayout
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -2002,6 +2161,20 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>, INTMCont
         _cellState = lstm.Cell;
     }
 
+    int? INTMControllerLayout.ResolvedInputWidth => _inputSizeResolved ? _inputSize : null;
+
+    void INTMControllerLayout.ResolveInputWidth(int width)
+    {
+        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "The input width must be positive.");
+        if (_weightsInput.Shape[1] != width)
+        {
+            _weightsInput = new Tensor<T>(new int[] { 4 * _hiddenSize, width });
+        }
+
+        _inputSize = width;
+        _inputSizeResolved = true;
+    }
+
     private sealed class LstmState
     {
         public LstmState(Tensor<T> hidden, Tensor<T> cell)
@@ -2040,7 +2213,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>, INTMCont
 /// </code>
 /// </para>
 /// </remarks>
-public class MLPNTMController<T, TInput, TOutput> : INTMController<T>, INTMControllerState
+public class MLPNTMController<T, TInput, TOutput> : INTMController<T>, INTMControllerState, INTMControllerLayout
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -2294,6 +2467,20 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>, INTMContr
         }
 
         _lastHiddenState = hidden;
+    }
+
+    int? INTMControllerLayout.ResolvedInputWidth => _inputSizeResolved ? _inputSize : null;
+
+    void INTMControllerLayout.ResolveInputWidth(int width)
+    {
+        if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "The input width must be positive.");
+        if (_layer1Weights.Shape[1] != width)
+        {
+            _layer1Weights = new Tensor<T>(new int[] { _hiddenSize, width });
+        }
+
+        _inputSize = width;
+        _inputSizeResolved = true;
     }
 }
 

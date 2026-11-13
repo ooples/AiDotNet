@@ -546,6 +546,69 @@ public class NTMPaperTests
             Assert.Equal(shifted[i], restored[i]);
     }
 
+    /// <summary>
+    /// A saved NTM keeps what it trains: a trained controller saved and loaded into a freshly built algorithm has
+    /// the same parameters and adapts and predicts identically. Save used to write only the supplied meta-model
+    /// (and threw when it could not serialize itself), so the controller was lost.
+    /// </summary>
+    [Theory]
+    [InlineData(NTMControllerType.LSTM)]
+    [InlineData(NTMControllerType.MLP)]
+    public void SaveAndLoad_RestoreTheTrainedController(NTMControllerType type)
+    {
+        var task = Task();
+        var trained = Algorithm(type, 0.01);
+        trained.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { OtherTask() }));
+
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ntm-{Guid.NewGuid():N}.bin");
+        try
+        {
+            trained.Save(path);
+            var loaded = Algorithm(type, 0.01);
+            loaded.Load(path);
+
+            var expected = trained.Controller.GetParameters();
+            var actual = loaded.Controller.GetParameters();
+            Assert.Equal(expected.Length, actual.Length);
+            for (int i = 0; i < expected.Length; i++)
+                Assert.Equal(expected[i], actual[i]);
+
+            AssertSamePredictions(
+                trained.Adapt(task).Predict(task.QuerySetX),
+                loaded.Adapt(task).Predict(task.QuerySetX));
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
+    /// <summary>A checkpoint is only loaded into an algorithm of the same controller shape.</summary>
+    [Fact]
+    public void Load_RejectsADifferentlyShapedController()
+    {
+        var trained = Algorithm(NTMControllerType.LSTM, 0.01);
+        trained.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { Task() }));
+
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"ntm-{Guid.NewGuid():N}.bin");
+        try
+        {
+            trained.Save(path);
+            var other = new NTMAlgorithm<double, Matrix<double>, Tensor<double>>(
+                new NTMOptions<double, Matrix<double>, Tensor<double>>(new TensorEmbeddingModel(2, 2))
+                {
+                    MemorySize = 4, MemoryWidth = 3, NumReadHeads = 1, NumClasses = 2, ControllerHiddenSize = 6,
+                    ControllerType = NTMControllerType.LSTM, InitializeMemory = false, RandomSeed = 11,
+                });
+
+            Assert.Throws<System.IO.InvalidDataException>(() => other.Load(path));
+        }
+        finally
+        {
+            System.IO.File.Delete(path);
+        }
+    }
+
     /// <summary>A controller that records every input and addresses by content only.</summary>
     private sealed class RecordingController : INTMController<double>
     {
