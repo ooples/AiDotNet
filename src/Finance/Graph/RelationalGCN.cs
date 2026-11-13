@@ -112,7 +112,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
 
     /// <summary>
     /// Per R-GCN layer: the shared bases V_b [numBases, hidden, hidden] under basis decomposition, otherwise the
-    /// relation weights W_r [numRelations, hidden, hidden] (masked to blocks under block decomposition).
+    /// relation weights W_r [numRelations, hidden, hidden], or under block decomposition only their diagonal blocks
+    /// [numRelations, numBlocks, hidden / numBlocks, hidden / numBlocks].
     /// </summary>
     [TrainableParameter]
     private readonly List<Tensor<T>> _relationBases = new List<Tensor<T>>();
@@ -128,13 +129,17 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// <summary>Per R-GCN layer: the dropout applied to its output.</summary>
     private readonly List<DropoutLayer<T>> _relationDropouts = new List<DropoutLayer<T>>();
 
-    /// <summary>The block-diagonal mask [hidden, hidden] of block decomposition, or null.</summary>
-    private Tensor<T>? _blockMask;
-
     /// <summary>The L2 penalty of the most recent training forward, handed to the objective once.</summary>
     private Tensor<T>? _pendingRegularization;
 
-    private readonly bool _meanAggregation;
+    /// <inheritdoc/>
+    /// <remarks>The aggregation is read from the restored options, so a checkpoint saved with Sum and loaded into a
+    /// model built with Mean (or the reverse) propagates the way it was trained.</remarks>
+    protected override void OnMutableConstructorConfigurationRestored()
+    {
+        base.OnMutableConstructorConfigurationRestored();
+        _aggregation = _options.Aggregation;
+    }
 
     private readonly Random _random;
     #endregion
@@ -312,7 +317,6 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _aggregation = _options.Aggregation;
         _numSamples = _options.NumSamples;
 
-        _meanAggregation = _aggregation == RelationalAggregation.Mean;
         _relationAdjacencies = relationAdjacencies is null ? null : ValidatedAdjacency(relationAdjacencies);
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
@@ -366,7 +370,6 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _numSamples = _options.NumSamples;
 
         ValidateRelationalOptions();
-        _meanAggregation = _aggregation == RelationalAggregation.Mean;
 
         // Initialize random before CreateDefaultRelationAdjacencies which uses it
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
@@ -454,12 +457,15 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         bool useBases = !useBlocks && _useBasisDecomposition;
         double scale = Math.Sqrt(2.0 / _hiddenDimension);
         int weightCount = useBases ? _numBases : _numRelations;
-        if (useBlocks)
-            _blockMask = BlockDiagonalMask(_hiddenDimension, _numBlocks);
+        int blockSize = useBlocks ? _hiddenDimension / _numBlocks : 0;
 
         for (int layer = 0; layer < _numLayers; layer++)
         {
-            _relationBases.Add(UniformTensor(new[] { weightCount, _hiddenDimension, _hiddenDimension }, scale));
+            // Block decomposition stores only the diagonal blocks, [numRelations, numBlocks, blockSize, blockSize],
+            // so NumBlocks really divides the trainable (and optimizer) storage by NumBlocks.
+            _relationBases.Add(useBlocks
+                ? UniformTensor(new[] { _numRelations, _numBlocks, blockSize, blockSize }, scale)
+                : UniformTensor(new[] { weightCount, _hiddenDimension, _hiddenDimension }, scale));
             if (useBases)
                 _relationCoefficients.Add(UniformTensor(new[] { _numRelations, _numBases }, 0.05));
             if (_useSelfLoop)
@@ -476,15 +482,29 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         => Engine.TensorRandomUniformRange(shape, NumOps.FromDouble(-limit), NumOps.FromDouble(limit), _random.Next());
 
     /// <summary>
-    /// The [size, size] mask that keeps the <paramref name="blocks"/> equal diagonal blocks of a weight matrix.
+    /// Assembles block-diagonal relation weights [numRelations, hidden, hidden] from their stored diagonal blocks
+    /// [numRelations, numBlocks, blockSize, blockSize]; everything off the blocks is zero. Built from engine
+    /// slices, zero padding and concatenation, so the gradient reaches every stored block entry.
     /// </summary>
-    private static Tensor<T> BlockDiagonalMask(int size, int blocks)
+    private Tensor<T> BlockDiagonal(Tensor<T> blocks)
     {
-        int blockSize = size / blocks;
-        var onBlock = new int[size * size];
-        for (int index = 0; index < onBlock.Length; index++)
-            onBlock[index] = index / size / blockSize == index % size / blockSize ? 1 : 0;
-        return new Tensor<int>(new[] { size, size }, new Vector<int>(onBlock)).Cast<T>();
+        int relations = blocks._shape[0];
+        int blockCount = blocks._shape[1];
+        int blockSize = blocks._shape[2];
+        var blockRows = new Tensor<T>[blockCount];
+        for (int b = 0; b < blockCount; b++)
+        {
+            var block = Engine.Reshape(Engine.TensorNarrow(blocks, 1, b, 1), new[] { relations, blockSize, blockSize });
+            var parts = new List<Tensor<T>>();
+            if (b > 0)
+                parts.Add(new Tensor<T>(new[] { relations, blockSize, b * blockSize }));
+            parts.Add(block);
+            if (b < blockCount - 1)
+                parts.Add(new Tensor<T>(new[] { relations, blockSize, (blockCount - 1 - b) * blockSize }));
+            blockRows[b] = parts.Count == 1 ? block : Engine.TensorConcatenate(parts.ToArray(), 2);
+        }
+
+        return blockCount == 1 ? blockRows[0] : Engine.TensorConcatenate(blockRows, 1);
     }
 
     /// <summary>
@@ -544,6 +564,10 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
                 "relationAdjacencies");
         }
 
+        // A NaN or infinite edge weight would spread through normalization and every message it touches.
+        if (NumericalStabilityHelper.ContainsNonFinite(adjacency))
+            throw new ArgumentException("Relation adjacency weights must all be finite.", "relationAdjacencies");
+
         return adjacency.Clone();
     }
 
@@ -563,7 +587,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         var adjacency = _relationAdjacencies
             ?? throw new InvalidOperationException("RelationalGCN has no relation adjacencies to propagate over.");
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var normalized = _meanAggregation ? DivideByRowSums(adjacency) : adjacency.Contiguous();
+        var normalized = _aggregation == RelationalAggregation.Mean ? DivideByRowSums(adjacency) : adjacency.Contiguous();
         return Engine.Reshape(normalized, new[] { _numRelations * _numNodes, _numNodes });
     }
 
@@ -963,7 +987,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         var outputData = new T[outputTensor.Length];
         NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
-        return new Tensor<T>(new[] { _numNodes * _forecastHorizon }, new Vector<T>(outputData));
+        // Shaped [numNodes, forecastHorizon], as the native forward returns it.
+        return new Tensor<T>(new[] { _numNodes, _forecastHorizon }, new Vector<T>(outputData));
     }
 
     #endregion
@@ -1006,8 +1031,8 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// <returns>The stacked relation weights.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Under basis decomposition W_r = sum_b a_rb V_b, computed for every relation as
-    /// one product of the coefficients with the flattened bases. Under block decomposition W_r is its full matrix
-    /// with everything off the diagonal blocks masked to zero.
+    /// one product of the coefficients with the flattened bases. Under block decomposition W_r is assembled from its
+    /// stored diagonal blocks, with zeros everywhere else.
     /// </para>
     /// </remarks>
     internal Tensor<T> RelationWeights(int layer)
@@ -1019,9 +1044,9 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
             weights = Engine.TensorMatMul(
                 _relationCoefficients[layer], Engine.Reshape(weights, new[] { weights._shape[0], squared }));
         }
-        else if (_blockMask is not null)
+        else if (weights.Rank == 4)
         {
-            weights = Engine.TensorMultiply(weights, Engine.TensorBroadcastTo(_blockMask, weights._shape));
+            weights = BlockDiagonal(weights);
         }
 
         return Engine.Reshape(weights, new[] { _numRelations * _hiddenDimension, _hiddenDimension });
