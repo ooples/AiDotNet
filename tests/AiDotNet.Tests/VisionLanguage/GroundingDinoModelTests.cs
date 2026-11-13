@@ -37,6 +37,46 @@ public class GroundingDinoModelTests
     }
 
     [Fact]
+    public void Detections_AreTheOfficialPredictInTheModelsNumericType()
+    {
+        var prompt = GroundingDinoPrompt.Create("cat . remote control");
+        // Query 0 scores "remote control" (tokens 3 and 4) at sigmoid(2); query 1 scores nothing above the box threshold.
+        var logits = new Tensor<float>(new[] { 1, 2, 7 });
+        logits.Fill(-5f);
+        logits[0, 0, 3] = 2f;
+        logits[0, 0, 4] = 2f;
+        var boxes = new Tensor<float>(new[] { 1, 2, 4 }, new Vector<float>(new[] { 0.5f, 0.5f, 0.2f, 0.4f, 0.1f, 0.1f, 0.1f, 0.1f }));
+        var output = new GroundingDinoOutput<float>(new[] { logits }, new[] { boxes }, logits, boxes, new bool[1, 7]);
+
+        var detections = prompt.Detections(output, 0, 0.35, 0.25);
+
+        var d = Assert.Single(detections);
+        Assert.Equal("remote control", d.Phrase);
+        Assert.Equal(0.4f, d.X1, 6);
+        Assert.Equal(0.3f, d.Y1, 6);
+        Assert.Equal(0.6f, d.X2, 6);
+        Assert.Equal(0.7f, d.Y2, 6);
+        Assert.Equal((float)(1 / (1 + Math.Exp(-2))), d.Score, 6);
+    }
+
+    [Fact]
+    public void GroundingRows_KeepTheModelsNumericType_WithClassesByPhrase()
+    {
+        var detections = new[]
+        {
+            new GroundingDetection<float>(0.1f, 0.2f, 0.3f, 0.4f, 0.9f, "remote control"),
+            new GroundingDetection<float>(0.5f, 0.5f, 0.6f, 0.7f, 0.4f, "dog"),
+        };
+
+        var boxes = GroundingRows<float>.Boxes(detections);
+        var classified = GroundingRows<float>.Classified(detections, new[] { "cat", "remote" });
+
+        Assert.Equal(new[] { 2, 5 }, boxes.Shape.ToArray());
+        Assert.Equal(new[] { 0.1f, 0.2f, 0.3f, 0.4f, 0.9f, 0.5f, 0.5f, 0.6f, 0.7f, 0.4f }, boxes.ToArray());
+        Assert.Equal(new[] { 0.1f, 0.2f, 0.3f, 0.4f, 1f, 0.9f, 0.5f, 0.5f, 0.6f, 0.7f, -1f, 0.4f }, classified.ToArray());
+    }
+
+    [Fact]
     public void Caption_IsReadAsTheOfficialCodeReadsIt()
     {
         var prompt = GroundingDinoPrompt.Create("  Cat . Remote Control");

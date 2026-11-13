@@ -1609,27 +1609,27 @@ AiDotNet.VisionLanguage.Grounding.GroundingBox.<Clone>$() -> AiDotNet.VisionLang
 AiDotNet.VisionLanguage.Grounding.GroundingBox.Y2.get -> double
 AiDotNet.VisionLanguage.Grounding.GroundingBox.Deconstruct(out string! Phrase, out double X1, out double Y1, out double X2, out double Y2) -> void
 AiDotNet.VisionLanguage.Grounding.GroundingBox.Y2.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X1.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y1.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y1.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X1.init -> void
-override AiDotNet.VisionLanguage.Grounding.GroundingDetection.ToString() -> string!
-static AiDotNet.VisionLanguage.Grounding.GroundingDetection.operator !=(AiDotNet.VisionLanguage.Grounding.GroundingDetection? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection? right) -> bool
-static AiDotNet.VisionLanguage.Grounding.GroundingDetection.operator ==(AiDotNet.VisionLanguage.Grounding.GroundingDetection? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection? right) -> bool
-override AiDotNet.VisionLanguage.Grounding.GroundingDetection.GetHashCode() -> int
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y2.get -> double
-override AiDotNet.VisionLanguage.Grounding.GroundingDetection.Equals(object? obj) -> bool
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X2.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X2.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y2.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Equals(AiDotNet.VisionLanguage.Grounding.GroundingDetection? other) -> bool
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GroundingDetection!
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Deconstruct(out double X1, out double Y1, out double X2, out double Y2, out double Score, out string! Phrase) -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Phrase.get -> string!
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Score.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Score.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Phrase.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X1.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y1.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y1.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X1.init -> void
+override AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.ToString() -> string!
+static AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.operator !=(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? right) -> bool
+static AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.operator ==(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? right) -> bool
+override AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.GetHashCode() -> int
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y2.get -> T
+override AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Equals(object? obj) -> bool
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X2.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X2.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y2.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Equals(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? other) -> bool
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Deconstruct(out T X1, out T Y1, out T X2, out T Y2, out T Score, out string! Phrase) -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Phrase.get -> string!
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Score.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Score.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Phrase.init -> void
 AiDotNet.VisionLanguage.Grounding.GlammTurn.User.get -> string!
 AiDotNet.VisionLanguage.Grounding.GlammTurn.User.init -> void
 AiDotNet.VisionLanguage.Grounding.GlammTurn.Assistant.get -> string!
@@ -1673,10 +1673,10 @@ override AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.Equals(object? obj) ->
 AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.Equals(AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>? other) -> bool
 AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>!
 AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.Deconstruct(out string! Text, out System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks) -> void
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Detection.get -> AiDotNet.VisionLanguage.Grounding.GroundingDetection!
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Detection.get -> AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Mask.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.MaskScore.get -> double
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.MaskScore.get -> T
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Detection.init -> void
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.MaskScore.init -> void
 override AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.ToString() -> string!
@@ -1687,7 +1687,7 @@ override AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.GetHashCode() -> i
 override AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Equals(object? obj) -> bool
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Equals(AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>? other) -> bool
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>!
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Deconstruct(out AiDotNet.VisionLanguage.Grounding.GroundingDetection! Detection, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, out double MaskScore) -> void
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Deconstruct(out AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>! Detection, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, out T MaskScore) -> void
 AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T>
 AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T>
 AiDotNet.Attributes.TaskVariantOfAttribute.Canonical.get -> System.Type!
@@ -5470,7 +5470,7 @@ override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.RegisterGenerated
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.TrainingUnavailableReason.get -> string?
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.ThrowIfCannotTrain() -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.GroundingDetection(double X1, double Y1, double X2, double Y2, double Score, string! Phrase) -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.GroundingDetection(T X1, T Y1, T X2, T Y2, T Score, string! Phrase) -> void
 AiDotNet.VisionLanguage.Grounding.GroundingBox.GroundingBox(string! Phrase, double X1, double Y1, double X2, double Y2) -> void
 override AiDotNet.VisionLanguage.Encoders.SAM<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.VisionLanguage.Grounding.GroundingDINOOptions.TextThreshold.get -> double
@@ -5581,7 +5581,7 @@ AiDotNet.TimeSeries.AnomalyDetection.DeepANTOptions<T>.AnomalyThreshold.get -> d
 override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.RegisterComponents() -> void
 override AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.SetTrainingMode(bool isTraining) -> void
 override AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection!>!
+AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!>!
 AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.TrainGrounding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> void
 AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.EvaluateGroundingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> T
 override AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
@@ -5617,7 +5617,7 @@ override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.Forecast(AiDotNet.Tenso
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.SetTrainingMode(bool isTraining) -> void
 override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.SerializeCore(System.IO.BinaryWriter! writer) -> void
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection!>!
+AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!>!
 override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.DeserializeCore(System.IO.BinaryReader! reader) -> void
 AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.Segment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>!>!
 AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
@@ -5627,7 +5627,7 @@ override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.TryApplyLearningRule(
 AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.EvaluateGroundingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> T
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.ResolveLazyLayerShapes() -> void
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.GroundedSegment(AiDotNet.VisionLanguage.Grounding.GroundingDetection! Detection, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, double MaskScore) -> void
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.GroundedSegment(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>! Detection, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, T MaskScore) -> void
 override AiDotNet.NER.SpanBased.W2NER<T>.DecodeSpans(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output, int seqLen) -> System.Collections.Generic.IReadOnlyList<AiDotNet.NER.SpanBased.NamedEntitySpan!>!
 override AiDotNet.NER.SpanBased.W2NER<T>.BuildTrainingTargets(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labels, int seqLen) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.NER.SpanBased.TriaffineNER<T>.BuildTrainingTargets(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labels, int seqLen) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

@@ -14,7 +14,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <param name="Detection">Grounding DINO's box, score and phrase.</param>
 /// <param name="Mask">The mask <c>[H, W]</c> at the image's size: 1 inside, 0 outside.</param>
 /// <param name="MaskScore">SAM 2's predicted IoU for the mask.</param>
-public sealed record GroundedSegment<T>(GroundingDetection Detection, Tensor<T> Mask, double MaskScore);
+public sealed record GroundedSegment<T>(GroundingDetection<T> Detection, Tensor<T> Mask, T MaskScore);
 
 /// <summary>
 /// Grounded SAM 2: Grounding DINO finds the boxes a caption names, and SAM 2 segments each box.
@@ -178,7 +178,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     /// <summary>Grounding DINO's detections of the caption's phrases (the official <c>predict</c>).</summary>
     /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
     /// <param name="caption">Period-separated phrases, such as "cat . remote control .".</param>
-    public IReadOnlyList<GroundingDetection> Ground(Tensor<T> image, string caption)
+    public IReadOnlyList<GroundingDetection<T>> Ground(Tensor<T> image, string caption)
     {
         ThrowIfDisposed();
         return Detector.Ground(GroundingDinoDetector<T>.Batched(Engine, image), caption);
@@ -201,21 +201,19 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         var (embedding, s0, s1) = Segmenter.EncodeImage(SegmenterInput(batch));
         var positional = Segmenter.DensePositional();
-        foreach (var d in detections)
+        // The predictor's transform_boxes: pixel corners scaled to the resized image.
+        var corners = Engine.TensorMultiplyScalar(new Tensor<T>(new[] { detections.Count, 4 },
+            Vector<T>.FromArray(detections.SelectMany(d => new[] { d.X1, d.Y1, d.X2, d.Y2 }).ToArray())), NumOps.FromDouble(side));
+        var maskThreshold = NumOps.FromDouble(_options.MaskThreshold);
+        for (int i = 0; i < detections.Count; i++)
         {
-            // The predictor's transform_boxes: pixel corners scaled to the resized image.
-            var box = new Tensor<T>(new[] { 1, 4 }, new Vector<T>(new[]
-            {
-                NumOps.FromDouble(d.X1 * side), NumOps.FromDouble(d.Y1 * side), NumOps.FromDouble(d.X2 * side), NumOps.FromDouble(d.Y2 * side),
-            }));
+            var box = Engine.TensorSlice(corners, new[] { i, 0 }, new[] { 1, 4 });
             var (sparse, dense) = Segmenter.EncodePrompts(null, null, box, null);
             var (logits, iou, _) = Segmenter.DecodeMasks(embedding, s0, s1, positional, sparse, dense, false);
             var full = Segmenter.Postprocess(logits, height, width);
-            var mask = new Tensor<T>(new[] { height, width });
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    mask[y, x] = NumOps.ToDouble(full[0, 0, y, x]) > _options.MaskThreshold ? NumOps.One : NumOps.Zero;
-            segments.Add(new GroundedSegment<T>(d, mask, NumOps.ToDouble(iou[0, 0])));
+            var mask = Engine.TensorGreaterThan(Engine.Reshape(
+                Engine.TensorSlice(full, new[] { 0, 0, 0, 0 }, new[] { 1, 1, height, width }), new[] { height, width }), maskThreshold);
+            segments.Add(new GroundedSegment<T>(detections[i], mask, iou.ToArray()[0]));
         }
         return segments;
     }
@@ -241,34 +239,44 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         Func<GroundedSegment<T>, int> classOf)
     {
         var batch = GroundingDinoDetector<T>.Batched(Engine, image);
-        int height = batch.Shape[2], width = batch.Shape[3];
-        var masks = new Tensor<T>(new[] { classes.Length, height, width });
-        var scores = new double[classes.Length];
-        var semantic = new Tensor<T>(new[] { height, width });
-        semantic.Fill(NumOps.FromDouble(-1));
-        var best = new double[height, width];
-        for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
-                best[y, x] = double.NegativeInfinity;
-        foreach (var s in segments)
+        int height = batch.Shape[2], width = batch.Shape[3], pixels = height * width, count = classes.Length;
+        var named = segments.Select(s => (Segment: s, Class: classOf(s))).Where(s => s.Class >= 0).ToList();
+        if (named.Count == 0)
         {
-            int c = classOf(s);
-            if (c < 0) continue;
-            scores[c] = Math.Max(scores[c], s.Detection.Score);
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                {
-                    if (NumOps.ToDouble(s.Mask[y, x]) == 0) continue;
-                    masks[c, y, x] = NumOps.One;
-                    if (s.Detection.Score > best[y, x])
-                    {
-                        best[y, x] = s.Detection.Score;
-                        semantic[y, x] = NumOps.FromDouble(c);
-                    }
-                }
+            var none = Tensor<T>.CreateDefault(new[] { height, width }, NumOps.FromDouble(-1));
+            return new OpenVocabSegmentationResult<T>
+            {
+                Masks = new Tensor<T>(new[] { count, height, width }), ClassNames = classes,
+                Scores = new Vector<T>(count), SemanticMap = none,
+            };
         }
-        // Detection scores arrive as double from Grounding DINO's box head; one conversion per class.
-        return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classes, Scores = new Vector<T>(scores.Select(v => NumOps.FromDouble(v))), SemanticMap = semantic };
+
+        int n = named.Count;
+        var masksOf = Engine.Reshape(Engine.TensorStack(named.Select(s => s.Segment.Mask).ToArray(), 0), new[] { n, pixels });
+        var scoreOf = new Tensor<T>(new[] { n }, Vector<T>.FromArray(named.Select(s => s.Segment.Detection.Score).ToArray()));
+        var classIds = new Tensor<int>(new[] { n }, Vector<int>.FromArray(named.Select(s => s.Class).ToArray()));
+        var membership = Engine.TensorOneHot<T>(classIds, count);
+
+        // Per class: the union of its masks, and its best detection score (0 when it has none; scores are sigmoids).
+        var union = Engine.TensorMin(Engine.TensorMatMul(Engine.TensorTranspose(membership), masksOf), NumOps.One);
+        var scores = Engine.ReduceMax(Engine.TensorMultiply(membership,
+            Engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, count })), new[] { 0 }, false);
+
+        // Per pixel: the class of the highest-scoring mask covering it (the first such mask on ties), or -1.
+        var covered = Engine.TensorGreaterThan(masksOf, NumOps.Zero);
+        var coverScores = Engine.TensorWhere(covered, Engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, pixels }),
+            Tensor<T>.CreateDefault(new[] { n, pixels }, NumOps.MinValue));
+        var winner = Engine.TensorArgMax(coverScores, 0);
+        var classValues = Engine.TensorIndexSelect(Engine.TensorArange<T>(0, count, 1), classIds, 0);
+        var winningClass = Engine.TensorIndexSelect(classValues, winner.Reshape(new[] { pixels }), 0);
+        var anyCover = Engine.ReduceMax(masksOf, new[] { 0 }, false);
+        var semantic = Engine.TensorWhere(Engine.TensorGreaterThan(anyCover, NumOps.Zero), winningClass,
+            Tensor<T>.CreateDefault(new[] { pixels }, NumOps.FromDouble(-1)));
+        return new OpenVocabSegmentationResult<T>
+        {
+            Masks = union.Reshape(new[] { count, height, width }), ClassNames = classes, Scores = scores.ToVector(),
+            SemanticMap = semantic.Reshape(new[] { height, width }),
+        };
     }
 
     /// <summary>

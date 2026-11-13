@@ -13,13 +13,14 @@ namespace AiDotNet.VisionLanguage.Grounding;
 public sealed record GroundingBox(string Phrase, double X1, double Y1, double X2, double Y2);
 
 /// <summary>A region a grounding model found for a caption.</summary>
+/// <typeparam name="T">The numeric type of the model that found it.</typeparam>
 /// <param name="X1">Left edge, as a fraction of the image width.</param>
 /// <param name="Y1">Top edge, as a fraction of the image height.</param>
 /// <param name="X2">Right edge, as a fraction of the image width.</param>
 /// <param name="Y2">Bottom edge, as a fraction of the image height.</param>
 /// <param name="Score">The highest token probability of the region's query.</param>
 /// <param name="Phrase">The caption's words whose tokens scored above the text threshold.</param>
-public sealed record GroundingDetection(double X1, double Y1, double X2, double Y2, double Score, string Phrase);
+public sealed record GroundingDetection<T>(T X1, T Y1, T X2, T Y2, T Score, string Phrase);
 
 /// <summary>
 /// A caption as Grounding DINO reads it (the official <c>preprocess_caption</c>: lowercased, trimmed and ended with a
@@ -126,26 +127,39 @@ internal sealed class GroundingDinoPrompt
     /// with that probability as its score, its box as corners, and the phrase of its tokens above
     /// <paramref name="textThreshold"/>. The queries keep their order; there is no non-maximum suppression.
     /// </summary>
-    public List<GroundingDetection> Detections<T>(GroundingDinoOutput<T> output, int image, double boxThreshold, double textThreshold)
+    public List<GroundingDetection<T>> Detections<T>(GroundingDinoOutput<T> output, int image, double boxThreshold, double textThreshold)
     {
+        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var logits = output.Logits[^1];
         var boxes = output.Boxes[^1];
         int queries = logits.Shape[1], width = logits.Shape[2];
-        var result = new List<GroundingDetection>();
+        var probabilities = engine.TensorSigmoid(engine.Reshape(
+            engine.TensorSlice(logits, new[] { image, 0, 0 }, new[] { 1, queries, width }), new[] { queries, width }));
+        var best = engine.ReduceMax(probabilities, new[] { 1 }, false);
+        var kept = engine.TensorGreaterThan(best, ops.FromDouble(boxThreshold)).ToArray();
+        var above = engine.TensorGreaterThan(probabilities, ops.FromDouble(textThreshold)).ToArray();
+
+        // (cx, cy, w, h) to corners: (cx, cy) -/+ (w, h) / 2.
+        var box = engine.Reshape(engine.TensorSlice(boxes, new[] { image, 0, 0 }, new[] { 1, queries, 4 }), new[] { queries, 4 });
+        var centre = engine.TensorSlice(box, new[] { 0, 0 }, new[] { queries, 2 });
+        var half = engine.TensorMultiplyScalar(engine.TensorSlice(box, new[] { 0, 2 }, new[] { queries, 2 }), ops.FromDouble(0.5));
+        var corners = engine.TensorConcatenate(new[] { engine.TensorSubtract(centre, half), engine.TensorAdd(centre, half) }, 1).ToArray();
+        var scores = best.ToArray();
+
+        var zero = ops.Zero;
+        var comparer = EqualityComparer<T>.Default;
+        int tokens = Math.Min(Ids.Length, width);
+        var result = new List<GroundingDetection<T>>();
         for (int q = 0; q < queries; q++)
         {
-            var probabilities = new double[width];
-            double best = 0;
-            for (int j = 0; j < width; j++)
-            {
-                probabilities[j] = 1 / (1 + Math.Exp(-ops.ToDouble(logits[image, q, j])));
-                best = Math.Max(best, probabilities[j]);
-            }
-            if (best <= boxThreshold) continue;
-            double cx = ops.ToDouble(boxes[image, q, 0]), cy = ops.ToDouble(boxes[image, q, 1]);
-            double w = ops.ToDouble(boxes[image, q, 2]), h = ops.ToDouble(boxes[image, q, 3]);
-            result.Add(new GroundingDetection(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, best, PhraseAbove(probabilities, textThreshold)));
+            if (comparer.Equals(kept[q], zero)) continue;
+            // The official get_phrases_from_posmap: the tokens above the threshold, past [CLS], decoded, periods removed.
+            var ids = new List<int>();
+            for (int j = 1; j < tokens; j++)
+                if (!comparer.Equals(above[q * width + j], zero)) ids.Add(Ids[j]);
+            result.Add(new GroundingDetection<T>(corners[4 * q], corners[4 * q + 1], corners[4 * q + 2], corners[4 * q + 3], scores[q],
+                Decode(ids).Replace(".", "")));
         }
         return result;
     }
@@ -162,38 +176,20 @@ internal sealed class GroundingDinoPrompt
 /// <summary>Detections as the tensors <see cref="Interfaces.IVisualGroundingModel{T}"/> returns.</summary>
 internal static class GroundingRows<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>Rows <c>[n, 5]</c> of (x1, y1, x2, y2, score).</summary>
-    public static Tensor<T> Boxes(IReadOnlyList<GroundingDetection> detections)
-    {
-        var result = new Tensor<T>(new[] { detections.Count, 5 });
-        for (int i = 0; i < detections.Count; i++)
-        {
-            var d = detections[i];
-            result[i, 0] = NumOps.FromDouble(d.X1);
-            result[i, 1] = NumOps.FromDouble(d.Y1);
-            result[i, 2] = NumOps.FromDouble(d.X2);
-            result[i, 3] = NumOps.FromDouble(d.Y2);
-            result[i, 4] = NumOps.FromDouble(d.Score);
-        }
-        return result;
-    }
+    public static Tensor<T> Boxes(IReadOnlyList<GroundingDetection<T>> detections)
+        => Rows(detections, 5, d => new[] { d.X1, d.Y1, d.X2, d.Y2, d.Score });
 
     /// <summary>Rows <c>[n, 6]</c> of (x1, y1, x2, y2, class, score), the class by the official <c>phrases2classes</c>.</summary>
-    public static Tensor<T> Classified(IReadOnlyList<GroundingDetection> detections, IReadOnlyList<string> categories)
+    public static Tensor<T> Classified(IReadOnlyList<GroundingDetection<T>> detections, IReadOnlyList<string> categories)
     {
-        var result = new Tensor<T>(new[] { detections.Count, 6 });
-        for (int i = 0; i < detections.Count; i++)
-        {
-            var d = detections[i];
-            result[i, 0] = NumOps.FromDouble(d.X1);
-            result[i, 1] = NumOps.FromDouble(d.Y1);
-            result[i, 2] = NumOps.FromDouble(d.X2);
-            result[i, 3] = NumOps.FromDouble(d.Y2);
-            result[i, 4] = NumOps.FromDouble(GroundingDinoPrompt.ClassOf(d.Phrase, categories));
-            result[i, 5] = NumOps.FromDouble(d.Score);
-        }
-        return result;
+        var classes = detections.Select(d => GroundingDinoPrompt.ClassOf(d.Phrase, categories)).ToArray();
+        var classValues = AiDotNetEngine.Current.TensorArange<T>(-1, Math.Max(categories.Count, 1), 1).ToArray();
+        // classValues[c + 1] is the class index c as T (from -1).
+        return Rows(detections.Select((d, i) => (d, Class: classValues[classes[i] + 1])).ToList(), 6,
+            r => new[] { r.d.X1, r.d.Y1, r.d.X2, r.d.Y2, r.Class, r.d.Score });
     }
+
+    private static Tensor<T> Rows<TRow>(IReadOnlyList<TRow> rows, int width, Func<TRow, T[]> values)
+        => new(new[] { rows.Count, width }, Vector<T>.FromArray(rows.SelectMany(values).ToArray()));
 }

@@ -80,7 +80,7 @@ internal sealed class GroundingDinoDetector<T>
     }
 
     /// <summary>The official <c>predict</c> on one image (a batch of one) and a caption.</summary>
-    public List<GroundingDetection> Ground(Tensor<T> image, string caption)
+    public List<GroundingDetection<T>> Ground(Tensor<T> image, string caption)
     {
         if (image.Shape[0] != 1) throw new ArgumentException("Grounding reads one image at a time.", nameof(image));
         var prompt = GroundingDinoPrompt.Create(caption);
@@ -91,10 +91,10 @@ internal sealed class GroundingDinoDetector<T>
     }
 
     /// <summary>The <see cref="GroundingVLMOptions.MaxDetections"/> highest-scoring detections, in query order.</summary>
-    public List<GroundingDetection> Strongest(IReadOnlyList<GroundingDetection> detections)
+    public List<GroundingDetection<T>> Strongest(IReadOnlyList<GroundingDetection<T>> detections)
     {
         if (detections.Count <= Options.MaxDetections) return detections.ToList();
-        var keep = new HashSet<GroundingDetection>(detections.OrderByDescending(d => d.Score).Take(Options.MaxDetections));
+        var keep = new HashSet<GroundingDetection<T>>(detections.OrderByDescending(d => d.Score).Take(Options.MaxDetections));
         return detections.Where(keep.Contains).ToList();
     }
 
