@@ -1,6 +1,6 @@
 #nullable enable
 *REMOVED*AiDotNet.CausalInference.CausalModelBase<T>.FitLogisticRegression(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<int>! treatment, int maxIterations = 100, double learningRate = 0.1) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.CausalInference.CausalModelBase<T>.FitLogisticRegression(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<int>! treatment, int maxIterations = 100, double inverseRegularization = 1.0) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.CausalInference.CausalModelBase<T>.FitLogisticRegression(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<int>! treatment, int maxIterations = 100, double inverseRegularization = 1) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 *REMOVED*AiDotNet.CausalInference.SLearner<T>.LearningRate.get -> double
 *REMOVED*AiDotNet.CausalInference.SLearner<T>.MaxIterations.get -> int
 *REMOVED*AiDotNet.CausalInference.SLearner<T>.SLearner(int maxIterations = 100, double learningRate = 0.1, double lambda = 0.01) -> void

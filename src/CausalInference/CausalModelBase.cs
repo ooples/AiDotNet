@@ -1056,22 +1056,23 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         T tolerance = NumOps.FromDouble(Math.Max(1e-10, Math.Pow(2.0, -NumOps.PrecisionBits)));
 
         var coefficients = new Tensor<T>(new[] { p + 1, 1 });
+        T scaledC = NumOps.Multiply(c, invN);
         for (int iter = 0; iter < maxIterations; iter++)
         {
             var probabilities = Engine.TensorSigmoid(Engine.TensorMatMul(design, coefficients));
             var weights = Engine.TensorMultiply(probabilities, Engine.TensorSubtract(Engine.TensorOnesLike(probabilities), probabilities));
 
             var gradient = Engine.TensorAdd(
-                Engine.TensorMultiplyScalar(Engine.TensorMatMul(designTransposed, Engine.TensorSubtract(probabilities, labels)), NumOps.Multiply(c, invN)),
+                Engine.TensorMultiplyScalar(Engine.TensorMatMul(designTransposed, Engine.TensorSubtract(probabilities, labels)), scaledC),
                 Engine.TensorMatMul(penalty, coefficients));
             var weightedDesign = Engine.TensorMultiply(design, Engine.TensorBroadcastTo(weights, new[] { n, p + 1 }));
             var hessian = Engine.TensorAdd(
-                Engine.TensorMultiplyScalar(Engine.TensorMatMul(designTransposed, weightedDesign), NumOps.Multiply(c, invN)),
+                Engine.TensorMultiplyScalar(Engine.TensorMatMul(designTransposed, weightedDesign), scaledC),
                 penalty);
 
             var step = LinalgDispatch<T>.Solve(hessian, gradient);
             coefficients = Engine.TensorSubtract(coefficients, step);
-            if (!NumOps.GreaterThan(Engine.TensorMaxValue(Engine.TensorAbs(step)), tolerance))
+            if (Engine.TensorCountNonzero(Engine.TensorGreaterThan(Engine.TensorAbs(step), tolerance)) == 0)
                 break;
         }
 

@@ -60,16 +60,27 @@ public class IQVFIDistillation<T>
                 $"Frames must align: student {studentFrame.Length}, teacher {teacherFrame.Length}, " +
                 $"ground truth {groundTruth.Length}.", nameof(teacherFrame));
 
-        var mask = new Tensor<T>(studentFrame.Shape.ToArray());
-        for (int i = 0; i < mask.Length; i++)
+        // 1 where the student is further from the ground truth than the teacher
+        var engine = AiDotNetEngine.Current;
+        var truth = Flat(groundTruth);
+        var studentError = engine.TensorAbs(engine.TensorSubtract(Flat(studentFrame), truth));
+        var teacherError = engine.TensorAbs(engine.TensorSubtract(Flat(teacherFrame), truth));
+        return engine.Reshape(engine.TensorGreaterThan(studentError, teacherError), studentFrame.Shape.ToArray());
+    }
+
+    /// <summary>The tensor's elements as a vector-shaped tensor.</summary>
+    private static Tensor<T> Flat(Tensor<T> tensor) => AiDotNetEngine.Current.Reshape(tensor, new[] { tensor.Length });
+
+    /// <summary>Mean absolute difference of two equally long tensors, 0 when they are empty.</summary>
+    private static double MeanAbsoluteDifference(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length == 0)
         {
-            double gt = NumOps.ToDouble(groundTruth[i]);
-            double studentError = Math.Abs(NumOps.ToDouble(studentFrame[i]) - gt);
-            double teacherError = Math.Abs(NumOps.ToDouble(teacherFrame[i]) - gt);
-            mask[i] = studentError > teacherError ? NumOps.One : NumOps.Zero;
+            return 0.0;
         }
 
-        return mask;
+        var engine = AiDotNetEngine.Current;
+        return NumOps.ToDouble(engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(Flat(a), Flat(b)))));
     }
 
     /// <summary>
@@ -88,11 +99,7 @@ public class IQVFIDistillation<T>
                 $"Priors must align; got {studentPrior.Length} and {teacherPrior.Length}.",
                 nameof(teacherPrior));
 
-        double sum = 0.0;
-        for (int i = 0; i < studentPrior.Length; i++)
-            sum += Math.Abs(NumOps.ToDouble(studentPrior[i]) - NumOps.ToDouble(teacherPrior[i]));
-
-        return sum / Math.Max(1, studentPrior.Length);
+        return MeanAbsoluteDifference(studentPrior, teacherPrior);
     }
 
     /// <summary>
@@ -131,17 +138,16 @@ public class IQVFIDistillation<T>
                 $"A mask of {mask.Length} elements does not tile flows of {n} elements.", nameof(mask));
 
         int repeat = n / mask.Length;
-        double sum = 0.0;
-        for (int i = 0; i < n; i++)
-        {
-            double m = NumOps.ToDouble(mask[i / repeat]);
-            if (m == 0.0) continue;
+        var engine = AiDotNetEngine.Current;
+        var m = engine.TensorRepeatInterleave(Flat(mask), repeat, 0);
+        var error = engine.TensorAdd(
+            engine.TensorAbs(engine.TensorSubtract(Flat(studentForward), Flat(teacherForward))),
+            engine.TensorAbs(engine.TensorSubtract(Flat(studentBackward), Flat(teacherBackward))));
 
-            sum += m * Math.Abs(NumOps.ToDouble(studentForward[i]) - NumOps.ToDouble(teacherForward[i]));
-            sum += m * Math.Abs(NumOps.ToDouble(studentBackward[i]) - NumOps.ToDouble(teacherBackward[i]));
-        }
-
-        return sum / Math.Max(1, n);
+        // Masked-out pixels contribute exactly nothing, even where an error is not finite
+        var gated = engine.TensorWhere(
+            engine.TensorEquals(m, NumOps.Zero), engine.TensorZerosLike(error), engine.TensorMultiply(m, error));
+        return NumOps.ToDouble(engine.TensorSum(gated)) / n;
     }
 
     /// <summary>
@@ -175,12 +181,8 @@ public class IQVFIDistillation<T>
                 throw new ArgumentException(
                     $"Level {level} mismatch: {s.Length} vs {g.Length}.", nameof(truthLevels));
 
-            double sum = 0.0;
-            for (int i = 0; i < s.Length; i++)
-                sum += Math.Abs(NumOps.ToDouble(s[i]) - NumOps.ToDouble(g[i]));
-
             double weight = Math.Pow(2.0, level);
-            total += weight * (sum / Math.Max(1, s.Length));
+            total += weight * MeanAbsoluteDifference(s, g);
         }
 
         return total;

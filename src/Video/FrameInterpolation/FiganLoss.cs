@@ -77,10 +77,10 @@ public static class FiganLoss<T>
                 nameof(predicted));
 
         // ||a - b||_1, averaged so the scale does not depend on image size.
-        double l1 = 0.0;
-        for (int i = 0; i < predicted.Length; i++)
-            l1 += Math.Abs(Ops.ToDouble(predicted[i]) - Ops.ToDouble(target[i]));
-        l1 /= predicted.Length;
+        var engine = AiDotNetEngine.Current;
+        double l1 = predicted.Length == 0
+            ? double.NaN
+            : Ops.ToDouble(engine.Mean(engine.Abs(engine.Subtract(predicted, target))));
 
         if (predictedFeatures is null || targetFeatures is null) return l1;
 
@@ -90,13 +90,18 @@ public static class FiganLoss<T>
                 nameof(predictedFeatures));
 
         // lambda_VGG ||gamma(a) - gamma(b)||_2^2 — SQUARED, unlike the L1 pixel term.
-        double squared = 0.0;
-        for (int i = 0; i < predictedFeatures.Length; i++)
+        // Differences scaled by their peak before squaring so the mean square cannot overflow T
+        double squared = double.NaN;
+        if (predictedFeatures.Length > 0)
         {
-            double d = Ops.ToDouble(predictedFeatures[i]) - Ops.ToDouble(targetFeatures[i]);
-            squared += d * d;
+            var difference = engine.Subtract(predictedFeatures, targetFeatures);
+            double peak = Ops.ToDouble(engine.TensorMaxValue(engine.Abs(difference).AsTensor()));
+            squared = peak > 0
+                ? Ops.ToDouble(engine.Mean(engine.Multiply(
+                    engine.Multiply(difference, Ops.FromDouble(1.0 / peak)),
+                    engine.Multiply(difference, Ops.FromDouble(1.0 / peak))))) * peak * peak
+                : double.IsNaN(peak) ? double.NaN : 0.0;
         }
-        squared /= predictedFeatures.Length;
 
         return l1 + (VggWeight * squared);
     }

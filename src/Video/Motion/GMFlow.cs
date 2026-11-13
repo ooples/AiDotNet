@@ -521,88 +521,49 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
         return Engine.TensorMultiplyScalar(upsampled, NumOps.FromDouble(ratio));
     }
 
-    private Tensor<T> ComputeOcclusionMask(Tensor<T> forward, Tensor<T> backward)
+    /// <summary>
+    /// GMFlow's forward-backward consistency check (<c>forward_backward_consistency_check</c>, alpha1 = 0.01,
+    /// alpha2 = 0.5): a pixel is occluded when <c>|f + warp(b, f)|² &gt; alpha1·(|f|² + |warp(b, f)|²) + alpha2</c>,
+    /// where <c>warp(b, f)</c> bilinearly samples the backward flow at <c>x + f(x)</c>.
+    /// </summary>
+    /// <remarks>
+    /// This used to look the backward flow up at the truncated (not interpolated) target pixel and compare the
+    /// round-trip error against a fixed 1-pixel threshold, which ignores the paper's motion-scaled tolerance.
+    /// </remarks>
+    internal Tensor<T> ComputeOcclusionMask(Tensor<T> forward, Tensor<T> backward)
     {
+        const double Alpha1 = 0.01;
+        const double Alpha2 = 0.5;
         int batchSize = forward.Shape[0];
         int height = forward.Shape[2];
         int width = forward.Shape[3];
 
-        var occlusion = new Tensor<T>([batchSize, 1, height, width]);
+        var fwd = Engine.TensorNarrow(forward, 1, 0, 2);
+        var bwdWarped = BilinearWarp(Engine.TensorNarrow(backward, 1, 0, 2), fwd);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double fx = Convert.ToDouble(forward[b, 0, h, w]);
-                    double fy = Convert.ToDouble(forward[b, 1, h, w]);
+        // Magnitudes scaled by the largest flow component before squaring, so the comparison cannot overflow
+        double peak = Math.Max(1.0, Math.Max(
+            NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(fwd))),
+            NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(bwdWarped)))));
+        var inverse = NumOps.FromDouble(1.0 / peak);
+        var f = Engine.TensorMultiplyScalar(fwd, inverse);
+        var bw = Engine.TensorMultiplyScalar(bwdWarped, inverse);
+        Tensor<T> SquaredNorm(Tensor<T> v) => Engine.ReduceSum(Engine.TensorMultiply(v, v), [1], true);
 
-                    int tx = Math.Max(0, Math.Min((int)(w + fx), width - 1));
-                    int ty = Math.Max(0, Math.Min((int)(h + fy), height - 1));
-
-                    double bx = Convert.ToDouble(backward[b, 0, ty, tx]);
-                    double by = Convert.ToDouble(backward[b, 1, ty, tx]);
-
-                    double consistency = Math.Sqrt((fx + bx) * (fx + bx) + (fy + by) * (fy + by));
-                    double occ = consistency > 1.0 ? 1.0 : 0.0;
-
-                    occlusion[b, 0, h, w] = NumOps.FromDouble(occ);
-                }
-            }
-        }
-
-        return occlusion;
+        var roundTrip = SquaredNorm(Engine.TensorAdd(f, bw));
+        var tolerance = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorAdd(SquaredNorm(f), SquaredNorm(bw)), NumOps.FromDouble(Alpha1)),
+            NumOps.FromDouble(Alpha2 / (peak * peak)));
+        return Engine.Reshape(Engine.TensorGreaterThan(roundTrip, tolerance), [batchSize, 1, height, width]);
     }
 
+    /// <summary>
+    /// GMFlow's <c>flow_warp</c>: bilinear sampling at <c>x + flow(x)</c>, grid_sample(align_corners=True) with
+    /// zero padding. It used to clamp out-of-image taps to the border, so content outside the frame repeated the
+    /// edge pixel instead of being zero.
+    /// </summary>
     private Tensor<T> BilinearWarp(Tensor<T> image, Tensor<T> flow)
-    {
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var warped = new Tensor<T>(image._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double srcX = w + Convert.ToDouble(flow[b, 0, h, w]);
-                    double srcY = h + Convert.ToDouble(flow[b, 1, h, w]);
-
-                    int x0 = (int)Math.Floor(srcX);
-                    int y0 = (int)Math.Floor(srcY);
-                    int x1 = x0 + 1;
-                    int y1 = y0 + 1;
-
-                    x0 = Math.Max(0, Math.Min(x0, width - 1));
-                    x1 = Math.Max(0, Math.Min(x1, width - 1));
-                    y0 = Math.Max(0, Math.Min(y0, height - 1));
-                    y1 = Math.Max(0, Math.Min(y1, height - 1));
-
-                    double dx = srcX - Math.Floor(srcX);
-                    double dy = srcY - Math.Floor(srcY);
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        double v00 = Convert.ToDouble(image[b, c, y0, x0]);
-                        double v01 = Convert.ToDouble(image[b, c, y0, x1]);
-                        double v10 = Convert.ToDouble(image[b, c, y1, x0]);
-                        double v11 = Convert.ToDouble(image[b, c, y1, x1]);
-
-                        double val = v00 * (1 - dx) * (1 - dy) + v01 * dx * (1 - dy) +
-                                     v10 * (1 - dx) * dy + v11 * dx * dy;
-                        warped[b, c, h, w] = NumOps.FromDouble(val);
-                    }
-                }
-            }
-        }
-
-        return warped;
-    }
+        => WarpByFlow(image, flow, GridSamplePadding.Zeros);
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {

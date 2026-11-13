@@ -81,13 +81,37 @@ public static class McnetLoss<T>
                 nameof(predicted));
         if (p <= 0) throw new ArgumentOutOfRangeException(nameof(p), p, "The norm must be positive.");
 
-        double sum = 0.0;
-        for (int i = 0; i < predicted.Length; i++)
+        if (predicted.Length == 0)
         {
-            double d = Math.Abs(Ops.ToDouble(predicted[i]) - Ops.ToDouble(target[i]));
-            sum += Math.Pow(d, p);
+            return double.NaN;
         }
-        return sum / predicted.Length;
+
+        var engine = AiDotNetEngine.Current;
+        var d = engine.TensorAbs(engine.TensorSubtract(predicted.AsTensor(), target.AsTensor()));
+        return MeanPower(engine, d, p);
+    }
+
+    /// <summary>
+    /// Mean of <c>|v|^exponent</c> over the non-negative values <paramref name="magnitudes"/>, with the values
+    /// divided by their peak before the power so a large exponent cannot overflow <typeparamref name="T"/>.
+    /// </summary>
+    private static double MeanPower(IEngine engine, Tensor<T> magnitudes, double exponent)
+    {
+        double peak = Ops.ToDouble(engine.TensorMaxValue(magnitudes));
+        if (double.IsNaN(peak))
+        {
+            return double.NaN;
+        }
+
+        if (peak == 0)
+        {
+            // 0^exponent: 0 for a positive exponent, 1 for exponent 0, as Math.Pow gives
+            return exponent == 0 ? 1.0 : 0.0;
+        }
+
+        var unit = engine.TensorMultiplyScalar(magnitudes, Ops.FromDouble(1.0 / peak));
+        var powered = engine.TensorPow(unit, Ops.FromDouble(exponent));
+        return Ops.ToDouble(engine.TensorMean(powered)) * Math.Pow(peak, exponent);
     }
 
     /// <summary>
@@ -115,39 +139,37 @@ public static class McnetLoss<T>
                 $"Both frames must hold at least {height * width} elements for a [{height}, {width}] image.",
                 nameof(predicted));
 
-        double sum = 0.0;
-        int count = 0;
+        var engine = AiDotNetEngine.Current;
+        var y = engine.Reshape(engine.TensorNarrow(target.AsTensor(), 0, 0, height * width), new[] { height, width });
+        var z = engine.Reshape(engine.TensorNarrow(predicted.AsTensor(), 0, 0, height * width), new[] { height, width });
 
-        for (int i = 0; i < height; i++)
+        // |(|y_i,j - y_i-1,j|) - (|z_i,j - z_i-1,j|)| along an axis, the vertical then the horizontal term
+        Tensor<T> GradientGap(int axis)
         {
-            for (int j = 0; j < width; j++)
-            {
-                int idx = (i * width) + j;
-
-                // Vertical gradients, |y_i,j - y_i-1,j|.
-                if (i > 0)
-                {
-                    int up = ((i - 1) * width) + j;
-                    double gy = Math.Abs(Ops.ToDouble(target[idx]) - Ops.ToDouble(target[up]));
-                    double gz = Math.Abs(Ops.ToDouble(predicted[idx]) - Ops.ToDouble(predicted[up]));
-                    sum += Math.Pow(Math.Abs(gy - gz), lambda);
-                    count++;
-                }
-
-                // Horizontal gradients — the paper's second term. Omitting it leaves blur in j
-                // unpenalised.
-                if (j > 0)
-                {
-                    int left = (i * width) + (j - 1);
-                    double gy = Math.Abs(Ops.ToDouble(target[idx]) - Ops.ToDouble(target[left]));
-                    double gz = Math.Abs(Ops.ToDouble(predicted[idx]) - Ops.ToDouble(predicted[left]));
-                    sum += Math.Pow(Math.Abs(gy - gz), lambda);
-                    count++;
-                }
-            }
+            int extent = axis == 0 ? height : width;
+            Tensor<T> Gradient(Tensor<T> image) => engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorNarrow(image, axis, 1, extent - 1), engine.TensorNarrow(image, axis, 0, extent - 1)));
+            return engine.TensorAbs(engine.TensorSubtract(Gradient(y), Gradient(z)));
         }
 
-        return count == 0 ? 0.0 : sum / count;
+        // Horizontal gradients are the paper's second term; omitting it leaves blur in j unpenalised.
+        var parts = new List<Tensor<T>>(2);
+        if (height > 1)
+        {
+            parts.Add(engine.Reshape(GradientGap(0), new[] { (height - 1) * width }));
+        }
+
+        if (width > 1)
+        {
+            parts.Add(engine.Reshape(GradientGap(1), new[] { height * (width - 1) }));
+        }
+
+        if (parts.Count == 0)
+        {
+            return 0.0;
+        }
+
+        return MeanPower(engine, engine.TensorConcatenate(parts.ToArray(), 0), lambda);
     }
 
     /// <summary>

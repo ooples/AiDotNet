@@ -217,22 +217,25 @@ public partial class RVM<T> : NeuralNetworkBase<T>
         int h = foreground.Rank == 4 ? foreground.Shape[2] : foreground.Shape[1];
         int w = foreground.Rank == 4 ? foreground.Shape[3] : foreground.Shape[2];
 
-        var composite = new Tensor<T>(foreground._shape);
+        // comp = a * fg + (1 - a) * bg = bg + a * (fg - bg) on the first sample's RGB; anything else stays zero
+        Tensor<T> Rgb(Tensor<T> t) => Engine.TensorNarrow(
+            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(t, 0, 0, 1), 1, 0, 3), 2, 0, h), 3, 0, w);
+        var bg = Rgb(background);
+        var a = Engine.TensorBroadcastTo(
+            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(alpha, 0, 0, 1), 1, 0, 1), 2, 0, h), 3, 0, w),
+            [1, 3, h, w]);
+        var composite = Engine.TensorAdd(bg, Engine.TensorMultiply(a, Engine.TensorSubtract(Rgb(foreground), bg)));
 
-        for (int y = 0; y < h; y++)
+        int channels = foreground.Shape[1];
+        if (channels > 3)
         {
-            for (int x = 0; x < w; x++)
-            {
-                double a = Convert.ToDouble(alpha[0, 0, y, x]);
+            composite = Engine.TensorConcatenate(new[] { composite, new Tensor<T>([1, channels - 3, h, w]) }, 1);
+        }
 
-                for (int c = 0; c < 3; c++)
-                {
-                    double fg = Convert.ToDouble(foreground[0, c, y, x]);
-                    double bg = Convert.ToDouble(background[0, c, y, x]);
-                    double comp = a * fg + (1 - a) * bg;
-                    composite[0, c, y, x] = NumOps.FromDouble(comp);
-                }
-            }
+        if (foreground.Shape[0] > 1)
+        {
+            composite = Engine.TensorConcatenate(
+                new[] { composite, new Tensor<T>([foreground.Shape[0] - 1, channels, h, w]) }, 0);
         }
 
         return composite;
@@ -267,16 +270,12 @@ public partial class RVM<T> : NeuralNetworkBase<T>
         int w = foreground.Rank == 4 ? foreground.Shape[3] : foreground.Shape[2];
 
         // Create green background
-        var greenBg = new Tensor<T>([1, 3, h, w]);
-        for (int y = 0; y < h; y++)
+        var greenBg = Engine.TensorConcatenate(new[]
         {
-            for (int x = 0; x < w; x++)
-            {
-                greenBg[0, 0, y, x] = NumOps.Zero;
-                greenBg[0, 1, y, x] = NumOps.FromDouble(1.0); // Green
-                greenBg[0, 2, y, x] = NumOps.Zero;
-            }
-        }
+            new Tensor<T>([1, 1, h, w]),
+            Tensor<T>.CreateDefault([1, 1, h, w], NumOps.One), // Green
+            new Tensor<T>([1, 1, h, w]),
+        }, 1);
 
         return CompositeWithBackground(foreground, alpha, greenBg);
     }
@@ -292,13 +291,11 @@ public partial class RVM<T> : NeuralNetworkBase<T>
         // Use hidden state for temporal consistency if available
         if (_hiddenState != null && _hiddenState._shape.SequenceEqual(input._shape))
         {
-            // Blend with previous state for temporal smoothing
-            for (int i = 0; i < Math.Min(result.Length, _hiddenState.Length); i++)
-            {
-                double curr = Convert.ToDouble(result.Data.Span[i]);
-                double prev = Convert.ToDouble(_hiddenState.Data.Span[i]);
-                result.Data.Span[i] = NumOps.FromDouble(curr * 0.9 + prev * 0.1);
-            }
+            // Blend with previous state for temporal smoothing, into a new tensor: blending in place
+            // overwrote the caller's input frame.
+            result = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(input, NumOps.FromDouble(0.9)),
+                Engine.TensorMultiplyScalar(_hiddenState, NumOps.FromDouble(0.1)));
         }
 
         foreach (var layer in Layers) result = layer.Forward(result);

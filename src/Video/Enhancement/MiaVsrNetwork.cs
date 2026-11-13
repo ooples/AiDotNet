@@ -352,18 +352,23 @@ internal sealed class MiaVsrNetwork<T>
     {
         int w2 = window * window, span = 2 * window - 1;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var index = new Tensor<T>(new[] { w2 * w2 });
-        for (int q = 0; q < w2; q++)
-        {
-            for (int k = 0; k < w2; k++)
-            {
-                int dy = q / window - k / window + window - 1;
-                int dx = q % window - k % window + window - 1;
-                index[q * w2 + k] = numOps.FromDouble(dy * span + dx);
-            }
-        }
+        var engine = AiDotNetEngine.Current;
 
-        return index;
+        // Query q and key k over the window positions, split into rows (p / window) and columns (p mod window)
+        var (keys, queries) = engine.TensorMeshgrid(engine.TensorArange<T>(0, w2, 1), engine.TensorArange<T>(0, w2, 1));
+        var inverseWindow = numOps.FromDouble(1.0 / window);
+        var windowSize = numOps.FromDouble(window);
+        var queryRow = engine.TensorFloor(engine.TensorMultiplyScalar(engine.TensorAddScalar(queries, numOps.FromDouble(0.5)), inverseWindow));
+        var keyRow = engine.TensorFloor(engine.TensorMultiplyScalar(engine.TensorAddScalar(keys, numOps.FromDouble(0.5)), inverseWindow));
+        var queryColumn = engine.TensorSubtract(queries, engine.TensorMultiplyScalar(queryRow, windowSize));
+        var keyColumn = engine.TensorSubtract(keys, engine.TensorMultiplyScalar(keyRow, windowSize));
+
+        // (dy + window - 1) * span + (dx + window - 1)
+        var offset = numOps.FromDouble(window - 1);
+        var dy = engine.TensorAddScalar(engine.TensorSubtract(queryRow, keyRow), offset);
+        var dx = engine.TensorAddScalar(engine.TensorSubtract(queryColumn, keyColumn), offset);
+        var index = engine.TensorAdd(engine.TensorMultiplyScalar(dy, numOps.FromDouble(span)), dx);
+        return engine.Reshape(index, new[] { w2 * w2 });
     }
 
     private static Tensor<T> ToTokens(IEngine engine, Tensor<T> image)
@@ -640,15 +645,8 @@ internal sealed class MiaVsrNetwork<T>
                     var source = gradInputs[0];
                     int columns = source.Shape[1];
                     var numOps = MathHelper.GetNumericOperations<T>();
-                    var gradSource = new Tensor<T>(source._shape);
-                    for (int row = 0; row < index.Length; row++)
-                    {
-                        int target = index[row];
-                        for (int column = 0; column < columns; column++)
-                        {
-                            gradSource[target, column] = numOps.Add(gradSource[target, column], gradOutput[row, column]);
-                        }
-                    }
+                    // Each output row's gradient goes back to the neighbour row it was gathered from
+                    var gradSource = gradEngine.TensorIndexAdd(new Tensor<T>(source._shape), 0, index, gradOutput);
 
                     AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
                         gradAccumulator, source, gradSource, gradEngine);
@@ -744,27 +742,12 @@ internal sealed class MiaVsrNetwork<T>
         private (double[] Dx, double[] Dy) ToField(Tensor<T> flow)
         {
             var g = _geometry;
-            int flowH = flow.Shape[2], flowW = flow.Shape[3];
-            var numOps = MathHelper.GetNumericOperations<T>();
-            var dx = new double[g.Tokens];
-            var dy = new double[g.Tokens];
-            int plane = flowH * flowW;
-            for (int b = 0; b < g.Batch; b++)
-            {
-                for (int y = 0; y < g.Height; y++)
-                {
-                    for (int x = 0; x < g.Width; x++)
-                    {
-                        int at = (b * g.Height + y) * g.Width + x;
-                        int source = b * 2 * plane + y * flowW + x;
-                        double fx = numOps.ToDouble(flow[source]);
-                        double fy = numOps.ToDouble(flow[source + plane]);
-                        dx[at] = double.IsNaN(fx) || double.IsInfinity(fx) ? 0 : fx;
-                        dy[at] = double.IsNaN(fy) || double.IsInfinity(fy) ? 0 : fy;
-                    }
-                }
-            }
-
+            // The [B, 2, H, W] corner of the flow, non-finite components replaced by zero
+            var region = _engine.TensorNarrow(_engine.TensorNarrow(_engine.TensorNarrow(
+                _engine.TensorNarrow(flow, 0, 0, g.Batch), 1, 0, 2), 2, 0, g.Height), 3, 0, g.Width);
+            var finite = _engine.TensorWhere(_engine.TensorIsFinite(region), region, _engine.TensorZerosLike(region));
+            var dx = _engine.TensorNarrow(finite, 1, 0, 1).Cast<double>().ToArray();
+            var dy = _engine.TensorNarrow(finite, 1, 1, 1).Cast<double>().ToArray();
             return (dx, dy);
         }
 
@@ -1024,15 +1007,22 @@ internal sealed class MiaVsrNetwork<T>
         private static Tensor<T> LogisticNoise(int[] shape, Random random)
         {
             var numOps = MathHelper.GetNumericOperations<T>();
-            var noise = new Tensor<T>(shape);
-            for (int i = 0; i < noise.Length; i++)
+            int length = 1;
+            foreach (int extent in shape) length *= extent;
+
+            // One uniform draw per element, in element order
+            var draws = new double[length];
+            for (int i = 0; i < length; i++)
             {
-                double u = random.NextDouble();
-                u = Math.Min(Math.Max(u, 1e-10), 1 - 1e-10);
-                noise[i] = numOps.FromDouble(Math.Log(u) - Math.Log(1 - u));
+                draws[i] = random.NextDouble();
             }
 
-            return noise;
+            // logit(u) with u kept inside (1e-10, 1 - 1e-10)
+            var engine = AiDotNetEngine.Current;
+            var u = new Tensor<double>(draws, shape).Cast<T>();
+            u = engine.TensorClamp(u, numOps.FromDouble(1e-10), numOps.FromDouble(1 - 1e-10));
+            var complement = engine.TensorSubtract(engine.TensorOnesLike(u), u);
+            return engine.TensorSubtract(engine.TensorLog(u), engine.TensorLog(complement));
         }
 
         private static Tensor<T> Blend(IEngine engine, Tensor<T> fresh, Tensor<T> previous, Tensor<T> keep)
@@ -1072,16 +1062,14 @@ internal sealed class MiaVsrNetwork<T>
             Tensor<T> previousAttention, Tensor<T> previousOutput)
         {
             var numOps = MathHelper.GetNumericOperations<T>();
-            var kept = new List<int>();
-            for (int row = 0; row < g.Tokens; row++)
-            {
-                if (numOps.ToDouble(keep[row]) > 0.5) kept.Add(row);
-            }
+            var keepRows = engine.TensorNarrow(engine.Reshape(keep, new[] { keep.Length }), 0, 0, g.Tokens);
+            var keptCoordinates = engine.TensorNonzero(engine.TensorGreaterThan(keepRows, numOps.FromDouble(0.5)));
+            var kept = keptCoordinates.ToArray();
 
-            if (kept.Count == 0) return (previousAttention, previousOutput);
+            if (kept.Length == 0) return (previousAttention, previousOutput);
 
-            int count = kept.Count, w2 = _window * _window;
-            var keptRows = new Tensor<int>(kept.ToArray(), new[] { count });
+            int count = kept.Length, w2 = _window * _window;
+            var keptRows = new Tensor<int>(kept, new[] { count });
             var keptWindows = new int[count];
             var keptPositions = new int[count];
             var map = new int[g.Tokens];

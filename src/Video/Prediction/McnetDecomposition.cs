@@ -37,8 +37,6 @@ namespace AiDotNet.Video.Prediction;
 /// </remarks>
 public sealed class McnetDecomposition<T>
 {
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
-
     private readonly int _scales;
 
     /// <summary>Gets the number of scales at which residual features are communicated.</summary>
@@ -85,21 +83,9 @@ public sealed class McnetDecomposition<T>
             throw new ArgumentException(
                 $"At least two frames are required to form a difference; got {time}.", nameof(frames));
 
-        int h = frames.Shape[1], w = frames.Shape[2], c = frames.Shape[3];
-        int perFrame = h * w * c;
-        var result = new Tensor<T>(new[] { time - 1, h, w, c });
-
-        for (int t = 1; t < time; t++)
-        {
-            int dst = (t - 1) * perFrame;
-            int cur = t * perFrame;
-            int prev = (t - 1) * perFrame;
-            for (int i = 0; i < perFrame; i++)
-            {
-                result[dst + i] = Ops.Subtract(frames[cur + i], frames[prev + i]);
-            }
-        }
-        return result;
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSubtract(
+            engine.TensorNarrow(frames, 0, 1, time - 1), engine.TensorNarrow(frames, 0, 0, time - 1));
     }
 
     /// <summary>
@@ -119,12 +105,8 @@ public sealed class McnetDecomposition<T>
                 $"Expected [time, height, width, channels]; got rank {frames.Shape.Length}.", nameof(frames));
 
         int time = frames.Shape[0], h = frames.Shape[1], w = frames.Shape[2], c = frames.Shape[3];
-        int perFrame = h * w * c;
-        var result = new Tensor<T>(new[] { h, w, c });
-
-        int offset = (time - 1) * perFrame;
-        for (int i = 0; i < perFrame; i++) result[i] = frames[offset + i];
-        return result;
+        var engine = AiDotNetEngine.Current;
+        return engine.Reshape(engine.TensorNarrow(frames, 0, time - 1, 1), new[] { h, w, c });
     }
 
     /// <summary>
@@ -149,22 +131,7 @@ public sealed class McnetDecomposition<T>
                 $"Spatial dimensions must match: motion is [{motion.Shape[0]}, {motion.Shape[1]}] but " +
                 $"content is [{content.Shape[0]}, {content.Shape[1]}].", nameof(content));
 
-        int h = motion.Shape[0], w = motion.Shape[1];
-        int mc = motion.Shape[2], cc = content.Shape[2];
-        var result = new Tensor<T>(new[] { h, w, mc + cc });
-
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                int dst = ((y * w) + x) * (mc + cc);
-                int ms = ((y * w) + x) * mc;
-                int cs = ((y * w) + x) * cc;
-                for (int k = 0; k < mc; k++) result[dst + k] = motion[ms + k];
-                for (int k = 0; k < cc; k++) result[dst + mc + k] = content[cs + k];
-            }
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate(new[] { motion, content }, 2);
     }
 
     /// <summary>
