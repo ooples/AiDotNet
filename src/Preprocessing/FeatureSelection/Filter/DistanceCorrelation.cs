@@ -77,7 +77,8 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var dcov2 = FeatureSelectionTensorOps.SquaredDistanceCovariances(
             Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), out var xVariances, out T yVariance);
         var zeros = new Tensor<T>(new[] { p });
-        var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(xVariances, yVariance));
+        // sqrt(a) sqrt(b) rather than sqrt(a b): the product of the two variances overflows Half's 65504 maximum
+        var denominators = engine.TensorMultiplyScalar(engine.TensorSqrt(xVariances), NumOps.Sqrt(yVariance));
         var usable = engine.TensorGreaterThan(denominators, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safe = engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var distanceCorrelations = engine.TensorWhere(usable,

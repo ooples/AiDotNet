@@ -77,13 +77,12 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private Tensor<T> ComputeHiguchiFD(Tensor<T> X, int n, int p)
     {
         var engine = Engine;
-        T nMinusOne = NumOps.FromDouble(n - 1.0);
         var curveLengths = new List<Tensor<T>>();
         var scales = new List<int>();
 
         for (int k = 1; k <= _kMax; k++)
         {
-            Tensor<T>? lmSum = null;
+            Tensor<double>? lmSum = null;
             int lmCount = 0;
 
             for (int m = 1; m <= k; m++)
@@ -98,16 +97,17 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
                 var steps = engine.TensorAbs(engine.TensorSubtract(
                     engine.TensorSlice(points, new[] { 1, 0 }, new[] { numSegments, p }),
                     engine.TensorSlice(points, new[] { 0, 0 }, new[] { numSegments, p })));
-                var lm = engine.TensorDivideScalar(
-                    engine.TensorMultiplyScalar(engine.ReduceSum(steps, new[] { 0 }, false), nMinusOne),
-                    PreprocessingTensorOps.CountAsScalar<T>(k * k * numSegments));
+                // Summed and normalized in double: a Half sum of the steps stalls once it passes 2048 times their
+                // spacing, and the normalizer k^2 numSegments overflows Half's 65504 maximum
+                var lm = engine.TensorMultiplyScalar(engine.ReduceSum(steps.Cast<double>(), new[] { 0 }, false),
+                    (n - 1.0) / ((double)k * k * numSegments));
                 lmSum = lmSum is null ? lm : engine.TensorAdd(lmSum, lm);
                 lmCount++;
             }
 
             if (lmSum is not null)
             {
-                curveLengths.Add(engine.TensorDivideScalar(lmSum, PreprocessingTensorOps.CountAsScalar<T>(lmCount)));
+                curveLengths.Add(engine.TensorDivideScalar(lmSum, (double)lmCount).Cast<T>());
                 scales.Add(k);
             }
         }

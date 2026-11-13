@@ -164,8 +164,8 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var zeros = new Tensor<T>(featureShape);
         var correlations = engine.TensorWhere(
             engine.TensorMultiply(engine.TensorGreaterThan(sxx, floor), engine.TensorGreaterThan(yVarFeatures, floor)),
-            engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(
-                engine.TensorMultiply(sxx, yVarFeatures), NumOps.FromDouble(nTrain)))),
+            engine.TensorDivide(sxy, engine.TensorMultiply(engine.TensorSqrt(sxx), engine.TensorMultiplyScalar(
+                engine.TensorBroadcastTo(yStd, featureShape), NumOps.Sqrt(NumOps.FromDouble(nTrain))))),
             zeros);
 
         // Predict on test set

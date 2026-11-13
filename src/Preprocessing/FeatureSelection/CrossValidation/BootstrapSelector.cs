@@ -115,7 +115,8 @@ public class BootstrapSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             var usable = engine.TensorMultiply(
                 engine.TensorGreaterThan(xVar, varianceFloor), engine.TensorGreaterThan(yVar, varianceFloor));
             var correlations = engine.TensorWhere(usable,
-                engine.TensorAbs(engine.TensorDivide(covar, engine.TensorSqrt(engine.TensorMultiply(xVar, yVar)))), zeros);
+                engine.TensorAbs(engine.TensorDivide(covar,
+                    engine.TensorMultiply(engine.TensorSqrt(xVar), engine.TensorSqrt(yVar)))), zeros);
 
             // Select top features for this bootstrap
             foreach (int j in PreprocessingTensorOps.TopKIndicesSorted(correlations, _nFeaturesToSelect))

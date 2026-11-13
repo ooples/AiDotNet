@@ -77,8 +77,9 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var usable = NumOps.GreaterThan(yVariance, epsilon)
             ? engine.TensorGreaterThan(xVariances, epsilon)
             : zeros;
-        var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(
-            engine.TensorWhere(usable, xVariances, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One)), yVariance));
+        // sqrt(a) sqrt(b) rather than sqrt(a b): the product of the two variances overflows Half's 65504 maximum
+        var denominators = engine.TensorMultiplyScalar(engine.TensorSqrt(
+            engine.TensorWhere(usable, xVariances, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), NumOps.Sqrt(yVariance));
         var distCorrelations = engine.TensorWhere(usable,
             engine.TensorSqrt(engine.TensorDivide(dcov2, denominators)), zeros);
         _distCorrelations = distCorrelations.ToVector();

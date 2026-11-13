@@ -139,9 +139,8 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             return new Tensor<T>(new[] { p });
 
         var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
-        var counts = engine.ReduceSum(membership, new[] { 0 }, false);
-        var classMeans = engine.TensorDivide(engine.TensorMatMul(engine.TensorTranspose(membership), X),
-            engine.TensorBroadcastTo(engine.Reshape(counts, new[] { k, 1 }), new[] { k, p }));
+        // Class sizes and means counted exactly (a Half sum of the 0/1 membership stops at 2048)
+        var classMeans = FeatureSelectionTensorOps.GroupMeans(membership, X, out var counts);
         var grandMean = engine.ReduceMean(X, new[] { 0 }, true);
 
         // Between-class and within-class sums of squares
@@ -176,7 +175,8 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         var dcov2 = FeatureSelectionTensorOps.SquaredDistanceCovariances(
             engine.TensorIndexSelect(X, rows, 0), engine.TensorIndexSelect(y, rows, 0), out var xVariances, out T yVariance);
         int p = dcov2.Length;
-        var denominators = engine.TensorSqrt(engine.TensorMultiplyScalar(xVariances, yVariance));
+        // sqrt(a) sqrt(b) rather than sqrt(a b): the product of the two variances overflows Half's 65504 maximum
+        var denominators = engine.TensorMultiplyScalar(engine.TensorSqrt(xVariances), NumOps.Sqrt(yVariance));
         var usable = engine.TensorGreaterThan(denominators, NumOps.Zero);
         var safe = engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         return engine.TensorWhere(usable,

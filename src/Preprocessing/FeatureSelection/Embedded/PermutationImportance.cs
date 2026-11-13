@@ -161,7 +161,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var zeros = new Tensor<T>(featureShape);
         var usable = engine.TensorMultiply(engine.TensorGreaterThan(xStds, floor), engine.TensorGreaterThan(yStd, floor));
         var denominators = engine.TensorWhere(usable,
-            engine.TensorSqrt(engine.TensorMultiply(sxx, engine.TensorBroadcastTo(syy, featureShape))), ones);
+            engine.TensorMultiply(engine.TensorSqrt(sxx), engine.TensorBroadcastTo(engine.TensorSqrt(syy), featureShape)), ones);
         var weights = engine.TensorWhere(usable, engine.TensorDivideScalar(
             engine.TensorMultiply(engine.TensorDivide(sxy, denominators), yStd), NumOps.FromDouble(p)), zeros);
 
