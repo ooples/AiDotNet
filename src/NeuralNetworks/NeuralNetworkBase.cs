@@ -14488,9 +14488,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
+        // The primary loss and every declared composite term (ComposeDeclaredObjective runs each term's tape loss).
         if (LossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> { ReadsTargetOnHost: true })
             return EmitFusedMissAndFallback(
                 $"{LossFunction.GetType().Name} decodes its target on the host, which a compiled plan cannot replay");
+        if (this is ICompositeLoss<T> { DeclaredOutputs: { } declaredTerms }
+            && declaredTerms.FirstOrDefault(term => term.Loss is AiDotNet.LossFunctions.LossFunctionBase<T> { ReadsTargetOnHost: true })
+                is { Loss: { } hostReadingTerm })
+            return EmitFusedMissAndFallback(
+                $"the declared term loss {hostReadingTerm.GetType().Name} decodes its target on the host, which a compiled plan cannot replay");
+        // Class-index labels are one-hot encoded by engine ops the plan replays, but their range check runs on the host
+        // and only while tracing; repeat it for this batch so an invalid label still throws.
+        if (LossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> indexLoss)
+            indexLoss.ValidateIndexTargetOutsidePlan(expected);
         if (IsGradientCheckpointingEnabled)
         {
             // Same rule as the configuration gate below: a committed plan's optimizer moments cannot move to the eager

@@ -62,8 +62,28 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// Whether <see cref="ComputeTapeLoss"/> reads the target's values on the host (decoding encoded labels into index
     /// arrays, say) rather than through engine ops. A compiled training plan replays only engine ops, so it would keep
     /// the target decoded when it was traced for the whole run; a model training with such a loss takes the eager step.
+    /// The library's own losses answer for themselves; a loss defined elsewhere, a derived one included, has not been
+    /// checked and takes the eager step, as with <see cref="KeepsResultsBetweenCalls"/>.
     /// </summary>
-    internal virtual bool ReadsTargetOnHost => false;
+    internal virtual bool ReadsTargetOnHost => GetType().Assembly != typeof(LossFunctionBase<T>).Assembly;
+
+    // The predicted rank and class count EnsureTargetMatchesPredicted last one-hot encoded class indices against,
+    // or -1 before it has. A compiled plan replays the one-hot (engine ops) but not the host-side label check, so
+    // the fused step re-runs the check through ValidateIndexTargetOutsidePlan before each replay.
+    private int _indexTargetPredictedRank = -1;
+    private int _indexTargetClasses;
+
+    /// <summary>
+    /// Re-checks class-index labels on the host, outside any compiled plan: a plan traced with valid labels would
+    /// otherwise one-hot an invalid label of a later batch to an all-zero row and drop the sample without an error.
+    /// Does nothing until this loss has one-hot encoded index labels, or for a target that is already one-hot.
+    /// </summary>
+    internal void ValidateIndexTargetOutsidePlan(Tensor<T> target)
+    {
+        if (_indexTargetPredictedRank < 0 || target is null || target.Shape.Length != _indexTargetPredictedRank - 1)
+            return;
+        ValidateClassIndices(target, _indexTargetClasses);
+    }
 
     /// <summary>
     /// Calculates both loss and gradient on GPU in a single pass.
@@ -159,6 +179,23 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
             }
         }
 
+        _indexTargetPredictedRank = predicted.Shape.Length;
+        _indexTargetClasses = numClasses;
+        ValidateClassIndices(target, numClasses);
+
+        // One-hot along the last axis: compare each class index against 0..numClasses-1.
+        var oneHotShape = predicted.Shape.ToArray();
+        var columnShape = (int[])oneHotShape.Clone();
+        columnShape[columnShape.Length - 1] = 1;
+        var classIds = Engine.TensorArange<T>(0, numClasses, 1);
+        return Engine.TensorEquals(
+            Engine.TensorBroadcastTo(Engine.Reshape(target, columnShape), oneHotShape),
+            Engine.TensorBroadcastTo(classIds, oneHotShape));
+    }
+
+    // Every target value must be an integer class index in [0, numClasses).
+    private void ValidateClassIndices(Tensor<T> target, int numClasses)
+    {
         // Validate every target value at once: it must be an integer class index in [0, numClasses).
         // A value is not an integer class index when it has a fractional part (NaN included) or lies
         // outside the int range, where the old (int) cast could not represent it.
@@ -187,15 +224,6 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
                 $"Class index {classIdx} at position {i} is out of range [0, {numClasses}). " +
                 "Target values must be valid class indices.");
         }
-
-        // One-hot along the last axis: compare each class index against 0..numClasses-1.
-        var oneHotShape = predicted.Shape.ToArray();
-        var columnShape = (int[])oneHotShape.Clone();
-        columnShape[columnShape.Length - 1] = 1;
-        var classIds = Engine.TensorArange<T>(0, numClasses, 1);
-        return Engine.TensorEquals(
-            Engine.TensorBroadcastTo(Engine.Reshape(target, columnShape), oneHotShape),
-            Engine.TensorBroadcastTo(classIds, oneHotShape));
     }
 
     /// <summary>

@@ -33,6 +33,12 @@ internal static class LinalgDispatch<T>
     // element type is computed in double and converted back, as the element loops these calls replaced handled any T.
     private static readonly bool Native = typeof(T) == typeof(float) || typeof(T) == typeof(double);
 
+    // Element types that hold no fractions. A factorization's factors are fractional in general, so they cannot be
+    // carried in such a T: [[2,1],[1,1]] has the multiplier 0.5, which an int factor would hold as 0.
+    private static readonly bool Integral = typeof(T) == typeof(sbyte) || typeof(T) == typeof(byte)
+        || typeof(T) == typeof(short) || typeof(T) == typeof(ushort) || typeof(T) == typeof(int)
+        || typeof(T) == typeof(uint) || typeof(T) == typeof(long) || typeof(T) == typeof(ulong);
+
     private static Tensor<double> Wide(Tensor<T> value) => value.Cast<double>();
 
     private static Tensor<T> Narrow(Tensor<double> value) => value.Cast<T>();
@@ -125,10 +131,18 @@ internal static class LinalgDispatch<T>
 
     /// <summary>Diagonal extraction (<c>Linalg.Diagonal</c>).</summary>
     internal static Tensor<T> Diagonal(Tensor<T> input, int offset = 0, int dim1 = -2, int dim2 = -1)
-        => Native
-            ? (_diagonal ??= Bind<Func<Tensor<T>, int, int, int, Tensor<T>>>(
-                nameof(Linalg.Diagonal), 4))(input, offset, dim1, dim2)
-            : Narrow(LinalgDispatch<double>.Diagonal(Wide(input), offset, dim1, dim2));
+    {
+        if (Native)
+            return (_diagonal ??= Bind<Func<Tensor<T>, int, int, int, Tensor<T>>>(
+                nameof(Linalg.Diagonal), 4))(input, offset, dim1, dim2);
+
+        // A copy needs no arithmetic: the main diagonal of a matrix is taken in T, so an integer or decimal entry
+        // keeps every digit (9007199254740993L does not survive a round trip through double). Other diagonals and
+        // batched inputs go through the double kernel.
+        if (input.Rank == 2 && offset == 0 && (dim1 == -2 || dim1 == 0) && (dim2 == -1 || dim2 == 1))
+            return AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorDiagonal(input);
+        return Narrow(LinalgDispatch<double>.Diagonal(Wide(input), offset, dim1, dim2));
+    }
 
     /// <summary>Solve from a Cholesky factor (<c>Linalg.CholeskySolve</c>).</summary>
     internal static Tensor<T> CholeskySolve(Tensor<T> b, Tensor<T> factor, bool upper = false)
@@ -156,6 +170,10 @@ internal static class LinalgDispatch<T>
     {
         if (Native)
             return (_luFactor ??= Bind<Func<Tensor<T>, (Tensor<T>, Tensor<int>)>>(nameof(Linalg.LuFactor), 1))(input);
+        if (Integral)
+            throw new NotSupportedException(
+                $"An LU factorization of a {typeof(T).Name} matrix has fractional factors, which {typeof(T).Name} cannot "
+                + "hold; use a floating-point or decimal element type, or Solve, which returns only the solution.");
         var (lu, pivots) = LinalgDispatch<double>.LuFactor(Wide(input));
         return (Narrow(lu), pivots);
     }

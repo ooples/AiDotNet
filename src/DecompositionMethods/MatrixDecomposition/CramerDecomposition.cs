@@ -188,9 +188,10 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
             return ops.Zero;
         }
 
+        // decimal's determinant is computed in double (LinalgDispatch has float and double kernels only), so its
+        // residue on a singular matrix is double round-off, about 1e-16, not decimal's 1e-28: bound it by double's.
         double epsilon = typeof(T) == typeof(float) ? Math.Pow(2, -23)
             : typeof(T) == typeof(Half) ? Math.Pow(2, -10)
-            : typeof(T) == typeof(decimal) ? 1e-28
             : Math.Pow(2, -52);
         return ops.FromDouble(epsilon);
     });
