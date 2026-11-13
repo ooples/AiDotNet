@@ -236,58 +236,44 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
         if (numQueries > dim)
             numQueries = dim;
 
-        var queryOutput = new Tensor<T>([dim]);
-
-        for (int q = 0; q < numQueries; q++)
+        var engine = Engine;
+        Tensor<T> queryOutput;
+        if (numQueries == 0)
         {
-            // Each query computes cross-attention over all frame features
-            double queryAttentionSum = 0;
-            double queryNormSum = 0;
+            queryOutput = new Tensor<T>([dim]);
+        }
+        else
+        {
+            // Query q reads the feature block [q * stride, (q + 1) * stride); numQueries * stride <= dim.
+            int stride = Math.Max(1, dim / numQueries);
+            var blocks = StackLeading(frameFeatures, count, numQueries * stride).Reshape([count, numQueries, stride]);
+            var queryKey = engine.TensorDivideScalar(engine.ReduceSum(blocks, [2], false), NumOps.FromDouble(stride));
 
-            for (int f = 0; f < count; f++)
-            {
-                // Compute attention score: query position attends to frame features
-                double queryKey = 0;
-                int stride = Math.Max(1, dim / numQueries);
-                int startDim = q * stride;
-                int endDim = Math.Min(startDim + stride, dim);
+            // Temporal position-weighted attention (earlier and later frames weighted differently):
+            // posWeight[f, q] = 1 + 0.1 * cos(2 pi * (f / max(1, count - 1)) * (q + 1) / numQueries)
+            var temporalPos = engine.TensorMultiplyScalar(
+                engine.TensorArange<T>(0, count, 1), NumOps.FromDouble(1.0 / Math.Max(1, count - 1)));
+            var posWeight = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(
+                    engine.TensorCos(engine.TensorMultiplyScalar(
+                        engine.TensorOuter(temporalPos, engine.TensorArange<T>(1, numQueries + 1, 1)),
+                        NumOps.FromDouble(Math.PI * 2.0 / numQueries))),
+                    NumOps.FromDouble(0.1)),
+                NumOps.One);
+            var attnScore = engine.TensorExp(engine.TensorMultiply(queryKey, posWeight));
 
-                for (int d = startDim; d < endDim; d++)
-                {
-                    double val = NumOps.ToDouble(frameFeatures[f][d]);
-                    queryKey += val;
-                }
-                queryKey /= Math.Max(1, endDim - startDim);
-
-                // Temporal position-weighted attention (earlier and later frames weighted differently)
-                double temporalPos = (double)f / Math.Max(1, count - 1);
-                double posWeight =
-                    1.0 + 0.1 * Math.Cos(temporalPos * Math.PI * 2.0 * (q + 1) / numQueries);
-
-                double attnScore = Math.Exp(queryKey * posWeight);
-                queryAttentionSum += attnScore;
-
-                // Weighted value aggregation
-                for (int d = startDim; d < endDim; d++)
-                {
-                    double current = NumOps.ToDouble(queryOutput[d]);
-                    double frameVal = NumOps.ToDouble(frameFeatures[f][d]);
-                    queryOutput[d] = NumOps.FromDouble(current + frameVal * attnScore);
-                }
-                queryNormSum += attnScore;
-            }
-
-            // Normalize by attention sum
-            if (queryNormSum > 1e-8)
-            {
-                int stride = Math.Max(1, dim / numQueries);
-                int startDim = q * stride;
-                int endDim = Math.Min(startDim + stride, dim);
-                for (int d = startDim; d < endDim; d++)
-                    queryOutput[d] = NumOps.FromDouble(
-                        NumOps.ToDouble(queryOutput[d]) / queryNormSum
-                    );
-            }
+            // Weighted value aggregation, normalized by the attention sum when it is above 1e-8.
+            var weighted = engine.ReduceSum(
+                engine.TensorMultiply(blocks, engine.TensorBroadcastTo(attnScore.Reshape([count, numQueries, 1]), [count, numQueries, stride])),
+                [0], false);
+            var queryNormSum = engine.ReduceSum(attnScore, [0], false);
+            var normalizer = engine.TensorWhere(
+                engine.TensorGreaterThan(queryNormSum, NumOps.FromDouble(1e-8)),
+                queryNormSum,
+                Tensor<T>.CreateDefault([numQueries], NumOps.One));
+            var normalized = engine.TensorDivide(
+                weighted, engine.TensorBroadcastTo(normalizer.Reshape([numQueries, 1]), [numQueries, stride]));
+            queryOutput = FitLength(normalized.Reshape([numQueries * stride]), dim);
         }
 
         // Step 3: Decode through LLM layers
@@ -351,10 +337,7 @@ public partial class VideoChat2<T> : VisionLanguageModelBase<T>, IVideoLanguageM
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

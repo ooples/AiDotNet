@@ -99,22 +99,16 @@ public partial class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// <returns>The interpolated y-value at the specified x-coordinate.</returns>
     public T Interpolate(T x)
     {
-        T numerator = _numOps.Zero;
-        T denominator = _numOps.Zero;
-
-        for (int i = 0; i < _x.Length; i++)
+        int match = InterpolationSearch.IndexOfFirstEqual(_x, x);
+        if (match >= 0)
         {
-            if (_numOps.Equals(x, _x[i]))
-            {
-                return _y[i]; // Return exact value if x matches a known point
-            }
-
-            T diff = _numOps.Subtract(x, _x[i]);
-            T term = _numOps.Divide(_weights[i], diff);
-
-            numerator = _numOps.Add(numerator, _numOps.Multiply(term, _y[i]));
-            denominator = _numOps.Add(denominator, term);
+            return _y[match]; // Return exact value if x matches a known point
         }
+
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> terms = engine.TensorDivide(_weights.AsTensor(), engine.ScalarMinusTensor(x, _x.AsTensor()));
+        T numerator = engine.TensorSum(engine.TensorMultiply(terms, _y.AsTensor()));
+        T denominator = engine.TensorSum(terms);
 
         return _numOps.Divide(numerator, denominator);
     }
@@ -140,22 +134,23 @@ public partial class BarycentricRationalInterpolation<T> : IInterpolation<T>
     /// <returns>A vector containing the calculated barycentric weights.</returns>
     private Vector<T> CalculateWeights()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
-        Vector<T> weights = new Vector<T>(n);
+        Tensor<T> knots = _x.AsTensor();
 
-        for (int i = 0; i < n; i++)
+        // products[i] = product over j != i of (x[i] - x[j]), multiplied in ascending j. The diagonal of the
+        // difference matrix is exactly zero, so adding the identity turns it into the multiplicative identity.
+        // Rows are processed in bounded blocks, so the full [n, n] matrix is never held.
+        int blockRows = InterpolationSearch.PairBlockRows(n);
+        var parts = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += blockRows)
         {
-            T weight = _numOps.One;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    weight = _numOps.Multiply(weight, _numOps.Subtract(_x[i], _x[j]));
-                }
-            }
-            weights[i] = _numOps.Divide(_numOps.One, weight);
+            int rows = Math.Min(blockRows, n - start);
+            var (differences, diagonal) = InterpolationSearch.DifferenceRows(knots, start, rows);
+            parts.Add(engine.TensorSliceAxis(engine.TensorCumProd(engine.TensorAdd(differences, diagonal), 1), 1, n - 1));
         }
 
-        return weights;
+        Tensor<T> products = parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
+        return engine.TensorReciprocal(products).ToVector();
     }
 }

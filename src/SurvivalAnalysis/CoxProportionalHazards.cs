@@ -191,121 +191,120 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// </remarks>
     protected override void FitSurvivalCore(Matrix<T> x, Vector<T> times, Vector<int> events)
     {
-        int n = x.Rows;
         int p = x.Columns;
+        var engine = AiDotNetEngine.Current;
 
         // Initialize coefficients
         _coefficients = new Vector<T>(p);
-        for (int i = 0; i < p; i++)
-        {
-            _coefficients[i] = NumOps.Zero;
-        }
 
-        // Get unique event times and sort data by time
+        // Get unique event times
         TrainedEventTimes = GetUniqueEventTimes(times, events);
 
-        // Create sorted indices by time (descending for efficient risk set computation)
-        var sortedIndices = Enumerable.Range(0, n)
-            .OrderByDescending(i => NumOps.ToDouble(times[i]))
-            .ToArray();
+        // Breslow risk sets: subject i's risk set is every subject with t_j >= t_i, so subjects with tied
+        // times share one risk set whatever their row order (formed by a sorted reverse cumulative sum).
+        var eventMask = engine.TensorEquals(events.AsTensor().Cast<T>(), NumOps.One);
+        var design = Tensor<T>.FromMatrix(x);
+        T learningRate = NumOps.FromDouble(_learningRate);
+        T l2Penalty = NumOps.FromDouble(_l2Penalty);
 
         // Gradient descent optimization
-        double prevLogLik = double.NegativeInfinity;
+        T prevLogLik = NumOps.Zero;
+        bool hasPrevious = false;
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Compute gradient and update coefficients
-            var (logLik, gradient) = ComputeGradient(x, times, events, sortedIndices);
+            var (logLik, gradient) = ComputeGradient(design, times, eventMask);
 
             // Check convergence
-            if (Math.Abs(logLik - prevLogLik) < _tolerance)
+            if (hasPrevious && HasConverged(logLik, prevLogLik))
             {
                 break;
             }
             prevLogLik = logLik;
+            hasPrevious = true;
 
-            // Update coefficients
-            for (int j = 0; j < p; j++)
-            {
-                T gradJ = gradient[j];
-                T reg = NumOps.Multiply(NumOps.FromDouble(_l2Penalty), _coefficients[j]);
-                T update = NumOps.Multiply(
-                    NumOps.FromDouble(_learningRate),
-                    NumOps.Subtract(gradJ, reg));
-                _coefficients[j] = NumOps.Add(_coefficients[j], update);
-            }
+            // Update coefficients: beta += lr * (gradient - l2 * beta)
+            _coefficients = engine.Add(_coefficients,
+                engine.Multiply(engine.Subtract(gradient, engine.Multiply(_coefficients, l2Penalty)), learningRate));
         }
 
         // Compute baseline survival using Breslow estimator
-        ComputeBaselineSurvival(x, times, events);
+        ComputeBaselineSurvival(design, times, events);
     }
 
     /// <summary>
-    /// Computes the gradient of the partial log-likelihood.
+    /// True when the partial log-likelihood moved by less than the tolerance.
     /// </summary>
-    private (double logLik, Vector<T> gradient) ComputeGradient(
-        Matrix<T> x,
-        Vector<T> times,
-        Vector<int> events,
-        int[] sortedIndices)
+    private bool HasConverged(T logLik, T prevLogLik)
     {
-        int n = x.Rows;
-        int p = x.Columns;
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(logLik, prevLogLik)), NumOps.FromDouble(_tolerance));
+    }
 
-        var gradient = new Vector<T>(p);
-        double logLik = 0;
+    /// <summary>
+    /// Computes exp(min(X beta, 700)) for every row of the design matrix.
+    /// </summary>
+    private Tensor<T> RiskScores(Tensor<T> design, Vector<T> coefficients)
+    {
+        return CappedExp(LinearPredictor(design, coefficients, NumOps.Zero));
+    }
 
-        // Compute risk scores exp(β·X) for all subjects
-        var riskScores = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double linearPred = 0;
-            for (int j = 0; j < p; j++)
-            {
-                linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
-            }
-            riskScores[i] = Math.Exp(Math.Min(linearPred, 700)); // Prevent overflow
-        }
+    /// <summary>
+    /// Computes exp(min(eta, 700)).
+    /// </summary>
+    private Tensor<T> CappedExp(Tensor<T> linearPred)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = linearPred.Length;
 
-        // Process events in reverse time order (for efficient cumulative sums)
-        double sumRisk = 0;
-        var sumRiskX = new double[p];
+        // Prevent overflow
+        T cap = NumOps.FromDouble(700);
+        var capped = engine.TensorWhere(engine.TensorGreaterThan(linearPred, cap),
+            Tensor<T>.CreateDefault(new[] { n }, cap), linearPred);
 
-        foreach (int i in sortedIndices)
-        {
-            sumRisk += riskScores[i];
-            for (int j = 0; j < p; j++)
-            {
-                sumRiskX[j] += riskScores[i] * NumOps.ToDouble(x[i, j]);
-            }
+        return engine.TensorExp(capped);
+    }
 
-            if (events[i] == 1)
-            {
-                // Add contribution to log-likelihood
-                double linearPred = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
-                }
-                logLik += linearPred - Math.Log(sumRisk);
+    /// <summary>
+    /// Computes the Breslow partial log-likelihood and its gradient.
+    /// </summary>
+    private (T logLik, Vector<T> gradient) ComputeGradient(
+        Tensor<T> design,
+        Vector<T> times,
+        Tensor<T> eventMask)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = design.Shape[0];
+        int p = design.Shape[1];
+        var linearPred = LinearPredictor(design, _coefficients, NumOps.Zero);
 
-                // Add contribution to gradient
-                for (int j = 0; j < p; j++)
-                {
-                    double xij = NumOps.ToDouble(x[i, j]);
-                    double gradContrib = xij - sumRiskX[j] / sumRisk;
-                    gradient[j] = NumOps.Add(gradient[j], NumOps.FromDouble(gradContrib));
-                }
-            }
-        }
+        // Compute risk scores exp(beta . X) for all subjects
+        var risk = CappedExp(linearPred);
+        var riskColumn = risk.Reshape(new[] { n, 1 });
 
-        return (logLik, gradient);
+        // Risk-set sums of exp(beta . X) and exp(beta . X) * X at each subject's time
+        var sumRisk = AtRiskSums(times, risk, times).Reshape(new[] { n, 1 });
+        var sumRiskX = AtRiskSums(times,
+            engine.TensorMultiply(design, engine.TensorBroadcastTo(riskColumn, new[] { n, p })), times);
+
+        // Only subjects with an observed event contribute; the rest are masked out before summing
+        // so an underflowed risk set cannot turn into 0 * -inf.
+        var logLikTerms = engine.TensorWhere(eventMask,
+            engine.TensorSubtract(linearPred, engine.TensorLog(sumRisk.Reshape(new[] { n }))),
+            new Tensor<T>(new[] { n }));
+        var gradientTerms = engine.TensorSubtract(design,
+            engine.TensorDivide(sumRiskX, engine.TensorBroadcastTo(sumRisk, new[] { n, p })));
+        var eventRows = engine.TensorBroadcastTo(eventMask.Reshape(new[] { n, 1 }), new[] { n, p });
+        var gradient = engine.ReduceSum(
+            engine.TensorWhere(eventRows, gradientTerms, new Tensor<T>(new[] { n, p })), new[] { 0 });
+
+        return (engine.TensorSum(logLikTerms), gradient.ToVector());
     }
 
     /// <summary>
     /// Computes the Breslow baseline survival function.
     /// </summary>
-    private void ComputeBaselineSurvival(Matrix<T> x, Vector<T> times, Vector<int> events)
+    private void ComputeBaselineSurvival(Tensor<T> design, Vector<T> times, Vector<int> events)
     {
         if (TrainedEventTimes is null || TrainedEventTimes.Length == 0)
         {
@@ -313,57 +312,23 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
             return;
         }
 
+        var engine = AiDotNetEngine.Current;
         int numTimes = TrainedEventTimes.Length;
-        BaselineSurvivalFunction = new Vector<T>(numTimes);
 
-        // Compute risk scores
-        var riskScores = new double[x.Rows];
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double linearPred = 0;
-            for (int j = 0; j < x.Columns; j++)
-            {
-                linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
-            }
-            riskScores[i] = Math.Exp(Math.Min(linearPred, 700));
-        }
+        // Sum of risk scores over the subjects at risk at each event time, and the events there
+        var sumRiskAtRisk = AtRiskSums(times, RiskScores(design, _coefficients), TrainedEventTimes);
+        var (_, eventsAtTime) = CountAtRiskAndEvents(times, events, TrainedEventTimes);
 
-        double cumulativeHazard = 0;
+        // Breslow estimator: H0(t) = sum d_i / sum_{j in R_i} exp(beta . X_j), skipping empty risk sets
+        var hasRisk = engine.TensorGreaterThan(sumRiskAtRisk, NumOps.Zero);
+        var safeRisk = engine.TensorWhere(hasRisk, sumRiskAtRisk,
+            Tensor<T>.CreateDefault(new[] { numTimes }, NumOps.One));
+        var hazardIncrement = engine.TensorWhere(hasRisk,
+            engine.TensorDivide(eventsAtTime, safeRisk), new Tensor<T>(new[] { numTimes }));
 
-        for (int t = 0; t < numTimes; t++)
-        {
-            double eventTime = NumOps.ToDouble(TrainedEventTimes[t]);
-
-            // Count events and sum of risk scores at this time
-            int numEventsAtTime = 0;
-            double sumRiskAtRisk = 0;
-
-            for (int i = 0; i < x.Rows; i++)
-            {
-                double ti = NumOps.ToDouble(times[i]);
-
-                // At risk if observation time >= event time
-                if (ti >= eventTime)
-                {
-                    sumRiskAtRisk += riskScores[i];
-                }
-
-                // Event at this time
-                if (events[i] == 1 && Math.Abs(ti - eventTime) < 1e-10)
-                {
-                    numEventsAtTime++;
-                }
-            }
-
-            // Breslow estimator: H₀(t) = Σ dᵢ / Σⱼ∈Rᵢ exp(β·Xⱼ)
-            if (sumRiskAtRisk > 0)
-            {
-                cumulativeHazard += numEventsAtTime / sumRiskAtRisk;
-            }
-
-            // S₀(t) = exp(-H₀(t))
-            BaselineSurvivalFunction[t] = NumOps.FromDouble(Math.Exp(-cumulativeHazard));
-        }
+        // S0(t) = exp(-H0(t))
+        BaselineSurvivalFunction = engine.TensorExp(engine.TensorNegate(engine.TensorCumSum(hazardIncrement, 0)))
+            .ToVector();
     }
 
     /// <summary>
@@ -385,23 +350,16 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
-        var result = new Matrix<T>(x.Rows, times.Length);
         var baselineSurv = GetBaselineSurvival(times);
         var hazardRatios = PredictHazardRatio(x);
+        var engine = AiDotNetEngine.Current;
+        var grid = new[] { hazardRatios.Length, times.Length };
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double hr = NumOps.ToDouble(hazardRatios[i]);
-            for (int t = 0; t < times.Length; t++)
-            {
-                // S(t|X) = S₀(t)^HR
-                double s0 = NumOps.ToDouble(baselineSurv[t]);
-                double survProb = Math.Pow(s0, hr);
-                result[i, t] = NumOps.FromDouble(survProb);
-            }
-        }
-
-        return result;
+        // S(t|X) = S0(t)^HR
+        return engine.TensorPower(
+            engine.TensorBroadcastTo(baselineSurv.AsTensor().Reshape(new[] { 1, times.Length }), grid),
+            engine.TensorBroadcastTo(hazardRatios.AsTensor().Reshape(new[] { hazardRatios.Length, 1 }), grid))
+            .ToMatrix();
     }
 
     /// <summary>
@@ -424,19 +382,7 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
         // Accepts either the covariates alone or the [event | covariates] design matrix Train takes.
         x = ExtractCovariates(x);
 
-        var result = new Vector<T>(x.Rows);
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double linearPred = 0;
-            for (int j = 0; j < x.Columns; j++)
-            {
-                linearPred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
-            }
-            result[i] = NumOps.FromDouble(Math.Exp(Math.Min(linearPred, 700)));
-        }
-
-        return result;
+        return RiskScores(Tensor<T>.FromMatrix(x), _coefficients).ToVector();
     }
 
     /// <summary>
@@ -448,38 +394,11 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
 
         if (TrainedEventTimes is null || BaselineSurvivalFunction is null)
         {
-            var ones = new Vector<T>(times.Length);
-            for (int i = 0; i < times.Length; i++)
-            {
-                ones[i] = NumOps.One;
-            }
-            return ones;
+            return Vector<T>.CreateDefault(times.Length, NumOps.One);
         }
 
-        var result = new Vector<T>(times.Length);
-
-        for (int i = 0; i < times.Length; i++)
-        {
-            double t = NumOps.ToDouble(times[i]);
-
-            // Find survival at this time (step function)
-            T survival = NumOps.One;
-            for (int j = 0; j < TrainedEventTimes.Length; j++)
-            {
-                if (NumOps.ToDouble(TrainedEventTimes[j]) <= t)
-                {
-                    survival = BaselineSurvivalFunction[j];
-                }
-                else
-                {
-                    break;
-                }
-            }
-
-            result[i] = survival;
-        }
-
-        return result;
+        // Find survival at this time (step function)
+        return EvaluateStepFunction(times, TrainedEventTimes, BaselineSurvivalFunction, NumOps.One).ToVector();
     }
 
     /// <summary>
@@ -517,14 +436,7 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
     {
         if (_coefficients is null) return null;
 
-        var result = new Vector<T>(_coefficients.Length);
-        for (int i = 0; i < _coefficients.Length; i++)
-        {
-            double coef = NumOps.ToDouble(_coefficients[i]);
-            result[i] = NumOps.FromDouble(Math.Exp(coef));
-        }
-
-        return result;
+        return AiDotNetEngine.Current.Exp(_coefficients);
     }
 
     #region JIT Compilation Support
@@ -563,12 +475,13 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
         var result = new Dictionary<string, T>();
         if (_coefficients is null) return result;
 
-        for (int i = 0; i < _coefficients.Length; i++)
+        var importances = AiDotNetEngine.Current.Abs(_coefficients).ToArray();
+        for (int i = 0; i < importances.Length; i++)
         {
             string name = FeatureNames is not null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(_coefficients[i])));
+            result[name] = importances[i];
         }
 
         return result;

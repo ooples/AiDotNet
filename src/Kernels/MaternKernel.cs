@@ -143,6 +143,15 @@ public class MaternKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
+        // Closed forms for nu = 1/2, 3/2, 5/2 run generically in T with engine ops.
+        if (Math.Abs(_nu - 0.5) < 0.01 || Math.Abs(_nu - 1.5) < 0.01 || Math.Abs(_nu - 2.5) < 0.01)
+        {
+            var engine = AiDotNetEngine.Current;
+            var diffVector = engine.Subtract(x1, x2);
+            return ComputeClosedFormMatern(_numOps.Sqrt(engine.DotProduct(diffVector, diffVector)));
+        }
+
+        // General nu needs the modified Bessel function K_nu, which has no engine op yet.
         // Compute Euclidean distance
         double r = 0;
         for (int i = 0; i < x1.Length; i++)
@@ -157,7 +166,39 @@ public class MaternKernel<T> : IKernelFunction<T>
     }
 
     /// <summary>
-    /// Computes the Matérn function value for a given distance.
+    /// Matérn closed forms for nu = 1/2, 3/2 and 5/2 (Rasmussen &amp; Williams 2006, eq. 4.16-4.17).
+    /// </summary>
+    private T ComputeClosedFormMatern(T r)
+    {
+        T variance = _numOps.FromDouble(_variance);
+        if (_numOps.LessThan(r, _numOps.FromDouble(1e-10)))
+        {
+            return variance;
+        }
+
+        T scaledR = _numOps.Divide(r, _numOps.FromDouble(_lengthScale));
+        if (Math.Abs(_nu - 0.5) < 0.01)
+        {
+            // Matérn 1/2 (exponential)
+            return _numOps.Multiply(variance, _numOps.Exp(_numOps.Negate(scaledR)));
+        }
+
+        if (Math.Abs(_nu - 1.5) < 0.01)
+        {
+            // Matérn 3/2
+            T sqrt3R = _numOps.Multiply(_numOps.FromDouble(Math.Sqrt(3.0)), scaledR);
+            return _numOps.Multiply(_numOps.Multiply(variance, _numOps.Add(_numOps.One, sqrt3R)), _numOps.Exp(_numOps.Negate(sqrt3R)));
+        }
+
+        // Matérn 5/2
+        T sqrt5R = _numOps.Multiply(_numOps.FromDouble(Math.Sqrt(5.0)), scaledR);
+        T polynomial = _numOps.Add(_numOps.Add(_numOps.One, sqrt5R), _numOps.Divide(_numOps.Multiply(sqrt5R, sqrt5R), _numOps.FromDouble(3.0)));
+        return _numOps.Multiply(_numOps.Multiply(variance, polynomial), _numOps.Exp(_numOps.Negate(sqrt5R)));
+    }
+
+    /// <summary>
+    /// Computes the Matérn function value for a given distance when ν has no closed form
+    /// (Calculate handles ν = 1/2, 3/2 and 5/2 through ComputeClosedFormMatern).
     /// </summary>
     /// <param name="r">The Euclidean distance.</param>
     /// <returns>The kernel value.</returns>
@@ -168,32 +209,8 @@ public class MaternKernel<T> : IKernelFunction<T>
             return _variance;
         }
 
-        // Use closed-form expressions for common values of nu
-        double scaledR = r / _lengthScale;
-
-        // Check for special cases (within tolerance)
-        if (Math.Abs(_nu - 0.5) < 0.01)
-        {
-            // Matérn 1/2 (exponential)
-            return _variance * Math.Exp(-scaledR);
-        }
-        else if (Math.Abs(_nu - 1.5) < 0.01)
-        {
-            // Matérn 3/2
-            double sqrt3R = Math.Sqrt(3.0) * scaledR;
-            return _variance * (1.0 + sqrt3R) * Math.Exp(-sqrt3R);
-        }
-        else if (Math.Abs(_nu - 2.5) < 0.01)
-        {
-            // Matérn 5/2
-            double sqrt5R = Math.Sqrt(5.0) * scaledR;
-            return _variance * (1.0 + sqrt5R + sqrt5R * sqrt5R / 3.0) * Math.Exp(-sqrt5R);
-        }
-        else
-        {
-            // General case using Bessel function approximation
-            return ComputeGeneralMatern(scaledR);
-        }
+        // General case using Bessel function approximation
+        return ComputeGeneralMatern(r / _lengthScale);
     }
 
     /// <summary>

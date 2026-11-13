@@ -792,17 +792,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -848,11 +838,8 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         // would detach it and starve the forecast head of gradients).
         var meanT = new Tensor<T>(new[] { batch, 1 });
         var stdT = new Tensor<T>(new[] { batch, 1 });
-        for (int b = 0; b < batch; b++)
-        {
-            meanT.Data.Span[b] = _revinMean[b];
-            stdT.Data.Span[b] = _revinStd[b];
-        }
+        _revinMean.AsSpan().Slice(0, batch).CopyTo(meanT.Data.Span);
+        _revinStd.AsSpan().Slice(0, batch).CopyTo(stdT.Data.Span);
 
         bool reshaped = forecast.Rank < 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
@@ -1014,13 +1001,18 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     {
         if (a.Length != b.Length)
         {
+            // Add over the shared prefix, keep a's tail; a detached result shaped like a, as before.
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Add(a[i], b[i]);
-            for (int i = minLen; i < a.Length; i++)
-                result[i] = a[i];
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return a.Clone();
+            var aFlat = Engine.Reshape(a.Contiguous(), new[] { a.Length });
+            var bFlat = Engine.Reshape(b.Contiguous(), new[] { b.Length });
+            var head = Engine.TensorAdd(Engine.TensorNarrow(aFlat, 0, 0, minLen), Engine.TensorNarrow(bFlat, 0, 0, minLen));
+            var summed = minLen == a.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(aFlat, 0, minLen, a.Length - minLen) }, 0);
+            return Engine.Reshape(summed, a._shape);
         }
 
         return Engine.TensorAdd(a, b);
@@ -1061,10 +1053,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
@@ -1080,10 +1069,7 @@ public partial class TimesFM<T> : TimeSeriesFoundationModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }

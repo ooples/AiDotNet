@@ -96,7 +96,8 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         var changePoints = DetectChangePoints(data, n, d);
 
         // Phase 2: Learn structure for each segment
-        var segmentGraphs = new List<Matrix<T>>();
+        var x = Tensor<T>.FromMatrix(data);
+        var segmentGraphs = new List<Tensor<T>>();
 
         int prevEnd = 0;
         for (int seg = 0; seg <= changePoints.Count; seg++)
@@ -107,14 +108,10 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
             if (segLen >= MaxLag + d + 3)
             {
                 // Extract segment data
-                var segData = new Matrix<T>(segLen, d);
-                for (int t = 0; t < segLen; t++)
-                    for (int j = 0; j < d; j++)
-                        segData[t, j] = data[prevEnd + t, j];
+                var segData = Engine.TensorSlice(x, new[] { prevEnd, 0 }, new[] { segLen, d });
 
                 // Learn structure for this segment using DYNOTEARS
-                var segGraph = LearnSegmentStructure(segData, segLen, d);
-                segmentGraphs.Add(segGraph);
+                segmentGraphs.Add(LearnSegmentStructure(segData, segLen, d));
             }
 
             prevEnd = segEnd;
@@ -123,23 +120,15 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         if (segmentGraphs.Count == 0)
             return new Matrix<T>(d, d);
 
-        // Phase 3: Aggregate — take max |w_k| across segments
-        var result = new Matrix<T>(d, d);
-        for (int sg = 0; sg < segmentGraphs.Count; sg++)
+        // Phase 3: Aggregate — take the entry with the largest |w_k| across segments (earliest segment on ties)
+        var result = new Tensor<T>(new[] { d, d });
+        foreach (var segmentGraph in segmentGraphs)
         {
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    T absNew = NumOps.Abs(segmentGraphs[sg][i, j]);
-                    T absCur = NumOps.Abs(result[i, j]);
-                    if (NumOps.GreaterThan(absNew, absCur))
-                        result[i, j] = segmentGraphs[sg][i, j];
-                }
-            }
+            var larger = Engine.TensorGreaterThan(Engine.TensorAbs(segmentGraph), Engine.TensorAbs(result));
+            result = Engine.TensorWhere(larger, segmentGraph, result);
         }
 
-        return result;
+        return result.ToMatrix();
     }
 
     private List<int> DetectChangePoints(Matrix<T> data, int n, int d)
@@ -148,63 +137,44 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         int windowSize = Math.Max(n / (_maxSegments * 2), MaxLag + d + 3);
         if (windowSize >= n / 2) return changePoints;
 
-        // Compute rolling variance ratio using Engine-accelerated dot products
-        var varianceRatios = new List<double>();
+        // Rolling variance ratio: for each split t, Σ_col |log(max(SS_right, 1e-15) / max(SS_left, 1e-15))| where
+        // SS is the centered sum of squares of the windowSize rows before / from t.
+        var x = Tensor<T>.FromMatrix(data);
+        T floor = NumOps.FromDouble(1e-15);
+        var ratios = new List<Tensor<T>>();
         for (int t = windowSize; t <= n - windowSize; t++)
         {
-            T totalRatio = NumOps.Zero;
-            for (int col = 0; col < d; col++)
-            {
-                // Left window variance
-                var leftVec = new Vector<T>(windowSize);
-                T leftSum = NumOps.Zero;
-                for (int s = 0; s < windowSize; s++)
-                {
-                    leftVec[s] = data[t - windowSize + s, col];
-                    leftSum = NumOps.Add(leftSum, leftVec[s]);
-                }
-                T leftMean = NumOps.Divide(leftSum, NumOps.FromDouble(windowSize));
-                for (int s = 0; s < windowSize; s++)
-                    leftVec[s] = NumOps.Subtract(leftVec[s], leftMean);
-                T leftVar = Engine.DotProduct(leftVec, leftVec);
-
-                // Right window variance
-                var rightVec = new Vector<T>(windowSize);
-                T rightSum = NumOps.Zero;
-                for (int s = 0; s < windowSize; s++)
-                {
-                    rightVec[s] = data[t + s, col];
-                    rightSum = NumOps.Add(rightSum, rightVec[s]);
-                }
-                T rightMean = NumOps.Divide(rightSum, NumOps.FromDouble(windowSize));
-                for (int s = 0; s < windowSize; s++)
-                    rightVec[s] = NumOps.Subtract(rightVec[s], rightMean);
-                T rightVar = Engine.DotProduct(rightVec, rightVec);
-
-                // Variance ratio (log ratio to handle scale differences)
-                double dLeft = Math.Max(NumOps.ToDouble(leftVar), 1e-15);
-                double dRight = Math.Max(NumOps.ToDouble(rightVar), 1e-15);
-                totalRatio = NumOps.Add(totalRatio, NumOps.FromDouble(Math.Abs(Math.Log(dRight / dLeft))));
-            }
-            varianceRatios.Add(NumOps.ToDouble(totalRatio));
+            var leftVar = WindowSumOfSquares(x, t - windowSize, windowSize, floor);
+            var rightVar = WindowSumOfSquares(x, t, windowSize, floor);
+            var logRatio = Engine.TensorAbs(Engine.TensorLog(Engine.TensorDivide(rightVar, leftVar)));
+            ratios.Add(Engine.ReduceSum(logRatio, new[] { 0 }, true));
         }
 
-        if (varianceRatios.Count == 0) return changePoints;
+        if (ratios.Count == 0) return changePoints;
+        var varianceRatios = Engine.TensorConcatenate(ratios.ToArray(), 0);
+        int count = ratios.Count;
+        if (count < 3) return changePoints;
 
-        // Find peaks in variance ratio that exceed threshold
-        double mean = varianceRatios.Average();
-        double std = Math.Sqrt(varianceRatios.Sum(v => (v - mean) * (v - mean)) / varianceRatios.Count);
-        double peakThreshold = mean + 2.0 * std;
+        // Find peaks in variance ratio that exceed mean + 2 * std (population std)
+        T mean = Engine.TensorMean(varianceRatios);
+        var deviation = Engine.TensorSubtractScalar(varianceRatios, mean);
+        T std = NumOps.Sqrt(Engine.TensorMean(Engine.TensorMultiply(deviation, deviation)));
+        T peakThreshold = NumOps.Add(mean, NumOps.Multiply(NumOps.FromDouble(2.0), std));
+
+        var middle = Engine.TensorSlice(varianceRatios, new[] { 1 }, new[] { count - 2 });
+        var previous = Engine.TensorSlice(varianceRatios, new[] { 0 }, new[] { count - 2 });
+        var next = Engine.TensorSlice(varianceRatios, new[] { 2 }, new[] { count - 2 });
+        var isPeak = Engine.TensorMultiply(Engine.TensorMultiply(
+            Engine.TensorGreaterThan(middle, peakThreshold), Engine.TensorGreaterThan(middle, previous)),
+            Engine.TensorGreaterThan(middle, next));
 
         int minGap = windowSize;
         int lastCP = -minGap;
-        for (int i = 1; i < varianceRatios.Count - 1 && changePoints.Count < _maxSegments - 1; i++)
+        foreach (int peak in Engine.TensorNonzero(isPeak).ToArray())
         {
-            int absT = windowSize + i;
-            if (varianceRatios[i] > peakThreshold &&
-                varianceRatios[i] > varianceRatios[i - 1] &&
-                varianceRatios[i] > varianceRatios[i + 1] &&
-                absT - lastCP >= minGap)
+            if (changePoints.Count >= _maxSegments - 1) break;
+            int absT = windowSize + peak + 1;
+            if (absT - lastCP >= minGap)
             {
                 changePoints.Add(absT);
                 lastCP = absT;
@@ -214,226 +184,142 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         return changePoints;
     }
 
-    private Matrix<T> LearnSegmentStructure(Matrix<T> segData, int n, int d)
+    /// <summary>
+    /// Per-column centered sum of squares of rows start..start+length-1, floored at <paramref name="floor"/>. Returns [d].
+    /// </summary>
+    private Tensor<T> WindowSumOfSquares(Tensor<T> x, int start, int length, T floor)
     {
-        // Standardize segment
-        T nT = NumOps.FromDouble(n);
-        var stdData = new Matrix<T>(n, d);
-        for (int j = 0; j < d; j++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < n; t++)
-                mean = NumOps.Add(mean, segData[t, j]);
-            mean = NumOps.Divide(mean, nT);
+        var window = CenterColumns(Engine.TensorSlice(x, new[] { start, 0 }, new[] { length, x.Shape[1] }));
+        return Engine.TensorMax(Engine.ReduceSum(Engine.TensorMultiply(window, window), new[] { 0 }, false), floor);
+    }
 
-            T variance = NumOps.Zero;
-            for (int t = 0; t < n; t++)
-            {
-                T diff = NumOps.Subtract(segData[t, j], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            T std = NumOps.Sqrt(NumOps.Add(NumOps.Divide(variance, nT), NumOps.FromDouble(1e-15)));
-
-            for (int t = 0; t < n; t++)
-                stdData[t, j] = NumOps.Divide(NumOps.Subtract(segData[t, j], mean), std);
-        }
+    private Tensor<T> LearnSegmentStructure(Tensor<T> segData, int n, int d)
+    {
+        // Standardize segment: (x - mean) / sqrt(var + 1e-15), population variance
+        var centered = CenterColumns(segData);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(
+            Engine.ReduceMean(Engine.TensorMultiply(centered, centered), new[] { 0 }, true), NumOps.FromDouble(1e-15)));
+        var stdData = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, new[] { n, d }));
 
         int effectiveN = n - MaxLag;
-        if (effectiveN < d + 3) return new Matrix<T>(d, d);
+        if (effectiveN < d + 3) return new Tensor<T>(new[] { d, d });
 
-        // Build contemporaneous and lagged matrices
-        var Xt = new Matrix<T>(effectiveN, d);
-        for (int t = 0; t < effectiveN; t++)
-            for (int j = 0; j < d; j++)
-                Xt[t, j] = stdData[t + MaxLag, j];
-
+        // Build contemporaneous and lagged matrices: Z[:, (lag - 1) * d + j] = x_j(t - lag)
+        var Xt = Engine.TensorSlice(stdData, new[] { MaxLag, 0 }, new[] { effectiveN, d });
         int lagDim = d * MaxLag;
-        var Z = new Matrix<T>(effectiveN, lagDim);
-        for (int t = 0; t < effectiveN; t++)
-            for (int lag = 1; lag <= MaxLag; lag++)
-            {
-                int colOffset = (lag - 1) * d;
-                for (int j = 0; j < d; j++)
-                    Z[t, colOffset + j] = stdData[t + MaxLag - lag, j];
-            }
+        var Z = Engine.TensorConcatenate(Enumerable.Range(1, MaxLag)
+            .Select(lag => Engine.TensorSlice(stdData, new[] { MaxLag - lag, 0 }, new[] { effectiveN, d }))
+            .ToArray(), 1);
+        var XtT = Engine.TensorTranspose(Xt);
+        var ZT = Engine.TensorTranspose(Z);
 
         // DYNOTEARS-style: optimize contemporaneous W and lagged A matrices
         // Loss = 1/(2n) * ||Xt - Xt*W - Z*A||_F^2 + lambda*||W||_1
         // subject to h(W) = tr(exp(W∘W)) - d = 0
-        var W = new Matrix<T>(d, d);
-        var A = new Matrix<T>(lagDim, d); // Lagged coefficients
-        double rho = 1.0, alpha = 0.0;
+        var W = new Tensor<T>(new[] { d, d });
+        var A = new Tensor<T>(new[] { lagDim, d }); // Lagged coefficients
+        // Augmented-Lagrangian state as [1] tensors: rho = 1, alpha = 0
+        var rho = Engine.TensorOnesLike(new Tensor<T>(new[] { 1 }));
+        var alpha = new Tensor<T>(new[] { 1 });
         // For small problems, use higher learning rate
         T lr = NumOps.FromDouble(d <= 10 ? 0.01 : 1e-3);
         T lambda = NumOps.FromDouble(_lambda1);
-        T invN = NumOps.FromDouble(1.0 / effectiveN);
+        T negInvN = NumOps.FromDouble(-1.0 / effectiveN);
+        T two = NumOps.FromDouble(2.0);
+        T ten = NumOps.FromDouble(10.0);
+        T rhoMax = NumOps.FromDouble(1e16);
+        T converged = NumOps.FromDouble(1e-8);
+        T notNaNBound = NumOps.FromDouble(-1.0);
+        var offDiagonal = OffDiagonalMask(d);
+        var zeros = new Tensor<T>(new[] { d, d });
 
         for (int outer = 0; outer < _maxOuterIterations; outer++)
         {
             // Inner gradient descent
             for (int step = 0; step < _maxInnerSteps; step++)
             {
-                var gradW = new Matrix<T>(d, d);
-                var gradA = new Matrix<T>(lagDim, d);
+                // Residual R = Xt - Xt*W - Z*A; gradients -1/n * Xt' R and -1/n * Z' R
+                var residual = Engine.TensorSubtract(Engine.TensorSubtract(Xt, Engine.TensorMatMul(Xt, W)), Engine.TensorMatMul(Z, A));
+                var gradW = Engine.TensorMultiplyScalar(Engine.TensorMatMul(XtT, residual), negInvN);
+                var gradA = Engine.TensorMultiplyScalar(Engine.TensorMatMul(ZT, residual), negInvN);
 
-                // Compute residual and gradients for each target column j
-                for (int j = 0; j < d; j++)
-                {
-                    // Residual: r_j = Xt[:,j] - Xt*W[:,j] - Z*A[:,j]
-                    var residCol = new Vector<T>(effectiveN);
-                    for (int t = 0; t < effectiveN; t++)
-                    {
-                        T pred = NumOps.Zero;
-                        // Contemporaneous: Xt * W[:,j]
-                        for (int k = 0; k < d; k++)
-                            pred = NumOps.Add(pred, NumOps.Multiply(Xt[t, k], W[k, j]));
-                        // Lagged: Z * A[:,j]
-                        for (int l = 0; l < lagDim; l++)
-                            pred = NumOps.Add(pred, NumOps.Multiply(Z[t, l], A[l, j]));
-                        residCol[t] = NumOps.Subtract(Xt[t, j], pred);
-                    }
-
-                    // Gradient for W: -1/n * Xt' * residual
-                    for (int i = 0; i < d; i++)
-                    {
-                        var xiCol = new Vector<T>(effectiveN);
-                        for (int t = 0; t < effectiveN; t++)
-                            xiCol[t] = Xt[t, i];
-                        T dot = Engine.DotProduct(xiCol, residCol);
-                        gradW[i, j] = NumOps.Negate(NumOps.Multiply(invN, dot));
-                    }
-
-                    // Gradient for A: -1/n * Z' * residual
-                    for (int l = 0; l < lagDim; l++)
-                    {
-                        var zCol = new Vector<T>(effectiveN);
-                        for (int t = 0; t < effectiveN; t++)
-                            zCol[t] = Z[t, l];
-                        T dot = Engine.DotProduct(zCol, residCol);
-                        gradA[l, j] = NumOps.Negate(NumOps.Multiply(invN, dot));
-                    }
-                }
+                // sign(W) is undefined for NaN (Math.Sign throws), so a diverged W fails loudly.
+                if (Engine.TensorCountNonzero(Engine.TensorGreaterThan(Engine.TensorAbs(W), notNaNBound)) < d * d)
+                    throw new ArithmeticException("Function does not accept floating point Not-a-Number values.");
 
                 // Add acyclicity gradient for W: (alpha + rho*h) * [exp(W∘W)^T ∘ 2W]
-                double h = ComputeTraceExpWoW(W, d);
-                T constraintMult = NumOps.FromDouble(alpha + rho * h);
-                T two = NumOps.FromDouble(2.0);
-                var expWoW = ComputeExpWoW(W, d);
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                    {
-                        // Use transposed expWoW: expWoW[j,i] not expWoW[i,j]
-                        T acGrad = NumOps.Multiply(constraintMult,
-                            NumOps.Multiply(two, NumOps.Multiply(expWoW[j, i], W[i, j])));
-                        T l1Grad = NumOps.Multiply(lambda, NumOps.FromDouble(Math.Sign(NumOps.ToDouble(W[i, j]))));
-                        gradW[i, j] = NumOps.Add(gradW[i, j], NumOps.Add(acGrad, l1Grad));
-                    }
+                var (expWoW, h) = ExpHadamardSquare(W, d);
+                var constraintMult = Engine.TensorAdd(alpha, Engine.TensorMultiply(rho, h));
+                var acGrad = Engine.TensorMultiply(
+                    Engine.TensorBroadcastTo(Engine.TensorMultiplyScalar(constraintMult, two).Reshape(new[] { 1, 1 }), new[] { d, d }),
+                    Engine.TensorMultiply(Engine.TensorTranspose(expWoW), W));
+                var l1Grad = Engine.TensorMultiplyScalar(Engine.TensorSign(W), lambda);
+                gradW = Engine.TensorAdd(gradW, Engine.TensorAdd(acGrad, l1Grad));
 
-                // Update W and A
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                        W[i, j] = NumOps.Subtract(W[i, j], NumOps.Multiply(lr, gradW[i, j]));
-                for (int l = 0; l < lagDim; l++)
-                    for (int j = 0; j < d; j++)
-                        A[l, j] = NumOps.Subtract(A[l, j], NumOps.Multiply(lr, gradA[l, j]));
-
-                // Zero diagonal of W
-                for (int i = 0; i < d; i++)
-                    W[i, i] = NumOps.Zero;
+                // Update W and A, then zero the diagonal of W
+                W = Engine.TensorSubtract(W, Engine.TensorMultiplyScalar(gradW, lr));
+                A = Engine.TensorSubtract(A, Engine.TensorMultiplyScalar(gradA, lr));
+                W = Engine.TensorWhere(offDiagonal, W, zeros);
             }
 
-            double hVal = ComputeTraceExpWoW(W, d);
-            if (hVal < 1e-8) break;
-            alpha += rho * hVal;
-            rho = Math.Min(rho * 10.0, 1e16);
+            var hVal = ExpHadamardSquare(W, d).Trace;
+            if (CausalTensorHelpers.AnyBelow(hVal, converged)) break;
+            alpha = Engine.TensorAdd(alpha, Engine.TensorMultiply(rho, hVal));
+            rho = Engine.TensorMin(Engine.TensorMultiplyScalar(rho, ten), rhoMax);
         }
 
         // Threshold and return, with covariance fallback
-        var result = new Matrix<T>(d, d);
         T thresh = NumOps.FromDouble(_wThreshold);
-        bool hasEdges = false;
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (NumOps.GreaterThan(NumOps.Abs(W[i, j]), thresh))
-                {
-                    result[i, j] = W[i, j];
-                    hasEdges = true;
-                }
+        var strong = Engine.TensorGreaterThan(Engine.TensorAbs(W), thresh);
+        if (Engine.TensorCountNonzero(strong) > 0)
+            return Engine.TensorWhere(strong, W, zeros);
 
-        if (!hasEdges)
-        {
-            // Covariance-based fallback for deterministic data
-            var cov = ComputeCovarianceMatrix(stdData);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    double varI = NumOps.ToDouble(cov[i, i]);
-                    if (varI < 1e-10) continue;
-                    double covIJ = NumOps.ToDouble(cov[i, j]);
-                    double weight = covIJ / varI;
-                    if (Math.Abs(weight) < _wThreshold) continue;
-                    double varJ = NumOps.ToDouble(cov[j, j]);
-                    double reverseW = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                    if (Math.Abs(weight) > reverseW || (Math.Abs(weight) == reverseW && i < j))
-                        result[i, j] = NumOps.FromDouble(weight);
-                }
-        }
-
-        return result;
+        // Covariance-based fallback for deterministic data: weight cov_ij / var_i when var_i ≥ 1e-10 and
+        // |weight| ≥ threshold, kept when it beats the reverse |cov_ij / var_j| (0 when var_j ≤ 1e-10),
+        // ties going to i < j.
+        var cov = Tensor<T>.FromMatrix(ComputeCovarianceMatrix(stdData.ToMatrix()));
+        var variance = Engine.TensorDiagonal(cov);
+        var shape = new[] { d, d };
+        var varianceRows = Engine.TensorBroadcastTo(variance.Reshape(new[] { d, 1 }), shape);
+        var varianceCols = Engine.TensorBroadcastTo(variance.Reshape(new[] { 1, d }), shape);
+        T varianceFloor = NumOps.FromDouble(1e-10);
+        var ones = Engine.TensorOnesLike(cov);
+        var weight = Engine.TensorDivide(cov, varianceRows);
+        var absWeight = Engine.TensorAbs(weight);
+        var reverseW = Engine.TensorWhere(Engine.TensorGreaterThan(varianceCols, varianceFloor),
+            Engine.TensorAbs(Engine.TensorDivide(cov, varianceCols)), zeros);
+        var usable = Engine.TensorMultiply(Engine.TensorMultiply(offDiagonal,
+            Engine.TensorSubtract(ones, Engine.TensorLessThan(varianceRows, varianceFloor))),
+            Engine.TensorSubtract(ones, Engine.TensorLessThan(absWeight, thresh)));
+        var wins = Engine.TensorAdd(Engine.TensorGreaterThan(absWeight, reverseW),
+            Engine.TensorMultiply(Engine.TensorEquals(absWeight, reverseW), Engine.TensorTriu(ones, 1)));
+        return Engine.TensorWhere(Engine.TensorMultiply(usable, wins), weight, zeros);
     }
 
-    private double ComputeTraceExpWoW(Matrix<T> W, int d)
+    /// <summary>
+    /// exp(W∘W) by its Taylor series through min(d, 20) terms, and h = tr(exp(W∘W)) − d (the trace of
+    /// every term after the identity) as a [1] tensor.
+    /// </summary>
+    private (Tensor<T> Exp, Tensor<T> Trace) ExpHadamardSquare(Tensor<T> w, int d)
     {
-        // tr(e^{W∘W}) - d via Taylor series with MatMul acceleration
-        var WoW = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                WoW[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
+        var wow = Engine.TensorMultiply(w, w);
+        var identity = Engine.TensorEye<T>(d);
+        var series = new Tensor<T>(new[] { d, d });
+        var power = identity;
 
-        double trace = 0;
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++) power[i, i] = NumOps.One;
-
-        double factorial = 1.0;
+        // runningFactorial holds k! as a [1, 1] tensor, broadcast over the power matrix.
+        var one = Engine.TensorOnesLike(new Tensor<T>(new[] { 1, 1 }));
+        var counter = Engine.TensorZerosLike(one);
+        var runningFactorial = one;
         for (int k = 1; k <= Math.Min(d, 20); k++)
         {
-            factorial *= k;
-            power = MatMul(power, WoW);
-            double tr = 0;
-            for (int i = 0; i < d; i++) tr += NumOps.ToDouble(power[i, i]);
-            trace += tr / factorial;
+            power = Engine.TensorMatMul(power, wow);
+            counter = Engine.TensorAdd(counter, one);
+            runningFactorial = Engine.TensorMultiply(runningFactorial, counter);
+            series = Engine.TensorAdd(series, Engine.TensorDivide(power, Engine.TensorBroadcastTo(runningFactorial, new[] { d, d })));
         }
 
-        return trace;
-    }
-
-    private Matrix<T> ComputeExpWoW(Matrix<T> W, int d)
-    {
-        var WoW = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                WoW[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
-
-        var result = new Matrix<T>(d, d);
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            result[i, i] = NumOps.One;
-            power[i, i] = NumOps.One;
-        }
-
-        double factorial = 1.0;
-        for (int k = 1; k <= Math.Min(d, 20); k++)
-        {
-            factorial *= k;
-            T invFact = NumOps.FromDouble(1.0 / factorial);
-            power = MatMul(power, WoW);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    result[i, j] = NumOps.Add(result[i, j], NumOps.Multiply(power[i, j], invFact));
-        }
-
-        return result;
+        var trace = Engine.ReduceSum(Engine.TensorDiagonal(series), new[] { 0 }, true);
+        return (Engine.TensorAdd(identity, series), trace);
     }
 }

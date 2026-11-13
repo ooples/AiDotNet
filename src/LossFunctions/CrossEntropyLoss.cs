@@ -48,15 +48,13 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Clamp predicted values to prevent log(0) using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
+        // Clamp predicted values into [eps, 1 - eps] to prevent log(0)
+        // (NumericalStabilityHelper.ClampProbability); SafeLog's floor is then already satisfied.
+        T eps = NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon);
+        var p = Engine.TensorClamp(predicted.AsTensor(), eps, NumOps.Subtract(NumOps.One, eps));
 
-            // -?(actual_i * log(predicted_i))
-            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(p, NumericalStabilityHelper.SmallEpsilon)));
-        }
+        // -Σ(actual_i * log(predicted_i)) / n
+        T sum = Engine.TensorSum(Engine.TensorMultiply(actual.AsTensor(), Engine.TensorLog(p)));
 
         return NumOps.Negate(NumOps.Divide(sum, NumOps.FromDouble(predicted.Length)));
     }
