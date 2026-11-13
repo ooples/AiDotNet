@@ -160,7 +160,8 @@ public class MAEReconstructionLoss<T> : ContrastiveLossBase<T>
 
         // Mean over each sample's masked patches; zero for a sample with none
         var sampleLoss = Engine.ReduceSum(patchLosses, new[] { 1 }, keepDims: false);
-        var sampleMaskedCount = Engine.ReduceSum(masked, new[] { 1 }, keepDims: false);
+        // Counted in int, as master did: a sum of 0/1 flags in T saturates (at 2048 for Half)
+        var sampleMaskedCount = Engine.ReduceSum(masked.Cast<int>(), new[] { 1 }, keepDims: false).Cast<T>();
         var losses = Engine.TensorWhere(sampleMaskedCount,
             Engine.TensorDivide(sampleLoss, sampleMaskedCount), new Tensor<T>(new[] { batchSize }));
 
