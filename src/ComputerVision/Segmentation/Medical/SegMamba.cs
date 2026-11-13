@@ -703,8 +703,11 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         var probs = Engine.Softmax(logits, 0);
 
         // Labels: first class with the largest logit; NaN logits never win (they are treated as -inf).
-        var finiteLogits = Engine.TensorWhere(Engine.TensorIsNan(logits),
-            Engine.TensorFullLike(logits, NumOps.FromDouble(double.NegativeInfinity)), logits);
+        // Only a NaN-holding (floating) tensor converts -infinity, which decimal cannot represent.
+        var isNan = Engine.TensorIsNan(logits);
+        var finiteLogits = Engine.TensorCountNonzero(isNan) == 0
+            ? logits
+            : Engine.TensorWhere(isNan, Engine.TensorFullLike(logits, NumOps.FromDouble(double.NegativeInfinity)), logits);
         var labels = Engine.TensorArgMax(finiteLogits, 0).Cast<T>();
 
         // Foreground structures (background class 0 omitted) in the order they first appear in the volume.

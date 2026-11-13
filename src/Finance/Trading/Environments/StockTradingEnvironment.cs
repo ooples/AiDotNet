@@ -133,11 +133,32 @@ public sealed class StockTradingEnvironment<T> : TradingEnvironment<T>
             return (int)NumOps.ToDouble(action[0]);
         }
 
-        // The first index of the largest score; a NaN score never wins (it ranks as -infinity).
+        return FirstMaxIndex(action);
+    }
+
+    /// <summary>
+    /// The scan <c>best = 0; if (Compare(v[i], v[best]) &gt; 0) best = i</c>: the first index of the largest
+    /// score, where a NaN score ranks below every number (as <c>CompareTo</c> orders it) and every score
+    /// being NaN gives 0.
+    /// </summary>
+    /// <remarks>
+    /// NaN positions are excluded with an int mask rather than replaced by -infinity, so a real -infinity
+    /// score still beats an earlier NaN, and types without infinity (decimal) never convert one.
+    /// </remarks>
+    internal static int FirstMaxIndex(Vector<T> action)
+    {
+        int n = action.Length;
+        if (n == 0) return 0;
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var scores = action.AsTensor();
-        var ranked = engine.TensorWhere(engine.TensorIsNan(scores),
-            engine.TensorFullLike(scores, NumOps.FromDouble(double.NegativeInfinity)), scores);
-        return engine.TensorArgMax(ranked, 0).ToArray()[0];
+        var isNumber = engine.ScalarMinusTensor(1, engine.TensorIsNan(scores).Cast<int>());
+        var numberIndices = engine.TensorNonzero(isNumber).ToArray();
+        if (numberIndices.Length == 0) return 0;
+        var numbers = numberIndices.Length == n
+            ? scores
+            : engine.TensorIndexSelect(scores, new Tensor<int>(numberIndices, new[] { numberIndices.Length }), 0);
+        T best = engine.TensorMaxValue(numbers);
+        var isBest = engine.TensorEquals(numbers, best).Cast<int>();
+        return numberIndices[engine.TensorNonzero(isBest).ToArray()[0]];
     }
 }
