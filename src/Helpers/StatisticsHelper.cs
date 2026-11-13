@@ -7027,7 +7027,7 @@ public static class StatisticsHelper<T>
         T degenerateBelow = _numOps.FromDouble(1e-10);
         var degenerate = _numOps.GreaterThan(degenerateBelow, _numOps.Zero)
             ? Engine.TensorLessThan(sigma, degenerateBelow)
-            : Engine.TensorLessEqual(sigma, _numOps.Zero);
+            : Engine.TensorLessEqual(sigma, new Tensor<T>(sigma._shape));
         var totalCrps = Engine.TensorSum(Engine.TensorWhere(degenerate, Engine.TensorAbs(error), gaussianCrps));
 
         return _numOps.Divide(totalCrps, _numOps.FromDouble(n));
