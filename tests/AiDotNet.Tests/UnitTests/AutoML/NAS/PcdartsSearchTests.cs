@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using AiDotNet.AutoML.NAS;
 using AiDotNet.AutoML.SearchSpace;
 using AiDotNet.Tensors.Helpers;
@@ -88,7 +89,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
         }
 
         [Fact(Timeout = 120000)]
-        public void RunSearch_TrainsAlphaAndBeta()
+        public async Task RunSearch_TrainsAlphaAndBeta()
         {
             var pcdarts = Create(epochs: 3, warmupEpochs: 1);
             var alphaBefore = Snapshot(pcdarts);
@@ -105,7 +106,7 @@ namespace AiDotNet.Tests.UnitTests.AutoML.NAS
         }
 
         [Fact(Timeout = 120000)]
-        public void RunSearch_WarmupEpochs_LeaveAlphaAndBetaUnchanged()
+        public async Task RunSearch_WarmupEpochs_LeaveAlphaAndBetaUnchanged()
         {
             var pcdarts = Create(epochs: 2, warmupEpochs: 2);
             var alphaBefore = Snapshot(pcdarts);
