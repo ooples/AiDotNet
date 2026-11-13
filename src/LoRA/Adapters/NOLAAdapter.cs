@@ -243,22 +243,56 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private Tensor<T> CombineBases(int rows, int cols, int basisOffset, Tensor<T> coefficients)
     {
-        if (_numBasis == 0) return new Tensor<T>([rows, cols]);
-        // At most sixteen bases, with a 65,536-element budget unless one basis itself is larger.
-        int blockSize = (int)Math.Max(1, Math.Min(16, 65_536L / ((long)rows * cols)));
-        var sum = new Tensor<T>([rows, cols]);
+        Tensor<T> sum;
+        // Random bases are constants: retaining each block on the forward tape defeats rematerialization.
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            int blockSize = BasisBlockSize(rows, cols);
+            sum = new Tensor<T>([rows, cols]);
+            for (int start = 0; start < _numBasis; start += blockSize)
+            {
+                int count = Math.Min(blockSize, _numBasis - start);
+                var bases = GenerateBasisBlock(rows, cols, basisOffset + start, count);
+                var weights = Engine.Reshape(Engine.TensorNarrow(coefficients, 0, start, count), [count, 1, 1]);
+                sum = Engine.TensorAdd(sum, Engine.ReduceSum(Engine.TensorMultiply(bases, weights), [0], false));
+            }
+        }
+
+        if (AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed) return sum;
+
+        // The closure retains dimensions and the seed-bearing adapter, never generated basis tensors.
+        return RegisterManualBackwardNode(sum, [coefficients],
+            gradient => [BasisCoefficientGradient(gradient, rows, cols, basisOffset)]);
+    }
+
+    private static int BasisBlockSize(int rows, int cols)
+        => (int)Math.Max(1, Math.Min(16, 65_536L / ((long)rows * cols)));
+
+    private Tensor<T> GenerateBasisBlock(int rows, int cols, int basisOffset, int count)
+    {
+        var bases = new Tensor<T>[count];
+        for (int b = 0; b < count; b++)
+            bases[b] = Tensor<T>.FromMatrix(GenerateRandomBasis(rows, cols, basisOffset + b));
+        return Engine.TensorStack(bases, 0);
+    }
+
+    private Tensor<T> BasisCoefficientGradient(Tensor<T> gradient, int rows, int cols, int basisOffset)
+    {
+        using var arenaSuspension = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        int blockSize = BasisBlockSize(rows, cols);
+        var blocks = new List<Tensor<T>>();
         for (int start = 0; start < _numBasis; start += blockSize)
         {
             int count = Math.Min(blockSize, _numBasis - start);
-            var bases = new Tensor<T>[count];
-            for (int b = 0; b < count; b++)
-                bases[b] = Tensor<T>.FromMatrix(GenerateRandomBasis(rows, cols, basisOffset + start + b));
-            var weights = Engine.Reshape(Engine.TensorNarrow(coefficients, 0, start, count), [count, 1, 1]);
-            var terms = Engine.TensorMultiply(Engine.TensorStack(bases, 0), weights);
-            sum = Engine.TensorAdd(sum, Engine.ReduceSum(terms, [0], false));
+            var bases = GenerateBasisBlock(rows, cols, basisOffset + start, count);
+            // d(sum_i c_i basis_i)/dc_i is basis_i; contract with the incoming matrix gradient.
+            var products = Engine.TensorMultiply(bases, Engine.Reshape(gradient, [1, rows, cols]));
+            blocks.Add(Engine.ReduceSum(products, [1, 2], false));
         }
-        return sum;
+        return Engine.TensorConcatenate(blocks.ToArray(), 0);
     }
+
 
     private Tensor<T> ReconstructMatrixA()
 

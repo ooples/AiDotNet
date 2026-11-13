@@ -14,6 +14,62 @@ namespace AiDotNet.Tests.IntegrationTests.LoRA;
 
 public class LoRAReviewRegressionTests
 {
+    [Fact]
+    public void Nola_NoGradDoesNotRecordCustomBasisNodes()
+    {
+        var adapter = new NOLAAdapter<double>(Dense(5, 3), rank: 2, numBasis: 17);
+        _ = adapter.GetTrainableParameters();
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>())
+            _ = adapter.Forward(new Tensor<double>(new[] { 0.2, 0.3, 0.4, 0.5, 0.6 }, new[] { 1, 5 }));
+        Assert.Equal(0, tape.EntryCount);
+    }
+
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static Tensor<double> BuildNolaObjective(NOLAAdapter<double> adapter, Tensor<double> input)
+        => Objective(adapter, input);
+
+    [Fact]
+    public void Nola_RegeneratesBasesWithoutRetainingForwardBlocksOnTheTape()
+    {
+        var previous = AiDotNetEngine.Current;
+        var engine = new BasisEngine();
+        try
+        {
+            AiDotNetEngine.Current = engine;
+            int? entryCount = null;
+            foreach (int bases in new[] { 17, 257 })
+            {
+                engine.BasisBuffers.Clear();
+                var adapter = new NOLAAdapter<double>(Dense(64, 5), rank: 5, numBasis: bases);
+                adapter.SetParameters(new Vector<double>(Enumerable.Repeat(0.01, 2 * bases).ToArray()));
+                var input = new Tensor<double>(Enumerable.Repeat(0.1, 64).ToArray(), new[] { 1, 64 });
+                using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+                var loss = BuildNolaObjective(adapter, input);
+                Assert.NotEmpty(engine.BasisBuffers);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+                Assert.All(engine.BasisBuffers, buffer => Assert.False(buffer.IsAlive,
+                    $"entries={tape.EntryCount}, arenaActive={AiDotNet.Tensors.Helpers.TensorArena.Current is not null}"));
+                if (entryCount.HasValue) Assert.Equal(entryCount.Value, tape.EntryCount);
+                entryCount = tape.EntryCount;
+                int forwardBlocks = engine.Blocks;
+                var parameters = adapter.GetTrainableParameters();
+                var gradients = tape.ComputeGradients(loss, parameters);
+                Assert.All(parameters, parameter =>
+                {
+                    Assert.True(gradients.TryGetValue(parameter, out var gradient));
+                    Assert.NotNull(gradient);
+                    Assert.Contains(gradient.ToArray(), x => Math.Abs(x) > 1e-12);
+                });
+                Assert.True(engine.Blocks > forwardBlocks);
+            }
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     private static DenseLayer<double> Dense(int input, int output)
     {
         var layer = new DenseLayer<double>(output, (IActivationFunction<double>)new IdentityActivation<double>());
@@ -97,11 +153,13 @@ public class LoRAReviewRegressionTests
     private sealed class BasisEngine : CpuEngine
     {
         internal int Blocks;
+        internal readonly System.Collections.Generic.List<WeakReference> BasisBuffers = new();
         public override Tensor<T> TensorMultiply<T>(Tensor<T> a, Tensor<T> b)
         {
             if (a.Shape.Length == 3 && b.Shape.Length == 3)
             {
                 Blocks++;
+                BasisBuffers.Add(new WeakReference(a));
                 Assert.InRange(a.Shape[0], 1, 16);
                 Assert.True(a.Length <= Math.Max(65_536L, (long)a.Shape[1] * a.Shape[2]));
             }
