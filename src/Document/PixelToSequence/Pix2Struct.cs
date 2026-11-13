@@ -420,6 +420,32 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     #region Preprocessing
 
     /// <summary>
+    /// Rescales the page, up or down and keeping its aspect ratio, to the largest patch grid that fits in
+    /// <c>MaxPatches</c> (Lee et al. 2023, section 2.1: "we scale the input image up or down so as to extract the
+    /// maximal number of fixed-size patches that fit within the given sequence length").
+    /// </summary>
+    /// <remarks>
+    /// The grid is the reference processor's: with s = sqrt(maxPatches * (p / H) * (p / W)), rows = floor(s * H / p) and
+    /// columns = floor(s * W / p), each clamped to [1, maxPatches]. An image already on that grid is returned unchanged.
+    /// </remarks>
+    private Tensor<T> ResizeToPatchBudget(Tensor<T> image)
+    {
+        if (_maxPatches <= 0 || _patchSize <= 0 || image.Rank != 4) return image;
+        int height = image.Shape[2];
+        int width = image.Shape[3];
+        if (height <= 0 || width <= 0) return image;
+
+        double scale = Math.Sqrt(_maxPatches * ((double)_patchSize / height) * ((double)_patchSize / width));
+        int rows = Math.Max(Math.Min((int)Math.Floor(scale * height / _patchSize), _maxPatches), 1);
+        int columns = Math.Max(Math.Min((int)Math.Floor(scale * width / _patchSize), _maxPatches), 1);
+        int targetHeight = rows * _patchSize;
+        int targetWidth = columns * _patchSize;
+        return targetHeight == height && targetWidth == width
+            ? image
+            : Engine.Interpolate(image, new[] { targetHeight, targetWidth }, InterpolateMode.Bilinear, alignCorners: false);
+    }
+
+    /// <summary>
     /// Applies Pix2Struct's industry-standard preprocessing: ImageNet normalization.
     /// </summary>
     /// <remarks>
@@ -428,7 +454,7 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
     {
-        var image = EnsureBatchDimension(rawImage);
+        var image = ResizeToPatchBudget(EnsureBatchDimension(rawImage));
         int batchSize = image.Shape[0];
         int channels = image.Shape[1];
         int height = image.Shape[2];
