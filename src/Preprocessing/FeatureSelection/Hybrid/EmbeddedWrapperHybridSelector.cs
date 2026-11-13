@@ -88,7 +88,7 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
         // Get candidate set from Lasso: nonzero coefficients by decreasing magnitude, then the rest if too few
         var order = PreprocessingTensorOps.StableOrder(absBeta, descending: true);
         var nonzero = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
-            engine.TensorGreaterThan(absBeta, NumOps.FromDouble(1e-10))));
+            engine.TensorGreaterThan(absBeta, PreprocessingTensorOps.Tolerance<T>(1e-10))));
         var candidates = order.Where(j => nonzero.Contains(j)).ToList();
         if (candidates.Count < _nFeaturesToSelect)
             candidates.AddRange(order.Where(j => !nonzero.Contains(j)).Take(_nFeaturesToSelect - candidates.Count));

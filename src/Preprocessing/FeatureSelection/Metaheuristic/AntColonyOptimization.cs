@@ -117,7 +117,7 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         for (int iter = 0; iter < _nIterations; iter++)
         {
             // Each ant constructs a solution with the transition weights tau^alpha * eta^beta of this iteration
-            var weights = engine.TensorMultiply(engine.TensorPower(pheromones, alpha), desirability);
+            var weights = TransitionWeights(pheromones, desirability, alpha);
             var antSubsets = new int[_nAnts][];
             var masks = new Tensor<T>[_nAnts];
             for (int ant = 0; ant < _nAnts; ant++)
@@ -159,6 +159,18 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The roulette weights tau^alpha * eta^beta of every feature, with tau divided by its largest value first.
+    /// The roulette depends only on the ratios, and in Half the pheromone of 20 ants at rho = 0.1 settles near
+    /// 200, so the weight total over a few hundred features passed 65504 and every draw landed on the last one.
+    /// </summary>
+    internal static Tensor<T> TransitionWeights(Tensor<T> pheromones, Tensor<T> desirability, T alpha)
+    {
+        var engine = AiDotNetEngine.Current;
+        var largest = engine.TensorBroadcastTo(engine.ReduceMax(pheromones, new[] { 0 }, true), new[] { pheromones.Length });
+        return engine.TensorMultiply(engine.TensorPower(engine.TensorDivide(pheromones, largest), alpha), desirability);
     }
 
     /// <summary>

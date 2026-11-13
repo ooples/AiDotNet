@@ -153,11 +153,16 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int m = minority.Shape[0];
         int count = Math.Min(k, m - 1);
 
-        // The row itself is pushed past every other row so it is never its own neighbour
+        // The row itself is pushed past every other row so it is never its own neighbour. The neighbour order does
+        // not depend on the scale, so the rows are divided by their largest magnitude first: the distance expansion
+        // squares the values, which passes 65504 in Half past 256 and left every distance NaN.
         var eye = engine.TensorEye<T>(m);
-        var distances = engine.TensorAdd(
-            engine.TensorMultiply(FeatureSelectionTensorOps.PairwiseDistances(minority), PreprocessingTensorOps.OneMinus(eye)),
-            engine.TensorMultiplyScalar(eye, ops.MaxValue));
+        var largest = engine.ReduceMax(engine.TensorAbs(minority), new[] { 0, 1 }, true);
+        var scale = engine.TensorWhere(
+            engine.TensorGreaterThan(largest, ops.Zero), largest, PreprocessingTensorOps.Filled(largest.Shape.ToArray(), ops.One));
+        var unit = engine.TensorDivide(minority, engine.TensorBroadcastTo(scale, minority.Shape.ToArray()));
+        var distances = engine.TensorWhere(
+            eye, PreprocessingTensorOps.Filled(new[] { m, m }, ops.MaxValue), FeatureSelectionTensorOps.PairwiseDistances(unit));
         var neighbors = new int[m][];
         for (int i = 0; i < m; i++)
             neighbors[i] = PreprocessingTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
@@ -194,7 +199,7 @@ public class SMOTEFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var var0 = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(class0, engine.TensorBroadcastTo(mean0, class0.Shape.ToArray()))), new[] { 0 }, false);
         var var1 = engine.ReduceMean(engine.TensorSquare(engine.TensorSubtract(class1, engine.TensorBroadcastTo(mean1, class1.Shape.ToArray()))), new[] { 0 }, false);
         var denom = engine.TensorAdd(var0, var1);
-        var valid = engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
+        var valid = engine.TensorGreaterThan(denom, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safe = engine.TensorWhere(valid, denom, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var gap = engine.TensorSquare(engine.Reshape(engine.TensorSubtract(mean0, mean1), new[] { p }));
         return engine.TensorWhere(valid, engine.TensorDivide(gap, safe), new Tensor<T>(new[] { p }));

@@ -235,7 +235,7 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var weighted = PopulationSearchOps.ScaleRows(design, weights);
         var transposed = engine.TensorTranspose(weighted);
         var gram = engine.TensorAdd(
-            engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<T>(p - 1), ops.FromDouble(1e-10)));
+            engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<T>(p - 1), PreprocessingTensorOps.Tolerance<T>(1e-10)));
         var rhs = engine.TensorMatMul(transposed, engine.Reshape(response, new[] { m, 1 }));
         var head = engine.Reshape(LinalgDispatch<T>.Solve(gram, rhs), new[] { p - 1 });
         var tail = engine.TensorSubtract(gap, engine.ReduceSum(head, new[] { 0 }, true));

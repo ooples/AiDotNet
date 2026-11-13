@@ -12,7 +12,9 @@ internal static class PopulationSearchOps
 {
     /// <summary>
     /// |Pearson r| of every column of <paramref name="data"/> with <paramref name="target"/>. A column whose sum of
-    /// squared deviations is at most 1e-10, or a target whose sum is, gets <paramref name="undefined"/>.
+    /// squared deviations is at most 1e-10 (the smallest normal value in Half), or a target whose sum is, gets
+    /// <paramref name="undefined"/>. r is formed from deviations divided by their column's largest magnitude:
+    /// r does not depend on the scale, and in Half the raw sums pass 65504 once n * deviation^2 does.
     /// </summary>
     public static Tensor<T> AbsTargetCorrelations<T>(Matrix<T> data, Vector<T> target, T undefined)
     {
@@ -27,12 +29,30 @@ internal static class PopulationSearchOps
         var sxy = engine.ReduceSum(engine.TensorMultiply(xc, engine.TensorBroadcastTo(yc, new[] { n, p })), new[] { 0 }, false);
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         var syy = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorSquare(yc), new[] { 0 }, false), new[] { p });
-        T tiny = ops.FromDouble(1e-10);
+        T tiny = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var defined = engine.TensorMultiply(engine.TensorGreaterThan(sxx, tiny), engine.TensorGreaterThan(syy, tiny));
+        var xs = DivideByLargestMagnitude(xc);
+        var ys = DivideByLargestMagnitude(yc);
+        var sxyScaled = engine.ReduceSum(engine.TensorMultiply(xs, engine.TensorBroadcastTo(ys, new[] { n, p })), new[] { 0 }, false);
+        var sxxScaled = engine.ReduceSum(engine.TensorSquare(xs), new[] { 0 }, false);
+        var syyScaled = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorSquare(ys), new[] { 0 }, false), new[] { p });
         var safe = engine.TensorWhere(
-            defined, engine.TensorMultiply(engine.TensorSqrt(sxx), engine.TensorSqrt(syy)), PreprocessingTensorOps.Filled(new[] { p }, ops.One));
+            defined,
+            engine.TensorMultiply(engine.TensorSqrt(sxxScaled), engine.TensorSqrt(syyScaled)),
+            PreprocessingTensorOps.Filled(new[] { p }, ops.One));
         return engine.TensorWhere(
-            defined, engine.TensorAbs(engine.TensorDivide(sxy, safe)), PreprocessingTensorOps.Filled(new[] { p }, undefined));
+            defined, engine.TensorAbs(engine.TensorDivide(sxyScaled, safe)), PreprocessingTensorOps.Filled(new[] { p }, undefined));
+    }
+
+    /// <summary>Every column of x [n, p] divided by its largest |x|; an all-zero column stays zero.</summary>
+    private static Tensor<T> DivideByLargestMagnitude<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var largest = engine.ReduceMax(engine.TensorAbs(x), new[] { 0 }, true);
+        var scale = engine.TensorWhere(
+            engine.TensorGreaterThan(largest, ops.Zero), largest, PreprocessingTensorOps.Filled(largest.Shape.ToArray(), ops.One));
+        return engine.TensorDivide(x, engine.TensorBroadcastTo(scale, x.Shape.ToArray()));
     }
 
     /// <summary>

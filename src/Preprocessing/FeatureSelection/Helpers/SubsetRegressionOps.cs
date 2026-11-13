@@ -79,7 +79,7 @@ internal static class SubsetRegressionOps
         var ssRes = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(y, prediction)), new[] { 0 }, true);
         var ssTot = engine.ReduceSum(
             engine.TensorSquare(engine.TensorSubtract(y, engine.TensorBroadcastTo(center, new[] { n }))), new[] { 0 }, true);
-        valid = PopulationSearchOps.Greater(ssTot, PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(1e-10)));
+        valid = PopulationSearchOps.Greater(ssTot, PreprocessingTensorOps.Filled(new[] { 1 }, PreprocessingTensorOps.Tolerance<T>(1e-10)));
         return valid
             ? PreprocessingTensorOps.OneMinus(engine.TensorDivide(ssRes, ssTot))
             : new Tensor<T>(new[] { 1 });

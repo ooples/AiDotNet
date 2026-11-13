@@ -17,14 +17,27 @@ internal static class NeuralSelectorOps
     public static Tensor<T> StandardizePopulation<T>(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int p = x.Shape[1];
         var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(engine.ReduceMean(x, new[] { 0 }, true), new[] { n, p }));
+        return engine.TensorDivide(centered, engine.TensorBroadcastTo(PopulationStdOrOne(centered), new[] { n, p }));
+    }
+
+    /// <summary>
+    /// The population standard deviation [1, p] of every column of the centred <paramref name="centered"/> [n, p],
+    /// with 1 for a column whose deviation is below 1e-10 (the smallest normal value in Half: 1e-10 itself is 0
+    /// in Half, so a constant column kept std 0 and divided 0 by 0).
+    /// </summary>
+    public static Tensor<T> PopulationStdOrOne<T>(Tensor<T> centered)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = centered.Shape[1];
         var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
-        std = engine.TensorWhere(
-            engine.TensorLessThan(std, ops.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, ops.One), std);
-        return engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { n, p }));
+        return engine.TensorWhere(
+            engine.TensorLessThan(std, PreprocessingTensorOps.Tolerance<T>(1e-10)),
+            PreprocessingTensorOps.Filled(new[] { 1, p }, ops.One),
+            std);
     }
 
     /// <summary>Columns of x [n, p] centered and divided by (sample standard deviation + 1e-10).</summary>

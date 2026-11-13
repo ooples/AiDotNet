@@ -168,7 +168,13 @@ public class SPEAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
         var objectives = engine.TensorConcatenate(
             new[] { engine.Reshape(accuracy, new[] { m, 1 }), engine.Reshape(featureCount, new[] { m, 1 }) }, 1);
-        distances = FeatureSelectionTensorOps.PairwiseDistances(objectives);
+        // measured on the objectives divided by the largest feature count (at least 1) and scaled back: the
+        // distance expansion squares the counts, which passes 65504 in Half once a count passes 256
+        var scale = engine.TensorMax(ParetoOps.Max(featureCount), ops.One);
+        distances = engine.TensorMultiply(
+            FeatureSelectionTensorOps.PairwiseDistances(
+                engine.TensorDivide(objectives, engine.TensorBroadcastTo(scale, new[] { m, 2 }))),
+            engine.TensorBroadcastTo(scale, new[] { m, m }));
 
         // Row-sorted distances start with the zero distance to the solution itself, so column k is the k-th nearest
         int k = Math.Min((int)Math.Sqrt(m), m - 1);

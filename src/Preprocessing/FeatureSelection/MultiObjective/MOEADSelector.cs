@@ -167,8 +167,9 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     internal static Tensor<T> WeightVectors(int count)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var first = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, count, 1), ops.FromDouble(1.0 / (count - 1)));
+        // i / (N - 1) formed in double and rounded to T once: in Half the positions past 2048 are not exact (2999
+        // rounds to 3000), which pushed the last weight past 1 and its complement below 0
+        var first = engine.TensorDivideScalar(engine.TensorArange<double>(0, count, 1), count - 1.0).Cast<T>();
         return engine.TensorConcatenate(
             new[]
             {

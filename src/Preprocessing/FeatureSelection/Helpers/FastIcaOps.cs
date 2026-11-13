@@ -21,8 +21,9 @@ internal static class FastIcaOps
         var ops = MathHelper.GetNumericOperations<T>();
         int n = centered.Shape[0];
         int p = centered.Shape[1];
-        var covariance = engine.TensorDivideScalar(
-            engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(n));
+        // divided by sqrt(n) before the product: in Half, x^T x passes 65504 once n * x^2 does
+        var scaled = engine.TensorDivideScalar(centered, ops.FromDouble(Math.Sqrt(n)));
+        var covariance = engine.TensorMatMul(engine.TensorTranspose(scaled), scaled);
         var vectors = FeatureSelectionTensorOps.TopEigenpairs(covariance, dimensions, out var values);
         var inverseRoot = engine.TensorDivide(
             PreprocessingTensorOps.Filled(new[] { dimensions }, ops.One),
@@ -95,7 +96,7 @@ internal static class FastIcaOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, true));
-        return PopulationSearchOps.Greater(norm, PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(1e-10)))
+        return PopulationSearchOps.Greater(norm, PreprocessingTensorOps.Filled(new[] { 1 }, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             ? engine.TensorDivide(v, engine.TensorBroadcastTo(norm, new[] { v.Length }))
             : v;
     }

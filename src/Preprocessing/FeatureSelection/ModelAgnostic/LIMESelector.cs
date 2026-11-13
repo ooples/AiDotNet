@@ -154,10 +154,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         // Compute feature means and (population) stds for perturbation; a constant feature uses std 1
         var x = Tensor<T>.FromMatrix(data);
         var means = engine.ReduceMean(x, new[] { 0 }, true);
-        var stds = engine.TensorSqrt(engine.ReduceMean(
-            engine.TensorSquare(engine.TensorSubtract(x, engine.TensorBroadcastTo(means, new[] { n, p }))), new[] { 0 }, true));
-        stds = engine.TensorWhere(
-            engine.TensorLessThan(stds, NumOps.FromDouble(1e-10)), PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One), stds);
+        var stds = NeuralSelectorOps.PopulationStdOrOne(engine.TensorSubtract(x, engine.TensorBroadcastTo(means, new[] { n, p })));
 
         // Sample instances to explain
         int nExplain = Math.Min(_nSamplesToExplain, n);
