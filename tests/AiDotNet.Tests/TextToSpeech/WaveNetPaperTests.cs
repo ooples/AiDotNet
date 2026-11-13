@@ -116,6 +116,38 @@ public class WaveNetPaperTests
         }
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task IncrementalSteps_DoNotAliasTheCallersOneHot()
+    {
+        // The sampler hands Step a one-hot that lives in an inference arena reset between steps, so the next step's
+        // one-hot can be written into the same storage. Reusing one tensor for every step reproduces that: the state
+        // must keep its own copy of each input, or the kernel-2 input convolution reads the current sample as the
+        // previous one (the old code stored the caller's tensor) and the logits drift from the teacher-forced pass.
+        await Task.Yield();
+        var engine = AiDotNetEngine.Current;
+        var network = new WaveNetNetwork<double>(engine, RandomHelper.CreateSeededRandom(3), 16, 4, 6, 6, 6, 5, 3, 2, new[] { 2, 2 });
+        var random = RandomHelper.CreateSeededRandom(4);
+        int samples = 24;
+        var classes = new int[samples];
+        for (int t = 0; t < samples; t++) classes[t] = (t * 5 + 3) % 16;   // consecutive classes always differ
+        var previous = new Tensor<double>(new[] { 1, 16, samples });
+        for (int t = 0; t < samples; t++) previous[0, classes[t], t] = 1;
+        var condition = new Tensor<double>(new[] { 1, 4, samples });
+        for (int i = 0; i < condition.Length; i++) condition[i] = random.NextDouble() - 0.5;
+        var full = network.Forward(previous, condition);
+
+        var state = network.NewState();
+        var reused = new Tensor<double>(new[] { 1, 16, 1 });
+        for (int t = 0; t < samples; t++)
+        {
+            for (int c = 0; c < 16; c++) reused[0, c, 0] = c == classes[t] ? 1 : 0;
+            var column = new Tensor<double>(new[] { 1, 4, 1 });
+            for (int c = 0; c < 4; c++) column[0, c, 0] = condition[0, c, t];
+            var step = network.Step(state, reused, column);
+            for (int c = 0; c < 16; c++) Assert.Equal(full[0, c, t], step[0, c, 0], 9);
+        }
+    }
+
     [Fact(Timeout = 300000)]
     public async Task Training_ReducesTheCrossEntropy()
     {

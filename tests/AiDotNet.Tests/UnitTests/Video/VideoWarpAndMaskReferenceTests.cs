@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -288,6 +289,108 @@ public class VideoWarpAndMaskReferenceTests
         double psnr = model.ComputeMaskedPSNR(inpainted, groundTruth, masks);
 
         Assert.Equal(10.0 * Math.Log10(1.0 / 3.6e77), psnr, 6);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RvmCompositesEverySampleAndChannel()
+    {
+        // comp = a * fg + (1 - a) * bg for every sample and channel: 0.5 * 0.8 + 0.5 * 0.2 = 0.5 throughout. The old
+        // loop wrote only sample 0's first three channels and left the rest of the batch zero.
+        await Task.Yield();
+        var model = new RVM<double>(Arch());
+        int[] shape = [2, 4, 1, 2];
+        var foreground = Tensor<double>.CreateDefault(shape, 0.8);
+        var background = Tensor<double>.CreateDefault(shape, 0.2);
+        var alpha = Tensor<double>.CreateDefault(new[] { 2, 1, 1, 2 }, 0.5);
+
+        var composite = model.CompositeWithBackground(foreground, alpha, background);
+
+        Assert.Equal(shape, composite.Shape.ToArray());
+        Assert.All(composite.ToArray(), value => Assert.Equal(0.5, value, 12));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RvmAsppGateReadsTheLastEncoderStage()
+    {
+        // LR-ASPP's gate is conv1x1(avgpool(f4)) over the last encoder stage (numFeatures * 8 channels), not the
+        // BatchNorm before it in the layer list. Without a declared depth the gate's input depth was left to a
+        // sequential shape walk that bound it to the ASPP width.
+        await Task.Yield();
+        const int features = 4;
+        var layers = AiDotNet.Helpers.LayerHelper<double>.CreateDefaultRVMLayers(3, 32, 32, features).ToList();
+        Assert.Equal(RvmRecurrentNetwork<double>.LayerCount, layers.Count);
+        var gate = Assert.IsType<AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<double>>(layers[6]);
+        Assert.Equal(features * 8, gate.InputDepth);
+    }
+
+    private sealed class FixedDraw : Random
+    {
+        private readonly double _value;
+        public FixedDraw(double value) => _value = value;
+        public override double NextDouble() => _value;
+        protected override double Sample() => _value;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MiaVsrLogisticNoiseIsComputedInDouble()
+    {
+        // logit(u) for u = 1 - 1e-9 is 20.7232658642 (python: math.log(u) - math.log(1 - u)). Cast to float first
+        // (the old code), u rounds to 1.0f, the 1 - 1e-10 clamp rounds to 1.0f too, and the noise is +infinity.
+        await Task.Yield();
+        var block = typeof(MiaVsrNetwork<float>).GetNestedType("AttentionBlock", BindingFlags.NonPublic);
+        Assert.NotNull(block);
+        var noise = block.MakeGenericType(typeof(float)).GetMethod("LogisticNoise", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(noise);
+
+        var result = Assert.IsType<Tensor<float>>(noise.Invoke(null, new object[] { new[] { 3 }, new FixedDraw(1 - 1e-9) }));
+
+        double u = 1 - 1e-9;
+        double expected = Math.Log(u) - Math.Log(1 - u);
+        Assert.All(result.ToArray(), value => Assert.Equal(expected, value, 4));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ProPainterLayerNormStandardizesHugeFloatActivations()
+    {
+        // A sample of +/-1e20 standardizes to +/-1. The old form multiplied the scaled variance back by peak^2 = 1e40,
+        // which overflows float to infinity, so every output was 0.
+        await Task.Yield();
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3);
+        var model = new ProPainter<float>(arch);
+        var layerNorm = typeof(ProPainter<float>).GetMethod("LayerNorm", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(layerNorm);
+        var input = new Tensor<float>(new[] { 1e20f, -1e20f }, new[] { 1, 2, 1, 1 });
+
+        var output = Assert.IsType<Tensor<float>>(layerNorm.Invoke(model, new object[] { input })).ToArray();
+
+        Assert.Equal(1.0, output[0], 5);
+        Assert.Equal(-1.0, output[1], 5);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConsistencyIndexesPixelsPastHalfPrecision()
+    {
+        // H = 3, W = 1025: pixel (y = 2, x = 1) is flat index 2051, which Half rounds to 2052 (python:
+        // struct.unpack('e', struct.pack('e', 2051.0)) gives 2052.0). With zero forward flow the round-trip error at
+        // (2, 1) is |b(2, 1)| = 4; forming y * W + x in Half (the old code) read b(2, 2) = 0 instead.
+        await Task.Yield();
+        const int height = 3, width = 1025;
+        var arch = new NeuralNetworkArchitecture<Half>(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3);
+        var model = new GMFlow<Half>(arch);
+        var forward = new Tensor<Half>(new[] { 2, height, width });
+        var backward = new Tensor<Half>(new[] { 2, height, width });
+        backward[0, 2, 1] = (Half)4.0;
+
+        var consistency = model.ComputeForwardBackwardConsistency(forward, backward);
+
+        Assert.Equal(4.0, (double)consistency[2, 1], 6);
+        Assert.Equal(0.0, (double)consistency[2, 2], 6);
     }
 
     private static double[] Varied(int length, double phase)

@@ -268,4 +268,99 @@ public class CausalEstimatorReferenceTests
         Assert.NotNull(obsolete);
         Assert.True(obsolete.IsError);
     }
+
+    [Fact]
+    public void CausalForest_HonestLeavesNeverKeepTheStructureEstimate()
+    {
+        // A twin forest with the same seed replays the first tree's structure/estimation draw, so the data can be
+        // built around it. Structure rows split at x = 0.5 with effects +50 (x = 0) and -50 (x = 1); every
+        // estimation row has x = 0 and y = 1 + 5t, so the right leaf receives no estimation row. Honest estimation
+        // (grf) prunes that split and predicts the estimation contrast, 5, everywhere. The old leaf re-estimation
+        // skipped the empty leaf, which kept the structure estimate -50 for x = 1.
+        const int seed = 7;
+        var twin = new CausalForest<double>(numTrees: 1, maxDepth: 1, minSamplesLeaf: 1, maxFeatures: 1,
+            honest: true, honestFraction: 0.5, seed: seed, sampleFraction: 1.0);
+        var (structure, estimation) = twin.DrawTreeSamples(N);
+
+        var x = new Matrix<double>(N, 1);
+        var t = new Vector<int>(N);
+        var y = new Vector<double>(N);
+        var structureRows = structure.ToArray().OrderBy(r => r).ToArray();
+        for (int k = 0; k < structureRows.Length; k++)
+        {
+            int row = structureRows[k];
+            bool right = k >= structureRows.Length / 2;
+            x[row, 0] = right ? 1.0 : 0.0;
+            t[row] = k % 2;
+            y[row] = (right ? -50.0 : 50.0) * t[row];
+        }
+
+        var estimationRows = estimation.ToArray().OrderBy(r => r).ToArray();
+        for (int k = 0; k < estimationRows.Length; k++)
+        {
+            int row = estimationRows[k];
+            x[row, 0] = 0.0;
+            t[row] = k % 2;
+            y[row] = 1.0 + (5.0 * t[row]);
+        }
+
+        var forest = new CausalForest<double>(numTrees: 1, maxDepth: 1, minSamplesLeaf: 1, maxFeatures: 1,
+            honest: true, honestFraction: 0.5, seed: seed, sampleFraction: 1.0);
+        forest.Fit(x, t, y);
+
+        var probe = new Matrix<double>(2, 1);
+        probe[0, 0] = 0.0;
+        probe[1, 0] = 1.0;
+        var effects = forest.PredictTreatmentEffect(probe);
+        Assert.Equal(5.0, effects[0], 9);
+        Assert.Equal(5.0, effects[1], 9);
+    }
+
+    [Fact]
+    public void DoublyRobust_TreatmentLeadingInput_PredictsFromTheCovariates()
+    {
+        // Train and Predict pass [treatment | covariates]. The outcome models have one slope per covariate, so the
+        // leading treatment column must be dropped; truncating to the slope count (the old code) read the
+        // treatment as age and age as income.
+        var (x, t, y) = Data();
+        var estimator = new DoublyRobustEstimator<double>();
+        estimator.Fit(x, t, y);
+
+        var withTreatment = new Matrix<double>(N, 3);
+        for (int i = 0; i < N; i++)
+        {
+            withTreatment[i, 0] = t[i];
+            withTreatment[i, 1] = x[i, 0];
+            withTreatment[i, 2] = x[i, 1];
+        }
+
+        var expectedTreated = estimator.PredictTreated(x);
+        var expectedControl = estimator.PredictControl(x);
+        var treated = estimator.PredictTreated(withTreatment);
+        var control = estimator.PredictControl(withTreatment);
+        for (int i = 0; i < N; i++)
+        {
+            Assert.Equal(expectedTreated[i], treated[i], 12);
+            Assert.Equal(expectedControl[i], control[i], 12);
+        }
+
+        // Any other width is rejected rather than truncated.
+        Assert.Throws<ArgumentException>(() => estimator.PredictTreated(new Matrix<double>(N, 5)));
+    }
+
+    [Fact]
+    public void DoublyRobust_ParameterVectorMustSplitIntoThreeBlocks()
+    {
+        // Propensity, treated-outcome and control-outcome blocks of NumFeatures + 1 each: 9 values here. Ten
+        // values used to be zero-padded to 12, silently zeroing the trailing control-outcome coefficients.
+        var (x, t, y) = Data();
+        var estimator = new DoublyRobustEstimator<double>();
+        estimator.Fit(x, t, y);
+        var parameters = estimator.GetParameters();
+        Assert.Equal(9, parameters.Length);
+
+        var tooLong = new Vector<double>(10);
+        for (int i = 0; i < 9; i++) tooLong[i] = parameters[i];
+        Assert.Throws<ArgumentException>(() => estimator.SetParameters(tooLong));
+    }
 }

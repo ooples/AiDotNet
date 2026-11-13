@@ -222,6 +222,26 @@ public class MiscHelpersIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task TensorCopyHelper_CastLogical_MaterializesALazyGraphModeResult()
+    {
+        await Task.Yield();
+        // Under GraphMode an engine result is a lazy placeholder whose storage is filled only when it is realized.
+        // Tensor.Cast reads that storage without realizing it (zeros); CastLogical goes through ToArray, which
+        // realizes first. [1, 2, 3] + [10, 20, 30] = [11, 22, 33].
+        var engine = AiDotNetEngine.Current;
+        var a = new Tensor<float>(new[] { 3 }, new Vector<float>(new float[] { 1, 2, 3 }));
+        var b = new Tensor<float>(new[] { 3 }, new Vector<float>(new float[] { 10, 20, 30 }));
+        int[] cast;
+        using (AiDotNet.Tensors.Engines.Compilation.GraphMode.Enable())
+        {
+            var lazy = engine.TensorAdd(a, b);
+            cast = TensorCopyHelper.CastLogical<float, int>(lazy).ToArray();
+        }
+
+        Assert.Equal(new[] { 11, 22, 33 }, cast);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TensorCopyHelper_CastLogical_ReadsViewsInLogicalOrder()
     {
         await Task.Yield();
