@@ -94,10 +94,14 @@ public class JamesSteinEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var y = Tensor<T>.FromVector(target);
         _globalMean = engine.TensorMean(y);
         T globalMean = _globalMean;
-        T globalVariance = NumOps.Divide(
-            engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, globalMean)), NumOps.FromDouble(n - 1));
-        bool degenerateVariance = NumOps.LessThan(globalVariance, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        // sigma = ||y - mean|| / sqrt(n - 1), from the max-scaled norm: the sum of squares itself overflows Half once
+        // the deviations pass 256 / sqrt(n). sigma^2 < eps is tested as sigma < sqrt(eps).
         T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        T globalStd = NumOps.Divide(
+            PreprocessingTensorOps.RowNorms(engine.Reshape(engine.TensorSubtractScalar(y, globalMean), new[] { 1, n }))[0],
+            NumOps.FromDouble(Math.Sqrt(n - 1)));
+        T rootEps = NumOps.Sqrt(eps);
+        bool degenerateVariance = NumOps.LessThan(globalStd, rootEps);
         T two = NumOps.FromDouble(2);
 
         _encodingMap = new Dictionary<int, CategoryValueMap<T>>();
@@ -113,13 +117,18 @@ public class JamesSteinEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 Tensor<T> shrinkage = full;
                 if (!degenerateVariance)
                 {
-                    var denominator = engine.TensorMultiply(counts, engine.TensorSquare(engine.TensorSubtractScalar(categoryMean, globalMean)));
-                    var partial = engine.TensorClamp(
-                        PreprocessingTensorOps.OneMinus(engine.TensorDivide(
-                            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(counts, two), globalVariance), denominator)),
-                        NumOps.Zero, NumOps.One);
+                    // (count - 2) sigma^2 / (count d^2) with d = mean - grand_mean, formed as
+                    // ((count - 2) / count) (sigma / |d|)^2: the denominator count d^2 overflows Half (65504) for
+                    // 300 rows 20 apart, which made B 1 (full shrinkage) where it is 0.005. The guard
+                    // count d^2 >= eps is taken as |d| sqrt(count) >= sqrt(eps) for the same reason.
+                    var gap = engine.TensorAbs(engine.TensorSubtractScalar(categoryMean, globalMean));
+                    var ratio = engine.TensorMultiply(
+                        engine.TensorDivide(engine.TensorSubtractScalar(counts, two), counts),
+                        engine.TensorSquare(engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { counts.Length }, globalStd), gap)));
+                    var partial = engine.TensorClamp(PreprocessingTensorOps.OneMinus(ratio), NumOps.Zero, NumOps.One);
                     var shrinkable = engine.TensorMultiply(
-                        engine.TensorGreaterThan(counts, two), PreprocessingTensorOps.AtLeast(denominator, eps));
+                        engine.TensorGreaterThan(counts, two),
+                        PreprocessingTensorOps.AtLeast(engine.TensorMultiply(gap, engine.TensorSqrt(counts)), rootEps));
                     shrinkage = engine.TensorWhere(shrinkable, partial, full);
                 }
 

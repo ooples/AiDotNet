@@ -96,19 +96,31 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         }
         else
         {
-            var squares = engine.TensorSquare(X);
-            var sumPos = engine.Reshape(engine.TensorMatMul(positiveRow, X), new[] { p });
-            var sumNeg = engine.Reshape(engine.TensorMatMul(negativeRow, X), new[] { p });
+            // The t statistic does not change when a column is scaled, so every column is divided by its largest
+            // magnitude s first and the 1e-10 guards are carried into those units (eps / s^2 on the variances,
+            // eps / s on the standard error): t is then exactly master's, while x^2 can no longer overflow Half
+            // (65504) once a value passes 256.
+            var scale = PreprocessingTensorOps.ColumnMax(engine.TensorAbs(X));
+            scale = engine.TensorWhere(engine.TensorGreaterThan(scale, NumOps.Zero), scale,
+                PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+            var unit = engine.TensorDivide(X, engine.TensorBroadcastTo(engine.Reshape(scale, new[] { 1, p }), new[] { n, p }));
+            var squares = engine.TensorSquare(unit);
+            var sumPos = engine.Reshape(engine.TensorMatMul(positiveRow, unit), new[] { p });
+            var sumNeg = engine.Reshape(engine.TensorMatMul(negativeRow, unit), new[] { p });
             var sumSqPos = engine.Reshape(engine.TensorMatMul(positiveRow, squares), new[] { p });
             var sumSqNeg = engine.Reshape(engine.TensorMatMul(negativeRow, squares), new[] { p });
 
             T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
+            var epsOverScale = engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { p }, eps), scale);
+            var epsOverScaleSquared = engine.TensorDivide(epsOverScale, scale);
             var meanPos = engine.TensorDivideScalar(sumPos, NumOps.FromDouble(countPos));
             var meanNeg = engine.TensorDivideScalar(sumNeg, NumOps.FromDouble(countNeg));
-            var varPos = engine.TensorAddScalar(
-                engine.TensorSubtract(engine.TensorDivideScalar(sumSqPos, NumOps.FromDouble(countPos)), engine.TensorSquare(meanPos)), eps);
-            var varNeg = engine.TensorAddScalar(
-                engine.TensorSubtract(engine.TensorDivideScalar(sumSqNeg, NumOps.FromDouble(countNeg)), engine.TensorSquare(meanNeg)), eps);
+            var varPos = engine.TensorAdd(
+                engine.TensorSubtract(engine.TensorDivideScalar(sumSqPos, NumOps.FromDouble(countPos)), engine.TensorSquare(meanPos)),
+                epsOverScaleSquared);
+            var varNeg = engine.TensorAdd(
+                engine.TensorSubtract(engine.TensorDivideScalar(sumSqNeg, NumOps.FromDouble(countNeg)), engine.TensorSquare(meanNeg)),
+                epsOverScaleSquared);
 
             // Bayes factor using a t-test approximation
             var pooledVar = engine.TensorDivideScalar(
@@ -116,9 +128,13 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                     engine.TensorMultiplyScalar(varPos, NumOps.FromDouble(countPos - 1)),
                     engine.TensorMultiplyScalar(varNeg, NumOps.FromDouble(countNeg - 1))),
                 NumOps.FromDouble(n - 2));
-            var standardError = engine.TensorAddScalar(
-                engine.TensorSqrt(engine.TensorMultiplyScalar(pooledVar, NumOps.FromDouble(1.0 / countPos + 1.0 / countNeg))), eps);
-            var tStatistic = engine.TensorDivide(engine.TensorAbs(engine.TensorSubtract(meanPos, meanNeg)), standardError);
+            var standardError = engine.TensorAdd(
+                engine.TensorSqrt(engine.TensorMultiplyScalar(pooledVar, NumOps.FromDouble(1.0 / countPos + 1.0 / countNeg))),
+                epsOverScale);
+            // A zero mean difference is t = 0 even where eps / s underflows to 0 in Half (0 / 0 would be NaN).
+            var meanGap = engine.TensorAbs(engine.TensorSubtract(meanPos, meanNeg));
+            var zeros = new Tensor<T>(new[] { p });
+            var tStatistic = engine.TensorWhere(engine.TensorEquals(meanGap, zeros), zeros, engine.TensorDivide(meanGap, standardError));
 
             // t-statistic to likelihood ratio approximation
             var logLikelihoodRatio = engine.TensorMin(

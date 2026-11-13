@@ -100,11 +100,22 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
         // Marginal likelihood ratio per feature. Every sweep of the sampler sees the same data, so each
         // iteration yields the same inclusion probabilities and their average over iterations is this value.
-        var xjNorm = engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false);
-        var xjy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(X), engine.Reshape(y, new[] { n, 1 })), new[] { p });
-        var betaHat = engine.TensorDivide(xjy, xjNorm);
-        var fitTerm = engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSquare(betaHat), xjNorm), NumOps.FromDouble(0.5));
-        var varianceRatio = engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { p }, residualVariance), xjNorm);
+        // ||x_j||^2 overflows Half (65504) once a value passes 256, so every column is divided by its largest
+        // magnitude s first: with u = x / s, ||x_j||^2 = s^2 ||u_j||^2, and the terms master formed from it are
+        // fit = 0.5 betaHat^2 ||x_j||^2 = 0.5 (x_j'y / ||x_j||)^2 = 0.5 (u_j'y / ||u_j||)^2 and
+        // residualVariance / ||x_j||^2 = ((residualVariance / s) / s) / ||u_j||^2, none of which squares s.
+        var scale = PreprocessingTensorOps.ColumnMax(engine.TensorAbs(X));
+        scale = engine.TensorWhere(engine.TensorGreaterThan(scale, NumOps.Zero), scale, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var unit = engine.TensorDivide(X, engine.TensorBroadcastTo(engine.Reshape(scale, new[] { 1, p }), new[] { n, p }));
+        var unitNormSquared = engine.ReduceSum(engine.TensorSquare(unit), new[] { 0 }, false);
+        var unitNorm = engine.TensorSqrt(unitNormSquared);
+        var uy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(unit), engine.Reshape(y, new[] { n, 1 })), new[] { p });
+        var fitTerm = engine.TensorMultiplyScalar(engine.TensorSquare(engine.TensorDivide(uy, unitNorm)), NumOps.FromDouble(0.5));
+        var varianceRatio = engine.TensorDivide(
+            engine.TensorDivide(engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { p }, residualVariance), scale), scale),
+            unitNormSquared);
+        // ||x_j|| = s ||u_j||, compared with sqrt(1e-10) where master compared ||x_j||^2 with 1e-10
+        var xjNorm = engine.TensorMultiply(scale, unitNorm);
         T minusHalf = NumOps.FromDouble(-0.5);
 
         // Bayes factor approximation
@@ -124,9 +135,9 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var gamma = engine.TensorSigmoid(
             engine.TensorAddScalar(engine.TensorMin(logBF, NumOps.FromDouble(50.0)), logPriorOdds));
 
-        // Degenerate columns (xjNorm < 1e-10) and non-finite Bayes factors keep the prior inclusion probability.
+        // Degenerate columns (||x_j||^2 < 1e-10) and non-finite Bayes factors keep the prior inclusion probability.
         gamma = engine.TensorWhere(engine.TensorIsFinite(logBF), gamma, prior);
-        gamma = engine.TensorWhere(engine.TensorLessThan(xjNorm, eps), prior, gamma);
+        gamma = engine.TensorWhere(engine.TensorLessThan(xjNorm, NumOps.Sqrt(eps)), prior, gamma);
         _inclusionProbabilities = gamma.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

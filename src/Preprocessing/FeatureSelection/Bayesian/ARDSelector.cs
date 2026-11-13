@@ -90,26 +90,57 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
                 nameof(data));
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
-        int p = data.Columns;
-        var engine = Engine;
-
+        int numToSelect = Math.Min(_nFeaturesToSelect, data.Columns);
         var X = Tensor<T>.FromMatrix(data);
-        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        var y = Tensor<T>.FromVector(target);
 
-        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        T tolerance = NumOps.FromDouble(_tolerance);
-        var thresholdFill = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_alphaThreshold));
-        var largeFill = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(1e10));
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            // diag(X^T X), and with it the posterior precision alpha + beta diag(X^T X), passes Half's 65504 once a
+            // column's values pass 256 / sqrt(n) (no rescaling helps: the EM is not scale-equivariant, since alpha
+            // and beta start at 1), and the 1e8 alpha threshold and 1e10 cap are not finite in Half at all. The EM
+            // runs in float and its results are cast back once.
+            var (floatAlphas, floatCoefficients, floatSelected) = RunEm(X.Cast<float>(), y.Cast<float>(), numToSelect);
+            _alphas = floatAlphas.Cast<T>().ToVector();
+            _coefficients = floatCoefficients.Cast<T>().ToVector();
+            _selectedIndices = floatSelected;
+        }
+        else
+        {
+            var (alphas, coefficients, selected) = RunEm(X, y, numToSelect);
+            _alphas = alphas.ToVector();
+            _coefficients = coefficients.ToVector();
+            _selectedIndices = selected;
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// The ARD EM iterations on X [n, p] and y [n] in <typeparamref name="TC"/>: returns the precisions alpha, the
+    /// posterior mean coefficients and the selected feature indices.
+    /// </summary>
+    private (Tensor<TC> Alphas, Tensor<TC> Coefficients, int[] Selected) RunEm<TC>(Tensor<TC> X, Tensor<TC> target, int numToSelect)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int n = X.Shape[0];
+        int p = X.Shape[1];
+        var y = engine.Reshape(target, new[] { n, 1 });
+
+        TC eps = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        TC tolerance = ops.FromDouble(_tolerance);
+        var thresholdFill = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(_alphaThreshold));
+        var largeFill = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(1e10));
 
         // diag(X^T X) (the diagonal posterior approximation only reads the diagonal) and X^T y.
         var xtxDiag = engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false);
         var xty = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(X), y), new[] { p });
 
         // Initialize alphas (precision parameters)
-        var alphas = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
-        var coefficients = new Tensor<T>(new[] { p });
-        T beta = NumOps.One; // Noise precision
+        var alphas = PreprocessingTensorOps.Filled(new[] { p }, ops.One);
+        var coefficients = new Tensor<TC>(new[] { p });
+        TC beta = ops.One; // Noise precision
 
         // EM iterations
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -124,7 +155,7 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             coefficients = engine.TensorMultiplyScalar(engine.TensorMultiply(sigma, xty), beta);
 
             // gamma = 1 - alpha * sigma (effective number of parameters per feature)
-            var gamma = engine.TensorAddScalar(engine.TensorNegate(engine.TensorMultiply(alphas, sigma)), NumOps.One);
+            var gamma = engine.TensorAddScalar(engine.TensorNegate(engine.TensorMultiply(alphas, sigma)), ops.One);
 
             // Update alphas
             var w2 = engine.TensorSquare(coefficients);
@@ -143,30 +174,22 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
                 break;
         }
 
-        _alphas = alphas.ToVector();
-        _coefficients = coefficients.ToVector();
-
         // Select features with low alpha (high relevance)
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        var relevant = engine.TensorLessThan(alphas, NumOps.FromDouble(_alphaThreshold));
+        var relevant = engine.TensorLessThan(alphas, ops.FromDouble(_alphaThreshold));
         int relevantCount = PreprocessingTensorOps.CountNonZero(relevant);
-        if (relevantCount >= numToSelect)
-        {
-            _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(alphas, numToSelect);
-        }
-        else
-        {
+        int[] selected = relevantCount >= numToSelect
+            ? PreprocessingTensorOps.BottomKIndicesSorted(alphas, numToSelect)
             // Not enough features below threshold: take top by coefficient magnitude
-            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(coefficients), numToSelect);
-        }
+            : PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(coefficients), numToSelect);
 
-        IsFitted = true;
+        return (alphas, coefficients, selected);
     }
 
-    private T UpdateNoisePrecision(int n, T gammaSum, T residualSum)
+    private static TC UpdateNoisePrecision<TC>(int n, TC gammaSum, TC residualSum)
     {
-        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        T value = NumOps.Divide(NumOps.Subtract(NumOps.FromDouble(n), gammaSum), NumOps.Add(residualSum, eps));
+        var ops = MathHelper.GetNumericOperations<TC>();
+        TC eps = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        TC value = ops.Divide(ops.Subtract(ops.FromDouble(n), gammaSum), ops.Add(residualSum, eps));
         return PreprocessingTensorOps.ScalarMax(value, eps);
     }
 

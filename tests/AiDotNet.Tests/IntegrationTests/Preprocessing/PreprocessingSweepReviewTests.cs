@@ -563,4 +563,92 @@ public class PreprocessingSweepReviewTests
         Assert.Equal(30000.0, (double)knots[5], Tolerance);
         Assert.Equal(45000.0, (double)knots[6], Tolerance);
     }
+
+    // Classes {0, 600} and {-600, 0}: means 300 and -300, population variances 90000, pooled 90000, standard error
+    // sqrt(90000 (1/2 + 1/2)) = 300, so t = 2, log LR = t^2 / 2 = 2 and the posterior is sigmoid(2) = 0.8807971.
+    // The class sums of x^2 (360000) overflowed Half, giving inf - inf = NaN variances and a NaN posterior.
+    [Fact(Timeout = 120000)]
+    public async Task BayesianFeatureSelector_Half_VariancesDoNotOverflowPast256()
+    {
+        await Task.CompletedTask;
+        double[] x = { 0, 600, -600, 0 };
+        var selector = new BayesianFeatureSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(4, i => x[i]), HalfVector(4, i => i < 2 ? 1.0 : 0.0));
+
+        Assert.NotNull(selector.PosteriorProbabilities);
+        Assert.Equal(1.0 / (1.0 + Math.Exp(-2.0)), (double)selector.PosteriorProbabilities[0], 1e-3);
+    }
+
+    // x = 100 (i + 1), y = (i + 1) + (-1)^i / 4 over eight rows: diag(X^T X) = 2.04e6 overflowed Half, so the
+    // posterior precision was infinite and the coefficient 0. Run in float, the Half fit matches the double fit
+    // (a coefficient of about 0.01).
+    [Fact(Timeout = 120000)]
+    public async Task ARDSelector_Half_MatchesDoubleWhenDiagXtXOverflows()
+    {
+        await Task.CompletedTask;
+        Func<int, double> xValue = i => 100.0 * (i + 1);
+        Func<int, double> yValue = i => (i + 1) + (i % 2 == 0 ? 0.25 : -0.25);
+        var reference = new ARDSelector<double>(nFeaturesToSelect: 1);
+        var xd = new double[8, 1];
+        var yd = new double[8];
+        for (int i = 0; i < 8; i++)
+        {
+            xd[i, 0] = xValue(i);
+            yd[i] = yValue(i);
+        }
+
+        reference.Fit(new Matrix<double>(xd), new Vector<double>(yd));
+        var selector = new ARDSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(8, xValue), HalfVector(8, yValue));
+
+        Assert.NotNull(reference.Coefficients);
+        Assert.NotNull(selector.Coefficients);
+        double expected = reference.Coefficients[0];
+        Assert.InRange(expected, 0.005, 0.02);
+        Assert.Equal(expected, (double)selector.Coefficients[0], 0.01 * expected);
+    }
+
+    // x = 100 (i + 1) and y = i + 1 over eight rows, slab variance 0.001 and spike variance 1: fit = 0.5 (x'y)^2 / x'x
+    // = 102 and the residual variance is 6, so log BF is about 20.4 and the inclusion probability sigmoid(20.4) = 1.
+    // x'x = 2.04e6 overflowed Half, so betaHat^2 x'x was 0 * inf = NaN and the feature fell back to the prior 0.5.
+    [Fact(Timeout = 120000)]
+    public async Task SpikeAndSlabSelector_Half_ColumnNormDoesNotOverflowPast256()
+    {
+        await Task.CompletedTask;
+        var selector = new SpikeAndSlabSelector<Half>(nFeaturesToSelect: 1, slabVariance: 0.001, spikeVariance: 1.0);
+        selector.Fit(HalfColumn(8, i => 100.0 * (i + 1)), HalfVector(8, i => i + 1));
+
+        Assert.NotNull(selector.InclusionProbabilities);
+        Assert.Equal(1.0, (double)selector.InclusionProbabilities[0], 1e-3);
+    }
+
+    // Two categories of 300 rows with targets 20 and -20 (interleaved): sigma^2 = 600 * 400 / 599, and for either
+    // category B = 1 - (298 / 300) sigma^2 / 400 = 0.00501, so the encoding is 0.99499 * 20 = 19.90 (the double
+    // encoder's value). In Half the denominator 300 * 20^2 = 120000 and the sum of squares 240000 overflowed, and
+    // the encoding came out NaN.
+    [Fact(Timeout = 120000)]
+    public async Task JamesSteinEncoder_Half_ShrinkageDoesNotOverflowTheDenominator()
+    {
+        await Task.CompletedTask;
+        const int rows = 600;
+        Func<int, double> category = i => i % 2;
+        Func<int, double> target = i => i % 2 == 0 ? 20.0 : -20.0;
+        var reference = new JamesSteinEncoder<double>();
+        var xd = new double[rows, 1];
+        var yd = new double[rows];
+        for (int i = 0; i < rows; i++)
+        {
+            xd[i, 0] = category(i);
+            yd[i] = target(i);
+        }
+
+        var expected = reference.FitTransform(new Matrix<double>(xd), new Vector<double>(yd));
+        var encoder = new JamesSteinEncoder<Half>();
+        var encoded = encoder.FitTransform(HalfColumn(rows, category), HalfVector(rows, target));
+
+        Assert.Equal(19.8998, expected[0, 0], 1e-3);
+        Assert.Equal(-19.8998, expected[1, 0], 1e-3);
+        Assert.Equal(expected[0, 0], (double)encoded[0, 0], 0.05);
+        Assert.Equal(expected[1, 0], (double)encoded[1, 0], 0.05);
+    }
 }
