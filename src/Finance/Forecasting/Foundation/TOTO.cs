@@ -343,17 +343,7 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -388,7 +378,8 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
 
         var meanRow = new Tensor<T>(new[] { 1, features });
         var stdRow = new Tensor<T>(new[] { 1, features });
-        for (int f = 0; f < features; f++) { meanRow.Data.Span[f] = _revinMean[f]; stdRow.Data.Span[f] = _revinStd[f]; }
+        _revinMean.AsSpan().Slice(0, features).CopyTo(meanRow.Data.Span);
+        _revinStd.AsSpan().Slice(0, features).CopyTo(stdRow.Data.Span);
 
         int rows = forecast.Length / features;
         var fc2d = Engine.Reshape(forecast, new[] { rows, features });
@@ -490,8 +481,7 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
         int features = input.Rank > 2 ? input.Shape[2] : 1;
 
         var inputData = new float[batchSize * seqLen * features];
-        for (int i = 0; i < input.Length && i < inputData.Length; i++)
-            inputData[i] = (float)NumOps.ToDouble(input[i]);
+        NumOps.ToFloatSpan(input.AsSpan().Slice(0, Math.Min(input.Length, inputData.Length)), inputData.AsSpan(0, Math.Min(input.Length, inputData.Length)));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData, new[] { batchSize, seqLen, features });
@@ -510,8 +500,7 @@ public partial class TOTO<T> : TimeSeriesFoundationModelBase<T>
         int totalElements = 1;
         foreach (var dim in outputShape) totalElements *= dim;
 
-        for (int i = 0; i < totalElements && i < output.Length; i++)
-            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, Math.Min(totalElements, output.Length)), output.Data.Span.Slice(0, Math.Min(totalElements, output.Length)));
 
         return output;
     }

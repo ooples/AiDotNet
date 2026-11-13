@@ -175,24 +175,22 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         int n = TimeSeries.Length;
         int levels = (int)Math.Log(n, 2);
 
-        Vector<T> trend = new Vector<T>(n);
-        Vector<T> cycle = new Vector<T>(n);
-
         // Perform wavelet decomposition
         Vector<T> coeffs = DiscreteWaveletTransform(TimeSeries, levels);
 
-        // Soft threshold detail coefficients (second half of vector)
+        // Soft threshold detail coefficients (second half of vector): scale them by 0.1
         int halfN = n / 2;
-        for (int i = halfN; i < n; i++)
-        {
-            coeffs[i] = NumOps.Multiply(coeffs[i], NumOps.FromDouble(0.1));
-        }
+        var isDetail = Engine.TensorGreaterThan(Engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(halfN - 0.5));
+        var thresholded = Engine.TensorWhere(isDetail,
+            Engine.TensorMultiplyScalar(Tensor<T>.FromVector(coeffs), NumOps.FromDouble(0.1)),
+            Tensor<T>.FromVector(coeffs));
+        coeffs = thresholded.ToVector();
 
         // Perform inverse wavelet transform
-        trend = InverseDiscreteWaveletTransform(coeffs, levels);
+        Vector<T> trend = InverseDiscreteWaveletTransform(coeffs, levels);
 
         // Vectorized: cycle = TimeSeries - trend
-        cycle = (Vector<T>)Engine.Subtract(TimeSeries, trend);
+        Vector<T> cycle = Engine.Subtract(TimeSeries, trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
@@ -212,31 +210,42 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> DiscreteWaveletTransform(Vector<T> data, int levels)
     {
         int n = data.Length;
-        Vector<T> coeffs = data.Clone();
+        var coeffs = Tensor<T>.FromVector(data.Clone());
+        T half = NumOps.FromDouble(0.5);
 
         for (int level = 0; level < levels; level++)
         {
             int levelSize = n >> level;
             int halfSize = levelSize >> 1;
+            if (halfSize == 0)
+            {
+                continue;
+            }
 
-            // Use temporary arrays to avoid in-place overwrite corruption
-            T[] approx = new T[halfSize];
-            T[] detail = new T[halfSize];
-            for (int i = 0; i < halfSize; i++)
-            {
-                T sum = NumOps.Add(coeffs[i * 2], coeffs[i * 2 + 1]);
-                T difference = NumOps.Subtract(coeffs[i * 2], coeffs[i * 2 + 1]);
-                approx[i] = NumOps.Multiply(sum, NumOps.FromDouble(0.5));
-                detail[i] = NumOps.Multiply(difference, NumOps.FromDouble(0.5));
-            }
-            for (int i = 0; i < halfSize; i++)
-            {
-                coeffs[i] = approx[i];
-                coeffs[halfSize + i] = detail[i];
-            }
+            // Haar step on the leading 2 * halfSize coefficients: pairs (a, b) become
+            // approx = (a + b) / 2 in the first half and detail = (a - b) / 2 in the second.
+            var pairs = Engine.TensorSlice(coeffs, new[] { 0 }, new[] { 2 * halfSize }).Reshape(new[] { halfSize, 2 });
+            var a = Engine.TensorSlice(pairs, new[] { 0, 0 }, new[] { halfSize, 1 }).Reshape(new[] { halfSize });
+            var b = Engine.TensorSlice(pairs, new[] { 0, 1 }, new[] { halfSize, 1 }).Reshape(new[] { halfSize });
+            var approx = Engine.TensorMultiplyScalar(Engine.TensorAdd(a, b), half);
+            var detail = Engine.TensorMultiplyScalar(Engine.TensorSubtract(a, b), half);
+            coeffs = ReplacePrefix(coeffs, Engine.TensorConcatenate(new[] { approx, detail }, 0));
         }
 
-        return coeffs;
+        return coeffs.ToVector();
+    }
+
+    /// <summary>Returns <paramref name="tensor"/> with its leading elements replaced by <paramref name="prefix"/>.</summary>
+    private Tensor<T> ReplacePrefix(Tensor<T> tensor, Tensor<T> prefix)
+    {
+        int rest = tensor.Length - prefix.Length;
+        if (rest == 0)
+        {
+            return prefix;
+        }
+
+        var tail = Engine.TensorSlice(tensor, new[] { prefix.Length }, new[] { rest });
+        return Engine.TensorConcatenate(new[] { prefix, tail }, 0);
     }
 
     /// <summary>
@@ -253,31 +262,33 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> InverseDiscreteWaveletTransform(Vector<T> coeffs, int levels)
     {
         int n = coeffs.Length;
-        Vector<T> data = coeffs.Clone();
+        var data = Tensor<T>.FromVector(coeffs.Clone());
 
         for (int level = levels - 1; level >= 0; level--)
         {
             int levelSize = n >> level;
             int halfSize = levelSize >> 1;
 
-            // Use temporary array to avoid in-place overwrite corruption
             // Inverse of DWT: approx = (a+b)/2, detail = (a-b)/2
-            // => a = approx + detail, b = approx - detail (no factor of 2)
-            T[] expanded = new T[levelSize];
-            for (int i = 0; i < halfSize; i++)
+            // => a = approx + detail, b = approx - detail (no factor of 2), interleaved.
+            // An odd levelSize leaves its last slot of the expanded block at zero.
+            var approx = Engine.TensorSlice(data, new[] { 0 }, new[] { halfSize });
+            var detail = Engine.TensorSlice(data, new[] { halfSize }, new[] { halfSize });
+            var expanded = Engine.TensorStack(
+                new[] { Engine.TensorAdd(approx, detail), Engine.TensorSubtract(approx, detail) }, 1)
+                .Reshape(new[] { 2 * halfSize });
+            if (levelSize > 2 * halfSize)
             {
-                T approx = data[i];
-                T detail = data[halfSize + i];
-                expanded[i * 2] = NumOps.Add(approx, detail);
-                expanded[i * 2 + 1] = NumOps.Subtract(approx, detail);
+                expanded = Engine.TensorConcatenate(new[] { expanded, new Tensor<T>(new[] { levelSize - 2 * halfSize }) }, 0);
             }
-            for (int i = 0; i < levelSize; i++)
+
+            if (levelSize > 0)
             {
-                data[i] = expanded[i];
+                data = ReplacePrefix(data, expanded);
             }
         }
 
-        return data;
+        return data.ToVector();
     }
 
     /// <summary>
@@ -298,37 +309,28 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         int nPadded = 1;
         while (nPadded < n) nPadded <<= 1;
 
-        Vector<T> padded = new Vector<T>(nPadded);
-        for (int i = 0; i < n; i++)
-        {
-            padded[i] = TimeSeries[i];
-        }
+        var padded = Engine.TensorConstantPad(Tensor<T>.FromVector(TimeSeries), new[] { 0, nPadded - n }, NumOps.Zero);
 
         // Perform FFT on zero-padded data
-        FastFourierTransform<T> fft = new();
-        Vector<Complex<T>> frequencyDomain = fft.Forward(padded);
+        var frequencyDomain = Engine.NativeComplexFFT(padded);
 
-        // Apply low-pass filter in frequency domain
+        // Apply low-pass filter in frequency domain: zero every bin with
+        // cutoff < i / nPadded < 1 - cutoff.
         T cutoffFrequency = NumOps.FromDouble(0.1);  // Adjust as needed
-        for (int i = 0; i < nPadded; i++)
-        {
-            T frequency = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nPadded));
-            if (NumOps.GreaterThan(frequency, cutoffFrequency) && NumOps.LessThan(frequency, NumOps.Subtract(NumOps.One, cutoffFrequency)))
-            {
-                frequencyDomain[i] = new Complex<T>(NumOps.Zero, NumOps.Zero);
-            }
-        }
+        var frequency = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, nPadded, 1), NumOps.FromDouble(1.0 / nPadded));
+        var rejected = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(frequency, cutoffFrequency),
+            Engine.TensorLessThan(frequency, NumOps.Subtract(NumOps.One, cutoffFrequency)));
+        var keep = Engine.ScalarMinusTensor(NumOps.One, rejected);
+        var filter = Engine.NativeComplexFromPolar(keep, Engine.TensorZerosLike(keep));
+        frequencyDomain = Engine.NativeComplexMultiply(frequencyDomain, filter);
 
         // Inverse FFT to get trend, then truncate to original length
-        Vector<T> paddedTrend = fft.Inverse(frequencyDomain);
-
-        // Copy padded trend to final trend
-        Vector<T> trend = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            trend[i] = paddedTrend[i];
+        var paddedTrend = Engine.NativeComplexIFFTReal(frequencyDomain);
+        Vector<T> trend = Engine.TensorSlice(paddedTrend, new[] { 0 }, new[] { n }).ToVector();
 
         // Vectorized: cycle = TimeSeries - trend
-        Vector<T> cycle = (Vector<T>)Engine.Subtract(TimeSeries, trend);
+        Vector<T> cycle = Engine.Subtract(TimeSeries, trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
@@ -465,15 +467,20 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Matrix<T> ConstructSecondDifferenceMatrix(int n)
     {
-        Matrix<T> D = new Matrix<T>(n - 2, n);
-
-        for (int i = 0; i < n - 2; i++)
+        int rows = n - 2;
+        if (rows <= 0)
         {
-            D[i, i] = NumOps.One;
-            D[i, i + 1] = NumOps.Multiply(NumOps.FromDouble(-2), NumOps.One);
-            D[i, i + 2] = NumOps.One;
+            return new Matrix<T>(rows, n);
         }
 
-        return D;
+        // D[i, i] = 1, D[i, i + 1] = -2, D[i, i + 2] = 1: shifted identity blocks.
+        var eye = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(rows));
+        var oneColumn = new Tensor<T>(new[] { rows, 1 });
+        var twoColumns = new Tensor<T>(new[] { rows, 2 });
+        var first = Engine.TensorConcatenate(new[] { eye, twoColumns }, 1);
+        var second = Engine.TensorConcatenate(new[] { oneColumn, eye, oneColumn }, 1);
+        var third = Engine.TensorConcatenate(new[] { twoColumns, eye }, 1);
+        var d = Engine.TensorSubtract(Engine.TensorAdd(first, third), Engine.TensorMultiplyScalar(second, NumOps.FromDouble(2)));
+        return d.ToMatrix();
     }
 }

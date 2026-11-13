@@ -115,12 +115,13 @@ public abstract class PitchDetectorBase<T> : IPitchDetector<T>
     {
         var detailed = ExtractDetailedPitchContour(audio, hopSizeMs);
         var pitches = new T[detailed.Count];
+        T zero = NumOps.FromDouble(0);
 
         for (int i = 0; i < detailed.Count; i++)
         {
             pitches[i] = detailed[i].IsVoiced
                 ? detailed[i].Pitch
-                : NumOps.FromDouble(0);
+                : zero;
         }
 
         return pitches;

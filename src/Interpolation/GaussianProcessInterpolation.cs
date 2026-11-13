@@ -82,11 +82,7 @@ public class GaussianProcessInterpolation<T> : IInterpolation<T>
 
         // Train the GPR model with our data points
         // First, convert the x vector to a matrix format required by the GPR
-        Matrix<T> xMatrix = new Matrix<T>(_x.Length, 1);
-        for (int i = 0; i < _x.Length; i++)
-        {
-            xMatrix[i, 0] = _x[i];
-        }
+        Matrix<T> xMatrix = Matrix<T>.FromVector(_x);
 
         // Train the model with the prepared data
         _gpr.Train(xMatrix, _y);
