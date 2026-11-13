@@ -1,4 +1,7 @@
 using AiDotNet.Initialization;
+using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tokenization.Models;
 
 namespace AiDotNet.VisionLanguage.Grounding;
 
@@ -39,10 +42,124 @@ internal sealed record GroundingQueryPrediction<T>(Tensor<T> Boxes, Tensor<T> Lo
 internal sealed record GroundingImageEncoderLayer<T>(DeformableAttentionLayers<T> SelfAttention, LayerNormalizationLayer<T> SelfNorm,
     DenseLayer<T> FeedForwardUp, DenseLayer<T> FeedForwardDown, LayerNormalizationLayer<T> FeedForwardNorm);
 
-/// <summary>A text enhancer layer (Grounding DINO's <c>TransformerEncoderLayer</c>): post-norm self-attention, then a
-/// ReLU FFN.</summary>
-internal sealed record GroundingTextEncoderLayer<T>(MultiHeadAttentionLayer<T> SelfAttention, LayerNormalizationLayer<T> SelfNorm,
+/// <summary>
+/// A multi-head self-attention under an explicit attention mask (<c>nn.MultiheadAttention</c> with <c>attn_mask</c>):
+/// query, key, value and output projections over <see cref="Heads"/> heads.
+/// </summary>
+internal sealed record GroundingMaskedAttention<T>(DenseLayer<T> Query, DenseLayer<T> Key, DenseLayer<T> Value,
+    DenseLayer<T> Output, int Heads);
+
+/// <summary>A text enhancer layer (Grounding DINO's <c>TransformerEncoderLayer</c>): post-norm self-attention under the
+/// sub-sentence mask, then a ReLU FFN.</summary>
+internal sealed record GroundingTextEncoderLayer<T>(GroundingMaskedAttention<T> SelfAttention, LayerNormalizationLayer<T> SelfNorm,
     DenseLayer<T> FeedForwardUp, DenseLayer<T> FeedForwardDown, LayerNormalizationLayer<T> FeedForwardNorm);
+
+/// <summary>
+/// Grounding DINO's sub-sentence structure of a prompt (<c>generate_masks_with_special_tokens_and_transfer_map</c>,
+/// groundingdino/models/GroundingDINO/bertwarper.py): which text tokens may attend to which, row-major
+/// <c>[L, L]</c>, and each token's position id.
+/// </summary>
+/// <remarks>The special tokens ([CLS], [SEP], "." and "?") split the prompt. Every token attends to itself; a special
+/// token at the first or last position attends only to itself at position 0; any other special token closes the phrase
+/// that began after the previous special token, and the phrase's tokens, the closing special token included, attend
+/// only to each other with positions restarting at 0. Without special tokens the text is one phrase.</remarks>
+internal sealed record GroundingTextStructure(bool[] Allowed, int[] Positions)
+{
+    public int Length => Positions.Length;
+
+    /// <summary>The structure of <paramref name="tokenIds"/> split at <paramref name="specialTokenIds"/>.</summary>
+    public static GroundingTextStructure Build(IReadOnlyList<int> tokenIds, IReadOnlyCollection<int>? specialTokenIds)
+    {
+        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+        int n = tokenIds.Count;
+        var allowed = new bool[n * n];
+        var positions = new int[n];
+        if (specialTokenIds is null || specialTokenIds.Count == 0)
+        {
+            for (int i = 0; i < allowed.Length; i++) allowed[i] = true;
+            for (int i = 0; i < n; i++) positions[i] = i;
+            return new GroundingTextStructure(allowed, positions);
+        }
+
+        var special = new HashSet<int>(specialTokenIds);
+        for (int i = 0; i < n; i++) allowed[i * n + i] = true;
+        int previous = 0;
+        for (int column = 0; column < n; column++)
+        {
+            if (!special.Contains(tokenIds[column])) continue;
+            if (column == 0 || column == n - 1)
+            {
+                positions[column] = 0;
+            }
+            else
+            {
+                for (int row = previous + 1; row <= column; row++)
+                {
+                    for (int key = previous + 1; key <= column; key++) allowed[row * n + key] = true;
+                    positions[row] = row - previous - 1;
+                }
+            }
+            previous = column;
+        }
+        return new GroundingTextStructure(allowed, positions);
+    }
+}
+
+/// <summary>
+/// The prompt side of the Grounding DINO heads over this library's CLIP-style tokenizer: Grounding DINO's special
+/// tokens are [CLS], [SEP], "." and "?", which here are the start token, the end token (<c>&lt;|endoftext|&gt;</c>, which
+/// the tokenizer does not append, so a prompt is closed with it as BERT closes one with [SEP]), and the tokenizer's ids
+/// of "." and "?".
+/// </summary>
+internal static class GroundingPrompt
+{
+    // ClipTokenizerFactory.CreateSimple's corpus plus category prompts, so "." and "?" are tokens of their own.
+    private static readonly string[] Corpus =
+    {
+        "a photo of a cat",
+        "a photo of a dog",
+        "a picture of a bird",
+        "an image of a car",
+        "a drawing of a house",
+        "the quick brown fox jumps over the lazy dog",
+        "hello world",
+        "artificial intelligence",
+        "machine learning",
+        "neural network",
+        "cat . dog . bird .",
+        "what is in the picture ?",
+    };
+
+    /// <summary>The tokenizer of the Grounding DINO models.</summary>
+    public static ITokenizer CreateTokenizer(int vocabSize) => ClipTokenizerFactory.CreateSimple(Corpus, vocabSize);
+
+    /// <summary>The ids of the start token, the end token, "." and "?".</summary>
+    public static HashSet<int> SpecialTokenIds(ITokenizer tokenizer)
+    {
+        if (tokenizer is null) throw new ArgumentNullException(nameof(tokenizer));
+        var clip = SpecialTokens.Clip();
+        var ids = new HashSet<int>(tokenizer.ConvertTokensToIds(new List<string> { clip.ClsToken, clip.EosToken }));
+        var plain = new EncodingOptions { AddSpecialTokens = false };
+        foreach (var separator in new[] { ".", "?" })
+        {
+            var encoded = tokenizer.Encode(separator, plain).TokenIds;
+            if (encoded.Count == 1) ids.Add(encoded[0]);
+        }
+        return ids;
+    }
+
+    /// <summary>The prompt's token ids, closed by the end token.</summary>
+    public static List<int> Encode(ITokenizer tokenizer, string text)
+    {
+        if (tokenizer is null) throw new ArgumentNullException(nameof(tokenizer));
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = tokenizer.Encode(text).TokenIds.ToList();
+        if (ids.Count == 0) throw new ArgumentException("The text query has no tokens.", nameof(text));
+        int end = tokenizer.ConvertTokensToIds(new List<string> { SpecialTokens.Clip().EosToken })[0];
+        if (ids[ids.Count - 1] != end) ids.Add(end);
+        return ids;
+    }
+}
 
 /// <summary>
 /// Grounding DINO's bi-directional image-text cross-attention (<c>BiAttentionBlock</c> over <c>BiMultiHeadAttention</c>):
@@ -145,7 +262,7 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
         {
             var fusion = HasText ? BiAttention(c.Width, halfFeedForward, Math.Max(1, c.Heads / 2)) : null;
             var text = HasText
-                ? new GroundingTextEncoderLayer<T>(Attention(c.Width, c.Heads), Norm(), Linear(halfFeedForward), Linear(c.Width), Norm())
+                ? new GroundingTextEncoderLayer<T>(MaskedAttention(c.Width, c.Heads), Norm(), Linear(halfFeedForward), Linear(c.Width), Norm())
                 : null;
             var image = new GroundingImageEncoderLayer<T>(DeformableAttention(c.Width, c.Heads, c.Levels, c.Points), Norm(),
                 Linear(c.FeedForward), Linear(c.Width), Norm());
@@ -186,30 +303,48 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
     private bool HasText => Configuration.VocabSize > 0;
 
     /// <summary>The text tokens embedded and enhanced against nothing yet: token plus learned position embeddings <c>[L, D]</c>.</summary>
-    internal Tensor<T> EmbedText(IReadOnlyList<int> tokenIds)
+    internal Tensor<T> EmbedText(IReadOnlyList<int> tokenIds) => EmbedText(tokenIds, null);
+
+    /// <summary>
+    /// The text tokens embedded: token plus learned position embeddings <c>[L, D]</c>, at the given position ids
+    /// (Grounding DINO's per-phrase <c>position_ids</c>), or 0, 1, ... when null.
+    /// </summary>
+    internal Tensor<T> EmbedText(IReadOnlyList<int> tokenIds, IReadOnlyList<int>? positionIds)
     {
         if (_tokenEmbedding is null || _positionEmbedding is null)
             throw new InvalidOperationException("A class-agnostic head reads no text.");
         if (tokenIds is null || tokenIds.Count == 0) throw new ArgumentException("The text has no tokens.", nameof(tokenIds));
         int length = Math.Min(tokenIds.Count, Configuration.MaxTextLength);
         var ids = tokenIds.Take(length).ToList();
+        var positionList = positionIds is null ? Enumerable.Range(0, length).ToList() : positionIds.Take(length).ToList();
+        if (positionList.Count != length) throw new ArgumentException("Every token needs a position id.", nameof(positionIds));
         var tokens = Rows(_tokenEmbedding, OneHot(ids, Configuration.VocabSize));
-        var positions = Rows(_positionEmbedding, OneHot(Enumerable.Range(0, length).ToList(), Configuration.MaxTextLength));
+        var positions = Rows(_positionEmbedding, OneHot(positionList, Configuration.MaxTextLength));
         return Engine.TensorAdd(tokens, positions);
     }
 
     /// <summary>
     /// Detects in one image: <paramref name="imageTokens"/> are the backbone's tokens <c>[N, d]</c> in row-major
-    /// grid order, <paramref name="tokenIds"/> the text's token ids (ignored by a class-agnostic head).
+    /// grid order, <paramref name="tokenIds"/> the text's token ids (ignored by a class-agnostic head), split into
+    /// phrases at <paramref name="specialTokenIds"/> (Grounding DINO's sub-sentence mask; one phrase when null).
     /// </summary>
-    public GroundingQueryPrediction<T> Forward(Tensor<T> imageTokens, IReadOnlyList<int>? tokenIds)
+    public GroundingQueryPrediction<T> Forward(Tensor<T> imageTokens, IReadOnlyList<int>? tokenIds,
+        IReadOnlyCollection<int>? specialTokenIds = null)
     {
         if (imageTokens is null) throw new ArgumentNullException(nameof(imageTokens));
         var c = Configuration;
         var levels = Pyramid(_pyramid, imageTokens);
         int n = levels.Tokens.Shape[0];
-        Tensor<T>? embeddedText = HasText ? EmbedText(tokenIds ?? throw new ArgumentNullException(nameof(tokenIds))) : null;
-        var (image, text) = Enhance(levels, embeddedText);
+        Tensor<T>? embeddedText = null;
+        GroundingTextStructure? structure = null;
+        if (HasText)
+        {
+            if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+            var ids = tokenIds.Take(Math.Min(tokenIds.Count, c.MaxTextLength)).ToList();
+            structure = GroundingTextStructure.Build(ids, specialTokenIds);
+            embeddedText = EmbedText(ids, structure.Positions);
+        }
+        var (image, text) = Enhance(levels, embeddedText, structure);
         var imageLevels = levels with { Tokens = image };
 
         // gen_encoder_output_proposals: every token's cell (centre, DINO's side 0.05 * 2^level) in logit space; a cell
@@ -275,30 +410,34 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
 
     /// <summary>
     /// The feature enhancer (§3.1) on the pyramid's tokens and the embedded text: per layer, the bi-directional fusion,
-    /// the text self-attention (positions as their sine embedding), then the deformable self-attention of the image
-    /// tokens around their own centres (positions as Grounding DINO's sine embedding plus the level embedding).
+    /// the text self-attention under the sub-sentence mask (positions as the sine embedding of the per-phrase position
+    /// ids), then the deformable self-attention of the image tokens around their own centres (positions as Grounding
+    /// DINO's sine embedding plus the level embedding).
     /// </summary>
-    internal (Tensor<T> Image, Tensor<T>? Text) Enhance(FeatureLevels<T> levels, Tensor<T>? text)
+    internal (Tensor<T> Image, Tensor<T>? Text) Enhance(FeatureLevels<T> levels, Tensor<T>? text,
+        GroundingTextStructure? structure = null)
     {
         if (levels is null) throw new ArgumentNullException(nameof(levels));
         var image = levels.Tokens;
         if (_enhancers.Count == 0) return (image, text);
         var imagePosition = Engine.TensorAdd(ImagePosition(levels), levels.LevelEmbedding);
         Tensor<T>? textPosition = null;
+        Tensor<T>? textMask = null;
         if (text is not null)
         {
-            int length = text.Shape[0];
-            // get_sine_pos_embed(position_ids[..., None], num_pos_feats=d): D features of the integer position.
-            textPosition = PadToWidth(SineEmbedding(Engine.TensorArange<T>(0, length, 1).Reshape(new[] { length, 1 }), Configuration.Width,
-                QueryPositionTemperature));
+            var textStructure = structure ?? GroundingTextStructure.Build(Enumerable.Range(0, text.Shape[0]).ToList(), null);
+            if (textStructure.Length != text.Shape[0])
+                throw new ArgumentException("The text structure must cover every text token.", nameof(structure));
+            textPosition = TextPosition(textStructure);
+            textMask = TextMask(textStructure);
         }
         foreach (var e in _enhancers)
         {
-            if (text is not null && textPosition is not null && e.Fusion is not null && e.Text is not null)
+            if (text is not null && textPosition is not null && textMask is not null && e.Fusion is not null && e.Text is not null)
             {
                 var (imageUpdate, textUpdate) = BiAttend(e.Fusion, image, text);
                 image = imageUpdate;
-                text = RunText(e.Text, textUpdate, textPosition);
+                text = RunText(e.Text, textUpdate, textPosition, textMask);
             }
 
             // Deformable DETR's encoder layer: src = norm1(src + attn(src + pos, src)); src = norm2(src + ffn(src)).
@@ -349,13 +488,66 @@ internal sealed class GroundingQueryDecoder<T> : GroundingHeadModule<T>
             Engine.TensorAdd(text, Engine.TensorMultiply(textScale, deltaText)));
     }
 
-    // Grounding DINO's text TransformerEncoderLayer: q = k = src + pos, v = src; post-norm; ReLU feed-forward.
-    private Tensor<T> RunText(GroundingTextEncoderLayer<T> layer, Tensor<T> text, Tensor<T> position)
+    // Grounding DINO's text TransformerEncoderLayer: q = k = src + pos, v = src, attn_mask = ~text_self_attention_masks;
+    // post-norm; ReLU feed-forward.
+    private Tensor<T> RunText(GroundingTextEncoderLayer<T> layer, Tensor<T> text, Tensor<T> position, Tensor<T> mask)
     {
-        text = Rows(layer.SelfNorm, Engine.TensorAdd(text, SelfAttendValues(layer.SelfAttention, Engine.TensorAdd(text, position), text)));
+        var attended = MaskedSelfAttention(layer.SelfAttention, text, position, mask, out _);
+        text = Rows(layer.SelfNorm, Engine.TensorAdd(text, attended));
         var hidden = Rows(layer.FeedForwardDown, Engine.ReLU(Rows(layer.FeedForwardUp, text)));
         return Rows(layer.FeedForwardNorm, Engine.TensorAdd(text, hidden));
     }
+
+    /// <summary>The attention weights <c>[heads, L, L]</c> of a text layer's self-attention on <paramref name="text"/>.</summary>
+    internal Tensor<T> TextSelfAttentionWeights(GroundingTextEncoderLayer<T> layer, Tensor<T> text, GroundingTextStructure structure)
+    {
+        if (layer is null) throw new ArgumentNullException(nameof(layer));
+        if (structure is null) throw new ArgumentNullException(nameof(structure));
+        MaskedSelfAttention(layer.SelfAttention, text, TextPosition(structure), TextMask(structure), out var weights);
+        return weights;
+    }
+
+    // get_sine_pos_embed(position_ids[..., None], num_pos_feats=d): D features of each token's position id.
+    private Tensor<T> TextPosition(GroundingTextStructure structure)
+    {
+        int length = structure.Length;
+        var positions = new Tensor<int>(new[] { length, 1 }, Vector<int>.FromArray(structure.Positions)).Cast<T>();
+        return PadToWidth(SineEmbedding(positions, Configuration.Width, QueryPositionTemperature));
+    }
+
+    // The [L, L] 0/1 mask of the keys each text token may attend to.
+    private static Tensor<T> TextMask(GroundingTextStructure structure)
+    {
+        int length = structure.Length;
+        return new Tensor<int>(new[] { length, length }, Vector<int>.FromArray(structure.Allowed.Select(a => a ? 1 : 0).ToArray())).Cast<T>();
+    }
+
+    /// <summary>
+    /// <c>nn.MultiheadAttention(x + pos, x + pos, x, attn_mask)</c>: scaled dot-product attention per head, a masked key
+    /// taking no weight.
+    /// </summary>
+    private Tensor<T> MaskedSelfAttention(GroundingMaskedAttention<T> attention, Tensor<T> x, Tensor<T> position, Tensor<T> mask,
+        out Tensor<T> weights)
+    {
+        int n = x.Shape[0], h = attention.Heads;
+        var withPosition = Engine.TensorAdd(x, position);
+        var q = Rows(attention.Query, withPosition);
+        var k = Rows(attention.Key, withPosition);
+        var v = Rows(attention.Value, x);
+        int width = q.Shape[1], dh = width / h;
+        Tensor<T> Heads(Tensor<T> rows) => Engine.TensorPermute(Engine.Reshape(rows, new[] { n, h, dh }), new[] { 1, 0, 2 });
+        var logits = Engine.TensorMultiplyScalar(Engine.BatchMatMul(Heads(q), Engine.TensorPermute(Heads(k), new[] { 0, 2, 1 })),
+            NumOps.FromDouble(1.0 / Math.Sqrt(dh)));
+        var masked = Engine.TensorWhere(Engine.TensorBroadcastTo(mask.Reshape(new[] { 1, n, n }), new[] { h, n, n }), logits,
+            Tensor<T>.CreateDefault(new[] { h, n, n }, NumOps.MinValue));
+        weights = Engine.Softmax(masked, 2);
+        var context = Engine.Reshape(Engine.TensorPermute(Engine.BatchMatMul(weights, Heads(v)), new[] { 1, 0, 2 }), new[] { n, width });
+        return Rows(attention.Output, context);
+    }
+
+    // The projections of a masked self-attention of `width` features over at most `heads` heads.
+    private GroundingMaskedAttention<T> MaskedAttention(int width, int heads)
+        => new(Linear(width), Linear(width), Linear(width), Linear(width), HeadsFor(width, heads));
 
     // The layers of a BiAttentionBlock with an embedding of `width` features over `heads` heads.
     private GroundingBiAttention<T> BiAttention(int modelWidth, int width, int heads)

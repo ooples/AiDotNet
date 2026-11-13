@@ -70,6 +70,8 @@ public partial class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     private int _encoderLayerEnd;
     private readonly List<ILayer<T>> _groundingHeadLayers = new();
     private GroundingQueryDecoder<T>? _groundingHead;
+    // Grounding DINO's special tokens ([CLS], [SEP], ".", "?") in this model's tokenizer.
+    private readonly HashSet<int> _promptSpecialTokens;
 
     public DINOX(
         NeuralNetworkArchitecture<T> architecture,
@@ -90,7 +92,8 @@ public partial class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenizer = GroundingPrompt.CreateTokenizer(_options.VocabSize);
+        _promptSpecialTokens = GroundingPrompt.SpecialTokenIds(_tokenizer);
         InitializeLayers();
     }
 
@@ -108,7 +111,8 @@ public partial class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenizer = GroundingPrompt.CreateTokenizer(_options.VocabSize);
+        _promptSpecialTokens = GroundingPrompt.SpecialTokenIds(_tokenizer);
         InitializeLayers();
     }
 
@@ -177,7 +181,7 @@ public partial class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
         var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
-        return head.Forward(visualFeatures, tokenIds);
+        return head.Forward(visualFeatures, tokenIds, _promptSpecialTokens);
     }
 
     /// <inheritdoc />
@@ -238,10 +242,18 @@ public partial class DINOX<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        if (text is null) throw new ArgumentNullException(nameof(text));
-        var ids = _tokenizer.Encode(text).TokenIds;
-        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
+        return GroundingPrompt.Encode(_tokenizer, text);
     }
+
+    /// <summary>The prompt's token ids and Grounding DINO's sub-sentence structure of them.</summary>
+    internal (List<int> TokenIds, GroundingTextStructure Structure) PromptStructure(string text)
+    {
+        var ids = TokenIds(text);
+        return (ids, GroundingTextStructure.Build(ids.Take(Math.Min(ids.Count, _options.MaxSequenceLength)).ToList(), _promptSpecialTokens));
+    }
+
+    /// <summary>Grounding DINO's special tokens ([CLS], [SEP], ".", "?") in this model's tokenizer.</summary>
+    internal IReadOnlyCollection<int> PromptSpecialTokenIds => _promptSpecialTokens;
 
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
