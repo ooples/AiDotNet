@@ -10665,8 +10665,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                      model.FullyQualifiedName.IndexOf(
                          "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal) >= 0)
             {
-                // Fit the same compact speech tokenizer used by the native ASR task tests.
-                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.Asr<double>()";
+                // The compact ASR fixture, its speech tokenizer fitted on a broad corpus (tones, offset noise, steady
+                // levels): a codebook fitted on two tones quantizes every generic probe to one audio token.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.AsrOverBroadAudio<double>()";
             }
 
             else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)

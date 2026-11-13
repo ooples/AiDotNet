@@ -91,4 +91,42 @@ internal static class AudioPaLMFixture
 
     internal static void Prepare<T>(AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> model)
         => model.FitSpeechTokenizer(new[] { Tones<T>(1.0), Tones<T>(1.0, 260.0, 610.0) });
+
+    /// <summary>
+    /// The ASR model with its tokenizer fitted on a broad corpus rather than two tones: the tones, offset noise and
+    /// steady levels across a hundredfold loudness range.
+    /// </summary>
+    /// <remarks>
+    /// The audio tokens are the nearest k-means centroids of w2v-BERT's embeddings (§3.1), so the codebook only separates
+    /// audio like what it was fitted on. Fitted on two tones alone, every steady level and every noise recording lies
+    /// far from all eight centroids and quantizes to the same token, so distinct recordings give one prompt and one
+    /// transcript. The paper fits on a large speech corpus; this corpus stands in for that coverage, so the generic
+    /// probes (steady levels, offset noise and scaled noise) get distinct audio tokens.
+    /// </remarks>
+    public static AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> AsrOverBroadAudio<T>()
+    {
+        var model = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>(Architecture<T>(), Options());
+        model.FitSpeechTokenizer(BroadCorpus<T>());
+        return model;
+    }
+
+    /// <summary>One-second 16 kHz recordings: two tone pairs, offset noise at three loudnesses and three steady levels.</summary>
+    public static Tensor<T>[] BroadCorpus<T>()
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        Tensor<T> Filled(Func<double> sample)
+        {
+            var audio = new T[16000];
+            for (int i = 0; i < audio.Length; i++) audio[i] = ops.FromDouble(sample());
+            return new Tensor<T>(new[] { audio.Length }, new Vector<T>(audio));
+        }
+
+        var corpus = new System.Collections.Generic.List<Tensor<T>> { Tones<T>(1.0), Tones<T>(1.0, 260.0, 610.0) };
+        foreach (double loudness in new[] { 0.1, 1.0, 10.0 })
+            corpus.Add(Filled(() => loudness * random.NextDouble()));
+        foreach (double level in new[] { 0.05, 0.5, 5.0 })
+            corpus.Add(Filled(() => level));
+        return corpus.ToArray();
+    }
 }
