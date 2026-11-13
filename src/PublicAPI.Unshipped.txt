@@ -22971,3 +22971,18 @@ AiDotNet.Models.Options.AutoAttackOptions<T>.FabBeta.set -> void
 *REMOVED*AiDotNet.Models.Options.CertifiedDefenseOptions<T>.CertificationMethod.get -> string!
 *REMOVED*AiDotNet.Models.Options.CertifiedDefenseOptions<T>.NormType.get -> string!
 *REMOVED*static AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>.WithCertification(string! certificationMethod = "RandomizedSmoothing") -> AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>!
+AiDotNet.Enums.CertifiedDefenseMethod.RandomizedSmoothing = 0 -> AiDotNet.Enums.CertifiedDefenseMethod
+AiDotNet.Enums.CertifiedDefenseMethod.Crown = 2 -> AiDotNet.Enums.CertifiedDefenseMethod
+AiDotNet.Enums.CertifiedDefenseMethod.IntervalBoundPropagation = 1 -> AiDotNet.Enums.CertifiedDefenseMethod
+AiDotNet.Enums.CertifiedDefenseMethod
+AiDotNet.AdversarialRobustness.CertifiedRobustness.RandomizedSmoothing<T, TInput, TOutput>.PredictWithAbstention(TInput input, AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model) -> int?
+AiDotNet.Models.CertifiedPrediction<T>.LowerBound.get -> T
+AiDotNet.Models.CertifiedPrediction<T>.Confidence.get -> T
+AiDotNet.Models.CertifiedPrediction<T>.UpperBound.get -> T
+AiDotNet.Models.Options.CertifiedDefenseOptions<T>.CertificationMethod.get -> AiDotNet.Enums.CertifiedDefenseMethod
+AiDotNet.Models.Options.CertifiedDefenseOptions<T>.SelectionSamples.get -> int
+AiDotNet.Models.Options.CertifiedDefenseOptions<T>.SelectionSamples.set -> void
+AiDotNet.Models.Options.CertifiedDefenseOptions<T>.NormType.get -> AiDotNet.Enums.AdversarialNormType
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.CertificationMethod.get -> AiDotNet.Enums.CertifiedDefenseMethod
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.CertificationNormType.get -> AiDotNet.Enums.AdversarialNormType
+static AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>.WithCertification(AiDotNet.Enums.CertifiedDefenseMethod certificationMethod = AiDotNet.Enums.CertifiedDefenseMethod.RandomizedSmoothing) -> AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>!

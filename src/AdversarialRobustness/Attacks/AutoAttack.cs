@@ -80,7 +80,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     }
 
     /// <summary>The losses APGD maximizes.</summary>
-    private enum LossKind
+    internal enum LossKind
     {
         CrossEntropy,
         Dlr,
@@ -325,7 +325,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// <summary>
     /// The value of an APGD loss and its gradient with respect to the logits.
     /// </summary>
-    private (T Value, Vector<T> LogitGradient) Loss(Vector<T> logits, LossKind kind, int label, int target)
+    internal (T Value, Vector<T> LogitGradient) Loss(Vector<T> logits, LossKind kind, int label, int target)
     {
         int n = logits.Length;
         if (kind == LossKind.CrossEntropy)
