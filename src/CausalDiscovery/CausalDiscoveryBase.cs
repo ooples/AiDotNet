@@ -66,7 +66,16 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
                 nameof(featureNames));
         }
 
-        Matrix<T> adjacency = DiscoverStructureCore(data);
+        // A structure search is not a training step: its thousands of small temporaries never recur, and the graph
+        // it returns outlives the call. Run outside any caller's TensorArena, which would keep every temporary for the
+        // whole search -- PartitionMCMC took 196 s under a test's arena against 12 s without -- and could reissue the
+        // adjacency's buffer after returning it.
+        Matrix<T> adjacency;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            adjacency = DiscoverStructureCore(data);
+        }
+
         return new CausalGraph<T>(adjacency, names);
     }
 
