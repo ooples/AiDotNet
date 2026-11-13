@@ -151,7 +151,8 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
                 : -1.0;
         }
 
-        if (!(maxDrawdown > 0))
+        // A NaN drawdown (a NaN return) has no ratio either, so it takes the same zero as "no drawdown".
+        if (double.IsNaN(maxDrawdown) || maxDrawdown <= 0)
         {
             return NumOps.Zero;
         }
