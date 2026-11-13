@@ -32,6 +32,28 @@ public class PpoReferenceTests
 
     private static double[] Values(JsonElement e) => e.EnumerateArray().Select(v => v.GetDouble()).ToArray();
 
+    [Fact]
+    [Trait("category", "unit")]
+    public void Half_advantage_standardization_does_not_overflow_the_mean()
+    {
+        // Baselines' (A - mean(A)) / std(A) over the 100 advantages 2048, 2040, ..., 1256 (exact in Half). Their sum
+        // (165,200) is past Half's 65,504, so a mean taken from the raw sum was infinite and every standardized
+        // advantage NaN.
+        const int n = 100;
+        var values = new Tensor<Half>(new[] { n });
+        for (int i = 0; i < n; i++) values[i] = (Half)(2048 - (8 * i));
+
+        var standardized = FinancialPPOAgent<Half>.Standardize(values);
+
+        // Reference in double: mean 1652, population std 8 sqrt((n^2 - 1) / 12), so A_i standardizes to
+        // -(i - 49.5) / sqrt((n^2 - 1) / 12). Half carries about three decimal digits.
+        double std = Math.Sqrt(((n * n) - 1) / 12.0);
+        for (int i = 0; i < n; i++)
+        {
+            Assert.Equal(-(i - 49.5) / std, (double)standardized[i], 1e-2);
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task TheSeededGenerator_IsDotNetsSystemRandom()
     {

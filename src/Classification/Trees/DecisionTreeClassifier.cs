@@ -107,8 +107,7 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
             throw new ArgumentException("Number of samples in X must match length of y.");
         }
 
-        var rows = new int[x.Rows];
-        for (int i = 0; i < rows.Length; i++) rows[i] = i;
+        var rows = Enumerable.Range(0, x.Rows).ToArray();
         TrainDense(CreateDenseData(x), y, rows, y);
     }
 
@@ -118,14 +117,13 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
     /// ranks its data once and trains every tree on its bootstrap rows this way, without copying them out.
     /// </summary>
     /// <param name="y">Labels indexed by data row.</param>
-    internal void TrainOnRows(DenseTreeData data, Vector<T> y, int[] rows)
+    internal void TrainOnRows(DenseTreeData<T> data, Vector<T> y, int[] rows)
     {
-        var sampleLabels = new Vector<T>(rows.Length);
-        for (int i = 0; i < rows.Length; i++) sampleLabels[i] = y[rows[i]];
+        var sampleLabels = AiDotNetEngine.Current.TensorTake(y.AsTensor(), new Tensor<int>(rows, new[] { rows.Length })).ToVector();
         TrainDense(data, y, rows, sampleLabels);
     }
 
-    private void TrainDense(DenseTreeData data, Vector<T> y, int[] rows, Vector<T> sampleLabels)
+    private void TrainDense(DenseTreeData<T> data, Vector<T> y, int[] rows, Vector<T> sampleLabels)
     {
         NumFeatures = data.Features;
         ClassLabels = ExtractClassLabels(sampleLabels);
@@ -148,12 +146,13 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <summary>
-    /// Updates feature importances based on the gain from a split.
+    /// Adds a split's impurity decrease weighted by its share of the samples (scikit-learn's
+    /// N_t / N * impurity decrease; the normalization makes the scale irrelevant).
     /// </summary>
-    private void UpdateFeatureImportances(int feature, T gain, int numSamples)
+    private void UpdateFeatureImportances(int feature, T weightedGain)
     {
-        T weightedGain = NumOps.Multiply(gain, NumOps.FromDouble(numSamples));
-        (FeatureImportances ?? throw new InvalidOperationException("FeatureImportances has not been initialized."))[feature] = NumOps.Add(FeatureImportances[feature], weightedGain);
+        var importances = FeatureImportances ?? throw new InvalidOperationException("FeatureImportances has not been initialized.");
+        importances[feature] = NumOps.Add(importances[feature], weightedGain);
     }
 
     /// <summary>
@@ -164,18 +163,11 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         if (FeatureImportances == null)
             return;
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < FeatureImportances.Length; i++)
-        {
-            sum = NumOps.Add(sum, FeatureImportances[i]);
-        }
-
+        var engine = AiDotNetEngine.Current;
+        T sum = engine.TensorSum(FeatureImportances.AsTensor());
         if (NumOps.Compare(sum, NumOps.Zero) > 0)
         {
-            for (int i = 0; i < FeatureImportances.Length; i++)
-            {
-                FeatureImportances[i] = NumOps.Divide(FeatureImportances[i], sum);
-            }
+            FeatureImportances = engine.TensorDivideScalar(FeatureImportances.AsTensor(), sum).ToVector();
         }
     }
 
@@ -189,15 +181,14 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
             throw new InvalidOperationException("Model must be trained before getting class index.");
         }
 
-        for (int i = 0; i < ClassLabels.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        var matches = engine.TensorEquals(ClassLabels.AsTensor(), label);
+        if (NumOps.Compare(engine.TensorSum(matches), NumOps.Zero) == 0)
         {
-            if (NumOps.Compare(ClassLabels[i], label) == 0)
-            {
-                return i;
-            }
+            throw new ArgumentException($"Label {label} not found in class labels.");
         }
 
-        throw new ArgumentException($"Label {label} not found in class labels.");
+        return engine.TensorArgMax(matches, 0).GetFlat(0);
     }
 
     /// <summary>The trained tree as flat arrays for batch evaluation, or null before training.</summary>
@@ -211,45 +202,66 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
             throw new InvalidOperationException("Model must be trained before prediction.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        var engine = AiDotNetEngine.Current;
+        int n = input.Rows;
+        if (n == 0)
         {
-            var sample = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                sample[j] = input[i, j];
-            }
-
-            var leafNode = TraverseTree(sample, _root);
-
-            for (int c = 0; c < NumClasses; c++)
-            {
-                probabilities[i, c] = (leafNode.ClassProbabilities ?? throw new InvalidOperationException("ClassProbabilities has not been initialized."))[c];
-            }
+            return new Matrix<T>(0, NumClasses);
         }
 
-        return probabilities;
+        // Route all rows down the tree at once: each node splits its rows into value <= threshold (left) and the
+        // rest, each leaf emits its class distribution for its rows, and the blocks are put back in row order.
+        var x = new Tensor<T>(new[] { n, input.Columns }, input);
+        var blocks = new List<Tensor<T>>();
+        var positions = new List<Tensor<int>>();
+        RouteRows(_root, x, new Tensor<int>(Enumerable.Range(0, n).ToArray(), new[] { n }), blocks, positions);
+
+        var leafRows = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+        var placed = positions.Count == 1 ? positions[0] : engine.TensorConcatenate(positions.ToArray(), 0);
+        return engine.TensorGather(leafRows, engine.TensorArgsort(placed, 0, false), 0).ToMatrix();
     }
 
-    /// <summary>
-    /// Traverses the tree to find the appropriate leaf node.
-    /// </summary>
-    private DecisionNode<T> TraverseTree(Vector<T> sample, DecisionNode<T> node)
+    private void RouteRows(DecisionNode<T> node, Tensor<T> x, Tensor<int> rows, List<Tensor<T>> blocks, List<Tensor<int>> positions)
     {
+        if (rows.Length == 0) return;
+        var engine = AiDotNetEngine.Current;
         if (node.IsLeaf)
         {
-            return node;
+            var probabilities = node.ClassProbabilities ?? throw new InvalidOperationException("ClassProbabilities has not been initialized.");
+            blocks.Add(engine.TensorBroadcastTo(
+                engine.Reshape(probabilities.AsTensor(), new[] { 1, probabilities.Length }), new[] { rows.Length, probabilities.Length }));
+            positions.Add(rows);
+            return;
         }
 
-        if (NumOps.Compare(sample[node.FeatureIndex], node.Threshold) <= 0)
+        int n = rows.Length;
+        var column = engine.Reshape(
+            engine.TensorSlice(engine.TensorGather(x, rows, 0), new[] { 0, node.FeatureIndex }, new[] { n, 1 }), new[] { n });
+        var goesRight = engine.TensorGreaterThan(column, node.Threshold);
+        // Counted and keyed in int: T may not hold the row count or n + position exactly (Half is exact only to 2048),
+        // which miscounts the right rows and lets a right row's key collide with a left row's.
+        var goesRightIndex = goesRight.Cast<int>();
+        int rightCount = engine.TensorSum(goesRightIndex);
+        var left = node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.");
+        var right = node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.");
+        if (rightCount == 0)
         {
-            return TraverseTree(sample, (node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")));
+            RouteRows(left, x, rows, blocks, positions);
+            return;
         }
-        else
+
+        if (rightCount == n)
         {
-            return TraverseTree(sample, (node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")));
+            RouteRows(right, x, rows, blocks, positions);
+            return;
         }
+
+        // key = goesRight * n + position puts the left rows first, then the right rows, each in order.
+        var key = engine.TensorAdd(engine.TensorMultiplyScalar(goesRightIndex, n), engine.TensorArange<int>(0, n, 1));
+        var arranged = engine.TensorGather(rows, engine.TensorArgsort(key, 0, false), 0);
+        int leftCount = n - rightCount;
+        RouteRows(left, x, engine.TensorSlice(arranged, new[] { 0 }, new[] { leftCount }), blocks, positions);
+        RouteRows(right, x, engine.TensorSlice(arranged, new[] { leftCount }, new[] { rightCount }), blocks, positions);
     }
 
     /// <summary>
@@ -301,11 +313,7 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
 
         if (node.ClassProbabilities != null)
         {
-            cloned.ClassProbabilities = new Vector<T>(node.ClassProbabilities.Length);
-            for (int i = 0; i < node.ClassProbabilities.Length; i++)
-            {
-                cloned.ClassProbabilities[i] = node.ClassProbabilities[i];
-            }
+            cloned.ClassProbabilities = node.ClassProbabilities.Clone();
         }
 
         if (node.Left != null)
@@ -371,11 +379,7 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
 
         if (node.ClassProbabilities is not null)
         {
-            var probsArray = new double[node.ClassProbabilities.Length];
-            for (int i = 0; i < node.ClassProbabilities.Length; i++)
-            {
-                probsArray[i] = NumOps.ToDouble(node.ClassProbabilities[i]);
-            }
+            var probsArray = node.ClassProbabilities.AsTensor().Cast<double>().ToArray();
             nodeData["ClassProbabilities"] = probsArray;
         }
 
@@ -417,11 +421,7 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
             var probsArray = probsToken.ToObject<double[]>() ?? Array.Empty<double>();
             if (probsArray.Length > 0)
             {
-                node.ClassProbabilities = new Vector<T>(probsArray.Length);
-                for (int i = 0; i < probsArray.Length; i++)
-                {
-                    node.ClassProbabilities[i] = NumOps.FromDouble(probsArray[i]);
-                }
+                node.ClassProbabilities = new Tensor<double>(probsArray, new[] { probsArray.Length }).Cast<T>().ToVector();
             }
         }
 

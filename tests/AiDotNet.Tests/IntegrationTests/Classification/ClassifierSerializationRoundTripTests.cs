@@ -1550,7 +1550,7 @@ public class ClassifierSerializationRoundTripTests
     {
         // MiniRocket uses 84 fixed kernels × dilations × biases — needs enough sequence length
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
-        var options = new MiniRocketOptions<double> { Seed = 42, NumBiasesPerDilation = 3 };
+        var options = new MiniRocketOptions<double> { Seed = 42 };
         var classifier = new MiniRocketClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1569,7 +1569,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task MiniRocket_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
-        var options = new MiniRocketOptions<double> { Seed = 42, NumBiasesPerDilation = 3 };
+        var options = new MiniRocketOptions<double> { Seed = 42 };
         var classifier = new MiniRocketClassifier<double>(options);
         classifier.Train(trainX, trainY);
 

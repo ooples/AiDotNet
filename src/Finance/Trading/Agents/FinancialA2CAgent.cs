@@ -239,7 +239,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // equivalent anyway: renormalising a softmax over the legal set gives the same numbers as a
         // softmax over the legal logits.
         var mask = ActionMasking.Validate(legalActions, TradingOptions.ActionSize);
-        var probabilities = ActionMasking.MaskProbabilities(SoftmaxProbabilities(logits), mask);
+        var probabilities = ActionMasking.MaskProbabilities(SoftmaxProbabilities(logits), mask, NumOps);
 
         // Both branches are masked. SampleCategorical is safe on a masked distribution because
         // MaskProbabilities renormalises -- without that the entries sum to less than one, and a
@@ -248,7 +248,7 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // the skip is stated rather than inferred from the zeroes.
         int actionIndex = training
             ? SampleCategorical(probabilities)
-            : ActionMasking.ArgMaxLegal(probabilities, mask);
+            : ActionMasking.ArgMaxLegal(probabilities, mask, NumOps);
         var action = new Vector<T>(TradingOptions.ActionSize);
         action[actionIndex] = NumOps.One;
         if (training)
@@ -261,92 +261,56 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     /// <summary>
-    /// Numerically stable softmax of the actor logits (max-subtracted before exponentiation, computed in
-    /// double precision so float agents do not overflow or lose the tail probabilities).
+    /// Numerically stable softmax of the actor logits (the engine softmax subtracts the max before
+    /// exponentiating), in the agent's numeric type.
     /// </summary>
-    private static double[] SoftmaxProbabilities(Vector<T> logits)
+    private static Vector<T> SoftmaxProbabilities(Vector<T> logits)
     {
+        var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var probabilities = new double[logits.Length];
-        double max = double.NegativeInfinity;
-        for (int i = 0; i < logits.Length; i++)
+        var values = logits.AsTensor();
+
+        // Fail on a diverged actor rather than converting it into a trade. A non-finite logit makes the
+        // softmax NaN; SampleCategorical then never satisfies r < cumulative so it returns the LAST tier
+        // while the greedy branch returns the FIRST -- a specific position decision silently produced by a
+        // numerical failure.
+        var nonFinite = engine.TensorWhere(
+            engine.TensorIsFinite(values), engine.TensorZerosLike(values), engine.TensorOnesLike(values));
+        if (numOps.GreaterThan(engine.TensorSum(nonFinite), numOps.Zero))
         {
-            probabilities[i] = numOps.ToDouble(logits[i]);
-            // Fail on a diverged actor rather than converting it into a trade. A non-finite logit
-            // makes max and sum non-finite and every probability NaN; SampleCategorical then never
-            // satisfies r < cumulative so it returns the LAST tier while ArgMaxIndex returns the
-            // FIRST -- a specific position decision silently produced by a numerical failure.
-            if (double.IsNaN(probabilities[i]) || double.IsInfinity(probabilities[i]))
-            {
-                throw new InvalidOperationException(
-                    $"Policy logit[{i}] is {probabilities[i]}, so the actor has diverged and no action "
-                    + "distribution can be formed. Refusing to select a trade from a non-finite policy.");
-            }
-            if (probabilities[i] > max)
-            {
-                max = probabilities[i];
-            }
+            int index = engine.TensorArgMax(nonFinite, 0).GetFlat(0);
+            throw new InvalidOperationException(
+                $"Policy logit[{index}] is {logits.AsSpan()[index]}, so the actor has diverged and no action "
+                + "distribution can be formed. Refusing to select a trade from a non-finite policy.");
         }
 
-        double sum = 0.0;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            probabilities[i] = Math.Exp(probabilities[i] - max);
-            sum += probabilities[i];
-        }
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            probabilities[i] /= sum;
-        }
-
-        return probabilities;
+        return engine.Softmax(logits);
     }
 
     /// <summary>
-    /// Samples an action index from a categorical distribution using the agent's seeded random stream.
+    /// Samples an action index from a categorical distribution using the agent's seeded random stream:
+    /// the first index whose cumulative probability exceeds one uniform draw.
     /// </summary>
-    private int SampleCategorical(double[] probabilities)
+    private int SampleCategorical(Vector<T> probabilities)
     {
+        var engine = AiDotNetEngine.Current;
         double r = Random.NextDouble();
-        double cumulative = 0;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            cumulative += probabilities[i];
-            if (r < cumulative) return i;
-        }
+        var cumulative = engine.TensorCumSum(probabilities.AsTensor(), 0);
 
-        // Only reachable through floating-point round-off in the cumulative sum (or non-finite logits).
-        return probabilities.Length - 1;
-    }
+        // The cumulative sum is non-decreasing, so the entries at or below r form a prefix and their count is
+        // the first index above r (counted in int, which holds any action count exactly).
+        var above = engine.TensorGreaterThan(cumulative, NumOps.FromDouble(r)).Cast<int>();
+        int index = probabilities.Length - engine.TensorSum(above);
+        if (index < probabilities.Length) return index;
 
-    private static int ArgMaxIndex(double[] values)
-    {
-        int best = 0;
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (values[i] > values[best])
-            {
-                best = i;
-            }
-        }
-
-        return best;
-    }
-
-    private static int ArgMaxIndex(Vector<T> values)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int best = 0;
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (numOps.GreaterThan(values[i], values[best]))
-            {
-                best = i;
-            }
-        }
-
-        return best;
+        // Round-off left the whole cumulative sum at or below r. The last legal entry takes the remainder, as in
+        // FinancialPPOAgent: the largest position (1-based, so 0 never wins) whose probability is positive. The last
+        // index could be a masked, zero-probability action.
+        var positivePositions = engine.TensorMultiply(
+            engine.TensorGreaterThan(probabilities.AsTensor(), NumOps.Zero).Cast<int>(),
+            engine.TensorArange<int>(1, probabilities.Length + 1, 1));
+        int last = engine.TensorMaxValue(positivePositions);
+        return last > 0 ? last - 1 : probabilities.Length - 1;
     }
 
     #endregion
@@ -405,22 +369,9 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // Batched advantage-actor-critic update: one batched forward/backward for the critic and
         // the actor instead of one autograd tape per experience (the per-sample loop dominated RL
         // training time — see profiling). Standard mini-batch update.
-        int stateDim = batch[0].State.Length;
-
-        var statesData = new T[n * stateDim];
-        var nextStatesData = new T[n * stateDim];
-        for (int i = 0; i < n; i++)
-        {
-            var exp = batch[i];
-            for (int j = 0; j < stateDim; j++)
-            {
-                statesData[i * stateDim + j] = exp.State[j];
-                nextStatesData[i * stateDim + j] = exp.NextState[j];
-            }
-        }
-
-        var states = new Tensor<T>([n, stateDim], new Vector<T>(statesData));
-        var nextStates = new Tensor<T>([n, stateDim], new Vector<T>(nextStatesData));
+        var engine = AiDotNetEngine.Current;
+        var states = engine.TensorStack(batch.Select(step => step.State.AsTensor()).ToArray(), 0);
+        var nextStates = engine.TensorStack(batch.Select(step => step.NextState.AsTensor()).ToArray(), 0);
 
         // n-step returns along each environment stream, bootstrapped from the critic at the end of the
         // rollout:  G_t = r_t + gamma*r_{t+1} + ... + gamma^k * V(s_end),  A_t = G_t - V(s_t).
@@ -428,34 +379,27 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // is a constant as far as the actor is concerned. With NumEnvironments > 1 the rollout interleaves
         // that many streams, so the recursion walks each stream separately — chaining along the
         // interleaved list would bootstrap every step from a DIFFERENT environment's next state.
-        var vCurrent = _critic.Predict(states).ToVector();
-        var vNext = _critic.Predict(nextStates).ToVector();
-        double gammaValue = Convert.ToDouble(TradingOptions.DiscountFactor);
-        var targetData = new T[n];
-        var advantageData = new T[n];
+        var vCurrent = engine.Reshape(_critic.Predict(states), new[] { n });
+        var vNext = engine.Reshape(_critic.Predict(nextStates), new[] { n });
+        T gamma = TradingOptions.DiscountFactor;
+        var rewards = new Vector<T>(batch.Select(step => step.Reward)).AsTensor();
+        var dones = Tensor<int>.FromVector(
+            Vector<int>.Wrap(batch.Select(step => step.Done ? 1 : 0).ToArray()), new[] { n }).Cast<T>();
+        var returns = new Tensor<T>(new[] { n });
         int streams = EnvironmentCount;
         for (int stream = 0; stream < streams && stream < n; stream++)
         {
-            int last = -1;
-            for (int i = stream; i < n; i += streams)
-            {
-                last = i;
-            }
-
-            // Bootstrap the tail of an unfinished stream with V(s'); a terminal step bootstraps nothing.
-            double running = batch[last].Done ? 0.0 : NumOps.ToDouble(vNext[last]);
-            for (int i = last; i >= stream; i -= streams)
-            {
-                double reward = NumOps.ToDouble(batch[i].Reward);
-                running = batch[i].Done ? reward : reward + (gammaValue * running);
-                targetData[i] = NumOps.FromDouble(running);
-                advantageData[i] = NumOps.FromDouble(running - NumOps.ToDouble(vCurrent[i]));
-            }
+            var members = Enumerable.Range(0, ((n - 1 - stream) / streams) + 1).Select(k => stream + (k * streams)).ToArray();
+            var index = Tensor<int>.FromVector(Vector<int>.Wrap(members), new[] { members.Length });
+            var lastIndex = Tensor<int>.FromVector(Vector<int>.Wrap(new[] { members[members.Length - 1] }), new[] { 1 });
+            var streamReturns = EpisodicRecurrence<T>.SolveBackward(
+                engine.TensorTake(rewards, index), engine.TensorTake(dones, index), gamma, engine.TensorTake(vNext, lastIndex));
+            returns = engine.TensorScatter(returns, index, streamReturns, 0);
         }
 
-        var targets = new Tensor<T>([n, 1], new Vector<T>(targetData));
+        var targets = engine.Reshape(returns, new[] { n, 1 });
         // Consumed only inside the synchronous custom-loss step below, so it is released when this update returns.
-        using var advantages = new Tensor<T>([n], new Vector<T>(advantageData));
+        using var advantages = engine.TensorSubtract(returns, vCurrent);
 
         _critic.Train(states, targets);
         T valueLoss = _critic.GetLastLoss();
@@ -465,18 +409,15 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
         // The previous update regressed the logits onto the sampled one-hot action with MSE, which ignores
         // the advantage entirely (a punished action was reinforced exactly like a rewarded one) and treats
         // unbounded logits as probabilities.
-        var actionIndices = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            actionIndices[i] = ArgMaxIndex(batch[i].Action);
-        }
+        // Every stored action is a validated one-hot vector, so its argmax is its single 1.
+        var actionIndices = engine.TensorArgMax(
+            engine.TensorStack(batch.Select(step => step.Action.AsTensor()).ToArray(), 0), 1).ToArray();
 
         using var maskBias = BuildMaskBias(batch);
         var entropyCoefficient = NumOps.FromDouble(TradingOptions.EntropyCoefficient);
         var trainableActor = (NeuralNetworkBase<T>)_actor;
         T policyLoss = trainableActor.TrainWithCustomLoss(states, actorOutput =>
         {
-            var engine = AiDotNetEngine.Current;
             var logits = maskBias is null ? actorOutput : engine.TensorAdd(actorOutput, maskBias);
             var logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(engine, logits, actionIndices);
             var policyObjective = engine.TensorMultiply(logProbs, advantages);
@@ -612,9 +553,9 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         if (state.Length != selectedState.Length) return false;
-        for (int i = 0; i < state.Length; i++)
-            if (!numOps.Equals(state[i], selectedState[i])) return false;
-        return true;
+        var engine = AiDotNetEngine.Current;
+        return numOps.Equals(
+            engine.TensorSum(engine.TensorNotEquals(state.AsTensor(), selectedState.AsTensor())), numOps.Zero);
     }
 
     private void EnqueueTransition(PolicyExperience experience)
@@ -628,18 +569,17 @@ public partial class FinancialA2CAgent<T> : TradingAgentBase<T>, IGradientComput
     {
         if (action.Length != TradingOptions.ActionSize)
             throw new ArgumentException("Action length must match ActionSize.", nameof(action));
-        int selected = -1;
-        for (int i = 0; i < action.Length; i++)
-        {
-            // Compare in T, before any floating conversion: decimal values adjacent to one
-            // can round to 1.0 as double but are not valid one-hot values.
-            if (NumOps.Equals(action[i], NumOps.One) && selected < 0) selected = i;
-            else if (!NumOps.Equals(action[i], NumOps.Zero))
-                throw new ArgumentException("Action must contain exactly one 1 and otherwise only 0.", nameof(action));
-        }
-        if (selected < 0)
+        // Compare in T, before any floating conversion: decimal values adjacent to one can round to 1.0 as
+        // double but are not valid one-hot values. Valid means every entry is 0 or 1 and exactly one is 1.
+        var engine = AiDotNetEngine.Current;
+        var values = action.AsTensor();
+        var isOne = engine.TensorEquals(values, NumOps.One);
+        var isZero = engine.TensorEquals(values, NumOps.Zero);
+        T ones = engine.TensorSum(isOne);
+        T valid = NumOps.Add(ones, engine.TensorSum(isZero));
+        if (!NumOps.Equals(ones, NumOps.One) || !NumOps.Equals(valid, NumOps.FromDouble(action.Length)))
             throw new ArgumentException("Action must contain exactly one 1 and otherwise only 0.", nameof(action));
-        return selected;
+        return engine.TensorArgMax(isOne, 0).GetFlat(0);
     }
 
     /// <inheritdoc/>

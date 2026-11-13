@@ -414,7 +414,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.Models.Options.MQCNNOptions<T>.Epochs",
             "AiDotNet.Models.Options.MQCNNOptions<T>.KernelSize",
             "AiDotNet.Models.Options.MTGNNOptions<T>.DropoutRate",
-            "AiDotNet.Models.Options.MiniRocketOptions<T>.NumFeatures",
             "AiDotNet.Models.Options.MiniRocketOptions<T>.UseBias",
             "AiDotNet.Models.Options.NGBoostClassifierOptions<T>.ColumnSubsampleRatio",
             "AiDotNet.Models.Options.NGBoostClassifierOptions<T>.MinSamplesLeaf",

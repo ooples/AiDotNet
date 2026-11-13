@@ -85,9 +85,12 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private readonly Random _random;
-    private double[][]? _kernels;
     private int[]? _dilations;
-    private double[][]? _biases;
+    private int[]? _featuresPerDilation;
+    // One [kernels, featuresPerDilation] bias table per dilation, fitted from training convolutions. A list, not an
+    // array: the generated state registry carries List<Tensor<T>>, so a restored model keeps its fitted biases.
+    [FittedParameter]
+    private List<Tensor<T>>? _biases;
     [FittedParameter]
     private Vector<T>? _weights;
     private bool _isFitted;
@@ -110,6 +113,12 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
     // MiniRocket uses fixed kernel patterns from {-1, 2}
     // These are the 84 unique kernels of length 9 with 3 values equal to 2
     private static readonly int[][] KernelPatterns = GenerateKernelPatterns();
+
+    private const int KernelLength = 9;
+
+    // The 84 kernels as a fixed table of weights {-1, 2}: [kernels, 1, length] for the convolution.
+    private static readonly Tensor<T> KernelWeights = new Tensor<int>(
+        KernelPatterns.SelectMany(pattern => pattern).ToArray(), new[] { KernelPatterns.Length, 1, KernelLength }).Cast<T>();
 
     /// <summary>
     /// Creates a new MiniRocket classifier.
@@ -138,7 +147,7 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         NumChannels = sequences.Shape.Length > 2 ? sequences.Shape[2] : 1;
         SequenceLength = seqLen;
 
-        // Generate kernels and dilations
+        // Dilations and the features each one carries
         GenerateKernelsAndDilations(seqLen);
 
         // Fit biases from training data
@@ -164,15 +173,8 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        // Train ridge classifier
-        if (NumClasses == 2)
-        {
-            TrainBinaryClassifier(x, y);
-        }
-        else
-        {
-            TrainMultiClassClassifier(x, y);
-        }
+        // sktime's head: StandardScaler(with_mean=False) + RidgeClassifierCV(alphas=logspace(-3, 3, 10)).
+        _weights = RidgeClassifierCv<T>.Fit(x, y, ClassLabels, RidgeClassifierCv<T>.DefaultAlphas);
     }
 
     /// <summary>
@@ -193,16 +195,12 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         ValidateSequenceInput(sequences, null);
         var predictions = PredictSequences(sequences);
         int numSamples = sequences.Shape[0];
-        var probabilities = new Matrix<T>(numSamples, NumClasses);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            int classIdx = GetClassIndexFromLabel(predictions[i]);
-            if (classIdx >= 0 && classIdx < NumClasses)
-            {
-                probabilities[i, classIdx] = NumOps.One;
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { numSamples, NumClasses };
+        var classes = (ClassLabels ?? ClassIndexLabels()).AsTensor();
+        var probabilities = engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.Reshape(predictions.AsTensor(), new[] { numSamples, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(classes, new[] { 1, NumClasses }), shape)).ToMatrix();
 
         return probabilities;
     }
@@ -215,56 +213,10 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
             throw new InvalidOperationException("Model must be trained before prediction.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            if (NumClasses == 2)
-            {
-                // Binary classification
-                T score = ComputeScore(input, i, _weights);
-                predictions[i] = !NumOps.LessThan(score, NumOps.Zero)
-                    ? (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[1]
-                    : (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[0];
-            }
-            else
-            {
-                // Multi-class: Find class with highest score
-                int bestClass = 0;
-                double bestScore = double.MinValue;
-                int weightsPerClass = NumFeatures;
-
-                // Extract input row once
-                var inputRow = new Vector<T>(NumFeatures);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    inputRow[j] = input[i, j];
-                }
-
-                // Reuse classWeights vector across class iterations
-                var classWeights = new Vector<T>(NumFeatures);
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        classWeights[j] = _weights[c * weightsPerClass + j];
-                    }
-                    T score = Engine.DotProduct(inputRow, classWeights);
-
-                    double scoreVal = NumOps.ToDouble(score);
-                    if (scoreVal > bestScore)
-                    {
-                        bestScore = scoreVal;
-                        bestClass = c;
-                    }
-                }
-
-                predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
-            }
-        }
-
-        return predictions;
+        return RidgeClassifierCv<T>.Predict(input, _weights, ClassLabels ?? ClassIndexLabels(), NumFeatures);
     }
+
+    private Vector<T> ClassIndexLabels() => AiDotNetEngine.Current.TensorArange<T>(0, NumClasses, 1).ToVector();
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
@@ -276,8 +228,8 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         clone.NumFeatures = NumFeatures;
         clone.SequenceLength = SequenceLength;
         clone.NumChannels = NumChannels;
-        clone._kernels = _kernels;
         clone._dilations = _dilations;
+        clone._featuresPerDilation = _featuresPerDilation;
         clone._biases = _biases;
         clone._isFitted = _isFitted;
         return clone;
@@ -313,327 +265,195 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         return patterns.ToArray();
     }
 
+    /// <summary>The fitted dilations and the features each carries per kernel.</summary>
+    internal (int[] Dilations, int[] FeaturesPerDilation) DilationPlan =>
+        (_dilations ?? Array.Empty<int>(), _featuresPerDilation ?? Array.Empty<int>());
+
+    /// <summary>The fitted [kernels, features per dilation] bias table of each dilation, in dilation order.</summary>
+    internal IReadOnlyList<Tensor<T>> FittedBiases => _biases ?? new List<Tensor<T>>();
+
+    /// <summary>
+    /// MiniRocket's <c>_fit_dilations</c>: the features per kernel are shared over up to
+    /// <see cref="MiniRocketOptions{T}.MaxDilationsPerKernel"/> exponentially spaced dilations
+    /// <c>floor(2^x)</c>, <c>x</c> evenly spaced in <c>[0, log2((L - 1) / 8)]</c>; repeated dilations merge and
+    /// carry proportionally more features, and the remainder goes round them one at a time.
+    /// </summary>
     private void GenerateKernelsAndDilations(int inputLength)
     {
-        int numKernels = KernelPatterns.Length; // 84
-        _kernels = new double[numKernels][];
+        int numKernels = KernelPatterns.Length;
+        int featuresPerKernel = Math.Max(1, _options.NumFeatures / numKernels);
+        int dilationCount = Math.Max(1, Math.Min(featuresPerKernel, _options.MaxDilationsPerKernel));
+        double multiplier = featuresPerKernel / (double)dilationCount;
+        double maxExponent = Math.Max(0.0, Math.Log((inputLength - 1) / (double)(KernelLength - 1), 2.0));
 
-        for (int i = 0; i < numKernels; i++)
+        var grouped = Enumerable.Range(0, dilationCount)
+            .Select(i => (int)Math.Pow(2.0, dilationCount == 1 ? 0.0 : maxExponent * i / (dilationCount - 1)))
+            .GroupBy(dilation => dilation)
+            .OrderBy(group => group.Key)
+            .ToArray();
+        _dilations = grouped.Select(group => group.Key).ToArray();
+        var perDilation = grouped.Select(group => (int)(group.Count() * multiplier)).ToArray();
+        int remainder = featuresPerKernel - perDilation.Sum();
+        for (int i = 0; remainder > 0; i = (i + 1) % perDilation.Length, remainder--)
         {
-            _kernels[i] = KernelPatterns[i].Select(x => (double)x).ToArray();
+            perDilation[i]++;
         }
 
-        // Compute dilations such that effective kernel length covers the input
-        var dilationsList = new List<int>();
-        int kernelLength = 9;
-        int maxDilation = (int)Math.Max(1, Math.Floor((inputLength - 1) / (double)(kernelLength - 1)));
-
-        // Use exponentially spaced dilations
-        for (int d = 1; d <= maxDilation; d = (int)Math.Ceiling(d * 1.5))
-        {
-            dilationsList.Add(d);
-        }
-
-        if (dilationsList.Count == 0)
-        {
-            dilationsList.Add(1);
-        }
-
-        _dilations = dilationsList.ToArray();
+        _featuresPerDilation = perDilation;
     }
 
+    /// <summary>
+    /// MiniRocket's <c>_fit_biases</c>: for each dilation and kernel, one training example drawn at random is
+    /// convolved (zero-padded to its own length) and the kernel's biases are that output's quantiles at the
+    /// next entries of the low-discrepancy sequence <c>frac(i * golden ratio)</c>.
+    /// </summary>
     private void FitBiases(Tensor<T> sequences)
     {
-        if (_kernels is null || _dilations is null)
+        if (_dilations is null || _featuresPerDilation is null)
         {
             throw new InvalidOperationException("Kernels and dilations must be generated first.");
         }
 
-        int numSamples = sequences.Shape[0];
+        var engine = AiDotNetEngine.Current;
+        int numExamples = sequences.Shape[0];
         int seqLen = sequences.Shape[1];
-        int numKernels = _kernels.Length;
-        int numDilations = _dilations.Length;
+        int numKernels = KernelPatterns.Length;
+        var series = UnivariateSeries(sequences);
+        double goldenRatio = (Math.Sqrt(5.0) + 1.0) / 2.0;
 
-        _biases = new double[numKernels * numDilations][];
-
-        int biasIdx = 0;
-        for (int k = 0; k < numKernels; k++)
+        var biases = new List<Tensor<T>>(_dilations.Length);
+        int quantileIndex = 0;
+        for (int d = 0; d < _dilations.Length; d++)
         {
-            for (int d = 0; d < numDilations; d++)
-            {
-                var convOutputs = new List<double>();
+            int dilation = _dilations[d];
+            int count = _featuresPerDilation[d];
+            int padding = ((KernelLength - 1) * dilation) / 2;
 
-                // Collect convolution outputs from all samples
-                for (int s = 0; s < Math.Min(numSamples, 500); s++) // Limit samples for efficiency
-                {
-                    var conv = ApplyConvolution(sequences, s, 0, _kernels[k], _dilations[d]);
-                    convOutputs.AddRange(conv);
-                }
+            // One random example per kernel, drawn in kernel order.
+            var examples = Enumerable.Range(0, numKernels).Select(_ => _random.Next(numExamples)).ToArray();
+            var chosen = engine.TensorGather(series, new Tensor<int>(examples, new[] { numKernels }), 0);
+            var (sorted, _) = engine.TensorSort(PerRowConvolution(chosen, dilation, padding), 1, false);
+            int outputLength = sorted.Shape[1];
 
-                // Compute quantile-based biases
-                if (convOutputs.Count > 0)
-                {
-                    convOutputs.Sort();
-                    _biases[biasIdx] = ComputeQuantileBiases(convOutputs, _options.NumBiasesPerDilation);
-                }
-                else
-                {
-                    _biases[biasIdx] = new double[_options.NumBiasesPerDilation];
-                }
-
-                biasIdx++;
-            }
-        }
-    }
-
-    private double[] ComputeQuantileBiases(List<double> sortedValues, int numBiases)
-    {
-        var biases = new double[numBiases];
-        int n = sortedValues.Count;
-
-        for (int i = 0; i < numBiases; i++)
-        {
-            double quantile = i / (double)(numBiases - 1);
-            int idx = (int)(quantile * (n - 1));
-            biases[i] = sortedValues[idx];
+            // numpy's linear quantile: position q (L - 1) between its floor and ceiling. The quantiles are a fixed
+            // sequence, so their positions and weights are a constant table converted to T once.
+            var quantiles = Enumerable.Range(quantileIndex + 1, numKernels * count)
+                .Select(i => (i * goldenRatio) % 1.0).ToArray();
+            quantileIndex += numKernels * count;
+            var positions = quantiles.Select(q => q * (outputLength - 1)).ToArray();
+            var lower = positions.Select(p => (int)Math.Floor(p)).ToArray();
+            var upper = lower.Select(i => Math.Min(i + 1, outputLength - 1)).ToArray();
+            var fraction = new Tensor<double>(positions.Select((p, i) => p - lower[i]).ToArray(), new[] { numKernels, count }).Cast<T>();
+            var low = engine.TensorTakeAlongDim(sorted, new Tensor<int>(lower, new[] { numKernels, count }), 1);
+            var high = engine.TensorTakeAlongDim(sorted, new Tensor<int>(upper, new[] { numKernels, count }), 1);
+            biases.Add(engine.TensorAdd(low, engine.TensorMultiply(engine.TensorSubtract(high, low), fraction)));
         }
 
-        return biases;
+        _biases = biases;
     }
 
-    private Matrix<T> Transform(Tensor<T> sequences)
+    /// <summary>
+    /// MiniRocket's transform: the proportion of each kernel's convolution output above each of its biases
+    /// (PPV). Kernels alternate between the zero-padded output and the valid part (padding when
+    /// <c>(dilation index + kernel index)</c> is even), so half the features see the series ends.
+    /// </summary>
+    internal Matrix<T> Transform(Tensor<T> sequences)
     {
-        if (_kernels is null || _dilations is null || _biases is null)
+        if (_dilations is null || _featuresPerDilation is null || _biases is null)
         {
             throw new InvalidOperationException("Model must be fitted before transform.");
         }
 
+        var engine = AiDotNetEngine.Current;
         int numSamples = sequences.Shape[0];
-        int numKernels = _kernels.Length;
-        int numDilations = _dilations.Length;
-        int numBiases = _options.NumBiasesPerDilation;
-        int numFeatures = numKernels * numDilations * numBiases;
+        int seqLen = sequences.Shape[1];
+        int numKernels = KernelPatterns.Length;
+        var series = engine.Reshape(UnivariateSeries(sequences), new[] { numSamples, 1, seqLen });
 
-        var features = new Matrix<T>(numSamples, numFeatures);
-
-        for (int s = 0; s < numSamples; s++)
+        var perDilation = new Tensor<T>[_dilations.Length];
+        for (int d = 0; d < _dilations.Length; d++)
         {
-            int featureIdx = 0;
-            int biasArrayIdx = 0;
+            int dilation = _dilations[d];
+            int count = _featuresPerDilation[d];
+            int padding = ((KernelLength - 1) * dilation) / 2;
+            var output = engine.Conv1D(series, KernelWeights, 1, padding, dilation);
+            int outputLength = output.Shape[2];
+            int validLength = outputLength - (2 * padding);
 
-            for (int k = 0; k < numKernels; k++)
+            // Compare in sample chunks so the [samples, kernels, length, biases] comparison stays bounded.
+            int chunk = Math.Max(1, 4_000_000 / Math.Max(1, numKernels * outputLength * count));
+            var pieces = new List<Tensor<T>>();
+            for (int start = 0; start < numSamples; start += chunk)
             {
-                for (int d = 0; d < numDilations; d++)
-                {
-                    var conv = ApplyConvolution(sequences, s, 0, _kernels[k], _dilations[d]);
-                    var biasValues = _biases[biasArrayIdx++];
-
-                    for (int b = 0; b < numBiases; b++)
-                    {
-                        // PPV: proportion of values greater than bias
-                        double ppv = conv.Count(v => v > biasValues[b]) / (double)conv.Length;
-                        features[s, featureIdx++] = NumOps.FromDouble(ppv);
-                    }
-                }
+                int rows = Math.Min(chunk, numSamples - start);
+                var cube = new[] { rows, numKernels, outputLength, count };
+                var block = engine.TensorSlice(output, new[] { start, 0, 0 }, new[] { rows, numKernels, outputLength });
+                var above = engine.TensorGreaterThan(
+                    engine.TensorBroadcastTo(engine.Reshape(block, new[] { rows, numKernels, outputLength, 1 }), cube),
+                    engine.TensorBroadcastTo(engine.Reshape(_biases[d], new[] { 1, numKernels, 1, count }), cube));
+                // Counted in int (RocketClassifier.ProportionOfOnes): a 0/1 mean in Half stops counting at 2048.
+                var full = RocketClassifier<T>.ProportionOfOnes(above, 2, outputLength, false);
+                var valid = validLength > 0
+                    ? RocketClassifier<T>.ProportionOfOnes(
+                        engine.TensorSlice(above, new[] { 0, 0, padding, 0 }, new[] { rows, numKernels, validLength, count }),
+                        2, validLength, false)
+                    : full;
+                var usesPadding = engine.TensorBroadcastTo(PaddedKernelMask(d), new[] { rows, numKernels, count });
+                pieces.Add(engine.Reshape(engine.TensorWhere(usesPadding, full, valid), new[] { rows, numKernels * count }));
             }
+
+            perDilation[d] = pieces.Count == 1 ? pieces[0] : engine.TensorConcatenate(pieces.ToArray(), 0);
         }
 
-        return features;
+        // Dilation, then kernel, then bias: MiniRocket's feature order.
+        return engine.TensorConcatenate(perDilation, 1).ToMatrix();
     }
 
-    private double[] ApplyConvolution(Tensor<T> sequences, int sampleIdx, int channelIdx,
-        double[] kernel, int dilation)
+    /// <summary>1 for the kernels that use the zero-padded output at dilation index <paramref name="dilationIndex"/>.</summary>
+    private static Tensor<T> PaddedKernelMask(int dilationIndex)
     {
+        int numKernels = KernelPatterns.Length;
+        var flags = Enumerable.Range(0, numKernels).Select(k => (dilationIndex + k) % 2 == 0 ? 1 : 0).ToArray();
+        return new Tensor<int>(flags, new[] { 1, numKernels, 1 }).Cast<T>();
+    }
+
+    /// <summary>The first channel of every series as [samples, length].</summary>
+    private static Tensor<T> UnivariateSeries(Tensor<T> sequences)
+    {
+        int numSamples = sequences.Shape[0];
         int seqLen = sequences.Shape[1];
-        int kernelLength = kernel.Length;
-        int effectiveLength = (kernelLength - 1) * dilation + 1;
-        int outputLength = Math.Max(1, seqLen - effectiveLength + 1);
-
-        var output = new double[outputLength];
-
-        for (int i = 0; i < outputLength; i++)
+        if (sequences.Shape.Length == 2)
         {
-            double sum = 0;
-            for (int j = 0; j < kernelLength; j++)
-            {
-                int idx = i + j * dilation;
-                if (idx < seqLen)
-                {
-                    int[] indices = NumChannels > 1
-                        ? new[] { sampleIdx, idx, channelIdx }
-                        : new[] { sampleIdx, idx };
-                    double val = NumOps.ToDouble(sequences[indices]);
-                    sum += val * kernel[j];
-                }
-            }
-            output[i] = sum;
+            return sequences;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var first = engine.TensorSlice(sequences, new[] { 0, 0, 0 }, new[] { numSamples, seqLen, 1 });
+        return engine.Reshape(first, new[] { numSamples, seqLen });
+    }
+
+    /// <summary>
+    /// Convolves row r of <paramref name="rows"/> with kernel r, zero-padded by <paramref name="padding"/> at each end.
+    /// </summary>
+    private static Tensor<T> PerRowConvolution(Tensor<T> rows, int dilation, int padding)
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = rows.Shape[0];
+        int seqLen = rows.Shape[1];
+        int outputLength = seqLen + (2 * padding) - ((KernelLength - 1) * dilation);
+        var zeros = new Tensor<T>(new[] { count, padding });
+        var padded = padding > 0 ? engine.TensorConcatenate(new[] { zeros, rows, zeros }, 1) : rows;
+        var weights = engine.Reshape(KernelWeights, new[] { count, KernelLength });
+        var output = new Tensor<T>(new[] { count, outputLength });
+        for (int tap = 0; tap < KernelLength; tap++)
+        {
+            var tapWeight = engine.TensorBroadcastTo(
+                engine.TensorSlice(weights, new[] { 0, tap }, new[] { count, 1 }), new[] { count, outputLength });
+            var shifted = engine.TensorSlice(padded, new[] { 0, tap * dilation }, new[] { count, outputLength });
+            output = engine.TensorAdd(output, engine.TensorMultiply(tapWeight, shifted));
         }
 
         return output;
-    }
-
-    private void TrainBinaryClassifier(Matrix<T> x, Vector<T> y)
-    {
-        T positiveClass = ClassLabels is not null ? ClassLabels[^1] : NumOps.One;
-        var yRegression = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            yRegression[i] = NumOps.Compare(y[i], positiveClass) == 0
-                ? NumOps.One
-                : NumOps.Negate(NumOps.One);
-        }
-
-        _weights = ComputeRidgeWeights(x, yRegression, 1.0);
-    }
-
-    private void TrainMultiClassClassifier(Matrix<T> x, Vector<T> y)
-    {
-        var allWeights = new List<Vector<T>>();
-
-        for (int c = 0; c < NumClasses; c++)
-        {
-            var classLabel = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[c];
-            var binaryLabels = new Vector<T>(y.Length);
-
-            for (int i = 0; i < y.Length; i++)
-            {
-                binaryLabels[i] = NumOps.Compare(y[i], classLabel) == 0
-                    ? NumOps.One
-                    : NumOps.Negate(NumOps.One);
-            }
-
-            var classWeights = ComputeRidgeWeights(x, binaryLabels, 1.0);
-            allWeights.Add(classWeights);
-        }
-
-        int totalParams = NumFeatures * NumClasses;
-        _weights = new Vector<T>(totalParams);
-        int idx = 0;
-        foreach (var w in allWeights)
-        {
-            for (int j = 0; j < w.Length; j++)
-            {
-                _weights[idx++] = w[j];
-            }
-        }
-    }
-
-    private Vector<T> ComputeRidgeWeights(Matrix<T> x, Vector<T> y, double alpha)
-    {
-        int n = x.Columns;
-
-        // Pre-extract columns from X as Vector<T> for Engine.DotProduct
-        var xCols = new Vector<T>[n];
-        for (int col = 0; col < n; col++)
-        {
-            xCols[col] = new Vector<T>(x.Rows);
-            for (int row = 0; row < x.Rows; row++)
-            {
-                xCols[col][row] = x[row, col];
-            }
-        }
-
-        var xtx = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                xtx[i, j] = Engine.DotProduct(xCols[i], xCols[j]);
-                if (i == j)
-                {
-                    xtx[i, j] = NumOps.Add(xtx[i, j], NumOps.FromDouble(alpha));
-                }
-            }
-        }
-
-        var xty = new Vector<T>(n);
-        for (int j = 0; j < n; j++)
-        {
-            xty[j] = Engine.DotProduct(xCols[j], y);
-        }
-
-        return SolveLinearSystem(xtx, xty);
-    }
-
-    private Vector<T> SolveLinearSystem(Matrix<T> a, Vector<T> b)
-    {
-        int n = b.Length;
-        var augmented = new Matrix<T>(n, n + 1);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = a[i, j];
-            }
-            augmented[i, n] = b[i];
-        }
-
-        for (int k = 0; k < n; k++)
-        {
-            int maxRow = k;
-            double maxVal = Math.Abs(NumOps.ToDouble(augmented[k, k]));
-            for (int i = k + 1; i < n; i++)
-            {
-                double val = Math.Abs(NumOps.ToDouble(augmented[i, k]));
-                if (val > maxVal)
-                {
-                    maxVal = val;
-                    maxRow = i;
-                }
-            }
-
-            if (maxRow != k)
-            {
-                for (int j = 0; j <= n; j++)
-                {
-                    (augmented[k, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[k, j]);
-                }
-            }
-
-            T pivot = augmented[k, k];
-            if (NumOps.LessThan(NumOps.Abs(pivot), NumOps.FromDouble(1e-10))) continue;
-
-            for (int i = k + 1; i < n; i++)
-            {
-                T factor = NumOps.Divide(augmented[i, k], pivot);
-                for (int j = k; j <= n; j++)
-                {
-                    augmented[i, j] = NumOps.Subtract(augmented[i, j],
-                        NumOps.Multiply(factor, augmented[k, j]));
-                }
-            }
-        }
-
-        var x = new Vector<T>(n);
-        for (int i = n - 1; i >= 0; i--)
-        {
-            T sum = augmented[i, n];
-            for (int j = i + 1; j < n; j++)
-            {
-                sum = NumOps.Subtract(sum, NumOps.Multiply(augmented[i, j], x[j]));
-            }
-
-            T diag = augmented[i, i];
-            x[i] = NumOps.GreaterThan(NumOps.Abs(diag), NumOps.FromDouble(1e-10))
-                ? NumOps.Divide(sum, diag)
-                : NumOps.Zero;
-        }
-
-        return x;
-    }
-
-    private T ComputeScore(Matrix<T> input, int rowIdx, Vector<T> weights)
-    {
-        int len = Math.Min(NumFeatures, weights.Length);
-        // Compute dot product inline to avoid per-call vector allocations
-        T sum = NumOps.Zero;
-        for (int j = 0; j < len; j++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(input[rowIdx, j], weights[j]));
-        }
-        return sum;
     }
 
     private void ValidateSequenceInput(Tensor<T> sequences, Vector<T>? labels)
