@@ -1,4 +1,4 @@
--- Security hardening for the revocations feature (follows 20260718000000_revocations.sql).
+-- Security hardening for the revocations feature (follows 20260718052704_revocations.sql).
 --
 -- Caught by the Supabase security advisor immediately after the prior migration:
 --   * revoke_license is a DESTRUCTIVE SECURITY DEFINER function, but Postgres grants EXECUTE to PUBLIC on
