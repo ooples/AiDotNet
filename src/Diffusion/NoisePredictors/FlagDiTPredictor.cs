@@ -292,15 +292,10 @@ public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <summary>Sinusoidal timestep embedding (Vaswani 2017 / DDPM), [B, hidden].</summary>
     private Tensor<T> GetTimestepEmbedding(int timestep, int batch)
     {
-        // emb[j] = sin(t f_j), emb[half + j] = cos(t f_j), f_j = exp(-ln(10000) j / max(1, half - 1))
+        // emb[j] = sin(t f_j), emb[half + j] = cos(t f_j), f_j = exp(-ln(10000) j / max(1, half - 1)); the angles
+        // are computed in double (Half cannot resolve t f_j to a useful fraction of a radian)
         var engine = AiDotNetEngine.Current;
-        int half = _hiddenSize / 2;
-        var j = engine.TensorArange<T>(0, half, 1);
-        var freq = engine.TensorExp(engine.TensorMultiplyScalar(j, NumOps.FromDouble(-System.Math.Log(10000.0) / System.Math.Max(1, half - 1))));
-        var arg = engine.TensorMultiplyScalar(freq, NumOps.FromDouble(timestep));
-        var row = _hiddenSize == 2 * half
-            ? engine.TensorConcatenate(new[] { engine.TensorSin(arg), engine.TensorCos(arg) }, 0)
-            : engine.TensorConcatenate(new[] { engine.TensorSin(arg), engine.TensorCos(arg), new Tensor<T>(new[] { 1 }) }, 0);
+        var row = DiffusionVectorOps.SinusoidalTimestepEmbedding<T>(timestep, _hiddenSize);
         return engine.TensorBroadcastTo(engine.Reshape(row, new[] { 1, _hiddenSize }), new[] { batch, _hiddenSize }).Clone();
     }
 

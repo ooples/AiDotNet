@@ -601,8 +601,26 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         var melSpectrogram = (_melSpectrogramProcessor ?? throw new InvalidOperationException("Mel spectrogram processor not initialized.")).Forward(waveform);
         // Compute statistical embedding from mel spectrogram
         // Using mel-frequency cepstral statistics as speaker embedding features
-        var embeddingDim = 256;
-        var engine = Engine;
+        return SpeakerStatisticsEmbedding(melSpectrogram, 256);
+    }
+
+    /// <summary>
+    /// Speaker embedding from mel statistics: per mel channel the mean, std, delta mean and delta std over the
+    /// [time frames, mel bins] spectrogram (as many statistics as fit), zero-padded to
+    /// <paramref name="embeddingDim"/> and L2-normalized, as [1, embeddingDim].
+    /// </summary>
+    /// <remarks>
+    /// Half accumulates reductions in Half, whose sums over ordinary clip lengths lose whole units past 2048; it
+    /// is reduced in double like the loop this replaced and returned as Half.
+    /// </remarks>
+    internal static Tensor<T> SpeakerStatisticsEmbedding(Tensor<T> melSpectrogram, int embeddingDim)
+    {
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+            return AudioDiffusionModelBase<double>.SpeakerStatisticsEmbedding(melSpectrogram.Cast<double>(), embeddingDim).Cast<T>();
+#endif
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // The processor returns [time frames, mel bins].
         var melFrames = melSpectrogram.Shape[0];
@@ -614,7 +632,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         // Compute per-channel statistics (mean, variance, delta mean, delta variance)
         var statsPerChannel = Math.Min(4, embeddingDim / melChannels);
         var channelShape = new[] { 1, melChannels };
-        var frames = NumOps.FromDouble(melFrames);
+        var frames = ops.FromDouble(melFrames);
         var channelMean = engine.TensorDivideScalar(engine.ReduceSum(mel, new[] { 0 }, true), frames);
         var centered = engine.TensorSubtract(mel, engine.TensorBroadcastTo(channelMean, mel._shape));
         var channelVar = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, true), frames);
@@ -626,7 +644,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
         {
             var delta = engine.TensorSubtract(
                 engine.TensorNarrow(mel, 0, 1, melFrames - 1), engine.TensorNarrow(mel, 0, 0, melFrames - 1));
-            var deltaCount = NumOps.FromDouble(melFrames - 1);
+            var deltaCount = ops.FromDouble(melFrames - 1);
             deltaMean = engine.TensorDivideScalar(engine.ReduceSum(delta, new[] { 0 }, true), deltaCount);
             deltaVar = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(delta), new[] { 0 }, true), deltaCount);
         }
@@ -638,7 +656,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
 
         // Store statistics as embedding features, channel by channel: mean, std, then delta mean and delta std
         // when there is room for 3 and 4 statistics per channel
-        var epsilon = NumOps.FromDouble(1e-6);
+        var epsilon = ops.FromDouble(1e-6);
         var columns = new List<Tensor<T>>
         {
             channelMean,
@@ -659,7 +677,7 @@ public abstract partial class AudioDiffusionModelBase<T> : LatentDiffusionModelB
             embedding = engine.TensorConcatenate(new[] { embedding, new Tensor<T>(new[] { embeddingDim - used }) }, 0);
 
         // L2 normalize the embedding
-        var norm = NumOps.Sqrt(NumOps.Add(engine.TensorSum(engine.TensorSquare(embedding)), NumOps.FromDouble(1e-8)));
+        var norm = ops.Sqrt(ops.Add(engine.TensorSum(engine.TensorSquare(embedding)), ops.FromDouble(1e-8)));
         return engine.Reshape(engine.TensorDivideScalar(embedding, norm), new[] { 1, embeddingDim }).Contiguous();
     }
 

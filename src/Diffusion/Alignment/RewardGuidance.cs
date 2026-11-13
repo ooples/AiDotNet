@@ -89,9 +89,9 @@ public class RewardGuidance<T>
     /// <returns>The clipped gradient vector.</returns>
     private Vector<T> ClipGradientNorm(Vector<T> gradient)
     {
-        // Compute L2 norm
+        // Compute L2 norm (Half is reduced in double: its squares overflow for ordinary reward gradients)
         var engine = AiDotNetEngine.Current;
-        var norm = engine.Norm(gradient);
+        var norm = DiffusionVectorOps.Norm(gradient);
 
         if (NumOps.LessThanOrEquals(norm, NumOps.FromDouble(_gradientClipNorm)))
         {

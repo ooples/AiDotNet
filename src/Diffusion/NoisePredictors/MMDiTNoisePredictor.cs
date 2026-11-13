@@ -612,21 +612,9 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // scratch. Renting it here aliased recycled scratch, so the cached posEmbed was corrupted between
         // steps -> garbage added to every token -> non-deterministic Predict (the StableDiffusion3
         // Predict_ShouldBeDeterministic / clone failures). A long-lived cache must be plain GC-owned.
-        // Even channel i holds sin(pos * 10000^(-i / hidden)), the following odd channel cos of the same angle
-        int pairs = (_hiddenSize + 1) / 2;
-        var positions = Engine.Reshape(Engine.TensorArange<T>(0, numPatches, 1), new[] { numPatches, 1 });
-        var freq = Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, 2 * pairs, 2),
-            NumOps.FromDouble(-Math.Log(10000.0) / _hiddenSize)));
-        var angles = Engine.TensorMultiply(
-            Engine.TensorBroadcastTo(positions, new[] { numPatches, pairs }),
-            Engine.TensorBroadcastTo(Engine.Reshape(freq, new[] { 1, pairs }), new[] { numPatches, pairs }));
-        var pairShape = new[] { numPatches, pairs, 1 };
-        var interleaved = Engine.Reshape(Engine.TensorConcatenate(new[]
-        {
-            Engine.Reshape(Engine.TensorSin(angles), pairShape),
-            Engine.Reshape(Engine.TensorCos(angles), pairShape),
-        }, 2), new[] { numPatches, 2 * pairs });
-        var embedding = Engine.TensorNarrow(interleaved, 1, 0, _hiddenSize).Contiguous();
+        // Even channel i holds sin(pos * 10000^(-i / hidden)), the following odd channel cos of the same angle;
+        // the angles are computed in double (Half cannot represent positions above 2048)
+        var embedding = DiffusionVectorOps.InterleavedPositionEmbedding<T>(numPatches, _hiddenSize);
 
         var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
         embedding.AsSpan().CopyTo(posEmbed.AsWritableSpan());

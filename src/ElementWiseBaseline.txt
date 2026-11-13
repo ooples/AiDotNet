@@ -11530,7 +11530,7 @@
 1	ADNELEM002|AiDotNet.Deployment.Optimization.Quantization.Training.QATTrainingHook<T>.FakeQuantize(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Deployment.Optimization.Quantization.Training.QuantizationState)
 3	ADNELEM002|AiDotNet.Diffusion.Acceleration.FreeNoiseModule<T>.GenerateRescheduledNoise(int, int[])
 1	ADNELEM002|AiDotNet.Diffusion.Audio.GriffinLim<T>.InitializeRandomPhase(int, int)
-3	ADNELEM002|AiDotNet.Diffusion.Audio.GriffinLim<T>.ReconstructWithProgress(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, System.Action<int, double>, int?)
+1	ADNELEM002|AiDotNet.Diffusion.Audio.GriffinLim<T>.ReconstructWithProgress(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, System.Action<int, double>, int?)
 1	ADNELEM002|AiDotNet.Diffusion.Audio.ProjectionLayer<T>.ProjectionLayer(int, int, int?)
 1	ADNELEM002|AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.Diffusion.DiffusionModelBase<T>.LoadState(System.IO.Stream)

@@ -342,13 +342,8 @@ public partial class GriffinLim<T>
             double convergence = 0;
             if (previousSignal != null)
             {
-                var engine = Engine;
-                T sumSquaredDiff = engine.TensorSum(engine.TensorSquare(engine.TensorSubtract(signal, previousSignal)));
-                T sumSquaredSignal = engine.TensorSum(engine.TensorSquare(signal));
-
-                convergence = NumOps.GreaterThan(sumSquaredSignal, NumOps.Zero)
-                    ? NumOps.ToDouble(NumOps.Divide(sumSquaredDiff, sumSquaredSignal))
-                    : 0;
+                // sum (signal - previous)^2 / sum signal^2, 0 for a silent signal (Half is reduced in double)
+                convergence = NumOps.ToDouble(DiffusionVectorOps.RelativeSquaredError(signal, previousSignal));
             }
 
             progressCallback?.Invoke(iter, convergence);
@@ -377,17 +372,13 @@ public partial class GriffinLim<T>
     {
         var reconstructedMag = _stft.Magnitude(signal);
 
-        // sqrt(sum (target - recon)^2 / sum target^2) over the common prefix; 0 when the target has no energy
+        // sqrt(sum (target - recon)^2 / sum target^2) over the common prefix; 0 when the target has no energy.
+        // Half is reduced in double: STFT magnitudes above 255 overflow its squares.
         var engine = Engine;
         int length = Math.Min(targetMagnitude.Length, reconstructedMag.Length);
         var target = engine.TensorNarrow(engine.Reshape(targetMagnitude, new[] { targetMagnitude.Length }), 0, 0, length);
         var recon = engine.TensorNarrow(engine.Reshape(reconstructedMag, new[] { reconstructedMag.Length }), 0, 0, length);
-        T sumSquaredDiff = engine.TensorSum(engine.TensorSquare(engine.TensorSubtract(target, recon)));
-        T sumSquaredTarget = engine.TensorSum(engine.TensorSquare(target));
-
-        return NumOps.GreaterThan(sumSquaredTarget, NumOps.Zero)
-            ? NumOps.Sqrt(NumOps.Divide(sumSquaredDiff, sumSquaredTarget))
-            : NumOps.Zero;
+        return NumOps.Sqrt(DiffusionVectorOps.RelativeSquaredError(target, recon));
     }
 
     /// <summary>

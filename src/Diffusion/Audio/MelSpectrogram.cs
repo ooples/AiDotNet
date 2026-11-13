@@ -460,14 +460,16 @@ public partial class MelSpectrogram<T>
         // Convert Hz to FFT bin indices
         var binPoints = hzPoints.Select(hz => (int)Math.Floor((nFft + 1) * hz / sampleRate)).ToArray();
 
-        // Per-filter edges as [nMels, numFreqs] columns, frequency bins as rows
-        Tensor<T> Edges(int offset) => engine.TensorBroadcastTo(
-            new Tensor<int>(new[] { nMels, 1 }, new Vector<int>(binPoints.Skip(offset).Take(nMels).ToArray())).Cast<T>(), shape);
+        // Per-filter edges as [nMels, numFreqs] columns, frequency bins as rows. Bin indices are integers and the
+        // edge weights were computed in double: Half cannot represent bin indices above 2048 (nFft >= 4096), so the
+        // triangles are built in double and only the finished weights are cast to T.
+        Tensor<double> Edges(int offset) => engine.TensorBroadcastTo(
+            new Tensor<int>(new[] { nMels, 1 }, new Vector<int>(binPoints.Skip(offset).Take(nMels).ToArray())).Cast<double>(), shape);
         var left = Edges(0);
         var center = Edges(1);
         var right = Edges(2);
         var freqs = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorArange<T>(0, numFreqs, 1), new[] { 1, numFreqs }), shape);
+            engine.Reshape(engine.TensorArange<double>(0, numFreqs, 1), new[] { 1, numFreqs }), shape);
 
         // Triangular filters: rising edge (f - left) / (center - left) on [left, center),
         // falling edge (right - f) / (right - center) on [center, right), zero elsewhere.
@@ -475,11 +477,11 @@ public partial class MelSpectrogram<T>
         var rising = engine.TensorDivide(engine.TensorSubtract(freqs, left), engine.TensorSubtract(center, left));
         var falling = engine.TensorDivide(engine.TensorSubtract(right, freqs), engine.TensorSubtract(right, center));
         var onRising = engine.TensorMultiply(
-            engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(freqs, left)), engine.TensorLessThan(freqs, center));
+            engine.ScalarMinusTensor(1.0, engine.TensorLessThan(freqs, left)), engine.TensorLessThan(freqs, center));
         var onFalling = engine.TensorMultiply(
-            engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(freqs, center)), engine.TensorLessThan(freqs, right));
+            engine.ScalarMinusTensor(1.0, engine.TensorLessThan(freqs, center)), engine.TensorLessThan(freqs, right));
         var filterbank = engine.TensorWhere(onRising, rising,
-            engine.TensorWhere(onFalling, falling, new Tensor<T>(shape)));
+            engine.TensorWhere(onFalling, falling, new Tensor<double>(shape))).Cast<T>();
 
         // Normalize each filter to have unit area (Slaney-style normalization); filters summing to at most
         // 1e-8 are left unnormalized

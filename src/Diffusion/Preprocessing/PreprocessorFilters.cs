@@ -139,6 +139,12 @@ internal static class PreprocessorFilters
     /// </summary>
     internal static Tensor<T> ClippedBoxMean<T>(Tensor<T> image, int radius)
     {
+        // Half convolution accumulates in Half, which stops counting (and summing) past 2048, so a window of more
+        // than 2048 pixels (radius >= 23) gives the wrong mean. Reduce in double like the loops this replaced.
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+            return ClippedBoxMean(image.Cast<double>(), radius).Cast<T>();
+#endif
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int[] shape = image._shape;

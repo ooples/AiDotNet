@@ -123,6 +123,18 @@ public class SGRACEEraser<T>
         var engine = AiDotNetEngine.Current;
         var styleVec = _styleVectors[styleIndex];
         var len = Math.Min(Math.Min(currentParameters.Length, baseParameters.Length), styleVec.Length);
+#if NET5_0_OR_GREATER
+        // Half dot products accumulate in Half and overflow for ordinary parameter vectors: reduce in double, as the
+        // converted loop did, and return the cosine as Half.
+        if (typeof(T) == typeof(Half))
+        {
+            var wide = new SGRACEEraser<double>();
+            wide.AddStyleVector(DiffusionVectorOps.Fit(styleVec, len).AsTensor().Cast<double>().ToVector());
+            return NumOps.FromDouble(wide.MeasureStylePresence(
+                DiffusionVectorOps.Fit(currentParameters, len).AsTensor().Cast<double>().ToVector(),
+                DiffusionVectorOps.Fit(baseParameters, len).AsTensor().Cast<double>().ToVector(), 0));
+        }
+#endif
         var delta = engine.Subtract(DiffusionVectorOps.Fit(currentParameters, len), DiffusionVectorOps.Fit(baseParameters, len));
         var style = DiffusionVectorOps.Fit(styleVec, len);
         var dotProduct = engine.DotProduct(delta, style);

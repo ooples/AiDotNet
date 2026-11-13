@@ -9,7 +9,8 @@ tests/AiDotNet.Tests/UnitTests/Diffusion/Schedulers/DiffusersSchedulerReferenceT
 
 Guidance: APG is diffusers' normalized_guidance with eta = 1 - projectionStrength (0.5) and scale 7.5;
 RescaledCFG is rescale_noise_cfg (guidance_rescale 0.7) applied to standard CFG at scale 7.5. Both are per
-sample. Used by tests/AiDotNet.Tests/UnitTests/Diffusion/Guidance/DiffusersGuidanceReferenceTests.cs.
+sample. Used by DiffusersGuidanceReferenceTests in
+DiffusersSchedulerReferenceTests.cs.
 
 Consistency models: one CMStochasticIterativeScheduler step (Song et al. 2023, Algorithm 1) at the first of two
 Karras sigmas (sigma_min 0.002, sigma_max 80, rho 7) re-noises the boundary-conditioned denoised sample to

@@ -595,23 +595,32 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Converts sigma to timestep for the noise predictor.
     /// </summary>
-    private int SigmaToTimestep(double sigma)
+    private int SigmaToTimestep(double sigma) => SigmaToTimestep(_sigmas, sigma);
+
+    /// <summary>
+    /// Converts sigma to a timestep on an ascending schedule sigma_0 (sigma_min) .. sigma_N (sigma_max).
+    /// </summary>
+    /// <param name="sigmas">The ascending sigma schedule of N + 1 levels.</param>
+    /// <param name="sigma">The noise level to locate.</param>
+    /// <returns>0 below the schedule, N at or above its top, otherwise i + (sigma - sigma_i) / (sigma_(i+1) - sigma_i)
+    /// truncated, for the bracket sigma_i &lt;= sigma &lt; sigma_(i+1).</returns>
+    internal static int SigmaToTimestep(T[] sigmas, double sigma)
     {
-        // The schedule ascends from sigma_min (index 0) to sigma_max (index N). Find the bracket
-        // sigma_i <= sigma < sigma_(i+1) and interpolate the timestep linearly inside it.
+        // Find the bracket by counting the levels at or below sigma. The count is an index: count it in int
+        // (a 0/1 sum in Half stops being exact past 2048 levels).
         var engine = AiDotNetEngine.Current;
-        var schedule = new Tensor<T>(new[] { _sigmas.Length }, new Vector<T>(_sigmas));
+        var schedule = new Tensor<T>(new[] { sigmas.Length }, new Vector<T>(sigmas));
         var sigmaT = NumOps.FromDouble(sigma);
-        int atOrBelow = NumOps.ToInt32(engine.TensorSum(engine.TensorLessEqual(schedule, Tensor<T>.CreateDefault(schedule._shape, sigmaT))));
+        int atOrBelow = engine.TensorCountNonzero(engine.TensorLessEqual(schedule, Tensor<T>.CreateDefault(schedule._shape, sigmaT)));
 
         if (atOrBelow == 0)
             return 0;
-        if (atOrBelow >= _sigmas.Length)
-            return _numTrainSteps;
+        if (atOrBelow >= sigmas.Length)
+            return sigmas.Length - 1;
 
         int i = atOrBelow - 1;
-        var sigmaI = NumOps.ToDouble(_sigmas[i]);
-        var sigmaI1 = NumOps.ToDouble(_sigmas[i + 1]);
+        var sigmaI = NumOps.ToDouble(sigmas[i]);
+        var sigmaI1 = NumOps.ToDouble(sigmas[i + 1]);
         var t = (sigma - sigmaI) / (sigmaI1 - sigmaI + 1e-8);
         return (int)(i + t);
     }
