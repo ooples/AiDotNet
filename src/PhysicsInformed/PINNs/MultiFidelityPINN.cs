@@ -410,11 +410,7 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                     highFidelityLoss = LossFunction.CalculateLoss(hfPred.ToVector(), hfOut.ToVector());
                 }
 
-                T correlationLoss = NumOps.Zero;
-                T physicsLoss = NumOps.Zero;
-                T totalLoss = NumOps.Add(lowFidelityLoss, highFidelityLoss);
-
-                history.AddEpoch(totalLoss, lowFidelityLoss, highFidelityLoss, correlationLoss, physicsLoss);
+                T totalLoss = RecordJointEpoch(history, lowFidelityLoss, highFidelityLoss);
 
                 if (verbose && epoch % 100 == 0)
                 {
@@ -437,6 +433,17 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         }
 
         return history;
+    }
+
+    /// <summary>
+    /// Records one joint-training epoch: the monitored total is the low- plus high-fidelity loss, with no separate
+    /// correlation or physics term (both live inside the training objective). Returns the total.
+    /// </summary>
+    private T RecordJointEpoch(MultiFidelityTrainingHistory<T> history, T lowFidelityLoss, T highFidelityLoss)
+    {
+        T totalLoss = NumOps.Add(lowFidelityLoss, highFidelityLoss);
+        history.AddEpoch(totalLoss, lowFidelityLoss, highFidelityLoss, NumOps.Zero, NumOps.Zero);
+        return totalLoss;
     }
 
     /// <inheritdoc/>

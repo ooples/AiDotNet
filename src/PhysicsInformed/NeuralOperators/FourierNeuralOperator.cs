@@ -979,7 +979,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 var permShape = rePerm._shape;
                 var reFlat = Engine.Reshape(rePerm, new[] { rows, n });
                 var imFlat = Engine.Reshape(imPerm, new[] { rows, n });
-                var (cos, sin) = DftBasis(n);
+                var (cos, sin, invN) = DftBasis(n);
 
                 var reC = Engine.TensorMatMul(reFlat, cos);
                 var imC = Engine.TensorMatMul(imFlat, cos);
@@ -988,7 +988,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 Tensor<T> newRe, newIm;
                 if (inverse)
                 {
-                    var invN = _numOps.FromDouble(1.0 / n);
                     newRe = Engine.TensorMultiplyScalar(Engine.TensorSubtract(reC, imS), invN);
                     newIm = Engine.TensorMultiplyScalar(Engine.TensorAdd(imC, reS), invN);
                 }
@@ -1005,11 +1004,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return (re, im);
         }
 
-        // The cosine and sine DFT bases for a length, [N, N], built once per length.
+        // The cosine and sine DFT bases for a length, [N, N], and the inverse scale 1 / N, built once per length.
         [Scratch]
-        private readonly Dictionary<int, (Tensor<T> Cos, Tensor<T> Sin)> _dftBases = new();
+        private readonly Dictionary<int, (Tensor<T> Cos, Tensor<T> Sin, T InvN)> _dftBases = new();
 
-        private (Tensor<T> Cos, Tensor<T> Sin) DftBasis(int n)
+        private (Tensor<T> Cos, Tensor<T> Sin, T InvN) DftBasis(int n)
         {
             if (_dftBases.TryGetValue(n, out var cached))
                 return cached;
@@ -1029,7 +1028,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             var cos = new Tensor<double>(cosValues, new[] { n, n }).Cast<T>();
             var sin = new Tensor<double>(sinValues, new[] { n, n }).Cast<T>();
-            var basis = (cos, sin);
+            var basis = (cos, sin, _numOps.FromDouble(1.0 / n));
             _dftBases[n] = basis;
             return basis;
         }

@@ -199,28 +199,31 @@ namespace AiDotNet.PhysicsInformed
 
             if (_boundaryConditions != null && _boundaryConditions.Length > 0)
             {
-                T boundaryLossSum = NumOps.Zero;
-                int boundaryCount = 0;
+                var boundaryResiduals = new List<T>();
                 var boundaryGradient = new PhysicsLossGradient<T>(predictions.Length, inputs.Length, NumOps);
 
+                // Each condition contributes r^2 to the loss and 2 r dr to the gradient. The gradient is linear in
+                // its scale, so the factor 2 joins the shared scale after the loop.
                 foreach (var bc in _boundaryConditions.Where(bc => bc.IsOnBoundary(inputs)))
                 {
                     T residual = bc.ComputeBoundaryResidual(inputs, predictions, derivatives);
-                    boundaryLossSum = NumOps.Add(boundaryLossSum, NumOps.Multiply(residual, residual));
-                    boundaryCount++;
+                    boundaryResiduals.Add(residual);
 
                     var residualGradient = ComputeBoundaryResidualGradient(bc, inputs, predictions, derivatives);
-                    T scale = NumOps.Multiply(NumOps.FromDouble(2.0), residual);
-                    AccumulateResidualGradient(boundaryGradient, residualGradient, scale);
+                    AccumulateResidualGradient(boundaryGradient, residualGradient, residual);
                 }
 
+                int boundaryCount = boundaryResiduals.Count;
                 if (boundaryCount > 0)
                 {
+                    var residualVector = new Vector<T>(boundaryResiduals.ToArray());
+                    T boundaryLossSum = VectorHelper.DotProduct(residualVector, residualVector);
                     T invCount = NumOps.Divide(NumOps.One, NumOps.FromDouble(boundaryCount));
                     T boundaryLoss = NumOps.Multiply(boundaryLossSum, invCount);
                     totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(_boundaryWeight, boundaryLoss));
 
-                    T gradientScale = NumOps.Multiply(_boundaryWeight, invCount);
+                    T gradientScale = NumOps.Multiply(
+                        NumOps.FromDouble(2.0), NumOps.Multiply(_boundaryWeight, invCount));
                     AccumulateScaledGradients(gradients, boundaryGradient, gradientScale);
                 }
             }
@@ -474,19 +477,18 @@ namespace AiDotNet.PhysicsInformed
                 return NumOps.Zero;
             }
 
-            T totalBoundaryLoss = NumOps.Zero;
-            int boundaryCount = 0;
-
-            foreach (var bc in _boundaryConditions.Where(bc => bc.IsOnBoundary(inputs)))
+            var residuals = _boundaryConditions
+                .Where(bc => bc.IsOnBoundary(inputs))
+                .Select(bc => bc.ComputeBoundaryResidual(inputs, predictions, derivatives))
+                .ToList();
+            if (residuals.Count == 0)
             {
-                T residual = bc.ComputeBoundaryResidual(inputs, predictions, derivatives);
-                totalBoundaryLoss = NumOps.Add(totalBoundaryLoss, NumOps.Multiply(residual, residual));
-                boundaryCount++;
+                return NumOps.Zero;
             }
 
-            return boundaryCount > 0
-                ? NumOps.Divide(totalBoundaryLoss, NumOps.FromDouble(boundaryCount))
-                : NumOps.Zero;
+            var residualVector = new Vector<T>(residuals.ToArray());
+            return NumOps.Divide(
+                VectorHelper.DotProduct(residualVector, residualVector), NumOps.FromDouble(residuals.Count));
         }
 
         /// <summary>
