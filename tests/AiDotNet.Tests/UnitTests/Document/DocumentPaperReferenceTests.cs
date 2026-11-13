@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using AiDotNet.Document;
 using AiDotNet.Document.Analysis.PageSegmentation;
+using AiDotNet.Document.Analysis.TableDetection;
 using AiDotNet.Document.LayoutAware;
 using AiDotNet.Document.OCR.TextDetection;
 using AiDotNet.Document.OCR.TextRecognition;
@@ -171,6 +172,86 @@ public sealed class DocumentPaperReferenceTests
         Assert.Equal(new[] { 1.0, 1.0, 10.0, 10.0 }, region.BoundingBox.ToArray());
         Assert.Equal(Math.Exp(2) / (Math.Exp(2) + 12), region.Confidence, 12);
         Assert.Equal(1.0, Enumerable.Range(0, 13).Sum(c => result.ClassProbabilities[0, c, 0, 0]), 12);
+    }
+
+    private static TableTransformer<double> SmallTableTransformer() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.Regression, inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 13),
+        options: new TableTransformerOptions { ImageSize = 64 });
+
+    /// <summary>One native DETR query: box logits (the inverse sigmoid of cx, cy, w, h) then class logits.</summary>
+    private static double[] Query(double cx, double cy, double w, double h, int classes, int label, double logit)
+    {
+        static double Logit(double p) => Math.Log(p / (1 - p));
+        var row = new double[4 + classes];
+        row[0] = Logit(cx); row[1] = Logit(cy); row[2] = Logit(w); row[3] = Logit(h);
+        row[4 + label] = logit;
+        return row;
+    }
+
+    private static Tensor<double> Queries(params double[][] rows) =>
+        new(new[] { rows.Length, rows[0].Length }, new Vector<double>(rows.SelectMany(r => r).ToArray()));
+
+    [Fact]
+    public void TableTransformer_DetectionScoresAreTheSoftmaxWithNoObjectLast()
+    {
+        // DETR: softmax over [table, no object]; the score is the best class except the trailing no-object.
+        // Reading the first logit as background (the old layout) rejects the real table.
+        using var model = SmallTableTransformer();
+        var output = Queries(Query(0.5, 0.5, 0.6, 0.4, 2, 0, 3.0), Query(0.5, 0.5, 0.6, 0.4, 2, 1, 3.0));
+        var table = Assert.Single(model.ParseTableDetections(output, Tensor<double>.CreateDefault(new[] { 3, 100, 100 }, 0.5), 0.5));
+        Assert.Equal(Math.Exp(3) / (Math.Exp(3) + 1), table.Confidence, 12);
+        Assert.Equal(new[] { 20.0, 30.0, 80.0, 70.0 }, table.BoundingBox.ToArray(), new Tolerance(1e-9));
+        Assert.NotNull(table.Image);
+    }
+
+    [Fact]
+    public void TableTransformer_CellsAreRowColumnIntersectionsWithSoftmaxScores()
+    {
+        // Two rows, two columns and a column header over the first row, each with its class logit 5 among the
+        // 7 structure logits (probability e^5 / (e^5 + 6)), plus a no-object query that must be ignored. The
+        // cells are the 2 x 2 intersections; the first row is the header row.
+        using var model = SmallTableTransformer();
+        const int classes = 7, column = 1, row = 2, header = 3, noObject = 6;
+        var output = Queries(
+            Query(0.5, 0.75, 0.8, 0.4, classes, row, 5.0),
+            Query(0.5, 0.25, 0.8, 0.4, classes, row, 5.0),
+            Query(0.75, 0.5, 0.4, 0.8, classes, column, 5.0),
+            Query(0.25, 0.5, 0.4, 0.8, classes, column, 5.0),
+            Query(0.5, 0.25, 0.8, 0.4, classes, header, 5.0),
+            Query(0.5, 0.5, 0.5, 0.5, classes, noObject, 5.0));
+        var result = model.ParseStructureOutput(output, Tensor<double>.CreateDefault(new[] { 3, 100, 100 }, 0.5), 0.5);
+
+        double p = Math.Exp(5) / (Math.Exp(5) + 6);
+        Assert.Equal(2, result.NumRows);
+        Assert.Equal(2, result.NumColumns);
+        Assert.Equal(new[] { 0 }, result.HeaderRows);
+        Assert.Equal(4, result.Cells.Count);
+        var first = result.Cells[0];
+        Assert.Equal((0, 0, true), (first.Row, first.Column, first.IsHeader));
+        Assert.Equal(new[] { 5.0, 5.0, 45.0, 45.0 }, first.BoundingBox.ToArray(), new Tolerance(1e-9));
+        Assert.False(result.Cells[3].IsHeader);
+        Assert.Equal(new[] { 55.0, 55.0, 95.0, 95.0 }, result.Cells[3].BoundingBox.ToArray(), new Tolerance(1e-9));
+        Assert.All(result.Cells, c => Assert.Equal(p, c.Confidence, 12));
+        Assert.Equal(p, result.Confidence, 12);
+    }
+
+    [Fact]
+    public void DocGcn_ClassifiesEveryNodeBySoftmaxIncludingText()
+    {
+        // Doc-GCN classifies each node with a softmax over its layout classes; class 0 is Text, a real class
+        // (PubLayNet has no background). The old parser reserved four of the four class columns for a box and
+        // treated class 0 as background, so it returned nothing.
+        using var model = new AiDotNet.Document.GraphBased.DocGCN<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: 16, outputSize: 4),
+            options: new DocGCNOptions { NodeDim = 16, EdgeDim = 8, GcnLayers = 1, NumClasses = 4, MaxNodes = 16 });
+        var logits = new Tensor<double>(new[] { 3, 4 }, new Vector<double>(new[] { 3.0, 0, 0, 0, 0, 3.0, 0, 0, 0.1, 0, 0, 0 }));
+        var regions = model.ParseLayoutOutput(logits, 0.5);
+
+        Assert.Equal(new[] { 0, 1 }, regions.Select(r => r.Index).ToArray());
+        Assert.Equal(new[] { LayoutElementType.Text, LayoutElementType.Title }, regions.Select(r => r.ElementType).ToArray());
+        Assert.All(regions, r => Assert.Equal(Math.Exp(3) / (Math.Exp(3) + 3), r.Confidence, 12));
     }
 
     private sealed class Tolerance : System.Collections.Generic.IEqualityComparer<double>

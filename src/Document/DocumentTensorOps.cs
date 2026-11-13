@@ -331,4 +331,56 @@ internal static class DocumentTensorOps
     /// </summary>
     internal static int[] DescendingOrder<T>(IEngine engine, Tensor<T> values)
         => values.Length == 0 ? Array.Empty<int>() : AudioEngineOps.StableDescendingOrder(engine, values);
+
+    /// <summary>
+    /// Node classification for the graph layout models (Doc-GCN, LayoutGraph): each of the first
+    /// <paramref name="maxNodes"/> rows of a <c>[nodes, width]</c> head holds <paramref name="classes"/> class logits,
+    /// optionally followed by a normalized <c>[x1, y1, x2, y2]</c> box in its last four columns. A node's class is
+    /// its softmax argmax (every class is a real layout class, so none is skipped as background) and it is kept
+    /// when that probability reaches <paramref name="threshold"/>. Without a box head the node's cell of a square
+    /// grid over the page stands in for its box.
+    /// </summary>
+    internal static List<LayoutRegion<T>> GraphLayoutRegions<T>(
+        IEngine engine, Tensor<T> output, int maxNodes, int classes, int imageSize, double threshold)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numNodes = Math.Min(output.Shape[0], maxNodes);
+        int width = output.Shape.Length > 1 ? output.Length / output.Shape[0] : classes;
+        int numClasses = Math.Min(width, classes);
+        if (numNodes <= 0 || numClasses <= 0)
+            return new List<LayoutRegion<T>>();
+
+        var rows = engine.TensorSlice(engine.Reshape(output, new[] { output.Shape[0], width }), new[] { 0, 0 }, new[] { numNodes, width });
+        var probabilities = engine.Softmax(engine.TensorSlice(rows, new[] { 0, 0 }, new[] { numNodes, numClasses }), 1);
+        var (labels, scores) = RowMax(engine, probabilities, numClasses);
+        int[] kept = Hits(engine, AtLeast(engine, scores, numOps.FromDouble(threshold)));
+        T[] confidences = Pick(engine, scores, kept);
+
+        T[] boxes;
+        if (width >= classes + 4)
+        {
+            T size = numOps.FromDouble(imageSize);
+            var corners = engine.TensorMultiplyScalar(engine.TensorSlice(rows, new[] { 0, width - 4 }, new[] { numNodes, 4 }), size);
+            var lower = engine.TensorMax(engine.TensorSlice(corners, new[] { 0, 0 }, new[] { numNodes, 2 }), numOps.Zero);
+            var upper = engine.TensorMin(engine.TensorSlice(corners, new[] { 0, 2 }, new[] { numNodes, 2 }), size);
+            boxes = engine.TensorConcatenate(new[] { lower, upper }, 1).ToArray();
+        }
+        else
+        {
+            int gridSize = Math.Max(1, (int)Math.Sqrt(numNodes));
+            int cellSize = imageSize / gridSize;
+            boxes = ToT<T>(Enumerable.Range(0, numNodes).SelectMany(i => new[]
+            {
+                (i % gridSize) * cellSize, (i / gridSize) * cellSize, ((i % gridSize) + 1) * cellSize, ((i / gridSize) + 1) * cellSize
+            }).ToArray());
+        }
+
+        return kept.Select((node, k) => new LayoutRegion<T>
+        {
+            ElementType = (LayoutElementType)Math.Min(labels[node], (int)LayoutElementType.Other),
+            Confidence = confidences[k],
+            Index = node,
+            BoundingBox = new Vector<T>(boxes.Skip(4 * node).Take(4).ToArray())
+        }).ToList();
+    }
 }

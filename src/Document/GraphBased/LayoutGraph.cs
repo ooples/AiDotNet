@@ -220,17 +220,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
 
     }
 
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
-    }
-
     #endregion
 
     #region ILayoutDetector Implementation
@@ -260,71 +249,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     }
 
     private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
-    {
-        var regions = new List<LayoutRegion<T>>();
-        int numNodes = Math.Min(output.Shape[0], _maxNodes);
-        int hiddenDim = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-        int numClasses = Math.Min(hiddenDim - 4, _numClasses); // Reserve 4 for bbox
-        bool hasBbox = hiddenDim > _numClasses;
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            double maxConf = 0;
-            int maxClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(output[i, c]);
-                if (conf > maxConf) { maxConf = conf; maxClass = c; }
-            }
-
-            if (maxConf >= threshold && maxClass > 0)
-            {
-                // Extract bounding box from last 4 values (normalized coordinates)
-                Vector<T> bbox;
-                if (hasBbox && hiddenDim >= 4)
-                {
-                    int bboxStart = hiddenDim - 4;
-                    double x1 = NumOps.ToDouble(output[i, bboxStart]) * ImageSize;
-                    double y1 = NumOps.ToDouble(output[i, bboxStart + 1]) * ImageSize;
-                    double x2 = NumOps.ToDouble(output[i, bboxStart + 2]) * ImageSize;
-                    double y2 = NumOps.ToDouble(output[i, bboxStart + 3]) * ImageSize;
-
-                    bbox = new Vector<T>([
-                        NumOps.FromDouble(Math.Max(0, x1)),
-                        NumOps.FromDouble(Math.Max(0, y1)),
-                        NumOps.FromDouble(Math.Min(ImageSize, x2)),
-                        NumOps.FromDouble(Math.Min(ImageSize, y2))
-                    ]);
-                }
-                else
-                {
-                    // Grid-based fallback for node index
-                    int gridSize = (int)Math.Sqrt(numNodes);
-                    int cellSize = ImageSize / Math.Max(1, gridSize);
-                    int row = i / gridSize;
-                    int col = i % gridSize;
-
-                    bbox = new Vector<T>([
-                        NumOps.FromDouble(col * cellSize),
-                        NumOps.FromDouble(row * cellSize),
-                        NumOps.FromDouble((col + 1) * cellSize),
-                        NumOps.FromDouble((row + 1) * cellSize)
-                    ]);
-                }
-
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = bbox
-                });
-            }
-        }
-
-        return regions;
-    }
+        => DocumentTensorOps.GraphLayoutRegions(Engine, output, _maxNodes, _numClasses, ImageSize, threshold);
 
     #endregion
 
@@ -375,21 +300,14 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
 
     private List<OrderedElement<T>> PredictReadingOrder(Tensor<T> output)
     {
-        var elements = new List<OrderedElement<T>>();
         int numNodes = Math.Min(output.Shape[0], _maxNodes);
-
-        for (int i = 0; i < numNodes; i++)
+        T confidence = NumOps.FromDouble(0.9);
+        return Enumerable.Range(0, numNodes).Select(i => new OrderedElement<T>
         {
-            elements.Add(new OrderedElement<T>
-            {
-                ElementIndex = i,
-                ReadingOrderPosition = i,
-                Confidence = NumOps.FromDouble(0.9),
-                ConfidenceValue = 0.9
-            });
-        }
-
-        return elements;
+            ElementIndex = i,
+            ReadingOrderPosition = i,
+            Confidence = confidence
+        }).ToList();
     }
 
     #endregion
@@ -439,15 +357,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     /// LayoutGraph uses basic normalization (divide by 255) since the focus is on graph-based layout analysis.
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        var normalized = new Tensor<T>(image._shape);
-        for (int i = 0; i < image.Data.Length; i++)
-        {
-            normalized.Data.Span[i] = NumOps.FromDouble(NumOps.ToDouble(image.Data.Span[i]) / 255.0);
-        }
-        return normalized;
-    }
+        => Engine.TensorDivideScalar(EnsureBatchDimension(rawImage), NumOps.FromDouble(255.0));
 
     /// <summary>
     /// Applies LayoutGraph's industry-standard postprocessing: pass-through (graph node classifications are already final).

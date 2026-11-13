@@ -304,76 +304,66 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
 
     private IList<FormField<T>> ParseFormFields(Tensor<T> output, double threshold)
     {
-        var fields = new List<FormField<T>>();
         int numEntities = Math.Min(output.Shape[0], _maxEntities);
         int hiddenDim = output.Shape.Length > 1 ? output.Shape[1] : _textDim;
+        var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, output, numEntities, 0, NumOps.FromDouble(threshold));
+        if (rows.Length == 0)
+            return new List<FormField<T>>();
 
-        for (int i = 0; i < numEntities; i++)
+        // Entity type: the first best of the type scores in columns 1 .. numEntityTypes.
+        int typeColumns = Math.Min(_numEntityTypes, hiddenDim - 1);
+        var matrix = Engine.Reshape(output, new[] { output.Shape[0], output.Length / output.Shape[0] });
+        int[] types = typeColumns <= 0
+            ? new int[numEntities]
+            : DocumentTensorOps.RowArgMax(Engine, Engine.TensorSlice(matrix, new[] { 0, 1 }, new[] { numEntities, typeColumns }));
+        double[] values = matrix.Cast<double>().ToArray();
+        int width = matrix.Shape[1];
+
+        return rows.Select((i, k) =>
         {
-            double conf = NumOps.ToDouble(output[i, 0]);
-            if (conf >= threshold)
+            int entityType = types[i];
+
+            // Field name and value from the key and value embedding portions.
+            string fieldName = ExtractFieldText(values, i * width, hiddenDim, startOffset: _numEntityTypes + 1, maxLen: 32);
+            string fieldValue = ExtractFieldText(values, i * width, hiddenDim, startOffset: _numEntityTypes + 1 + 32, maxLen: 64);
+
+            // Map entity type to field type
+            string fieldType = entityType switch
             {
-                // Extract entity type from output
-                int entityType = 0;
-                double maxTypeScore = double.MinValue;
-                for (int t = 0; t < Math.Min(_numEntityTypes, hiddenDim - 1); t++)
-                {
-                    double typeScore = NumOps.ToDouble(output[i, 1 + t]);
-                    if (typeScore > maxTypeScore)
-                    {
-                        maxTypeScore = typeScore;
-                        entityType = t;
-                    }
-                }
+                0 => "text",
+                1 => "name",
+                2 => "date",
+                3 => "number",
+                4 => "address",
+                5 => "email",
+                6 => "phone",
+                7 => "checkbox",
+                8 => "signature",
+                _ => "other"
+            };
 
-                // Extract field name from key embedding portion
-                string fieldName = ExtractFieldText(output, i, hiddenDim, startOffset: _numEntityTypes + 1, maxLen: 32);
-
-                // Extract field value from value embedding portion
-                string fieldValue = ExtractFieldText(output, i, hiddenDim, startOffset: _numEntityTypes + 1 + 32, maxLen: 64);
-
-                // Map entity type to field type
-                string fieldType = entityType switch
-                {
-                    0 => "text",
-                    1 => "name",
-                    2 => "date",
-                    3 => "number",
-                    4 => "address",
-                    5 => "email",
-                    6 => "phone",
-                    7 => "checkbox",
-                    8 => "signature",
-                    _ => "other"
-                };
-
-                fields.Add(new FormField<T>
-                {
-                    FieldName = string.IsNullOrEmpty(fieldName) ? $"field_{entityType}_{i}" : fieldName,
-                    FieldValue = fieldValue,
-                    FieldType = fieldType,
-                    Confidence = NumOps.FromDouble(conf),
-                    ConfidenceValue = conf,
-                    BoundingBox = ExtractBoundingBox(output, i, hiddenDim)
-                });
-            }
-        }
-
-        return fields;
+            return new FormField<T>
+            {
+                FieldName = string.IsNullOrEmpty(fieldName) ? $"field_{entityType}_{i}" : fieldName,
+                FieldValue = fieldValue,
+                FieldType = fieldType,
+                Confidence = scores[k],
+                BoundingBox = ExtractBoundingBox(output, i, hiddenDim)
+            };
+        }).ToList<FormField<T>>();
     }
 
     /// <summary>
     /// Extracts text from embedding portion of output.
     /// </summary>
-    private string ExtractFieldText(Tensor<T> output, int entityIdx, int hiddenDim, int startOffset, int maxLen)
+    private string ExtractFieldText(double[] values, int rowStart, int hiddenDim, int startOffset, int maxLen)
     {
         var tokens = new List<int>();
         int endOffset = Math.Min(startOffset + maxLen, hiddenDim);
 
         for (int j = startOffset; j < endOffset; j++)
         {
-            double val = NumOps.ToDouble(output[entityIdx, j]);
-            int tokenId = (int)Math.Round(val * 255); // Denormalize from embedding
+            int tokenId = (int)Math.Round(values[rowStart + j] * 255); // Denormalize from embedding
 
             // Special tokens
             if (tokenId <= 2) continue; // PAD, BOS, EOS
@@ -478,26 +468,15 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
 
     private List<TextRegion<T>> ParseTextRegions(Tensor<T> output, double threshold)
     {
-        var regions = new List<TextRegion<T>>();
         int numDetections = Math.Min(output.Shape[0], _maxEntities);
-
-        for (int i = 0; i < numDetections; i++)
+        var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, output, numDetections, 0, NumOps.FromDouble(threshold));
+        return rows.Select((i, k) => new TextRegion<T>
         {
-            double conf = NumOps.ToDouble(output[i, 0]);
-            if (conf >= threshold)
-            {
-                regions.Add(new TextRegion<T>
-                {
-                    Confidence = NumOps.FromDouble(conf),
-                    ConfidenceValue = conf,
-                    BoundingBox = Vector<T>.Empty(),
-                    PolygonPoints = [],
-                    Index = i
-                });
-            }
-        }
-
-        return regions;
+            Confidence = scores[k],
+            BoundingBox = Vector<T>.Empty(),
+            PolygonPoints = [],
+            Index = i
+        }).ToList();
     }
 
     #endregion
@@ -549,35 +528,8 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
     /// mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies TRIE's industry-standard postprocessing: pass-through (entity extraction outputs are already final).

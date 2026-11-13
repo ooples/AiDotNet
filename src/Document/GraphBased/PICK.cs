@@ -314,21 +314,22 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         if (packed.Rank != 2 || packed.Shape[1] < 5)
             throw new ArgumentException(
                 "PICK expects packed segments [N, 4 + T]: each row a box (x0, y0, x1, y1) followed by T token ids.", nameof(packed));
-        int n = packed.Shape[0], slots = packed.Shape[1] - 4;
+        int n = packed.Shape[0], width = packed.Shape[1], slots = width - 4;
+        double[] values = packed.Cast<double>().ToArray();
         var boxes = new double[n][];
         var tokens = new int[n][];
         for (int i = 0; i < n; i++)
         {
-            double a = NumOps.ToDouble(packed[i, 0]), b = NumOps.ToDouble(packed[i, 1]);
-            double c = NumOps.ToDouble(packed[i, 2]), e = NumOps.ToDouble(packed[i, 3]);
+            int row = i * width;
+            double a = values[row], b = values[row + 1], c = values[row + 2], e = values[row + 3];
             boxes[i] = new[] { Math.Min(a, c), Math.Min(b, e), Math.Max(a, c), Math.Max(b, e) };
             int last = 0;
             for (int t = 0; t < slots; t++)
-                if (NumOps.ToDouble(packed[i, 4 + t]) != 0) last = t + 1;
+                if (values[row + 4 + t] != 0) last = t + 1;
             int length = Math.Max(1, last);
             tokens[i] = new int[length];
             for (int t = 0; t < length; t++)
-                tokens[i][t] = Math.Min(Math.Max((int)Math.Round(NumOps.ToDouble(packed[i, 4 + t])), 0), _vocabSize - 1);
+                tokens[i][t] = Math.Min(Math.Max((int)Math.Round(values[row + 4 + t]), 0), _vocabSize - 1);
         }
         return new Segments(boxes, tokens, slots);
     }
@@ -368,10 +369,7 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
                 for (int i = 0; i < n; i++)
                     for (int j = 0; j < n; j++) features[i, j, k] = (features[i, j, k] - min) / (max - min);
         }
-        var tensor = new Tensor<T>(new[] { n, n, PickGraphLayer<T>.RelationFeatures });
-        int index = 0;
-        foreach (var value in features) tensor[index++] = NumOps.FromDouble(value);
-        return tensor;
+        return new Tensor<double>(features.Cast<double>().ToArray(), new[] { n, n, PickGraphLayer<T>.RelationFeatures }).Cast<T>();
     }
 
     #endregion
@@ -408,8 +406,7 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         for (int i = 0; i < n; i++)
         {
             int length = segments.Tokens[i].Length;
-            var ids = new Tensor<T>(new[] { length });
-            for (int t = 0; t < length; t++) ids[t] = NumOps.FromDouble(segments.Tokens[i][t]);
+            var ids = DocumentTensorOps.IntTensor<T>(segments.Tokens[i]);
             var x = Engine.TensorAdd(Layers[_embeddingIndex].Forward(ids), SinusoidalPositions(length, d));
             if (imageEmbeddings is not null)
                 x = Engine.TensorAdd(x, Engine.TensorBroadcastTo(
@@ -417,7 +414,7 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
             for (int l = _encoderStart; l < _encoderNormIndex; l++) x = Layers[l].Forward(x);
             x = Layers[_encoderNormIndex].Forward(x);
             tokenFeatures[i] = x;
-            nodes[i] = Engine.TensorMultiplyScalar(Engine.ReduceSum(x, new[] { 0 }, keepDims: true), NumOps.FromDouble(1.0 / length));
+            nodes[i] = Engine.ReduceMean(x, new[] { 0 }, keepDims: true);
         }
 
         var graph = (PickGraphLayer<T>)Layers[_graphIndex];
@@ -467,15 +464,15 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
 
     private Tensor<T> SinusoidalPositions(int length, int dim)
     {
-        var pe = new Tensor<T>(new[] { length, dim });
+        var pe = new double[length * dim];
         for (int p = 0; p < length; p++)
             for (int i = 0; i < dim; i += 2)
             {
                 double angle = p / Math.Pow(10000, (double)i / dim);
-                pe[p, i] = NumOps.FromDouble(Math.Sin(angle));
-                if (i + 1 < dim) pe[p, i + 1] = NumOps.FromDouble(Math.Cos(angle));
+                pe[(p * dim) + i] = Math.Sin(angle);
+                if (i + 1 < dim) pe[(p * dim) + i + 1] = Math.Cos(angle);
             }
-        return pe;
+        return new Tensor<double>(pe, new[] { length, dim }).Cast<T>();
     }
 
     /// <summary>
@@ -581,24 +578,26 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         bool indices = target.Rank == 1 || (target.Rank == 2 && target.Shape[1] == 1);
         if (target.Shape[0] != n * slots)
             throw new ArgumentException($"PICK tags must cover the {n} x {slots} slot grid ({n * slots} rows).", nameof(target));
-        var labels = new List<T>();
+        int width = indices ? 1 : target.Shape[1];
+        double[] values = target.Cast<double>().ToArray();
+        var labels = new List<int>();
         for (int i = 0; i < n; i++)
             for (int t = 0; t < segments.Tokens[i].Length; t++)
             {
-                int slot = (i * slots) + t, tag;
+                int row = ((i * slots) + t) * width, tag;
                 if (indices)
                 {
-                    tag = (int)Math.Round(NumOps.ToDouble(target.Rank == 1 ? target[slot] : target[slot, 0]));
+                    tag = (int)Math.Round(values[row]);
                 }
                 else
                 {
                     tag = 0;
-                    for (int c = 1; c < target.Shape[1]; c++)
-                        if (NumOps.ToDouble(target[slot, c]) > NumOps.ToDouble(target[slot, tag])) tag = c;
+                    for (int c = 1; c < width; c++)
+                        if (values[row + c] > values[row + tag]) tag = c;
                 }
-                labels.Add(NumOps.FromDouble(Math.Min(Math.Max(tag, 0), _numEntityTypes - 1)));
+                labels.Add(Math.Min(Math.Max(tag, 0), _numEntityTypes - 1));
             }
-        return new Tensor<T>(labels.ToArray(), new[] { labels.Count });
+        return DocumentTensorOps.IntTensor<T>(labels.ToArray());
     }
 
     #endregion
@@ -640,13 +639,9 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
             throw new InvalidOperationException("The OCR model found no text lines with boxes on this page.");
         var encoded = lines.Select(line => _tokenizer.Encode(line.Text).TokenIds.Take(MaxSequenceLength).ToList()).ToList();
         int slots = Math.Max(1, encoded.Max(ids => ids.Count));
-        var packed = new Tensor<T>(new[] { lines.Count, 4 + slots });
-        for (int i = 0; i < lines.Count; i++)
-        {
-            for (int c = 0; c < 4; c++) packed[i, c] = lines[i].BoundingBox[c];
-            for (int t = 0; t < encoded[i].Count; t++) packed[i, 4 + t] = NumOps.FromDouble(encoded[i][t]);
-        }
-        return (packed, lines);
+        var boxes = new Tensor<T>(lines.SelectMany(line => line.BoundingBox.ToArray().Take(4)).ToArray(), new[] { lines.Count, 4 });
+        var ids = new Tensor<int>(encoded.SelectMany(e => e.Concat(Enumerable.Repeat(0, slots - e.Count))).ToArray(), new[] { lines.Count, slots });
+        return (Engine.TensorConcatenate(new[] { boxes, ids.Cast<T>() }, 1), lines);
     }
 
     /// <inheritdoc/>
@@ -688,35 +683,48 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
     {
         var fields = new List<FormField<T>>();
         int classes = output.Shape[1];
+        int rows = lines.Count * slots;
+        if (rows == 0 || classes == 0)
+            return fields;
+
+        // Each slot's tag is the LAST class above 0.5 (none when no class is): (c + 1) on the hits, maxed per row.
+        var grid = Engine.TensorSlice(Engine.Reshape(output, new[] { output.Shape[0], classes }), new[] { 0, 0 }, new[] { rows, classes });
+        var hits = Engine.TensorGreaterThan(grid, NumOps.FromDouble(0.5));
+        var rank = Engine.TensorBroadcastTo(new Tensor<int>(Enumerable.Range(1, classes).ToArray(), new[] { 1, classes }).Cast<T>(), new[] { rows, classes });
+        int[] best = Engine.ReduceMax(Engine.TensorMultiply(hits, rank), new[] { 1 }, keepDims: false).Cast<int>().ToArray();
+
+        var kept = new List<(int Line, int Tag, double Confidence)>();
         for (int i = 0; i < lines.Count; i++)
         {
             var counts = new int[classes];
             int tokens = 0;
             for (int t = 0; t < slots; t++)
             {
-                int row = (i * slots) + t, best = -1;
-                for (int c = 0; c < classes; c++)
-                    if (NumOps.ToDouble(output[row, c]) > 0.5) best = c;
-                if (best < 0) continue;
-                counts[best]++;
+                int tag = best[(i * slots) + t] - 1;
+                if (tag < 0) continue;
+                counts[tag]++;
                 tokens++;
             }
             if (tokens == 0) continue;
-            int tag = Enumerable.Range(1, Math.Max(0, classes - 1)).OrderByDescending(c => counts[c]).FirstOrDefault();
-            double confidence = (double)counts[tag] / tokens;
-            if (tag <= 0 || counts[tag] == 0 || confidence < threshold) continue;
-            string entityType = tag < SupportedEntityTypes.Count ? SupportedEntityTypes[tag] : "UNKNOWN";
-            fields.Add(new FormField<T>
+            int top = Enumerable.Range(1, Math.Max(0, classes - 1)).OrderByDescending(c => counts[c]).FirstOrDefault();
+            double confidence = (double)counts[top] / tokens;
+            if (top <= 0 || counts[top] == 0 || confidence < threshold) continue;
+            kept.Add((i, top, confidence));
+        }
+
+        T[] confidences = kept.Select(k => k.Confidence).Select(NumOps.FromDouble).ToArray();
+        return kept.Select((k, j) =>
+        {
+            string entityType = k.Tag < SupportedEntityTypes.Count ? SupportedEntityTypes[k.Tag] : "UNKNOWN";
+            return new FormField<T>
             {
                 FieldName = entityType,
-                FieldValue = lines[i].Text,
+                FieldValue = lines[k.Line].Text,
                 FieldType = entityType,
-                Confidence = NumOps.FromDouble(confidence),
-                ConfidenceValue = confidence,
-                BoundingBox = lines[i].BoundingBox
-            });
-        }
-        return fields;
+                Confidence = confidences[j],
+                BoundingBox = lines[k.Line].BoundingBox
+            };
+        }).ToList();
     }
 
     /// <summary>

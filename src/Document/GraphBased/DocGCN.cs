@@ -247,17 +247,6 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         EnsureGraphPathBuilt();
     }
 
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
-    }
-
     /// <summary>
     /// Resolves Doc-GCN's trainable optimizer while preserving the public constructor's
     /// general <see cref="IOptimizer{T, TInput, TOutput}"/> contract.
@@ -325,72 +314,8 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         };
     }
 
-    private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
-    {
-        var regions = new List<LayoutRegion<T>>();
-        int numNodes = Math.Min(output.Shape[0], _maxNodes);
-        int hiddenDim = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-        int numClasses = Math.Min(hiddenDim - 4, _numClasses); // Reserve 4 for bbox
-        bool hasBbox = hiddenDim > _numClasses;
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            double maxConf = 0;
-            int maxClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(output[i, c]);
-                if (conf > maxConf) { maxConf = conf; maxClass = c; }
-            }
-
-            if (maxConf >= threshold && maxClass > 0)
-            {
-                // Extract bounding box from last 4 values (normalized coordinates)
-                Vector<T> bbox;
-                if (hasBbox && hiddenDim >= 4)
-                {
-                    int bboxStart = hiddenDim - 4;
-                    double x1 = NumOps.ToDouble(output[i, bboxStart]) * ImageSize;
-                    double y1 = NumOps.ToDouble(output[i, bboxStart + 1]) * ImageSize;
-                    double x2 = NumOps.ToDouble(output[i, bboxStart + 2]) * ImageSize;
-                    double y2 = NumOps.ToDouble(output[i, bboxStart + 3]) * ImageSize;
-
-                    bbox = new Vector<T>([
-                        NumOps.FromDouble(Math.Max(0, x1)),
-                        NumOps.FromDouble(Math.Max(0, y1)),
-                        NumOps.FromDouble(Math.Min(ImageSize, x2)),
-                        NumOps.FromDouble(Math.Min(ImageSize, y2))
-                    ]);
-                }
-                else
-                {
-                    // Grid-based fallback for node index
-                    int gridSize = (int)Math.Sqrt(numNodes);
-                    int cellSize = ImageSize / Math.Max(1, gridSize);
-                    int row = i / gridSize;
-                    int col = i % gridSize;
-
-                    bbox = new Vector<T>([
-                        NumOps.FromDouble(col * cellSize),
-                        NumOps.FromDouble(row * cellSize),
-                        NumOps.FromDouble((col + 1) * cellSize),
-                        NumOps.FromDouble((row + 1) * cellSize)
-                    ]);
-                }
-
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = bbox
-                });
-            }
-        }
-
-        return regions;
-    }
+    internal List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
+        => DocumentTensorOps.GraphLayoutRegions(Engine, output, _maxNodes, _numClasses, ImageSize, threshold);
 
     #endregion
 
@@ -439,20 +364,7 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
     /// DocGCN uses basic normalization (divide by 255) since the focus is on graph-based processing.
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        for (int i = 0; i < image.Data.Length; i++)
-        {
-            normalized.Data.Span[i] = NumOps.FromDouble(NumOps.ToDouble(image.Data.Span[i]) / 255.0);
-        }
-        return normalized;
-    }
+        => Engine.TensorDivideScalar(EnsureBatchDimension(rawImage), NumOps.FromDouble(255.0));
 
     /// <summary>
     /// Applies DocGCN's industry-standard postprocessing: pass-through (node classifications are already final).
@@ -640,11 +552,7 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         }
 
         // Node order, added in the graph hidden space once the convolutions have produced it.
-        var positions = new Tensor<T>([hidden.Shape[0]]);
-        for (int i = 0; i < positions.Length; i++)
-        {
-            positions[i] = NumOps.FromDouble(Math.Min(i, Math.Max(1, _maxNodes) - 1));
-        }
+        var positions = DocumentTensorOps.IntTensor<T>(Enumerable.Range(0, hidden.Shape[0]).Select(i => Math.Min(i, Math.Max(1, _maxNodes) - 1)).ToArray());
 
         var order = (_nodeOrderEmbedding ?? throw new InvalidOperationException("_nodeOrderEmbedding is null where it is required.")).Forward(positions);
         if (order.Rank == hidden.Rank && order.Length == hidden.Length)
