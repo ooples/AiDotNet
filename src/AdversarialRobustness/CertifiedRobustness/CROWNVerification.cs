@@ -219,6 +219,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
 
         int cleanCorrect = 0, certifiedCorrect = 0, certifiedCount = 0;
         var radii = new List<T>();
+        T zero = NumOps.Zero;
         for (int i = 0; i < testData.Length; i++)
         {
             var trueClass = GetPredictedClass(ConversionsHelper.ConvertToVector<T, TOutput>(labels[i]));
@@ -226,13 +227,15 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
             bool correct = certification.PredictedClass == trueClass;
             cleanCorrect += correct ? 1 : 0;
             certifiedCount += certification.IsCertified ? 1 : 0;
-            certifiedCorrect += correct && certification.IsCertified
-                && NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius) ? 1 : 0;
-            radii.Add(certification.IsCertified ? certification.CertifiedRadius : NumOps.Zero);
+            certifiedCorrect += correct && CertifiedAt(certification, radius) ? 1 : 0;
+            radii.Add(certification.IsCertified ? certification.CertifiedRadius : zero);
         }
 
         return CertificationMath<T>.Summarize(cleanCorrect, certifiedCorrect, certifiedCount, radius, radii);
     }
+
+    private static bool CertifiedAt(CertifiedPrediction<T> certification, T radius) =>
+        certification.IsCertified && NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius);
 
     /// <inheritdoc/>
     public CertifiedDefenseOptions<T> GetOptions()

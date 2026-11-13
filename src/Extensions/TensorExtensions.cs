@@ -141,17 +141,12 @@ public static class TensorExtensions
         if (!a._shape.SequenceEqual(b._shape))
             return false;
 
-        // Use spans for vectorized comparison
-        ReadOnlySpan<T> spanA = a.AsSpan();
-        ReadOnlySpan<T> spanB = b.AsSpan();
+        if (a.Length == 0)
+            return true;
 
-        for (int i = 0; i < spanA.Length; i++)
-        {
-            if (!numOps.Equals(spanA[i], spanB[i]))
-                return false;
-        }
-
-        return true;
+        // Element-wise equality mask (1 where equal); equal iff every entry is 1.
+        var equal = AiDotNetEngine.Current.TensorEquals(a, b);
+        return numOps.GreaterThanOrEquals(AiDotNetEngine.Current.TensorMinValue(equal), numOps.One);
     }
 
     /// <summary>
@@ -270,13 +265,19 @@ public static class TensorExtensions
     /// </remarks>
     public static Tensor<T> CreateXavierInitializedTensor<T>(int[] shape, double stddev, Random random)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
+        int length = 1;
+        foreach (int dimension in shape)
         {
-            tensor[i] = numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
+            length *= dimension;
         }
-        return tensor;
+
+        var draws = new double[length];
+        for (int i = 0; i < length; i++)
+        {
+            draws[i] = (random.NextDouble() * 2 - 1) * stddev;
+        }
+
+        return new Tensor<double>(draws, shape).Cast<T>();
     }
 
     /// <summary>

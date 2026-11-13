@@ -6,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Serialization;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -37,6 +38,8 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 public class SafetyFilter<T> : ISafetyFilter<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Timeout for regex operations to prevent ReDoS attacks.
@@ -133,21 +136,17 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         }
 
         // Check for NaN or infinite values
-        for (int i = 0; i < input.Length; i++)
+        foreach (int i in NonFiniteIndices(input))
         {
-            var d = NumOps.ToDouble(input[i]);
-            if (double.IsNaN(d) || double.IsInfinity(d))
+            result.IsValid = false;
+            result.SafetyScore = Math.Min(result.SafetyScore, 0.3);
+            result.Issues.Add(new ValidationIssue
             {
-                result.IsValid = false;
-                result.SafetyScore = Math.Min(result.SafetyScore, 0.3);
-                result.Issues.Add(new ValidationIssue
-                {
-                    Severity = "Critical",
-                    Type = "InvalidValue",
-                    Description = "Input contains NaN or infinite values",
-                    Location = i
-                });
-            }
+                Severity = "Critical",
+                Type = "InvalidValue",
+                Description = "Input contains NaN or infinite values",
+                Location = i
+            });
         }
 
         // Convert to text for pattern matching (if applicable)
@@ -517,14 +516,15 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         // This is a placeholder - in practice, you'd have proper encoding/decoding.
         var builder = new StringBuilder();
-        for (int i = 0; i < data.Length; i++)
+        var values = data.AsSpan();
+        for (int i = 0; i < values.Length; i++)
         {
             if (i > 0)
             {
                 builder.Append(' ');
             }
 
-            object? value = data[i];
+            object? value = values[i];
             builder.Append(value?.ToString() ?? string.Empty);
         }
 
@@ -533,44 +533,38 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
     private Vector<T> SanitizeOutput(Vector<T> output, HarmfulContentResult<T> harmfulResult)
     {
-        // Create a sanitized copy of the output
-        var sanitized = CloneVector(output);
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         // Zero out values at harmful locations identified in findings
         if (harmfulResult.Findings != null && harmfulResult.Findings.Count > 0)
         {
+            // The specific location and its neighbours, as a 0/1 mask selecting the entries to clear.
+            var clear = new double[output.Length];
             foreach (var finding in harmfulResult.Findings)
             {
-                // Zero out the harmful region with a small buffer around the location
                 int location = finding.Location;
-                if (location >= 0 && location < sanitized.Length)
+                if (location >= 0 && location < output.Length)
                 {
-                    // Zero out the specific location and nearby indices
                     int startIdx = Math.Max(0, location - 1);
-                    int endIdx = Math.Min(sanitized.Length - 1, location + 1);
-
+                    int endIdx = Math.Min(output.Length - 1, location + 1);
                     for (int i = startIdx; i <= endIdx; i++)
                     {
-                        sanitized[i] = numOps.Zero;
+                        clear[i] = 1.0;
                     }
                 }
             }
-        }
-        else
-        {
-            // If no specific findings, but harmful content detected, apply global dampening
-            // Reduce all values toward zero based on harm score
-            if (harmfulResult.HarmfulContentDetected && harmfulResult.HarmScore > 0)
-            {
-                var dampingFactor = numOps.FromDouble(1.0 - harmfulResult.HarmScore);
-                for (int i = 0; i < sanitized.Length; i++)
-                {
-                    sanitized[i] = numOps.Multiply(sanitized[i], dampingFactor);
-                }
-            }
+
+            var values = output.AsTensor();
+            var mask = new Tensor<double>(clear, new[] { output.Length }).Cast<T>();
+            return Engine.TensorWhere(mask, Engine.TensorZerosLike(values), values).ToVector();
         }
 
+        // If no specific findings, but harmful content detected, apply global dampening
+        // Reduce all values toward zero based on harm score
+        if (harmfulResult.HarmfulContentDetected && harmfulResult.HarmScore > 0)
+        {
+            return Engine.Multiply<T>(output, NumOps.FromDouble(1.0 - harmfulResult.HarmScore));
+        }
+
+        var sanitized = CloneVector(output);
         return sanitized;
     }
 
@@ -599,12 +593,25 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
     private static Vector<T> CloneVector(Vector<T> source)
     {
-        var clone = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
+        return new Vector<T>(source.AsSpan().ToArray());
+    }
+
+    /// <summary>Indices of NaN and infinite entries, in order.</summary>
+    private List<int> NonFiniteIndices(Vector<T> input)
+    {
+        var values = input.AsTensor();
+        var invalid = Engine.TensorWhere(Engine.TensorIsFinite(values), Engine.TensorZerosLike(values), Engine.TensorOnesLike(values));
+        var flags = invalid.ToVector().AsSpan();
+        var indices = new List<int>();
+        T zero = NumOps.Zero;
+        for (int i = 0; i < flags.Length; i++)
         {
-            clone[i] = source[i];
+            if (flags[i] is { } flag && !flag.Equals(zero))
+            {
+                indices.Add(i);
+            }
         }
 
-        return clone;
+        return indices;
     }
 }
