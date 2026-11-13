@@ -227,14 +227,7 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         _coefficients = new Matrix<T>(_numClasses, numFeatures + 1);
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
-        // The relative jitter must survive being added to a diagonal entry in T: 1e-8 is below half an ulp of a float
-        // (eps 1.2e-7), so float kept the singular Hessian unchanged. Four machine epsilons of T is at least two ulps;
-        // double keeps 1e-8, which is larger.
-        double machineEpsilon = typeof(T) == typeof(float) ? Math.Pow(2, -23)
-            : typeof(T) == typeof(Half) ? Math.Pow(2, -10)
-            : Math.Pow(2, -52);
-        T jitterRelative = NumOps.FromDouble(Math.Max(1e-8, 4 * machineEpsilon));
-        T jitterFloor = NumOps.FromDouble(1e-12);
+        var (jitterRelative, jitterFloor) = NewtonJitter();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -345,6 +338,25 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         var expScores = Engine.TensorExp(Engine.TensorSubtract(scoreTensor, maxScores));
         var sumExpScores = Engine.TensorBroadcastTo(Engine.ReduceSum(expScores, new[] { 1 }, keepDims: true), shape);
         return Engine.TensorDivide(expScores, sumExpScores).ToMatrix();
+    }
+
+    /// <summary>
+    /// The relative and absolute diagonal jitter that make the Newton system of the full-softmax Hessian solvable.
+    /// </summary>
+    /// <remarks>
+    /// Both must survive being stored in T. The relative jitter must change a diagonal entry: 1e-8 is below half an ulp
+    /// of a float (eps 1.2e-7), so float kept the singular Hessian unchanged; four machine epsilons of T is at least two
+    /// ulps, and double keeps 1e-8, which is larger. The floor covers an exactly-zero diagonal (a feature that is zero
+    /// in every sample): 1e-12 rounds to 0 in Half, whose smallest subnormal is 2^-24, so the floor is at least eps^2.
+    /// </remarks>
+    internal static (T Relative, T Floor) NewtonJitter()
+    {
+        double machineEpsilon = typeof(T) == typeof(float) ? Math.Pow(2, -23)
+            : typeof(T) == typeof(Half) ? Math.Pow(2, -10)
+            : Math.Pow(2, -52);
+        var ops = MathHelper.GetNumericOperations<T>();
+        return (ops.FromDouble(Math.Max(1e-8, 4 * machineEpsilon)),
+            ops.FromDouble(Math.Max(1e-12, machineEpsilon * machineEpsilon)));
     }
 
     /// <summary>

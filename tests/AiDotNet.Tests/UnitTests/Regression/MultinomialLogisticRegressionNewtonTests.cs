@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
@@ -53,5 +54,22 @@ public class MultinomialLogisticRegressionNewtonTests
                 Assert.True(Math.Abs(score) < 1e-6, $"score for class {c}, feature {j} is {score}");
             }
         }
+    }
+
+    /// <summary>
+    /// A feature that is zero in every sample leaves an exactly-zero Hessian diagonal, which only the absolute floor
+    /// lifts. A floor of 1e-12 rounds to 0 in Half (smallest subnormal 2^-24), leaving the Newton system singular.
+    /// </summary>
+    [Fact]
+    [Trait("category", "unit")]
+    public void Newton_jitter_lifts_a_zero_diagonal_in_half_precision()
+    {
+        var (relative, floor) = MultinomialLogisticRegression<Half>.NewtonJitter();
+
+        var jittered = RegressionEngineOps2.AddRelativeDiagonalJitter(new Matrix<Half>(2, 2), relative, floor);
+
+        var ops = MathHelper.GetNumericOperations<Half>();
+        Assert.True(ops.ToDouble(jittered[0, 0]) > 0, "the zero diagonal stayed 0 in Half");
+        Assert.True(ops.ToDouble(jittered[1, 1]) > 0, "the zero diagonal stayed 0 in Half");
     }
 }
