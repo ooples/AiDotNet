@@ -92,6 +92,12 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
+        if (typeof(T) != typeof(double))
+            return NumOps.FromDouble(new DistillationLoss<double>(Temperature, Alpha).ComputeLoss(
+                Tensor<T>.FromMatrix(studentBatchOutput).Cast<double>().ToMatrix(),
+                Tensor<T>.FromMatrix(teacherBatchOutput).Cast<double>().ToMatrix(),
+                trueLabelsBatch is null ? null : Tensor<T>.FromMatrix(trueLabelsBatch).Cast<double>().ToMatrix()));
+
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
@@ -154,6 +160,12 @@ public class DistillationLoss<T> : DistillationStrategyBase<T>
     /// </remarks>
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
+        if (typeof(T) != typeof(double))
+            return Tensor<double>.FromMatrix(new DistillationLoss<double>(Temperature, Alpha).ComputeGradient(
+                Tensor<T>.FromMatrix(studentBatchOutput).Cast<double>().ToMatrix(),
+                Tensor<T>.FromMatrix(teacherBatchOutput).Cast<double>().ToMatrix(),
+                trueLabelsBatch is null ? null : Tensor<T>.FromMatrix(trueLabelsBatch).Cast<double>().ToMatrix())).Cast<T>().ToMatrix();
+
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 

@@ -19,9 +19,8 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static Vector<T> Softmax(Vector<T> logits, double temperature)
     {
-        // Max-shifted softmax of logits / temperature
         return Engine.Softmax(
-            Engine.TensorDivideScalar(Tensor<T>.FromVector(logits), NumOps.FromDouble(temperature)), -1).ToVector();
+            Engine.TensorDivideScalar(Tensor<T>.FromVector(logits).Cast<double>(), temperature), -1).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -29,9 +28,10 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static T KLDivergence(Vector<T> p, Vector<T> q)
     {
-        Vector<T> pClamped = ClampBelow(p, Epsilon);
-        Vector<T> qClamped = ClampBelow(q, Epsilon);
-        return Engine.Sum(Engine.Multiply(pClamped, Engine.Log(Engine.Divide(pClamped, qClamped))));
+        var pClamped = ClampBelow(Tensor<T>.FromVector(p).Cast<double>(), Epsilon);
+        var qClamped = ClampBelow(Tensor<T>.FromVector(q).Cast<double>(), Epsilon);
+        return NumOps.FromDouble(Engine.TensorSum(Engine.TensorMultiply(pClamped,
+            Engine.TensorLog(Engine.TensorDivide(pClamped, qClamped)))));
     }
 
     /// <summary>
@@ -39,7 +39,9 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static T CrossEntropy(Vector<T> p, Vector<T> q)
     {
-        return NumOps.Negate(Engine.Sum(Engine.Multiply(p, Engine.Log(ClampBelow(q, Epsilon)))));
+        var labels = Tensor<T>.FromVector(p).Cast<double>();
+        var predictions = ClampBelow(Tensor<T>.FromVector(q).Cast<double>(), Epsilon);
+        return NumOps.FromDouble(-Engine.TensorSum(Engine.TensorMultiply(labels, Engine.TensorLog(predictions))));
     }
 
     /// <summary>
@@ -48,7 +50,7 @@ internal static class DistillationHelper<T>
     public static Matrix<T> SoftmaxRows(Matrix<T> logits, double temperature)
     {
         return Engine.Softmax(
-            Engine.TensorDivideScalar(Tensor<T>.FromMatrix(logits), NumOps.FromDouble(temperature)), 1).ToMatrix();
+            Engine.TensorDivideScalar(Tensor<T>.FromMatrix(logits).Cast<double>(), temperature), 1).Cast<T>().ToMatrix();
     }
 
     /// <summary>
@@ -56,9 +58,10 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static Vector<T> KLDivergenceRows(Matrix<T> p, Matrix<T> q)
     {
-        Tensor<T> pClamped = ClampBelow(Tensor<T>.FromMatrix(p), Epsilon);
-        Tensor<T> qClamped = ClampBelow(Tensor<T>.FromMatrix(q), Epsilon);
-        return RowSums(Engine.TensorMultiply(pClamped, Engine.TensorLog(Engine.TensorDivide(pClamped, qClamped))));
+        var pClamped = ClampBelow(Tensor<T>.FromMatrix(p).Cast<double>(), Epsilon);
+        var qClamped = ClampBelow(Tensor<T>.FromMatrix(q).Cast<double>(), Epsilon);
+        var terms = Engine.TensorMultiply(pClamped, Engine.TensorLog(Engine.TensorDivide(pClamped, qClamped)));
+        return Engine.ReduceSum(terms, [1], keepDims: false).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -66,9 +69,10 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static Vector<T> CrossEntropyRows(Matrix<T> p, Matrix<T> q)
     {
-        Tensor<T> terms = Engine.TensorMultiply(
-            Tensor<T>.FromMatrix(p), Engine.TensorLog(ClampBelow(Tensor<T>.FromMatrix(q), Epsilon)));
-        return Engine.Negate(RowSums(terms));
+        var labels = Tensor<T>.FromMatrix(p).Cast<double>();
+        var predictions = ClampBelow(Tensor<T>.FromMatrix(q).Cast<double>(), Epsilon);
+        var terms = Engine.TensorNegate(Engine.TensorMultiply(labels, Engine.TensorLog(predictions)));
+        return Engine.ReduceSum(terms, [1], keepDims: false).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -78,6 +82,13 @@ internal static class DistillationHelper<T>
     public static Vector<T> StandardSampleLosses(
         Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch, double temperature, double alpha)
     {
+        if (typeof(T) != typeof(double))
+            return Tensor<double>.FromVector(DistillationHelper<double>.StandardSampleLosses(
+                Tensor<T>.FromMatrix(studentBatchOutput).Cast<double>().ToMatrix(),
+                Tensor<T>.FromMatrix(teacherBatchOutput).Cast<double>().ToMatrix(),
+                trueLabelsBatch is null ? null : Tensor<T>.FromMatrix(trueLabelsBatch).Cast<double>().ToMatrix(),
+                temperature, alpha)).Cast<T>().ToVector();
+
         Matrix<T> studentSoft = SoftmaxRows(studentBatchOutput, temperature);
         Matrix<T> teacherSoft = SoftmaxRows(teacherBatchOutput, temperature);
         Vector<T> losses = Engine.Multiply(
@@ -102,6 +113,13 @@ internal static class DistillationHelper<T>
     public static Matrix<T> StandardSampleGradients(
         Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch, double temperature, double alpha)
     {
+        if (typeof(T) != typeof(double))
+            return Tensor<double>.FromMatrix(DistillationHelper<double>.StandardSampleGradients(
+                Tensor<T>.FromMatrix(studentBatchOutput).Cast<double>().ToMatrix(),
+                Tensor<T>.FromMatrix(teacherBatchOutput).Cast<double>().ToMatrix(),
+                trueLabelsBatch is null ? null : Tensor<T>.FromMatrix(trueLabelsBatch).Cast<double>().ToMatrix(),
+                temperature, alpha)).Cast<T>().ToMatrix();
+
         Matrix<T> studentSoft = SoftmaxRows(studentBatchOutput, temperature);
         Matrix<T> teacherSoft = SoftmaxRows(teacherBatchOutput, temperature);
         Matrix<T> gradient = Engine.MatrixMultiplyScalar(
@@ -126,21 +144,15 @@ internal static class DistillationHelper<T>
     public static int ArgMax(Vector<T> vector)
     {
         T first = vector[0];
-        if (NumOps.IsNaN(first))
-        {
-            return 0;
-        }
-
+        if (NumOps.IsNaN(first)) return 0;
         int n = vector.Length;
-        Tensor<T> values = Tensor<T>.FromVector(vector);
-        // NaN entries can never win a strict '>' comparison; standing in the first element keeps them out
-        Tensor<T> cleaned = Engine.TensorWhere(
+        var values = Tensor<T>.FromVector(vector);
+        var cleaned = Engine.TensorWhere(
             Engine.TensorNotEquals(values, values), Tensor<T>.CreateDefault([n], first), values);
         T max = Engine.TensorMaxValue(cleaned);
-        Tensor<T> positions = Engine.TensorArange<T>(0, n, 1);
-        T firstIndex = Engine.TensorMinValue(Engine.TensorWhere(
-            Engine.TensorEquals(cleaned, max), positions, Tensor<T>.CreateDefault([n], NumOps.FromDouble(n))));
-        return (int)Math.Round(NumOps.ToDouble(firstIndex));
+        var positions = Engine.TensorArange<int>(0, n, 1);
+        return Engine.TensorMinValue(Engine.TensorWhere(
+            Engine.TensorEquals(cleaned, max).Cast<int>(), positions, Tensor<int>.CreateDefault([n], n)));
     }
 
     /// <summary>
@@ -150,13 +162,16 @@ internal static class DistillationHelper<T>
     /// </summary>
     public static Tensor<T> CosineSimilarityMatrix(Tensor<T> a, Tensor<T> b)
     {
-        var dot = Engine.TensorMatMul(a, Engine.TensorTranspose(b));
-        var squaredNormsA = Engine.ReduceSum(Engine.TensorMultiply(a, a), [1], keepDims: true); // [n, 1]
-        var squaredNormsB = Engine.ReduceSum(Engine.TensorMultiply(b, b), [1], keepDims: true); // [m, 1]
-        var denom = Engine.TensorSqrt(Engine.TensorMatMul(squaredNormsA, Engine.TensorTranspose(squaredNormsB)));
-        var cosine = Engine.TensorClamp(Engine.TensorDivide(dot, denom), NumOps.FromDouble(-1.0), NumOps.One);
-        return Engine.TensorWhere(
-            Engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), cosine, new Tensor<T>(dot.Shape.ToArray()));
+        var wideA = a.Cast<double>();
+        var wideB = b.Cast<double>();
+        var dot = Engine.TensorMatMul(wideA, Engine.TensorTranspose(wideB));
+        var normsA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(wideA, wideA), [1], keepDims: true));
+        var normsB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(wideB, wideB), [1], keepDims: true));
+        var denom = Engine.TensorMatMul(normsA, Engine.TensorTranspose(normsB));
+        var positive = Engine.TensorGreaterThan(denom, 1e-10);
+        var safeDenom = Engine.TensorWhere(positive, denom, Tensor<double>.CreateDefault(denom.Shape.ToArray(), 1.0));
+        var cosine = Engine.TensorClamp(Engine.TensorDivide(dot, safeDenom), -1.0, 1.0);
+        return Engine.TensorWhere(positive, cosine, new Tensor<double>(dot.Shape.ToArray())).Cast<T>();
     }
 
     /// <summary>
@@ -178,16 +193,10 @@ internal static class DistillationHelper<T>
     /// <summary>
     /// Elementwise max(value, floor); NaN entries stay NaN (like Math.Max).
     /// </summary>
-    private static Vector<T> ClampBelow(Vector<T> values, double floor)
+    private static Tensor<double> ClampBelow(Tensor<double> values, double floor)
     {
-        return Engine.Max(Vector<T>.CreateDefault(values.Length, NumOps.FromDouble(floor)), values);
+        return Engine.TensorMax(Tensor<double>.CreateDefault(values.Shape.ToArray(), floor), values);
     }
 
-    /// <summary>
-    /// Elementwise max(value, floor); NaN entries stay NaN (like Math.Max).
-    /// </summary>
-    private static Tensor<T> ClampBelow(Tensor<T> values, double floor)
-    {
-        return Engine.TensorMax(Tensor<T>.CreateDefault(values.Shape.ToArray(), NumOps.FromDouble(floor)), values);
-    }
+    // Probability floors are applied in double before any conversion back to T.
 }

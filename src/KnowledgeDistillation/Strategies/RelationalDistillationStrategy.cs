@@ -286,72 +286,60 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </remarks>
     private Tensor<T> ComputeDistanceWiseGradient(Tensor<T> students, Tensor<T> teachers)
     {
-        int n = students.Shape[0];
-        int dim = students.Shape[1];
-        int pairCount = n * (n - 1) / 2;
-        var zeros = new Tensor<T>([n, n]);
-
-        var studentDistances = PairwiseDistances(students);
-        var diff = Engine.TensorSubtract(studentDistances, PairwiseDistances(teachers));
-
-        // Huber loss gradient: quadratic region 2·diff, linear region 2·sign(diff)
-        var huberGrad = Engine.TensorMultiplyScalar(
-            Engine.TensorWhere(Engine.TensorLessThan(Engine.TensorAbs(diff), NumOps.One), diff, Engine.TensorSign(diff)),
-            NumOps.FromDouble(2.0 / pairCount));
-        var weights = Engine.TensorWhere(OffDiagonalMask(n), huberGrad, zeros);
-
-        switch (_distanceMetric)
+        int n = students.Shape[0], dimensions = students.Shape[1];
+        var wideStudents = students.Cast<double>();
+        var wideTeachers = teachers.Cast<double>();
+        double pairCount = n * (double)(n - 1) / 2;
+        var blocks = new List<Tensor<double>>();
+        for (int i = 0; i < n; i += DistillationPairOps.RowBlockSize)
         {
-            case RelationalDistanceMetric.Euclidean:
+            int count = Math.Min(DistillationPairOps.RowBlockSize, n - i);
+            var a = Engine.TensorNarrow(wideStudents, 0, i, count);
+            var ta = Engine.TensorNarrow(wideTeachers, 0, i, count);
+            var gradient = new Tensor<double>([count, dimensions]);
+            for (int j = 0; j < n; j += DistillationPairOps.RowBlockSize)
             {
-                // ∇||x-y|| = (x-y) / ||x-y|| (no direction for coincident points)
-                var positive = Engine.TensorGreaterThan(studentDistances, NumOps.Zero);
-                var safeDistances = Engine.TensorWhere(positive, studentDistances, Tensor<T>.CreateDefault([n, n], NumOps.One));
-                var coefficients = Engine.TensorWhere(positive, Engine.TensorDivide(weights, safeDistances), zeros);
-
-                // Σ_j c_ij (x_i - x_j) = x_i Σ_j c_ij - (C X)_i
-                return Engine.TensorSubtract(
-                    Engine.TensorMultiply(students, Column(Engine.ReduceSum(coefficients, [1], keepDims: false), dim)),
-                    Engine.TensorMatMul(coefficients, students));
+                int otherCount = Math.Min(DistillationPairOps.RowBlockSize, n - j);
+                var b = Engine.TensorNarrow(wideStudents, 0, j, otherCount);
+                var tb = Engine.TensorNarrow(wideTeachers, 0, j, otherCount);
+                var distances = MetricDistances(a, b);
+                var difference = Engine.TensorSubtract(distances, MetricDistances(ta, tb));
+                var weights = OffDiagonalBlock(Engine.TensorMultiplyScalar(Engine.TensorWhere(
+                    Engine.TensorLessThan(Engine.TensorAbs(difference), 1.0), difference, Engine.TensorSign(difference)), 2.0 / pairCount), i, j);
+                Tensor<double> contribution;
+                if (_distanceMetric == RelationalDistanceMetric.Cosine)
+                {
+                    var dots = Engine.TensorMatMul(a, Engine.TensorTranspose(b));
+                    var normA = Engine.ReduceSum(Engine.TensorMultiply(a, a), [1], keepDims: true);
+                    var normB = Engine.ReduceSum(Engine.TensorMultiply(b, b), [1], keepDims: true);
+                    var denominator = Engine.TensorSqrt(Engine.TensorMatMul(normA, Engine.TensorTranspose(normB)));
+                    var positive = Engine.TensorGreaterThan(denominator, 1e-10);
+                    var safe = Engine.TensorWhere(positive, denominator, Tensor<double>.CreateDefault([count, otherCount], 1.0));
+                    var valid = Engine.TensorMultiply(positive, Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorDivide(dots, safe)), 1.0));
+                    var zeros = new Tensor<double>([count, otherCount]);
+                    var cross = Engine.TensorWhere(valid, Engine.TensorDivide(weights, safe), zeros);
+                    var normProduct = Engine.TensorMultiply(safe, Engine.TensorBroadcastTo(normA, safe.Shape.ToArray()));
+                    normProduct = Engine.TensorWhere(valid, normProduct, Tensor<double>.CreateDefault([count, otherCount], 1.0));
+                    var self = Engine.TensorWhere(valid, Engine.TensorDivide(Engine.TensorMultiply(weights, dots), normProduct), zeros);
+                    contribution = Engine.TensorSubtract(
+                        Engine.TensorMultiply(a, Engine.TensorBroadcastTo(Engine.ReduceSum(self, [1], keepDims: true), a.Shape.ToArray())),
+                        Engine.TensorMatMul(cross, b));
+                }
+                else
+                {
+                    if (_distanceMetric == RelationalDistanceMetric.Euclidean)
+                    {
+                        var positive = Engine.TensorGreaterThan(distances, 0.0);
+                        var safe = Engine.TensorWhere(positive, distances, Tensor<double>.CreateDefault([count, otherCount], 1.0));
+                        weights = Engine.TensorWhere(positive, Engine.TensorDivide(weights, safe), new Tensor<double>([count, otherCount]));
+                    }
+                    contribution = DistillationPairOps.WeightedDifferences(a, b, weights, _distanceMetric == RelationalDistanceMetric.Manhattan);
+                }
+                gradient = Engine.TensorAdd(gradient, contribution);
             }
-
-            case RelationalDistanceMetric.Cosine:
-            {
-                // ∇(1 - cos(x,y)) = -[y/(||x|| ||y||) - (x·y)x/(||x||^3 ||y||)], zero where the
-                // similarity is clamped to ±1 or set to 0 for vanishing norms
-                var dots = Engine.TensorMatMul(students, Engine.TensorTranspose(students));
-                var squaredNorms = Engine.ReduceSum(Engine.TensorMultiply(students, students), [1], keepDims: true); // [n, 1]
-                var denom = Engine.TensorSqrt(Engine.TensorMatMul(squaredNorms, Engine.TensorTranspose(squaredNorms)));
-                var nonDegenerate = Engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
-                var safeDenom = Engine.TensorWhere(nonDegenerate, denom, Tensor<T>.CreateDefault([n, n], NumOps.One));
-                var rawCosine = Engine.TensorDivide(dots, safeDenom);
-                var valid = Engine.TensorMultiply(
-                    nonDegenerate, Engine.TensorLessThan(Engine.TensorAbs(rawCosine), NumOps.One));
-
-                var crossWeights = Engine.TensorWhere(valid, Engine.TensorDivide(weights, safeDenom), zeros);
-                var selfWeights = Engine.TensorWhere(
-                    valid,
-                    Engine.TensorDivide(
-                        Engine.TensorMultiply(weights, dots),
-                        Engine.TensorMultiply(safeDenom, Engine.TensorBroadcastTo(squaredNorms, [n, n]))),
-                    zeros);
-
-                return Engine.TensorSubtract(
-                    Engine.TensorMultiply(students, Column(Engine.ReduceSum(selfWeights, [1], keepDims: false), dim)),
-                    Engine.TensorMatMul(crossWeights, students));
-            }
-
-            case RelationalDistanceMetric.Manhattan:
-            {
-                // ∇Σ|x_i - y_i| = sign(x_i - y_i) for each component
-                var pairWeights = Engine.TensorBroadcastTo(Engine.Reshape(weights, [n, n, 1]), [n, n, dim]);
-                return Engine.ReduceSum(
-                    Engine.TensorMultiply(pairWeights, Engine.TensorSign(PairwiseDifferences(students))), [1], keepDims: false);
-            }
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(_distanceMetric), _distanceMetric, $"Gradient is not defined for distance metric '{_distanceMetric}'. Valid metrics: Euclidean, Cosine, Manhattan.");
+            blocks.Add(gradient);
         }
+        return Engine.TensorConcatenate(blocks.ToArray(), 0).Cast<T>();
     }
 
     /// <summary>
@@ -502,28 +490,29 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </summary>
     private T ComputeDistanceWiseLoss(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings, int n)
     {
-        int pairCount = n * (n - 1) / 2;
-        if (pairCount == 0)
-            return NumOps.Zero;
-
-        // Compute all pairwise distances for both student and teacher
-        var diff = Engine.TensorSubtract(
-            PairwiseDistances(DistillationHelper<T>.StackRows(studentEmbeddings.Take(n).ToArray())),
-            PairwiseDistances(DistillationHelper<T>.StackRows(teacherEmbeddings.Take(n).ToArray())));
-
-        // Huber loss for robust distance matching: quadratic for small differences,
-        // linear for large differences (more robust)
-        var absDiff = Engine.TensorAbs(diff);
-        var pairLoss = Engine.TensorWhere(
-            Engine.TensorLessThan(absDiff, NumOps.One),
-            Engine.TensorMultiply(diff, diff),
-            Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(absDiff, NumOps.FromDouble(2.0)), NumOps.One));
-
-        // Distances are symmetric, so the off-diagonal entries hold every pair (i < j) twice
-        T loss = Engine.TensorSum(Engine.TensorWhere(OffDiagonalMask(n), pairLoss, new Tensor<T>([n, n])));
-
-        // Normalize by number of pairs
-        return NumOps.Divide(loss, NumOps.FromDouble(2.0 * pairCount));
+        if (n < 2) return NumOps.Zero;
+        var students = DistillationHelper<T>.StackRows(studentEmbeddings.Take(n).ToArray()).Cast<double>();
+        var teachers = DistillationHelper<T>.StackRows(teacherEmbeddings.Take(n).ToArray()).Cast<double>();
+        double sum = 0;
+        for (int i = 0; i < n; i += DistillationPairOps.RowBlockSize)
+        {
+            int count = Math.Min(DistillationPairOps.RowBlockSize, n - i);
+            var a = Engine.TensorNarrow(students, 0, i, count);
+            var ta = Engine.TensorNarrow(teachers, 0, i, count);
+            for (int j = 0; j < n; j += DistillationPairOps.RowBlockSize)
+            {
+                int otherCount = Math.Min(DistillationPairOps.RowBlockSize, n - j);
+                var b = Engine.TensorNarrow(students, 0, j, otherCount);
+                var tb = Engine.TensorNarrow(teachers, 0, j, otherCount);
+                var difference = Engine.TensorSubtract(MetricDistances(a, b), MetricDistances(ta, tb));
+                var absolute = Engine.TensorAbs(difference);
+                var loss = Engine.TensorWhere(Engine.TensorLessThan(absolute, 1.0),
+                    Engine.TensorMultiply(difference, difference),
+                    Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(absolute, 2.0), 1.0));
+                sum += Engine.TensorSum(OffDiagonalBlock(loss, i, j));
+            }
+        }
+        return NumOps.FromDouble(sum / (n * (double)(n - 1)));
     }
 
     /// <summary>
@@ -584,43 +573,27 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     /// <summary>
     /// [n, n] distances between every pair of rows, based on the selected metric.
     /// </summary>
-    private Tensor<T> PairwiseDistances(Tensor<T> rows)
+    private Tensor<double> MetricDistances(Tensor<double> a, Tensor<double> b)
     {
-        switch (_distanceMetric)
+        if (_distanceMetric == RelationalDistanceMetric.Cosine)
         {
-            case RelationalDistanceMetric.Euclidean:
-            {
-                var diff = PairwiseDifferences(rows);
-                return Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), [2], keepDims: false));
-            }
-
-            case RelationalDistanceMetric.Cosine:
-            {
-                // Distance = 1 - similarity
-                var similarity = DistillationHelper<T>.CosineSimilarityMatrix(rows, rows);
-                return Engine.TensorSubtract(Tensor<T>.CreateDefault(similarity.Shape.ToArray(), NumOps.One), similarity);
-            }
-
-            case RelationalDistanceMetric.Manhattan:
-                return Engine.ReduceSum(Engine.TensorAbs(PairwiseDifferences(rows)), [2], keepDims: false);
-
-            default:
-                throw new ArgumentOutOfRangeException(nameof(_distanceMetric), _distanceMetric, $"Unrecognised RelationalDistanceMetric '{_distanceMetric}'. Valid metrics: Euclidean, Cosine, Manhattan.");
+            var cosine = DistillationHelper<double>.CosineSimilarityMatrix(a, b);
+            return Engine.TensorSubtract(Tensor<double>.CreateDefault(cosine.Shape.ToArray(), 1.0), cosine);
         }
+        if (_distanceMetric != RelationalDistanceMetric.Euclidean && _distanceMetric != RelationalDistanceMetric.Manhattan)
+            throw new ArgumentOutOfRangeException(nameof(_distanceMetric));
+        var distance = DistillationPairOps.DistanceBlock(a, b, _distanceMetric == RelationalDistanceMetric.Manhattan);
+        return _distanceMetric == RelationalDistanceMetric.Manhattan ? distance : Engine.TensorSqrt(distance);
     }
 
-    /// <summary>
-    /// [n, n, d] tensor of row differences x_i - x_j.
-    /// </summary>
-    private Tensor<T> PairwiseDifferences(Tensor<T> rows)
+    private Tensor<double> OffDiagonalBlock(Tensor<double> values, int rowStart, int columnStart)
     {
-        int n = rows.Shape[0];
-        int dim = rows.Shape[1];
-        int[] shape = [n, n, dim];
-        return Engine.TensorSubtract(
-            Engine.TensorBroadcastTo(Engine.Reshape(rows, [n, 1, dim]), shape),
-            Engine.TensorBroadcastTo(Engine.Reshape(rows, [1, n, dim]), shape));
+        var rows = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<int>(rowStart, rowStart + values.Shape[0], 1), [values.Shape[0], 1]), values.Shape.ToArray());
+        var columns = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<int>(columnStart, columnStart + values.Shape[1], 1), [1, values.Shape[1]]), values.Shape.ToArray());
+        return Engine.TensorWhere(Engine.TensorNotEquals(rows, columns).Cast<double>(), values, new Tensor<double>(values.Shape.ToArray()));
     }
+
+    // Pair differences are assembled only inside bounded row/feature blocks.
 
     /// <summary>
     /// [n, n] mask that is 1 off the diagonal (pairs i != j) and 0 on it.

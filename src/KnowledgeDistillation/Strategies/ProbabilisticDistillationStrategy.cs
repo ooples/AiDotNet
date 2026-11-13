@@ -179,27 +179,10 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 
     private T ComputeMMDLoss(Vector<T>[] studentPredictions, Vector<T>[] teacherPredictions)
     {
-        // Maximum Mean Discrepancy with RBF kernel
-        // MMD² = E[k(x,x')] - 2E[k(x,y)] + E[k(y,y')]
-        // where x~student, y~teacher
-
-        int n = studentPredictions.Length;
-
-        // E[k(x,x')] - student vs student
-        T studentKernel = ComputeAverageKernel(studentPredictions, studentPredictions);
-
-        // E[k(y,y')] - teacher vs teacher
-        T teacherKernel = ComputeAverageKernel(teacherPredictions, teacherPredictions);
-
-        // E[k(x,y)] - student vs teacher (cross term)
-        T crossKernel = ComputeAverageKernel(studentPredictions, teacherPredictions);
-
-        // MMD² = k(x,x') - 2*k(x,y) + k(y,y')
-        var mmd = NumOps.Add(studentKernel, teacherKernel);
-        mmd = NumOps.Subtract(mmd, NumOps.Multiply(crossKernel, NumOps.FromDouble(2.0)));
-
-        // Return squared MMD (already computed above)
-        return mmd;
+        double studentKernel = ComputeAverageKernel(studentPredictions, studentPredictions);
+        double teacherKernel = ComputeAverageKernel(teacherPredictions, teacherPredictions);
+        double crossKernel = ComputeAverageKernel(studentPredictions, teacherPredictions);
+        return NumOps.FromDouble(studentKernel + teacherKernel - 2.0 * crossKernel);
     }
 
     private T ComputeEntropyLoss(Vector<T>[] studentPredictions, Vector<T>[] teacherPredictions)
@@ -242,40 +225,39 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
     /// Average RBF kernel value over all pairs of the two sets (the diagonal is skipped when both are the
     /// same set, so a set is not compared with itself sample by sample).
     /// </summary>
-    private T ComputeAverageKernel(Vector<T>[] set1, Vector<T>[] set2)
+    private double ComputeAverageKernel(Vector<T>[] set1, Vector<T>[] set2)
     {
-        int n1 = set1.Length;
-        int n2 = set2.Length;
-        bool sameSet = set1 == set2;
-        int pairCount = sameSet ? n1 * (n1 - 1) : n1 * n2;
-        if (pairCount <= 0)
-            return NumOps.Zero;
-
-        var kernel = RBFKernelMatrix(DistillationHelper<T>.StackRows(set1), DistillationHelper<T>.StackRows(set2));
-        if (sameSet)
+        int n = set1.Length, m = set2.Length;
+        bool sameSet = ReferenceEquals(set1, set2);
+        double pairs = sameSet ? n * (double)(n - 1) : n * (double)m;
+        if (pairs == 0) return 0;
+        var a = DistillationHelper<T>.StackRows(set1).Cast<double>();
+        var b = sameSet ? a : DistillationHelper<T>.StackRows(set2).Cast<double>();
+        double sum = 0;
+        for (int i = 0; i < n; i += DistillationPairOps.RowBlockSize)
         {
-            // Skip diagonal for same set
-            kernel = Engine.TensorMultiply(kernel, OffDiagonalMask(n1));
+            var left = Engine.TensorNarrow(a, 0, i, Math.Min(DistillationPairOps.RowBlockSize, n - i));
+            for (int j = 0; j < m; j += DistillationPairOps.RowBlockSize)
+            {
+                var right = Engine.TensorNarrow(b, 0, j, Math.Min(DistillationPairOps.RowBlockSize, m - j));
+                sum += Engine.TensorSum(RBFKernelBlock(left, right, i, j, sameSet));
+            }
         }
-
-        return NumOps.Divide(Engine.TensorSum(kernel), NumOps.FromDouble(pairCount));
+        return sum / pairs;
     }
 
     /// <summary>
     /// RBF kernel k(x,y) = exp(-||x-y||²/(2*σ²)) for every row pair ([n, d] and [m, d] -> [n, m]), with the
     /// squared distance summed from the explicit differences.
     /// </summary>
-    private Tensor<T> RBFKernelMatrix(Tensor<T> a, Tensor<T> b)
+    private Tensor<double> RBFKernelBlock(Tensor<double> a, Tensor<double> b, int rowStart, int columnStart, bool sameSet)
     {
-        int n = a.Shape[0];
-        int m = b.Shape[0];
-        int d = a.Shape[1];
-        var diff = Engine.TensorSubtract(
-            Engine.TensorBroadcastTo(Engine.Reshape(a, [n, 1, d]), [n, m, d]),
-            Engine.TensorBroadcastTo(Engine.Reshape(b, [1, m, d]), [n, m, d]));
-        var squaredDistance = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), [2], keepDims: false);
-        return Engine.TensorExp(Engine.TensorMultiplyScalar(
-            squaredDistance, NumOps.FromDouble(-1.0 / (2.0 * _mmdBandwidth * _mmdBandwidth))));
+        var squaredDistance = DistillationPairOps.DistanceBlock(a, b);
+        var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(squaredDistance, -1.0 / (2.0 * _mmdBandwidth * _mmdBandwidth)));
+        if (!sameSet) return kernel;
+        var rows = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<int>(rowStart, rowStart + a.Shape[0], 1), [a.Shape[0], 1]), kernel.Shape.ToArray());
+        var columns = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<int>(columnStart, columnStart + b.Shape[0], 1), [1, b.Shape[0]]), kernel.Shape.ToArray());
+        return Engine.TensorWhere(Engine.TensorNotEquals(rows, columns).Cast<double>(), kernel, new Tensor<double>(kernel.Shape.ToArray()));
     }
 
     /// <summary>
@@ -368,42 +350,33 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
     /// </summary>
     private Matrix<T> ComputeMMDGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
     {
-        int batchSize = studentSoft.Length;
-        int numClasses = studentSoft[0].Length;
-        int teacherCount = teacherSoft.Length;
-        int[] shape = [batchSize, numClasses];
+        int n = studentSoft.Length, m = teacherSoft.Length, dimensions = studentSoft[0].Length;
         double sigmaSquared = _mmdBandwidth * _mmdBandwidth;
-
-        var s = DistillationHelper<T>.StackRows(studentSoft);
-        var t = DistillationHelper<T>.StackRows(teacherSoft);
-
-        // Σ_j k_ij (x_i - y_j) = rowsum(K)_i * x_i - (K @ Y)_i
-        Tensor<T> KernelWeightedDifferences(Tensor<T> kernel, Tensor<T> others) =>
-            Engine.TensorSubtract(
-                Engine.TensorMultiply(s, Engine.TensorBroadcastTo(Engine.ReduceSum(kernel, [1], keepDims: true), shape)),
-                Engine.TensorMatMul(kernel, others));
-
-        var gradient = new Tensor<T>(shape);
-
-        int studentPairs = batchSize * (batchSize - 1);
-        if (studentPairs > 0)
+        var students = DistillationHelper<T>.StackRows(studentSoft).Cast<double>();
+        var teachers = DistillationHelper<T>.StackRows(teacherSoft).Cast<double>();
+        var blocks = new List<Tensor<double>>();
+        for (int i = 0; i < n; i += DistillationPairOps.RowBlockSize)
         {
-            // d/ds_i of Σ_{a≠b} k(s_a, s_b) / (n(n-1)): each unordered pair appears twice
-            var studentKernel = Engine.TensorMultiply(RBFKernelMatrix(s, s), OffDiagonalMask(batchSize));
-            gradient = Engine.TensorMultiplyScalar(
-                KernelWeightedDifferences(studentKernel, s), NumOps.FromDouble(-2.0 / (sigmaSquared * studentPairs)));
+            int count = Math.Min(DistillationPairOps.RowBlockSize, n - i);
+            var left = Engine.TensorNarrow(students, 0, i, count);
+            var gradient = new Tensor<double>([count, dimensions]);
+            void Accumulate(Tensor<double> others, bool sameSet, double scale)
+            {
+                for (int j = 0; j < others.Shape[0]; j += DistillationPairOps.RowBlockSize)
+                {
+                    var right = Engine.TensorNarrow(others, 0, j, Math.Min(DistillationPairOps.RowBlockSize, others.Shape[0] - j));
+                    var kernel = RBFKernelBlock(left, right, i, j, sameSet);
+                    var differences = Engine.TensorSubtract(
+                        Engine.TensorMultiply(left, Engine.TensorBroadcastTo(Engine.ReduceSum(kernel, [1], keepDims: true), left.Shape.ToArray())),
+                        Engine.TensorMatMul(kernel, right));
+                    gradient = Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(differences, scale));
+                }
+            }
+            if (n > 1) Accumulate(students, true, -2.0 / (sigmaSquared * n * (double)(n - 1)));
+            if (m > 0) Accumulate(teachers, false, 2.0 / (sigmaSquared * n * (double)m));
+            blocks.Add(gradient);
         }
-
-        int crossPairs = batchSize * teacherCount;
-        if (crossPairs > 0)
-        {
-            // d/ds_i of -2 Σ_{i,j} k(s_i, t_j) / (n·m)
-            var crossKernel = RBFKernelMatrix(s, t);
-            gradient = Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(
-                KernelWeightedDifferences(crossKernel, t), NumOps.FromDouble(2.0 / (sigmaSquared * crossPairs))));
-        }
-
-        return gradient.ToMatrix();
+        return Engine.TensorConcatenate(blocks.ToArray(), 0).Cast<T>().ToMatrix();
     }
 
     /// <summary>
