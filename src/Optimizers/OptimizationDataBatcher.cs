@@ -262,11 +262,9 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
 
         if (data is Vector<T> vector)
         {
-            var result = new Vector<T>(indices.Length);
-            for (int i = 0; i < indices.Length; i++)
-            {
-                result[i] = vector[indices[i]];
-            }
+            var result = AiDotNet.Tensors.Engines.AiDotNetEngine.Current
+                .TensorGather(vector.AsTensor(), Vector<int>.FromArray(indices).AsTensor(), 0)
+                .AsVector();
             return CastToDataType<Vector<T>, TData>(result);
         }
 

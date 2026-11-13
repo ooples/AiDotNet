@@ -81,92 +81,80 @@ public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
     /// </summary>
     public override AudioFingerprint<T> Fingerprint(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Fingerprint(tensor);
     }
 
-    private double[,] ComputeMagnitude(Tensor<Complex<T>> stft)
+    private Tensor<T> ComputeMagnitude(Tensor<Complex<T>> stft)
     {
-        int numFrames = stft.Shape[0];
-        int numBins = stft.Shape[1];
-
-        var magnitude = new double[numFrames, numBins];
-
-        for (int f = 0; f < numFrames; f++)
-        {
-            for (int b = 0; b < numBins; b++)
-            {
-                var complex = stft[f, b];
-                double real = NumOps.ToDouble(complex.Real);
-                double imag = NumOps.ToDouble(complex.Imaginary);
-                magnitude[f, b] = Math.Sqrt(real * real + imag * imag);
-            }
-        }
-
-        return magnitude;
+        // |X| = sqrt(re^2 + im^2), shape [numFrames, numBins]
+        var real = Engine.TensorReal(stft);
+        var imag = Engine.TensorImag(stft);
+        return Engine.TensorSqrt(Engine.TensorAdd(Engine.TensorSquare(real), Engine.TensorSquare(imag)));
     }
 
-    private List<SpectralPeak> FindPeaks(double[,] magnitude)
+    private List<SpectralPeak> FindPeaks(Tensor<T> magnitude)
     {
-        int numFrames = magnitude.GetLength(0);
-        int numBins = magnitude.GetLength(1);
+        int numFrames = magnitude.Shape[0];
+        int numBins = magnitude.Shape[1];
+        int radius = _options.PeakNeighborhood;
+        if (radius < 0)
+            throw new IndexOutOfRangeException("PeakNeighborhood must be non-negative.");
 
         var peaks = new List<SpectralPeak>();
+        Tensor<T> peakValues = new Tensor<T>([0]);
 
-        // Find local maxima in the spectrogram
-        for (int f = _options.PeakNeighborhood; f < numFrames - _options.PeakNeighborhood; f++)
+        // Find local maxima in the spectrogram: not below the threshold and strictly greater than
+        // every neighbour (a comparison with NaN never disqualifies, as before)
+        int innerFrames = numFrames - 2 * radius;
+        int innerBins = numBins - 2 * radius;
+        if (innerFrames > 0 && innerBins > 0)
         {
-            for (int b = _options.PeakNeighborhood; b < numBins - _options.PeakNeighborhood; b++)
+            var center = Engine.TensorSlice(magnitude, [radius, radius], [innerFrames, innerBins]);
+            var ones = Tensor<T>.CreateDefault([innerFrames, innerBins], NumOps.One);
+            var isPeak = Engine.TensorSubtract(ones, Engine.TensorLessThan(center, NumOps.FromDouble(_options.PeakThreshold)));
+            for (int df = -radius; df <= radius; df++)
             {
-                double value = magnitude[f, b];
-
-                if (value < _options.PeakThreshold)
-                    continue;
-
-                // Check if this is a local maximum
-                bool isPeak = true;
-                for (int df = -_options.PeakNeighborhood; df <= _options.PeakNeighborhood && isPeak; df++)
+                for (int db = -radius; db <= radius; db++)
                 {
-                    for (int db = -_options.PeakNeighborhood; db <= _options.PeakNeighborhood && isPeak; db++)
-                    {
-                        if (df == 0 && db == 0) continue;
-
-                        if (magnitude[f + df, b + db] >= value)
-                        {
-                            isPeak = false;
-                        }
-                    }
+                    if (df == 0 && db == 0) continue;
+                    var neighbor = Engine.TensorSlice(magnitude, [radius + df, radius + db], [innerFrames, innerBins]);
+                    isPeak = Engine.TensorMultiply(isPeak, Engine.TensorSubtract(ones, Engine.TensorGreaterEqual(neighbor, center)));
                 }
+            }
 
-                if (isPeak)
-                {
-                    peaks.Add(new SpectralPeak
-                    {
-                        Frame = f,
-                        Bin = b,
-                        Magnitude = value
-                    });
-                }
+            // Peaks in frame-then-bin order (row-major), with their magnitudes
+            var coords = Engine.TensorNonzero(isPeak).ToArray();
+            var flatIndex = new int[coords.Length / 2];
+            for (int k = 0; k < flatIndex.Length; k++)
+            {
+                peaks.Add(new SpectralPeak { Frame = coords[2 * k] + radius, Bin = coords[2 * k + 1] + radius });
+                flatIndex[k] = coords[2 * k] * innerBins + coords[2 * k + 1];
+            }
+            if (flatIndex.Length > 0)
+            {
+                peakValues = Engine.TensorIndexSelect(
+                    AudioEngineOps.Flatten(Engine, center), new Tensor<int>(flatIndex, [flatIndex.Length]), 0);
             }
         }
 
-        // Keep only the strongest peaks per time window
+        // Keep only the strongest peaks per time window (stable: equal magnitudes keep peak order,
+        // NaN magnitudes rank last)
         var filteredPeaks = new List<SpectralPeak>();
         int windowSize = _options.PeakWindowSizeFrames;
 
         for (int start = 0; start < numFrames; start += windowSize)
         {
-            var windowPeaks = peaks
-                .Where(p => p.Frame >= start && p.Frame < start + windowSize)
-                .OrderByDescending(p => p.Magnitude)
-                .Take(_options.MaxPeaksPerWindow)
-                .ToList();
+            int windowStart = start;
+            var members = Enumerable.Range(0, peaks.Count)
+                .Where(i => peaks[i].Frame >= windowStart && peaks[i].Frame < windowStart + windowSize)
+                .ToArray();
+            if (members.Length == 0) continue;
 
-            filteredPeaks.AddRange(windowPeaks);
+            var windowValues = Engine.TensorIndexSelect(peakValues, new Tensor<int>(members, [members.Length]), 0);
+            filteredPeaks.AddRange(AudioEngineOps.StableDescendingOrder(Engine, windowValues)
+                .Take(_options.MaxPeaksPerWindow)
+                .Select(rank => peaks[members[rank]]));
         }
 
         return filteredPeaks.OrderBy(p => p.Frame).ThenBy(p => p.Bin).ToList();
@@ -207,7 +195,9 @@ public class SpectrogramFingerprinter<T> : AudioFingerprinterBase<T>
         }
 
         // Convert to fingerprint data
-        var fpData = hashes.Select(h => NumOps.FromDouble(h)).ToArray();
+        var fpData = hashes.Count == 0
+            ? new T[0]
+            : new Tensor<uint>(hashes.ToArray(), [hashes.Count]).Cast<T>().ToArray();
 
         // Calculate actual frame count from audio length
         int actualFrameCount = Math.Max(1, (audioLength - _options.FftSize) / _options.HopLength + 1);
@@ -337,5 +327,4 @@ internal class SpectralPeak
 {
     public int Frame { get; set; }
     public int Bin { get; set; }
-    public double Magnitude { get; set; }
 }

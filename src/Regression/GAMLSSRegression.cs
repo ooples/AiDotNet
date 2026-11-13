@@ -189,16 +189,9 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         InitializeParameters(y);
 
         // Initialize linear predictors
-        var etaLocation = new Vector<T>(n);
-        var etaScale = new Vector<T>(n);
-        var etaShape = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            etaLocation[i] = _locationIntercept;
-            etaScale[i] = _scaleIntercept;
-            etaShape[i] = _shapeIntercept;
-        }
+        var etaLocation = Engine.Fill(n, _locationIntercept);
+        var etaScale = Engine.Fill(n, _scaleIntercept);
+        var etaShape = Engine.Fill(n, _shapeIntercept);
 
         double prevDeviance = double.MaxValue;
 
@@ -246,20 +239,18 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
         var distributions = await PredictDistributionsAsync(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (distributions.Length == 0)
         {
-            // Denormalize: prediction = standardized_mean * yStd + yMean
-            double mean = NumOps.ToDouble(distributions[i].Mean);
-            double pred = mean * NumOps.ToDouble(_yStd) + NumOps.ToDouble(_yMean);
-            // Guard against NaN/Infinity from degenerate data (e.g., collinear features)
-            if (double.IsNaN(pred) || double.IsInfinity(pred))
-                pred = NumOps.ToDouble(_yMean);
-            predictions[i] = NumOps.FromDouble(pred);
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Denormalize: prediction = standardized_mean * yStd + yMean
+        var means = new Vector<T>(distributions.Select(distribution => distribution.Mean));
+        var fallback = Engine.Fill(means.Length, _yMean);
+        var predictions = Tensor<T>.FromVector(Engine.Add(Engine.Multiply(means, _yStd), fallback));
+
+        // Guard against NaN/Infinity from degenerate data (e.g., collinear features)
+        return Engine.TensorWhere(Engine.TensorIsFinite(predictions), predictions, Tensor<T>.FromVector(fallback)).ToVector();
     }
 
     /// <summary>
@@ -301,18 +292,13 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public async Task<(Vector<T> Lower, Vector<T> Upper)> PredictIntervalAsync(Matrix<T> input, double confidenceLevel = 0.95)
     {
         var distributions = await PredictDistributionsAsync(input);
-        var lower = new Vector<T>(input.Rows);
-        var upper = new Vector<T>(input.Rows);
 
         double alpha = 1 - confidenceLevel;
         T alphaLower = NumOps.FromDouble(alpha / 2);
         T alphaUpper = NumOps.FromDouble(1 - alpha / 2);
 
-        for (int i = 0; i < input.Rows; i++)
-        {
-            lower[i] = distributions[i].InverseCdf(alphaLower);
-            upper[i] = distributions[i].InverseCdf(alphaUpper);
-        }
+        var lower = new Vector<T>(distributions.Select(distribution => distribution.InverseCdf(alphaLower)));
+        var upper = new Vector<T>(distributions.Select(distribution => distribution.InverseCdf(alphaUpper)));
 
         return (lower, upper);
     }
@@ -323,20 +309,11 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void InitializeParameters(Vector<T> y)
     {
         // Compute initial estimates
-        T mean = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            mean = NumOps.Add(mean, y[i]);
-        }
-        mean = NumOps.Divide(mean, NumOps.FromDouble(y.Length));
+        T mean = NumOps.Divide(y.Length > 0 ? Engine.Sum(y) : NumOps.Zero, NumOps.FromDouble(y.Length));
 
-        T variance = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            T diff = NumOps.Subtract(y[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(y.Length));
+        var centered = Engine.Subtract(y, Engine.Fill(y.Length, mean));
+        T variance = NumOps.Divide(y.Length > 0 ? Engine.DotProduct(centered, centered) : NumOps.Zero, NumOps.FromDouble(y.Length));
+
         T minVariance = NumOps.FromDouble(1e-6);
         if (NumOps.LessThan(variance, minVariance))
         {
@@ -352,10 +329,12 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         {
             _locationCoefficients = new Vector<T>(_numFeatures);
         }
+
         if (_options.ScaleModelType != GAMLSSModelType.Constant)
         {
             _scaleCoefficients = new Vector<T>(_numFeatures);
         }
+
         if (_options.ShapeModelType != GAMLSSModelType.Constant)
         {
             _shapeCoefficients = new Vector<T>(_numFeatures);
@@ -367,33 +346,20 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private void FitLocationParameter(Matrix<T> x, Vector<T> y, Vector<T> etaLocation, Vector<T> etaScale, Vector<T> etaShape)
     {
-        int n = x.Rows;
-
         for (int iter = 0; iter < _options.MaxInnerIterations; iter++)
         {
-            // Compute working weights and adjusted dependent variable
-            var weights = new Vector<T>(n);
-            var z = new Vector<T>(n);
-
-            for (int i = 0; i < n; i++)
-            {
-                double mu = NumOps.ToDouble(etaLocation[i]);
-                double sigma = NumOps.ToDouble(NumOps.Exp(etaScale[i]));
-                double yi = NumOps.ToDouble(y[i]);
-
-                // For normal distribution: weight = 1/sigma^2, z = y
-                double w = 1.0 / (sigma * sigma);
-                double zi = yi;
-
-                weights[i] = NumOps.FromDouble(w);
-                z[i] = NumOps.FromDouble(zi);
-            }
+            // Compute working weights and adjusted dependent variable.
+            // For normal distribution: weight = 1/sigma^2 with sigma = exp(etaScale), z = y
+            var sigma = Engine.Exp(etaScale);
+            var weights = Engine.Reciprocal(Engine.Multiply(sigma, sigma));
+            var z = new Vector<T>(y);
 
             // Update coefficients using weighted least squares
             if (_locationCoefficients is null)
             {
                 throw new InvalidOperationException("Location coefficients have not been initialized.");
             }
+
             UpdateCoefficients(x, z, weights, ref _locationCoefficients, ref _locationIntercept);
             UpdateLinearPredictor(x, etaLocation, _locationCoefficients, _locationIntercept);
         }
@@ -405,34 +371,23 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void FitScaleParameter(Matrix<T> x, Vector<T> y, Vector<T> etaLocation, Vector<T> etaScale, Vector<T> etaShape)
     {
         int n = x.Rows;
+        T fisherWeight = NumOps.FromDouble(2.0);  // Fisher information for log(sigma) in normal
 
         for (int iter = 0; iter < _options.MaxInnerIterations; iter++)
         {
-            var weights = new Vector<T>(n);
-            var z = new Vector<T>(n);
-
-            for (int i = 0; i < n; i++)
-            {
-                double mu = NumOps.ToDouble(etaLocation[i]);
-                double logSigma = NumOps.ToDouble(etaScale[i]);
-                double sigma = Math.Exp(logSigma);
-                double yi = NumOps.ToDouble(y[i]);
-
-                // Working response and weight for log(sigma)
-                double residual = (yi - mu) / sigma;
-                double dldLogSigma = residual * residual - 1;  // d log L / d log(sigma)
-                double w = 2.0;  // Fisher information for log(sigma) in normal
-
-                double zi = logSigma + dldLogSigma / w;  // Newton step
-
-                weights[i] = NumOps.FromDouble(w);
-                z[i] = NumOps.FromDouble(zi);
-            }
+            // Working response and weight for log(sigma):
+            // residual = (y - mu) / sigma, dl/dlog(sigma) = residual^2 - 1, z = log(sigma) + dl / w (Newton step)
+            var sigma = Engine.Exp(etaScale);
+            var residual = Engine.Divide(Engine.Subtract(y, etaLocation), sigma);
+            var score = Engine.Subtract(Engine.Multiply(residual, residual), Engine.Fill(n, NumOps.One));
+            var z = Engine.Add(etaScale, Engine.Divide(score, fisherWeight));
+            var weights = Engine.Fill(n, fisherWeight);
 
             if (_scaleCoefficients is null)
             {
                 throw new InvalidOperationException("Scale coefficients have not been initialized.");
             }
+
             UpdateCoefficients(x, z, weights, ref _scaleCoefficients, ref _scaleIntercept);
             UpdateLinearPredictor(x, etaScale, _scaleCoefficients, _scaleIntercept, useExpLink: true);
         }
@@ -447,20 +402,9 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int iter = 0; iter < _options.MaxInnerIterations; iter++)
         {
-            var weights = new Vector<T>(n);
-            var z = new Vector<T>(n);
-
-            for (int i = 0; i < n; i++)
-            {
-                double mu = NumOps.ToDouble(etaLocation[i]);
-                double sigma = NumOps.ToDouble(NumOps.Exp(etaScale[i]));
-                double nu = NumOps.ToDouble(NumOps.Exp(etaShape[i]));  // degrees of freedom
-                double yi = NumOps.ToDouble(y[i]);
-
-                // Simplified: constant weight, linear update
-                weights[i] = NumOps.FromDouble(1.0);
-                z[i] = etaShape[i];
-            }
+            // Simplified: constant weight, linear update on the current shape predictor
+            var weights = Engine.Fill(n, NumOps.One);
+            var z = new Vector<T>(etaShape);
 
             if (_shapeCoefficients != null)
             {
@@ -478,44 +422,19 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = x.Rows;
         int p = _numFeatures;
 
-        // Compute X'WX and X'Wz with intercept
-        var xtwx = new Matrix<T>(p + 1, p + 1);
-        var xtwz = new Vector<T>(p + 1);
+        // Compute X'WX and X'Wz with an intercept column first
+        var design = (x.Columns == p ? x : x.GetSubMatrix(0, 0, n, p)).AddConstantColumn(NumOps.One);
+        var designTensor = Tensor<T>.FromMatrix(design);
+        var weightColumn = Engine.TensorBroadcastTo(new Tensor<T>(new[] { n, 1 }, weights), new[] { n, p + 1 });
+        var weightedDesign = Engine.TensorMultiply(designTensor, weightColumn).ToMatrix();
+        var designTranspose = Engine.MatrixTranspose(design);
+        var xtwx = Engine.MatrixMultiply(designTranspose, weightedDesign);
+        var xtwz = Engine.MatrixVectorMultiply(designTranspose, Engine.Multiply(weights, z));
 
-        for (int i = 0; i < n; i++)
-        {
-            T w = weights[i];
-            T zi = z[i];
-
-            // Intercept term
-            xtwx[0, 0] = NumOps.Add(xtwx[0, 0], w);
-            xtwz[0] = NumOps.Add(xtwz[0], NumOps.Multiply(w, zi));
-
-            for (int j = 0; j < p; j++)
-            {
-                T xij = x[i, j];
-                T wxij = NumOps.Multiply(w, xij);
-                xtwx[0, j + 1] = NumOps.Add(xtwx[0, j + 1], wxij);
-                xtwx[j + 1, 0] = NumOps.Add(xtwx[j + 1, 0], wxij);
-                xtwz[j + 1] = NumOps.Add(xtwz[j + 1], NumOps.Multiply(wxij, zi));
-
-                for (int k = 0; k <= j; k++)
-                {
-                    T xik = x[i, k];
-                    T val = NumOps.Multiply(wxij, xik);
-                    xtwx[j + 1, k + 1] = NumOps.Add(xtwx[j + 1, k + 1], val);
-                    if (k < j)
-                        xtwx[k + 1, j + 1] = xtwx[j + 1, k + 1];
-                }
-            }
-        }
-
-        // Add regularization
+        // Add regularization (not on the intercept)
         T lambda = _options.UseRegularization ? NumOps.FromDouble(_options.RegularizationStrength) : NumOps.Zero;
-        for (int j = 1; j <= p; j++)
-        {
-            xtwx[j, j] = NumOps.Add(xtwx[j, j], lambda);
-        }
+        var penalty = Vector<T>.Concatenate(new[] { Engine.FillZero<T>(1), Engine.Fill(p, lambda) });
+        xtwx = Engine.MatrixAdd(xtwx, Matrix<T>.CreateDiagonal(penalty));
 
         // Solve the system
         var solution = SolveLinearSystem(xtwx, xtwz, p + 1);
@@ -528,12 +447,9 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
             NumOps.Multiply(oneMinusLr, intercept),
             NumOps.Multiply(lr, solution[0]));
 
-        for (int j = 0; j < p; j++)
-        {
-            coefficients[j] = NumOps.Add(
-                NumOps.Multiply(oneMinusLr, coefficients[j]),
-                NumOps.Multiply(lr, solution[j + 1]));
-        }
+        coefficients = Engine.Add(
+            Engine.Multiply(coefficients, oneMinusLr),
+            Engine.Multiply(solution.GetSubVector(1, p), lr));
     }
 
     /// <summary>
@@ -541,28 +457,24 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private void UpdateLinearPredictor(Matrix<T> x, Vector<T> eta, Vector<T>? coefficients, T intercept, bool useExpLink = false)
     {
-        for (int i = 0; i < x.Rows; i++)
+        int n = x.Rows;
+        var values = Engine.Fill(n, intercept);
+        if (coefficients != null && n > 0 && _numFeatures > 0)
         {
-            T val = intercept;
-
-            if (coefficients != null)
-            {
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    val = NumOps.Add(val, NumOps.Multiply(coefficients[j], x[i, j]));
-                }
-            }
-
-            // For log-link parameters (scale σ, shape ν) the predictor feeds exp(·); bound it so
-            // exp() cannot overflow/underflow and destabilise the IRLS working weights (see the
-            // MinLogScale/MaxLogScale rationale on the class fields).
-            if (useExpLink)
-            {
-                val = ClampLogScale(val);
-            }
-
-            eta[i] = val;
+            var design = x.Columns == _numFeatures ? x : x.GetSubMatrix(0, 0, n, _numFeatures);
+            values = Engine.Add(values, Engine.MatrixVectorMultiply(design, coefficients.GetSubVector(0, _numFeatures)));
         }
+
+        // For log-link parameters (scale sigma, shape nu) the predictor feeds exp(.); bound it so
+        // exp() cannot overflow/underflow and destabilise the IRLS working weights (see the
+        // MinLogScale/MaxLogScale rationale on the class fields).
+        if (useExpLink)
+        {
+            values = Engine.Clamp(values, NumOps.FromDouble(MinLogScale), NumOps.FromDouble(MaxLogScale));
+        }
+
+        // The predictor is updated in place (bulk copy) because the caller keeps the same vector
+        values.AsSpan().CopyTo(eta.AsWritableSpan());
     }
 
     /// <summary>
@@ -602,19 +514,23 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private double ComputeDeviance(Vector<T> y, Vector<T> etaLocation, Vector<T> etaScale, Vector<T> etaShape)
     {
-        double deviance = 0;
-
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            T location = etaLocation[i];
-            T scale = NumOps.Exp(etaScale[i]);
-            T shape = NumOps.Exp(etaShape[i]);
-
-            var dist = CreateDistribution(location, scale, shape);
-            T logPdf = dist.LogPdf(y[i]);
-            deviance -= NumOps.ToDouble(logPdf);
+            return 0;
         }
 
+        // Log-density of every observation under its own fitted distribution
+        var scales = Engine.Exp(etaScale);
+        var shapes = Engine.Exp(etaShape);
+        var logPdfs = etaLocation
+            .Zip(scales, (location, scale) => (location, scale))
+            .Zip(shapes, (ls, shape) => (ls.location, ls.scale, shape))
+            .Zip(y, (parameters, observation) =>
+                CreateDistribution(parameters.location, parameters.scale, parameters.shape).LogPdf(observation))
+            .ToList();
+
+        // The convergence check works in double; the single total is converted once.
+        double deviance = -NumOps.ToDouble(Engine.Sum(new Vector<T>(logPdfs)));
         return 2 * deviance;
     }
 
@@ -648,66 +564,23 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private Vector<T> SolveLinearSystem(Matrix<T> a, Vector<T> b, int n)
     {
-        var augmented = new Matrix<T>(n, n + 1);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
+        // Augmented [A | b]
+        var augmented = Engine.TensorConcatenate(
+            new[]
             {
-                augmented[i, j] = a[i, j];
-            }
-            augmented[i, n] = b[i];
-        }
+                Tensor<T>.FromMatrix(a.GetSubMatrix(0, 0, n, n)),
+                new Tensor<T>(new[] { n, 1 }, b.GetSubVector(0, n))
+            }, 1).ToMatrix();
 
         T pivotThreshold = NumOps.FromDouble(1e-10);
 
-        // Forward elimination with partial pivoting
+        // Gauss-Jordan elimination with partial pivoting
         for (int col = 0; col < n; col++)
         {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
-                {
-                    maxRow = row;
-                }
-            }
-
-            for (int j = 0; j <= n; j++)
-            {
-                (augmented[col, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[col, j]);
-            }
-
-            T pivot = augmented[col, col];
-            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
-            {
-                pivot = pivotThreshold;
-            }
-
-            for (int j = 0; j <= n; j++)
-            {
-                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
-            }
-
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = augmented[row, col];
-                    for (int j = 0; j <= n; j++)
-                    {
-                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
-                    }
-                }
-            }
+            augmented = RegressionEngineOps.GaussJordanStep(augmented, col, n, pivotThreshold);
         }
 
-        var solution = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            solution[i] = augmented[i, n];
-        }
-
-        return solution;
+        return augmented.GetColumn(n);
     }
 
     /// <inheritdoc/>
@@ -715,39 +588,20 @@ public partial class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         var importances = new Vector<T>(_numFeatures);
 
-        // Combine importances from all parameter models
-        for (int f = 0; f < _numFeatures; f++)
+        // Combine importances from all parameter models: sum of |coefficient| per feature
+        foreach (var coefficients in new[] { _locationCoefficients, _scaleCoefficients, _shapeCoefficients })
         {
-            T importance = NumOps.Zero;
-
-            if (_locationCoefficients != null)
+            if (coefficients != null && _numFeatures > 0)
             {
-                importance = NumOps.Add(importance, NumOps.Abs(_locationCoefficients[f]));
+                importances = Engine.Add(importances, Engine.Abs(coefficients.GetSubVector(0, _numFeatures)));
             }
-            if (_scaleCoefficients != null)
-            {
-                importance = NumOps.Add(importance, NumOps.Abs(_scaleCoefficients[f]));
-            }
-            if (_shapeCoefficients != null)
-            {
-                importance = NumOps.Add(importance, NumOps.Abs(_shapeCoefficients[f]));
-            }
-
-            importances[f] = importance;
         }
 
         // Normalize
-        T sum = NumOps.Zero;
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            sum = NumOps.Add(sum, importances[f]);
-        }
+        T sum = _numFeatures > 0 ? Engine.Sum(importances) : NumOps.Zero;
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                importances[f] = NumOps.Divide(importances[f], sum);
-            }
+            importances = Engine.Divide(importances, sum);
         }
 
         FeatureImportances = importances;

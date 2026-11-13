@@ -215,7 +215,7 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
             // update_bn: eval-mode statistics for the current weights, not the momentum average of earlier ones.
             BatchNormRecalibration.Recalibrate<T>(detector, () => detector.Predict(image));
             var found = detector.Detect(image).TextRegions;
-            return metrics.Evaluate(new[] { found }, new[] { groundTruth }).HMean;
+            return ToD(metrics.Evaluate(new[] { found }, new[] { groundTruth }).HMean);
         }
 
         double initial = HMean();
@@ -340,7 +340,7 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
             Assert.False(double.IsNaN(x) || double.IsNaN(y), "Text polygon has a NaN vertex.");
             Assert.False(double.IsInfinity(x) || double.IsInfinity(y), "Text polygon has an infinite vertex.");
         }
-        Assert.True(TextDetectionMetrics<T>.PolygonArea(polygon) > 0.0,
+        Assert.True(ToD(TextDetectionMetrics<T>.PolygonArea(region.Polygon)) > 0.0,
             "Text polygon encloses zero area, so every IoU against it is zero and the region can never be scored as a match.");
     }
 

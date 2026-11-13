@@ -166,15 +166,10 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows);
         var tasks = Enumerable.Range(0, input.Rows).Select(i => Task.Run(() => PredictSingle(input.GetRow(i))));
         var results = await ParallelProcessingHelper.ProcessTasksInParallel(tasks);
-        for (int i = 0; i < results.Count; i++)
-        {
-            predictions[i] = results[i];
-        }
 
-        return predictions;
+        return new Vector<T>(results);
     }
 
     /// <summary>
@@ -304,49 +299,47 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         // sum & sum-of-squares, so each split is O(1). The previous CalculateSDR rebuilt — and then
         // discarded — two full feature sub-matrices for EVERY candidate threshold of EVERY feature
         // at EVERY node, which dominated M5 training allocation. Nothing here copies the matrix.
-        T totalSum = NumOps.Zero, totalSumSq = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            var yi = y[i];
-            totalSum = NumOps.Add(totalSum, yi);
-            totalSumSq = NumOps.Add(totalSumSq, NumOps.Square(yi));
-        }
+        var engine = AiDotNetEngine.Current;
+        T totalSum = engine.Sum(y);
+        T totalSumSq = engine.DotProduct(y, y);
 
         T totalVariance = VarianceFromMoments(totalSum, totalSumSq, n);
-        var bestSplit = (Threshold: NumOps.Zero, SDR: NumOps.Zero);
-        T leftSum = NumOps.Zero, leftSumSq = NumOps.Zero;
-
-        for (int i = 1; i < n; i++)
+        if (n < 2)
         {
-            var yPrev = y[sortedIndices[i - 1]];
-            leftSum = NumOps.Add(leftSum, yPrev);
-            leftSumSq = NumOps.Add(leftSumSq, NumOps.Square(yPrev));
-
-            // No valid threshold between two equal feature values (sorted ascending).
-            if (!NumOps.GreaterThan(featureValues[sortedIndices[i]], featureValues[sortedIndices[i - 1]]))
-            {
-                continue;
-            }
-
-            int leftCount = i, rightCount = n - i;
-            T leftVariance = VarianceFromMoments(leftSum, leftSumSq, leftCount);
-            T rightVariance = VarianceFromMoments(
-                NumOps.Subtract(totalSum, leftSum), NumOps.Subtract(totalSumSq, leftSumSq), rightCount);
-
-            T weightedVariance = NumOps.Add(
-                NumOps.Multiply(NumOps.Divide(NumOps.FromDouble(leftCount), NumOps.FromDouble(n)), leftVariance),
-                NumOps.Multiply(NumOps.Divide(NumOps.FromDouble(rightCount), NumOps.FromDouble(n)), rightVariance));
-            T sdr = NumOps.Subtract(totalVariance, weightedVariance);
-
-            if (NumOps.GreaterThan(sdr, bestSplit.SDR))
-            {
-                var threshold = NumOps.Divide(
-                    NumOps.Add(featureValues[sortedIndices[i - 1]], featureValues[sortedIndices[i]]), NumOps.FromDouble(2));
-                bestSplit = (threshold, sdr);
-            }
+            return (feature, NumOps.Zero, NumOps.Zero);
         }
 
-        return (feature, bestSplit.Threshold, bestSplit.SDR);
+        // Running left/right moments for every split position s = 1..n-1 at once.
+        int splits = n - 1;
+        var sortedFeature = RegressionEngineOps.Gather(featureValues, sortedIndices);
+        var sortedY = RegressionEngineOps.Gather(y, sortedIndices);
+        var leftSum = RegressionEngineOps.SplitPrefixSums(sortedY);
+        var leftSumSq = RegressionEngineOps.SplitPrefixSums(engine.Multiply(sortedY, sortedY));
+        var leftCount = engine.TensorCumSum(Tensor<T>.FromVector(engine.Fill(splits, NumOps.One)), 0).ToVector();
+        var totalCount = NumOps.FromDouble(n);
+        var rightCount = engine.Subtract(engine.Fill(splits, totalCount), leftCount);
+
+        var leftVariance = VarianceFromMoments(leftSum, leftSumSq, leftCount);
+        var rightVariance = VarianceFromMoments(
+            engine.Subtract(engine.Fill(splits, totalSum), leftSum),
+            engine.Subtract(engine.Fill(splits, totalSumSq), leftSumSq),
+            rightCount);
+
+        var weightedVariance = engine.Add(
+            engine.Multiply(engine.Divide(leftCount, totalCount), leftVariance),
+            engine.Multiply(engine.Divide(rightCount, totalCount), rightVariance));
+        var sdr = engine.Subtract(engine.Fill(splits, totalVariance), weightedVariance);
+
+        // No valid threshold between two equal feature values (sorted ascending); the first split
+        // with the largest positive SDR wins.
+        var (index, bestSdr, threshold) = RegressionEngineOps.BestSortedSplit(
+            sdr, RegressionEngineOps.AdjacentIncreaseMask(sortedFeature), null, sortedFeature);
+        if (index < 0 || !NumOps.GreaterThan(bestSdr, NumOps.Zero))
+        {
+            return (feature, NumOps.Zero, NumOps.Zero);
+        }
+
+        return (feature, threshold, bestSdr);
     }
 
     /// <summary>
@@ -369,6 +362,20 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// the spread directly from those two totals.
     /// </para>
     /// </remarks>
+    private Vector<T> VarianceFromMoments(Vector<T> sum, Vector<T> sumSq, Vector<T> count)
+    {
+        // Element-wise version of the scalar overload below: (sumSq - count * mean^2) / (count - 1),
+        // and 0 where count < 2.
+        var engine = AiDotNetEngine.Current;
+        var mean = engine.Divide(sum, count);
+        var sumSquaredDeviations = engine.Subtract(sumSq, engine.Multiply(count, engine.Multiply(mean, mean)));
+        var variance = engine.Divide(sumSquaredDeviations, engine.Subtract(count, engine.Fill(count.Length, NumOps.One)));
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(Tensor<T>.FromVector(count), NumOps.One),
+            Tensor<T>.FromVector(variance),
+            Tensor<T>.FromVector(engine.FillZero<T>(count.Length))).ToVector();
+    }
+
     private T VarianceFromMoments(T sum, T sumSq, int count)
     {
         if (count < 2)
@@ -427,10 +434,7 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Populate Samples for use in pruning calculations
-        for (int i = 0; i < y.Length; i++)
-        {
-            node.Samples.Add(new Sample<T>(x.GetRow(i), y[i]));
-        }
+        node.Samples.AddRange(x.GetRows().Zip(y, (row, target) => new Sample<T>(row, target)));
 
         return node;
     }
@@ -607,9 +611,7 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
             if (_options.UseLinearRegressionAtLeaves && node.LinearModel != null)
             {
                 // Convert the input vector to a single-row matrix (1 sample, N features)
-                var inputMatrix = new Matrix<T>(1, input.Length);
-                for (int i = 0; i < input.Length; i++)
-                    inputMatrix[0, i] = input[i];
+                var inputMatrix = new Tensor<T>(new[] { 1, input.Length }, input).ToMatrix();
                 return node.LinearModel.Predict(inputMatrix)[0];
             }
             else
@@ -806,12 +808,10 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         var meanPrediction = CalculateAveragePrediction(node);
-        var error = node.Samples.Select(sample =>
-            NumOps.Multiply(
-                NumOps.Subtract(sample.Target, meanPrediction),
-                NumOps.Subtract(sample.Target, meanPrediction)
-            )
-        ).Aggregate(NumOps.Zero, NumOps.Add);
+        var engine = AiDotNetEngine.Current;
+        var deviations = engine.Subtract(
+            SampleTargets(node), engine.Fill(node.Samples.Count, meanPrediction));
+        var error = engine.DotProduct(deviations, deviations);
 
         // Apply regularization if a linear model exists
         if (node.LinearModel != null && node.LinearModel.Coefficients != null)
@@ -856,9 +856,13 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
             return NumOps.Zero;
         }
 
-        var sum = node.Samples.Aggregate(NumOps.Zero, (acc, sample) => NumOps.Add(acc, sample.Target));
+        var sum = AiDotNetEngine.Current.Sum(SampleTargets(node));
         return NumOps.Divide(sum, NumOps.FromDouble(node.Samples.Count));
     }
+
+    /// <summary>The targets of a node's retained samples, in sample order.</summary>
+    private static Vector<T> SampleTargets(DecisionTreeNode<T> node)
+        => new Vector<T>(node.Samples.Select(sample => sample.Target));
 
     /// <summary>
     /// Calculates the maximum depth of the tree.
@@ -955,20 +959,7 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// </remarks>
     private (Matrix<T> LeftX, Vector<T> LeftY, Matrix<T> RightX, Vector<T> RightY) SplitData(Matrix<T> x, Vector<T> y, int feature, T threshold)
     {
-        var leftIndices = new List<int>();
-        var rightIndices = new List<int>();
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (NumOps.LessThanOrEquals(x[i, feature], threshold))
-            {
-                leftIndices.Add(i);
-            }
-            else
-            {
-                rightIndices.Add(i);
-            }
-        }
+        var (leftIndices, rightIndices) = RegressionEngineOps.PartitionByThreshold(x.GetColumn(feature), threshold);
 
         return (
             x.GetRows(leftIndices),

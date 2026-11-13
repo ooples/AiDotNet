@@ -612,7 +612,6 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         ThrowIfDisposed();
 
-        double thresholdValue = NumOps.ToDouble(threshold);
         double totalDuration = audio.Length / (double)_options.SampleRate;
 
         // Split audio into overlapping windows for frame-level analysis.
@@ -638,20 +637,16 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
             // Collect all events above the confidence threshold for this window.
             // BEATs is multi-label, so multiple classes can be active simultaneously.
-            for (int i = 0; i < scores.Length && i < ClassLabels.Count; i++)
+            foreach (int i in AudioEventDetectionOps.IndicesAtOrAbove(Engine, scores, ClassLabels.Count, threshold))
             {
-                double score = NumOps.ToDouble(scores[i]);
-                if (score >= thresholdValue)
+                allEvents.Add(new AudioEvent<T>
                 {
-                    allEvents.Add(new AudioEvent<T>
-                    {
-                        EventType = ClassLabels[i],
-                        Confidence = scores[i],
-                        StartTime = startTime,
-                        EndTime = Math.Min(startTime + _options.WindowSize, totalDuration),
-                        PeakTime = startTime + _options.WindowSize / 2
-                    });
-                }
+                    EventType = ClassLabels[i],
+                    Confidence = scores[i],
+                    StartTime = startTime,
+                    EndTime = Math.Min(startTime + _options.WindowSize, totalDuration),
+                    PeakTime = startTime + _options.WindowSize / 2
+                });
             }
         }
 
@@ -825,7 +820,7 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         ThrowIfDisposed();
 
         var windows = SplitIntoWindows(audio);
-        var probabilities = new Tensor<T>([windows.Count, ClassLabels.Count]);
+        var rows = new List<Tensor<T>>(windows.Count);
 
         for (int windowIdx = 0; windowIdx < windows.Count; windowIdx++)
         {
@@ -833,15 +828,10 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             var melSpec = _melSpectrogram?.Forward(window) ??
                 throw new InvalidOperationException("MelSpectrogram not initialized.");
 
-            var scores = ClassifyWindow(melSpec);
-
-            for (int i = 0; i < ClassLabels.Count && i < scores.Length; i++)
-            {
-                probabilities[windowIdx, i] = scores[i];
-            }
+            rows.Add(AudioEventDetectionOps.ScoreRow(ClassifyWindow(melSpec), ClassLabels.Count));
         }
 
-        return probabilities;
+        return AudioEventDetectionOps.StackScoreRows(Engine, rows, ClassLabels.Count);
     }
 
     /// <summary>
@@ -1098,16 +1088,7 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// </para>
     /// </remarks>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        var result = new Tensor<T>(modelOutput._shape);
-        for (int i = 0; i < modelOutput.Length; i++)
-        {
-            double logit = NumOps.ToDouble(modelOutput[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-logit));
-            result[i] = NumOps.FromDouble(sigmoid);
-        }
-        return result;
-    }
+        => AudioEventDetectionOps.SigmoidDetached(Engine, modelOutput);
 
     /// <summary>
     /// Gets metadata about this BEATs model instance, including architecture details and configuration.
@@ -1228,29 +1209,12 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (IsOnnxMode && OnnxEncoder is not null)
         {
             // ONNX mode: reshape to [batch=1, channels=1, time, frequency] format
-            var input = new Tensor<T>([1, 1, melSpec.Shape[0], melSpec.Shape[1]]);
-            for (int t = 0; t < melSpec.Shape[0]; t++)
-            {
-                for (int f = 0; f < melSpec.Shape[1]; f++)
-                {
-                    input[0, 0, t, f] = melSpec[t, f];
-                }
-            }
-            output = Predict(input);
+            output = Predict(Engine.Reshape(melSpec, [1, 1, melSpec.Shape[0], melSpec.Shape[1]]));
         }
         else if (_useNativeMode)
         {
             // Native mode: flatten spectrogram and run through layer stack
-            var input = new Tensor<T>([melSpec.Length]);
-            int idx = 0;
-            for (int t = 0; t < melSpec.Shape[0]; t++)
-            {
-                for (int f = 0; f < melSpec.Shape[1]; f++)
-                {
-                    input[idx++] = melSpec[t, f];
-                }
-            }
-            output = Predict(input);
+            output = Predict(AudioEventDetectionOps.Flatten(Engine, melSpec));
         }
         else
         {
@@ -1261,13 +1225,7 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         // Predict applies BEATs' multi-label sigmoid exactly once for both
         // native and ONNX inference. Training remains on raw logits through
         // ForwardNativeForTraining / TrainWithTape.
-        var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
-        {
-            scores[i] = output[i];
-        }
-
-        return scores;
+        return AudioEventDetectionOps.HeadScores(Engine, output, ClassLabels.Count);
     }
 
     #endregion
@@ -1312,51 +1270,14 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// </remarks>
     private List<Tensor<T>> SplitIntoWindows(Tensor<T> audio)
     {
-        var windows = new List<Tensor<T>>();
         int windowSamples = (int)(_options.WindowSize * _options.SampleRate);
         int hopSamples = (int)(windowSamples * (1 - _options.WindowOverlap));
 
         if (hopSamples <= 0) hopSamples = 1;
 
-        int lastStart = 0;
-        for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
-        {
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < windowSamples; i++)
-            {
-                window[i] = audio[start + i];
-            }
-            windows.Add(window);
-            lastStart = start + hopSamples;
-        }
-
-        // Handle remaining audio that doesn't fill a complete window
-        int remainingStart = windows.Count > 0 ? lastStart : 0;
-        int remainingSamples = audio.Length - remainingStart;
-
-        // Include partial window if at least 10% of window size remains
-        if (remainingSamples > windowSamples / 10)
-        {
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < remainingSamples && i < windowSamples; i++)
-            {
-                window[i] = audio[remainingStart + i];
-            }
-            // Remaining values default to zero (zero-padded)
-            windows.Add(window);
-        }
-        else if (windows.Count == 0 && audio.Length > 0)
-        {
-            // Very short audio: zero-pad to full window size so BEATs can still process it
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < audio.Length; i++)
-            {
-                window[i] = audio[i];
-            }
-            windows.Add(window);
-        }
-
-        return windows;
+        // Full windows every hop; the remainder becomes a zero-padded partial window if more than
+        // 10% of a window remains, and very short audio is zero-padded to one full window.
+        return AudioEventDetectionOps.SplitIntoWindows(Engine, audio, windowSamples, hopSamples, windowSamples / 10);
     }
 
     #endregion
@@ -1385,48 +1306,7 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// </para>
     /// </remarks>
     private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events)
-    {
-        if (events.Count == 0) return events;
-
-        var grouped = events.GroupBy(e => e.EventType);
-        var merged = new List<AudioEvent<T>>();
-
-        foreach (var group in grouped)
-        {
-            var sortedEvents = group.OrderBy(e => e.StartTime).ToList();
-            var currentEvent = sortedEvents[0];
-
-            for (int i = 1; i < sortedEvents.Count; i++)
-            {
-                var next = sortedEvents[i];
-
-                // Merge if overlapping or within 100ms gap
-                if (next.StartTime <= currentEvent.EndTime + 0.1)
-                {
-                    double currentConf = NumOps.ToDouble(currentEvent.Confidence);
-                    double nextConf = NumOps.ToDouble(next.Confidence);
-
-                    currentEvent = new AudioEvent<T>
-                    {
-                        EventType = currentEvent.EventType,
-                        StartTime = currentEvent.StartTime,
-                        EndTime = Math.Max(currentEvent.EndTime, next.EndTime),
-                        Confidence = currentConf > nextConf ? currentEvent.Confidence : next.Confidence,
-                        PeakTime = currentConf > nextConf ? currentEvent.PeakTime : next.PeakTime
-                    };
-                }
-                else
-                {
-                    merged.Add(currentEvent);
-                    currentEvent = next;
-                }
-            }
-
-            merged.Add(currentEvent);
-        }
-
-        return merged.OrderBy(e => e.StartTime).ToList();
-    }
+        => AudioEventDetectionOps.MergeEvents(Engine, events, 0.1); // merge if overlapping or within 100ms
 
     /// <summary>
     /// Computes per-class aggregate statistics from a list of detected events.
@@ -1445,28 +1325,7 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// </para>
     /// </remarks>
     private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events)
-    {
-        var stats = new Dictionary<string, EventStatistics<T>>();
-
-        var grouped = events.GroupBy(e => e.EventType);
-        foreach (var group in grouped)
-        {
-            var eventList = group.ToList();
-            double totalDuration = eventList.Sum(e => e.Duration);
-            double avgConfidence = eventList.Average(e => NumOps.ToDouble(e.Confidence));
-            double maxConfidence = eventList.Max(e => NumOps.ToDouble(e.Confidence));
-
-            stats[group.Key] = new EventStatistics<T>
-            {
-                Count = eventList.Count,
-                TotalDuration = totalDuration,
-                AverageConfidence = NumOps.FromDouble(avgConfidence),
-                MaxConfidence = NumOps.FromDouble(maxConfidence)
-            };
-        }
-
-        return stats;
-    }
+        => AudioEventDetectionOps.ComputeEventStatistics(Engine, events);
 
     #endregion
 
@@ -1615,20 +1474,13 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 }
 
                 // Accumulate incoming audio samples into the buffer
-                for (int i = 0; i < audioChunk.Length; i++)
-                {
-                    _buffer.Add(audioChunk[i]);
-                }
+                _buffer.AddRange(audioChunk.ToArray());
 
                 // Process all complete windows available in the buffer
                 while (_buffer.Count >= _windowSamples)
                 {
                     // Extract one window from the front of the buffer
-                    var window = new Tensor<T>([_windowSamples]);
-                    for (int i = 0; i < _windowSamples; i++)
-                    {
-                        window[i] = _buffer[i];
-                    }
+                    var window = new Tensor<T>(_buffer.GetRange(0, _windowSamples).ToArray(), [_windowSamples]);
 
                     // Run BEATs: mel spectrogram extraction + classification
                     var melSpec = _detector._melSpectrogram?.Forward(window) ??
@@ -1636,26 +1488,26 @@ public partial class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                     var scores = _detector.ClassifyWindow(melSpec);
 
                     // Check each class against the threshold
-                    double thresholdValue = _detector.NumOps.ToDouble(_threshold);
-                    for (int i = 0; i < scores.Length && i < _detector.ClassLabels.Count; i++)
+                    int classCount = Math.Min(scores.Length, _detector.ClassLabels.Count);
+                    for (int i = 0; i < classCount; i++)
                     {
                         _currentState[_detector.ClassLabels[i]] = scores[i];
+                    }
 
-                        if (_detector.NumOps.ToDouble(scores[i]) >= thresholdValue)
+                    foreach (int i in AudioEventDetectionOps.IndicesAtOrAbove(_detector.Engine, scores, classCount, _threshold))
+                    {
+                        var evt = new AudioEvent<T>
                         {
-                            var evt = new AudioEvent<T>
-                            {
-                                EventType = _detector.ClassLabels[i],
-                                Confidence = scores[i],
-                                StartTime = _processedTime,
-                                EndTime = _processedTime + _detector._options.WindowSize,
-                                PeakTime = _processedTime + _detector._options.WindowSize / 2
-                            };
+                            EventType = _detector.ClassLabels[i],
+                            Confidence = scores[i],
+                            StartTime = _processedTime,
+                            EndTime = _processedTime + _detector._options.WindowSize,
+                            PeakTime = _processedTime + _detector._options.WindowSize / 2
+                        };
 
-                            _newEvents.Add(evt);
-                            eventsToRaise ??= new List<AudioEvent<T>>();
-                            eventsToRaise.Add(evt);
-                        }
+                        _newEvents.Add(evt);
+                        eventsToRaise ??= new List<AudioEvent<T>>();
+                        eventsToRaise.Add(evt);
                     }
 
                     // Advance buffer by hop size (keeping overlap samples for next window)

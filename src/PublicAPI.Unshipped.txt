@@ -21875,7 +21875,6 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Init
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
-AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
 AiDotNet.Interfaces.IFeatureSelector<T>
 AiDotNet.Interfaces.IFeatureSelector<T>.GetSupportMask() -> bool[]!
 AiDotNet.Interfaces.IFeatureSelector<T>.SelectedIndices.get -> int[]?
@@ -22263,6 +22262,34 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+AiDotNet.Interfaces.LocalObjectiveStep<T>.ReadoutLossDetached.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Layers.TiedEmbeddingHeadLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.DetachReadoutOnHiddenLayers.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.LayerStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.DetachReadoutOnHiddenLayers.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.LayerStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.MaxCandidates.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.SampledTiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenLayers = true, int layerStride = 1, bool useDepthProgressiveWeight = false, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.TiedReadoutLocalError<T>(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> AiDotNet.Interfaces.ICreditRule<T>!
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.SampledTiedReadoutLocalError<T>(int readoutLayerCount = 2, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenLayers = true, int layerStride = 1, bool useDepthProgressiveWeight = false, int? seed = null) -> AiDotNet.Interfaces.ICreditRule<T>!
+*REMOVED*AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(System.Collections.Generic.IEnumerable<double>! x, System.Collections.Generic.IEnumerable<double>! y, double cutoffFrequency = 1) -> void
+*REMOVED*AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(System.Collections.Generic.IEnumerable<double>! x, System.Collections.Generic.IEnumerable<double>! y, double? customPeriod = null) -> void
+AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y) -> void
+AiDotNet.Interpolation.SincInterpolation<T>.SincInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, T cutoffFrequency) -> void
+AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y) -> void
+AiDotNet.Interpolation.TrigonometricInterpolation<T>.TrigonometricInterpolation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x, AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, T customPeriod) -> void
 AiDotNet.Models.Options.GradientBasedOptimizerOptions<T, TInput, TOutput>.RegularizationOrder.get -> AiDotNet.Models.Options.RegularizationOrder
 AiDotNet.Models.Options.GradientBasedOptimizerOptions<T, TInput, TOutput>.RegularizationOrder.set -> void
 AiDotNet.Models.Options.RegularizationOrder
@@ -22554,6 +22581,346 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.WeightDecay.get -> double
+AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.WeightDecay.set -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.DisableGradientCheckpointing() -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.EnableGradientCheckpointing(int segmentSize = 0) -> void
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.Dimension.get -> int
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.GetParameterRoles() -> System.Collections.Generic.Dictionary<string!, string!>!
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.HouseholderSubspaceLayer(int dimension, int numReflectors = 4, bool transpose = false) -> void
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.NumReflectors.get -> int
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.Reflectors.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.Transpose.get -> bool
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.GetTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.ResetState() -> void
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.SetTrainableParameters(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> void
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.SupportsTraining.get -> bool
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.UpdateParameters(T learningRate) -> void
+override AiDotNet.NeuralNetworks.Layers.HouseholderSubspaceLayer<T>.ZeroGrad() -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.AnchorStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.BlockwiseAnchorLocalErrorCreditRule(int readoutLayerCount = 2, int anchorStride = 4, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenBlocks = true, bool useDepthProgressiveWeight = true, bool streamBlocksSequentially = true, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.DetachReadoutOnHiddenBlocks.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.IsIntermediateAnchor(int hiddenIndex, int hiddenLayerCount) -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.MaxCandidates.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.StreamBlocksSequentially.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.BlockwiseAnchorLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.BlockwiseAnchorLocalError<T>(int readoutLayerCount = 2, int anchorStride = 4, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenBlocks = true, bool useDepthProgressiveWeight = true, bool streamBlocksSequentially = true, int? seed = null) -> AiDotNet.Interfaces.ICreditRule<T>!
+AiDotNet.Interfaces.ISharedParameterConsumerLayer<T>
+AiDotNet.Interfaces.ISharedParameterConsumerLayer<T>.GetSharedTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Layers.TiedEmbeddingHeadLayer<T>.GetSharedTrainableParameters() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>.Train(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> void
+AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.TensorL2Norm(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> T
+AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.GradientWithinTolerance(AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradient, T tolerance) -> bool
+AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.EnsureDescentDirection(AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradient, AiDotNet.Tensors.LinearAlgebra.Vector<T>! direction) -> (AiDotNet.Tensors.LinearAlgebra.Vector<T>! Direction, T DirectionalDerivative)
+AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.CreateLineSearchProblem(AiDotNet.Tensors.LinearAlgebra.Vector<T>! current, AiDotNet.Tensors.LinearAlgebra.Vector<T>! direction, T objective, T directionalDerivative, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, (T objective, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradient)>! objectiveAndGradient, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? projection, int parameterCount, double sufficientDecreaseConstant, double curvatureConstant) -> AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>.LineSearchProblem!
+AiDotNet.Optimizers.OptimizerBase<T, TInput, TOutput>.FitnessChangeBelow(T previous, T current, double tolerance) -> bool
+*REMOVED*AiDotNet.Regression.DeepHit<T>.PredictPMF(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> T[,,]!
+AiDotNet.Regression.DeepHit<T>.PredictPMF(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(double[,]! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(double[,]! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d, double learnedThreshold) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+*REMOVED*static AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(double[,]! p, int d) -> double[,]!
+*REMOVED*static AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(double[,]! p, int d, double[]! sourceScore) -> double[,]!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.BuildFinalAdjacency(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! learnedP, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! cov, int d, double learnedThreshold) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.CausalDiscovery.DeepLearning.DeepCausalBase<T>.ProjectToDag(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! p, int d, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sourceScore) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.CausalDiscovery.TimeSeries.TiMINoAlgorithm<T>.ModelFitRejected.get -> bool
+AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42, double adversarialWeight = 1, double contextualWeight = 50, double encoderWeight = 1) -> void
+*REMOVED*AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.SCiForest(int numTrees = 100, int maxSamples = 256, double sparsity = 0.2, double contamination = 0.1, int randomSeed = 42) -> void
+*REMOVED*AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.Sparsity.get -> double
+AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.SCiForest(int numTrees = 100, int maxSamples = 256, int attributesPerHyperplane = 2, int hyperplanesPerNode = 10, double contamination = 0.1, int randomSeed = 42) -> void
+AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.AttributesPerHyperplane.get -> int
+AiDotNet.AnomalyDetection.TreeBased.SCiForest<T>.HyperplanesPerNode.get -> int
+*REMOVED*AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim = 32, int hiddenDim = 64, int epochs = 100, double learningRate = 0.0002, double contamination = 0.1, int randomSeed = 42) -> void
+AiDotNet.AnomalyDetection.NeuralNetwork.GANomalyDetector<T>.GANomalyDetector(int latentDim, int hiddenDim, int epochs, double learningRate, double contamination, int randomSeed) -> void
+*REMOVED*AiDotNet.VisionLanguage.Robotics.HelixSystem2Latent<T>.L2Norm() -> double
+AiDotNet.VisionLanguage.Robotics.HelixSystem2Latent<T>.L2Norm() -> T
+*REMOVED*static AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.Compute(System.Collections.Generic.IReadOnlyList<T>! returns, System.Random! rng, System.Func<System.Collections.Generic.IReadOnlyList<double>!, double>? statistic = null, double confidence = 0.95, int nResamples = 1000, double meanBlockLength = 1) -> AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.Interval!
+*REMOVED*static AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.MeanStatistic(System.Collections.Generic.IReadOnlyList<double>! sample) -> double
+*REMOVED*static AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.SharpeStatistic(System.Collections.Generic.IReadOnlyList<double>! sample) -> double
+static AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.Compute(System.Collections.Generic.IReadOnlyList<T>! returns, System.Random! rng, System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>? statistic = null, double confidence = 0.95, int nResamples = 1000, double meanBlockLength = 1) -> AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.Interval!
+static AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.MeanStatistic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! sample) -> T
+static AiDotNet.Finance.Evaluation.BootstrapConfidenceInterval<T>.SharpeStatistic(AiDotNet.Tensors.LinearAlgebra.Vector<T>! sample) -> T
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary<double, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! quantileForecasts, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals) -> double
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary<double, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! quantileForecasts, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals) -> T
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! historicalData, int seasonalPeriod = 1) -> double
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! historicalData, int seasonalPeriod = 1) -> T
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, double quantileLevel) -> double
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, double quantileLevel) -> T
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! contextLengths, System.Collections.Generic.IReadOnlyList<int>! seasonalPeriods, double[]? quantileLevels = null) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! contextLengths, System.Collections.Generic.IReadOnlyList<int>! seasonalPeriods, double[]? quantileLevels = null) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! groundTruthLabels, double? threshold = null) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! groundTruthLabels, double? threshold = null) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! trueLabels, int numClasses) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! trueLabels, int numClasses) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>! testPairs) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>! testPairs) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! completeSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! masks) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! completeSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! masks) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>? forecastingData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Labels, double? Threshold)? anomalyData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<int>! Labels, int NumClasses)? classificationData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks)? imputationData = null) -> System.Collections.Generic.Dictionary<string!, System.Collections.Generic.Dictionary<string!, double>!>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>? forecastingData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Labels, double? Threshold)? anomalyData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<int>! Labels, int NumClasses)? classificationData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks)? imputationData = null) -> System.Collections.Generic.Dictionary<string!, System.Collections.Generic.Dictionary<string!, T>!>!
+*REMOVED*AiDotNet.Finance.Portfolio.PathSignatureTransform<T>.SignedArea(AiDotNet.Tensors.LinearAlgebra.Vector<T>! first, AiDotNet.Tensors.LinearAlgebra.Vector<T>! second) -> double
+AiDotNet.Finance.Portfolio.PathSignatureTransform<T>.SignedArea(AiDotNet.Tensors.LinearAlgebra.Vector<T>! first, AiDotNet.Tensors.LinearAlgebra.Vector<T>! second) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.AssetGraphBuilder<T>.DistanceCorrelation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! first, AiDotNet.Tensors.LinearAlgebra.Vector<T>! second) -> double
+AiDotNet.Finance.Portfolio.AssetGraphBuilder<T>.DistanceCorrelation(AiDotNet.Tensors.LinearAlgebra.Vector<T>! first, AiDotNet.Tensors.LinearAlgebra.Vector<T>! second) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.Moments(double[]! portfolioReturns) -> (double Mean, double Volatility)
+AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.Moments(AiDotNet.Tensors.LinearAlgebra.Vector<T>! portfolioReturns) -> (T Mean, T Volatility)
+*REMOVED*AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.SharpeRatio(double[]! portfolioReturns) -> double
+AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.SharpeRatio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! portfolioReturns) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.Loss(double[]! portfolioReturns) -> double
+AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.Loss(AiDotNet.Tensors.LinearAlgebra.Vector<T>! portfolioReturns) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.PortfolioReturns(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! assetReturns) -> double[]!
+AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.PortfolioReturns(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! assetReturns) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.L1Penalty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! scores) -> double
+AiDotNet.Finance.Portfolio.SharpeRatioPortfolioObjective<T>.L1Penalty(AiDotNet.Tensors.LinearAlgebra.Vector<T>! scores) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.GraphAttentionPortfolio<T>.RealizedSharpe(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! assetReturns) -> double
+AiDotNet.Finance.Portfolio.GraphAttentionPortfolio<T>.RealizedSharpe(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! assetReturns) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.GraphAttentionPortfolio<T>.PortfolioLoss(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! assetReturns) -> double
+AiDotNet.Finance.Portfolio.GraphAttentionPortfolio<T>.PortfolioLoss(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! assetReturns) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.Loss(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns) -> double
+AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.Loss(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.ValueAtRisk(double[]! losses) -> double
+AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.ValueAtRisk(AiDotNet.Tensors.LinearAlgebra.Vector<T>! losses) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.ConditionalValueAtRisk(double[]! losses) -> double
+AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.ConditionalValueAtRisk(AiDotNet.Tensors.LinearAlgebra.Vector<T>! losses) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.DualObjective(double[]! losses, double nu) -> double
+AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.DualObjective(AiDotNet.Tensors.LinearAlgebra.Vector<T>! losses, T nu) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.OptimalNu(double[]! losses) -> double
+AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.OptimalNu(AiDotNet.Tensors.LinearAlgebra.Vector<T>! losses) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.Turnover(AiDotNet.Tensors.LinearAlgebra.Vector<T>! previousWeights, AiDotNet.Tensors.LinearAlgebra.Vector<T>! newWeights) -> double
+AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.Turnover(AiDotNet.Tensors.LinearAlgebra.Vector<T>! previousWeights, AiDotNet.Tensors.LinearAlgebra.Vector<T>! newWeights) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.TransactionCost(AiDotNet.Tensors.LinearAlgebra.Vector<T>! previousWeights, AiDotNet.Tensors.LinearAlgebra.Vector<T>! newWeights, double basisPoints) -> double
+AiDotNet.Finance.Portfolio.CVaRPortfolioObjective<T>.TransactionCost(AiDotNet.Tensors.LinearAlgebra.Vector<T>! previousWeights, AiDotNet.Tensors.LinearAlgebra.Vector<T>! newWeights, double basisPoints) -> T
+*REMOVED*AiDotNet.Finance.Portfolio.SignatureInformedTransformer<T>.PortfolioCVaR(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realizedReturns) -> double
+AiDotNet.Finance.Portfolio.SignatureInformedTransformer<T>.PortfolioCVaR(AiDotNet.Tensors.LinearAlgebra.Vector<T>! weights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realizedReturns) -> T
+*REMOVED*override AiDotNet.Finance.Graph.GraphWaveNet<T>.OnTrainingStepEnded(bool succeeded) -> void
+override AiDotNet.Finance.Graph.GraphWaveNet<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.Finance.Graph.GraphWaveNet<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+*REMOVED*override AiDotNet.Finance.Graph.MTGNN<T>.OnTrainingStepEnded(bool succeeded) -> void
+override AiDotNet.Finance.Graph.MTGNN<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.Finance.Graph.MTGNN<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+*REMOVED*AiDotNet.Finance.Graph.MTGNN<T>.LearnedAdjacency.get -> double[,]?
+*REMOVED*AiDotNet.Finance.Graph.MTGNN<T>.MTGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.MTGNNOptions<T>? options = null, double[,]? predefinedAdjacency = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.Finance.Graph.MTGNN<T>.MTGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.MTGNNOptions<T>? options = null, double[,]? predefinedAdjacency = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.Finance.Graph.TemporalGCN<T>.TemporalGCN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.TemporalGCNOptions<T>? options = null, double[,]? adjacencyMatrix = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.Finance.Graph.TemporalGCN<T>.TemporalGCN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.TemporalGCNOptions<T>? options = null, double[,]? adjacencyMatrix = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+AiDotNet.Finance.Graph.MTGNN<T>.LearnedAdjacency.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Finance.Graph.MTGNN<T>.MTGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.MTGNNOptions<T>? options = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? predefinedAdjacency = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+AiDotNet.Finance.Graph.MTGNN<T>.MTGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.MTGNNOptions<T>? options, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? predefinedAdjacency) -> void
+AiDotNet.Finance.Graph.TemporalGCN<T>.TemporalGCN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.TemporalGCNOptions<T>? options = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? adjacencyMatrix = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+AiDotNet.Finance.Graph.TemporalGCN<T>.TemporalGCN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.TemporalGCNOptions<T>? options, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? adjacencyMatrix) -> void
+*REMOVED*AiDotNet.Finance.Graph.GraphWaveNet<T>.GraphWaveNet(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.GraphWaveNetOptions<T>? options = null, double[,]? predefinedAdjacency = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.Finance.Graph.GraphWaveNet<T>.GraphWaveNet(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.GraphWaveNetOptions<T>? options = null, double[,]? predefinedAdjacency = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.Finance.Graph.GraphWaveNet<T>.LearnedAdjacency.get -> double[,]?
+*REMOVED*AiDotNet.Finance.Graph.STGNN<T>.STGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.STGNNOptions<T>? options = null, double[,]? adjacencyMatrix = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.Finance.Graph.STGNN<T>.STGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.STGNNOptions<T>? options = null, double[,]? adjacencyMatrix = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+AiDotNet.Finance.Graph.GraphWaveNet<T>.GraphWaveNet(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.GraphWaveNetOptions<T>? options = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? predefinedAdjacency = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+AiDotNet.Finance.Graph.GraphWaveNet<T>.GraphWaveNet(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.GraphWaveNetOptions<T>? options, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? predefinedAdjacency) -> void
+AiDotNet.Finance.Graph.GraphWaveNet<T>.LearnedAdjacency.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Finance.Graph.STGNN<T>.STGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Models.Options.STGNNOptions<T>? options = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? adjacencyMatrix = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+AiDotNet.Finance.Graph.STGNN<T>.STGNN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.Models.Options.STGNNOptions<T>? options, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? adjacencyMatrix) -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Audio.MusicAnalysis.BeatTrackingResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Audio.MusicAnalysis.BeatTrackingResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.ChordSegment() -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Confidence.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Confidence.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Duration.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.EndTime.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.EndTime.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Name.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.Name.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.StartTime.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.ChordSegment.StartTime.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Confidence.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Confidence.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Correlation.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Correlation.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.KeyDetectionResult() -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.KeyIndex.get -> int
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.KeyIndex.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Mode.get -> AiDotNet.Audio.MusicAnalysis.KeyMode
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Mode.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Name.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.Name.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RelativeKey.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RelativeKey.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RootNote.get -> string!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetectionResult.RootNote.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.DetectAll(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.KeyDetectionResult!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.GetTopKTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int k = 10) -> System.Collections.Generic.IReadOnlyList<(string! Tag, double Confidence)>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5) -> System.Collections.Generic.IReadOnlyList<(string! Tag, double Confidence)>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTagsAsync(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<(string! Tag, double Confidence)>!>!
+AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Interfaces.BeatTrackingResult<T>!
+AiDotNet.Audio.MusicAnalysis.BeatTracker<T>.Track(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Interfaces.BeatTrackingResult<T>!
+AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment<T>!>!
+AiDotNet.Audio.MusicAnalysis.ChordRecognizer<T>.Recognize(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.ChordSegment<T>!>!
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.ChordSegment() -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Confidence.get -> T
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Confidence.set -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Duration.get -> double
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.EndTime.get -> double
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.EndTime.set -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Name.get -> string!
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.Name.set -> void
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.StartTime.get -> double
+AiDotNet.Audio.MusicAnalysis.ChordSegment<T>.StartTime.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Confidence.get -> T
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Confidence.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Correlation.get -> T
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Correlation.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.KeyDetectionResult() -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.KeyIndex.get -> int
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.KeyIndex.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Mode.get -> AiDotNet.Audio.MusicAnalysis.KeyMode
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Mode.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Name.get -> string!
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.Name.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RelativeKey.get -> string!
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RelativeKey.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RootNote.get -> string!
+AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>.RootNote.set -> void
+AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>!
+AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audio) -> AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>!
+AiDotNet.Audio.MusicAnalysis.KeyDetector<T>.DetectAll(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> System.Collections.Generic.List<AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<T>!>!
+AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.GetTopKTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int k = 10) -> System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!
+AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTags(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5) -> System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!
+AiDotNet.Audio.MusicAnalysis.MusicTaggingTransformer<T>.PredictTagsAsync(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double threshold = 0.5, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<(string! Tag, T Confidence)>!>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.AverageBeatInterval.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.BeatTimes.get -> System.Collections.Generic.List<double>!
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.BeatTimes.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.BeatTrackingResult() -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.ConfidenceScore.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.ConfidenceScore.set -> void
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.Tempo.get -> double
+*REMOVED*AiDotNet.Audio.MusicAnalysis.BeatTrackingResult.Tempo.set -> void
+*REMOVED*AiDotNet.Kernels.ARDKernel<T>.ARDKernel(double[]! lengthScales, double variance = 1) -> void
+*REMOVED*AiDotNet.Kernels.ARDKernel<T>.GetLengthScales() -> double[]!
+AiDotNet.Kernels.ARDKernel<T>.ARDKernel(AiDotNet.Tensors.LinearAlgebra.Vector<T>! lengthScales) -> void
+AiDotNet.Kernels.ARDKernel<T>.ARDKernel(AiDotNet.Tensors.LinearAlgebra.Vector<T>! lengthScales, double variance) -> void
+AiDotNet.Kernels.ARDKernel<T>.GetLengthScales() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups, double[]? weights = null) -> void
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, double[]? weights = null) -> void
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.CalculateComponent(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2, int componentIndex) -> double
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.GetComponentImportances(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double[]!
+*REMOVED*AiDotNet.Kernels.AdditiveStructureKernel<T>.GetWeight(int componentIndex) -> double
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! componentKernels, int[]![]! featureGroups, AiDotNet.Tensors.LinearAlgebra.Vector<T>? weights) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.AdditiveStructureKernel(int numFeatures, AiDotNet.Interfaces.IKernelFunction<T>! baseKernel, AiDotNet.Tensors.LinearAlgebra.Vector<T>? weights) -> void
+AiDotNet.Kernels.AdditiveStructureKernel<T>.CalculateComponent(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2, int componentIndex) -> T
+AiDotNet.Kernels.AdditiveStructureKernel<T>.GetComponentImportances(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Kernels.AdditiveStructureKernel<T>.GetWeight(int componentIndex) -> T
+*REMOVED*AiDotNet.Kernels.CylindricalKernel<T>.CylindricalKernel(AiDotNet.Interfaces.IKernelFunction<T>! regularKernel, int[]! regularDims, int[]! angularDims, double[]? periods = null, double[]? angularLengthScales = null) -> void
+*REMOVED*static AiDotNet.Kernels.CylindricalKernel<T>.WithRBF(int totalDims, int[]! angularDimIndices, double regularLengthScale = 1, double[]? periods = null, double[]? angularLengthScales = null) -> AiDotNet.Kernels.CylindricalKernel<T>!
+AiDotNet.Kernels.CylindricalKernel<T>.CylindricalKernel(AiDotNet.Interfaces.IKernelFunction<T>! regularKernel, int[]! regularDims, int[]! angularDims, AiDotNet.Tensors.LinearAlgebra.Vector<T>? periods = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? angularLengthScales = null) -> void
+static AiDotNet.Kernels.CylindricalKernel<T>.WithRBF(int totalDims, int[]! angularDimIndices, double regularLengthScale = 1, AiDotNet.Tensors.LinearAlgebra.Vector<T>? periods = null, AiDotNet.Tensors.LinearAlgebra.Vector<T>? angularLengthScales = null) -> AiDotNet.Kernels.CylindricalKernel<T>!
+*REMOVED*AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double
+*REMOVED*AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, double>! lengthScaleFunction, double variance = 1) -> void
+AiDotNet.Kernels.GibbsKernel<T>.GetLengthScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> T
+AiDotNet.Kernels.GibbsKernel<T>.GibbsKernel(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, T>! lengthScaleFunction, double variance = 1) -> void
+*REMOVED*AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Kernels.RationalQuadraticKernel<T>.CalculateHyperparameterGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! x2) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Kernels.ProductStructureKernel<T>.LogDeterminant(AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! groupKernelMatrices) -> double
+AiDotNet.Kernels.ProductStructureKernel<T>.LogDeterminant(AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! groupKernelMatrices) -> T
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> double[]!
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> double
+AiDotNet.Kernels.GridKernel<T>.GetEigenvalues() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Kernels.GridKernel<T>.LogDeterminant() -> T
+*REMOVED*AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> double
+AiDotNet.Kernels.InducingPointKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> T
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeComprehensiveMetrics(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? realImages = null) -> (double isMean, double isStd, double? fid)
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeIS(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+*REMOVED*AiDotNet.Metrics.InceptionScore<T>.ComputeISWithUncertainty(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> (double mean, double std)
+*REMOVED*AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFID(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+*REMOVED*AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFIDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> double
+AiDotNet.Metrics.InceptionScore<T>.ComputeComprehensiveMetrics(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? realImages = null) -> (T isMean, T isStd, T fid, bool hasFid)
+AiDotNet.Metrics.InceptionScore<T>.ComputeIS(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+AiDotNet.Metrics.InceptionScore<T>.ComputeISWithUncertainty(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> (T mean, T std)
+AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFID(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+AiDotNet.Metrics.FrechetInceptionDistance<T>.ComputeFIDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedImages) -> T
+*REMOVED*AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVD(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realVideos, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> double
+*REMOVED*AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> double
+AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVD(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! realVideos, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
+AiDotNet.Metrics.FrechetVideoDistance<T>.ComputeFVDWithStats(AiDotNet.Tensors.LinearAlgebra.Vector<T>! realMean, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! realCov, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generatedVideos) -> T
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! input2, int output1, int output2) -> double
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.GetCoregMatrix(int componentIndex) -> double[,]!
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.GetTotalCorrelation() -> double[,]!
+*REMOVED*AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! inputKernels, double[,]![]! coregMatrices) -> void
+AiDotNet.Kernels.LCMKernel<T>.CalculateForOutputs(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! input2, int output1, int output2) -> T
+AiDotNet.Kernels.LCMKernel<T>.GetCoregMatrix(int componentIndex) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.LCMKernel<T>.GetTotalCorrelation() -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.LCMKernel<T>.LCMKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! inputKernels, AiDotNet.Tensors.LinearAlgebra.Matrix<T>![]! coregMatrices) -> void
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X, AiDotNet.Interfaces.IKernelFunction<T>! exactKernel) -> double
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.GetFeatureMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> double[,]!
+*REMOVED*AiDotNet.Kernels.RFFKernel<T>.GetFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> double[]!
+AiDotNet.Kernels.RFFKernel<T>.EstimateApproximationError(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X, AiDotNet.Interfaces.IKernelFunction<T>! exactKernel) -> T
+AiDotNet.Kernels.RFFKernel<T>.GetFeatureMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! X) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Kernels.RFFKernel<T>.GetFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Kernels.GridKernel<T>.GridKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! dimensionKernels, double[]![]! gridCoordinates) -> void
+*REMOVED*static AiDotNet.Kernels.GridKernel<T>.WithRBF(double[]![]! gridCoordinates, double[]? lengthscales = null) -> AiDotNet.Kernels.GridKernel<T>!
+AiDotNet.Kernels.GridKernel<T>.GridKernel(AiDotNet.Interfaces.IKernelFunction<T>![]! dimensionKernels, AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates) -> void
+static AiDotNet.Kernels.GridKernel<T>.WithRBF(AiDotNet.Tensors.LinearAlgebra.Vector<T>![]! gridCoordinates, double[]? lengthscales = null) -> AiDotNet.Kernels.GridKernel<T>!
+*REMOVED*AiDotNet.Metrics.TextDetectionMetrics<T>.Evaluate(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! predictions, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! groundTruth, double iouThreshold = 0.5) -> (double Precision, double Recall, double HMean)
+*REMOVED*static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonArea(System.Collections.Generic.IReadOnlyList<(double X, double Y)>! polygon) -> double
+*REMOVED*static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonIoU(System.Collections.Generic.IReadOnlyList<(double X, double Y)>! first, System.Collections.Generic.IReadOnlyList<(double X, double Y)>! second) -> double
+AiDotNet.Metrics.TextDetectionMetrics<T>.Evaluate(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! predictions, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Detection.TextDetection.TextRegion<T>!>!>! groundTruth, double iouThreshold = 0.5) -> (T Precision, T Recall, T HMean)
+static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonArea(System.Collections.Generic.IReadOnlyList<(T X, T Y)>! polygon) -> T
+static AiDotNet.Metrics.TextDetectionMetrics<T>.PolygonIoU(System.Collections.Generic.IReadOnlyList<(T X, T Y)>! first, System.Collections.Generic.IReadOnlyList<(T X, T Y)>! second) -> T
+AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.Enums.ReverseDiffusionVariance.FixedLarge = 0 -> AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.Enums.ReverseDiffusionVariance.FixedSmall = 1 -> AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.NeuralNetworks.SyntheticData.GaussianDiffusion<T>.GaussianDiffusion(int numTimesteps, double betaStart, double betaEnd, AiDotNet.Enums.BetaSchedule schedule, AiDotNet.Enums.ReverseDiffusionVariance varianceType, System.Random! random) -> void
+AiDotNet.NeuralNetworks.SyntheticData.GaussianDiffusion<T>.VarianceType.get -> AiDotNet.Enums.ReverseDiffusionVariance
+AiDotNet.NeuralNetworks.SyntheticData.MultinomialDiffusion<T>.ComputeLossGradient(AiDotNet.Tensors.LinearAlgebra.Vector<T>! predictedLogProbs, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trueOneHot, AiDotNet.Tensors.LinearAlgebra.Vector<T>! noisyProbs, int t) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Models.Options.CTGANOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.CTGANOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.CopulaGANOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.CopulaGANOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.DPCTGANOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.DPCTGANOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.CTABGANPlusOptions<T>.GumbelTemperature.get -> double
+AiDotNet.Models.Options.CTABGANPlusOptions<T>.GumbelTemperature.set -> void
+AiDotNet.Models.Options.CTGANOptions<T>.CTGANOptions(AiDotNet.Models.Options.CTGANOptions<T>! other) -> void
+AiDotNet.Models.Options.CopulaGANOptions<T>.CopulaGANOptions(AiDotNet.Models.Options.CopulaGANOptions<T>! other) -> void
+AiDotNet.Models.Options.CTABGANPlusOptions<T>.CTABGANPlusOptions(AiDotNet.Models.Options.CTABGANPlusOptions<T>! other) -> void
+AiDotNet.Models.Options.DPCTGANOptions<T>.DPCTGANOptions(AiDotNet.Models.Options.DPCTGANOptions<T>! other) -> void
+AiDotNet.Models.Options.FinancialNeuralNetworkOptions.FinancialNeuralNetworkOptions(AiDotNet.Models.Options.FinancialNeuralNetworkOptions! other) -> void
+AiDotNet.Models.Options.RiskModelOptions<T>.RiskModelOptions(AiDotNet.Models.Options.RiskModelOptions<T>! other) -> void
+AiDotNet.Models.Options.SyntheticDataGeneratorOptions<T>.SyntheticDataGeneratorOptions(AiDotNet.Models.Options.SyntheticDataGeneratorOptions<T>! other) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer<T>.MixtureOfExpertsLayer(System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>!>! experts, AiDotNet.Interfaces.ILayer<T>! router, int[]! inputShape, int[]! outputShape, int topK = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, bool useLoadBalancing = false, T? loadBalancingWeight = default(T?)) -> void
+AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer<T>.MixtureOfExpertsLayer(System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<T>!>! experts, AiDotNet.Interfaces.ILayer<T>! router, int[]! inputShape, int[]! outputShape, int topK = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, bool useLoadBalancing = false, T? loadBalancingWeight = default(T?), AiDotNet.Enums.MixtureOfExpertsGatingNoise gatingNoise = AiDotNet.Enums.MixtureOfExpertsGatingNoise.LearnedNoiseWeights) -> void
+AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.ObliviousDecisionTreeLayer(int depth, int outputDim, double initScale, AiDotNet.Enums.ObliviousTreeChoiceFunction choiceFunction) -> void
+AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.ObliviousDecisionTreeLayer(int inputDim, int depth, int outputDim, double initScale, AiDotNet.Enums.ObliviousTreeChoiceFunction choiceFunction) -> void
+AiDotNet.Enums.MixtureOfExpertsGatingNoise
+AiDotNet.Enums.MixtureOfExpertsGatingNoise.LearnedNoiseWeights = 0 -> AiDotNet.Enums.MixtureOfExpertsGatingNoise
+AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNet.Enums.MixtureOfExpertsGatingNoise
+AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.PCA<T>.Mean.get -> double[]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.PCA<T>.Components.get -> double[,]?
 *REMOVED*AiDotNet.Preprocessing.DimensionalityReduction.PCA<T>.ExplainedVariance.get -> double[]?
