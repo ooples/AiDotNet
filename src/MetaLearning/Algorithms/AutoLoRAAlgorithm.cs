@@ -84,6 +84,11 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// <summary>SPSA learning rate multiplier for auxiliary parameter updates.</summary>
     private const double SpsaLearningRateMultiplier = 0.1;
 
+    /// <summary>
+    /// A selection weight (or a group's thresholded weight sum) at or below this value counts as inactive.
+    /// </summary>
+    private const double ActiveWeightEpsilon = 1e-10;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.AutoLoRA;
 
@@ -141,7 +146,7 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Update rank components (inner loop) by projecting gradient onto each component
-                UpdateRankComponents(grad, baseParams, selectionWeights);
+                UpdateRankComponents(grad, selectionWeights);
 
                 // Recompose with updated components
                 adaptedParams = ComposeAdaptedParams(baseParams, selectionWeights);
@@ -190,7 +195,7 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            UpdateRankComponents(grad, baseParams, thresholdedWeights);
+            UpdateRankComponents(grad, thresholdedWeights);
             adaptedParams = ComposeAdaptedParams(baseParams, thresholdedWeights);
             ParamModel.SetParameters(adaptedParams);
         }
@@ -207,11 +212,13 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         => Engine.Softmax(Engine.Reshape(Tensor<T>.FromVector(_selectionLogits), new[] { _numGroups, _maxRank }), 1);
 
     /// <summary>
-    /// The selection weights with every weight below 1e-10 set to zero: those components are skipped.
+    /// The selection weights with every weight below <see cref="ActiveWeightEpsilon"/> set to zero: those
+    /// components are skipped.
     /// </summary>
     private Tensor<T> ActiveWeights(Tensor<T> selectionWeights)
         => Engine.TensorMultiply(selectionWeights, Engine.TensorSubtract(
-            Engine.TensorOnesLike(selectionWeights), Engine.TensorLessThan(selectionWeights, NumOps.FromDouble(1e-10))));
+            Engine.TensorOnesLike(selectionWeights),
+            Engine.TensorLessThan(selectionWeights, NumOps.FromDouble(ActiveWeightEpsilon))));
 
     /// <summary>The rank components as a [group, rank, paramsPerGroup] tensor.</summary>
     private Tensor<T> ComponentTensor()
@@ -242,7 +249,7 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// <summary>
     /// Updates rank-1 components using projected gradients from the full parameter gradient.
     /// </summary>
-    private void UpdateRankComponents(Vector<T> fullGrad, Vector<T> baseParams, Tensor<T> selectionWeights)
+    private void UpdateRankComponents(Vector<T> fullGrad, Tensor<T> selectionWeights)
     {
         // C[g, j, p] -= lr * w[g, j] * grad[g P + p]; the zero-padded tail of the gradient leaves its slots unchanged.
         var shape = new[] { _numGroups, _maxRank, _paramsPerGroup };
@@ -266,7 +273,7 @@ public partial class AutoLoRAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         // Re-normalize each group; a group with nothing left falls back to uniform weights.
         var sums = Engine.TensorBroadcastTo(Engine.ReduceSum(thresholded, new[] { 1 }, true), shape);
-        var valid = Engine.TensorGreaterThan(sums, NumOps.FromDouble(1e-10));
+        var valid = Engine.TensorGreaterThan(sums, NumOps.FromDouble(ActiveWeightEpsilon));
         var normalized = Engine.TensorDivide(thresholded, Engine.TensorWhere(valid, sums, Engine.TensorOnesLike(sums)));
         var uniform = Engine.TensorFullLike(selectionWeights, NumOps.FromDouble(1.0 / _maxRank));
         return Engine.TensorWhere(valid, normalized, uniform);

@@ -88,6 +88,14 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        // The setter is public, so re-check here: a nonpositive count would otherwise surface only after the
+        // outer update had already changed the model (negative) or freeze the log-variance (zero).
+        if (_algoOptions.NumPosteriorSamples <= 0)
+        {
+            throw new InvalidOperationException(
+                $"NumPosteriorSamples must be positive, but is {_algoOptions.NumPosteriorSamples}.");
+        }
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
@@ -194,10 +202,12 @@ public partial class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     /// <summary>KL(N(mean, diag exp(logVar)) || N(prior, I)) = 0.5 * sum_d [v_d + (mean_d - prior_d)^2 - 1 - log v_d].</summary>
     private T DiagonalGaussianKL(Vector<T> mean, Vector<T> prior)
     {
+        // Per dimension v_d - 1 - log v_d = expm1(log v_d) - log v_d is nonnegative and near zero when log v_d is,
+        // so it is summed first; adding the squared mean shift to that small sum (rather than to a sum near D)
+        // keeps a tiny shift visible when T is float.
         var diff = Engine.Subtract(mean, prior);
-        T kl = NumOps.Subtract(
-            NumOps.Add(Engine.Sum(Engine.Exp(_logVar)), Engine.DotProduct(diff, diff)),
-            NumOps.Add(NumOps.FromDouble(_paramDim), Engine.Sum(_logVar)));
+        T varianceTerm = Engine.Sum(Engine.Subtract(Engine.ExpM1(_logVar), _logVar));
+        T kl = NumOps.Add(varianceTerm, Engine.DotProduct(diff, diff));
         return NumOps.Multiply(NumOps.FromDouble(0.5), kl);
     }
 

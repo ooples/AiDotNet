@@ -288,8 +288,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return new CAVIAModel<T, TInput, TOutput>(
             MetaModel,
             context,
-            _caviaOptions,
-            NumOps);
+            _caviaOptions);
     }
 
     /// <summary>
@@ -487,7 +486,7 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// </para>
     /// </remarks>
     private TInput AugmentInput(TInput input, Vector<T> context) =>
-        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _caviaOptions.ContextInjectionMode, NumOps);
+        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _caviaOptions.ContextInjectionMode);
 }
 
 /// <summary>
@@ -497,14 +496,13 @@ public partial class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 internal static class CAVIAContextHelper<T>
 {
     /// <summary>Augments input by injecting context according to the specified injection mode.</summary>
-    public static TInput AugmentInput<TInput>(TInput input, Vector<T> context,
-        CAVIAContextInjectionMode mode, INumericOperations<T> numOps)
+    public static TInput AugmentInput<TInput>(TInput input, Vector<T> context, CAVIAContextInjectionMode mode)
     {
         return mode switch
         {
             CAVIAContextInjectionMode.Concatenation => ConcatenateContext<TInput>(input, context),
-            CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context, numOps),
-            CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context, numOps),
+            CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context),
+            CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context),
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, $"Unknown CAVIAContextInjectionMode: {mode}")
         };
     }
@@ -552,12 +550,12 @@ internal static class CAVIAContextHelper<T>
         return Vector<T>.Concatenate(vector, context);
     }
 
-    public static TInput AddContext<TInput>(TInput input, Vector<T> context, INumericOperations<T> numOps)
+    public static TInput AddContext<TInput>(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
-            return (TInput)(object)AddContextToTensor(tensor, context, numOps);
+            return (TInput)(object)AddContextToTensor(tensor, context);
         if (input is Matrix<T> matrix)
-            return (TInput)(object)AddContextToMatrix(matrix, context, numOps);
+            return (TInput)(object)AddContextToMatrix(matrix, context);
         if (input is Vector<T> vector)
         {
             if (vector.Length != context.Length)
@@ -568,7 +566,7 @@ internal static class CAVIAContextHelper<T>
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context addition.");
     }
 
-    public static Tensor<T> AddContextToTensor(Tensor<T> tensor, Vector<T> context, INumericOperations<T> numOps)
+    public static Tensor<T> AddContextToTensor(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
         {
@@ -587,7 +585,7 @@ internal static class CAVIAContextHelper<T>
         throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported for context addition.");
     }
 
-    public static Matrix<T> AddContextToMatrix(Matrix<T> matrix, Vector<T> context, INumericOperations<T> numOps)
+    public static Matrix<T> AddContextToMatrix(Matrix<T> matrix, Vector<T> context)
     {
         if (matrix.Columns != context.Length)
             throw new ArgumentException(
@@ -605,12 +603,12 @@ internal static class CAVIAContextHelper<T>
             new[] { rows, context.Length });
     }
 
-    public static TInput MultiplyContext<TInput>(TInput input, Vector<T> context, INumericOperations<T> numOps)
+    public static TInput MultiplyContext<TInput>(TInput input, Vector<T> context)
     {
         if (input is Tensor<T> tensor)
-            return (TInput)(object)MultiplyContextWithTensor(tensor, context, numOps);
+            return (TInput)(object)MultiplyContextWithTensor(tensor, context);
         if (input is Matrix<T> matrix)
-            return (TInput)(object)MultiplyContextWithMatrix(matrix, context, numOps);
+            return (TInput)(object)MultiplyContextWithMatrix(matrix, context);
         if (input is Vector<T> vector)
         {
             if (vector.Length != context.Length)
@@ -621,7 +619,7 @@ internal static class CAVIAContextHelper<T>
         throw new NotSupportedException($"Input type {typeof(TInput).Name} is not supported for context multiplication.");
     }
 
-    public static Tensor<T> MultiplyContextWithTensor(Tensor<T> tensor, Vector<T> context, INumericOperations<T> numOps)
+    public static Tensor<T> MultiplyContextWithTensor(Tensor<T> tensor, Vector<T> context)
     {
         if (tensor.Shape.Length == 1)
         {
@@ -640,7 +638,7 @@ internal static class CAVIAContextHelper<T>
         throw new NotSupportedException($"Tensor with {tensor.Shape.Length} dimensions is not supported for context multiplication.");
     }
 
-    public static Matrix<T> MultiplyContextWithMatrix(Matrix<T> matrix, Vector<T> context, INumericOperations<T> numOps)
+    public static Matrix<T> MultiplyContextWithMatrix(Matrix<T> matrix, Vector<T> context)
     {
         if (matrix.Columns != context.Length)
             throw new ArgumentException(
@@ -673,7 +671,6 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     private readonly IFullModel<T, TInput, TOutput> _bodyModel;
     private readonly Vector<T> _adaptedContext;
     private readonly CAVIAOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Initializes a new instance of the CAVIAModel with adapted context.
@@ -681,7 +678,6 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <param name="bodyModel">The meta-learned body model (frozen during inference).</param>
     /// <param name="adaptedContext">The task-adapted context vector.</param>
     /// <param name="options">CAVIA configuration options.</param>
-    /// <param name="numOps">Numeric operations for type T.</param>
     /// <exception cref="ArgumentNullException">Thrown when any required parameter is null.</exception>
     /// <remarks>
     /// <para>
@@ -700,8 +696,7 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     public CAVIAModel(
         IFullModel<T, TInput, TOutput> bodyModel,
         Vector<T> adaptedContext,
-        CAVIAOptions<T, TInput, TOutput> options,
-        INumericOperations<T> numOps)
+        CAVIAOptions<T, TInput, TOutput> options)
     {
         Guard.NotNull(bodyModel);
         _bodyModel = bodyModel;
@@ -709,8 +704,6 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         _adaptedContext = adaptedContext;
         Guard.NotNull(options);
         _options = options;
-        Guard.NotNull(numOps);
-        _numOps = numOps;
     }
 
     /// <summary>
@@ -850,5 +843,5 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// </para>
     /// </remarks>
     private TInput AugmentInput(TInput input, Vector<T> context) =>
-        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _options.ContextInjectionMode, _numOps);
+        CAVIAContextHelper<T>.AugmentInput<TInput>(input, context, _options.ContextInjectionMode);
 }

@@ -40376,4 +40376,25 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.MetaLearning.Algorithms.CAVIAModel`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.MetaLearning.Options.CAVIAOptions{`0,`1,`2},AiDotNet.Tensors.Interfaces.INumericOperations{`0})</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.MetaLearning.Algorithms.CAVIAModel`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.MetaLearning.Options.CAVIAOptions{`0,`1,`2},AiDotNet.Tensors.Interfaces.INumericOperations{`0})</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.MetaLearning.Algorithms.CAVIAModel`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.MetaLearning.Options.CAVIAOptions{`0,`1,`2},AiDotNet.Tensors.Interfaces.INumericOperations{`0})</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>

@@ -22573,3 +22573,5 @@ AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.AdaptedMet
 AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>.ParameterModulationFactors.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 *REMOVED*AiDotNet.MetaLearning.Algorithms.NeuralProcessModel<T, TInput, TOutput>.ParameterModulationFactors.get -> double[]?
 AiDotNet.MetaLearning.Algorithms.NeuralProcessModel<T, TInput, TOutput>.ParameterModulationFactors.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.MetaLearning.Algorithms.CAVIAModel<T, TInput, TOutput>.CAVIAModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! bodyModel, AiDotNet.Tensors.LinearAlgebra.Vector<T>! adaptedContext, AiDotNet.MetaLearning.Options.CAVIAOptions<T, TInput, TOutput>! options, AiDotNet.Tensors.Interfaces.INumericOperations<T>! numOps) -> void
+AiDotNet.MetaLearning.Algorithms.CAVIAModel<T, TInput, TOutput>.CAVIAModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! bodyModel, AiDotNet.Tensors.LinearAlgebra.Vector<T>! adaptedContext, AiDotNet.MetaLearning.Options.CAVIAOptions<T, TInput, TOutput>! options) -> void

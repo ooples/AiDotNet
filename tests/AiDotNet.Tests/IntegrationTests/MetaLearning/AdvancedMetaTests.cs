@@ -194,6 +194,23 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void BayTransProto_MetaTrain_RejectsNonpositiveSampleCountBeforeUpdatingTheModel(int samples)
+    {
+        var model = new LinearVectorModel(3);
+        var options = new BayTransProtoOptions<double, Matrix<double>, Vector<double>>(model)
+        { InnerLearningRate = 0.01, OuterLearningRate = 0.01 };
+        var algorithm = new BayTransProtoAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        options.NumPosteriorSamples = samples;
+        var paramsBefore = model.GetParameters().Clone();
+
+        var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { CreateTask(7354) });
+        Assert.Throws<InvalidOperationException>(() => algorithm.MetaTrain(batch));
+        Assert.Equal(paramsBefore.ToArray(), model.GetParameters().ToArray());
+    }
+
     [Fact(Timeout = 120000)]
     public async Task BayTransProto_MetaTrain_LearnsPosteriorLogVarianceTowardKLOptimum()
     {

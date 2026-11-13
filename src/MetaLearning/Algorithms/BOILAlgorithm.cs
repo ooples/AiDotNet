@@ -89,6 +89,12 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly bool[] _adaptedLayers;
 
     /// <summary>
+    /// The layer each body parameter belongs to, built once from <see cref="_layers"/> (which never changes) so
+    /// the per-step rate expansion does not rebuild a parameter-sized index.
+    /// </summary>
+    private readonly Tensor<int> _layerIndex;
+
+    /// <summary>
     /// Initializes a new instance of the BOILAlgorithm class.
     /// </summary>
     /// <param name="options">BOIL configuration options containing the model and all hyperparameters.</param>
@@ -135,6 +141,7 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         _headBias = new Vector<T>(options.NumClasses);
         _layers = BodyLayers(options.MetaModel, InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length);
         _adaptedLayers = TopLayers(_layers.Length, options.BodyAdaptationFraction);
+        _layerIndex = LayerIndex();
         _layerStepRates = options.UseLayerwiseLearningRates ? InitialLayerStepRates() : new Vector<T>(0);
     }
 
@@ -224,7 +231,7 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var rates = new Vector<T>(_layerStepRates.Length);
         int layerCount = _layers.Length;
         var rateRows = _layerStepRates.Length > 0 && layerCount > 0 ? new Vector<T>?[_layerStepRates.Length / layerCount] : null;
-        var layerIndex = rateRows is not null ? LayerIndex() : null;
+        var layerIndex = rateRows is not null ? _layerIndex : null;
 
         // Walk the inner loop back. body_{k+1} = body_k - A_k o g_k with g_k the support gradient; the adjoint lambda
         // of body_{k+1} gives each learned rate -sum_layer(g_k o lambda), sends -d/dhead (g_k . A_k o lambda) to the
@@ -474,7 +481,7 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             ? _layerStepRates.GetSubVector(step * _layers.Length, _layers.Length)
             : Engine.Fill(_layers.Length, NumOps.FromDouble(_boilOptions.InnerLearningRate));
         var masked = Tensor<T>.FromVector(Engine.Multiply(layerRates, AdaptedLayerMask()));
-        return Engine.TensorIndexSelect(masked, LayerIndex(), 0).ToVector();
+        return Engine.TensorIndexSelect(masked, _layerIndex, 0).ToVector();
     }
 
     /// <summary>

@@ -213,19 +213,10 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Each feature reads four context parameters in order - gate weight, gate bias, projection weight,
         // projection bias - and once the parameters run out every read takes its default (0.01, 0, 0.01, 0).
-        int needed = 4 * n;
-        int available = Math.Min(_contextParams.Length, needed);
         T small = NumOps.FromDouble(0.01);
-        var defaults = ParameterModulation.Cycle(
-            Engine, new Vector<T>(new[] { small, NumOps.Zero, small, NumOps.Zero }), needed);
-        var parameters = available == needed
-            ? _contextParams.GetSubVector(0, needed)
-            : Vector<T>.Concatenate(
-                available > 0 ? _contextParams.GetSubVector(0, available) : new Vector<T>(0),
-                defaults.GetSubVector(available, needed - available));
-        var table = Engine.Reshape(Tensor<T>.FromVector(parameters), new[] { n, 4 });
-        Vector<T> Column(int column)
-            => Engine.Reshape(Engine.TensorSlice(table, new[] { 0, column }, new[] { n, 1 }), new[] { n }).ToVector();
+        var table = ParameterModulation.DefaultedTable(
+            Engine, _contextParams, n, new Vector<T>(new[] { small, NumOps.Zero, small, NumOps.Zero }));
+        Vector<T> Column(int column) => ParameterModulation.Column(Engine, table, column);
 
         // Context gate: sigmoid(w * context + b)
         var gate = Engine.Sigmoid(Engine.Add(Engine.Multiply(Column(0), contextMean), Column(1)));
