@@ -442,7 +442,76 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
         int targetWidth = columns * _patchSize;
         return targetHeight == height && targetWidth == width
             ? image
-            : Engine.Interpolate(image, new[] { targetHeight, targetWidth }, InterpolateMode.Bilinear, alignCorners: false);
+            : ResizeBilinearAntialiased(image, targetHeight, targetWidth);
+    }
+
+    /// <summary>
+    /// Resizes a [batch, channels, height, width] image as the reference processor does:
+    /// <c>torch.nn.functional.interpolate(mode="bilinear", align_corners=False, antialias=True)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Without shrinking, the antialiased weights are plain bilinear ones, so the engine's interpolation runs. When either
+    /// axis shrinks, each axis is filtered separately by its weight matrix (two MatMuls); without the antialias filter a
+    /// downscaled page reads only the two source pixels nearest each output and aliases thin strokes away.
+    /// </remarks>
+    internal static Tensor<T> ResizeBilinearAntialiased(Tensor<T> image, int targetHeight, int targetWidth)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int batch = image.Shape[0], channels = image.Shape[1], height = image.Shape[2], width = image.Shape[3];
+        if (targetHeight >= height && targetWidth >= width)
+            return engine.Interpolate(image, new[] { targetHeight, targetWidth }, InterpolateMode.Bilinear, alignCorners: false);
+
+        // Height: [B, C, H, W] -> [H, B*C*W], weights [H', H] on the left, and back.
+        var heightFirst = engine.Reshape(engine.TensorPermute(image, new[] { 2, 0, 1, 3 }),
+            new[] { height, batch * channels * width });
+        var rows = engine.TensorMatMul(AntialiasedBilinearWeights(targetHeight, height), heightFirst);
+        var x = engine.TensorPermute(engine.Reshape(rows, new[] { targetHeight, batch, channels, width }),
+            new[] { 1, 2, 0, 3 });
+
+        // Width: [B*C*H', W] times the transposed weights [W, W'].
+        var flat = engine.Reshape(x, new[] { batch * channels * targetHeight, width });
+        var columns = engine.TensorMatMul(flat, engine.TensorTranspose(AntialiasedBilinearWeights(targetWidth, width)));
+        return engine.Reshape(columns, new[] { batch, channels, targetHeight, targetWidth });
+    }
+
+    /// <summary>
+    /// The [outputs, inputs] weights of PyTorch's antialiased bilinear resampling along one axis (ATen
+    /// <c>_compute_indices_weights_aa</c> with the triangle filter, align_corners = False).
+    /// </summary>
+    /// <remarks>
+    /// scale = inputs / outputs; output i is centred on source coordinate scale·(i + 0.5); the triangle's support is
+    /// scale when shrinking and 1 otherwise; taps are the source pixels whose centres fall within the support, each
+    /// weighted by the triangle at (pixel centre − centre) / max(scale, 1), and normalised to sum to one. The weights are
+    /// built in double and rounded to T once.
+    /// </remarks>
+    private static Tensor<T> AntialiasedBilinearWeights(int outputs, int inputs)
+    {
+        double scale = inputs / (double)outputs;
+        double support = scale >= 1.0 ? scale : 1.0;
+        double inverseScale = scale >= 1.0 ? 1.0 / scale : 1.0;
+        var weights = new double[outputs * inputs];
+        for (int i = 0; i < outputs; i++)
+        {
+            double center = scale * (i + 0.5);
+            int first = Math.Max((int)(center - support + 0.5), 0);
+            int end = Math.Min((int)(center + support + 0.5), inputs);
+            double total = 0.0;
+            for (int j = first; j < end; j++)
+            {
+                double distance = Math.Abs((j - center + 0.5) * inverseScale);
+                double w = distance < 1.0 ? 1.0 - distance : 0.0;
+                weights[i * inputs + j] = w;
+                total += w;
+            }
+
+            if (total != 0.0)
+            {
+                for (int j = first; j < end; j++)
+                    weights[i * inputs + j] /= total;
+            }
+        }
+
+        return new Tensor<double>(weights, new[] { outputs, inputs }).Cast<T>();
     }
 
     /// <summary>
