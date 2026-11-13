@@ -136,13 +136,11 @@ internal static class PreprocessingTensorOps
         return engine.TensorArgsort(new Tensor<long>(keys, new[] { count }), 0, false).AsSpan().ToArray();
     }
 
-    /// <summary>The index of the first (lowest-index) largest entry of a 1-D tensor.</summary>
-    public static int FirstArgMax<T>(Tensor<T> values)
-    {
-        var engine = AiDotNetEngine.Current;
-        var flat = values.Rank == 1 ? values : engine.Reshape(values, new[] { values.Length });
-        return MaskPositions(engine.TensorEquals(flat, engine.TensorMaxValue(flat)))[0];
-    }
+    /// <summary>
+    /// The index of the first (lowest-index) largest entry of a 1-D tensor, a NaN ranking below every number: the
+    /// first entry of <see cref="StableOrder{T}"/>, the one ranking every FirstArgMax shares.
+    /// </summary>
+    public static int FirstArgMax<T>(Tensor<T> values) => StableOrder(values, descending: true)[0];
 
     /// <summary>
     /// The positions of the (at most <paramref name="k"/>) largest entries that are at least <paramref name="minimum"/>,
