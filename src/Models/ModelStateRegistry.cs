@@ -382,15 +382,15 @@ public sealed class ModelStateRegistry<T>
                 var vector = get();
                 if (vector is null) { w.Write(-1); return; }
                 w.Write(vector.Length);
-                for (int i = 0; i < vector.Length; i++) w.Write(vector[i]);
+                w.Write(vector.AsSpan().ToArray());
             },
             r =>
             {
                 int length = r.ReadInt32();
                 if (length < 0) return Assign(set, null);
-                var vector = new Vector<byte>(length);
-                for (int i = 0; i < length; i++) vector[i] = r.ReadByte();
-                return Assign(set, vector);
+                var bytes = r.ReadBytes(length);
+                if (bytes.Length != length) throw new EndOfStreamException($"State '{name}' ended inside a byte vector.");
+                return Assign(set, new Vector<byte>(bytes));
             });
 
     /// <summary>Declares a double vector held by a model whose primary numeric type may differ.</summary>
@@ -401,15 +401,13 @@ public sealed class ModelStateRegistry<T>
                 var vector = get();
                 if (vector is null) { w.Write(-1); return; }
                 w.Write(vector.Length);
-                for (int i = 0; i < vector.Length; i++) w.Write(vector[i]);
+                WriteDoubleValues(w, vector.AsSpan().ToArray());
             },
             r =>
             {
                 int length = r.ReadInt32();
                 if (length < 0) return Assign(set, null);
-                var vector = new Vector<double>(length);
-                for (int i = 0; i < length; i++) vector[i] = r.ReadDouble();
-                return Assign(set, vector);
+                return Assign(set, new Vector<double>(ReadDoubleValues(r, length)));
             });
 
     /// <summary>Declares a matrix, such as the retained training set of an instance-based model.</summary>
@@ -1502,7 +1500,7 @@ public sealed class ModelStateRegistry<T>
         public NodeShape<TNode> Scalar(Func<TNode, T> get, Action<TNode, T> set)
         {
             Fields.Add((
-                (n, w) => w.Write(Convert.ToDouble(get(n))),
+                (n, w) => w.Write(Ops.ToDouble(get(n))),
                 (n, r) => set(n, Ops.FromDouble(r.ReadDouble()))));
             return this;
         }
@@ -1652,15 +1650,13 @@ public sealed class ModelStateRegistry<T>
                 var a = get();
                 if (a is null) { w.Write(-1); return; }
                 w.Write(a.Length);
-                foreach (var value in a) w.Write(Convert.ToDouble(value));
+                WriteDoubleValues(w, ToDoubles(a));
             },
             r =>
             {
                 int length = r.ReadInt32();
                 if (length < 0) return Assign(set, null);
-                var a = new T[length];
-                for (int i = 0; i < length; i++) a[i] = Ops.FromDouble(r.ReadDouble());
-                return Assign(set, a);
+                return Assign(set, FromDoubles(ReadDoubleValues(r, length)));
             });
 
     /// <summary>Declares a JAGGED array held as the model's own numeric type.</summary>
@@ -1685,7 +1681,7 @@ public sealed class ModelStateRegistry<T>
                 {
                     if (row is null) { w.Write(-1); continue; }
                     w.Write(row.Length);
-                    foreach (var value in row) w.Write(Convert.ToDouble(value));
+                    WriteDoubleValues(w, ToDoubles(row));
                 }
             },
             r =>
@@ -1697,9 +1693,7 @@ public sealed class ModelStateRegistry<T>
                 {
                     int inner = r.ReadInt32();
                     if (inner < 0) continue;
-                    var row = new T[inner];
-                    for (int j = 0; j < inner; j++) row[j] = Ops.FromDouble(r.ReadDouble());
-                    rows[i] = row;
+                    rows[i] = FromDoubles(ReadDoubleValues(r, inner));
                 }
                 return Assign(set, rows);
             });
@@ -2470,15 +2464,15 @@ public sealed class ModelStateRegistry<T>
                 var v = get();
                 if (v is null) { w.Write(-1); return; }
                 w.Write(v.Length);
-                for (int i = 0; i < v.Length; i++) w.Write(v[i]);
+                foreach (int value in v.AsSpan()) w.Write(value);
             },
             r =>
             {
                 int length = r.ReadInt32();
                 if (length < 0) return Assign(set, null);
-                var v = new Vector<int>(length);
-                for (int i = 0; i < length; i++) v[i] = r.ReadInt32();
-                return Assign(set, v);
+                var values = new int[length];
+                for (int i = 0; i < length; i++) values[i] = r.ReadInt32();
+                return Assign(set, new Vector<int>(values));
             });
 
     /// <summary>Declares a keyed set of vectors, such as per-layer optimiser moments.</summary>
@@ -2697,7 +2691,7 @@ public sealed class ModelStateRegistry<T>
     /// <param name="set">Installs a restored value.</param>
     public void DeclareScalar(string name, Func<T> get, Action<T> set)
         => Add(name,
-            w => w.Write(Convert.ToDouble(get())),
+            w => w.Write(Ops.ToDouble(get())),
             r => Assign(set, Ops.FromDouble(r.ReadDouble())));
 
     /// <summary>Declares a string, such as a fitted category name or a chosen kernel.</summary>
@@ -2918,20 +2912,37 @@ public sealed class ModelStateRegistry<T>
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>The payload format stores every numeric element as a double.</summary>
+    private static double[] ToDoubles(T[] values) =>
+        new Tensor<T>(values, new[] { values.Length }).Cast<double>().ToArray();
+
+    private static T[] FromDoubles(double[] values) =>
+        new Tensor<double>(values, new[] { values.Length }).Cast<T>().ToArray();
+
+    private static void WriteDoubleValues(BinaryWriter w, double[] values)
+    {
+        foreach (double value in values) w.Write(value);
+    }
+
+    private static double[] ReadDoubleValues(BinaryReader r, int length)
+    {
+        var values = new double[length];
+        for (int i = 0; i < length; i++) values[i] = r.ReadDouble();
+        return values;
+    }
+
     private static void WriteVector(BinaryWriter w, Vector<T>? v)
     {
         if (v is null) { w.Write(-1); return; }
         w.Write(v.Length);
-        for (int i = 0; i < v.Length; i++) w.Write(Convert.ToDouble(v[i]));
+        WriteDoubleValues(w, ToDoubles(v.AsSpan().ToArray()));
     }
 
     private static Vector<T>? ReadVector(BinaryReader r)
     {
         int length = r.ReadInt32();
         if (length < 0) return null;
-        var v = new Vector<T>(length);
-        for (int i = 0; i < length; i++) v[i] = Ops.FromDouble(r.ReadDouble());
-        return v;
+        return new Vector<T>(FromDoubles(ReadDoubleValues(r, length)));
     }
 
     private static void WriteMatrix(BinaryWriter w, Matrix<T>? m)
@@ -2939,9 +2950,7 @@ public sealed class ModelStateRegistry<T>
         if (m is null) { w.Write(-1); return; }
         w.Write(m.Rows);
         w.Write(m.Columns);
-        for (int i = 0; i < m.Rows; i++)
-            for (int j = 0; j < m.Columns; j++)
-                w.Write(Convert.ToDouble(m[i, j]));
+        WriteDoubleValues(w, ToDoubles(m.AsSpan().ToArray()));
     }
 
     private static Matrix<T>? ReadMatrix(BinaryReader r)
@@ -2950,9 +2959,7 @@ public sealed class ModelStateRegistry<T>
         if (rows < 0) return null;
         int columns = r.ReadInt32();
         var m = new Matrix<T>(rows, columns);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < columns; j++)
-                m[i, j] = Ops.FromDouble(r.ReadDouble());
+        FromDoubles(ReadDoubleValues(r, rows * columns)).AsSpan().CopyTo(m.AsWritableSpan());
         return m;
     }
 
@@ -2963,7 +2970,7 @@ public sealed class ModelStateRegistry<T>
         w.Write(shape.Length);
         for (int i = 0; i < shape.Length; i++) w.Write(shape[i]);
         w.Write(t.Length);
-        for (int i = 0; i < t.Length; i++) w.Write(Convert.ToDouble(t[i]));
+        WriteDoubleValues(w, t.Cast<double>().ToArray());
     }
 
     private static Tensor<T>? ReadTensor(BinaryReader r)
@@ -2978,7 +2985,7 @@ public sealed class ModelStateRegistry<T>
         {
             if (length != t.Length)
                 throw new InvalidDataException("Stored tensor length does not match its declared shape.");
-            for (int i = 0; i < length; i++) t[i] = Ops.FromDouble(r.ReadDouble());
+            FromDoubles(ReadDoubleValues(r, length)).AsSpan().CopyTo(t.AsWritableSpan());
             return t;
         }
         catch
