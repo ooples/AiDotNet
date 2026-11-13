@@ -3407,7 +3407,6 @@ public static class MatrixExtensions
             throw new ArgumentException("Matrix exponential is only defined for square matrices.", nameof(matrix));
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         int d = matrix.Rows;
         if (d == 0)
         {
@@ -3415,15 +3414,22 @@ public static class MatrixExtensions
         }
 
         // Truncated Taylor series: e^A = I + sum_{k=1..order} A^k / k!
-        var a = Tensor<T>.FromMatrix(matrix);
-        var result = Eng.TensorEye<T>(d);
-        var power = a;
+        var inverseFactorials = new double[Math.Max(order, 0)];
         double factorial = 1.0;
-
         for (int k = 1; k <= order; k++)
         {
             factorial *= k;
-            result = Eng.TensorAdd(result, Eng.TensorMultiplyScalar(power, numOps.FromDouble(1.0 / factorial)));
+            inverseFactorials[k - 1] = 1.0 / factorial;
+        }
+
+        T[] coefficients = new Tensor<double>(inverseFactorials, new[] { inverseFactorials.Length }).Cast<T>().ToArray();
+        var a = Tensor<T>.FromMatrix(matrix);
+        var result = Eng.TensorEye<T>(d);
+        var power = a;
+
+        for (int k = 1; k <= order; k++)
+        {
+            result = Eng.TensorAdd(result, Eng.TensorMultiplyScalar(power, coefficients[k - 1]));
 
             // power = power * matrix (for next iteration)
             if (k < order)
