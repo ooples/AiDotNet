@@ -59,6 +59,13 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     internal virtual bool KeepsResultsBetweenCalls => GetType().Assembly != typeof(LossFunctionBase<T>).Assembly;
 
     /// <summary>
+    /// Whether <see cref="ComputeTapeLoss"/> reads the target's values on the host (decoding encoded labels into index
+    /// arrays, say) rather than through engine ops. A compiled training plan replays only engine ops, so it would keep
+    /// the target decoded when it was traced for the whole run; a model training with such a loss takes the eager step.
+    /// </summary>
+    internal virtual bool ReadsTargetOnHost => false;
+
+    /// <summary>
     /// Calculates both loss and gradient on GPU in a single pass.
     /// Default implementation differentiates <see cref="ComputeTapeLoss"/> on the CPU and uploads
     /// the result; override to compute both in a single GPU kernel invocation.

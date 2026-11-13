@@ -14488,6 +14488,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
+        if (LossFunction is AiDotNet.LossFunctions.LossFunctionBase<T> { ReadsTargetOnHost: true })
+            return EmitFusedMissAndFallback(
+                $"{LossFunction.GetType().Name} decodes its target on the host, which a compiled plan cannot replay");
         if (IsGradientCheckpointingEnabled)
         {
             // Same rule as the configuration gate below: a committed plan's optimizer moments cannot move to the eager
