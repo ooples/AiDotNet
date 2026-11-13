@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -10,6 +12,7 @@ using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.PhysicsInformed.PDEs;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.PhysicsInformed.ScientificML;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using Xunit;
@@ -246,5 +249,168 @@ public class PhysicsInformedPaperReferenceTests
         var trainer = new GpuPINNTrainer<double>(pinn);
 
         Assert.Throws<ArgumentNullException>(() => trainer.Train(epochs: 1, verbose: false));
+    }
+
+    [Fact]
+    public void InverseProblemPinn_SolveTrainsTheNetwork()
+    {
+        // Raissi et al. (2019), Sec. 4, train the network and the coefficients together on MSE_u + MSE_f. The old
+        // network step ran the optimizer with no backward pass, so Solve never moved the network.
+        var observations = new List<(double[] location, double[] value)>
+        {
+            (new[] { 0.25, 0.1 }, new[] { 0.9 }),
+            (new[] { 0.50, 0.1 }, new[] { 0.7 }),
+            (new[] { 0.75, 0.1 }, new[] { 0.4 })
+        };
+        var pinn = new InverseProblemPINN<double>(
+            Architecture(2, 1), new DiffusivityIdentification(observations), Array.Empty<IBoundaryCondition<double>>(),
+            options: new InverseProblemOptions<double> { NumCollocationPoints = 16 });
+        var probe = new Tensor<double>(new[] { 0.3, 0.2, 0.6, 0.8 }, new[] { 2, 2 });
+
+        var before = pinn.Predict(probe).ToArray();
+        pinn.Solve(epochs: 1, learningRate: 0.01, verbose: false);
+        var after = pinn.Predict(probe).ToArray();
+
+        Assert.True(before.Zip(after, (a, b) => Math.Abs(a - b)).Max() > 1e-9);
+    }
+
+    [Fact]
+    public void VariationalPinn_TestFunctionsAreLegendreAndVanishOnTheBoundary()
+    {
+        // Kharazmi et al. (2019), Eq. 13: v_k = P_{k+1} - P_{k-1} on xi = 2x - 1, integrated by Gauss-Legendre
+        // quadrature, which is exact for these polynomials. The old test functions and integration rule did not
+        // give these values.
+        var engine = AiDotNetEngine.Current;
+        VariationalPINN<double> Vpinn(Func<Tensor<double>, Tensor<double>, Tensor<double>> integrand) =>
+            new VariationalPINN<double>(
+                Architecture(1, 1),
+                (x, u, gradU, v, gradV) => integrand(v, gradV),
+                new VariationalPINNOptions { NumTestFunctions = 3, NumQuadraturePoints = 8 });
+
+        // int_0^1 v_k dx = (1/2) int_-1^1 (P_{k+1} - P_{k-1}) dxi: -1 for k = 1 (P_0 integrates to 2), 0 above.
+        var mean = Vpinn((v, gradV) => v);
+        Assert.Equal(-1.0, mean.ComputeWeakResidual(0), 1e-12);
+        Assert.Equal(0.0, mean.ComputeWeakResidual(1), 1e-12);
+        Assert.Equal(0.0, mean.ComputeWeakResidual(2), 1e-12);
+
+        // int_0^1 v_k' dx = v_k(1) - v_k(0) = 0: every test function vanishes on the boundary.
+        var slope = Vpinn((v, gradV) => engine.Reshape(gradV, new[] { gradV.Shape[0] }));
+        for (int k = 0; k < 3; k++)
+        {
+            Assert.Equal(0.0, slope.ComputeWeakResidual(k), 1e-12);
+        }
+
+        // int_0^1 v_k^2 dx = (1/2) (2 / (2k + 3) + 2 / (2k - 1)) by Legendre orthogonality: degree 2k + 2, still
+        // exact with 8 nodes.
+        var square = Vpinn((v, gradV) => engine.TensorMultiply(v, v));
+        for (int k = 1; k <= 3; k++)
+        {
+            double expected = 1.0 / (2 * k + 3) + 1.0 / (2 * k - 1);
+            Assert.Equal(expected, square.ComputeWeakResidual(k - 1), 1e-12);
+        }
+    }
+
+    [Fact]
+    public void FourierLayer_SpectralPathIsTheTruncatedRealFft()
+    {
+        // Li et al. (2021): rfft over the last axis, keep the frequencies 0 .. m - 1, multiply each by its complex
+        // weight, irfft, then add the pointwise path W x + b. The old layer kept both ends of the last axis with
+        // shared weights instead.
+        const int n = 8;
+        var layer = new FourierLayer<double>(1, 3, new[] { n }, new IdentityActivation<double>());
+        double[] weightRe = { 0.5, -0.3, 0.8 };
+        double[] weightIm = { 0.0, 0.4, -0.6 };
+        const double pointwise = 0.7;
+        const double bias = 0.1;
+        layer.SetParameters(new Vector<double>(weightRe.Concat(weightIm).Concat(new[] { pointwise, bias }).ToArray()));
+
+        double[] x = Enumerable.Range(0, n).Select(i => Math.Sin(0.9 * i) + 0.3 * Math.Cos(2.1 * i) + 0.2).ToArray();
+        var output = layer.Forward(new Tensor<double>(x, new[] { 1, 1, n })).ToArray();
+
+        for (int i = 0; i < n; i++)
+        {
+            double spectral = 0.0;
+            for (int k = 0; k < 3; k++)
+            {
+                double xRe = 0.0, xIm = 0.0;
+                for (int j = 0; j < n; j++)
+                {
+                    double angle = -2.0 * Math.PI * k * j / n;
+                    xRe += x[j] * Math.Cos(angle);
+                    xIm += x[j] * Math.Sin(angle);
+                }
+
+                double yRe = weightRe[k] * xRe - weightIm[k] * xIm;
+                double yIm = weightRe[k] * xIm + weightIm[k] * xRe;
+                double phase = 2.0 * Math.PI * k * i / n;
+                double hermitian = k == 0 ? 1.0 : 2.0;
+                spectral += hermitian * (yRe * Math.Cos(phase) - yIm * Math.Sin(phase)) / n;
+            }
+
+            Assert.Equal(spectral + pointwise * x[i] + bias, output[i], 1e-10);
+        }
+    }
+
+    [Fact]
+    public void FourierNeuralOperator_LiftIsLinearAndProjectionHasAHiddenLayer()
+    {
+        // Li et al. (2021), Sec. 4: the lift P is a pointwise linear map (fc0) and the projection Q is two pointwise
+        // layers, width -> 128 with GELU, then 128 -> output (fc1, fc2). The old lift applied GELU and the
+        // projection was a single layer.
+        var fno = new FourierNeuralOperator<double>(
+            Architecture(1, 1), new[] { 8 }, options: new FourierNeuralOperatorOptions { Modes = 2, Width = 4, NumLayers = 2 });
+
+        Assert.Equal(2 + 3, fno.Layers.Count);
+        Assert.Equal(new[] { 128 }, fno.Layers[fno.Layers.Count - 2].GetOutputShape());
+
+        var lift = fno.Layers[0];
+        double[] Lift(double scale) =>
+            lift.Forward(new Tensor<double>(new[] { 0.4 * scale, -1.3 * scale, 2.2 * scale }, new[] { 3, 1 })).ToArray();
+        var origin = Lift(0.0);
+        var single = Lift(1.0);
+        var twice = Lift(2.0);
+        for (int i = 0; i < origin.Length; i++)
+        {
+            Assert.Equal(2.0 * (single[i] - origin[i]), twice[i] - origin[i], 1e-12);
+        }
+    }
+
+    [Fact]
+    public void GraphNeuralOperator_NormalizedAdjacencyIgnoresTheEdgeScale()
+    {
+        // Kipf and Welling (2017): D^-1/2 A D^-1/2 is unchanged when every edge weight is scaled. The old code added
+        // 1e-10 to every degree, so a graph with small weights (degree 1e-8 here) was normalized about 1% low; an
+        // isolated node keeps a zero row either way.
+        var gno = new GraphNeuralOperator<double>(
+            Architecture(2, 3), options: new GraphNeuralOperatorOptions { HiddenDim = 3, NumLayers = 2, InputDim = 2 });
+        var features = new Tensor<double>(new[] { 0.5, -0.2, 0.1, 0.9, -0.7, 0.3 }, new[] { 3, 2 });
+        double[] adjacency = { 0, 1, 0, 1, 0, 0, 0, 0, 0 };
+
+        var unit = gno.Forward(features, new Tensor<double>(adjacency, new[] { 3, 3 })).ToArray();
+        var small = gno.Forward(features, new Tensor<double>(adjacency.Select(a => a * 1e-8).ToArray(), new[] { 3, 3 })).ToArray();
+
+        for (int i = 0; i < unit.Length; i++)
+        {
+            Assert.Equal(unit[i], small[i], 1e-12);
+        }
+    }
+
+    private sealed class DiffusivityIdentification : IInverseProblem<double>
+    {
+        public DiffusivityIdentification(IReadOnlyList<(double[] location, double[] value)> observations)
+        {
+            Observations = observations;
+        }
+
+        public string[] ParameterNames => new[] { "diffusivity" };
+        public int NumberOfParameters => 1;
+        public double[] InitialParameterGuesses => new[] { 0.5 };
+        public double[]? ParameterLowerBounds => new[] { 1e-3 };
+        public double[]? ParameterUpperBounds => new[] { 10.0 };
+        public IReadOnlyList<(double[] location, double[] value)> Observations { get; }
+        public bool HasMeasurementNoiseLevel => false;
+        public double MeasurementNoiseLevel => 0.0;
+        public bool ValidateParameters(double[] parameters) => parameters.Length == 1 && parameters[0] > 0;
+        public IPDESpecification<double> CreateParameterizedPDE(double[] parameters) => new HeatEquation<double>(parameters[0]);
     }
 }
