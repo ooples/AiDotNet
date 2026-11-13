@@ -248,13 +248,11 @@ public partial class AiModelResult<T, TInput, TOutput>
         TOutput[] testLabels,
         double epsilon = 0.03)
     {
-        var attackOptions = new AdversarialAttackOptions<T>
+        // The paper's standard AutoAttack (Croce and Hein 2020): 100 APGD/FAB iterations, 5000 Square queries.
+        var attackOptions = new AutoAttackOptions<T>
         {
             Epsilon = epsilon,
-            StepSize = epsilon / 4.0,
-            Iterations = 10,
-            NormType = AdversarialNormType.LInfinity,
-            UseRandomStart = true
+            NormType = AdversarialNormType.LInfinity
         };
 
         var attack = new AutoAttack<T, TInput, TOutput>(attackOptions);

@@ -22922,13 +22922,9 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 *REMOVED*AiDotNet.Models.Options.AdversarialAttackOptions<T>.NormType.get -> string!
-*REMOVED*AiDotNet.Models.Options.AdversarialAttackOptions<T>.NormType.set -> void
 *REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AttackNormType.get -> string!
-*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AttackNormType.set -> void
 *REMOVED*AiDotNet.Models.RobustnessStats<T>.NormType.get -> string!
-*REMOVED*AiDotNet.Models.RobustnessStats<T>.NormType.set -> void
 *REMOVED*AiDotNet.Models.RobustnessStats<T>.AveragePerturbationSize.get -> double
-*REMOVED*AiDotNet.Models.RobustnessStats<T>.AveragePerturbationSize.set -> void
 AiDotNet.Enums.AdversarialNormType
 AiDotNet.Enums.AdversarialNormType.LInfinity = 0 -> AiDotNet.Enums.AdversarialNormType
 AiDotNet.Enums.AdversarialNormType.L2 = 1 -> AiDotNet.Enums.AdversarialNormType
@@ -22948,3 +22944,22 @@ AiDotNet.AdversarialRobustness.Attacks.AdversarialAttackBase<T, TInput, TOutput>
 static AiDotNet.AdversarialRobustness.Attacks.AdversarialAttackBase<T, TInput, TOutput>.DivisionGuard() -> T
 *REMOVED*AiDotNet.Augmentation.Tabular.TabularMixUp<T>.MixWithLabels(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data1, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data2, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels2, AiDotNet.Augmentation.AugmentationContext<T>! context) -> (AiDotNet.Tensors.LinearAlgebra.Matrix<T>! Data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! Labels, double Lambda)
 AiDotNet.Augmentation.Tabular.TabularMixUp<T>.MixWithLabels(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data1, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data2, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels1, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels2, AiDotNet.Augmentation.AugmentationContext<T>! context) -> (AiDotNet.Tensors.LinearAlgebra.Matrix<T>! Data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! Labels, T Lambda)
+AiDotNet.Enums.AutoAttackVersion
+AiDotNet.Enums.AutoAttackVersion.Standard = 0 -> AiDotNet.Enums.AutoAttackVersion
+AiDotNet.Enums.AutoAttackVersion.Plus = 1 -> AiDotNet.Enums.AutoAttackVersion
+AiDotNet.Models.Options.AutoAttackOptions<T>
+AiDotNet.Models.Options.AutoAttackOptions<T>.AutoAttackOptions() -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.Version.get -> AiDotNet.Enums.AutoAttackVersion
+AiDotNet.Models.Options.AutoAttackOptions<T>.Version.set -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.TargetClasses.get -> int
+AiDotNet.Models.Options.AutoAttackOptions<T>.TargetClasses.set -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.SquareQueries.get -> int
+AiDotNet.Models.Options.AutoAttackOptions<T>.SquareQueries.set -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.SquareInitialFraction.get -> double
+AiDotNet.Models.Options.AutoAttackOptions<T>.SquareInitialFraction.set -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.FabAlphaMax.get -> double
+AiDotNet.Models.Options.AutoAttackOptions<T>.FabAlphaMax.set -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.FabEta.get -> double
+AiDotNet.Models.Options.AutoAttackOptions<T>.FabEta.set -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.FabBeta.get -> double
+AiDotNet.Models.Options.AutoAttackOptions<T>.FabBeta.set -> void
