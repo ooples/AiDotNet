@@ -294,12 +294,17 @@ public partial class MedNeXt<T> : Common.MedicalSegmentationBase<T>
         {
             var slice = Engine.Reshape(Engine.TensorSlice(volume, new[] { 0, d, 0, 0 }, new[] { numC, 1, h, w }), new[] { numC, h, w });
             var result = SegmentSlice(slice);
-            // The slice's [H, W] labels and first numC probability planes go to depth d.
-            volLabels = Engine.TensorSetSlice(volLabels,
-                Engine.Reshape(Engine.TensorSlice(result.Labels, new[] { 0, 0 }, new[] { h, w }), new[] { 1, h, w }), new[] { d, 0, 0 });
-            volProbs = Engine.TensorSetSlice(volProbs,
-                Engine.Reshape(Engine.TensorSlice(result.Probabilities, new[] { 0, 0, 0 }, new[] { numC, h, w }), new[] { numC, 1, h, w }),
-                new[] { 0, d, 0, 0 });
+            // The slice's [H, W] labels and first numC probability planes are copied into depth d in place:
+            // TensorSetSlice returns a full copy of the volume, which made the loop quadratic in the depth.
+            int plane = h * w;
+            Engine.TensorSlice(result.Labels, new[] { 0, 0 }, new[] { h, w }).AsSpan()
+                .CopyTo(volLabels.AsWritableSpan().Slice(d * plane, plane));
+            var probabilityPlanes = Engine.TensorSlice(result.Probabilities, new[] { 0, 0, 0 }, new[] { numC, h, w }).AsSpan();
+            var volumeProbabilities = volProbs.AsWritableSpan();
+            for (int c = 0; c < numC; c++)
+            {
+                probabilityPlanes.Slice(c * plane, plane).CopyTo(volumeProbabilities.Slice(((c * depth) + d) * plane, plane));
+            }
             foreach (var s in result.Structures)
             {
                 if (structAccum.TryGetValue(s.ClassId, out var existing))

@@ -297,17 +297,39 @@ public static class SegmentationTensorOps
         var a = EnsureUnbatched(features1);
         var b = EnsureUnbatched(features2);
         int c = a.Shape[0], h = a.Shape[1], w = a.Shape[2];
-        if (b.Shape[0] != c)
+        // Only the first C channels and the top-left H x W of features2 pair with features1.
+        if (b.Shape[0] != c || b.Shape[1] != h || b.Shape[2] != w)
             b = engine.TensorSlice(b, [0, 0, 0], [c, h, w]);
 
-        // dot / (|a| |b|) over the channel axis, 0 where the norm product is at most 1e-8.
-        var dot = engine.ReduceSum(engine.TensorMultiply(a, b), [0], keepDims: false);
-        var norm1 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(a), [0], keepDims: false));
-        var norm2 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(b), [0], keepDims: false));
+        // Cosine similarity is scale-invariant, so each pixel's channel vector is first divided by its largest
+        // magnitude: the squared norms then stay at most C, where raw squares overflow half precision (65504) for
+        // features as small as 64 over 16 channels and the ratio became NaN.
+        var (unitA, scaleA) = ScaleByChannelMax(a, h, w);
+        var (unitB, scaleB) = ScaleByChannelMax(b, h, w);
+
+        // dot / (|a| |b|) over the channel axis, 0 where the norm product |a| |b| is at most 1e-8.
+        var dot = engine.ReduceSum(engine.TensorMultiply(unitA, unitB), [0], keepDims: false);
+        var norm1 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(unitA), [0], keepDims: false));
+        var norm2 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(unitB), [0], keepDims: false));
         var denom = engine.TensorMultiply(norm1, norm2);
-        var valid = engine.TensorGreaterThan(denom, numOps.FromDouble(1e-8));
+        var originalDenom = engine.TensorMultiply(engine.TensorMultiply(denom, scaleA), scaleB);
+        var valid = engine.TensorGreaterThan(originalDenom, numOps.FromDouble(1e-8));
         var safeDenom = engine.TensorWhere(valid, denom, CvTensorOps<T>.Fill([h, w], 1.0));
         return engine.TensorWhere(valid, engine.TensorDivide(dot, safeDenom), new Tensor<T>([h, w]));
+    }
+
+    /// <summary>
+    /// <paramref name="features"/> <c>[C, H, W]</c> divided per pixel by its largest channel magnitude (1 where that
+    /// is 0), and that magnitude <c>[H, W]</c> (0 for an all-zero pixel).
+    /// </summary>
+    private static (Tensor<T> Scaled, Tensor<T> Scale) ScaleByChannelMax<T>(Tensor<T> features, int h, int w)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var largest = engine.ReduceMax(engine.TensorAbs(features), [0], keepDims: true);
+        var safe = engine.TensorWhere(engine.TensorGreaterThan(largest, numOps.Zero), largest, CvTensorOps<T>.Fill([1, h, w], 1.0));
+        var scaled = engine.TensorDivide(features, engine.TensorBroadcastTo(safe, features.Shape.ToArray()));
+        return (scaled, engine.Reshape(largest, [h, w]));
     }
 
     /// <summary>
@@ -345,8 +367,17 @@ public static class SegmentationTensorOps
     /// The per-pixel channel mean of a <c>[C, H, W]</c> embedding, <c>[H, W]</c>: the base score map the
     /// promptable models gate with their prompt.
     /// </summary>
+    /// <remarks>
+    /// Each channel is divided by C before the sum: the engine's mean accumulates in T, and a half-precision running
+    /// sum passes 65504 (and becomes infinite) for 256 channels near 300, where the mean itself is in range.
+    /// </remarks>
     internal static Tensor<T> ChannelMean<T>(Tensor<T> features)
-        => AiDotNetEngine.Current.ReduceMean(features, [0], keepDims: false);
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var share = engine.TensorDivideScalar(features, numOps.FromDouble(features.Shape[0]));
+        return engine.ReduceSum(share, [0], keepDims: false);
+    }
 
     /// <summary>
     /// Scales every channel of a <c>[C, H, W]</c> feature map by the top-left <c>[H, W]</c> of

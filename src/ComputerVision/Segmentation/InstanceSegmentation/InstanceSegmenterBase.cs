@@ -92,8 +92,9 @@ public class InstanceMask<T>
     /// </summary>
     public int GetMaskArea(INumericOperations<T> numOps)
     {
+        // Counted in int: a 0/1 sum in half precision stops at 2048 and rounds above it.
         var engine = AiDotNetEngine.Current;
-        return (int)numOps.ToDouble(engine.TensorSum(engine.TensorGreaterThan(Mask, numOps.FromDouble(0.5))));
+        return engine.TensorCountNonzero(engine.TensorGreaterThan(Mask, numOps.FromDouble(0.5)));
     }
 
     /// <summary>
@@ -109,10 +110,11 @@ public class InstanceMask<T>
         var half = numOps.FromDouble(0.5);
         var a = engine.TensorGreaterThan(Mask, half);
         var b = engine.TensorGreaterThan(other.Mask, half);
-        double intersection = numOps.ToDouble(engine.TensorSum(engine.TensorMultiply(a, b)));
-        double union = numOps.ToDouble(engine.TensorSum(engine.TensorMax(a, b)));
+        // Both counts in int: a 0/1 sum in half precision stops at 2048 and rounds above it.
+        int intersection = engine.TensorCountNonzero(engine.TensorMultiply(a, b));
+        int union = engine.TensorCountNonzero(engine.TensorMax(a, b));
 
-        return union > 0 ? intersection / union : 0;
+        return union > 0 ? (double)intersection / union : 0;
     }
 }
 
