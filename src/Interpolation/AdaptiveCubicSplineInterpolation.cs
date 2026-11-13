@@ -154,12 +154,6 @@ public class AdaptiveCubicSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the interval containing the x-coordinate.</returns>
     private int FindInterval(T x)
     {
-        for (int i = 0; i < _x.Length - 1; i++)
-        {
-            if (_numOps.LessThanOrEquals(x, _x[i + 1]))
-                return i;
-        }
-
-        return _x.Length - 2;
+        return InterpolationSearch.FirstSegmentReaching(_x, x, 0, _x.Length - 2);
     }
 }

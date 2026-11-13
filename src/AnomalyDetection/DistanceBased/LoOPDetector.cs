@@ -128,218 +128,88 @@ public partial class LoOPDetector<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
         var probDists = _probabilisticDistances ?? throw new InvalidOperationException("_probabilisticDistances has not been initialized.");
+        var trainingData = _trainingData ?? throw new InvalidOperationException("Model not properly fitted.");
 
-        for (int i = 0; i < X.Rows; i++)
+        var engine = Engine;
+        T k = NumOps.FromDouble(_k);
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        var pdTraining = probDists.AsTensor();
+
+        // PLOF of every training point within its training neighbourhood (itself excluded by index)
+        AnomalyTensorOps.NearestNeighbors(training, training, _k, true, true, out var trainingNeighbors);
+        var trainingExpected = engine.TensorDivideScalar(
+            engine.ReduceSum(AnomalyTensorOps.GatherByIndex(pdTraining, trainingNeighbors), new[] { 1 }, false), k);
+        var trainingPlof = Plof(pdTraining, trainingExpected);
+
+        // nPLOF = lambda * sqrt(E[PLOF^2]) with the expectation over the whole training set: one aggregate
+        // normalization for every object (Kriegel et al. 2009, the aggregate nPLOF; ELKI computes it once per relation)
+        T nplof = NumOps.Multiply(NumOps.FromDouble(_lambda), NumOps.Sqrt(engine.TensorMean(engine.TensorSquare(trainingPlof))));
+
+        // Query rows are scored in bounded blocks: only a [block, nTrain] distance matrix is live
+        return AnomalyTensorOps.MapRowBlocks(AnomalyTensorOps.ToTensor(X), trainingData.Rows,
+            query => ScoreBlock(query, training, pdTraining, nplof)).ToVector();
+    }
+
+    // LoOP scores of one block of query rows against the training data, given the dataset-wide nPLOF.
+    private Tensor<T> ScoreBlock(Tensor<T> query, Tensor<T> training, Tensor<T> pdTraining, T nplof)
+    {
+        var engine = Engine;
+        // Neighbourhood of every point: the k nearest training points at a positive distance. Distances
+        // sort ascending, so after the zero distances the next (at most) k entries are the neighbours.
+        var (sortedSq, order) = AnomalyTensorOps.StableSortRows(
+            AnomalyTensorOps.PairwiseSquaredDistances(query, training), descending: false);
+        var positive = engine.TensorGreaterThan(sortedSq, NumOps.Zero);
+        var neighborMask = engine.TensorMultiply(positive,
+            engine.TensorLessThan(engine.TensorCumSum(positive, 1), NumOps.FromDouble(_k + 0.5)));
+        var count = engine.ReduceSum(neighborMask, new[] { 1 }, false);
+
+        // Probabilistic distance sqrt(sum(d^2) / |S|) and its expected value over the neighbours
+        var pdist = engine.TensorSqrt(engine.TensorDivide(
+            engine.ReduceSum(engine.TensorMultiply(neighborMask, sortedSq), new[] { 1 }, false), count));
+        var ePdist = engine.TensorDivide(
+            MaskedRowSum(AnomalyTensorOps.GatherByIndex(pdTraining, order), neighborMask), count);
+
+        // PLOF (Probabilistic LOF)
+        var plof = Plof(pdist, ePdist);
+
+        // LoOP = max(0, erf(PLOF / (sqrt(2) * nPLOF))) (Kriegel et al. 2009); with nPLOF = 0 it is 1 for a
+        // positive PLOF and 0 otherwise
+        if (!NumOps.GreaterThan(nplof, NumOps.Zero))
         {
-            // Compute probabilistic distance for this point
-            var neighbors = GetKNearestNeighbors(X, i);
-            T pdist = ComputePDist(X, i, neighbors);
-
-            // Compute expected value E[pdist] over neighbors
-            T ePdist = NumOps.Zero;
-            foreach (int neighborIdx in neighbors)
-            {
-                ePdist = NumOps.Add(ePdist, probDists[neighborIdx]);
-            }
-            ePdist = NumOps.Divide(ePdist, NumOps.FromDouble(neighbors.Count));
-
-            // Compute PLOF (Probabilistic LOF)
-            T plof = NumOps.GreaterThan(ePdist, NumOps.Zero)
-                ? NumOps.Subtract(NumOps.Divide(pdist, ePdist), NumOps.One)
-                : NumOps.Zero;
-
-            // Compute standard deviation of PLOF in neighborhood
-            T nplof = ComputeNPLOF(neighbors);
-
-            // Compute LoOP using error function
-            // LoOP = max(0, erf(plof / (sqrt(2) * lambda * nplof)))
-            T loop;
-            if (NumOps.GreaterThan(nplof, NumOps.Zero))
-            {
-                T z = NumOps.Divide(plof,
-                    NumOps.Multiply(NumOps.FromDouble(Math.Sqrt(2) * _lambda), nplof));
-                double zDouble = NumOps.ToDouble(z);
-                double erfVal = ErrorFunction(zDouble);
-                loop = NumOps.FromDouble(Math.Max(0, erfVal));
-            }
-            else if (NumOps.GreaterThan(plof, NumOps.Zero))
-            {
-                loop = NumOps.One;
-            }
-            else
-            {
-                loop = NumOps.Zero;
-            }
-
-            scores[i] = loop;
+            return engine.TensorGreaterThan(plof, NumOps.Zero);
         }
 
-        return scores;
+        var z = engine.TensorDivideScalar(plof, NumOps.Multiply(nplof, NumOps.FromDouble(Math.Sqrt(2))));
+        return engine.TensorMax(engine.TensorErf(z), NumOps.Zero);
+    }
+
+    // sum_j values[i, j] over the entries where mask[i, j] is 1 (masked-out entries never contribute,
+    // even when they are infinite or NaN).
+    private Tensor<T> MaskedRowSum(Tensor<T> values, Tensor<T> mask)
+    {
+        var engine = Engine;
+        var kept = engine.TensorWhere(mask, values, engine.TensorMultiplyScalar(mask, NumOps.Zero));
+        return engine.ReduceSum(kept, new[] { 1 }, false);
+    }
+
+    // PLOF = pdist / E[pdist] - 1 where E[pdist] > 0, else 0.
+    private Tensor<T> Plof(Tensor<T> pdist, Tensor<T> expected)
+    {
+        var engine = Engine;
+        var ratio = engine.TensorSubtractScalar(engine.TensorDivide(pdist, expected), NumOps.One);
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(expected, NumOps.Zero), ratio, Tensor<T>.CreateZeros(new[] { pdist.Length }));
     }
 
     private Vector<T> ComputeProbabilisticDistances(Matrix<T> X)
     {
-        var pdist = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var neighbors = GetKNearestNeighborsFromTraining(i);
-            pdist[i] = ComputePDistFromTraining(i, neighbors);
-        }
-
-        return pdist;
-    }
-
-    private T ComputePDist(Matrix<T> X, int pointIdx, List<int> neighbors)
-    {
-        // Probabilistic set distance: sqrt(sum(d^2) / k)
-        T sumSquaredDist = NumOps.Zero;
-        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
-
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        foreach (int neighborIdx in neighbors)
-        {
-            var neighbor = new Vector<T>(trainingData.GetRowReadOnlySpan(neighborIdx).ToArray());
-            var diff = Engine.Subtract(point, neighbor);
-            T distSq = Engine.DotProduct(diff, diff);
-            sumSquaredDist = NumOps.Add(sumSquaredDist, distSq);
-        }
-
-        return NumOps.Sqrt(NumOps.Divide(sumSquaredDist, NumOps.FromDouble(neighbors.Count)));
-    }
-
-    private T ComputePDistFromTraining(int pointIdx, List<int> neighbors)
-    {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        T sumSquaredDist = NumOps.Zero;
-        var point = new Vector<T>(trainingData.GetRowReadOnlySpan(pointIdx).ToArray());
-
-        foreach (int neighborIdx in neighbors)
-        {
-            var neighbor = new Vector<T>(trainingData.GetRowReadOnlySpan(neighborIdx).ToArray());
-            var diff = Engine.Subtract(point, neighbor);
-            T distSq = Engine.DotProduct(diff, diff);
-            sumSquaredDist = NumOps.Add(sumSquaredDist, distSq);
-        }
-
-        return neighbors.Count > 0
-            ? NumOps.Sqrt(NumOps.Divide(sumSquaredDist, NumOps.FromDouble(neighbors.Count)))
-            : NumOps.Zero;
-    }
-
-    private T ComputeNPLOF(List<int> neighbors)
-    {
-        // Normalization factor for PLOF
-        var probabilisticDistances = _probabilisticDistances;
-        if (probabilisticDistances == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        T sumSquaredRatio = NumOps.Zero;
-
-        foreach (int neighborIdx in neighbors)
-        {
-            var neighborNeighbors = GetKNearestNeighborsFromTraining(neighborIdx);
-            T pdist = probabilisticDistances[neighborIdx];
-
-            T ePdist = NumOps.Zero;
-            foreach (int nn in neighborNeighbors)
-            {
-                ePdist = NumOps.Add(ePdist, probabilisticDistances[nn]);
-            }
-            ePdist = NumOps.Divide(ePdist, NumOps.FromDouble(neighborNeighbors.Count));
-
-            T plof = NumOps.GreaterThan(ePdist, NumOps.Zero)
-                ? NumOps.Subtract(NumOps.Divide(pdist, ePdist), NumOps.One)
-                : NumOps.Zero;
-            sumSquaredRatio = NumOps.Add(sumSquaredRatio, NumOps.Multiply(plof, plof));
-        }
-
-        return NumOps.Multiply(
-            NumOps.FromDouble(_lambda),
-            NumOps.Sqrt(NumOps.Divide(sumSquaredRatio, NumOps.FromDouble(neighbors.Count))));
-    }
-
-    private List<int> GetKNearestNeighbors(Matrix<T> X, int pointIdx)
-    {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        var point = new Vector<T>(X.GetRowReadOnlySpan(pointIdx).ToArray());
-
-        return Enumerable.Range(0, trainingData.Rows)
-            .Select(i =>
-            {
-                var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-                var diff = Engine.Subtract(point, refPoint);
-                return (Index: i, Dist: NumOps.ToDouble(NumOps.Sqrt(Engine.DotProduct(diff, diff))));
-            })
-            .Where(x => x.Dist > 0)
-            .OrderBy(x => x.Dist)
-            .Take(_k)
-            .Select(x => x.Index)
-            .ToList();
-    }
-
-    private List<int> GetKNearestNeighborsFromTraining(int pointIdx)
-    {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        var point = new Vector<T>(trainingData.GetRowReadOnlySpan(pointIdx).ToArray());
-
-        return Enumerable.Range(0, trainingData.Rows)
-            .Where(i => i != pointIdx)
-            .Select(i =>
-            {
-                var refPoint = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-                var diff = Engine.Subtract(point, refPoint);
-                return (Index: i, Dist: NumOps.ToDouble(NumOps.Sqrt(Engine.DotProduct(diff, diff))));
-            })
-            .OrderBy(x => x.Dist)
-            .Take(_k)
-            .Select(x => x.Index)
-            .ToList();
-    }
-
-    /// <summary>
-    /// Approximation of the error function (erf).
-    /// </summary>
-    private static double ErrorFunction(double x)
-    {
-        // Horner form approximation
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
+        // Probabilistic set distance of every training point over its k training neighbours (itself
+        // excluded by index): sqrt(sum(d^2) / k)
+        var data = AnomalyTensorOps.ToTensor(X);
+        var squared = AnomalyTensorOps.NearestNeighbors(data, data, _k, true, true, out _);
+        var engine = Engine;
+        return engine.TensorSqrt(engine.TensorDivideScalar(
+            engine.ReduceSum(squared, new[] { 1 }, false), NumOps.FromDouble(_k))).ToVector();
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.VisionLanguage.Robotics;
 
@@ -78,8 +79,10 @@ public sealed class GR00TFlowMatchingActionHead<T>
         if (system2Latent is null)
             throw new ArgumentNullException(nameof(system2Latent));
 
+        var engine = AiDotNetEngine.Current;
         var x = SampleGaussian(actionDimension);
         double dt = 1.0 / _numIntegrationSteps;
+        T dtT = _numOps.FromDouble(dt);
         for (int step = 0; step < _numIntegrationSteps; step++)
         {
             double t = (step + 0.5) * dt;
@@ -89,12 +92,8 @@ public sealed class GR00TFlowMatchingActionHead<T>
                     $"Velocity network returned length {velocity.Length} but expected {actionDimension}."
                 );
 
-            for (int d = 0; d < actionDimension; d++)
-            {
-                double xd = _numOps.ToDouble(x[d]);
-                double vd = _numOps.ToDouble(velocity[d]);
-                x[d] = _numOps.FromDouble(xd + dt * vd);
-            }
+            // Euler step x <- x + dt * v, in place so x stays the same tensor across steps.
+            engine.TensorAddInPlace(x, engine.TensorMultiplyScalar(velocity.Reshape([actionDimension]), dtT));
         }
         return x;
     }
@@ -110,12 +109,11 @@ public sealed class GR00TFlowMatchingActionHead<T>
         if (horizon <= 0)
             throw new ArgumentOutOfRangeException(nameof(horizon));
         var flat = new Tensor<T>([actionDimension * horizon]);
+        var steps = new Tensor<T>[horizon];
         for (int step = 0; step < horizon; step++)
-        {
-            var stepAction = Generate(actionDimension, system2Latent);
-            for (int d = 0; d < actionDimension; d++)
-                flat[step * actionDimension + d] = stepAction[d];
-        }
+            steps[step] = Generate(actionDimension, system2Latent);
+        var engine = AiDotNetEngine.Current;
+        engine.TensorCopy(engine.TensorConcatenate(steps, 0), flat);
         return flat;
     }
 

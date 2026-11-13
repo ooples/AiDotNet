@@ -147,12 +147,13 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
 
         // Build the forest
         _trees = new List<IsolationTree>(_numTrees);
+        var columns = AnomalyTensorOps.Columns(X);
 
         for (int t = 0; t < _numTrees; t++)
         {
             // Sample indices for this tree
             var sampleIndices = SampleIndices(n, effectiveMaxSamples);
-            var tree = BuildTree(X, sampleIndices, 0, maxDepth);
+            var tree = BuildTree(columns, sampleIndices, 0, maxDepth);
             _trees.Add(tree);
         }
 
@@ -187,30 +188,24 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
                 "Average path length is invalid. Ensure the model was fitted with at least 2 samples.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-        T two = NumOps.FromDouble(2);
+        var trees = _trees ?? throw new InvalidOperationException("_trees is null where it is required.");
+        var engine = Engine;
         T nTreesT = NumOps.FromDouble(_numTrees);
 
-        for (int i = 0; i < X.Rows; i++)
+        // Path lengths of every point, summed over the trees in order
+        var columns = AnomalyTensorOps.Columns(X);
+        var allRows = AnomalyTensorOps.Range(X.Rows);
+        var totalPathLength = Tensor<T>.CreateZeros(new[] { X.Rows });
+        foreach (var tree in trees)
         {
-            var point = X.GetRow(i);
-            T avgPathLength = NumOps.Zero;
-
-            foreach (var tree in (_trees ?? throw new InvalidOperationException("_trees is null where it is required.")))
-            {
-                avgPathLength = NumOps.Add(avgPathLength, PathLength(point, tree, 0));
-            }
-
-            avgPathLength = NumOps.Divide(avgPathLength, nTreesT);
-
-            // Anomaly score: s(x, n) = 2^(-E(h(x))/c(n))
-            T exponent = NumOps.Negate(NumOps.Divide(avgPathLength, _averagePathLength));
-            T anomalyScore = NumOps.Power(two, exponent);
-
-            scores[i] = anomalyScore;
+            totalPathLength = engine.TensorAdd(totalPathLength, TreePathLengths(columns, allRows, tree));
         }
 
-        return scores;
+        var avgPathLength = engine.TensorDivideScalar(totalPathLength, nTreesT);
+
+        // Anomaly score: s(x, n) = 2^(-E(h(x))/c(n))
+        var exponent = engine.TensorNegate(engine.TensorDivideScalar(avgPathLength, _averagePathLength));
+        return engine.TensorExp2(exponent).ToVector();
     }
 
     private int[] SampleIndices(int n, int sampleSize)
@@ -228,7 +223,7 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
         return indices;
     }
 
-    private IsolationTree BuildTree(Matrix<T> X, int[] indices, int currentDepth, int maxDepth)
+    private IsolationTree BuildTree(Tensor<T>[] columns, int[] indices, int currentDepth, int maxDepth)
     {
         int n = indices.Length;
 
@@ -243,18 +238,14 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
         }
 
         // Select a random feature
-        int splitFeature = _random.Next(X.Columns);
+        int splitFeature = _random.Next(columns.Length);
 
         // Find min and max for the selected feature among the samples
-        T minVal = X[indices[0], splitFeature];
-        T maxVal = minVal;
-
-        for (int i = 1; i < n; i++)
-        {
-            T val = X[indices[i], splitFeature];
-            if (NumOps.LessThan(val, minVal)) minVal = val;
-            if (NumOps.GreaterThan(val, maxVal)) maxVal = val;
-        }
+        var engine = Engine;
+        var rows = Vector<int>.Wrap(indices).AsTensor();
+        var values = engine.TensorGather(columns[splitFeature], rows, 0);
+        T minVal = engine.TensorMinValue(values);
+        T maxVal = engine.TensorMaxValue(values);
 
         // If all values are the same, create external node
         if (NumOps.Equals(minVal, maxVal))
@@ -267,26 +258,13 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
         }
 
         // Select a random split value between min and max
-        double minDouble = NumOps.ToDouble(minVal);
-        double maxDouble = NumOps.ToDouble(maxVal);
-        double splitValue = minDouble + _random.NextDouble() * (maxDouble - minDouble);
-        T splitThreshold = NumOps.FromDouble(splitValue);
+        T fraction = NumOps.FromDouble(_random.NextDouble());
+        T splitThreshold = NumOps.Add(minVal, NumOps.Multiply(fraction, NumOps.Subtract(maxVal, minVal)));
 
-        // Partition the indices
-        var leftIndices = new List<int>();
-        var rightIndices = new List<int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(X[indices[i], splitFeature], splitThreshold))
-            {
-                leftIndices.Add(indices[i]);
-            }
-            else
-            {
-                rightIndices.Add(indices[i]);
-            }
-        }
+        // Partition the indices (order preserved): values below the threshold go left
+        var goesLeft = engine.TensorLessThan(values, splitThreshold);
+        var leftIndices = AnomalyTensorOps.SelectWhere(rows, goesLeft, NumOps.One);
+        var rightIndices = AnomalyTensorOps.SelectWhere(rows, goesLeft, NumOps.Zero);
 
         // Recursively build children
         return new IsolationTree
@@ -294,19 +272,44 @@ public partial class IsolationForest<T> : AnomalyDetectorBase<T>
             IsExternal = false,
             SplitFeature = splitFeature,
             SplitValue = splitThreshold,
-            Left = BuildTree(X, leftIndices.ToArray(), currentDepth + 1, maxDepth),
-            Right = BuildTree(X, rightIndices.ToArray(), currentDepth + 1, maxDepth)
+            Left = BuildTree(columns, leftIndices.ToArray(), currentDepth + 1, maxDepth),
+            Right = BuildTree(columns, rightIndices.ToArray(), currentDepth + 1, maxDepth)
         };
     }
 
-    private T PathLength(Vector<T> point, IsolationTree node, int currentDepth)
+    // Path length h(x) of every row in one tree: rows are routed down the tree as index sets, and each
+    // external node contributes its depth plus the c(size) adjustment for the rows that reach it.
+    private Tensor<T> TreePathLengths(Tensor<T>[] columns, Tensor<int> rows, IsolationTree tree)
     {
-        // External nodes add adjustment based on size, internal nodes recurse
-        return node.IsExternal
-            ? NumOps.FromDouble(currentDepth + AveragePathLength(node.Size))
-            : NumOps.LessThan(point[node.SplitFeature], node.SplitValue)
-                ? PathLength(point, (node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")), currentDepth + 1)
-                : PathLength(point, (node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")), currentDepth + 1);
+        var leafRows = new List<Tensor<int>>();
+        var leafValues = new List<Tensor<T>>();
+        RoutePathLengths(columns, rows, tree, 0, leafRows, leafValues);
+        return AnomalyTensorOps.AssembleByRow(leafRows, leafValues);
+    }
+
+    private void RoutePathLengths(Tensor<T>[] columns, Tensor<int> rows, IsolationTree node, int currentDepth,
+        List<Tensor<int>> leafRows, List<Tensor<T>> leafValues)
+    {
+        if (rows.Length == 0)
+        {
+            return;
+        }
+
+        if (node.IsExternal)
+        {
+            leafRows.Add(rows);
+            leafValues.Add(Engine.Fill(rows.Length, NumOps.FromDouble(currentDepth + AveragePathLength(node.Size))).AsTensor());
+            return;
+        }
+
+        var engine = Engine;
+        var goesLeft = engine.TensorLessThan(engine.TensorGather(columns[node.SplitFeature], rows, 0), node.SplitValue);
+        RoutePathLengths(columns, AnomalyTensorOps.SelectWhere(rows, goesLeft, NumOps.One),
+            node.Left ?? throw new InvalidOperationException("node.Left is null where it is required."),
+            currentDepth + 1, leafRows, leafValues);
+        RoutePathLengths(columns, AnomalyTensorOps.SelectWhere(rows, goesLeft, NumOps.Zero),
+            node.Right ?? throw new InvalidOperationException("node.Right is null where it is required."),
+            currentDepth + 1, leafRows, leafValues);
     }
 
     /// <summary>

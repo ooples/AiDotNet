@@ -810,20 +810,21 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// </summary>
     private double PeakWindowOverlap(int numFrames, int fullLen)
     {
-        int L = FrameLen, hop = _hopSize;
-        var win = HannWindow().ToVector();
-        var sum = new double[fullLen];
+        if (fullLen < 0) throw new OverflowException("Signal length must be non-negative.");
+        if (numFrames <= 0 || fullLen == 0) return 1e-8;
+
+        // Peak of the overlap-added squared analysis window.
+        var squared = Engine.TensorSquare(HannWindow());
+        var frames = new List<Tensor<T>>(numFrames);
+        var starts = new List<int>(numFrames);
         for (int t = 0; t < numFrames; t++)
         {
-            int off = t * hop;
-            for (int i = 0; i < L && off + i < fullLen; i++)
-            {
-                double w = NumOps.ToDouble(win[i]);
-                sum[off + i] += w * w;
-            }
+            frames.Add(squared);
+            starts.Add(t * _hopSize);
         }
-        double peak = 0.0;
-        for (int i = 0; i < fullLen; i++) if (sum[i] > peak) peak = sum[i];
+        var sum = AudioEngineOps.OverlapAdd(Engine, frames, starts, fullLen);
+
+        double peak = Math.Max(0.0, NumOps.ToDouble(Engine.TensorMaxValue(sum)));
         return peak < 1e-8 ? 1e-8 : peak;
     }
 
@@ -831,11 +832,11 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     {
         if (_analysisWindow is null)
         {
+            // 0.5 - 0.5 cos(2 pi i / max(1, L - 1)): symmetric Hann; a one-sample window is 0.
             int L = FrameLen;
-            var w = new Vector<T>(L);
-            for (int i = 0; i < L; i++)
-                w[i] = NumOps.FromDouble(0.5 - 0.5 * Math.Cos(2.0 * Math.PI * i / Math.Max(1, L - 1)));
-            _analysisWindow = new Tensor<T>([L], w);
+            _analysisWindow = L <= 1
+                ? new Tensor<T>([L])
+                : Engine.TensorHannWindow<T>(L, periodic: false);
         }
         return _analysisWindow;
     }
@@ -844,22 +845,30 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     {
         if (_erbPoolMatrix is not null && _cachedNumFreqs == NumFreqs) return;
         int F = NumFreqs, E = _numErbBands;
-        var pool = new Tensor<T>([F, E]);
-        var expand = new Tensor<T>([E, F]);
+
+        // Band membership (every band holds at least its start bin); pooling averages over it.
+        var member = new int[F * E];
         for (int erb = 0; erb < E; erb++)
         {
             int startBin = erb * F / E;
             int endBin = (erb + 1) * F / E;
             if (endBin <= startBin) endBin = startBin + 1;
-            double inv = 1.0 / (endBin - startBin);
             for (int bin = startBin; bin < endBin && bin < F; bin++)
-            {
-                pool[[bin, erb]] = NumOps.FromDouble(inv);
-                expand[[erb, bin]] = NumOps.One;
-            }
+                member[bin * E + erb] = 1;
         }
-        _erbPoolMatrix = pool;
-        _erbExpandMatrix = expand;
+
+        var membership = new Tensor<int>(member, [F, E]).Cast<T>();
+        if (F == 0 || E == 0)
+        {
+            _erbPoolMatrix = membership;
+            _erbExpandMatrix = new Tensor<T>([E, F]);
+        }
+        else
+        {
+            var bandWidths = Engine.ReduceSum(membership, [0], keepDims: true);
+            _erbPoolMatrix = Engine.TensorDivide(membership, Engine.TensorBroadcastTo(bandWidths, [F, E]));
+            _erbExpandMatrix = Engine.TensorTranspose(membership);
+        }
         _cachedNumFreqs = NumFreqs;
     }
 
@@ -876,30 +885,36 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// </summary>
     private Tensor<T> ComputeErbFeatures(Tensor<Complex<T>> complexStft)
     {
+        // Built from fresh values as before (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int numFrames = complexStft.Shape[0];
         int numBins = complexStft.Shape[1];
 
-        var erbFeatures = new Tensor<T>([numFrames, _numErbBands]);
+        if (numFrames == 0 || _numErbBands == 0)
+            return new Tensor<T>([numFrames, _numErbBands]);
+        if (numBins == 0)
+            return Tensor<T>.CreateDefault([numFrames, _numErbBands], NumOps.FromDouble(Math.Log(1e-8)));
 
-        for (int frame = 0; frame < numFrames; frame++)
+        // ERB band of each bin: band e covers [e * numBins / E, (e + 1) * numBins / E).
+        var bandOfBin = new int[numBins];
+        for (int erb = 0; erb < _numErbBands; erb++)
         {
-            for (int erb = 0; erb < _numErbBands; erb++)
-            {
-                double sum = 0;
-                int startBin = erb * numBins / _numErbBands;
-                int endBin = (erb + 1) * numBins / _numErbBands;
-
-                for (int bin = startBin; bin < endBin && bin < numBins; bin++)
-                {
-                    double mag = NumOps.ToDouble(complexStft.Data.Span[frame * numBins + bin].Magnitude);
-                    sum += mag;
-                }
-
-                erbFeatures[[frame, erb]] = NumOps.FromDouble(Math.Log(sum + 1e-8));
-            }
+            int startBin = erb * numBins / _numErbBands;
+            int endBin = (erb + 1) * numBins / _numErbBands;
+            for (int bin = startBin; bin < endBin && bin < numBins; bin++)
+                bandOfBin[bin] = erb;
         }
 
-        return erbFeatures;
+        // log(sum of |X| over the band's bins + 1e-8)
+        var magnitude = Engine.Reshape(
+            AudioEngineOps.FitLength(Engine, Engine.TensorSqrt(Engine.TensorAdd(
+                Engine.TensorSquare(Engine.TensorReal(complexStft)),
+                Engine.TensorSquare(Engine.TensorImag(complexStft)))), numFrames * numBins),
+            [numFrames, numBins]);
+        var bandSums = Engine.TensorTranspose(
+            Engine.ScatterAdd(Engine.TensorTranspose(magnitude), new Tensor<int>(bandOfBin, [numBins]), 0, _numErbBands));
+
+        return Engine.TensorLog(Engine.TensorAddScalar(bandSums, NumOps.FromDouble(1e-8)));
     }
 
     /// <summary>
@@ -917,55 +932,103 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
             return new Tensor<T>([fallbackSamples]);
         }
 
+        // Built from fresh values as before (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int numFrames = _cachedComplexStft.Shape[0];
         int numBins = _cachedComplexStft.Shape[1];
         int dfCoeffSize = _dfBins * _dfOrder * 2;
+        int coveredFrames = Math.Min(numFrames, enhanced.Shape[0]);
 
-        // Apply ERB gains and deep filtering to complex STFT
-        var enhancedStft = new Tensor<Complex<T>>(_cachedComplexStft._shape);
+        var real = Engine.TensorReal(_cachedComplexStft);
+        var imag = Engine.TensorImag(_cachedComplexStft);
 
-        for (int frame = 0; frame < numFrames; frame++)
+        // ERB gains: sigmoid of the band's raw gain where the network produced one, else 1.
+        int availableBands = Math.Max(0, Math.Min(_numErbBands, enhanced.Shape[^1] - dfCoeffSize));
+        if (coveredFrames > 0 && numBins > 0 && availableBands > 0)
         {
+            var bandOfBin = new int[numBins];
+            var hasGain = new int[coveredFrames * numBins];
             for (int bin = 0; bin < numBins; bin++)
             {
                 int erbBand = Math.Min(bin * _numErbBands / numBins, _numErbBands - 1);
-                int idx = frame * numBins + bin;
-
-                double gain = 1.0;
-                if (frame < enhanced.Shape[0] && dfCoeffSize + erbBand < enhanced.Shape[^1])
+                bandOfBin[bin] = Math.Min(erbBand, availableBands - 1);
+                if (erbBand < availableBands)
                 {
-                    double rawGain = NumOps.ToDouble(enhanced[[frame, dfCoeffSize + erbBand]]);
-                    gain = 1.0 / (1.0 + Math.Exp(-rawGain));
+                    for (int frame = 0; frame < coveredFrames; frame++)
+                        hasGain[frame * numBins + bin] = 1;
                 }
-
-                double real = NumOps.ToDouble(_cachedComplexStft.Data.Span[idx].Real) * gain;
-                double imag = NumOps.ToDouble(_cachedComplexStft.Data.Span[idx].Imaginary) * gain;
-
-                // Apply deep filtering for first _dfBins bins
-                if (bin < _dfBins && frame < enhanced.Shape[0])
-                {
-                    for (int order = 0; order < _dfOrder && frame >= order; order++)
-                    {
-                        int coeffIdx = (bin * _dfOrder + order) * 2;
-                        if (coeffIdx + 1 < dfCoeffSize)
-                        {
-                            double dfReal = NumOps.ToDouble(enhanced[[frame, coeffIdx]]);
-                            double dfImag = NumOps.ToDouble(enhanced[[frame, coeffIdx + 1]]);
-
-                            double newReal = real * dfReal - imag * dfImag;
-                            double newImag = real * dfImag + imag * dfReal;
-                            real = newReal * 0.1 + real * 0.9;
-                            imag = newImag * 0.1 + imag * 0.9;
-                        }
-                    }
-                }
-
-                enhancedStft.Data.Span[idx] = new Complex<T>(NumOps.FromDouble(real), NumOps.FromDouble(imag));
             }
+
+            var rawGains = Engine.TensorSlice(enhanced, [0, dfCoeffSize], [coveredFrames, availableBands]);
+            var binGains = Engine.TensorIndexSelect(Engine.Sigmoid(rawGains), new Tensor<int>(bandOfBin, [numBins]), 1);
+            var gain = Engine.TensorWhere(
+                new Tensor<int>(hasGain, [coveredFrames, numBins]).Cast<T>(),
+                binGains,
+                Tensor<T>.CreateDefault([coveredFrames, numBins], NumOps.One));
+            if (coveredFrames < numFrames)
+                gain = Engine.Concat(new[] { gain, Tensor<T>.CreateDefault([numFrames - coveredFrames, numBins], NumOps.One) }, 0);
+
+            real = Engine.TensorMultiply(real, gain);
+            imag = Engine.TensorMultiply(imag, gain);
+        }
+
+        // Deep filtering for the first _dfBins bins: for order = 0 .. min(_dfOrder, frame + 1) - 1,
+        // z <- 0.1 * (z * c[frame, bin, order]) + 0.9 * z with the frame's own coefficients.
+        int dfBins = Math.Min(_dfBins, numBins);
+        if (coveredFrames > 0 && dfBins > 0 && _dfOrder > 0)
+        {
+            var coeffs = Engine.Reshape(
+                Engine.TensorSlice(enhanced, [0, 0], [coveredFrames, dfCoeffSize]), [coveredFrames, _dfBins, _dfOrder, 2]);
+            var blockReal = Engine.TensorSlice(real, [0, 0], [coveredFrames, dfBins]);
+            var blockImag = Engine.TensorSlice(imag, [0, 0], [coveredFrames, dfBins]);
+            T mix = NumOps.FromDouble(0.1);
+            T keep = NumOps.FromDouble(0.9);
+
+            for (int order = 0; order < _dfOrder && order < coveredFrames; order++)
+            {
+                var dfReal = Engine.Reshape(Engine.TensorSlice(coeffs, [0, 0, order, 0], [coveredFrames, dfBins, 1, 1]), [coveredFrames, dfBins]);
+                var dfImag = Engine.Reshape(Engine.TensorSlice(coeffs, [0, 0, order, 1], [coveredFrames, dfBins, 1, 1]), [coveredFrames, dfBins]);
+
+                var newReal = Engine.TensorSubtract(Engine.TensorMultiply(blockReal, dfReal), Engine.TensorMultiply(blockImag, dfImag));
+                var newImag = Engine.TensorAdd(Engine.TensorMultiply(blockReal, dfImag), Engine.TensorMultiply(blockImag, dfReal));
+                var mixedReal = Engine.TensorAdd(Engine.TensorMultiplyScalar(newReal, mix), Engine.TensorMultiplyScalar(blockReal, keep));
+                var mixedImag = Engine.TensorAdd(Engine.TensorMultiplyScalar(newImag, mix), Engine.TensorMultiplyScalar(blockImag, keep));
+
+                // Frames earlier than `order` have no further taps and keep their value.
+                blockReal = order == 0 ? mixedReal : KeepLeadingRows(blockReal, mixedReal, order);
+                blockImag = order == 0 ? mixedImag : KeepLeadingRows(blockImag, mixedImag, order);
+            }
+
+            real = ReplaceTopLeft(real, blockReal);
+            imag = ReplaceTopLeft(imag, blockImag);
         }
 
         // Use proper ISTFT for reconstruction
-        return _stft.Inverse(enhancedStft);
+        return _stft.Inverse(Engine.TensorComplex(real, imag));
+    }
+
+    /// <summary>The first <paramref name="rows"/> rows of <paramref name="previous"/>, then the rest of <paramref name="updated"/>.</summary>
+    private Tensor<T> KeepLeadingRows(Tensor<T> previous, Tensor<T> updated, int rows)
+    {
+        int total = previous.Shape[0], cols = previous.Shape[1];
+        return Engine.Concat(new[]
+        {
+            Engine.TensorSlice(previous, [0, 0], [rows, cols]),
+            Engine.TensorSlice(updated, [rows, 0], [total - rows, cols])
+        }, 0);
+    }
+
+    /// <summary><paramref name="x"/> with its top-left block replaced by <paramref name="block"/>.</summary>
+    private Tensor<T> ReplaceTopLeft(Tensor<T> x, Tensor<T> block)
+    {
+        int rows = block.Shape[0], cols = block.Shape[1];
+        int totalRows = x.Shape[0], totalCols = x.Shape[1];
+        var top = cols == totalCols
+            ? block
+            : Engine.Concat(new[] { block, Engine.TensorSlice(x, [0, cols], [rows, totalCols - cols]) }, 1);
+        return rows == totalRows
+            ? top
+            : Engine.Concat(new[] { top, Engine.TensorSlice(x, [rows, 0], [totalRows - rows, totalCols]) }, 0);
     }
 
     /// <summary>
@@ -973,28 +1036,15 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// </summary>
     private Tensor<T> CombineOutputs(Tensor<T> dfCoeffs, Tensor<T> gains)
     {
-        // Combine DF coefficients and ERB gains for output
+        // Combine DF coefficients and ERB gains for output: [frames, dfCoeffs | gains]
         int numFrames = gains.Shape[0];
-        int outputDim = _dfBins * _dfOrder * 2 + _numErbBands;
+        int dfCoeffSize = _dfBins * _dfOrder * 2;
 
-        var combined = new Tensor<T>([numFrames, outputDim]);
-
-        for (int frame = 0; frame < numFrames; frame++)
+        return Engine.Concat(new[]
         {
-            // Copy DF coefficients
-            for (int i = 0; i < _dfBins * _dfOrder * 2; i++)
-            {
-                combined[[frame, i]] = dfCoeffs[[frame, i]];
-            }
-
-            // Copy gains
-            for (int i = 0; i < _numErbBands; i++)
-            {
-                combined[[frame, _dfBins * _dfOrder * 2 + i]] = gains[[frame, i]];
-            }
-        }
-
-        return combined;
+            Engine.TensorSlice(dfCoeffs, [0, 0], [numFrames, dfCoeffSize]),
+            Engine.TensorSlice(gains, [0, 0], [numFrames, _numErbBands])
+        }, 1);
     }
 
     private static int NextPowerOfTwo(int v)

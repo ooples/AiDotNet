@@ -131,7 +131,11 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
     {
         ThrowIfDisposed();
         var probs = GetEmotionProbabilities(audio);
-        var sorted = probs.OrderByDescending(p => NumOps.ToDouble(p.Value)).ToList();
+        var entries = probs.ToList();
+        var sorted = (entries.Count == 0
+                ? Array.Empty<int>()
+                : AudioEngineOps.StableDescendingOrder(Engine, new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count])))
+            .Select(i => entries[i]).ToList();
         string primary = sorted[0].Key;
         T confidence = sorted[0].Value;
         string? secondary = sorted.Count > 1 && NumOps.GreaterThan(sorted[1].Value, NumOps.FromDouble(0.1)) ? sorted[1].Key : null;
@@ -155,23 +159,17 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
         {
             // The ONNX encoder emits RAW logits, so softmax them here.
             var logits = OnnxEncoder.Run(features);
-            double sumExp = 0;
-            var expValues = new double[_options.NumClasses];
-            for (int i = 0; i < _options.NumClasses && i < logits.Length; i++)
-            {
-                expValues[i] = Math.Exp(NumOps.ToDouble(logits[i]));
-                sumExp += expValues[i];
-            }
+            T[] values = AudioEngineOps.SoftmaxOrUniform(Engine, logits, _options.NumClasses);
             for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length; i++)
-                probs[_options.EmotionLabels[i]] = NumOps.FromDouble(sumExp > 0 ? expValues[i] / sumExp : 1.0 / _options.NumClasses);
+                probs[_options.EmotionLabels[i]] = values[i];
         }
         else
         {
             // Native PredictCore ALREADY returns softmax probabilities (see PredictCore). Re-softmaxing
             // them would distort the distribution (softmax of a probability vector is not that vector),
             // so use the probabilities directly.
-            var p = Predict(features);
-            for (int i = 0; i < _options.NumClasses && i < _options.EmotionLabels.Length && i < p.Length; i++)
+            T[] p = AudioEngineOps.Head(Engine, Predict(features), Math.Min(_options.NumClasses, _options.EmotionLabels.Length));
+            for (int i = 0; i < p.Length; i++)
                 probs[_options.EmotionLabels[i]] = p[i];
         }
 
@@ -188,8 +186,7 @@ public partial class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T
 
         for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
         {
-            var chunk = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < windowSamples; i++) chunk[i] = audio[start + i];
+            var chunk = Engine.TensorSlice(AudioEngineOps.Flatten(Engine, audio), [start], [windowSamples]);
             var result = RecognizeEmotion(chunk);
             results.Add(new TimedEmotionResult<T>
             {

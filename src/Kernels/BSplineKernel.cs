@@ -101,14 +101,14 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        T result = _numOps.One;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T diff = _numOps.Divide(_numOps.Subtract(x1[i], x2[i]), _knotSpacing);
-            result = _numOps.Multiply(result, BSplineBasis(_degree, diff));
-        }
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Divide(engine.Subtract(x1, x2), _knotSpacing).AsTensor();
 
-        return result;
+        // Centered cardinal B-spline B(u + (degree + 1) / 2): the uncentered basis has support
+        // [0, degree + 1], which gave k(x, x) = 0 and k(x1, x2) != k(x2, x1).
+        var centered = engine.TensorAddScalar(diff, _numOps.FromDouble((_degree + 1) / 2.0));
+
+        return engine.Product(BSplineBasis(_degree, centered).AsVector());
     }
 
     /// <summary>
@@ -133,16 +133,20 @@ public class BSplineKernel<T> : IKernelFunction<T>
     /// similar to how combining simple shapes can create more complex and smoother shapes.
     /// </para>
     /// </remarks>
-    private T BSplineBasis(int degree, T x)
+    private Tensor<T> BSplineBasis(int degree, Tensor<T> x)
     {
+        var engine = AiDotNetEngine.Current;
         if (degree == 0)
         {
-            return (_numOps.GreaterThanOrEquals(x, _numOps.Zero) && _numOps.LessThan(x, _numOps.One)) ? _numOps.One : _numOps.Zero;
+            // Indicator of 0 <= x < 1: (1 - [x < 0]) * [x < 1].
+            var notNegative = engine.TensorNegate(engine.TensorAddScalar(engine.TensorLessThan(x, _numOps.Zero), _numOps.FromDouble(-1)));
+            return engine.TensorMultiply(notNegative, engine.TensorLessThan(x, _numOps.One));
         }
 
-        T left = _numOps.Multiply(x, BSplineBasis(degree - 1, x));
-        T right = _numOps.Multiply(_numOps.Subtract(_numOps.FromDouble(degree + 1), x), BSplineBasis(degree - 1, _numOps.Subtract(x, _numOps.One)));
+        var left = engine.TensorMultiply(x, BSplineBasis(degree - 1, x));
+        var rightWeight = engine.TensorAddScalar(engine.TensorNegate(x), _numOps.FromDouble(degree + 1));
+        var right = engine.TensorMultiply(rightWeight, BSplineBasis(degree - 1, engine.TensorAddScalar(x, _numOps.FromDouble(-1))));
 
-        return _numOps.Divide(_numOps.Add(left, right), _numOps.FromDouble(degree));
+        return engine.TensorDivideScalar(engine.TensorAdd(left, right), _numOps.FromDouble(degree));
     }
 }

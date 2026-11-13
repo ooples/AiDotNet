@@ -160,19 +160,6 @@ public partial class HermiteInterpolation<T> : IInterpolation<T>
         if (_numOps.GreaterThanOrEquals(x, _x[_x.Length - 1]))
             return _x.Length - 1;
 
-        // Use binary search to find the interval
-        int low = 0;
-        int high = _x.Length - 1;
-
-        while (low < high - 1)
-        {
-            int mid = (low + high) / 2;
-            if (_numOps.LessThanOrEquals(_x[mid], x))
-                low = mid;
-            else
-                high = mid;
-        }
-
-        return low;
+        return InterpolationSearch.LastKnotAtOrBelow(_x, x, 0, _x.Length - 2);
     }
 }
