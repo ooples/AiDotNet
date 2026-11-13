@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.TextToSpeech;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
+using AiDotNet.TextToSpeech.MultiModal;
 using Xunit;
 
 namespace AiDotNet.Tests.TextToSpeech;
@@ -89,5 +90,28 @@ public class TtsSamplingTieTests
         var logits = new Tensor<double>(Enumerable.Repeat(1.0, Ties).ToArray(), new[] { Ties });
         int drawn = ChatTTS<double>.Sample(logits, 1.0, 1.0, Array.Empty<int>(), 0.5, Ties, -1, new FixedRandom(Middle(j, Ties / 2)));
         Assert.Equal(Ties / 2 + j, drawn);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(12)]
+    [InlineData(31)]
+    public void NucleusSampling_KeepsTheHighestIdsAmongTiedLogits(int j)
+    {
+        // 64 equal logits, top-p 0.5: the stable ascending sort visits ids 0..63 in order and drops 0..31 (running mass
+        // at most 0.5); the draw over ids 32..63 lands on 32 + j.
+        var logits = new Tensor<double>(Enumerable.Repeat(2.0, Ties).ToArray(), new[] { Ties });
+        Assert.Equal(Ties / 2 + j, NucleusSampling<double>.Sample(logits, 1.0, 0.5, null, new FixedRandom(Middle(j, Ties / 2))));
+        var floatLogits = new Tensor<float>(Enumerable.Repeat(2f, Ties).ToArray(), new[] { Ties });
+        Assert.Equal(Ties / 2 + j, NucleusSampling<float>.Sample(floatLogits, 1.0, 0.5, null, new FixedRandom(Middle(j, Ties / 2))));
+    }
+
+    [Fact]
+    public void NucleusSamplingGreedy_TakesTheFirstOfTiedLogits()
+    {
+        var values = Enumerable.Repeat(1.0, Ties).ToArray();
+        var logits = new Tensor<double>(values, new[] { Ties });
+        Assert.Equal(0, NucleusSampling<double>.Greedy(logits));
+        Assert.Equal(5, NucleusSampling<double>.Greedy(logits, id => id >= 5));
     }
 }

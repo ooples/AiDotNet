@@ -76,6 +76,15 @@ internal static class TtsSampling<T>
             Tensor<T>.CreateDefault(new[] { bits.Length }, fill), values);
     }
 
+    /// <summary>A <c>[n]</c> copy of <paramref name="scores"/> with the <paramref name="ids"/> below n at −∞.</summary>
+    public static Tensor<T> Forbid(Tensor<T> scores, IEnumerable<int> ids)
+    {
+        int n = scores.Length;
+        var mask = new bool[n];
+        foreach (int id in ids) if (id >= 0 && id < n) mask[id] = true;
+        return Fill(AiDotNetEngine.Current.Reshape(scores, new[] { n }), mask, Ops.FromDouble(double.NegativeInfinity));
+    }
+
     /// <summary>exp(v − max) with removed (−∞) scores at exactly 0.</summary>
     public static Tensor<T> UnnormalizedProbabilities(Tensor<T> scores)
     {
