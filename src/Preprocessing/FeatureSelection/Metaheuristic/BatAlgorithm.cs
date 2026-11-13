@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -33,7 +34,7 @@ public class BatAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly double _frequencyMax;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +42,7 @@ public class BatAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int MaxIterations => _maxIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -86,154 +87,152 @@ public class BatAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        int targetCount = Math.Min(_nFeaturesToSelect, p);
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize bats
-        var positions = new double[_populationSize, p];
-        var velocities = new double[_populationSize, p];
-        var frequencies = new double[_populationSize];
-        var loudness = new double[_populationSize];
-        var pulseRates = new double[_populationSize];
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+        Func<Tensor<T>, Tensor<T>> evaluate = rows => PopulationSearchOps.ThresholdFitness(rows, correlations, targetCount, 0.1);
 
-        for (int i = 0; i < _populationSize; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                positions[i, j] = random.NextDouble();
-                velocities[i, j] = 0;
-            }
-            loudness[i] = random.NextDouble() * 2;
-            pulseRates[i] = random.NextDouble();
-        }
+        // Initialize bats: per bat its position, then its loudness A0 in [0, 2) and pulse rate r0 in [0, 1)
+        var init = PopulationSearchOps.Uniform<T>(random, _populationSize, p + 2);
+        var swarm = new BatSwarm(
+            engine.TensorSlice(init, new[] { 0, 0 }, new[] { _populationSize, p }),
+            engine.TensorMultiplyScalar(
+                engine.Reshape(engine.TensorSlice(init, new[] { 0, p }, new[] { _populationSize, 1 }), new[] { _populationSize }),
+                NumOps.FromDouble(2)),
+            engine.Reshape(engine.TensorSlice(init, new[] { 0, p + 1 }, new[] { _populationSize, 1 }), new[] { _populationSize }),
+            evaluate);
 
-        var fitness = new double[_populationSize];
-        for (int i = 0; i < _populationSize; i++)
-            fitness[i] = EvaluateSolution(data, target, positions, i, p, n);
-
-        // Find best bat
-        int bestIdx = 0;
-        double bestFitness = fitness[0];
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (fitness[i] > bestFitness)
-            {
-                bestFitness = fitness[i];
-                bestIdx = i;
-            }
-        }
-
-        var bestPos = new double[p];
-        for (int j = 0; j < p; j++)
-            bestPos[j] = positions[bestIdx, j];
-
-        // Main loop
-        double alpha = 0.9;
-        double gamma = 0.9;
+        // r_i^t = r_i^0 (1 - exp(-gamma t)) for t = 1, 2, ... (t counts the iterations done, so r never starts at 0)
+        var pulseFactors = PulseRateFactors(_maxIterations, Gamma);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
+            var pulseFactor = PopulationSearchOps.At(pulseFactors, iter);
             for (int i = 0; i < _populationSize; i++)
             {
-                frequencies[i] = _frequencyMin + (_frequencyMax - _frequencyMin) * random.NextDouble();
-
-                for (int j = 0; j < p; j++)
-                {
-                    velocities[i, j] += (positions[i, j] - bestPos[j]) * frequencies[i];
-                    double newPos = positions[i, j] + velocities[i, j];
-
-                    // Local search
-                    if (random.NextDouble() > pulseRates[i])
-                    {
-                        double avgLoudness = 0;
-                        for (int k = 0; k < _populationSize; k++)
-                            avgLoudness += loudness[k];
-                        avgLoudness /= _populationSize;
-
-                        newPos = bestPos[j] + 0.01 * avgLoudness * (random.NextDouble() * 2 - 1);
-                    }
-
-                    positions[i, j] = Math.Max(0, Math.Min(1, newPos));
-                }
-
-                double newFitness = EvaluateSolution(data, target, positions, i, p, n);
-
-                // Accept if better and loud enough
-                if (random.NextDouble() < loudness[i] && newFitness > fitness[i])
-                {
-                    fitness[i] = newFitness;
-                    loudness[i] *= alpha;
-                    pulseRates[i] = pulseRates[i] * (1 - Math.Exp(-gamma * iter));
-                }
-
-                if (fitness[i] > bestFitness)
-                {
-                    bestFitness = fitness[i];
-                    for (int j = 0; j < p; j++)
-                        bestPos[j] = positions[i, j];
-                }
+                var frequencyDraw = PopulationSearchOps.Uniform<T>(random, 1);
+                var pulseDraw = PopulationSearchOps.Uniform<T>(random, 1);
+                Tensor<T>? walk = PopulationSearchOps.Greater(pulseDraw, PopulationSearchOps.At(swarm.PulseRate, i))
+                    ? PopulationSearchOps.Affine(PopulationSearchOps.Uniform<T>(random, p), 2, -1)
+                    : null;
+                var acceptDraw = PopulationSearchOps.Uniform<T>(random, 1);
+                swarm.Fly(i, frequencyDraw, walk, acceptDraw, _frequencyMin, _frequencyMax, pulseFactor);
             }
         }
 
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = bestPos[j];
+        _featureScores = swarm.Best.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(swarm.Best, numToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateSolution(Matrix<T> data, Vector<T> target, double[,] positions, int idx, int p, int n)
+    /// <summary>Loudness decay alpha of Yang (2010).</summary>
+    internal const double Alpha = 0.9;
+
+    /// <summary>Pulse-rate growth gamma of Yang (2010).</summary>
+    internal const double Gamma = 0.9;
+
+    /// <summary>The pulse-rate factors 1 - exp(-gamma t) for t = 1 .. <paramref name="iterations"/>.</summary>
+    internal static Tensor<T> PulseRateFactors(int iterations, double gamma)
     {
-        var selectedFeatures = Enumerable.Range(0, p)
-            .Where(j => positions[idx, j] > 0.5)
-            .ToArray();
-
-        if (selectedFeatures.Length == 0)
-            return 0;
-
-        double totalScore = 0;
-        foreach (int f in selectedFeatures)
-            totalScore += ComputeCorrelation(data, target, f, n);
-
-        int targetCount = Math.Min(_nFeaturesToSelect, p);
-        double countPenalty = Math.Abs(selectedFeatures.Length - targetCount);
-
-        return totalScore / selectedFeatures.Length - 0.1 * countPenalty;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var t = engine.TensorArange<T>(1, iterations + 1, 1);
+        return PreprocessingTensorOps.OneMinus(engine.TensorExp(engine.TensorMultiplyScalar(t, ops.FromDouble(-gamma))));
     }
 
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int j, int n)
+    /// <summary>
+    /// The bat population of Yang (2010): positions, velocities, fitness, loudness A_i, pulse rates r_i (and their
+    /// initial values r_i^0), and the best solution x*.
+    /// </summary>
+    internal sealed class BatSwarm
     {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
+        private readonly Func<Tensor<T>, Tensor<T>> _evaluate;
 
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
+        public BatSwarm(Tensor<T> positions, Tensor<T> loudness, Tensor<T> initialPulseRate, Func<Tensor<T>, Tensor<T>> evaluate)
         {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
+            _evaluate = evaluate;
+            Positions = positions;
+            Velocities = new Tensor<T>(positions.Shape.ToArray());
+            Fitness = evaluate(positions);
+            Loudness = loudness;
+            InitialPulseRate = initialPulseRate;
+            PulseRate = initialPulseRate;
+            int best = PopulationSearchOps.ArgMax(Fitness);
+            Best = PopulationSearchOps.Row(positions, best);
+            BestFitness = PopulationSearchOps.At(Fitness, best);
         }
 
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+        public Tensor<T> Positions { get; private set; }
+
+        public Tensor<T> Velocities { get; private set; }
+
+        public Tensor<T> Fitness { get; private set; }
+
+        public Tensor<T> Loudness { get; private set; }
+
+        public Tensor<T> InitialPulseRate { get; }
+
+        public Tensor<T> PulseRate { get; private set; }
+
+        public Tensor<T> Best { get; private set; }
+
+        public Tensor<T> BestFitness { get; private set; }
+
+        /// <summary>
+        /// One move of bat <paramref name="i"/>: f_i = fmin + (fmax - fmin) beta, v_i += (x_i - x*) f_i, candidate
+        /// x_i + v_i; or, when <paramref name="walk"/> (epsilon in [-1, 1]^d) is given because the pulse draw
+        /// exceeded r_i, the local solution x* + epsilon * mean(A). Candidates are clamped to [0, 1]. The candidate
+        /// replaces x_i only when it is better and the acceptance draw is below A_i; then A_i = alpha A_i and
+        /// r_i = r_i^0 (1 - exp(-gamma t)). A rejected candidate leaves x_i, A_i and r_i as they were. x* tracks the
+        /// best candidate seen.
+        /// </summary>
+        public void Fly(
+            int i, Tensor<T> frequencyDraw, Tensor<T>? walk, Tensor<T> acceptDraw, double frequencyMin, double frequencyMax,
+            Tensor<T> pulseFactor)
+        {
+            var engine = AiDotNetEngine.Current;
+            var ops = MathHelper.GetNumericOperations<T>();
+            int p = Positions.Shape[1];
+
+            var frequency = PopulationSearchOps.Affine(frequencyDraw, frequencyMax - frequencyMin, frequencyMin);
+            var position = PopulationSearchOps.Row(Positions, i);
+            var velocity = engine.TensorAdd(
+                PopulationSearchOps.Row(Velocities, i),
+                PopulationSearchOps.Scale(engine.TensorSubtract(position, Best), frequency));
+            Velocities = PopulationSearchOps.ReplaceRow(Velocities, i, velocity);
+
+            var candidate = walk is null
+                ? engine.TensorAdd(position, velocity)
+                : engine.TensorAdd(Best, engine.TensorMultiplyScalar(walk, engine.TensorMean(Loudness)));
+            candidate = PopulationSearchOps.Clamp01(candidate);
+            var candidateFitness = _evaluate(engine.Reshape(candidate, new[] { 1, p }));
+
+            if (PopulationSearchOps.Greater(PopulationSearchOps.At(Loudness, i), acceptDraw)
+                && PopulationSearchOps.Greater(candidateFitness, PopulationSearchOps.At(Fitness, i)))
+            {
+                Positions = PopulationSearchOps.ReplaceRow(Positions, i, candidate);
+                Fitness = PopulationSearchOps.ReplaceAt(Fitness, i, candidateFitness);
+                Loudness = PopulationSearchOps.ReplaceAt(
+                    Loudness, i, engine.TensorMultiplyScalar(PopulationSearchOps.At(Loudness, i), ops.FromDouble(Alpha)));
+                PulseRate = PopulationSearchOps.ReplaceAt(
+                    PulseRate, i, engine.TensorMultiply(PopulationSearchOps.At(InitialPulseRate, i), pulseFactor));
+            }
+
+            if (PopulationSearchOps.Greater(candidateFitness, BestFitness))
+            {
+                Best = candidate;
+                BestFitness = candidateFitness;
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -249,15 +248,7 @@ public class BatAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (_selectedIndices is null)
             throw new InvalidOperationException("BatAlgorithm has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

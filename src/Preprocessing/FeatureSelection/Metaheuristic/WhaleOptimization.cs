@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -31,7 +32,7 @@ public class WhaleOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly double _spiralConstant;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -40,7 +41,7 @@ public class WhaleOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     public int PopulationSize => _populationSize;
     public int MaxIterations => _maxIterations;
     public double SpiralConstant => _spiralConstant;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -83,146 +84,111 @@ public class WhaleOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        int targetCount = Math.Min(_nFeaturesToSelect, p);
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+
         // Initialize population
-        var positions = new double[_populationSize, p];
-        for (int i = 0; i < _populationSize; i++)
-            for (int j = 0; j < p; j++)
-                positions[i, j] = random.NextDouble();
+        var positions = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
+        var fitness = PopulationSearchOps.ThresholdFitness(positions, correlations, targetCount, 0.1);
 
-        var fitness = new double[_populationSize];
-        for (int i = 0; i < _populationSize; i++)
-            fitness[i] = EvaluateSolution(data, target, positions, i, p, n);
+        // The leader is the best solution found so far
+        int bestIdx = PopulationSearchOps.ArgMax(fitness);
+        var bestFitness = PopulationSearchOps.At(fitness, bestIdx);
+        var bestPos = PopulationSearchOps.Row(positions, bestIdx);
 
-        // Find best solution
-        int bestIdx = 0;
-        double bestFitness = fitness[0];
-        for (int i = 1; i < _populationSize; i++)
-        {
-            if (fitness[i] > bestFitness)
-            {
-                bestFitness = fitness[i];
-                bestIdx = i;
-            }
-        }
+        var randomWhales = new int[p];
 
-        var bestPos = new double[p];
-        for (int j = 0; j < p; j++)
-            bestPos[j] = positions[bestIdx, j];
-
-        // Main loop
+        // Main loop (Mirjalili and Lewis 2016)
         for (int iter = 0; iter < _maxIterations; iter++)
         {
+            // a falls linearly from 2 to 0, a2 from -1 to -2; the leader stays fixed while the pod moves
             double a = 2 - iter * 2.0 / _maxIterations;
-
+            double a2 = -1 - (double)iter / _maxIterations;
             for (int i = 0; i < _populationSize; i++)
             {
-                double r = random.NextDouble();
-                double A = 2 * a * r - a;
-                double C = 2 * random.NextDouble();
-                double l = random.NextDouble() * 2 - 1;
-                double prob = random.NextDouble();
-
-                for (int j = 0; j < p; j++)
+                // r (for A), r2 (for C), the spiral draw and the strategy draw
+                var draws = PopulationSearchOps.Uniform<T>(random, 4);
+                Tensor<T>? randomWhale = null;
+                if (Explores(draws, a))
                 {
-                    if (prob < 0.5)
-                    {
-                        if (Math.Abs(A) < 1)
-                        {
-                            // Encircling prey
-                            double D = Math.Abs(C * bestPos[j] - positions[i, j]);
-                            positions[i, j] = bestPos[j] - A * D;
-                        }
-                        else
-                        {
-                            // Random search
-                            int randIdx = random.Next(_populationSize);
-                            double D = Math.Abs(C * positions[randIdx, j] - positions[i, j]);
-                            positions[i, j] = positions[randIdx, j] - A * D;
-                        }
-                    }
-                    else
-                    {
-                        // Spiral update (bubble-net)
-                        double D = Math.Abs(bestPos[j] - positions[i, j]);
-                        positions[i, j] = D * Math.Exp(_spiralConstant * l) * Math.Cos(2 * Math.PI * l) + bestPos[j];
-                    }
-
-                    positions[i, j] = Math.Max(0, Math.Min(1, positions[i, j]));
-                }
-
-                fitness[i] = EvaluateSolution(data, target, positions, i, p, n);
-
-                if (fitness[i] > bestFitness)
-                {
-                    bestFitness = fitness[i];
                     for (int j = 0; j < p; j++)
-                        bestPos[j] = positions[i, j];
+                        randomWhales[j] = random.Next(_populationSize);
+                    randomWhale = PopulationSearchOps.GatherPerColumn(positions, randomWhales);
                 }
+
+                var moved = Move(PopulationSearchOps.Row(positions, i), bestPos, randomWhale, draws, a, a2, _spiralConstant);
+                positions = PopulationSearchOps.ReplaceRow(positions, i, moved);
+            }
+
+            fitness = PopulationSearchOps.ThresholdFitness(positions, correlations, targetCount, 0.1);
+            int iterBest = PopulationSearchOps.ArgMax(fitness);
+            var iterBestFitness = PopulationSearchOps.At(fitness, iterBest);
+            if (PopulationSearchOps.Greater(iterBestFitness, bestFitness))
+            {
+                bestFitness = iterBestFitness;
+                bestPos = PopulationSearchOps.Row(positions, iterBest);
             }
         }
 
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = bestPos[j];
+        _featureScores = bestPos.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestPos, numToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateSolution(Matrix<T> data, Vector<T> target, double[,] positions, int idx, int p, int n)
+    /// <summary>
+    /// True when a whale searches for prey around a random whale: the strategy draw is below 0.5 and |A| &gt;= 1, with
+    /// A = 2 a r - a. <paramref name="draws"/> is (r, r2, spiral draw, strategy draw).
+    /// </summary>
+    internal static bool Explores(Tensor<T> draws, double a)
     {
-        var selectedFeatures = Enumerable.Range(0, p)
-            .Where(j => positions[idx, j] > 0.5)
-            .ToArray();
-
-        if (selectedFeatures.Length == 0)
-            return 0;
-
-        double totalScore = 0;
-        foreach (int f in selectedFeatures)
-            totalScore += ComputeCorrelation(data, target, f, n);
-
-        int targetCount = Math.Min(_nFeaturesToSelect, p);
-        double countPenalty = Math.Abs(selectedFeatures.Length - targetCount);
-
-        return totalScore / selectedFeatures.Length - 0.1 * countPenalty;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var strategy = PopulationSearchOps.At(draws, 3);
+        var coefficientA = PopulationSearchOps.Affine(PopulationSearchOps.At(draws, 0), 2 * a, -a);
+        return PopulationSearchOps.Any(engine.TensorLessThan(strategy, ops.FromDouble(0.5)))
+            && !PopulationSearchOps.Any(engine.TensorLessThan(engine.TensorAbs(coefficientA), ops.One));
     }
 
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int j, int n)
+    /// <summary>
+    /// One whale move. With A = 2 a r - a, C = 2 r2 and l = (a2 - 1) u + 1: when the strategy draw is below 0.5,
+    /// X = L - A |C L - X| where L is the leader (|A| &lt; 1, encircling) or <paramref name="randomWhale"/> (search for
+    /// prey); otherwise the bubble-net spiral X = |X* - X| e^(b l) cos(2 pi l) + X*. The result is clamped to [0, 1].
+    /// </summary>
+    internal static Tensor<T> Move(
+        Tensor<T> position, Tensor<T> leader, Tensor<T>? randomWhale, Tensor<T> draws, double a, double a2, double b)
     {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var strategy = PopulationSearchOps.At(draws, 3);
+        Tensor<T> moved;
+        if (PopulationSearchOps.Any(engine.TensorLessThan(strategy, ops.FromDouble(0.5))))
         {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
+            var coefficientA = PopulationSearchOps.Affine(PopulationSearchOps.At(draws, 0), 2 * a, -a);
+            var coefficientC = engine.TensorMultiplyScalar(PopulationSearchOps.At(draws, 1), ops.FromDouble(2));
+            var reference = randomWhale ?? leader;
+            var distance = engine.TensorAbs(engine.TensorSubtract(PopulationSearchOps.Scale(reference, coefficientC), position));
+            moved = engine.TensorSubtract(reference, PopulationSearchOps.Scale(distance, coefficientA));
         }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
+        else
         {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
+            var l = PopulationSearchOps.Affine(PopulationSearchOps.At(draws, 2), a2 - 1, 1);
+            var spiral = engine.TensorMultiply(
+                engine.TensorExp(engine.TensorMultiplyScalar(l, ops.FromDouble(b))),
+                engine.TensorCos(engine.TensorMultiplyScalar(l, ops.FromDouble(2 * Math.PI))));
+            var distance = engine.TensorAbs(engine.TensorSubtract(leader, position));
+            moved = engine.TensorAdd(PopulationSearchOps.Scale(distance, spiral), leader);
         }
 
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
+        return PopulationSearchOps.Clamp01(moved);
     }
 
     /// <inheritdoc />
@@ -238,15 +204,7 @@ public class WhaleOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("WhaleOptimization has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

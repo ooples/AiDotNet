@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -31,7 +32,7 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +40,7 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int NIterations => _nIterations;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -84,243 +85,198 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        _featureScores = ComputeFeatureScores(data, target);
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+        _featureScores = scores.ToVector();
 
-        // Initialize dragonfly positions and velocities
-        var positions = new double[_populationSize, p];
-        var velocities = new double[_populationSize, p];
+        // Initialize dragonfly positions and step vectors in the search space [0, 1]
+        var positions = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
+        var steps = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
 
-        for (int i = 0; i < _populationSize; i++)
+        Tensor<T>? food = null;
+        Tensor<T>? foodFitness = null;
+        Tensor<T>? enemy = null;
+        Tensor<T>? enemyFitness = null;
+
+        // Main loop (Mirjalili 2016)
+        for (int iter = 1; iter <= _nIterations; iter++)
         {
-            for (int j = 0; j < p; j++)
-            {
-                positions[i, j] = random.NextDouble();
-                velocities[i, j] = (random.NextDouble() - 0.5) * 0.1;
-            }
-        }
+            var weights = SwarmWeights.ForIteration(iter, _nIterations, PopulationSearchOps.Uniform<T>(random, 4));
 
-        var fitness = new double[_populationSize];
-        int foodIdx = 0, enemyIdx = 0;
-        double foodFitness = double.MinValue, enemyFitness = double.MaxValue;
-
-        // Evaluate initial population
-        for (int i = 0; i < _populationSize; i++)
-        {
-            fitness[i] = EvaluateFitness(positions, i, p);
-            if (fitness[i] > foodFitness)
+            // Food: the best position found so far; enemy: the worst
+            var fitness = PopulationSearchOps.ThresholdFitness(positions, scores, _nFeaturesToSelect, 0.1);
+            int best = PopulationSearchOps.ArgMax(fitness);
+            int worst = PopulationSearchOps.ArgMin(fitness);
+            if (foodFitness is null || PopulationSearchOps.Greater(PopulationSearchOps.At(fitness, best), foodFitness))
             {
-                foodFitness = fitness[i];
-                foodIdx = i;
+                foodFitness = PopulationSearchOps.At(fitness, best);
+                food = PopulationSearchOps.Row(positions, best);
             }
-            if (fitness[i] < enemyFitness)
-            {
-                enemyFitness = fitness[i];
-                enemyIdx = i;
-            }
-        }
 
-        // Main loop
-        for (int iter = 0; iter < _nIterations; iter++)
-        {
-            double w = 0.9 - iter * (0.9 - 0.4) / _nIterations; // Inertia weight
+            if (enemyFitness is null || PopulationSearchOps.Greater(enemyFitness, PopulationSearchOps.At(fitness, worst)))
+            {
+                enemyFitness = PopulationSearchOps.At(fitness, worst);
+                enemy = PopulationSearchOps.Row(positions, worst);
+            }
+
+            if (food is null || enemy is null)
+                throw new InvalidOperationException("The food and enemy positions must be set after the first evaluation.");
 
             for (int i = 0; i < _populationSize; i++)
-            {
-                // Calculate swarm behaviors
-                var separation = CalculateSeparation(positions, i, p);
-                var alignment = CalculateAlignment(velocities, i, p);
-                var cohesion = CalculateCohesion(positions, i, p);
-
-                // Calculate attraction to food and distraction from enemy
-                var foodAttraction = new double[p];
-                var enemyDistraction = new double[p];
-
-                for (int j = 0; j < p; j++)
-                {
-                    foodAttraction[j] = positions[foodIdx, j] - positions[i, j];
-                    enemyDistraction[j] = positions[enemyIdx, j] + positions[i, j];
-                }
-
-                // Update velocity and position
-                double s = 2 * random.NextDouble() * (1 - (double)iter / _nIterations);
-                double a = 2 * random.NextDouble() * (1 - (double)iter / _nIterations);
-                double c = 2 * random.NextDouble() * (1 - (double)iter / _nIterations);
-                double f = 2 * random.NextDouble();
-                double e = 0.1 * random.NextDouble();
-
-                for (int j = 0; j < p; j++)
-                {
-                    velocities[i, j] = w * velocities[i, j] +
-                        s * separation[j] +
-                        a * alignment[j] +
-                        c * cohesion[j] +
-                        f * foodAttraction[j] -
-                        e * enemyDistraction[j];
-
-                    // Clamp velocity
-                    velocities[i, j] = Math.Max(-1, Math.Min(1, velocities[i, j]));
-
-                    // Update position
-                    positions[i, j] += velocities[i, j];
-                    positions[i, j] = Math.Max(0, Math.Min(1, positions[i, j]));
-                }
-
-                // Evaluate fitness
-                fitness[i] = EvaluateFitness(positions, i, p);
-
-                // Update food and enemy
-                if (fitness[i] > foodFitness)
-                {
-                    foodFitness = fitness[i];
-                    foodIdx = i;
-                }
-                if (fitness[i] < enemyFitness)
-                {
-                    enemyFitness = fitness[i];
-                    enemyIdx = i;
-                }
-            }
+                MoveDragonfly(ref positions, ref steps, i, food, enemy, weights, random);
         }
 
-        // Extract selected features from best position
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => positions[foodIdx, j] * _featureScores[j])
-            .Take(_nFeaturesToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        var finalFitness = PopulationSearchOps.ThresholdFitness(positions, scores, _nFeaturesToSelect, 0.1);
+        int finalBest = PopulationSearchOps.ArgMax(finalFitness);
+        var foodPosition = food is not null && foodFitness is not null
+            && !PopulationSearchOps.Greater(PopulationSearchOps.At(finalFitness, finalBest), foodFitness)
+                ? food
+                : PopulationSearchOps.Row(positions, finalBest);
+
+        // Extract selected features from the food position
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            Engine.TensorMultiply(foodPosition, scores), _nFeaturesToSelect);
 
         IsFitted = true;
     }
 
-    private double[] CalculateSeparation(double[,] positions, int idx, int p)
+    /// <summary>Maximum step length in each dimension, a tenth of the search range [0, 1].</summary>
+    internal const double MaxStep = 0.1;
+
+    /// <summary>
+    /// The per-iteration weights of DA: neighbourhood radius r = 1/4 + 2 t / T, inertia w = 0.9 - 0.5 t / T,
+    /// c' = max(0.1 - 0.2 t / T, 0), and s = 2 rand c', a = 2 rand c', c = 2 rand c', f = 2 rand, e = c'.
+    /// </summary>
+    internal sealed class SwarmWeights
     {
-        var separation = new double[p];
-        int count = 0;
+        public double Radius { get; private set; }
 
-        for (int i = 0; i < _populationSize; i++)
+        public double Inertia { get; private set; }
+
+        public Tensor<T> Separation { get; private set; } = new Tensor<T>(new[] { 1 });
+
+        public Tensor<T> Alignment { get; private set; } = new Tensor<T>(new[] { 1 });
+
+        public Tensor<T> Cohesion { get; private set; } = new Tensor<T>(new[] { 1 });
+
+        public Tensor<T> Food { get; private set; } = new Tensor<T>(new[] { 1 });
+
+        public double Enemy { get; private set; }
+
+        /// <summary>The weights of iteration <paramref name="t"/> of <paramref name="iterations"/>; <paramref name="draws"/> holds the s, a, c and f uniforms.</summary>
+        public static SwarmWeights ForIteration(int t, int iterations, Tensor<T> draws)
         {
-            if (i == idx) continue;
-
-            double dist = 0;
-            for (int j = 0; j < p; j++)
-                dist += Math.Pow(positions[i, j] - positions[idx, j], 2);
-            dist = Math.Sqrt(dist);
-
-            if (dist < 0.5) // Neighborhood radius
+            double progress = (double)t / iterations;
+            double c = Math.Max(0.1 - 0.2 * progress, 0);
+            return new SwarmWeights
             {
-                for (int j = 0; j < p; j++)
-                    separation[j] -= positions[i, j] - positions[idx, j];
-                count++;
-            }
+                Radius = 0.25 + 2 * progress,
+                Inertia = 0.9 - 0.5 * progress,
+                Separation = PopulationSearchOps.Affine(PopulationSearchOps.At(draws, 0), 2 * c, 0),
+                Alignment = PopulationSearchOps.Affine(PopulationSearchOps.At(draws, 1), 2 * c, 0),
+                Cohesion = PopulationSearchOps.Affine(PopulationSearchOps.At(draws, 2), 2 * c, 0),
+                Food = PopulationSearchOps.Affine(PopulationSearchOps.At(draws, 3), 2, 0),
+                Enemy = c,
+            };
         }
-
-        if (count > 0)
-        {
-            for (int j = 0; j < p; j++)
-                separation[j] /= count;
-        }
-
-        return separation;
     }
 
-    private double[] CalculateAlignment(double[,] velocities, int idx, int p)
+    /// <summary>
+    /// Moves dragonfly <paramref name="i"/> as in DA. Neighbours are the dragonflies whose distance is at most r and
+    /// nonzero in every dimension. S = -sum(X_j - X), A = mean(dX_j),
+    /// C = mean(X_j) - X (A = dX and C = 0 with at most one neighbour, as in DA.m), F = food - X and E = enemy + X when food and enemy are within r in
+    /// every dimension (else 0). When the food is out of reach, a dragonfly with more than one neighbour steps
+    /// dX = w dX + rand A + rand C + rand S (a fresh rand per dimension), and one without does a Levy flight X = X + Levy .* X with dX = 0;
+    /// otherwise dX = s S + a A + c C + f F + e E + w dX. Steps are clamped to [-0.1, 0.1] and positions to [0, 1].
+    /// </summary>
+    internal static void MoveDragonfly(
+        ref Tensor<T> positions, ref Tensor<T> steps, int i, Tensor<T> food, Tensor<T> enemy, SwarmWeights weights, Random random)
     {
-        var alignment = new double[p];
-        int count = 0;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = positions.Shape[0];
+        int p = positions.Shape[1];
+        T radius = ops.FromDouble(weights.Radius);
+        T zero = ops.Zero;
 
-        for (int i = 0; i < _populationSize; i++)
+        var x = PopulationSearchOps.Row(positions, i);
+        var step = PopulationSearchOps.Row(steps, i);
+        var distances = engine.TensorAbs(engine.TensorSubtract(
+            positions, engine.TensorBroadcastTo(engine.Reshape(x, new[] { 1, p }), new[] { m, p })));
+        var outside = engine.ReduceSum(engine.TensorGreaterThan(distances, radius), new[] { 1 }, false);
+        var coincident = engine.ReduceSum(engine.TensorEquals(distances, zero), new[] { 1 }, false);
+        var neighbour = engine.TensorMultiply(engine.TensorEquals(outside, zero), engine.TensorEquals(coincident, zero));
+        int neighbourCount = engine.TensorCountNonzero(neighbour);
+
+        var neighbourRow = engine.Reshape(neighbour, new[] { 1, m });
+        var positionSum = engine.Reshape(engine.TensorMatMul(neighbourRow, positions), new[] { p });
+        var stepSum = engine.Reshape(engine.TensorMatMul(neighbourRow, steps), new[] { p });
+        T count = ops.FromDouble(Math.Max(neighbourCount, 1));
+        var separation = engine.TensorNegate(engine.TensorSubtract(
+            positionSum, engine.TensorMultiplyScalar(x, ops.FromDouble(neighbourCount))));
+        // DA.m averages the neighbours only when there is more than one; a lone neighbour leaves A = dX and C = 0
+        var alignment = neighbourCount > 1 ? engine.TensorDivideScalar(stepSum, count) : step;
+        var cohesion = neighbourCount > 1
+            ? engine.TensorSubtract(engine.TensorDivideScalar(positionSum, count), x)
+            : new Tensor<T>(new[] { p });
+
+        bool foodNear = !PopulationSearchOps.Any(engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(x, food)), radius));
+        bool enemyNear = !PopulationSearchOps.Any(engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(x, enemy)), radius));
+        var attraction = foodNear ? engine.TensorSubtract(food, x) : new Tensor<T>(new[] { p });
+        var distraction = enemyNear ? engine.TensorAdd(enemy, x) : new Tensor<T>(new[] { p });
+        var inertia = engine.TensorMultiplyScalar(step, ops.FromDouble(weights.Inertia));
+
+        Tensor<T> newStep;
+        Tensor<T> newPosition;
+        if (!foodNear && neighbourCount <= 1)
         {
-            if (i == idx) continue;
-            for (int j = 0; j < p; j++)
-                alignment[j] += velocities[i, j];
-            count++;
+            // Levy flight of DA: 0.01 r1 sigma / |r2|^(1/beta) with uniform r1, r2 and beta = 3/2
+            var levyDraws = PopulationSearchOps.Uniform<T>(random, 2, p);
+            var r1 = PopulationSearchOps.Row(levyDraws, 0);
+            var r2 = PopulationSearchOps.Row(levyDraws, 1);
+            var levy = engine.TensorMultiplyScalar(
+                engine.TensorDivide(r1, engine.TensorPower(engine.TensorAbs(r2), ops.FromDouble(1 / 1.5))),
+                ops.FromDouble(0.01 * LevySigma));
+            newPosition = engine.TensorAdd(x, engine.TensorMultiply(levy, x));
+            newStep = new Tensor<T>(new[] { p });
         }
-
-        if (count > 0)
+        else
         {
-            for (int j = 0; j < p; j++)
-                alignment[j] /= count;
-        }
-
-        return alignment;
-    }
-
-    private double[] CalculateCohesion(double[,] positions, int idx, int p)
-    {
-        var cohesion = new double[p];
-        int count = 0;
-
-        for (int i = 0; i < _populationSize; i++)
-        {
-            if (i == idx) continue;
-            for (int j = 0; j < p; j++)
-                cohesion[j] += positions[i, j];
-            count++;
-        }
-
-        if (count > 0)
-        {
-            for (int j = 0; j < p; j++)
-                cohesion[j] = cohesion[j] / count - positions[idx, j];
-        }
-
-        return cohesion;
-    }
-
-    private double[] ComputeFeatureScores(Matrix<T> data, Vector<T> target)
-    {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
+            Tensor<T> sum;
+            if (!foodNear)
             {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
+                // DA.m draws rand for A, C and S per dimension: [p, 3] in that order
+                var r = PopulationSearchOps.Uniform<T>(random, p, 3);
+                Tensor<T> Column(int k) => engine.Reshape(engine.TensorSlice(r, new[] { 0, k }, new[] { p, 1 }), new[] { p });
+                sum = engine.TensorAdd(
+                    engine.TensorAdd(
+                        engine.TensorMultiply(alignment, Column(0)),
+                        engine.TensorMultiply(cohesion, Column(1))),
+                    engine.TensorMultiply(separation, Column(2)));
             }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
-    }
-
-    private double EvaluateFitness(double[,] positions, int idx, int p)
-    {
-        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
-        double fitness = 0;
-        double selected = 0;
-
-        for (int j = 0; j < p; j++)
-        {
-            if (positions[idx, j] > 0.5)
+            else
             {
-                fitness += featureScores[j];
-                selected++;
+                sum = engine.TensorAdd(
+                    engine.TensorAdd(
+                        engine.TensorAdd(
+                            PopulationSearchOps.Scale(separation, weights.Separation),
+                            PopulationSearchOps.Scale(alignment, weights.Alignment)),
+                        engine.TensorAdd(
+                            PopulationSearchOps.Scale(cohesion, weights.Cohesion),
+                            PopulationSearchOps.Scale(attraction, weights.Food))),
+                    engine.TensorMultiplyScalar(distraction, ops.FromDouble(weights.Enemy)));
             }
+
+            newStep = engine.TensorClamp(engine.TensorAdd(sum, inertia), ops.FromDouble(-MaxStep), ops.FromDouble(MaxStep));
+            newPosition = engine.TensorAdd(x, newStep);
         }
 
-        // Penalize for deviating from target number of features
-        double penalty = Math.Abs(selected - _nFeaturesToSelect) * 0.1;
-
-        return selected > 0 ? fitness / selected - penalty : 0;
+        positions = PopulationSearchOps.ReplaceRow(positions, i, PopulationSearchOps.Clamp01(newPosition));
+        steps = PopulationSearchOps.ReplaceRow(steps, i, newStep);
     }
+
+    /// <summary>Mantegna's sigma for beta = 3/2: (Gamma(5/2) sin(3 pi / 4) / (Gamma(5/4) 3/2 2^(1/4)))^(2/3).</summary>
+    private static readonly double LevySigma = Math.Pow(
+        1.329340388179137 * Math.Sin(Math.PI * 0.75) / (0.906402477055477 * 1.5 * Math.Pow(2, 0.25)), 1 / 1.5);
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -335,15 +291,7 @@ public class DragonflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("DragonflyAlgorithm has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
