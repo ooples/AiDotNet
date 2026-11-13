@@ -14,6 +14,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.ReinforcementLearning.Environments;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.A3C;
@@ -306,7 +307,10 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 var value = RLTensorOps.FirstValue(valueTensor);
                 var (nextState, reward, done, info) = environment.Step(action);
 
-                trajectory.Add((state, action, reward, done, value));
+                // A time-limit end is a truncation: it ends the rollout like a termination but its return is
+                // bootstrapped from V(nextState), so it is not stored as terminal.
+                bool terminated = done && !EnvironmentInfoKeys.IsTruncated(info);
+                trajectory.Add((state, action, reward, terminated, value));
 
                 state = nextState;
                 Interlocked.Increment(ref _globalSteps);
@@ -317,8 +321,8 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 }
             }
 
-            // Compute returns and advantages
-            var returns = ComputeReturns(trajectory, localValue);
+            // Compute returns and advantages; after the loop, state holds s_{t+1} of the last collected step.
+            var returns = ComputeReturns(trajectory, localValue, state);
             var advantages = ComputeAdvantages(trajectory, returns);
 
             // Update global network
@@ -338,35 +342,32 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         return SelectAction(state, training);
     }
 
-    private List<T> ComputeReturns(List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> trajectory, INeuralNetwork<T> valueNetwork)
+    /// <summary>
+    /// n-step returns R_i = r_i + gamma R_{i+1} (Mnih et al. 2016, Algorithm S3), with R = V(s_{t_max}) after the last
+    /// step when it did not terminate the episode (a truncated step or the t_max cutoff), where
+    /// <paramref name="bootstrapState"/> is that step's NEXT state. The <c>done</c> flags are terminations.
+    /// </summary>
+    internal List<T> ComputeReturns(List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> trajectory,
+        INeuralNetwork<T> valueNetwork, Vector<T> bootstrapState)
     {
-        var returns = new List<T>();
-        T nextValue = NumOps.Zero;
-
-        if (trajectory.Count > 0 && !trajectory[trajectory.Count - 1].done)
+        int count = trajectory.Count;
+        if (count == 0)
         {
-            var lastState = trajectory[trajectory.Count - 1].state;
-            var lastStateTensor = Tensor<T>.FromVector(lastState);
-            var nextValueTensor = valueNetwork.Predict(lastStateTensor);
-            nextValue = nextValueTensor.ToVector()[0];
+            return new List<T>();
         }
 
-        T runningReturn = nextValue;
-        for (int i = trajectory.Count - 1; i >= 0; i--)
-        {
-            var exp = trajectory[i];
-            if (exp.done)
-            {
-                runningReturn = exp.reward;
-            }
-            else
-            {
-                runningReturn = NumOps.Add(exp.reward, NumOps.Multiply(DiscountFactor, runningReturn));
-            }
-            returns.Insert(0, runningReturn);
-        }
+        bool lastTerminated = trajectory[count - 1].done;
+        T bootstrapValue = lastTerminated
+            ? NumOps.Zero
+            : RLTensorOps.FirstValue(valueNetwork.Predict(Tensor<T>.FromVector(bootstrapState)));
 
-        return returns;
+        // Only the last step bootstraps: earlier terminal steps restart the return with nothing after them.
+        var nextValues = Vector<T>.CreateDefault(count, NumOps.Zero);
+        nextValues[count - 1] = bootstrapValue;
+        var chainCuts = trajectory.Select(step => step.done).ToArray();
+        chainCuts[count - 1] = true;
+        var rewards = Vector<T>.FromEnumerable(trajectory.Select(step => step.reward));
+        return RLTensorOps.DiscountedReturns(rewards, nextValues, chainCuts, DiscountFactor).ToList();
     }
 
     private List<T> ComputeAdvantages(List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)> trajectory, List<T> returns)

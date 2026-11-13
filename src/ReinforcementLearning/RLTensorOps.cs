@@ -112,6 +112,36 @@ internal static class RLTensorOps
     }
 
     /// <summary>
+    /// True when the vectors have the same length and every element pair compares equal (a NaN never does). The
+    /// test is min(a == b) = 1 rather than a count of matches in T, which Half cannot hold exactly past 2048.
+    /// </summary>
+    internal static bool SameValues<T>(Vector<T> a, Vector<T> b)
+    {
+        if (a is null)
+        {
+            throw new ArgumentNullException(nameof(a));
+        }
+
+        if (b is null)
+        {
+            throw new ArgumentNullException(nameof(b));
+        }
+
+        if (a.Length != b.Length)
+        {
+            return false;
+        }
+
+        if (a.Length == 0)
+        {
+            return true;
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        return ops.Equals(Engine.TensorMinValue(Engine.TensorEquals(a.AsTensor(), b.AsTensor())), ops.One);
+    }
+
+    /// <summary>
     /// Gathers actions 0..count-1 of a dictionary-backed table row into a vector (data movement
     /// only; a missing action throws <see cref="KeyNotFoundException"/> like the indexed reads).
     /// </summary>
@@ -247,6 +277,204 @@ internal static class RLTensorOps
         var z = Engine.Divide(Engine.Subtract(value, mean), Engine.Exp(logStd));
         var perDimension = Engine.Subtract(Engine.Multiply(Engine.Multiply(z, z), ops.FromDouble(-0.5)), logStd);
         return ops.Subtract(Engine.Sum(perDimension), ops.FromDouble(0.5 * Math.Log(2.0 * Math.PI) * mean.Length));
+    }
+
+    /// <summary>
+    /// log(p + floor) evaluated in double: a floor such as 1e-10 rounds to zero in Half, where the T sum would
+    /// give log(0) = -infinity for a zero probability.
+    /// </summary>
+    internal static T LogWithFloor<T>(T probability, double floor)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        return ops.FromDouble(Math.Log(ops.ToDouble(probability) + floor));
+    }
+
+    /// <summary>
+    /// 1 - <paramref name="epsilon"/> in T, or Half's largest value below one (1 - 2^-11) when that rounds to one:
+    /// a 1e-6 clip margin is lost in Half, which would collapse the clip onto the boundary.
+    /// </summary>
+    internal static T BelowOne<T>(double epsilon)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T bound = ops.FromDouble(1.0 - epsilon);
+        return ops.LessThan(bound, ops.One) ? bound : ops.FromDouble(1.0 - 4.8828125e-4);
+    }
+
+    /// <summary>
+    /// The backward linear recurrence y_t = x_t + c_t y_{t+1} with y_T = 0, the shape of every discounted return
+    /// and of GAE (Schulman et al. 2016, Eq. 16). Each step is one engine op on single-element slices, newest first.
+    /// </summary>
+    internal static Vector<T> ReverseLinearRecurrence<T>(Vector<T> inputs, Vector<T> coefficients)
+    {
+        if (inputs is null)
+        {
+            throw new ArgumentNullException(nameof(inputs));
+        }
+
+        if (coefficients is null)
+        {
+            throw new ArgumentNullException(nameof(coefficients));
+        }
+
+        if (coefficients.Length != inputs.Length)
+        {
+            throw new ArgumentException("One coefficient per input is required.", nameof(coefficients));
+        }
+
+        int n = inputs.Length;
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var x = inputs.AsTensor();
+        var c = coefficients.AsTensor();
+        var steps = new Tensor<T>[n];
+        var running = Engine.TensorSlice(x, [n - 1], [1]);
+        steps[n - 1] = running;
+        for (int t = n - 2; t >= 0; t--)
+        {
+            running = Engine.TensorAdd(Engine.TensorSlice(x, [t], [1]), Engine.TensorMultiply(Engine.TensorSlice(c, [t], [1]), running));
+            steps[t] = running;
+        }
+
+        return Engine.TensorConcatenate(steps, 0).ToVector();
+    }
+
+    /// <summary>
+    /// Generalized advantage estimation (Schulman et al. 2016, Eq. 16; Stable-Baselines3's
+    /// compute_returns_and_advantage): delta_t = r_t + gamma V'_t - V_t and A_t = delta_t + gamma lambda A_{t+1},
+    /// with the chain cut after every step that ends an episode or the rollout. <paramref name="nextValues"/> holds
+    /// V'_t, the value bootstrapped after step t: zero for a terminated step, V(s_{t+1}) otherwise (including a
+    /// truncated one). Returns are A_t + V_t.
+    /// </summary>
+    internal static (Vector<T> Advantages, Vector<T> Returns) Gae<T>(
+        Vector<T> rewards, Vector<T> values, Vector<T> nextValues, bool[] chainCut, T gamma, T lambda)
+    {
+        if (rewards is null)
+        {
+            throw new ArgumentNullException(nameof(rewards));
+        }
+
+        if (chainCut is null)
+        {
+            throw new ArgumentNullException(nameof(chainCut));
+        }
+
+        if (rewards.Length == 0)
+        {
+            return (new Vector<T>(0), new Vector<T>(0));
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var deltas = Engine.Subtract(Engine.Add(rewards, Engine.Multiply(nextValues, gamma)), values);
+        var coefficients = Engine.TensorWhere(
+            chainCut,
+            Vector<T>.CreateDefault(rewards.Length, ops.Zero).AsTensor(),
+            Vector<T>.CreateDefault(rewards.Length, ops.Multiply(gamma, lambda)).AsTensor()).ToVector();
+        var advantages = ReverseLinearRecurrence(deltas, coefficients);
+        return (advantages, Engine.Add(advantages, values));
+    }
+
+    /// <summary>
+    /// n-step discounted returns (Mnih et al. 2016, Algorithm S3): R_t = r_t + gamma R_{t+1}, and
+    /// R_t = r_t + gamma V'_t after a step that ends an episode or the rollout, where <paramref name="nextValues"/>
+    /// holds V'_t (zero for a terminated step, V(s_{t+1}) for a truncated one); entries of other steps are unused.
+    /// </summary>
+    internal static Vector<T> DiscountedReturns<T>(Vector<T> rewards, Vector<T> nextValues, bool[] chainCut, T gamma)
+    {
+        if (rewards is null)
+        {
+            throw new ArgumentNullException(nameof(rewards));
+        }
+
+        if (chainCut is null)
+        {
+            throw new ArgumentNullException(nameof(chainCut));
+        }
+
+        if (rewards.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var zeros = Vector<T>.CreateDefault(rewards.Length, ops.Zero).AsTensor();
+        var bootstrap = Engine.TensorWhere(chainCut, Engine.Multiply(nextValues, gamma).AsTensor(), zeros).ToVector();
+        var coefficients = Engine.TensorWhere(chainCut, zeros, Vector<T>.CreateDefault(rewards.Length, gamma).AsTensor()).ToVector();
+        return ReverseLinearRecurrence(Engine.Add(rewards, bootstrap), coefficients);
+    }
+
+    /// <summary>
+    /// Log-density of a tanh-squashed diagonal Gaussian (Haarnoja et al. 2018, SAC, Appendix C; Stable-Baselines3's
+    /// TanhBijector): a = tanh(u), u ~ N(mu, sigma), log pi(a) = log N(atanh(a); mu, sigma) - sum_i log(1 - a_i^2 + 1e-6),
+    /// with a clipped just inside (-1, 1) first. The clip bound stays strictly below one in T (see
+    /// <see cref="BelowOne{T}"/>), so a saturated action gives a finite log-density in Half too.
+    /// </summary>
+    internal static T SquashedGaussianLogProb<T>(Vector<T> mean, Vector<T> logStd, Vector<T> action)
+    {
+        if (action is null)
+        {
+            throw new ArgumentNullException(nameof(action));
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        T upper = BelowOne<T>(1e-6);
+        var clipped = Engine.Clamp(action, ops.Negate(upper), upper);
+        T gaussianLogProb = GaussianLogProb(mean, logStd, Engine.Atanh(clipped));
+        var oneMinusSquare = Engine.Subtract(Vector<T>.CreateDefault(clipped.Length, ops.One), Engine.Multiply(clipped, clipped));
+        var correction = Engine.TensorLog(Engine.TensorAddScalar(oneMinusSquare.AsTensor(), ops.FromDouble(1e-6)));
+        return ops.Subtract(gaussianLogProb, Engine.TensorSum(correction));
+    }
+
+    /// <summary>
+    /// Advantage normalisation (A - mean) / (std + 1e-8) with the unbiased standard deviation, as Stable-Baselines3
+    /// and CleanRL normalise (torch.std). When std + 1e-8 is not positive in T (Half rounds 1e-8 to zero, so equal
+    /// advantages would give 0 / 0 = NaN) the centred advantages, all zero there, are returned as they are.
+    /// </summary>
+    internal static List<T> NormalizeAdvantages<T>(List<T> advantages)
+    {
+        if (advantages is null)
+        {
+            throw new ArgumentNullException(nameof(advantages));
+        }
+
+        if (advantages.Count == 0)
+        {
+            return new List<T>();
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        T std = StatisticsHelper<T>.CalculateStandardDeviation(advantages);
+        T mean = Average(advantages);
+        var centred = Engine.Subtract(Vector<T>.FromEnumerable(advantages), Vector<T>.CreateDefault(advantages.Count, mean));
+        T denominator = ops.Add(std, ops.FromDouble(1e-8));
+        return ops.GreaterThan(denominator, ops.Zero)
+            ? Engine.Divide(centred, denominator).ToList()
+            : centred.ToList();
+    }
+
+    /// <summary>
+    /// The UCB1 exploration ratio ln(t) / N(a) per arm (Auer et al. 2002), formed from the integer step and visit
+    /// counts in double and converted to T once: in Half, t and N saturate (inexact past 2048, infinite past 65504),
+    /// and ln(inf) would give every arm an infinite bonus. The ratio of an unvisited arm (N = 0) is not meaningful;
+    /// callers pick unvisited arms before using it.
+    /// </summary>
+    internal static Vector<T> UcbRatio<T>(int totalSteps, Vector<int> counts)
+    {
+        if (counts is null)
+        {
+            throw new ArgumentNullException(nameof(counts));
+        }
+
+        if (counts.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var visits = counts.AsTensor().Cast<double>().ToVector();
+        var ratio = Engine.Divide(Vector<double>.CreateDefault(counts.Length, Math.Log(totalSteps)), visits);
+        return ratio.AsTensor().Cast<T>().ToVector();
     }
 
     /// <summary>

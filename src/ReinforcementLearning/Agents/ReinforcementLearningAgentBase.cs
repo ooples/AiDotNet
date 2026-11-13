@@ -227,6 +227,20 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         StoreExperience(state, action, reward, nextState, done);
     }
 
+    /// <summary>
+    /// Stores a transition, telling termination apart from truncation.
+    /// </summary>
+    /// <remarks>
+    /// Agents that bootstrap on truncation (the on-policy rollout agents) override this. The default treats either
+    /// as the end of the episode, as <see cref="StoreExperience(Vector{T}, Vector{T}, T, Vector{T}, bool)"/> with
+    /// <c>done = terminated || truncated</c>.
+    /// </remarks>
+    public virtual void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool terminated, bool truncated)
+    {
+        StoreExperience(state, action, reward, nextState, terminated || truncated);
+    }
+
 
     /// <summary>
     /// Performs one training step, updating the agent's policy/value function.

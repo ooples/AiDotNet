@@ -85,8 +85,8 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
         int selectedArm = RLTensorOps.FirstPositiveIndex(unvisited, NumOps.Zero, out bool hasUnvisited);
         if (!hasUnvisited && _options.NumArms > 0)
         {
-            T logSteps = NumOps.Log(NumOps.FromDouble(_totalSteps));
-            var ratio = engine.Divide(Vector<T>.CreateDefault(_options.NumArms, logSteps), counts);
+            // ln(t) / N(a) from the integer counts (in Half, t past 65504 would make ln(t) infinite for every arm).
+            var ratio = RLTensorOps.UcbRatio<T>(_totalSteps, _actionCounts);
             var exploration = engine.Multiply(engine.Sqrt(ratio), NumOps.FromDouble(_options.ExplorationParameter));
             selectedArm = RLTensorOps.ArgMax(engine.Add(_qValues, exploration));
         }

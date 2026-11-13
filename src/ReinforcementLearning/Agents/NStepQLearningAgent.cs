@@ -107,17 +107,20 @@ public partial class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>,
         int actionIndex = GetActionIndex(action);
         _nStepBuffer.Add((stateKey, actionIndex, reward));
 
-        if (_nStepBuffer.Count >= _options.NSteps || done)
+        if (done)
         {
-            UpdateNStep(nextState, done);
-            if (done)
+            // Episode end: every pending step gets its truncated return G_{t:T} (Sutton & Barto 2018, Section 7.2,
+            // tau running on to T - 1), oldest first.
+            while (_nStepBuffer.Count > 0)
             {
-                _nStepBuffer.Clear();
-            }
-            else if (_nStepBuffer.Count >= _options.NSteps)
-            {
+                UpdateNStep(nextState, true);
                 _nStepBuffer.RemoveAt(0);
             }
+        }
+        else if (_nStepBuffer.Count >= _options.NSteps)
+        {
+            UpdateNStep(nextState, false);
+            _nStepBuffer.RemoveAt(0);
         }
         // Epsilon decay moved to ResetEpisode to decay per episode, not per step
     }

@@ -178,8 +178,15 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         var engine = AiDotNetEngine.Current;
         var successes = RLTensorOps.CountsAs<T>(_successCounts);
         var failures = RLTensorOps.CountsAs<T>(_failureCounts);
-        // Posterior mean successes / (successes + failures) per arm.
-        var means = _options.NumArms == 0 ? new Vector<T>(0) : engine.Divide(successes, engine.Add(successes, failures));
+        // Posterior mean successes / (successes + failures) per arm, formed from the integer counts (their sum
+        // overflows Half past 65504).
+        var means = new Vector<T>(0);
+        if (_options.NumArms > 0)
+        {
+            var successCounts = _successCounts.AsTensor().Cast<double>().ToVector();
+            var failureCounts = _failureCounts.AsTensor().Cast<double>().ToVector();
+            means = engine.Divide(successCounts, engine.Add(successCounts, failureCounts)).AsTensor().Cast<T>().ToVector();
+        }
         RLTensorOps.AddIndexedMetrics(metrics, _options.NumArms,
             ("mean_arm_", means), ("successes_arm_", successes), ("failures_arm_", failures));
         return metrics;

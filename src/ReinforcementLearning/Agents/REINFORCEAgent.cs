@@ -221,7 +221,8 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
         {
             var probs = Softmax(policyOutput);
             int actionIndex = ArgMax(action);
-            return NumOps.Log(NumOps.Add(probs[actionIndex], NumOps.FromDouble(1e-10)));
+            // log(p + 1e-10) in double, as before: 1e-10 rounds to zero in Half.
+            return RLTensorOps.LogWithFloor(probs[actionIndex], 1e-10);
         }
     }
 

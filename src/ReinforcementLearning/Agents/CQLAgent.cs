@@ -479,67 +479,67 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     /// </summary>
     private (Vector<T> Action, double LogProb) SampleSquashedAction(Vector<T> policyOutputs, int offset)
     {
-            // ã = tanh(μ + σ·ε), log π = Σ_k [−½ε_k² − log σ_k − ½ log 2π − log(1 − ã_k² + 1e-6)], in double precision
-            int actionSize = _options.ActionSize;
-            var engine = AiDotNetEngine.Current;
-            var mean = policyOutputs.GetSubVector(offset, actionSize).AsTensor().Cast<double>().ToVector();
-            var logStd = engine.Clamp(policyOutputs.GetSubVector(offset + actionSize, actionSize).AsTensor().Cast<double>().ToVector(), -20.0, 2.0);
-            var epsilon = StandardNormalDraws(actionSize).AsTensor().Cast<double>().ToVector();
-            var squashed = engine.Tanh(engine.Add(mean, engine.Multiply(engine.Exp(logStd), epsilon)));
-            var oneMinusSquare = engine.Subtract(Vector<double>.CreateDefault(actionSize, 1.0), engine.Multiply(squashed, squashed));
-            var perDimension = engine.Subtract(
-                engine.Subtract(
-                    engine.Subtract(engine.Multiply(engine.Multiply(epsilon, epsilon), -0.5), logStd),
-                    Vector<double>.CreateDefault(actionSize, 0.5 * Math.Log(2.0 * Math.PI))),
-                engine.TensorLog(engine.TensorAddScalar(oneMinusSquare.AsTensor(), 1e-6)).ToVector());
-            return (squashed.AsTensor().Cast<T>().ToVector(), engine.Sum(perDimension));
+        // ã = tanh(μ + σ·ε), log π = Σ_k [−½ε_k² − log σ_k − ½ log 2π − log(1 − ã_k² + 1e-6)], in double precision
+        int actionSize = _options.ActionSize;
+        var engine = AiDotNetEngine.Current;
+        var mean = policyOutputs.GetSubVector(offset, actionSize).AsTensor().Cast<double>().ToVector();
+        var logStd = engine.Clamp(policyOutputs.GetSubVector(offset + actionSize, actionSize).AsTensor().Cast<double>().ToVector(), -20.0, 2.0);
+        var epsilon = StandardNormalDraws(actionSize).AsTensor().Cast<double>().ToVector();
+        var squashed = engine.Tanh(engine.Add(mean, engine.Multiply(engine.Exp(logStd), epsilon)));
+        var oneMinusSquare = engine.Subtract(Vector<double>.CreateDefault(actionSize, 1.0), engine.Multiply(squashed, squashed));
+        var perDimension = engine.Subtract(
+            engine.Subtract(
+                engine.Subtract(engine.Multiply(engine.Multiply(epsilon, epsilon), -0.5), logStd),
+                Vector<double>.CreateDefault(actionSize, 0.5 * Math.Log(2.0 * Math.PI))),
+            engine.TensorLog(engine.TensorAddScalar(oneMinusSquare.AsTensor(), 1e-6)).ToVector());
+        return (squashed.AsTensor().Cast<T>().ToVector(), engine.Sum(perDimension));
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> standard-normal draws from this agent's seeded stream, in order.
+    /// </summary>
+    private Vector<T> StandardNormalDraws(int count)
+    {
+        if (count <= 0)
+        {
+            return new Vector<T>(0);
         }
 
-        /// <summary>
-        /// <paramref name="count"/> standard-normal draws from this agent's seeded stream, in order.
-        /// </summary>
-        private Vector<T> StandardNormalDraws(int count)
-        {
-            if (count <= 0)
-            {
-                return new Vector<T>(0);
-            }
+        T zero = _numOps.Zero;
+        T one = _numOps.One;
+        return new Vector<T>(Enumerable.Range(0, count).Select(_ => GetSeededNormalRandom(zero, one, _random)));
+    }
 
-            T zero = _numOps.Zero;
-            T one = _numOps.One;
-            return new Vector<T>(Enumerable.Range(0, count).Select(_ => GetSeededNormalRandom(zero, one, _random)));
-        }
+    /// <summary>
+    /// One state's sampled critic rows, drawn in the order the scalar loop drew them: a' ~ π(·|s') for the TD
+    /// target, then <paramref name="samples"/> uniform actions on [-1, 1]^d, then <paramref name="samples"/> policy
+    /// actions; with each sampled row's log proposal-density correction.
+    /// </summary>
+    private (Vector<T> NextAction, Tensor<T> Rows, Vector<T> Density) SampleBlock(
+        Experience<T, Vector<T>, Vector<T>> exp, int offset, Vector<T> policyOutputs, Vector<T> nextPolicyOutputs,
+        int samples, double uniformLogDensity)
+    {
+        var engine = AiDotNetEngine.Current;
+        int stateDim = _options.StateSize;
+        int actionDim = _options.ActionSize;
 
-        /// <summary>
-        /// One state's sampled critic rows, drawn in the order the scalar loop drew them: a' ~ π(·|s') for the TD
-        /// target, then <paramref name="samples"/> uniform actions on [-1, 1]^d, then <paramref name="samples"/> policy
-        /// actions; with each sampled row's log proposal-density correction.
-        /// </summary>
-        private (Vector<T> NextAction, Tensor<T> Rows, Vector<T> Density) SampleBlock(
-            Experience<T, Vector<T>, Vector<T>> exp, int offset, Vector<T> policyOutputs, Vector<T> nextPolicyOutputs,
-            int samples, double uniformLogDensity)
-        {
-            var engine = AiDotNetEngine.Current;
-            int stateDim = _options.StateSize;
-            int actionDim = _options.ActionSize;
+        var (nextAction, _) = SampleSquashedAction(nextPolicyOutputs, offset);
 
-            var (nextAction, _) = SampleSquashedAction(nextPolicyOutputs, offset);
+        var uniform = new Vector<double>(Enumerable.Range(0, samples * actionDim).Select(_ => _random.NextDouble()));
+        var uniformActions = engine.Subtract(engine.Multiply(uniform, 2.0), Vector<double>.CreateDefault(samples * actionDim, 1.0));
+        var uniformRows = engine.Reshape(uniformActions.AsTensor().Cast<T>(), [samples, actionDim]);
 
-            var uniform = new Vector<double>(Enumerable.Range(0, samples * actionDim).Select(_ => _random.NextDouble()));
-            var uniformActions = engine.Subtract(engine.Multiply(uniform, 2.0), Vector<double>.CreateDefault(samples * actionDim, 1.0));
-            var uniformRows = engine.Reshape(uniformActions.AsTensor().Cast<T>(), [samples, actionDim]);
+        var policySamples = Enumerable.Range(0, samples).Select(_ => SampleSquashedAction(policyOutputs, offset)).ToList();
+        var policyRows = RLTensorOps.StackRows(policySamples.Select(sample => sample.Action).ToList());
 
-            var policySamples = Enumerable.Range(0, samples).Select(_ => SampleSquashedAction(policyOutputs, offset)).ToList();
-            var policyRows = RLTensorOps.StackRows(policySamples.Select(sample => sample.Action).ToList());
+        var states = engine.TensorTile(engine.Reshape(RLTensorOps.Head(exp.State, stateDim).AsTensor(), [1, stateDim]), [2 * samples, 1]);
+        var actions = engine.TensorConcatenate([uniformRows, policyRows], 0);
+        var rows = engine.TensorConcatenate([states, actions], 1);
 
-            var states = engine.TensorTile(engine.Reshape(RLTensorOps.Head(exp.State, stateDim).AsTensor(), [1, stateDim]), [2 * samples, 1]);
-            var actions = engine.TensorConcatenate([uniformRows, policyRows], 0);
-            var rows = engine.TensorConcatenate([states, actions], 1);
-
-            var density = RLTensorOps.Concat(
-                Vector<double>.CreateDefault(samples, -uniformLogDensity).AsTensor().Cast<T>().ToVector(),
-                new Vector<double>(policySamples.Select(sample => -sample.LogProb)).AsTensor().Cast<T>().ToVector());
-            return (nextAction, rows, density);
+        var density = RLTensorOps.Concat(
+            Vector<double>.CreateDefault(samples, -uniformLogDensity).AsTensor().Cast<T>().ToVector(),
+            new Vector<double>(policySamples.Select(sample => -sample.LogProb)).AsTensor().Cast<T>().ToVector());
+        return (nextAction, rows, density);
     }
 
     /// <summary>

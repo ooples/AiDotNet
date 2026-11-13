@@ -199,18 +199,30 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var outputTensor = _policyNetwork.Predict(stateTensor);
             var output = outputTensor.ToVector();
 
+            return BetaLogDensity(output, action, _actionSize, _actionMin, _actionMax);
+        }
+
+        /// <summary>
+        /// Log-density of <paramref name="action"/> under the Beta heads in <paramref name="output"/>
+        /// ([raw alpha | raw beta], alpha = softplus(raw) + 1), rescaled from [actionMin, actionMax] to [0, 1].
+        /// </summary>
+        /// <remarks>The unit action is clipped to [1e-7, 1 - 1e-7]; the upper bound is kept strictly below one in T
+        /// (1 - 1e-7 rounds to 1 in Half, where log(1 - x) would be -infinity at the action bound).</remarks>
+        internal static T BetaLogDensity(Vector<T> output, Vector<T> action, int actionSize, double actionMin, double actionMax)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
             var engine = AiDotNetEngine.Current;
-            T one = NumOps.One;
+            T one = numOps.One;
 
             // alpha, beta = softplus(raw) + 1 (> 1 for a well-behaved Beta)
-            var alpha = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(0, _actionSize).AsTensor()), one);
-            var beta = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(_actionSize, _actionSize).AsTensor()), one);
+            var alpha = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(0, actionSize).AsTensor()), one);
+            var beta = engine.TensorAddScalar(engine.Softplus(output.GetSubVector(actionSize, actionSize).AsTensor()), one);
 
             // Rescale action from [actionMin, actionMax] to [0, 1], clipped to avoid log(0)
-            T range = NumOps.FromDouble(_actionMax - _actionMin);
+            T range = numOps.FromDouble(actionMax - actionMin);
             var unit = engine.TensorDivideScalar(
-                engine.TensorSubtractScalar(action.AsTensor(), NumOps.FromDouble(_actionMin)), range);
-            var x = engine.TensorClamp(unit, NumOps.FromDouble(1e-7), NumOps.FromDouble(1.0 - 1e-7));
+                engine.TensorSubtractScalar(RLTensorOps.Head(action, actionSize).AsTensor(), numOps.FromDouble(actionMin)), range);
+            var x = engine.TensorClamp(unit, numOps.FromDouble(1e-7), RLTensorOps.BelowOne<T>(1e-7));
             var oneMinusX = engine.TensorSubtract(engine.TensorFullLike(x, one), x);
 
             // Beta distribution log probability
@@ -226,8 +238,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 logBeta);
 
             // Account for rescaling Jacobian: log(actionMax - actionMin) per dimension
-            T rescaleLogProb = NumOps.Multiply(NumOps.FromDouble(_actionSize), NumOps.Log(range));
-            return NumOps.Subtract(engine.TensorSum(betaLogProb), rescaleLogProb);
+            T rescaleLogProb = numOps.Multiply(numOps.FromDouble(actionSize), numOps.Log(range));
+            return numOps.Subtract(engine.TensorSum(betaLogProb), rescaleLogProb);
         }
 
         /// <summary>

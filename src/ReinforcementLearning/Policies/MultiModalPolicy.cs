@@ -275,9 +275,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var componentLogProb = engine.TensorSubtractScalar(
                 engine.ReduceSum(perDimension, [1], false), NumOps.FromDouble(0.5 * Math.Log(2.0 * Math.PI) * width));
 
-            // log(sum_k w_k exp(log N_k) + 1e-8)
+            // log(sum_k w_k exp(log N_k) + 1e-8), the floored log in double (1e-8 rounds to zero in Half)
             T totalProb = engine.TensorSum(engine.TensorMultiply(mixingCoefficients.AsTensor(), engine.TensorExp(componentLogProb)));
-            return NumOps.Log(NumOps.Add(totalProb, NumOps.FromDouble(1e-8)));
+            return RLTensorOps.LogWithFloor(totalProb, 1e-8);
         }
 
         /// <inheritdoc />

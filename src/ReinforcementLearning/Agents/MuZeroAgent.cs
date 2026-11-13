@@ -643,11 +643,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private bool SameVector(Vector<T> a, Vector<T> b)
     {
-        if (a.Length != b.Length) return false;
-        if (a.Length == 0) return true;
-        // Every element pair compares equal (a NaN never does).
-        var equal = AiDotNetEngine.Current.TensorEquals(a.AsTensor(), b.AsTensor());
-        return NumOps.Equals(AiDotNetEngine.Current.TensorSum(equal), NumOps.FromDouble(a.Length));
+        return RLTensorOps.SameValues(a, b);
     }
 
     private int GetDiscreteActionIndex(Vector<T> action)

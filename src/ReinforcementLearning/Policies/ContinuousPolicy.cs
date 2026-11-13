@@ -142,7 +142,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var outputTensor = _policyNetwork.Predict(stateTensor);
             var output = outputTensor.ToVector();
 
-            var engine = AiDotNetEngine.Current;
             var mean = output.GetSubVector(0, _actionSize);
             var logStd = output.GetSubVector(_actionSize, _actionSize);
             var taken = RLTensorOps.Head(action, _actionSize);
@@ -156,15 +155,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
             // Tanh-squashed Gaussian (Haarnoja et al. 2018, SAC, Appendix C): the action is a = tanh(u) with
             // u ~ N(mu, sigma), so log pi(a) = log N(u) - sum_i log(1 - a_i^2). The pre-squash sample is recovered
             // as u = atanh(a) (a clipped just inside (-1, 1)), as Stable-Baselines3's TanhBijector does; the
-            // former code evaluated the Gaussian at the squashed action and squashed it a second time.
-            T epsilon = NumOps.FromDouble(1e-6);
-            var clipped = engine.Clamp(taken, NumOps.FromDouble(-1.0 + 1e-6), NumOps.FromDouble(1.0 - 1e-6));
-            T gaussianLogProb = RLTensorOps.GaussianLogProb(mean, logStd, engine.Atanh(clipped));
-            var oneMinusSquare = engine.Subtract(
-                Vector<T>.CreateDefault(_actionSize, NumOps.Add(NumOps.One, epsilon)),
-                engine.Multiply(taken, taken));
-            T correction = engine.Sum(engine.TensorLog(oneMinusSquare.AsTensor()).ToVector());
-            return NumOps.Subtract(gaussianLogProb, correction);
+            // former code evaluated the Gaussian at the squashed action and squashed it a second time. The clip
+            // bound stays below one in T, so a saturated action keeps a finite log-density in Half.
+            return RLTensorOps.SquashedGaussianLogProb(mean, logStd, taken);
         }
 
         /// <inheritdoc />

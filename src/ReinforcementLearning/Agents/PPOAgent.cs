@@ -82,6 +82,9 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     public override ModelOptions GetOptions() => _ppoOptions;
     private readonly Trajectory<T> _trajectory;
 
+    // s_{t+1} of the latest stored step: GAE bootstraps V(s_T) from it when the rollout ends mid-episode.
+    private Vector<T>? _bootstrapState;
+
     private INeuralNetwork<T> _policyNetwork;
     private INeuralNetwork<T> _valueNetwork;
 
@@ -247,18 +250,25 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
+    /// <remarks><paramref name="done"/> is termination: nothing is bootstrapped after the step. Use the
+    /// terminated/truncated overload when a time limit cut the episode off.</remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, terminated: done, truncated: false);
+
+    /// <inheritdoc/>
+    /// <remarks>A truncated step bootstraps V(nextState) into its return (Stable-Baselines3 and CleanRL); a
+    /// terminated one does not.</remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool terminated, bool truncated)
     {
-        // Get value estimate for current state
-        var stateTensor = Tensor<T>.FromVector(state);
-        var valueOutputTensor = _valueNetwork.Predict(stateTensor);
-        var valueOutput = valueOutputTensor.ToVector();
-        var value = valueOutput[0];
-
-        // Get log probability of action
+        var value = RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(state)));
         var logProb = ComputeLogProb(state, action);
-
-        _trajectory.AddStep(state, action, reward, value, logProb, done);
+        bool bootstraps = truncated && !terminated;
+        T bootstrapValue = bootstraps
+            ? RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(nextState)))
+            : NumOps.Zero;
+        _trajectory.AddStep(state, action, reward, value, logProb, terminated, bootstraps, bootstrapValue);
+        _bootstrapState = nextState?.Clone();
     }
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
@@ -352,63 +362,33 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         // Clear trajectory for next collection
         _trajectory.Clear();
+        _bootstrapState = null;
 
         return avgLoss;
     }
 
     private void ComputeAdvantages()
     {
-        // Compute advantages using GAE (Generalized Advantage Estimation)
-        var advantages = new List<T>();
-        var returns = new List<T>();
-
-        T lastGae = NumOps.Zero;
-
-        for (int t = _trajectory.Length - 1; t >= 0; t--)
+        // A rollout that stops mid-episode truncates its last step there: V(s_T) of the stored next state is
+        // bootstrapped (Schulman et al. 2016; Stable-Baselines3's last_values).
+        if (_bootstrapState is not null)
         {
-            T nextValue;
-            if (t == _trajectory.Length - 1)
-            {
-                nextValue = _trajectory.Dones[t] ? NumOps.Zero : _trajectory.Values[t];
-            }
-            else
-            {
-                nextValue = _trajectory.Values[t + 1];
-            }
-
-            // TD error: delta = r + gamma * V(s') - V(s)
-            var delta = NumOps.Add(
-                _trajectory.Rewards[t],
-                NumOps.Subtract(
-                    NumOps.Multiply(DiscountFactor, nextValue),
-                    _trajectory.Values[t]
-                )
-            );
-
-            // GAE: A = delta + gamma * lambda * A_next
-            lastGae = NumOps.Add(
-                delta,
-                NumOps.Multiply(
-                    NumOps.Multiply(DiscountFactor, _ppoOptions.GaeLambda),
-                    _trajectory.Dones[t] ? NumOps.Zero : lastGae
-                )
-            );
-
-            advantages.Insert(0, lastGae);
-            returns.Insert(0, NumOps.Add(lastGae, _trajectory.Values[t]));
+            _trajectory.TruncateLastStep(RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(_bootstrapState))));
         }
 
-        // Normalize advantages using StatisticsHelper: (A - mean) / (std + 1e-8)
-        var stdAdv = StatisticsHelper<T>.CalculateStandardDeviation(advantages);
-        T meanAdv = RLTensorOps.Average(advantages);
-        var engine = AiDotNetEngine.Current;
-        var normalized = engine.Divide(
-            engine.Subtract(Vector<T>.FromEnumerable(advantages), Vector<T>.CreateDefault(advantages.Count, meanAdv)),
-            NumOps.Add(stdAdv, NumOps.FromDouble(1e-8)));
-        advantages = normalized.ToList();
+        // GAE: V(s_{t+1}) is zero after a terminal step and the stored bootstrap value after a truncated one, and the
+        // advantage chain stops at both (SB3's next_non_terminal, with truncation bootstrapped as SB3 and CleanRL do).
+        var (advantages, returns) = RLTensorOps.Gae(
+            Vector<T>.FromEnumerable(_trajectory.Rewards),
+            Vector<T>.FromEnumerable(_trajectory.Values),
+            _trajectory.NextValues(),
+            _trajectory.ChainCuts(),
+            DiscountFactor,
+            _ppoOptions.GaeLambda);
 
-        _trajectory.Advantages = advantages;
-        _trajectory.Returns = returns;
+        // Normalize advantages: (A - mean) / (std + 1e-8), unbiased std
+        _trajectory.Advantages = RLTensorOps.NormalizeAdvantages(advantages.ToList());
+        _trajectory.Returns = returns.ToList();
     }
 
     private T UpdateNetworks(List<int> batchIndices)

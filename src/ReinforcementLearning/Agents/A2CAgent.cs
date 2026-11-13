@@ -75,6 +75,10 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     public override ModelOptions GetOptions() => _a2cOptions;
     private readonly Trajectory<T> _trajectory;
 
+    // s_{t+1} of the latest stored step: the n-step returns bootstrap V(s_T) from it when the rollout ends
+    // mid-episode.
+    private Vector<T>? _bootstrapState;
+
     private INeuralNetwork<T> _policyNetwork;
     private INeuralNetwork<T> _valueNetwork;
 
@@ -221,13 +225,25 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
 
     /// <inheritdoc/>
+    /// <remarks><paramref name="done"/> is termination: nothing is bootstrapped after the step. Use the
+    /// terminated/truncated overload when a time limit cut the episode off.</remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, terminated: done, truncated: false);
+
+    /// <inheritdoc/>
+    /// <remarks>A truncated step bootstraps V(nextState) into its return (Stable-Baselines3 and CleanRL); a
+    /// terminated one does not.</remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool terminated, bool truncated)
     {
-        var stateTensor = Tensor<T>.FromVector(state);
-        var valueTensor = _valueNetwork.Predict(stateTensor);
-        var value = valueTensor.ToVector()[0];
+        var value = RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(state)));
         var logProb = ComputeLogProb(state, action);
-        _trajectory.AddStep(state, action, reward, value, logProb, done);
+        bool bootstraps = truncated && !terminated;
+        T bootstrapValue = bootstraps
+            ? RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(nextState)))
+            : NumOps.Zero;
+        _trajectory.AddStep(state, action, reward, value, logProb, terminated, bootstraps, bootstrapValue);
+        _bootstrapState = nextState?.Clone();
     }
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
@@ -256,7 +272,8 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         {
             var probs = Softmax(policyOutput);
             int actionIndex = ArgMax(action);
-            return NumOps.Log(NumOps.Add(probs[actionIndex], NumOps.FromDouble(1e-10)));
+            // log(p + 1e-10) in double, as before: 1e-10 rounds to zero in Half.
+            return RLTensorOps.LogWithFloor(probs[actionIndex], 1e-10);
         }
     }
 
@@ -341,47 +358,29 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         LossHistory.Add(totalLoss);
         _trajectory.Clear();
+        _bootstrapState = null;
 
         return totalLoss;
     }
 
     private void ComputeAdvantages()
     {
-        var advantages = new List<T>();
-        var returns = new List<T>();
-
-        T runningReturn = NumOps.Zero;
-
-        for (int t = _trajectory.Length - 1; t >= 0; t--)
+        // A rollout that stops mid-episode truncates its last step there: R_T = V(s_T) of the stored next state
+        // (Mnih et al. 2016, Algorithm S3; Stable-Baselines3's last_values).
+        if (_bootstrapState is not null)
         {
-            if (_trajectory.Dones[t])
-            {
-                runningReturn = _trajectory.Rewards[t];
-            }
-            else
-            {
-                runningReturn = NumOps.Add(
-                    _trajectory.Rewards[t],
-                    NumOps.Multiply(DiscountFactor, runningReturn)
-                );
-            }
-
-            returns.Insert(0, runningReturn);
-            var advantage = NumOps.Subtract(runningReturn, _trajectory.Values[t]);
-            advantages.Insert(0, advantage);
+            _trajectory.TruncateLastStep(RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(_bootstrapState))));
         }
 
-        // Normalize advantages using StatisticsHelper: (A - mean) / (std + 1e-8)
-        var stdAdv = StatisticsHelper<T>.CalculateStandardDeviation(advantages);
-        T meanAdv = RLTensorOps.Average(advantages);
-        var engine = AiDotNetEngine.Current;
-        var normalized = engine.Divide(
-            engine.Subtract(Vector<T>.FromEnumerable(advantages), Vector<T>.CreateDefault(advantages.Count, meanAdv)),
-            NumOps.Add(stdAdv, NumOps.FromDouble(1e-8)));
-        advantages = normalized.ToList();
+        // n-step returns: R_t = r_t + gamma R_{t+1}, restarted after a terminal step (nothing bootstrapped) and after a
+        // truncated one (V(s_{t+1}) bootstrapped, as SB3 and CleanRL do on truncation).
+        var returns = RLTensorOps.DiscountedReturns(
+            Vector<T>.FromEnumerable(_trajectory.Rewards), _trajectory.NextValues(), _trajectory.ChainCuts(), DiscountFactor);
+        var advantages = AiDotNetEngine.Current.Subtract(returns, Vector<T>.FromEnumerable(_trajectory.Values));
 
-        _trajectory.Advantages = advantages;
-        _trajectory.Returns = returns;
+        // Normalize advantages: (A - mean) / (std + 1e-8), unbiased std
+        _trajectory.Advantages = RLTensorOps.NormalizeAdvantages(advantages.ToList());
+        _trajectory.Returns = returns.ToList();
     }
 
     // UpdateValueNetwork removed — value network now trained via _valueNetwork.Train()

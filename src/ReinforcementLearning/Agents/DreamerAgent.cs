@@ -819,16 +819,18 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// The weight of each imagined step: the cumulative product of the predicted discounts before it, with the
     /// gradient stopped (Section 3; w_t = 1).
     /// </summary>
-    private Tensor<T>[] CumulativeDiscountWeights(Tensor<T>[] discounts)
+    internal Tensor<T>[] CumulativeDiscountWeights(Tensor<T>[] discounts)
     {
-        // w_0 = 1, w_k = prod_{j<k} discount_j per row
+        // w_0 = 1, w_k = prod_{j<k} discount_j per row. The weights are constants of the actor objective (Hafner et
+        // al. 2020, Section 3 and the authors' stop_gradient(weights)): the discounts' gradient is stopped so the
+        // actor does not learn to raise its objective by moving the continue model's predictions.
         int rows = discounts[0].Shape[0];
         var weights = new Tensor<T>[discounts.Length];
         var running = new Tensor<T>([rows, 1], Vector<T>.CreateDefault(rows, NumOps.One));
         for (int k = 0; k < discounts.Length; k++)
         {
             weights[k] = running;
-            running = Engine.TensorMultiply(running, Engine.Reshape(discounts[k], [rows, 1]));
+            running = Engine.TensorMultiply(running, Engine.Reshape(Engine.StopGradient(discounts[k]), [rows, 1]));
         }
         return weights;
     }

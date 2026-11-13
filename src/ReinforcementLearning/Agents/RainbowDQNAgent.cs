@@ -317,34 +317,34 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     /// </summary>
     private Vector<T> SoftmaxAtomSlice(Vector<T> logits, int offset, int count)
     {
-            // exp(l - max l) / sum, over one action's atom logits; the max skips NaN (a strict greater-than scan from
-            // -infinity), and an all-zero sum is left unnormalised.
-            var engine = AiDotNetEngine.Current;
-            var slice = logits.GetSubVector(offset, count);
-            T maxLogit = RLTensorOps.MaxAbove(slice, NumOps.FromDouble(double.NegativeInfinity));
-            var probs = engine.TensorExp(engine.TensorSubtractScalar(slice.AsTensor(), maxLogit));
-            T sumExp = engine.TensorSum(probs);
-            if (NumOps.GreaterThan(sumExp, NumOps.Zero))
-            {
-                probs = engine.TensorMultiplyScalar(probs, NumOps.Divide(NumOps.One, sumExp));
-            }
-            return probs.ToVector();
-        }
-
-        /// <summary>
-        /// C51 expected values Q(s, a) = sum_i z_i p_i(s, a) for every action, with p the per-action softmax over the
-        /// atom logits and z_i = VMin + i * deltaZ.
-        /// </summary>
-        private Vector<T> ExpectedAtomValues(Vector<T> output)
+        // exp(l - max l) / sum, over one action's atom logits; the max skips NaN (a strict greater-than scan from
+        // -infinity), and an all-zero sum is left unnormalised.
+        var engine = AiDotNetEngine.Current;
+        var slice = logits.GetSubVector(offset, count);
+        T maxLogit = RLTensorOps.MaxAbove(slice, NumOps.FromDouble(double.NegativeInfinity));
+        var probs = engine.TensorExp(engine.TensorSubtractScalar(slice.AsTensor(), maxLogit));
+        T sumExp = engine.TensorSum(probs);
+        if (NumOps.GreaterThan(sumExp, NumOps.Zero))
         {
-            var engine = AiDotNetEngine.Current;
-            int numAtoms = _options.NumAtoms;
-            double deltaZ = (_options.VMax - _options.VMin) / (numAtoms - 1);
-            var support = engine.TensorAddScalar(
-                engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numAtoms, 1), NumOps.FromDouble(deltaZ)),
-                NumOps.FromDouble(_options.VMin)).ToVector();
-            return Vector<T>.FromEnumerable(Enumerable.Range(0, _options.ActionSize)
-                .Select(action => engine.DotProduct(SoftmaxAtomSlice(output, action * numAtoms, numAtoms), support)));
+            probs = engine.TensorMultiplyScalar(probs, NumOps.Divide(NumOps.One, sumExp));
+        }
+        return probs.ToVector();
+    }
+
+    /// <summary>
+    /// C51 expected values Q(s, a) = sum_i z_i p_i(s, a) for every action, with p the per-action softmax over the
+    /// atom logits and z_i = VMin + i * deltaZ.
+    /// </summary>
+    private Vector<T> ExpectedAtomValues(Vector<T> output)
+    {
+        var engine = AiDotNetEngine.Current;
+        int numAtoms = _options.NumAtoms;
+        double deltaZ = (_options.VMax - _options.VMin) / (numAtoms - 1);
+        var support = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numAtoms, 1), NumOps.FromDouble(deltaZ)),
+            NumOps.FromDouble(_options.VMin)).ToVector();
+        return Vector<T>.FromEnumerable(Enumerable.Range(0, _options.ActionSize)
+            .Select(action => engine.DotProduct(SoftmaxAtomSlice(output, action * numAtoms, numAtoms), support)));
     }
 
     /// <inheritdoc />
@@ -353,21 +353,13 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         // N-step learning: accumulate transitions
         _nStepBuffer.Add((state, action, reward, nextState, done));
 
-        if (_nStepBuffer.Count >= _options.NSteps || done)
+        // On episode end every pending transition is stored with its truncated n-step return (Hessel et al. 2018,
+        // as Dopamine and Stable-Baselines3 flush the n-step queue), not only the oldest one.
+        while (_nStepBuffer.Count > 0 && (_nStepBuffer.Count >= _options.NSteps || done))
         {
-            // Compute n-step return
             var (nStepState, nStepAction, nStepReturn, nStepNextState, nStepDone) = ComputeNStepReturn();
             _replayBuffer.Add(nStepState, nStepAction, nStepReturn, nStepNextState, nStepDone);
-
-            // Clear n-step buffer on episode end
-            if (done)
-            {
-                _nStepBuffer.Clear();
-            }
-            else
-            {
-                _nStepBuffer.RemoveAt(0);
-            }
+            _nStepBuffer.RemoveAt(0);
         }
 
         _stepCount++;

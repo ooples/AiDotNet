@@ -56,6 +56,23 @@ public interface IRLAgent<T> : IFullModel<T, Vector<T>, Vector<T>>,
     void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done);
 
     /// <summary>
+    /// Stores an experience tuple, telling termination apart from truncation.
+    /// </summary>
+    /// <param name="state">The state before taking action.</param>
+    /// <param name="action">The action taken.</param>
+    /// <param name="reward">The reward received.</param>
+    /// <param name="nextState">The state after taking action.</param>
+    /// <param name="terminated">Whether the episode reached a terminal state (nothing is bootstrapped after it).</param>
+    /// <param name="truncated">Whether the episode was cut off in a non-terminal state, for example by a time limit
+    /// (the value of <paramref name="nextState"/> is still bootstrapped).</param>
+    /// <remarks>
+    /// <b>For Beginners:</b> Gymnasium's terminated/truncated split. Stable-Baselines3 and CleanRL bootstrap the
+    /// next state's value on truncation and not on termination; treating a time limit as a terminal state teaches
+    /// the agent that the state before the limit is worth nothing more.
+    /// </remarks>
+    void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool terminated, bool truncated);
+
+    /// <summary>
     /// Performs one training step using stored experiences.
     /// </summary>
     /// <returns>Training loss for monitoring.</returns>

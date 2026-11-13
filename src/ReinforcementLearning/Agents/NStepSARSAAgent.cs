@@ -117,18 +117,20 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
 
         _nStepBuffer.Add((stateKey, actionIndex, reward));
 
-        if (_nStepBuffer.Count >= _options.NSteps || done)
+        if (done)
         {
-            UpdateNStep(nextState, done);
-
-            if (done)
+            // Episode end: every pending step gets its truncated return G_{t:T} (Sutton & Barto 2018, Figure 7.2,
+            // tau running on to T - 1), oldest first.
+            while (_nStepBuffer.Count > 0)
             {
-                _nStepBuffer.Clear();
-            }
-            else if (_nStepBuffer.Count >= _options.NSteps)
-            {
+                UpdateNStep(nextState, true);
                 _nStepBuffer.RemoveAt(0);
             }
+        }
+        else if (_nStepBuffer.Count >= _options.NSteps)
+        {
+            UpdateNStep(nextState, false);
+            _nStepBuffer.RemoveAt(0);
         }
 
         _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);

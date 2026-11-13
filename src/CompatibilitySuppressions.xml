@@ -42257,4 +42257,25 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IRLAgent`1.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Boolean,System.Boolean)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IRLAgent`1.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Boolean,System.Boolean)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IRLAgent`1.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Boolean,System.Boolean)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>
