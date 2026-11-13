@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using AiDotNet.TextToSpeech;
+using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
 using Xunit;
 
@@ -75,5 +76,18 @@ public class TtsSamplingTieTests
         var tensor = new Tensor<double>(p, new[] { p.Length });
         for (int j = 0; j < 4; j++)
             Assert.Equal(j + 1, MegaTTS2<double>.TopK(tensor, 4, new FixedRandom(Middle(j, 4))));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    [InlineData(31)]
+    public void ChatTtsTopP_RemovesTheLowestIndicesAmongTiedLogits(int j)
+    {
+        // 64 equal logits, top-p 0.5: the ascending pass (ties by index) drops tokens 0..31, whose running mass stays
+        // at or below 0.5, so a draw over what is left lands on token 32 + j.
+        var logits = new Tensor<double>(Enumerable.Repeat(1.0, Ties).ToArray(), new[] { Ties });
+        int drawn = ChatTTS<double>.Sample(logits, 1.0, 1.0, Array.Empty<int>(), 0.5, Ties, -1, new FixedRandom(Middle(j, Ties / 2)));
+        Assert.Equal(Ties / 2 + j, drawn);
     }
 }

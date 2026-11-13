@@ -554,58 +554,55 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// when positive); Hugging Face's top-p then top-k warpers, each keeping at least 3 tokens; then a multinomial draw
     /// from the softmax. <paramref name="forbidden"/> removes a token first (the end, before the first frame).
     /// </summary>
-    internal static int Sample(double[] logits, double temperature, double penalty, IEnumerable<int> history, double topP, int topK,
+    internal static int Sample(Tensor<T> logits, double temperature, double penalty, IEnumerable<int> history, double topP, int topK,
         int forbidden, Random random)
     {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         int vocabulary = logits.Length;
-        var scores = logits.Select(l => l / temperature).ToArray();
+        T negativeInfinity = ops.FromDouble(double.NegativeInfinity);
+        var removedScore = Tensor<T>.CreateDefault(new[] { vocabulary }, negativeInfinity);
+        var scores = engine.TensorDivideScalar(engine.Reshape(logits, new[] { vocabulary }), ops.FromDouble(temperature));
         if (penalty != 1.0)
         {
             var counts = new int[vocabulary];
             foreach (int token in history) if (token >= 0 && token < vocabulary) counts[token]++;
-            for (int v = 0; v < vocabulary; v++)
-            {
-                if (counts[v] == 0) continue;
-                double alpha = Math.Pow(penalty, counts[v]);
-                scores[v] = scores[v] < 0 ? scores[v] * alpha : scores[v] / alpha;
-            }
+            // penalty^count is 1 for unseen tokens, which leaves them as they are.
+            var alpha = engine.TensorPower(Tensor<T>.CreateDefault(new[] { vocabulary }, ops.FromDouble(penalty)),
+                new Tensor<int>(counts, new[] { vocabulary }).Cast<T>());
+            scores = engine.TensorWhere(engine.TensorLessThan(scores, ops.Zero),
+                engine.TensorMultiply(scores, alpha), engine.TensorDivide(scores, alpha));
         }
-        if (forbidden >= 0) scores[forbidden] = double.NegativeInfinity;
-        const int minKeep = 3;
-        // TopPLogitsWarper: sort ascending, drop tokens whose cumulative probability stays at or below 1 − p, keep the
-        // last min_tokens_to_keep.
-        var ascending = Enumerable.Range(0, vocabulary).OrderBy(v => scores[v]).ThenBy(v => v).ToArray();
-        double max = scores.Max();
-        var probabilities = scores.Select(s => double.IsNegativeInfinity(s) ? 0 : Math.Exp(s - max)).ToArray();
-        double total = probabilities.Sum();
-        double cumulative = 0;
-        for (int i = 0; i < vocabulary; i++)
+        if (forbidden >= 0)
         {
-            int v = ascending[i];
-            cumulative += probabilities[v] / total;
-            if (cumulative <= 1 - topP && i < vocabulary - minKeep) scores[v] = double.NegativeInfinity;
+            var mask = new bool[vocabulary];
+            mask[forbidden] = true;
+            scores = engine.TensorWhere(mask, removedScore, scores);
         }
+        const int minKeep = 3;
+        // TopPLogitsWarper: sort ascending (ties by index), drop tokens whose cumulative probability stays at or below
+        // 1 − p, keep the last min_tokens_to_keep.
+        var ascending = TtsSampling<T>.StableOrder(scores, descending: false);
+        var probabilities = TtsSampling<T>.UnnormalizedProbabilities(scores);
+        var sorted = engine.TensorIndexSelect(probabilities, new Tensor<int>((int[])ascending.Clone(), new[] { vocabulary }), 0);
+        var cumulative = engine.TensorCumSum(engine.TensorDivideScalar(sorted, engine.TensorSum(sorted)), 0);
+        var kept = engine.TensorGreaterThan(cumulative, ops.FromDouble(1 - topP)).Cast<int>().ToArray();
+        var removed = new bool[vocabulary];
+        for (int i = 0; i < vocabulary - minKeep; i++) removed[ascending[i]] = kept[i] == 0;
+        scores = engine.TensorWhere(removed, removedScore, scores);
         // TopKLogitsWarper: keep the scores at least the k-th largest, k = max(top_k, min_tokens_to_keep).
         int k = Math.Min(Math.Max(topK, minKeep), vocabulary);
-        double threshold = scores.OrderByDescending(s => s).ElementAt(k - 1);
-        for (int v = 0; v < vocabulary; v++) if (scores[v] < threshold) scores[v] = double.NegativeInfinity;
-        max = scores.Max();
-        var weights = scores.Select(s => double.IsNegativeInfinity(s) ? 0 : Math.Exp(s - max)).ToArray();
-        double draw = random.NextDouble() * weights.Sum();
-        for (int v = 0; v < vocabulary; v++)
-        {
-            if (weights[v] <= 0) continue;
-            draw -= weights[v];
-            if (draw <= 0) return v;
-        }
-        return Array.FindLastIndex(weights, w => w > 0);
+        var largest = engine.TensorTopK(scores, k, 0, out _);
+        T threshold = engine.TensorSlice(largest, new[] { k - 1 }, new[] { 1 }).ToArray()[0];
+        scores = engine.TensorWhere(engine.TensorLessThan(scores, threshold), removedScore, scores);
+        var weights = TtsSampling<T>.UnnormalizedProbabilities(scores);
+        return TtsSampling<T>.DrawPosition(weights, random.NextDouble(), inclusive: true);
     }
 
-    private double[] Row(Tensor<T> logits, int row)
+    private Tensor<T> Row(Tensor<T> logits, int row)
     {
-        var values = new double[logits.Shape[1]];
-        for (int v = 0; v < values.Length; v++) values[v] = NumOps.ToDouble(logits[row, v]);
-        return values;
+        int vocabulary = logits.Shape[1];
+        return Engine.Reshape(Engine.TensorSlice(logits, new[] { row, 0 }, new[] { 1, vocabulary }), new[] { vocabulary });
     }
 
     /// <summary>Refines text ids (<c>Chat._refine_text</c>): the text head continues <c>[Sbreak]</c> text
