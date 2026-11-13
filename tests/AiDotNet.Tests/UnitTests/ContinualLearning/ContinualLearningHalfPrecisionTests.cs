@@ -194,8 +194,8 @@ public class ContinualLearningHalfPrecisionTests
         var json = AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase<Half, Tensor<Half>, Tensor<Half>>.AccuraciesToJson(accuracies);
 
         Assert.Equal(Newtonsoft.Json.Linq.JTokenType.Float, json["0"]?.Type);
-        Assert.Equal(0.75, json["0"]?.Value<double>() ?? double.NaN, 12);
-        Assert.Equal(0.5, json["2"]?.Value<double>() ?? double.NaN, 12);
+        Assert.Equal(0.75, (double?)json["0"] ?? double.NaN, 12);
+        Assert.Equal(0.5, (double?)json["2"] ?? double.NaN, 12);
 
         var restored = new System.Collections.Generic.Dictionary<int, Half>();
         AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase<Half, Tensor<Half>, Tensor<Half>>.AccuraciesFromJson(
