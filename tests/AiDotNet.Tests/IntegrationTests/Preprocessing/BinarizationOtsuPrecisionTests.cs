@@ -68,4 +68,24 @@ public class BinarizationOtsuPrecisionTests
         Assert.Equal(1.0, ops.ToDouble(result[3099]));
         Assert.Equal(1.0, ops.ToDouble(result[3100]));
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task Otsu_HalfPixel_BinUsesExactProduct()
+    {
+        await Task.Yield();
+
+        // Half pixel v = 0.501953125: v * 255 = 127.998..., bin 127 when taken in double, but the product
+        // rounded to Half is 128.0, bin 128. With pixels at v and at 1.0 the first best split is the lower bin, so
+        // the threshold is 127 / 255 and v stays above it; at 128 / 255 (which rounds to v in Half) v would drop to 0.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var pixels = new[] { ops.FromDouble(0.501953125), ops.FromDouble(0.501953125), ops.One, ops.One };
+
+        using var binarization = new Binarization<Half>();
+        var result = binarization.OtsuBinarization(
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<Half>(pixels, new[] { 1, 1, 4 })).ToArray();
+
+        Assert.Equal(1.0, ops.ToDouble(result[0]));
+        Assert.Equal(1.0, ops.ToDouble(result[1]));
+        Assert.Equal(1.0, ops.ToDouble(result[2]));
+    }
 }

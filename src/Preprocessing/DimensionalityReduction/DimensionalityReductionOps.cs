@@ -114,8 +114,27 @@ internal static class DimensionalityReductionOps
         return engine.TensorTranspose(AnomalyTensorOps.WithLargestComponentPositive(engine.TensorTranspose(columns)));
     }
 
-    /// <summary>Euclidean distances between the rows of a [n, p] and b [m, p] (direct differences, no Gram expansion).</summary>
-    internal static Tensor<T> EuclideanDistances<T>(Tensor<T> a, Tensor<T> b) => Engine.TensorCDist(a, b, 2.0);
+    /// <summary>
+    /// Euclidean distances between the rows of a [n, p] and b [m, p] (direct differences, no Gram expansion). Both
+    /// inputs are divided by the power of two at or above their largest magnitude and the distances multiplied back,
+    /// which is exact, so the squared differences inside the distance cannot overflow narrow types (Half past 256).
+    /// </summary>
+    internal static Tensor<T> EuclideanDistances<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double largest = Math.Max(
+            a.Length == 0 ? 0.0 : numOps.ToDouble(engine.TensorMaxValue(engine.TensorAbs(a))),
+            b.Length == 0 ? 0.0 : numOps.ToDouble(engine.TensorMaxValue(engine.TensorAbs(b))));
+        if (!(largest > 0) || double.IsInfinity(largest))
+        {
+            return engine.TensorCDist(a, b, 2.0);
+        }
+
+        T scale = numOps.FromDouble(Math.Pow(2.0, Math.Ceiling(Math.Log(largest, 2.0))));
+        var distances = engine.TensorCDist(engine.TensorDivideScalar(a, scale), engine.TensorDivideScalar(b, scale), 2.0);
+        return engine.TensorMultiplyScalar(distances, scale);
+    }
 
     /// <summary>Squared Euclidean distances between the rows of a and b.</summary>
     internal static Tensor<T> SquaredDistances<T>(Tensor<T> a, Tensor<T> b) => Engine.TensorSquare(Engine.TensorCDist(a, b, 2.0));

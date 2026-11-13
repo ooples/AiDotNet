@@ -587,6 +587,197 @@ public class DimensionalityReductionReferenceTests
         Assert.Equal(1e-3, half.ToDouble(DimensionalityReductionOps.Tolerance<Half>(1e-3)), 1e-6);
     }
 
+    [Fact]
+    public async Task PCA_VarianceRatio_ExactlyReached_KeepsOneMoreLikeSklearn()
+    {
+        await Task.Yield();
+
+        // Equal variance on both axes gives explained_variance_ratio_ = [0.5, 0.5] exactly. scikit-learn
+        // (PCA(n_components=0.5)) picks searchsorted([0.5, 1.0], 0.5, side="right") + 1 = 2 components.
+        var data = new Matrix<double>(new double[,] { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } });
+        var pca = new PCA<double>(varianceRatio: 0.5);
+        pca.Fit(data);
+
+        Assert.Equal(new[] { 0.5, 0.5 }, pca.ExplainedVarianceRatio?.ToArray());
+        Assert.Equal(2, pca.NComponentsOut);
+    }
+
+    [Fact]
+    public async Task StableOrder_Half_MoreThan2048DistinctValues_SortsThemAll()
+    {
+        await Task.Yield();
+
+        // 3000 distinct Half integers (1500 down to -1499) in descending index order: ascending order is the
+        // reversed index list. Dense ranks counted in Half stop at 2048, which would sort every value past the
+        // 2048th distinct one by index instead of by value.
+        var half = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        const int n = 3000;
+        var values = new Half[n];
+        for (int j = 0; j < n; j++)
+        {
+            values[j] = half.FromDouble(1500 - j);
+        }
+
+        var order = AiDotNet.AnomalyDetection.AnomalyTensorOps.StableOrder(
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<Half>(values, new[] { n }), descending: false).ToArray();
+
+        for (int p = 0; p < n; p++)
+        {
+            Assert.Equal(n - 1 - p, order[p]);
+        }
+    }
+
+    [Fact]
+    public async Task PaCMAP_Half_NearestPairsFollowDistanceBeyondSquareOverflow()
+    {
+        await Task.Yield();
+
+        // Half points 0, 1000 and 300 on a line: the nearest neighbour of point 0 is point 2 (300 away), not point 1
+        // (1000 away). Their squared distances (90000 and 1e6) both overflow Half to infinity, which would tie them
+        // and pick point 1 by index.
+        var half = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var x = new AiDotNet.Tensors.LinearAlgebra.Tensor<Half>(
+            new[] { half.Zero, half.FromDouble(1000), half.FromDouble(300) }, new[] { 3, 1 });
+        var pacmap = new PaCMAP<Half>(nComponents: 1, nNeighbors: 1, randomState: 0);
+        var method = typeof(PaCMAP<Half>).GetMethod(
+            "GeneratePairs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+
+        var result = method?.Invoke(pacmap, new object[] { x, 3, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1) });
+        Assert.NotNull(result);
+        var nearby = ((System.ValueTuple<
+            (AiDotNet.Tensors.LinearAlgebra.Tensor<int> Heads, AiDotNet.Tensors.LinearAlgebra.Tensor<int> Tails),
+            (AiDotNet.Tensors.LinearAlgebra.Tensor<int> Heads, AiDotNet.Tensors.LinearAlgebra.Tensor<int> Tails),
+            (AiDotNet.Tensors.LinearAlgebra.Tensor<int> Heads, AiDotNet.Tensors.LinearAlgebra.Tensor<int> Tails)>)(result ?? new object())).Item1;
+
+        Assert.Equal(new[] { 0, 1, 2 }, nearby.Heads.ToArray());
+        Assert.Equal(new[] { 2, 2, 0 }, nearby.Tails.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HessianLLE_CurvedSurface_MatchesSklearn()
+    {
+        await Task.Yield();
+
+        // sklearn 1.9.1 LocallyLinearEmbedding(n_neighbors=7, n_components=2, method='hessian',
+        // eigen_solver='dense').fit_transform(X), compared column by column up to sign. scikit-learn divides every
+        // local Hessian column by its sum (hessian_tol 1e-4); without that the embedding differs in the second
+        // decimal (row 0 would be (0.0653, 0.4912)).
+        var x = new double[,]
+        {
+            { 0.0, 0.0, 0.10 }, { 1.0, 0.2, 0.90 }, { 2.1, 0.1, 4.30 }, { 0.1, 1.0, -0.8 },
+            { 1.2, 1.1, 0.40 }, { 2.0, 0.9, 3.20 }, { 0.2, 2.1, -2.0 }, { 1.1, 2.0, -0.7 },
+            { 2.2, 2.2, 2.60 }, { 3.0, 0.4, 8.70 }, { 3.1, 1.6, 7.90 }, { 2.9, 2.8, 5.60 },
+            { 0.5, 3.1, -2.9 }, { 1.6, 3.0, -0.4 },
+        };
+        var expected = new double[,]
+        {
+            { 0.05342888776842297, -0.4917728309031661 },
+            { 0.004587378675076775, -0.33611827793832494 },
+            { -0.24219838103521124, -0.23296552633791687 },
+            { 0.17038456916384617, -0.265655136735507 },
+            { 0.08782570931381038, -0.12068101488690054 },
+            { -0.12147384592582469, -0.07038600431288754 },
+            { 0.3133604230009105, -0.016395559876013543 },
+            { 0.2138043263668885, 0.06240510968871538 },
+            { -0.009955093415199418, 0.23511055505965495 },
+            { -0.5373880675759429, -0.035147497684842294 },
+            { -0.41685148634514774, 0.2379224344146773 },
+            { -0.19012959356745046, 0.46804929758947106 },
+            { 0.42871244508534556, 0.23540218219583142 },
+            { 0.2458927285204894, 0.3302322697449402 },
+        };
+
+        var embedding = new HessianLLE<double>(nComponents: 2, nNeighbors: 7).FitTransform(new Matrix<double>(x));
+
+        for (int c = 0; c < 2; c++)
+        {
+            double sign = Math.Sign(embedding[0, c]) == Math.Sign(expected[0, c]) ? 1.0 : -1.0;
+            for (int i = 0; i < expected.GetLength(0); i++)
+            {
+                Assert.Equal(expected[i, c], sign * embedding[i, c], 6);
+            }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DiffusionMaps_Embedding_IsRightEigenvectorsOfTheMarkovMatrix()
+    {
+        await Task.Yield();
+
+        // numpy reference (Coifman and Lafon 2006): K = exp(-d^2 / median(d)^2), alpha = 0.5 normalisation,
+        // P = D^-1 K_alpha, right eigenvectors psi of P (np.linalg.eig) normalised so that psi_0 = 1 (sum of
+        // pi psi^2 = 1 with pi = d / sum d), embedding lambda_k psi_k for k = 1, 2; compared up to column sign. The
+        // symmetric eigenvectors D^(1/2) psi_k are not diffusion coordinates.
+        var expected = new double[,]
+        {
+            { 0.6436337210550851, -0.007101490621882962 },
+            { -1.1269572482442622, 0.45210199710973675 },
+            { 0.7619197836092492, 0.11560995973009273 },
+            { 0.25558232554860183, -0.2927252370685659 },
+            { 0.9979601611632956, 0.5581308283488806 },
+            { 0.6186344005106518, -0.09175726168309226 },
+            { -0.15424225405626862, -0.4528671754185853 },
+            { -0.8096286829285488, 0.08277908914902861 },
+            { -0.3417395536719599, -0.28807291461045176 },
+            { -0.888072540155848, 0.09184996069358281 },
+        };
+
+        var embedding = new DiffusionMaps<double>(nComponents: 2).FitTransform(new Matrix<double>(Data));
+
+        for (int c = 0; c < 2; c++)
+        {
+            double sign = Math.Sign(embedding[0, c]) == Math.Sign(expected[0, c]) ? 1.0 : -1.0;
+            for (int i = 0; i < expected.GetLength(0); i++)
+            {
+                Assert.Equal(expected[i, c], sign * embedding[i, c], 9);
+            }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DiffusionMaps_Half_LargeDistances_KernelStaysFinite()
+    {
+        await Task.Yield();
+
+        // Points 0, 300, 700 and 1000 on a line: every squared distance and the squared median overflow Half, so
+        // exp(-d^2 / eps) would be exp(-inf / inf) = NaN everywhere.
+        var half = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var data = new Matrix<Half>(4, 1);
+        data[0, 0] = half.Zero;
+        data[1, 0] = half.FromDouble(300);
+        data[2, 0] = half.FromDouble(700);
+        data[3, 0] = half.FromDouble(1000);
+
+        var embedding = new DiffusionMaps<Half>(nComponents: 1).FitTransform(data);
+
+        for (int i = 0; i < 4; i++)
+        {
+            double value = half.ToDouble(embedding[i, 0]);
+            Assert.False(double.IsNaN(value) || double.IsInfinity(value), $"row {i} is {value}");
+        }
+
+        // The 1-D chain is ordered by its first diffusion coordinate
+        Assert.True(half.ToDouble(embedding[0, 0]) * half.ToDouble(embedding[3, 0]) < 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NCA_SameLabelMask_Half_KeepsLabelsHalfCannotTellApart()
+    {
+        await Task.Yield();
+
+        // Labels 2048 and 2049 are different classes; converted to Half both are 2048 and would count as the same
+        // class.
+        var half = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        var same = NCA<Half>.SameLabelMask(new[] { 2048, 2049, 2048 });
+
+        Assert.Equal(1.0, half.ToDouble(same[0, 0]));
+        Assert.Equal(0.0, half.ToDouble(same[0, 1]));
+        Assert.Equal(1.0, half.ToDouble(same[0, 2]));
+        Assert.Equal(0.0, half.ToDouble(same[1, 2]));
+    }
+
     private static double[,] SignRows(int start, int count)
     {
         var rows = new double[count, SignData.GetLength(1)];

@@ -112,38 +112,41 @@ public class Deskew<T> : IDisposable
         int width = image.Shape[2];
 
         double radians = angle * Math.PI / 180.0;
-        T cos = _numOps.FromDouble(Math.Cos(radians));
-        T sin = _numOps.FromDouble(Math.Sin(radians));
+        double cos = Math.Cos(radians);
+        double sin = Math.Sin(radians);
         int centerX = width / 2;
         int centerY = height / 2;
 
+        // Source coordinates are computed in double, as the scalar original did: in T a coordinate past 2048 (Half)
+        // cannot address every pixel of a page, and the interpolation weights would be quantised
         // Output pixel offsets from the center as [height, 1] and [1, width]
-        var dy = engine.Reshape(engine.TensorSubtractScalar(PixelRange(height), _numOps.FromDouble(centerY)), new[] { height, 1 });
-        var dx = engine.Reshape(engine.TensorSubtractScalar(PixelRange(width), _numOps.FromDouble(centerX)), new[] { 1, width });
+        var dy = engine.Reshape(engine.TensorSubtractScalar(PixelRange(height), (double)centerY), new[] { height, 1 });
+        var dx = engine.Reshape(engine.TensorSubtractScalar(PixelRange(width), (double)centerX), new[] { 1, width });
 
         // Translate to center, rotate, translate back
         var srcX = engine.TensorAddScalar(
-            engine.TensorAdd(engine.TensorMultiplyScalar(dx, cos), engine.TensorMultiplyScalar(dy, sin)), _numOps.FromDouble(centerX));
+            engine.TensorAdd(engine.TensorMultiplyScalar(dx, cos), engine.TensorMultiplyScalar(dy, sin)), (double)centerX);
         var srcY = engine.TensorAddScalar(
-            engine.TensorSubtract(engine.TensorMultiplyScalar(dy, cos), engine.TensorMultiplyScalar(dx, sin)), _numOps.FromDouble(centerY));
+            engine.TensorSubtract(engine.TensorMultiplyScalar(dy, cos), engine.TensorMultiplyScalar(dx, sin)), (double)centerY);
 
         // Inside test: 0 <= srcX < width - 1 and 0 <= srcY < height - 1
-        var zero = _numOps.Zero;
+        double zero = 0.0;
         var negativeX = engine.TensorLessThan(srcX, zero);
         var negativeY = engine.TensorLessThan(srcY, zero);
         var inside = engine.TensorMultiply(
-            engine.TensorMultiply(engine.TensorSubtract(engine.TensorOnesLike(negativeX), negativeX), engine.TensorLessThan(srcX, _numOps.FromDouble(width - 1))),
-            engine.TensorMultiply(engine.TensorSubtract(engine.TensorOnesLike(negativeY), negativeY), engine.TensorLessThan(srcY, _numOps.FromDouble(height - 1))));
+            engine.TensorMultiply(engine.TensorSubtract(engine.TensorOnesLike(negativeX), negativeX), engine.TensorLessThan(srcX, (double)(width - 1))),
+            engine.TensorMultiply(engine.TensorSubtract(engine.TensorOnesLike(negativeY), negativeY), engine.TensorLessThan(srcY, (double)(height - 1))))
+            .Cast<T>();
 
         // Bilinear interpolation from the clamped neighbours
         var floorX = engine.TensorFloor(srcX);
         var floorY = engine.TensorFloor(srcY);
-        var x0 = engine.TensorClamp(floorX, zero, _numOps.FromDouble(width - 1));
-        var y0 = engine.TensorClamp(floorY, zero, _numOps.FromDouble(height - 1));
-        var x1 = engine.TensorClamp(engine.TensorAddScalar(x0, _numOps.One), zero, _numOps.FromDouble(width - 1));
-        var y1 = engine.TensorClamp(engine.TensorAddScalar(y0, _numOps.One), zero, _numOps.FromDouble(height - 1));
-        var fx = engine.TensorSubtract(srcX, x0);
-        var fy = engine.TensorSubtract(srcY, y0);
+        var x0 = engine.TensorClamp(floorX, zero, (double)(width - 1));
+        var y0 = engine.TensorClamp(floorY, zero, (double)(height - 1));
+        var x1 = engine.TensorClamp(engine.TensorAddScalar(x0, 1.0), zero, (double)(width - 1));
+        var y1 = engine.TensorClamp(engine.TensorAddScalar(y0, 1.0), zero, (double)(height - 1));
+        var fx = engine.TensorSubtract(srcX, x0).Cast<T>();
+        var fy = engine.TensorSubtract(srcY, y0).Cast<T>();
 
         var pixels = engine.Reshape(image, new[] { channels, height * width });
         var v00 = Gather(pixels, y0, x0, width);
@@ -239,25 +242,28 @@ public class Deskew<T> : IDisposable
         double angleStep = (2 * maxAngle) / numAngles;
         double threshold = 0.3; // Edge threshold
 
+        // Projections and votes are accumulated in double, as the scalar original did: in T the pixel coordinates
+        // past 2048 and the vote sums (Half overflows at 65504) would be lost
         var radians = engine.TensorMultiplyScalar(
-            engine.TensorAddScalar(engine.TensorMultiplyScalar(PixelRange(numAngles), _numOps.FromDouble(angleStep)), _numOps.FromDouble(-maxAngle)),
-            _numOps.FromDouble(Math.PI / 180.0));
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(PixelRange(numAngles), angleStep), -maxAngle),
+            Math.PI / 180.0);
         var cos = engine.Reshape(engine.TensorCos(radians), new[] { 1, numAngles });
         var sin = engine.Reshape(engine.TensorSin(radians), new[] { 1, numAngles });
 
         var edgeMask = engine.TensorGreaterThan(
-            engine.Reshape(engine.TensorNarrow(edges, 0, 0, 1), new[] { height, width }), _numOps.FromDouble(threshold));
+            engine.Reshape(engine.TensorNarrow(edges, 0, 0, 1), new[] { height, width }), _numOps.FromDouble(threshold))
+            .Cast<double>();
         var xs = engine.Reshape(PixelRange(width), new[] { 1, width });
-        var accumulator = new Tensor<T>(new[] { numAngles });
+        var accumulator = new Tensor<double>(new[] { numAngles });
 
         int rowsPerChunk = Math.Max(1, (1 << 22) / Math.Max(1, width * numAngles));
         for (int start = 0; start < height; start += rowsPerChunk)
         {
             int count = Math.Min(rowsPerChunk, height - start);
             var ys = engine.Reshape(
-                engine.TensorAddScalar(PixelRange(count), _numOps.FromDouble(start)), new[] { count, 1 });
-            var pixelX = engine.Reshape(engine.TensorMultiply(Tensor<T>.CreateDefault(new[] { count, width }, _numOps.One), xs), new[] { count * width, 1 });
-            var pixelY = engine.Reshape(engine.TensorMultiply(Tensor<T>.CreateDefault(new[] { count, width }, _numOps.One), ys), new[] { count * width, 1 });
+                engine.TensorAddScalar(PixelRange(count), (double)start), new[] { count, 1 });
+            var pixelX = engine.Reshape(engine.TensorMultiply(Tensor<double>.CreateDefault(new[] { count, width }, 1.0), xs), new[] { count * width, 1 });
+            var pixelY = engine.Reshape(engine.TensorMultiply(Tensor<double>.CreateDefault(new[] { count, width }, 1.0), ys), new[] { count * width, 1 });
             var weight = engine.Reshape(engine.TensorNarrow(edgeMask, 0, start, count), new[] { count * width, 1 });
 
             // Project point onto line at this angle
@@ -270,12 +276,12 @@ public class Deskew<T> : IDisposable
         return -maxAngle + maxIdx * angleStep;
     }
 
-    /// <summary>0, 1, ..., count - 1 as T.</summary>
-    private static Tensor<T> PixelRange(int count) =>
-        Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, count))).Cast<T>();
+    /// <summary>0, 1, ..., count - 1 as double (pixel coordinates are not held in T).</summary>
+    private static Tensor<double> PixelRange(int count) =>
+        Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, count))).Cast<double>();
 
     /// <summary>Gathers pixels[c, y * width + x] for every output pixel, [channels, height * width].</summary>
-    private static Tensor<T> Gather(Tensor<T> pixels, Tensor<T> y, Tensor<T> x, int width)
+    private static Tensor<T> Gather(Tensor<T> pixels, Tensor<double> y, Tensor<double> x, int width)
     {
         var engine = AiDotNetEngine.Current;
         var flat = engine.TensorAdd(engine.TensorMultiplyScalar(y.Cast<int>(), width), x.Cast<int>());

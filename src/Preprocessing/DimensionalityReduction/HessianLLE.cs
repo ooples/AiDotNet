@@ -151,6 +151,13 @@ public class HessianLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (available > 1 + d)
         {
             var nullSpace = engine.TensorNarrow(q, 2, 1 + d, available - 1 - d);
+
+            // scikit-learn (and Donoho and Grimes' reference code) divide every Hessian column by its sum, leaving
+            // columns whose sum is below hessian_tol = 1e-4 as they are
+            var sums = engine.ReduceSum(nullSpace, new[] { 1 }, true);
+            var negligible = engine.TensorLessThan(engine.TensorAbs(sums), DimensionalityReductionOps.Tolerance<T>(1e-4));
+            var divisors = engine.TensorWhere(negligible, engine.TensorOnesLike(sums), sums);
+            nullSpace = engine.TensorDivide(nullSpace, engine.TensorBroadcastTo(divisors, nullSpace.Shape.ToArray()));
             var local = DimensionalityReductionOps.BatchMatMulTranspose(nullSpace, nullSpace);
             h = DimensionalityReductionOps.ScatterAddBlocks(neighbors, local, n);
         }

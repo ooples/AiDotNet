@@ -159,11 +159,8 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         var x = Tensor<T>.FromMatrix(data);
 
-        // Step 1: Compute pairwise (squared) distances
-        var distances = DimensionalityReductionOps.SquaredDistances(x, x);
-
-        // Step 2: Generate pairs
-        var (nearbyPairs, midNearPairs, furtherPairs) = GeneratePairs(distances, n, random);
+        // Steps 1 and 2: Rank neighbours by pairwise distance and generate pairs
+        var (nearbyPairs, midNearPairs, furtherPairs) = GeneratePairs(x, n, random);
 
         // Step 3: Initialize embedding with PCA
         var y = InitializeWithPCA(x, n, random);
@@ -173,12 +170,16 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Nearby pairs (the k nearest neighbours, ties in index order), mid-near pairs (random ranks in [k, 6k) of
+    /// From the rows of <paramref name="x"/>: nearby pairs (the k nearest neighbours, ties in index order), mid-near pairs (random ranks in [k, 6k) of
     /// the sorted neighbour list) and further pairs (uniformly random other points), each as (heads, tails).
     /// </summary>
     private ((Tensor<int> Heads, Tensor<int> Tails) Nearby, (Tensor<int> Heads, Tensor<int> Tails) MidNear, (Tensor<int> Heads, Tensor<int> Tails) Further)
-        GeneratePairs(Tensor<T> distances, int n, Random random)
+        GeneratePairs(Tensor<T> x, int n, Random random)
     {
+        // Only the order of the distances is used, so plain distances are ranked: squared distances overflow narrow
+        // types (Half past 256), which would tie every far pair at infinity and order them by index
+        var distances = DimensionalityReductionOps.EuclideanDistances(x, x);
+
         int k = Math.Min(_nNeighbors, n - 1);
         int nMidNear = Math.Max(1, (int)(k * _mnRatio));
         int nFurther = Math.Max(1, (int)(k * _fpRatio));

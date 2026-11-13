@@ -157,11 +157,12 @@ public class PCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         if (_varianceRatio.HasValue)
         {
-            // Keep the fewest leading components whose cumulative ratio reaches the target
+            // scikit-learn: searchsorted(ratio_cumsum, target, side="right") + 1, so a cumulative ratio exactly
+            // equal to the target keeps one more component
             var cumulative = engine.TensorCumSum(explainedVarianceRatio, 0);
             var target = DimensionalityReductionOps.Scalar(NumOps.FromDouble(_varianceRatio.Value));
-            int below = engine.TensorSearchSorted(cumulative, target, false)[0];
-            _nComponentsOut = Math.Min(below + 1, p);
+            int atMost = engine.TensorSearchSorted(cumulative, target, true)[0];
+            _nComponentsOut = Math.Min(atMost + 1, p);
         }
         else if (_nComponents.HasValue)
         {

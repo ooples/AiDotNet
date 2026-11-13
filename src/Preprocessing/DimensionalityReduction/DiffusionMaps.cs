@@ -131,13 +131,12 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 $"The first eigenvector is skipped, so at least {_nComponents + 1} samples are required.");
         }
 
-        // Step 1: Compute pairwise distances and squared distances
+        // Step 1: Compute pairwise distances
         var x = Tensor<T>.FromMatrix(data);
         var distances = DimensionalityReductionOps.EuclideanDistances(x, x);
-        var distSq = engine.TensorSquare(distances);
 
-        // Step 2: Compute epsilon (kernel bandwidth) if not provided
-        T eps = DimensionalityReductionOps.Tolerance<T>(_epsilon);
+        // Step 2: Compute the kernel bandwidth sqrt(epsilon) (epsilon = median distance squared if not provided)
+        T bandwidth = NumOps.Sqrt(DimensionalityReductionOps.Tolerance<T>(_epsilon));
         if (_epsilon <= 0)
         {
             // Median of the n(n-1)/2 pairwise distances, squared. With the diagonal at +inf every pair appears
@@ -146,12 +145,12 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             engine.TensorFillDiagonalInPlace(masked, NumOps.FromDouble(double.PositiveInfinity));
             var (sorted, _) = engine.TensorSort(engine.TensorFlatten(masked), 0, false);
             int pairs = n * (n - 1) / 2;
-            T median = sorted[2 * (pairs / 2)];
-            eps = NumOps.Multiply(median, median);
+            bandwidth = sorted[2 * (pairs / 2)];
         }
 
-        // Step 3: Kernel K = exp(-d^2 / eps)
-        var kernel = engine.TensorExp(engine.TensorNegate(engine.TensorDivideScalar(distSq, eps)));
+        // Step 3: Kernel K = exp(-d^2 / eps) = exp(-(d / sqrt(eps))^2), the ratio taken before squaring: d^2 and eps
+        // overflow narrow types (Half past 256) and inf / inf would turn the kernel into NaN
+        var kernel = engine.TensorExp(engine.TensorNegate(engine.TensorSquare(engine.TensorDivideScalar(distances, bandwidth))));
 
         // Step 4-5: alpha-normalization K_alpha = K / (q_i q_j)^alpha with q = row sums (q_i >= K_ii = 1)
         var q = DimensionalityReductionOps.RowSums(kernel);
@@ -172,12 +171,17 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors,
             DimensionalityReductionOps.SeededPowerIterationStarts<T>(_randomState ?? 42, Math.Min(n, _nComponents + 2), n, 0.0));
 
-        // Step 9: Embedding from eigenvectors 1..nComponents (skipping the trivial first one) scaled by lambda^t
+        // Step 9: Diffusion coordinates (Coifman and Lafon 2006): the right eigenvectors psi_k = D^(-1/2) v_k of the
+        // Markov matrix P = D^-1 K_alpha, normalised so the trivial psi_0 is the constant 1 (psi_k = v_k / v_0, as
+        // v_0 is proportional to sqrt(d)), for k = 1..nComponents, scaled by lambda_k^t. The symmetric eigenvectors
+        // v_k themselves are not diffusion coordinates (and v_0 is not constant).
         var selected = engine.TensorNarrow(eigenvalues, 0, 1, _nComponents);
         var scale = engine.TensorPow(selected, NumOps.FromDouble(_diffusionTime));
+        var trivial = engine.TensorAbs(engine.TensorNarrow(eigenvectors, 1, 0, 1));
+        var leading = engine.TensorNarrow(eigenvectors, 1, 1, _nComponents);
+        var right = engine.TensorDivide(leading, engine.TensorBroadcastTo(trivial, leading.Shape.ToArray()));
         _eigenvalues = selected.ToVector();
-        _embedding = DimensionalityReductionOps.ScaleColumns(
-            engine.TensorNarrow(eigenvectors, 1, 1, _nComponents), scale).ToMatrix();
+        _embedding = DimensionalityReductionOps.ScaleColumns(right, scale).ToMatrix();
     }
 
     /// <summary>

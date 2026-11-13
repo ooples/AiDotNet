@@ -223,14 +223,14 @@ public class LayoutNormalization<T> : IDisposable
         int srcWidth = image.Shape[2];
 
         // Source coordinates and clamped bilinear neighbours, separable in x and y
-        var srcX = engine.TensorMultiplyScalar(Range(targetWidth), _numOps.FromDouble((double)srcWidth / targetWidth));
-        var srcY = engine.TensorMultiplyScalar(Range(targetHeight), _numOps.FromDouble((double)srcHeight / targetHeight));
+        var srcX = engine.TensorMultiplyScalar(Range(targetWidth), (double)srcWidth / targetWidth);
+        var srcY = engine.TensorMultiplyScalar(Range(targetHeight), (double)srcHeight / targetHeight);
         var x0 = ClampIndex(engine.TensorFloor(srcX), srcWidth);
         var y0 = ClampIndex(engine.TensorFloor(srcY), srcHeight);
-        var x1 = ClampIndex(engine.TensorAddScalar(x0, _numOps.One), srcWidth);
-        var y1 = ClampIndex(engine.TensorAddScalar(y0, _numOps.One), srcHeight);
-        var fx = engine.Reshape(engine.TensorSubtract(srcX, x0), new[] { 1, 1, targetWidth });
-        var fy = engine.Reshape(engine.TensorSubtract(srcY, y0), new[] { 1, targetHeight, 1 });
+        var x1 = ClampIndex(engine.TensorAddScalar(x0, 1.0), srcWidth);
+        var y1 = ClampIndex(engine.TensorAddScalar(y0, 1.0), srcHeight);
+        var fx = engine.Reshape(engine.TensorSubtract(srcX, x0).Cast<T>(), new[] { 1, 1, targetWidth });
+        var fy = engine.Reshape(engine.TensorSubtract(srcY, y0).Cast<T>(), new[] { 1, targetHeight, 1 });
 
         var rows0 = engine.TensorIndexSelect(image, y0.Cast<int>(), 1);
         var rows1 = engine.TensorIndexSelect(image, y1.Cast<int>(), 1);
@@ -255,13 +255,16 @@ public class LayoutNormalization<T> : IDisposable
         return Place(image, targetWidth, targetHeight, padTop, padLeft, paddingValue);
     }
 
-    /// <summary>0, 1, ..., count - 1 as T.</summary>
-    private static Tensor<T> Range(int count) =>
-        Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, count))).Cast<T>();
+    /// <summary>
+    /// 0, 1, ..., count - 1 as double: pixel coordinates are kept out of T, where (for Half) integers past 2048
+    /// are not exact and the bilinear fractions would be quantised, as the scalar original computed them in double.
+    /// </summary>
+    private static Tensor<double> Range(int count) =>
+        Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, count))).Cast<double>();
 
     /// <summary>Clamps index values to [0, size - 1].</summary>
-    private Tensor<T> ClampIndex(Tensor<T> index, int size) =>
-        AiDotNetEngine.Current.TensorClamp(index, _numOps.Zero, _numOps.FromDouble(size - 1));
+    private static Tensor<double> ClampIndex(Tensor<double> index, int size) =>
+        AiDotNetEngine.Current.TensorClamp(index, 0.0, (double)(size - 1));
 
     /// <summary>
     /// A [channels, targetHeight, targetWidth] canvas filled with <paramref name="fill"/> holding

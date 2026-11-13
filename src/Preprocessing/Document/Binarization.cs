@@ -89,10 +89,11 @@ public class Binarization<T> : IDisposable
     {
         var engine = AiDotNetEngine.Current;
 
-        // Compute histogram over 256 bins: bin = clamp((int)(v * 255), 0, 255)
-        var flat = engine.Reshape(gray, new[] { gray.Length });
-        var bins = engine.TensorClamp(engine.TensorFloor(engine.TensorMultiplyScalar(flat, _numOps.FromDouble(255.0))),
-            _numOps.Zero, _numOps.FromDouble(255.0)).Cast<int>();
+        // Compute histogram over 256 bins: bin = clamp((int)(v * 255), 0, 255), with v * 255 taken in double (a
+        // product rounded to T, e.g. Half, can round up across an integer and move the pixel to the next bin)
+        var flat = engine.Reshape(gray, new[] { gray.Length }).Cast<double>();
+        var bins = engine.TensorClamp(engine.TensorFloor(engine.TensorMultiplyScalar(flat, 255.0)), 0.0, 255.0)
+            .Cast<int>();
         // Histogram counted in int (a running count in Half stops at 2048), then turned into bin probabilities
         // count / n without materialising a count in T: count = hi * 2048 + lo, p = hi * (2048 / n) + lo / n, so
         // every value cast to T is below 2048 (exact in Half) as long as n < 2048^2

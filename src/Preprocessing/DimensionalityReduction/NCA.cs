@@ -146,10 +146,7 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             NumOps.FromDouble(0.01));
 
         // same[i, j] = 1 when labels[i] == labels[j]
-        var labelValues = new Tensor<int>(labels, new[] { n }).Cast<T>();
-        var same = engine.TensorEquals(
-            engine.TensorSubtract(DimensionalityReductionOps.AsColumn(labelValues), DimensionalityReductionOps.AsRow(labelValues)),
-            NumOps.Zero);
+        var same = SameLabelMask(labels);
 
         T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
         T sumFloor = DimensionalityReductionOps.Tolerance<T>(1e-10);
@@ -208,6 +205,31 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _transformationMatrix = a.ToMatrix();
+    }
+
+    /// <summary>
+    /// The [n, n] 0/1 matrix of label equality, compared as int: labels converted to T first would merge distinct
+    /// labels that T cannot tell apart (Half rounds 2049 to 2048). The labels are mapped to dense ids first so the
+    /// difference cannot overflow.
+    /// </summary>
+    internal static Tensor<T> SameLabelMask(int[] labels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ids = new Dictionary<int, int>();
+        var dense = labels.Select(label =>
+        {
+            if (!ids.TryGetValue(label, out int id))
+            {
+                id = ids.Count;
+                ids[label] = id;
+            }
+
+            return id;
+        }).ToArray();
+        var labelIds = new Tensor<int>(dense, new[] { dense.Length });
+        var difference = engine.TensorSubtract(
+            DimensionalityReductionOps.AsColumn(labelIds), DimensionalityReductionOps.AsRow(labelIds));
+        return engine.TensorEquals(difference, 0).Cast<T>();
     }
 
     /// <summary>
