@@ -73,23 +73,26 @@ public class KruskalWallisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Rank all values of every feature (average ranks for ties) and sum them per class
         var ranks = RankTestOps.AverageRanksWithTies(Tensor<T>.FromMatrix(data), out var tieTerm);
         var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
-        var rankSums = Engine.TensorMatMul(Engine.TensorTranspose(membership), ranks);
         // (class sizes counted as int: a 0/1 sum in T stops counting at 2048 for Half)
         var classCounts = Engine.Reshape(Engine.ReduceSum(
             membership.Cast<int>(), new[] { 0 }, false).Cast<T>(), new[] { k, 1 });
 
         // Kruskal-Wallis H = 12 / (n (n + 1)) sum_c R_c^2 / n_c - 3 (n + 1), divided by the tie correction
-        // 1 - sum (t^3 - t) / (n^3 - n) as scipy.stats.kruskal (left as is when every value is tied)
-        var meanSquares = Engine.ReduceSum(Engine.TensorDivide(Engine.TensorMultiply(rankSums, rankSums),
+        // 1 - sum (t^3 - t) / (n^3 - n) as scipy.stats.kruskal (left as is when every value is tied). Formed as
+        // H = 12 (n + 1) / n sum_c n_c (u_c - 1/2)^2 with u_c the class mean of rank / (n + 1), the same value:
+        // R_c^2 / n_c reaches about n^3 / 4, past Half's 65504 from n = 64, while every term here stays below n.
+        var scaledRanks = Engine.TensorDivideScalar(ranks, NumOps.FromDouble(n + 1.0));
+        var classMeans = Engine.TensorDivide(Engine.TensorMatMul(Engine.TensorTranspose(membership), scaledRanks),
+            Engine.TensorBroadcastTo(Engine.TensorMax(classCounts, NumOps.One), new[] { k, p }));
+        var offset = Engine.TensorSubtractScalar(classMeans, NumOps.FromDouble(0.5));
+        var spread = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMultiply(offset, offset),
             Engine.TensorBroadcastTo(classCounts, new[] { k, p })), new[] { 0 }, false);
-        var h = Engine.TensorSubtractScalar(
-            Engine.TensorMultiplyScalar(meanSquares, NumOps.FromDouble(12.0 / ((double)n * (n + 1)))),
-            NumOps.FromDouble(3.0 * (n + 1)));
-        var correction = PreprocessingTensorOps.OneMinus(
-            Engine.TensorDivideScalar(tieTerm, NumOps.FromDouble((double)n * n * n - n)));
-        var corrected = Engine.TensorGreaterThan(correction, NumOps.Zero);
-        var scores = Engine.TensorWhere(corrected, Engine.TensorDivide(h,
-            Engine.TensorWhere(corrected, correction, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), h);
+        var h = Engine.TensorMultiplyScalar(spread, NumOps.FromDouble(12.0 * (n + 1) / n));
+        var correction = Engine.TensorSubtractScalar(
+            Engine.TensorNegate(Engine.TensorDivideScalar(tieTerm, (double)n * n * n - n)), -1.0);
+        var corrected = Engine.TensorGreaterThan(correction, 0.0);
+        var divisor = Engine.TensorWhere(corrected, correction, PreprocessingTensorOps.Filled(new[] { p }, 1.0)).Cast<T>();
+        var scores = Engine.TensorDivide(h, divisor);
         _hStatistics = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;

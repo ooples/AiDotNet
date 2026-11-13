@@ -64,7 +64,7 @@ public class CorrelationFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         T count = NumOps.FromDouble(n);
         var variances = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), count);
         var stds = Engine.TensorSqrt(variances);
-        stds = Engine.TensorWhere(Engine.TensorLessThan(stds, NumOps.FromDouble(1e-10)),
+        stds = Engine.TensorWhere(Engine.TensorLessThan(stds, PreprocessingTensorOps.Tolerance<T>(1e-10)),
             PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), stds);
 
         // Compute correlation matrix (unit diagonal)

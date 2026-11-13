@@ -70,7 +70,7 @@ public class LDABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         // Univariate Fisher ratio: between-class over within-class sum of squares (+1e-10)
         var betweenVar = SelectorTensorOps.ClassScatter(
             Tensor<T>.FromMatrix(data), new Tensor<int>(classIndex, new[] { n }), nClasses, out var withinVar);
-        var scores = Engine.TensorDivide(betweenVar, Engine.TensorAddScalar(withinVar, NumOps.FromDouble(1e-10)));
+        var scores = Engine.TensorDivide(betweenVar, Engine.TensorAddScalar(withinVar, PreprocessingTensorOps.Tolerance<T>(1e-10)));
         _discriminantScores = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;

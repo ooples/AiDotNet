@@ -69,7 +69,7 @@ public class AutocorrelationFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         // Centre every column and compute its population variance
         var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var variance = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
-        var varying = PreprocessingTensorOps.AtLeast(variance, NumOps.FromDouble(1e-10));
+        var varying = PreprocessingTensorOps.AtLeast(variance, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeVariance = Engine.TensorWhere(varying, variance, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
 
         // Compute |autocorrelation| (lag covariance over n - lag, divided by the variance) for each lag and take max

@@ -51,11 +51,11 @@ internal static class SelectorTensorOps
         var ops = MathHelper.GetNumericOperations<T>();
         var total = engine.ReduceSum(weights, new[] { 0 }, true);
         var probability = engine.TensorDivide(weights, total);
-        var counted = engine.TensorGreaterThan(probability, ops.FromDouble(minProbability));
+        var counted = engine.TensorGreaterThan(probability, PreprocessingTensorOps.Tolerance<T>(minProbability));
         var zeros = PreprocessingTensorOps.Filled(weights.Shape.ToArray(), ops.Zero);
         var terms = engine.TensorWhere(counted, engine.TensorMultiply(probability, engine.TensorLog2(probability)), zeros);
         var entropy = engine.TensorNegate(engine.ReduceSum(terms, new[] { 0 }, false));
-        var valid = engine.TensorGreaterThan(engine.Reshape(total, new[] { total.Length }), ops.FromDouble(minTotal));
+        var valid = engine.TensorGreaterThan(engine.Reshape(total, new[] { total.Length }), PreprocessingTensorOps.Tolerance<T>(minTotal));
         return engine.TensorWhere(valid, entropy, PreprocessingTensorOps.Filled(new[] { total.Length }, ops.Zero));
     }
 
@@ -144,7 +144,7 @@ internal static class SelectorTensorOps
             engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(n - 1));
         var std = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(ColumnSumOfSquares(centered), ops.FromDouble(n - 1))),
-            ops.FromDouble(stdEpsilon));
+            PreprocessingTensorOps.Tolerance<T>(stdEpsilon));
         var correlation = engine.TensorDivide(covariance, engine.TensorOuter(std, std));
         return engine.TensorWhere(engine.TensorEye<T>(p), PreprocessingTensorOps.Filled(new[] { p, p }, ops.One), correlation);
     }
@@ -201,7 +201,7 @@ internal static class SelectorTensorOps
         var centered = FilterStatisticTensorOps.CenterColumns(x);
         var std = engine.TensorSqrt(engine.TensorDivideScalar(
             ColumnSumOfSquares(centered), ops.FromDouble(sample ? n - 1 : n)));
-        std = engine.TensorWhere(engine.TensorLessThan(std, ops.FromDouble(minStd)),
+        std = engine.TensorWhere(engine.TensorLessThan(std, PreprocessingTensorOps.Tolerance<T>(minStd)),
             PreprocessingTensorOps.Filled(new[] { m }, ops.One), std);
         return engine.TensorDivide(centered, engine.Reshape(std, new[] { 1, m }));
     }
@@ -258,13 +258,13 @@ internal static class SelectorTensorOps
         int m = x.Shape[1];
         var xc = FilterStatisticTensorOps.CenterColumns(x);
         var yc = FilterStatisticTensorOps.CenterColumns(y);
-        var sxy = engine.ReduceSum(engine.TensorMultiply(xc, yc), new[] { 0 }, false);
         var sxx = ColumnSumOfSquares(xc);
         T syy = engine.TensorSum(engine.TensorMultiply(yc, yc));
-        var r = engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)));
+        // r from max-magnitude-scaled columns: sxx and sxx syy overflow Half (the ranks of 100 samples suffice)
+        var r = PreprocessingTensorOps.CenteredCorrelations(xc, yc);
         var valid = engine.TensorMultiply(
-            engine.TensorGreaterThan(sxx, ops.FromDouble(epsilon)),
-            PreprocessingTensorOps.Filled(new[] { m }, ops.GreaterThan(syy, ops.FromDouble(epsilon)) ? ops.One : ops.Zero));
+            engine.TensorGreaterThan(sxx, PreprocessingTensorOps.Tolerance<T>(epsilon)),
+            PreprocessingTensorOps.Filled(new[] { m }, ops.GreaterThan(syy, PreprocessingTensorOps.Tolerance<T>(epsilon)) ? ops.One : ops.Zero));
         return ZeroUnless(valid, r);
     }
 
@@ -278,7 +278,7 @@ internal static class SelectorTensorOps
         var deviation = engine.TensorSubtract(x, ColumnMedian(x, keepDims: true));
         var scale = engine.TensorAddScalar(
             engine.TensorMultiplyScalar(ColumnMedian(engine.TensorAbs(deviation), keepDims: true), ops.FromDouble(1.4826)),
-            ops.FromDouble(epsilon));
+            PreprocessingTensorOps.Tolerance<T>(epsilon));
         return engine.TensorDivide(deviation, scale);
     }
 
@@ -329,7 +329,7 @@ internal static class SelectorTensorOps
         var sxy = engine.ReduceSum(engine.TensorMultiply(xd, yd), new[] { 0 }, false);
         var denominator = engine.TensorSqrt(engine.TensorMultiply(ColumnSumOfSquares(xd), ColumnSumOfSquares(yd)));
         var valid = engine.TensorMultiply(
-            engine.TensorGreaterThan(denominator, ops.FromDouble(epsilon)),
+            engine.TensorGreaterThan(denominator, PreprocessingTensorOps.Tolerance<T>(epsilon)),
             AtLeastCount(engine.Reshape(count, new[] { m }), minRows));
         return ZeroUnless(valid, engine.TensorDivide(sxy, denominator));
     }
@@ -389,37 +389,37 @@ internal static class SelectorTensorOps
         if (p == 0)
             return zeros;
 
-        // Pair counts are summed in int (0/+-1 sums in a narrow T such as Half stop growing at 2048) and only the
-        // totals are converted to T.
-        T tolerance = ops.FromDouble(1e-10);
+        // Pair counts are integers (summed in int: 0/+-1 sums in a narrow T such as Half stop growing at 2048) and
+        // tau is their ratio, formed in double and converted to T once: the counts themselves reach n (n - 1), past
+        // Half's 65504 from n = 257 (and 2 (C - D) past it from n = 182), so in Half they would overflow to infinity.
+        T tolerance = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var ySigns = PairSigns(y, tolerance);
         var ySignsInt = ySigns.Cast<int>();
-        var signSums = new Tensor<T>[p];
-        var untied = new Tensor<T>[p];
+        var signSums = new int[p];
+        var untied = new int[p];
         for (int j = 0; j < p; j++)
         {
             var xSigns = PairSigns(PreprocessingTensorOps.ColumnVector(x, j), tolerance);
-            signSums[j] = engine.ReduceSum(
-                engine.TensorMultiply(xSigns.Cast<int>(), ySignsInt), new[] { 0 }, true).Cast<T>();
-            untied[j] = PreprocessingTensorOps.Filled(
-                new[] { 1 }, PreprocessingTensorOps.CountAsScalar<T>(engine.TensorCountNonzero(xSigns)));
+            signSums[j] = engine.TensorSum(engine.TensorMultiply(xSigns.Cast<int>(), ySignsInt));
+            untied[j] = engine.TensorCountNonzero(xSigns);
         }
 
         // Over ordered pairs: sum(sx * sy) = 2 (C - D) and sum|sx| = 2 (n0 - n1)
-        var differences = engine.TensorConcatenate(signSums, 0);
+        var differences = new Tensor<int>(signSums, new[] { p }).Cast<double>();
         if (tauB)
         {
-            // sqrt(a) * sqrt(b) rather than sqrt(a * b): the product of two pair counts overflows Half
-            T yUntied = ops.Sqrt(PreprocessingTensorOps.CountAsScalar<T>(engine.TensorCountNonzero(ySigns)));
+            // sqrt(a) * sqrt(b) rather than sqrt(a * b): the product of two pair counts overflows int
+            double yUntied = Math.Sqrt(engine.TensorCountNonzero(ySigns));
             var denominators = engine.TensorMultiplyScalar(
-                engine.TensorSqrt(engine.TensorConcatenate(untied, 0)), yUntied);
-            var usable = engine.TensorGreaterThan(denominators, ops.Zero);
+                engine.TensorSqrt(new Tensor<int>(untied, new[] { p }).Cast<double>()), yUntied);
+            var usable = engine.TensorGreaterThan(denominators, 0.0);
             return engine.TensorWhere(usable, engine.TensorDivide(differences,
-                engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, ops.One))), zeros);
+                engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, 1.0))),
+                new Tensor<double>(new[] { p })).Cast<T>();
         }
 
         long pairs = (long)n * (n - 1) / 2;
-        return pairs > 0 ? engine.TensorDivideScalar(differences, ops.FromDouble(2.0 * pairs)) : zeros;
+        return pairs > 0 ? engine.TensorDivideScalar(differences, 2.0 * pairs).Cast<T>() : zeros;
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ internal static class SelectorTensorOps
         T ssTotal = engine.TensorSum(engine.TensorMultiply(yc, yc));
 
         // Slope (0 for a near-constant feature) and the residual sum of squares of y - beta x
-        var beta = ZeroUnless(engine.TensorGreaterThan(sxx, ops.FromDouble(1e-10)), engine.TensorDivide(sxy, sxx));
+        var beta = ZeroUnless(engine.TensorGreaterThan(sxx, PreprocessingTensorOps.Tolerance<T>(1e-10)), engine.TensorDivide(sxy, sxx));
         var residual = engine.TensorSubtract(yc, engine.TensorMultiply(xc, engine.Reshape(beta, new[] { 1, p })));
         var ssResidual = ColumnSumOfSquares(residual);
         var ssRegression = engine.TensorMax(engine.TensorSubtract(
@@ -534,7 +534,7 @@ internal static class SelectorTensorOps
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var shape = numerator.Shape.ToArray();
-        T eps = ops.FromDouble(epsilon);
+        T eps = PreprocessingTensorOps.Tolerance<T>(epsilon);
         var usable = engine.TensorGreaterThan(denominator, eps);
         var safeDenominator = engine.TensorWhere(usable, denominator, PreprocessingTensorOps.Filled(shape, ops.One));
         var degenerate = engine.TensorWhere(engine.TensorGreaterThan(numerator, eps),
@@ -568,7 +568,7 @@ internal static class SelectorTensorOps
         var classShare = engine.TensorDivideScalar(classSizes, ops.FromDouble(n));
         var expected = engine.TensorOuter(classShare, engine.ReduceSum(x, new[] { 0 }, false));
         var difference = engine.TensorSubtract(observed, expected);
-        var counted = engine.TensorGreaterThan(expected, ops.FromDouble(1e-10));
+        var counted = engine.TensorGreaterThan(expected, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeExpected = engine.TensorWhere(counted, expected, PreprocessingTensorOps.Filled(new[] { k, p }, ops.One));
         var terms = ZeroUnless(counted, engine.TensorDivide(engine.TensorMultiply(difference, difference), safeExpected));
         var scores = engine.ReduceSum(terms, new[] { 0 }, false);

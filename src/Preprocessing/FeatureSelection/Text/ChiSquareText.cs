@@ -112,11 +112,13 @@ public class ChiSquareText<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     /// </summary>
     private Tensor<T> CellTerm(Tensor<T> observed, Tensor<T> rowTotal, Tensor<T> columnTotal, T n)
     {
-        var expected = Engine.TensorDivideScalar(Engine.TensorMultiply(rowTotal, columnTotal), n);
+        // rowTotal (columnTotal / n) and difference (difference / expected): the products rowTotal columnTotal and
+        // difference^2 reach n^2, past Half's 65504 from about 256 documents, while every factor here stays below n
+        var expected = Engine.TensorMultiply(rowTotal, Engine.TensorDivideScalar(columnTotal, n));
         var positive = Engine.TensorGreaterThan(expected, NumOps.Zero);
         var safeExpected = Engine.TensorWhere(positive, expected, PreprocessingTensorOps.Filled(expected.Shape.ToArray(), NumOps.One));
         var difference = Engine.TensorSubtract(observed, expected);
-        return SelectorTensorOps.ZeroUnless(positive, Engine.TensorDivide(Engine.TensorMultiply(difference, difference), safeExpected));
+        return SelectorTensorOps.ZeroUnless(positive, Engine.TensorMultiply(difference, Engine.TensorDivide(difference, safeExpected)));
     }
 
     /// <inheritdoc />

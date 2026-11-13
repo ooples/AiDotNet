@@ -117,7 +117,7 @@ public class OnlineFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 Engine.TensorDivide(Engine.TensorMultiply(featureSums, targetSums), Engine.TensorBroadcastTo(counts, new[] { n, p }))));
 
             // Correlation estimate after every sample, 0 unless both variances are above 1e-10
-            T eps = NumOps.FromDouble(1e-10);
+            T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
             var xVar = Engine.TensorSlice(vars, new[] { 0, 0 }, new[] { n, p });
             var yVar = Engine.TensorBroadcastTo(Engine.TensorSlice(vars, new[] { 0, p }, new[] { n, 1 }), new[] { n, p });
             var usable = Engine.TensorMultiply(Engine.TensorGreaterThan(xVar, eps), Engine.TensorGreaterThan(yVar, eps));

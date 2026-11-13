@@ -89,13 +89,14 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         // Normalize features: centre and divide by the sample standard deviation plus 1e-10; centre the target
         var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var std = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(
-            SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))), NumOps.FromDouble(1e-10));
+            SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))), PreprocessingTensorOps.Tolerance<T>(1e-10));
         var x = Engine.TensorDivide(centered, Engine.Reshape(std, new[] { 1, p }));
         var y = SelectorTensorOps.CenteredColumn(target);
 
         var singletons = Enumerable.Range(0, p).ToArray();
-        T nonZero = NumOps.FromDouble(1e-10);
-        var selectionCounts = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        T nonZero = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        // (counted in int: a 0/1 sum in T stops counting at 2048 for Half)
+        var selectionCounts = new Tensor<int>(new[] { p });
         int sampleSize = (int)(n * _sampleFraction);
 
         for (int iter = 0; iter < _nIterations; iter++)
@@ -112,11 +113,12 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 Engine.TensorBroadcastTo(weights, new[] { indices.Length, p })), Engine.TensorIndexSelect(y, rows, 0), singletons);
 
             // Count selected features
-            selectionCounts = Engine.TensorAdd(selectionCounts, Engine.TensorGreaterThan(Engine.TensorAbs(beta), nonZero));
+            selectionCounts = Engine.TensorAdd(
+                selectionCounts, Engine.TensorGreaterThan(Engine.TensorAbs(beta), nonZero).Cast<int>());
         }
 
         // Compute selection probabilities
-        var probabilities = Engine.TensorDivideScalar(selectionCounts, NumOps.FromDouble(_nIterations));
+        var probabilities = Engine.TensorDivideScalar(selectionCounts.Cast<double>(), (double)_nIterations).Cast<T>();
         _selectionProbabilities = probabilities.ToVector();
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(probabilities, Math.Min(_nFeaturesToSelect, p));

@@ -69,24 +69,25 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
             return;
         }
 
-        // Time variable (0, 1, 2, ..., n-1), centred
+        // Time variable (0, 1, 2, ..., n-1), centred and divided by its norm sqrt(sum (t - mean)^2) =
+        // sqrt(n (n^2 - 1) / 12), known in closed form: that sum of squares passes Half's 65504 from n = 59
         double tMean = (n - 1) / 2.0;
-        var time = Engine.Reshape(Engine.TensorSubtractScalar(Engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(tMean)), new[] { n, 1 });
-        T tVar = Engine.TensorSumOfSquares(time);
+        double tNorm = Math.Sqrt(n * ((double)n * n - 1) / 12.0);
+        var unitTime = Engine.Reshape(Engine.TensorDivideScalar(Engine.TensorSubtractScalar(
+            Engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(tMean)), NumOps.FromDouble(tNorm)), new[] { n, 1 });
+        var unitTimeWide = Engine.TensorBroadcastTo(unitTime, new[] { n, p });
 
-        // Compute linear regression slope (trend) of every feature on time
+        // Linear regression slope (trend) of every feature on time: sum(x_c t_c) / sum(t_c^2) = projection / tNorm
         var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
-        var covariance = Engine.ReduceSum(Engine.TensorMultiply(centered, Engine.TensorBroadcastTo(time, new[] { n, p })), new[] { 0 }, false);
-        var slope = NumOps.GreaterThan(tVar, NumOps.FromDouble(1e-10))
-            ? Engine.TensorDivideScalar(covariance, tVar)
-            : PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        var projection = Engine.ReduceSum(Engine.TensorMultiply(centered, unitTimeWide), new[] { 0 }, false);
+        var slope = Engine.TensorDivideScalar(projection, NumOps.FromDouble(tNorm));
 
-        // Compute R-squared to measure trend strength
+        // Compute R-squared to measure trend strength (the fit slope t_c = projection unitTime)
         var residual = Engine.TensorSubtract(centered, Engine.TensorMultiply(
-            Engine.TensorBroadcastTo(time, new[] { n, p }), Engine.TensorBroadcastTo(Engine.Reshape(slope, new[] { 1, p }), new[] { n, p })));
+            unitTimeWide, Engine.TensorBroadcastTo(Engine.Reshape(projection, new[] { 1, p }), new[] { n, p })));
         var ssTotal = SelectorTensorOps.ColumnSumOfSquares(centered);
         var ssResidual = SelectorTensorOps.ColumnSumOfSquares(residual);
-        var fitted = Engine.TensorGreaterThan(ssTotal, NumOps.FromDouble(1e-10));
+        var fitted = Engine.TensorGreaterThan(ssTotal, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeTotal = Engine.TensorWhere(fitted, ssTotal, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var rSquared = SelectorTensorOps.ZeroUnless(fitted, PreprocessingTensorOps.OneMinus(Engine.TensorDivide(ssResidual, safeTotal)));
 

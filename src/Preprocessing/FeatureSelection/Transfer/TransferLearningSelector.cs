@@ -88,7 +88,7 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         {
             // Normalize both by their maximum (+1e-10)
             var source = Tensor<T>.FromVector(_sourceImportances);
-            T eps = NumOps.FromDouble(1e-10);
+            T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
             var normSource = Engine.TensorDivideScalar(source, NumOps.Add(Engine.TensorMaxValue(source), eps));
             var normTarget = Engine.TensorDivideScalar(targetImportances, NumOps.Add(Engine.TensorMaxValue(targetImportances), eps));
             combined = Engine.TensorAdd(

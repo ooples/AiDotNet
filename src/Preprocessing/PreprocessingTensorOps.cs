@@ -167,14 +167,12 @@ internal static class PreprocessingTensorOps
         T eps = Tolerance<T>(epsilon);
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
-        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { x.Shape[1] });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         T syy = engine.TensorSumOfSquares(yc);
         var zeros = new Tensor<T>(new[] { x.Shape[1] });
         if (!ops.GreaterThan(syy, eps))
             return zeros;
-        var r = engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)));
-        return engine.TensorWhere(engine.TensorGreaterThan(sxx, eps), r, zeros);
+        return engine.TensorWhere(engine.TensorGreaterThan(sxx, eps), CenteredCorrelations(xc, yc), zeros);
     }
 
     /// <summary>
@@ -184,16 +182,46 @@ internal static class PreprocessingTensorOps
     public static Tensor<T> CorrelationsWithDenominatorGuard<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int p = x.Shape[1];
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
-        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { p });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
-        var denom = engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, engine.TensorSumOfSquares(yc)));
+        // sqrt(sxx) sqrt(syy): the product sxx syy overflows a narrow T such as Half long before either factor does
+        var denom = engine.TensorMultiplyScalar(
+            engine.TensorSqrt(sxx), MathHelper.GetNumericOperations<T>().Sqrt(engine.TensorSumOfSquares(yc)));
         return engine.TensorWhere(
-            engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), engine.TensorDivide(sxy, denom), new Tensor<T>(new[] { p }));
+            engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), CenteredCorrelations(xc, yc), new Tensor<T>(new[] { p }));
+    }
+
+    /// <summary>
+    /// Pearson correlation of every centred column of <paramref name="xc"/> ([n, p]) with the centred
+    /// <paramref name="yc"/> ([n, 1]), as [p]. r does not change when a column is scaled, so every column (and the
+    /// target) is first divided by its largest magnitude: the sums of squares and cross products then stay at most
+    /// n and the denominator is formed as <c>sqrt(sxx) sqrt(syy)</c>, so nothing overflows a narrow T such as Half
+    /// (unscaled, the sums of squares of 100 ranks already pass Half's 65504). The caller guards degenerate columns.
+    /// </summary>
+    public static Tensor<T> CenteredCorrelations<T>(Tensor<T> xc, Tensor<T> yc)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int p = xc.Shape[1];
+        var xs = DivideColumnsByMaxMagnitude(xc);
+        var ys = DivideColumnsByMaxMagnitude(yc);
+        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xs), ys), new[] { p });
+        var xNorm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(xs), new[] { 0 }, false));
+        T yNorm = ops.Sqrt(engine.TensorSum(engine.TensorSquare(ys)));
+        return engine.TensorDivide(sxy, engine.TensorMultiplyScalar(xNorm, yNorm));
+    }
+
+    /// <summary>Every column of a 2-D tensor divided by its largest magnitude (an all-zero column is left as is).</summary>
+    private static Tensor<T> DivideColumnsByMaxMagnitude<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var scale = engine.ReduceMax(engine.TensorAbs(x), new[] { 0 }, true);
+        var safeScale = engine.TensorWhere(engine.TensorGreaterThan(scale, ops.Zero), scale, Filled(scale.Shape.ToArray(), ops.One));
+        return engine.TensorDivide(x, safeScale);
     }
 
     /// <summary>Column-wise minimum of a 2-D tensor ([n, p] to [p]).</summary>

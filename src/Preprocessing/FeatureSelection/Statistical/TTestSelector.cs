@@ -92,7 +92,7 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         var squares = Engine.TensorMatMul(Engine.TensorTranspose(membership),
             Engine.TensorSquare(Engine.TensorSubtract(x, Engine.TensorIndexSelect(means, index, 0))));
 
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var best = zeros;
         var bestP = ones;
 

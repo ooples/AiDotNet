@@ -81,7 +81,8 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         var x = Tensor<T>.FromMatrix(data);
         var y = Tensor<T>.FromVector(target);
         var maxCorr = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
-        var bestLag = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        // (lags kept as int: stored in a narrow T such as Half, a lag past 2048 rounds to a neighbouring lag)
+        var bestLag = new Tensor<int>(new[] { p });
 
         for (int lag = _minLag; lag <= maxLag; lag++)
         {
@@ -94,12 +95,11 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
                 Engine.TensorSlice(y, new[] { lag }, new[] { nValid })));
             var better = Engine.TensorGreaterThan(corr, maxCorr);
             maxCorr = Engine.TensorWhere(better, corr, maxCorr);
-            bestLag = Engine.TensorWhere(better,
-                PreprocessingTensorOps.Filled(new[] { p }, PreprocessingTensorOps.CountAsScalar<T>(lag)), bestLag);
+            bestLag = Engine.TensorWhere(better.Cast<int>(), PreprocessingTensorOps.Filled(new[] { p }, lag), bestLag);
         }
 
         _correlationScores = maxCorr.ToVector();
-        _bestLags = bestLag.Cast<int>().AsSpan().ToArray();
+        _bestLags = bestLag.AsSpan().ToArray();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(maxCorr, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }

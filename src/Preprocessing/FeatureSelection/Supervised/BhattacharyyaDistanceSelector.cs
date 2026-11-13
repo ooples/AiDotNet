@@ -78,9 +78,9 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
         var means = SelectorTensorOps.GroupMeans(membership, x, out var counts);
         var squares = Engine.TensorMatMul(Engine.TensorTranspose(membership),
             Engine.TensorSquare(Engine.TensorSubtract(x, Engine.TensorIndexSelect(means, index, 0))));
-        var divisor = Engine.TensorAddScalar(Engine.TensorSubtractScalar(counts, NumOps.One), NumOps.FromDouble(1e-10));
+        var divisor = Engine.TensorAddScalar(Engine.TensorSubtractScalar(counts, NumOps.One), PreprocessingTensorOps.Tolerance<T>(1e-10));
         var variances = Engine.TensorMax(Engine.TensorDivide(squares,
-            Engine.TensorBroadcastTo(Engine.Reshape(divisor, new[] { nClasses, 1 }), new[] { nClasses, p })), NumOps.FromDouble(1e-10));
+            Engine.TensorBroadcastTo(Engine.Reshape(divisor, new[] { nClasses, 1 }), new[] { nClasses, p })), PreprocessingTensorOps.Tolerance<T>(1e-10));
 
         // Average pairwise Bhattacharyya distance between the class Gaussians:
         // D_B = 1/4 ln(1/4 (v1 / v2 + v2 / v1 + 2)) + 1/4 (m1 - m2)^2 / (v1 + v2)

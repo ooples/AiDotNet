@@ -69,7 +69,7 @@ public class MaximalInformation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         var x = Tensor<T>.FromMatrix(data);
         var min = Engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
         var range = Engine.TensorSubtract(Engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p }), min);
-        var varying = PreprocessingTensorOps.AtLeast(range, NumOps.FromDouble(1e-10));
+        var varying = PreprocessingTensorOps.AtLeast(range, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeRange = Engine.TensorWhere(varying, range, PreprocessingTensorOps.Filled(new[] { 1, p }, NumOps.One));
         var scaled = Engine.TensorMultiplyScalar(
             Engine.TensorDivide(Engine.TensorSubtract(x, min), safeRange), NumOps.FromDouble(_nBins));

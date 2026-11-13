@@ -64,7 +64,7 @@ public class SeasonalityFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         // Centre every column and compute its population variance
         var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var variance = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
-        var varying = PreprocessingTensorOps.AtLeast(variance, NumOps.FromDouble(1e-10));
+        var varying = PreprocessingTensorOps.AtLeast(variance, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeVariance = Engine.TensorWhere(varying, variance, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
 
         // Spectral power |sum_t (x_t - mean) e^(-2 pi i t / period)|^2 / n^2 at each usable seasonal period

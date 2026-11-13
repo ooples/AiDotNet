@@ -791,4 +791,185 @@ public class FeatureSelectionSweep09bReferenceTests
             .Fit(data, target);
         Assert.Equal(wolfExpected, wolfCalls.Take(population).ToList());
     }
+
+    // Half reference tests: every statistic below overflowed Half (max 65504) or stopped counting at 2048 before the
+    // review fixes, giving NaN, 0 or a wrong value. Expected values are exact (numpy/scipy agree), compared at Half's
+    // resolution.
+    private static Matrix<Half> HalfColumn(int n, Func<int, double> value)
+    {
+        var data = new Half[n, 1];
+        for (int i = 0; i < n; i++)
+            data[i, 0] = (Half)value(i);
+        return new Matrix<Half>(data);
+    }
+
+    private static Vector<Half> HalfVector(int n, Func<int, double> value) =>
+        new Vector<Half>(Enumerable.Range(0, n).Select(i => (Half)value(i)).ToArray());
+
+    // tau of a monotone pair is 1 (scipy.stats.kendalltau). With 300 samples the pair counts reach n (n - 1) = 89700.
+    [Fact(Timeout = 120000)]
+    public async Task KendallTau_Half_MonotonePairOf300IsOne()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Statistical.KendallTauSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(300, i => i), HalfVector(300, i => 2 * i));
+
+        Assert.NotNull(selector.TauScores);
+        Assert.Equal(1.0, (double)selector.TauScores[0], 1e-3);
+    }
+
+    // |rho| of a reversed order is 1 (scipy.stats.spearmanr). The centred rank sum of squares of 100 samples is 83325.
+    [Fact(Timeout = 120000)]
+    public async Task Spearman_Half_ReversedOrderOf100IsOne()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Statistical.SpearmanCorrelationSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(100, i => i), HalfVector(100, i => 100 - i));
+
+        Assert.NotNull(selector.CorrelationScores);
+        Assert.Equal(1.0, (double)selector.CorrelationScores[0], 1e-2);
+    }
+
+    // A constant feature has no mean difference and no spread: t = 0. The 1e-10 guard is 0 in Half, so it was 0 / 0.
+    [Fact(Timeout = 120000)]
+    public async Task SupervisedTTest_Half_ConstantFeatureScoresZero()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Supervised.TTestSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(10, _ => 3.0), HalfVector(10, i => i % 2));
+
+        Assert.NotNull(selector.TStatistics);
+        Assert.Equal(0.0, (double)selector.TStatistics[0]);
+    }
+
+    // A feature equal to the target is selected in every one of 2100 runs: probability 2100 / 2100 = 1. Counted in
+    // Half the selection count stopped at 2048 (2048 / 2100 = 0.975).
+    [Fact(Timeout = 300000)]
+    public async Task RandomizedLasso_Half_CountsSelectionsPast2048()
+    {
+        await Task.CompletedTask;
+        var data = new Half[8, 1];
+        for (int i = 0; i < 8; i++)
+            data[i, 0] = (Half)(i - 3.5);
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Stability.RandomizedLassoSelector<Half>(
+            nFeaturesToSelect: 1, nIterations: 2100, alpha: 0.01, randomState: 42);
+        selector.Fit(new Matrix<Half>(data), HalfVector(8, i => i - 3.5));
+
+        Assert.NotNull(selector.SelectionProbabilities);
+        Assert.Equal(1.0, (double)selector.SelectionProbabilities[0]);
+    }
+
+    // Three classes of 100 with ranks 1-100, 101-200, 201-300: H = 12 / (300 * 301) sum R_c^2 / 100 - 3 * 301 =
+    // 265.78073089701 (scipy.stats.kruskal). R_c^2 = 25050^2 alone overflows Half.
+    [Fact(Timeout = 120000)]
+    public async Task KruskalWallis_Half_300SeparatedSamplesMatchScipy()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Supervised.KruskalWallisSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(300, i => i), HalfVector(300, i => i / 100));
+
+        Assert.NotNull(selector.HStatistics);
+        Assert.Equal(265.78073089701, (double)selector.HStatistics[0], 0.5);
+    }
+
+    // Two classes of 300 split by the feature: |U - n0 n1 / 2| / sigma = 45000 / sqrt(90000 * 601 / 12) =
+    // 21.195547832507966 (scipy.stats.mannwhitneyu normal approximation). n0 n1 = 90000 itself overflows Half.
+    [Fact(Timeout = 120000)]
+    public async Task Wilcoxon_Half_600SeparatedSamplesMatchScipy()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Supervised.WilcoxonSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(600, i => i), HalfVector(600, i => i < 300 ? 0 : 1));
+
+        Assert.NotNull(selector.TestStatistics);
+        Assert.Equal(21.195547832507966, (double)selector.TestStatistics[0], 0.05);
+    }
+
+    // A term present in exactly the 300 class-1 documents of 600: every expected cell is 300 * 300 / 600 = 150 and
+    // chi2 = 4 * 150^2 / 150 = 600 for both classes, so the prior-weighted average is 600. 300 * 300 overflows Half.
+    [Fact(Timeout = 120000)]
+    public async Task ChiSquareText_Half_600DocumentsDoNotOverflowExpectedCounts()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Text.ChiSquareText<Half>(nFeaturesToSelect: 1, binarize: true);
+        selector.Fit(HalfColumn(600, i => i < 300 ? 0 : 1), HalfVector(600, i => i < 300 ? 0 : 1));
+
+        Assert.NotNull(selector.ChiSquareScores);
+        Assert.Equal(600.0, (double)selector.ChiSquareScores[0], 1.0);
+    }
+
+    // x = 0.01 t over 200 steps: slope 0.01 and R^2 = 1, so the score is 0.01. sum (t - mean)^2 = 666650 overflows Half.
+    [Fact(Timeout = 120000)]
+    public async Task TrendFS_Half_200StepsKeepTheSlope()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.TimeSeries.TrendFS<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(200, i => 0.01 * i));
+
+        Assert.NotNull(selector.TrendScores);
+        Assert.Equal(0.01, (double)selector.TrendScores[0], 1e-3);
+    }
+
+    // x = 0.5 i and y = x +- 5 alternating over 100 samples: r = 0.9443089920761609 and the F statistic
+    // r^2 / ((1 - r^2) / 98) = 807.0565441176473 (numpy). ssXY^2 (about 4.6e8) overflowed Half and gave NaN.
+    [Fact(Timeout = 120000)]
+    public async Task RFE_Half_FStatisticDoesNotOverflow()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Wrapper.RFE<Half>(
+            nFeaturesToSelect: 1, importanceMethod: RFEImportanceMethod.FStatistic);
+        selector.Fit(HalfColumn(100, i => 0.5 * i), HalfVector(100, i => 0.5 * i + (i % 2 == 0 ? 5 : -5)));
+
+        Assert.NotNull(selector.FeatureImportances);
+        Assert.Equal(807.0565441176473, (double)selector.FeatureImportances[0], 25.0);
+    }
+
+    // A feature equal to the target has distance correlation 1 (dcor.distance_correlation). With 300 samples the
+    // sums of squares of the 90000 centred distances overflowed Half.
+    [Fact(Timeout = 120000)]
+    public async Task DistanceCorrelation_Half_300IdenticalSamplesIsOne()
+    {
+        await Task.CompletedTask;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Statistical.DistanceCorrelationSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(HalfColumn(300, i => i), HalfVector(300, i => i));
+
+        Assert.NotNull(selector.DistanceCorrelations);
+        Assert.Equal(1.0, (double)selector.DistanceCorrelations[0], 1e-2);
+    }
+
+    // y(t) = x(t - 2049) with x of period 211: among lags 2040-2060 only 2049 gives r = 1. Stored in Half the lag
+    // rounded to 2048 (Half's spacing is 2 from 2048).
+    [Fact(Timeout = 120000)]
+    public async Task LaggedCorrelation_Half_KeepsLagsPast2048()
+    {
+        await Task.CompletedTask;
+        const int n = 6200;
+        const int lag = 2049;
+        Func<int, double> pattern = t => (((t * 7919) % 211) + 211) % 211 / 211.0;
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.TimeSeries.LaggedCorrelationSelector<Half>(
+            nFeaturesToSelect: 1, minLag: 2040, maxLag: 2060);
+        selector.Fit(HalfColumn(n, pattern), HalfVector(n, t => pattern(t - lag)));
+
+        Assert.NotNull(selector.BestLags);
+        Assert.Equal(lag, selector.BestLags[0]);
+    }
+
+    // Two identical columns 0, 0.5, ..., 49.5: |r| = 1. Each sum of squares (20831.25) fits Half, their product does not.
+    [Fact(Timeout = 120000)]
+    public async Task MeanAbsPairCorrelation_Half_ProductOfSumsOfSquaresDoesNotOverflow()
+    {
+        await Task.CompletedTask;
+        var data = new Half[100, 2];
+        for (int i = 0; i < 100; i++)
+        {
+            data[i, 0] = (Half)(0.5 * i);
+            data[i, 1] = (Half)(0.5 * i);
+        }
+
+        var matrix = new Matrix<Half>(data);
+        var features = new[] { 0, 1 };
+
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.Wrapper.WrapperScoringOps.MeanAbsPairCorrelation(matrix, features), 1e-2);
+        Assert.Equal(1.0, (double)AiDotNet.Preprocessing.FeatureSelection.Wrapper.WrapperScoringOps.MeanAbsPairCorrelationWithDenominatorGuard(matrix, features), 1e-2);
+    }
 }

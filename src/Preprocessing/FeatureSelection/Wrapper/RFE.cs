@@ -212,18 +212,19 @@ public class RFE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         int k = columns.Shape[1];
         var zeros = PreprocessingTensorOps.Filled(new[] { k }, NumOps.Zero);
         int df2 = n - 2;
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var centered = FilterStatisticTensorOps.CenterColumns(columns);
         var yc = Engine.Reshape(Engine.TensorSubtractScalar(y, Engine.TensorMean(y)), new[] { n, 1 });
         T ssYY = Engine.TensorSumOfSquares(yc);
         if (df2 <= 0 || NumOps.LessThan(ssYY, epsilon))
             return zeros;
 
-        var ssXY = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(centered), yc), new[] { k });
         var ssXX = SelectorTensorOps.ColumnSumOfSquares(centered);
         var varying = PreprocessingTensorOps.AtLeast(ssXX, epsilon);
-        var safeXX = Engine.TensorWhere(varying, ssXX, PreprocessingTensorOps.Filled(new[] { k }, NumOps.One));
-        var r2 = Engine.TensorDivide(Engine.TensorMultiply(ssXY, ssXY), Engine.TensorMultiplyScalar(safeXX, ssYY));
+        // r^2 = ssXY^2 / (ssXX ssYY) from r of the max-magnitude-scaled columns: ssXY^2 and ssXX ssYY overflow a
+        // narrow T such as Half (Half's 65504 is passed by ssXY = 256)
+        var r = PreprocessingTensorOps.CenteredCorrelations(centered, yc);
+        var r2 = Engine.TensorMultiply(r, r);
         var f = Engine.TensorDivide(r2,
             Engine.TensorDivideScalar(PreprocessingTensorOps.OneMinus(r2), NumOps.FromDouble(df2)));
         return Engine.TensorWhere(varying, f, zeros);

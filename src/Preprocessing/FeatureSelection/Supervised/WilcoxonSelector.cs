@@ -73,24 +73,26 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (n0 == 0 || n1 == 0)
             throw new InvalidOperationException("Target must have both classes present.");
 
-        // Rank sum of class 1 over the average ranks of every feature
         var ranks = RankTestOps.AverageRanksWithTies(Tensor<T>.FromMatrix(data), out var tieTerm);
-        var r1 = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(positive, new[] { 1, n }), ranks), new[] { p });
 
-        // Mann-Whitney U statistic
-        var u1 = Engine.TensorSubtractScalar(r1, NumOps.FromDouble(n1 * (n1 + 1.0) / 2));
-        var u0 = Engine.TensorAddScalar(Engine.TensorNegate(u1), NumOps.FromDouble((double)n0 * n1));
-        var u = Engine.TensorMin(u1, u0);
-
-        // Standardized statistic (normal approximation) with the tie-corrected variance of scipy.stats.mannwhitneyu:
-        // sigma^2 = n0 n1 / 12 ((n + 1) - sum (t^3 - t) / (n (n - 1)))
-        double meanU = (double)n0 * n1 / 2.0;
+        // Standardized Mann-Whitney statistic |U - n0 n1 / 2| / sigma (normal approximation) with the tie-corrected
+        // variance of scipy.stats.mannwhitneyu: sigma^2 = n0 n1 / 12 ((n + 1) - sum (t^3 - t) / (n (n - 1))).
+        // The tie term is an exact count in double, so sigma is formed there and converted to T once: sigma^2 reaches
+        // n0 n1 (n + 1) / 12, past Half's 65504 from about 150 samples.
         var variance = Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(Engine.TensorNegate(
-                Engine.TensorDivideScalar(tieTerm, NumOps.FromDouble((double)n * (n - 1)))), NumOps.FromDouble(n + 1)),
-            NumOps.FromDouble((double)n0 * n1 / 12));
-        var stdU = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorMax(variance, NumOps.Zero)), NumOps.FromDouble(1e-10));
-        var scores = Engine.TensorDivide(Engine.TensorAbs(Engine.TensorSubtractScalar(u, NumOps.FromDouble(meanU))), stdU);
+            Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorDivideScalar(tieTerm, (double)n * (n - 1))), n + 1.0),
+            (double)n0 * n1 / 12);
+        var stdU = Engine.TensorAddScalar(
+            Engine.TensorSqrt(Engine.TensorMax(variance, 0.0)).Cast<T>(), PreprocessingTensorOps.Tolerance<T>(1e-10));
+
+        // U1 - n0 n1 / 2 = R1 - n1 (n + 1) / 2 = sum over class 1 of (rank - (n + 1) / 2), and U0 - n0 n1 / 2 is its
+        // negation, so |min(U0, U1) - n0 n1 / 2| is the magnitude of that sum. Each centred rank is divided by sigma
+        // before summing: the rank sum and n0 n1 themselves pass Half's 65504 (n0 n1 from 512 samples).
+        var standardized = Engine.TensorDivide(
+            Engine.TensorSubtractScalar(ranks, NumOps.FromDouble((n + 1) / 2.0)),
+            Engine.TensorBroadcastTo(Engine.Reshape(stdU, new[] { 1, p }), new[] { n, p }));
+        var scores = Engine.TensorAbs(Engine.Reshape(
+            Engine.TensorMatMul(Engine.Reshape(positive, new[] { 1, n }), standardized), new[] { p }));
         _testStatistics = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;

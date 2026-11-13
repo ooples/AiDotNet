@@ -72,7 +72,7 @@ public class MANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         var between = SelectorTensorOps.ClassScatter(
             Tensor<T>.FromMatrix(data), new Tensor<int>(classIndex, new[] { n }), k, out var within);
         var total = Engine.TensorAdd(between, within);
-        var usable = Engine.TensorGreaterThan(total, NumOps.FromDouble(1e-10));
+        var usable = Engine.TensorGreaterThan(total, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var scores = Engine.TensorWhere(usable,
             Engine.TensorDivide(within, Engine.TensorWhere(usable, total, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))),
             PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));

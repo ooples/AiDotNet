@@ -89,7 +89,7 @@ public class TwoWayANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
             // F-statistics (combine main effects), 0 where the error mean square is not above 1e-10
             var msWithin = Engine.TensorDivideScalar(ssWithin, NumOps.FromDouble(dfWithin));
-            var usable = Engine.TensorGreaterThan(msWithin, NumOps.FromDouble(1e-10));
+            var usable = Engine.TensorGreaterThan(msWithin, PreprocessingTensorOps.Tolerance<T>(1e-10));
             var safeMsWithin = Engine.TensorWhere(usable, msWithin, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
             var f1Stat = Engine.TensorDivide(Engine.TensorDivideScalar(ss1, NumOps.FromDouble(df1)), safeMsWithin);
             var f2Stat = Engine.TensorDivide(Engine.TensorDivideScalar(ss2, NumOps.FromDouble(df2)), safeMsWithin);

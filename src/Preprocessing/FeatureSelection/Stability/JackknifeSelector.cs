@@ -98,7 +98,7 @@ public class JackknifeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
 
         // Select features with high mean importance and low variance (stable): mean / (std + 1e-6)
         var stabilityScores = Engine.TensorDivide(mean,
-            Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(1e-6)));
+            Engine.TensorAddScalar(Engine.TensorSqrt(variance), PreprocessingTensorOps.Tolerance<T>(1e-6)));
 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(stabilityScores, Math.Min(_nFeaturesToSelect, p));
 

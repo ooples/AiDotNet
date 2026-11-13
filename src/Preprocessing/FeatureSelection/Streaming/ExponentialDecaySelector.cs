@@ -113,7 +113,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _effectiveN = decayN * _effectiveN + (1 - decayN) / (1 - _decayFactor);
 
         // Compute correlation scores, 0 unless both variances are above 1e-10
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var xVar = Engine.Reshape(Engine.TensorSlice(ewmaVars, new[] { 0, 0 }, new[] { 1, p }), new[] { p });
         T yVar = Engine.TensorSlice(ewmaVars, new[] { 0, p }, new[] { 1, 1 }).GetFlat(0);
         var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);

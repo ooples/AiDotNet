@@ -104,7 +104,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             if (dfUnrestricted > 0)
             {
                 var rss = Engine.TensorConcatenate(rssUnrestricted, 0);
-                var usable = Engine.TensorGreaterThan(rss, NumOps.FromDouble(1e-10));
+                var usable = Engine.TensorGreaterThan(rss, PreprocessingTensorOps.Tolerance<T>(1e-10));
                 var safeRss = Engine.TensorWhere(usable, rss, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
                 var numerator = Engine.TensorDivideScalar(
                     Engine.TensorAddScalar(Engine.TensorNegate(rss), rssRestricted), NumOps.FromDouble(_maxLag));
@@ -142,7 +142,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     {
         var (u, s, _) = LinalgDispatch<T>.Svd(design, false);
         var kept = Engine.TensorGreaterThan(s,
-            NumOps.Multiply(Engine.TensorMaxValue(s), NumOps.FromDouble(1e-10)));
+            NumOps.Multiply(Engine.TensorMaxValue(s), PreprocessingTensorOps.Tolerance<T>(1e-10)));
         var projections = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(u), y), new[] { s.Length });
         T explained = Engine.TensorSum(Engine.TensorMultiply(kept, Engine.TensorMultiply(projections, projections)));
         T rss = NumOps.Subtract(Engine.TensorSumOfSquares(y), explained);

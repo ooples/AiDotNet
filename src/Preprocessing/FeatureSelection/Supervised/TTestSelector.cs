@@ -102,7 +102,7 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
                 Engine.TensorDivideScalar(ss1, NumOps.FromDouble((double)(n1 - 1) * n1))));
         }
 
-        var scores = Engine.TensorAbs(Engine.TensorDivide(meanDifference, Engine.TensorAddScalar(se, NumOps.FromDouble(1e-10))));
+        var scores = Engine.TensorAbs(Engine.TensorDivide(meanDifference, Engine.TensorAddScalar(se, PreprocessingTensorOps.Tolerance<T>(1e-10))));
         _tStatistics = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;

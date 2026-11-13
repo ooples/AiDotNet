@@ -82,7 +82,7 @@ public class PointBiserialSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var meanDifference = Engine.TensorSubtract(
             PreprocessingTensorOps.RowVector(groupMeans, 1), PreprocessingTensorOps.RowVector(groupMeans, 0));
         var std = Engine.TensorAddScalar(
-            Engine.TensorSqrt(SelectorTensorOps.ColumnVariance(x)), NumOps.FromDouble(1e-10));
+            Engine.TensorSqrt(SelectorTensorOps.ColumnVariance(x)), PreprocessingTensorOps.Tolerance<T>(1e-10));
         T share = NumOps.FromDouble(Math.Sqrt((double)n0 * n1 / ((double)n * n)));
         var scores = Engine.TensorAbs(Engine.TensorMultiplyScalar(Engine.TensorDivide(meanDifference, std), share));
         _correlationScores = scores.ToVector();

@@ -66,36 +66,56 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
 
-        // Szekely et al. (2007): dCor = sqrt(dCov^2 / sqrt(dVar_x^2 dVar_y^2)) from double-centred distance matrices
+        // Szekely et al. (2007): dCor = sqrt(dCov^2 / sqrt(dVar_x^2 dVar_y^2)) from double-centred distance matrices.
+        // dCor does not change when either matrix is scaled, so each is divided by its largest magnitude and the
+        // averages are taken as row means then their mean: the n^2-term sums of squares and their product overflow
+        // a narrow T such as Half (300 samples already pass 65504), while every term here stays at most 1.
         var x = Tensor<T>.FromMatrix(data);
-        var dy = ComputeCenteredDistanceMatrix(Tensor<T>.FromVector(target));
-        T count = NumOps.FromDouble((double)n * n);
-        T dVarBSq = NumOps.Divide(Engine.TensorSumOfSquares(dy), count);
+        var dy = ScaledCenteredDistanceMatrix(Tensor<T>.FromVector(target), out T yScale);
+        T dVarBSqScaled = TotalMean(Engine.TensorMultiply(dy, dy)).GetFlat(0);
+        T dVarBSq = NumOps.Multiply(NumOps.Multiply(dVarBSqScaled, yScale), yScale);
 
-        var crossSums = new Tensor<T>[p];
-        var squareSums = new Tensor<T>[p];
+        var crossMeans = new Tensor<T>[p];
+        var squareMeans = new Tensor<T>[p];
+        var scales = new T[p];
         for (int j = 0; j < p; j++)
         {
-            var dx = ComputeCenteredDistanceMatrix(Engine.TensorSliceAxis(x, 1, j));
-            crossSums[j] = TotalSum(Engine.TensorMultiply(dx, dy));
-            squareSums[j] = TotalSum(Engine.TensorMultiply(dx, dx));
+            var dx = ScaledCenteredDistanceMatrix(Engine.TensorSliceAxis(x, 1, j), out scales[j]);
+            crossMeans[j] = TotalMean(Engine.TensorMultiply(dx, dy));
+            squareMeans[j] = TotalMean(Engine.TensorMultiply(dx, dx));
         }
 
         var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         if (p > 0 && !NumOps.LessThan(dVarBSq, eps))
         {
-            var dCovSq = Engine.TensorDivideScalar(Engine.TensorConcatenate(crossSums, 0), count);
-            var dVarASq = Engine.TensorDivideScalar(Engine.TensorConcatenate(squareSums, 0), count);
-            var dCor = Engine.TensorSqrt(Engine.TensorDivide(dCovSq,
-                Engine.TensorSqrt(Engine.TensorMultiplyScalar(dVarASq, dVarBSq))));
-            scores = SelectorTensorOps.ZeroUnless(PreprocessingTensorOps.AtLeast(dVarASq, eps), dCor);
+            var dCovSq = Engine.TensorConcatenate(crossMeans, 0);
+            var dVarASq = Engine.TensorConcatenate(squareMeans, 0);
+            var dCor = Engine.TensorSqrt(Engine.TensorDivide(dCovSq, Engine.TensorMultiplyScalar(
+                Engine.TensorSqrt(dVarASq), NumOps.Sqrt(dVarBSqScaled))));
+
+            // The guard compares the unscaled dVar_x^2 (an overflow to infinity still compares as above eps)
+            var scale = new Tensor<T>(scales, new[] { p });
+            var unscaledVarA = Engine.TensorMultiply(Engine.TensorMultiply(dVarASq, scale), scale);
+            scores = SelectorTensorOps.ZeroUnless(PreprocessingTensorOps.AtLeast(unscaledVarA, eps), dCor);
         }
 
         _distanceCorrelations = scores.ToVector();
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The double-centred distance matrix divided by its largest magnitude <paramref name="scale"/> (1 when it is all
+    /// zero), as [n, n].
+    /// </summary>
+    private Tensor<T> ScaledCenteredDistanceMatrix(Tensor<T> values, out T scale)
+    {
+        var centered = ComputeCenteredDistanceMatrix(values);
+        T largest = Engine.TensorMaxValue(Engine.TensorAbs(centered));
+        scale = NumOps.GreaterThan(largest, NumOps.Zero) ? largest : NumOps.One;
+        return Engine.TensorDivideScalar(centered, scale);
     }
 
     /// <summary>The double-centred pairwise distance matrix <c>|v_i - v_k|</c> of a 1-D tensor, as [n, n].</summary>
@@ -112,9 +132,9 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             Engine.TensorSubtract(Engine.TensorSubtract(distances, rowMeans), colMeans), Engine.TensorMean(distances));
     }
 
-    /// <summary>The sum of every element of a tensor, as a [1] tensor.</summary>
-    private Tensor<T> TotalSum(Tensor<T> values) =>
-        Engine.ReduceSum(Engine.Reshape(values, new[] { 1, values.Length }), new[] { 1 }, false);
+    /// <summary>The mean of every element of an [n, n] tensor (the mean of its row means), as a [1] tensor.</summary>
+    private Tensor<T> TotalMean(Tensor<T> values) =>
+        Engine.ReduceMean(Engine.ReduceMean(values, new[] { 1 }, false), new[] { 0 }, true);
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
