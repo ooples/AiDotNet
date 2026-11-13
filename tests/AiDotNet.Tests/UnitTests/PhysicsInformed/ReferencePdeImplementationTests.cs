@@ -39,6 +39,19 @@ public class ReferencePdeImplementationTests
         return d;
     }
 
+    /// <summary>The same derivatives for a batch of one point: [1, out, in] and [1, out, in, in].</summary>
+    private static PDEDerivatives<double> BatchedDerivatives(double dudt, double d2udx2)
+    {
+        var d = Derivatives(dudt, d2udx2);
+        return new PDEDerivatives<double>
+        {
+            FirstDerivatives = d.FirstDerivatives?.Reshape(new[] { 1, 1, 2 }),
+            SecondDerivatives = d.SecondDerivatives?.Reshape(new[] { 1, 1, 2, 2 })
+        };
+    }
+
+    private static Tensor<double> Row(params double[] values) => new Tensor<double>(values, new[] { 1, values.Length });
+
     // ── The multi-scale equation ──────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -60,12 +73,12 @@ public class ReferencePdeImplementationTests
     public void TheTwoScalesUseDifferentDiffusivities()
     {
         var pde = new MultiScaleReactionDiffusion<double>(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
-        var derivatives = Derivatives(dudt: 2.0, d2udx2: 3.0);
+        var inputs = Row(0.5, 0.1);
+        var outputs = Row(1.0);
+        var derivatives = BatchedDerivatives(dudt: 2.0, d2udx2: 3.0);
 
-        double coarse = pde.ComputeScaleResidual(0, inputs, outputs, derivatives);
-        double fine = pde.ComputeScaleResidual(1, inputs, outputs, derivatives);
+        double coarse = pde.ComputeScaleResidual(0, inputs, outputs, derivatives).ToArray()[0];
+        double fine = pde.ComputeScaleResidual(1, inputs, outputs, derivatives).ToArray()[0];
 
         // ∂u/∂t − k ∂²u/∂x²  =  2 − k·3
         Assert.Equal(2.0 - 1.0 * 3.0, coarse, 10);
@@ -82,9 +95,10 @@ public class ReferencePdeImplementationTests
         var derivatives = Derivatives(dudt: 2.0, d2udx2: 3.0);
 
         double combined = pde.ComputeResidual(inputs, outputs, derivatives);
+        var batched = BatchedDerivatives(dudt: 2.0, d2udx2: 3.0);
         double expected =
-            pde.ComputeScaleResidual(0, inputs.ToArray(), outputs.ToArray(), derivatives)
-            + pde.ComputeScaleResidual(1, inputs.ToArray(), outputs.ToArray(), derivatives);
+            pde.ComputeScaleResidual(0, Row(inputs.ToArray()), Row(outputs.ToArray()), batched).ToArray()[0]
+            + pde.ComputeScaleResidual(1, Row(inputs.ToArray()), Row(outputs.ToArray()), batched).ToArray()[0];
 
         Assert.Equal(expected, combined, 10);
     }
@@ -108,12 +122,12 @@ public class ReferencePdeImplementationTests
     public void TheCouplingIsZeroWhenTheScalesAgree()
     {
         var pde = new MultiScaleReactionDiffusion<double>();
-        var derivatives = Derivatives(0.0, 0.0);
+        var derivatives = BatchedDerivatives(0.0, 0.0);
 
         double agreeing = pde.ComputeScaleCoupling(
-            0, 1, [0.5, 0.1], [1.0], [1.0], derivatives, derivatives);
+            0, 1, Row(0.5, 0.1), Row(1.0), Row(1.0), derivatives, derivatives).ToArray()[0];
         double disagreeing = pde.ComputeScaleCoupling(
-            0, 1, [0.5, 0.1], [1.0], [0.4], derivatives, derivatives);
+            0, 1, Row(0.5, 0.1), Row(1.0), Row(0.4), derivatives, derivatives).ToArray()[0];
 
         Assert.Equal(0.0, agreeing, 10);
         Assert.True(disagreeing > 0);
