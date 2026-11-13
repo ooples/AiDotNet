@@ -55,18 +55,22 @@ internal sealed class Mask2FormerPrediction<T>
 /// <summary>The widths of kMaX-DeepLab's transformer decoder.</summary>
 internal readonly struct KMaXDecoderShape
 {
-    /// <param name="pixelDim">Width of the pixel features and of the cluster mask kernels (128 in the reference).</param>
+    /// <param name="pixelDim">Width of the pixel features and of the cluster mask kernels
+    /// (<c>pixel_space_head.output_channels</c>, 128 in the reference).</param>
     /// <param name="queryDim">Width of the cluster centers (in_channel_query, 256).</param>
     /// <param name="heads">Self-attention heads (8).</param>
     /// <param name="feedForwardDim">Hidden width of the centers' FFN (2048).</param>
     /// <param name="classes">Class-head outputs, the classes plus void.</param>
-    internal KMaXDecoderShape(int pixelDim, int queryDim, int heads, int feedForwardDim, int classes)
+    /// <param name="pixelHeadDim">Width of the pixel-space head's 1x1 convolution after its 5x5 depthwise convolution
+    /// (<c>pixel_space_head.head_channels</c>, 256).</param>
+    internal KMaXDecoderShape(int pixelDim, int queryDim, int heads, int feedForwardDim, int classes, int pixelHeadDim)
     {
         PixelDim = pixelDim;
         QueryDim = queryDim;
         Heads = heads;
         FeedForwardDim = feedForwardDim;
         Classes = classes;
+        PixelHeadDim = pixelHeadDim;
     }
 
     internal int PixelDim { get; }
@@ -74,6 +78,7 @@ internal readonly struct KMaXDecoderShape
     internal int Heads { get; }
     internal int FeedForwardDim { get; }
     internal int Classes { get; }
+    internal int PixelHeadDim { get; }
 
     /// <summary>Key width: base_filters * key_expansion = 128 * 1, half the 256-wide bottleneck.</summary>
     internal int KeyDim => QueryDim / 2;
@@ -106,14 +111,25 @@ internal readonly struct KMaXDecoderShape
 /// <para>
 /// After the last stage the class and mask embedding projections (<c>GELU(BN(W C))</c>) feed a final predictor on
 /// the finest pixel features. Every stage's prediction is returned so the loss can supervise each one (deep
-/// supervision). The reference's pixel-space head runs a 5x5 depth-wise and a 1x1 convolution before the key
-/// projection; this decoder keeps the key projection only.
+/// supervision).
+/// </para>
+/// <para>
+/// Each predictor's pixel-space head is deeplab2's <c>PanopticDeepLabSingleHead</c> with a depthwise-separable
+/// convolution (the PyTorch port's <c>_pixel_space_head_conv0bnact</c>, <c>_pixel_space_head_conv1bnact</c> and
+/// <c>_pixel_space_head_last_convbn</c>): a bias-free 5x5 depthwise convolution, BN and GELU on the predictor's input,
+/// a bias-free 1x1 convolution to <see cref="KMaXDecoderShape.PixelHeadDim"/> (256), BN and GELU, then the biased 1x1
+/// key projection to <see cref="KMaXDecoderShape.PixelDim"/> (128) and BN (<c>pixel_space_feature_batch_norm</c>),
+/// L2-normalized.
 /// </para>
 /// </remarks>
 internal static class KMaXTransformerDecoder
 {
-    /// <summary>Layers of one predictor: key projection + BN, mask kernel + BN, cluster-logit BN, class head.</summary>
-    internal const int PredictorLayerCount = 6;
+    /// <summary>Layers of one predictor: the pixel-space head (5x5 depthwise + BN, 1x1 + BN, key projection + BN),
+    /// mask kernel + BN, cluster-logit BN, class head.</summary>
+    internal const int PredictorLayerCount = 10;
+
+    /// <summary>Kernel of the pixel-space head's depthwise convolution (5, deeplab2's PanopticDeepLabSingleHead).</summary>
+    internal const int PixelHeadKernel = 5;
 
     /// <summary>Layers of one decoder stage.</summary>
     internal const int StageLayerCount = 19 + PredictorLayerCount;
@@ -137,7 +153,7 @@ internal static class KMaXTransformerDecoder
             yield return Linear<T>(shape.QueryDim); yield return Norm<T>();           // pixel bottleneck projection
             yield return Linear<T>(shape.QueryDim); yield return Norm<T>();           // query projection
             yield return Linear<T>(shape.ValueDim); yield return Norm<T>();           // value projection
-            foreach (var layer in CreatePredictorLayers<T>(shape)) yield return layer; // key projection, mask kernel, class head
+            foreach (var layer in CreatePredictorLayers<T>(shape, shape.QueryDim)) yield return layer; // pixel head, mask kernel, class head
             yield return Norm<T>();                                                   // retrieved k-means value
             yield return Linear<T>(shape.QueryDim); yield return ZeroNorm<T>();       // k-means output projection
             yield return Linear<T>(2 * shape.KeyDim + shape.ValueDim); yield return Norm<T>(); // fused Q/K/V
@@ -150,11 +166,20 @@ internal static class KMaXTransformerDecoder
 
         yield return Linear<T>(shape.QueryDim); yield return Norm<T>();               // class embedding projection
         yield return Linear<T>(shape.QueryDim); yield return Norm<T>();               // mask embedding projection
-        foreach (var layer in CreatePredictorLayers<T>(shape)) yield return layer;
+        foreach (var layer in CreatePredictorLayers<T>(shape, shape.PixelDim)) yield return layer;
     }
 
-    private static IEnumerable<ILayer<T>> CreatePredictorLayers<T>(KMaXDecoderShape shape)
+    /// <param name="shape">The decoder widths.</param>
+    /// <param name="inputChannels">Width of the pixel features the predictor reads: a stage's bottleneck
+    /// (<see cref="KMaXDecoderShape.QueryDim"/>) or the finest pixel-decoder features.</param>
+    internal static IEnumerable<ILayer<T>> CreatePredictorLayers<T>(KMaXDecoderShape shape, int inputChannels)
     {
+        yield return ConvolutionalLayer<T>.WithInputDepth(inputChannels, inputChannels, PixelHeadKernel, 1, PixelHeadKernel / 2,
+            groups: inputChannels, biasMode: BiasMode.Never);                       // 5x5 depthwise convolution
+        yield return Norm<T>();
+        yield return ConvolutionalLayer<T>.WithInputDepth(inputChannels, shape.PixelHeadDim, 1, 1, 0,
+            biasMode: BiasMode.Never);                                              // 1x1 convolution to the head width
+        yield return Norm<T>();
         yield return new DenseLayer<T>(shape.PixelDim); yield return Norm<T>();      // pixel key projection (bias, as the reference)
         yield return Linear<T>(shape.PixelDim); yield return Norm<T>();              // mask kernel (query) projection
         var maskNorm = new BatchNormalizationLayer<T>(1);
@@ -239,22 +264,23 @@ internal static class KMaXTransformerDecoder
 
         // k-means cross-attention: cluster-wise argmax of the cluster logits, then the assigned values summed into
         // each cluster center.
+        int p = start + 6 + PredictorLayerCount;
         var assignment = HardAssignment(prediction.MaskLogits);                                             // [B, N, hw]
-        var update = Rows(layers[start + 12], engine.TensorMatMul(assignment, pixelValue));                 // [B, N, Dv]
-        update = ProjectNorm(layers[start + 13], layers[start + 14], update);
+        var update = Rows(layers[p], engine.TensorMatMul(assignment, pixelValue));                          // [B, N, Dv]
+        update = ProjectNorm(layers[p + 1], layers[p + 2], update);
         centers = engine.TensorAdd(centers, update);
 
         // Self-attention among the cluster centers, on the query projection taken before the k-means update.
-        var qkv = ProjectNorm(layers[start + 15], layers[start + 16], querySpace);                          // [B, N, 2Dk + Dv]
+        var qkv = ProjectNorm(layers[p + 3], layers[p + 4], querySpace);                                    // [B, N, 2Dk + Dv]
         var query = engine.TensorNarrow(qkv, 2, 0, shape.KeyDim);
         var key = engine.TensorNarrow(qkv, 2, shape.KeyDim, shape.KeyDim);
         var value = engine.TensorNarrow(qkv, 2, 2 * shape.KeyDim, shape.ValueDim);
-        var attended = SelfAttention(query, key, value, shape.Heads, layers[start + 17], layers[start + 18]);
-        centers = engine.TensorGELU(engine.TensorAdd(centers, ProjectNorm(layers[start + 19], layers[start + 20], attended)));
+        var attended = SelfAttention(query, key, value, shape.Heads, layers[p + 5], layers[p + 6]);
+        centers = engine.TensorGELU(engine.TensorAdd(centers, ProjectNorm(layers[p + 7], layers[p + 8], attended)));
 
         // FFN.
-        var hidden = engine.TensorGELU(ProjectNorm(layers[start + 21], layers[start + 22], centers));
-        centers = engine.TensorGELU(engine.TensorAdd(centers, ProjectNorm(layers[start + 23], layers[start + 24], hidden)));
+        var hidden = engine.TensorGELU(ProjectNorm(layers[p + 9], layers[p + 10], centers));
+        centers = engine.TensorGELU(engine.TensorAdd(centers, ProjectNorm(layers[p + 11], layers[p + 12], hidden)));
         return (centers, prediction);
     }
 
@@ -270,19 +296,27 @@ internal static class KMaXTransformerDecoder
         return engine.TensorPermute(engine.TensorOneHot<T>(engine.TensorArgMax(detached, 1), n), new[] { 0, 2, 1 });
     }
 
-    /// <summary>kMaXPredictor: class logits from the class embeddings, cluster logits on the normalized pixel keys.</summary>
-    private static KMaXPrediction<T> Predict<T>(
+    /// <summary>
+    /// kMaXPredictor: class logits from the class embeddings, cluster logits on the normalized pixel keys of the
+    /// pixel-space head (5x5 depthwise conv, BN, GELU; 1x1 conv, BN, GELU; biased 1x1 key projection, BN; L2 norm).
+    /// </summary>
+    internal static KMaXPrediction<T> Predict<T>(
         IReadOnlyList<ILayer<T>> layers, int start, Tensor<T> classEmbeddings, Tensor<T> maskEmbeddings,
         Tensor<T> pixels, int height, int width)
     {
         var engine = AiDotNetEngine.Current;
-        int b = pixels.Shape[0], hw = pixels.Shape[1], n = maskEmbeddings.Shape[1];
-        var key = MaskClassificationOps.NormalizeAxis(ProjectNorm(layers[start], layers[start + 1], pixels), 2); // [B, hw, Dp]
+        int b = pixels.Shape[0], hw = pixels.Shape[1], c = pixels.Shape[2], n = maskEmbeddings.Shape[1];
+        if (hw != height * width) throw new ArgumentException("The pixel features do not match the given size.", nameof(pixels));
+        var spatial = engine.Reshape(engine.TensorPermute(pixels, new[] { 0, 2, 1 }), new[] { b, c, height, width });
+        spatial = engine.TensorGELU(layers[start + 1].Forward(layers[start].Forward(spatial)));               // 5x5 depthwise
+        spatial = engine.TensorGELU(layers[start + 3].Forward(layers[start + 2].Forward(spatial)));           // 1x1 to the head width
+        var head = engine.TensorPermute(engine.Reshape(spatial, new[] { b, spatial.Shape[1], hw }), new[] { 0, 2, 1 }); // [B, hw, Dh]
+        var key = MaskClassificationOps.NormalizeAxis(ProjectNorm(layers[start + 4], layers[start + 5], head), 2); // [B, hw, Dp]
         var keyT = engine.TensorPermute(key, new[] { 0, 2, 1 });                                                // [B, Dp, hw]
-        var kernel = ProjectNorm(layers[start + 2], layers[start + 3], maskEmbeddings);                          // [B, N, Dp]
+        var kernel = ProjectNorm(layers[start + 6], layers[start + 7], maskEmbeddings);                          // [B, N, Dp]
         var logits = engine.TensorMatMul(kernel, keyT);                                                          // [B, N, hw]
-        logits = engine.Reshape(layers[start + 4].Forward(engine.Reshape(logits, new[] { b * n * hw, 1 })), new[] { b, n, hw });
-        var classLogits = Rows(layers[start + 5], classEmbeddings);
+        logits = engine.Reshape(layers[start + 8].Forward(engine.Reshape(logits, new[] { b * n * hw, 1 })), new[] { b, n, hw });
+        var classLogits = Rows(layers[start + 9], classEmbeddings);
         return new KMaXPrediction<T>(classLogits, logits, keyT, height, width);
     }
 

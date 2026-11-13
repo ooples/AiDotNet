@@ -250,6 +250,36 @@ internal static class MaskSetPredictionLoss
         => KMaX(classLogits, maskLogits, segments, KMaXLossSettings.Default);
 
     /// <summary>
+    /// kMaX-DeepLab's Hungarian matching of every image, maximizing <c>p(c) * Dice</c> (no gradient). Yu et al. 2022,
+    /// Sec. 4.1: "Hungarian matching result based on the final prediction is used to assign supervisions for all
+    /// auxiliary outputs"; deeplab2's <c>MaXDeepLabLoss.call</c> (model/loss/max_deeplab_loss.py L930-L1020 at
+    /// 64bc1c1a) matches on the main output once and permutes every auxiliary output with that permutation.
+    /// </summary>
+    /// <param name="classLogits">Class logits <c>[B, N, K + 1]</c> of the final prediction.</param>
+    /// <param name="maskLogits">Cluster logits <c>[B, N, HW]</c> of the final prediction.</param>
+    /// <param name="segments">Each image's ground-truth segments.</param>
+    internal static (int[] Segment, int[] Prediction)[] KMaXMatching<T>(
+        Tensor<T> classLogits, Tensor<T> maskLogits, IReadOnlyList<Segments<T>> segments)
+    {
+        if (classLogits is null) throw new ArgumentNullException(nameof(classLogits));
+        if (maskLogits is null) throw new ArgumentNullException(nameof(maskLogits));
+        if (segments is null) throw new ArgumentNullException(nameof(segments));
+        var engine = AiDotNetEngine.Current;
+        int b = classLogits.Shape[0], n = classLogits.Shape[1], c = classLogits.Shape[2], hw = maskLogits.Shape[2];
+        if (segments.Count != b) throw new ArgumentException("Give one segment set per image.", nameof(segments));
+        var matchings = new (int[] Segment, int[] Prediction)[b];
+        for (int i = 0; i < b; i++)
+        {
+            var cls = engine.Reshape(engine.TensorSlice(classLogits, new[] { i, 0, 0 }, new[] { 1, n, c }), new[] { n, c });
+            var logits = engine.Reshape(engine.TensorSlice(maskLogits, new[] { i, 0, 0 }, new[] { 1, n, hw }), new[] { n, hw });
+            var segment = segments[i];
+            matchings[i] = MatchWithoutGradient(() => engine.TensorNegate(KMaXSimilarity(cls, logits, segment)));
+        }
+
+        return matchings;
+    }
+
+    /// <summary>
     /// kMaX-DeepLab's loss over a batch: <c>w_PQ * L_PQ + w_ID * L_maskID</c>, where
     /// <c>L_PQ = alpha * L_pos + (1 - alpha) * L_neg</c>,
     /// <c>L_pos = mean_i [ -sg(p_i) * Dice_i - sg(Dice_i) * log p_i ]</c> over the matched segments and
@@ -259,14 +289,19 @@ internal static class MaskSetPredictionLoss
     /// <param name="maskLogits">Cluster logits <c>[B, N, HW]</c> (softmax over N gives the masks).</param>
     /// <param name="segments">Each image's ground-truth segments.</param>
     /// <param name="settings">The loss weights (paper: 3.0, 0.3, alpha = 0.75).</param>
+    /// <param name="matchings">Each image's (segment, cluster) assignment, from <see cref="KMaXMatching"/> on the final
+    /// prediction; when null, this prediction is matched on its own.</param>
     internal static Tensor<T> KMaX<T>(
-        Tensor<T> classLogits, Tensor<T> maskLogits, IReadOnlyList<Segments<T>> segments, KMaXLossSettings settings)
+        Tensor<T> classLogits, Tensor<T> maskLogits, IReadOnlyList<Segments<T>> segments, KMaXLossSettings settings,
+        IReadOnlyList<(int[] Segment, int[] Prediction)>? matchings = null)
     {
         if (settings is null) throw new ArgumentNullException(nameof(settings));
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int b = classLogits.Shape[0], n = classLogits.Shape[1], c = classLogits.Shape[2], hw = maskLogits.Shape[2];
         if (segments.Count != b) throw new ArgumentException("Give one segment set per image.", nameof(segments));
+        var assignments = matchings ?? KMaXMatching(classLogits, maskLogits, segments);
+        if (assignments.Count != b) throw new ArgumentException("Give one matching per image.", nameof(matchings));
 
         Tensor<T>? total = null;
         var allVoidWeight = ops.FromDouble(settings.PanopticQualityWeight * (1 - settings.PositiveWeight) / n);
@@ -278,8 +313,9 @@ internal static class MaskSetPredictionLoss
         {
             var cls = engine.Reshape(engine.TensorSlice(classLogits, new[] { i, 0, 0 }, new[] { 1, n, c }), new[] { n, c });
             var logits = engine.Reshape(engine.TensorSlice(maskLogits, new[] { i, 0, 0 }, new[] { 1, n, hw }), new[] { n, hw });
-            var (segment, prediction) = MatchWithoutGradient(
-                () => engine.TensorNegate(KMaXSimilarity(cls, logits, segments[i])));
+            var (segment, prediction) = assignments[i];
+            if (segment.Length != prediction.Length || prediction.Any(q => q < 0 || q >= n))
+                throw new ArgumentException($"The matching of image {i} does not fit {n} clusters.", nameof(matchings));
             var logProbability = engine.TensorLogSoftmax(cls, 1);
             Tensor<T> imageLoss;
             if (segment.Length == 0)
@@ -525,24 +561,54 @@ internal static class MaskSetPredictionLoss
 }
 
 /// <summary>
-/// The weights and sampling of kMaX-DeepLab's training loss (Yu et al. 2022, following MaX-DeepLab, Wang et al.
-/// 2021). The defaults are the reference's: PQ-style loss 3.0 with alpha 0.75, mask-ID cross-entropy 0.3, pixel-wise
-/// instance discrimination 1.0 (temperature 0.3; 4096 pixels sampled at sampling temperature 1.5) and the auxiliary
-/// semantic loss 1.0 (4096 pixels at sampling temperature 2.0).
+/// The weights and sampling of kMaX-DeepLab's training loss (Yu et al., "k-means Mask Transformer", ECCV 2022,
+/// following MaX-DeepLab, Wang et al. 2021). The defaults are the reference's: PQ-style loss 3.0 with alpha 0.75,
+/// mask-ID cross-entropy 0.3, pixel-wise instance discrimination 1.0 (temperature 0.3; 4096 pixels sampled at sampling
+/// temperature 1.5) and the auxiliary semantic loss 1.0 (4096 pixels at sampling temperature 2.0).
 /// </summary>
+/// <remarks>
+/// <para>Sources, checked against google-research/deeplab2 at commit 64bc1c1a, bytedance/kmax-deeplab (the authors'
+/// PyTorch port) at f8e1d046 and arXiv 2207.04044v5:</para>
+/// <list type="bullet">
+/// <item>Loss weights 3.0 / 1.0 / 0.3 / 1.0 (PQ-style, semantic, mask-ID, instance discrimination): the paper, Sec. 4.1
+/// "COCO dataset"; deeplab2 configs/coco/kmax_deeplab/kmax_meta_r50_os32.textproto L70 (semantic_loss weight 1.0),
+/// L73 (pq_style_loss 3.0), L76 (mask_id_cross_entropy_loss 0.3), L79 (instance_discrimination_loss 1.0); PyTorch
+/// port kmax_deeplab/config.py L39-L43.</item>
+/// <item>alpha 0.75: deeplab2 model/loss/max_deeplab_loss.py L211 (focal_loss_alpha=0.75).</item>
+/// <item>Instance discrimination temperature 0.3: deeplab2 model/loss/max_deeplab_loss.py L214
+/// (instance_discrimination_temperature=0.3, not overridden by model/loss/loss_builder.py L171-L179); PyTorch port
+/// kmax_deeplab/modeling/criterion.py L294.</item>
+/// <item>Instance discrimination sampling 4096 pixels at temperature 1.5: kmax_meta_r50_os32.textproto L57-L58
+/// (instance_discrimination_sample_k, instance_discrimination_sample_temperature); PyTorch port config.py L46-L47.</item>
+/// <item>Semantic sampling 4096 pixels at temperature 2.0: kmax_meta_r50_os32.textproto L59-L60 (semantic_sample_k,
+/// semantic_sample_temperature); PyTorch port config.py L48-L49 and criterion.py L230. (deeplab2's loss_builder.py does
+/// not forward these two fields to MaXDeepLabLoss, which then falls back to the full-image semantic loss; the config
+/// and the authors' port both sample.)</item>
+/// </list>
+/// </remarks>
 internal sealed class KMaXLossSettings
 {
     /// <summary>The paper's weights.</summary>
     internal static readonly KMaXLossSettings Default = new KMaXLossSettings();
 
+    /// <summary>3.0: kmax_meta_r50_os32.textproto L73.</summary>
     internal double PanopticQualityWeight { get; init; } = MaskSetPredictionLoss.KMaXPanopticQualityWeight;
+    /// <summary>0.75: max_deeplab_loss.py L211.</summary>
     internal double PositiveWeight { get; init; } = MaskSetPredictionLoss.KMaXPositiveWeight;
+    /// <summary>0.3: kmax_meta_r50_os32.textproto L76.</summary>
     internal double MaskIdWeight { get; init; } = MaskSetPredictionLoss.KMaXMaskIdWeight;
+    /// <summary>1.0: kmax_meta_r50_os32.textproto L79.</summary>
     internal double InstanceDiscriminationWeight { get; init; } = 1.0;
+    /// <summary>0.3: max_deeplab_loss.py L214.</summary>
     internal double InstanceDiscriminationTemperature { get; init; } = 0.3;
+    /// <summary>4096: kmax_meta_r50_os32.textproto L57.</summary>
     internal int InstanceDiscriminationSampleCount { get; init; } = 4096;
+    /// <summary>1.5: kmax_meta_r50_os32.textproto L58.</summary>
     internal double InstanceDiscriminationSampleTemperature { get; init; } = 1.5;
+    /// <summary>1.0: kmax_meta_r50_os32.textproto L70.</summary>
     internal double SemanticWeight { get; init; } = 1.0;
+    /// <summary>4096: kmax_meta_r50_os32.textproto L59.</summary>
     internal int SemanticSampleCount { get; init; } = 4096;
+    /// <summary>2.0: kmax_meta_r50_os32.textproto L60.</summary>
     internal double SemanticSampleTemperature { get; init; } = 2.0;
 }

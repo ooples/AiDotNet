@@ -591,19 +591,32 @@ public class PanopticVideoFewShotSegmentationReferenceTests
 
     // ---- Learnable kMaX and Mask2Former decoders, kMaX auxiliary losses, Dice sums in float for Half ----
 
-    /// <summary>A small kMaX decoder: pixel width 4, query width 8 (keys 4, values 8), 2 heads, FFN 16, 2 classes + void.</summary>
-    private static readonly KMaXDecoderShape SmallKMaX = new(pixelDim: 4, queryDim: 8, heads: 2, feedForwardDim: 16, classes: 3);
+    /// <summary>
+    /// A small kMaX decoder: pixel width 4, query width 8 (keys 4, values 8), 2 heads, FFN 16, 2 classes + void and a
+    /// 6-wide pixel-space head.
+    /// </summary>
+    private static readonly KMaXDecoderShape SmallKMaX = new(pixelDim: 4, queryDim: 8, heads: 2, feedForwardDim: 16, classes: 3, pixelHeadDim: 6);
 
     /// <summary>
-    /// The small kMaX decoder's trainable parameter count, from deeplab2's kMaXTransformerLayer and kMaXPredictor
-    /// (bias-free convolutions before a BatchNorm of 2 * C parameters, biased pixel key projection and class head).
-    /// Per stage: pixel bottleneck 4*8 + 16, query projection 8*8 + 16, value projection 8*8 + 16, predictor (key
-    /// 8*4 + 4 + 8, mask kernel 8*4 + 8, cluster-logit BN 2, class head 8*3 + 3) = 113, retrieved value BN 16, k-means
-    /// output 8*8 + 16, fused Q/K/V 8*16 + 32, similarity BN 2*2, retrieved value BN 16, attention output 8*8 + 16,
-    /// FFN 8*16 + 32 and 16*8 + 16: 981. Initial centers 3*8 = 24; final class and mask projections 2 * (8*8 + 16) and
-    /// a predictor on the 4-wide finest features (key 4*4 + 4 + 8, mask kernel 32 + 8, BN 2, class head 27): 257.
+    /// The trainable parameters of one small kMaX predictor reading <paramref name="inputChannels"/>-wide pixels, from
+    /// deeplab2's MaXDeepLab predictor with its PanopticDeepLabSingleHead pixel-space head (the PyTorch port's
+    /// kMaXPredictor): bias-free 5x5 depthwise conv C*25 + BN 2C, bias-free 1x1 conv C*6 + BN 12, biased key projection
+    /// 6*4 + 4 + BN 8 (pixel_space_feature_batch_norm), bias-free mask kernel 8*4 + BN 8, cluster-logit BN 2 and the
+    /// biased class head 8*3 + 3.
     /// </summary>
-    private const int SmallKMaXParameters = 24 + 2 * 981 + 257;
+    private static int SmallKMaXPredictorParameters(int inputChannels)
+        => inputChannels * 25 + 2 * inputChannels + inputChannels * 6 + 12 + (6 * 4 + 4) + 8 + 8 * 4 + 8 + 2 + (8 * 3 + 3);
+
+    /// <summary>
+    /// The small kMaX decoder's trainable parameter count, from deeplab2's kMaXTransformerLayer (bias-free convolutions
+    /// before a BatchNorm of 2 * C parameters). Per stage: pixel bottleneck 4*8 + 16, query projection 8*8 + 16, value
+    /// projection 8*8 + 16, the predictor on the 8-wide bottleneck (200 + 16 + 48 + 12 + 28 + 8 + 32 + 8 + 2 + 27 = 381),
+    /// retrieved value BN 16, k-means output 8*8 + 16, fused Q/K/V 8*16 + 32, similarity BN 2*2, retrieved value BN 16,
+    /// attention output 8*8 + 16, FFN 8*16 + 32 and 16*8 + 16: 1249. Initial centers 3*8 = 24; final class and mask
+    /// projections 2 * (8*8 + 16) and the predictor on the 4-wide finest features (100 + 8 + 24 + 12 + 28 + 8 + 32 + 8
+    /// + 2 + 27 = 249): 409.
+    /// </summary>
+    private const int SmallKMaXParameters = 24 + 2 * 1249 + 409;
 
     private static IReadOnlyList<KMaXPrediction<double>> RunKMaX(IReadOnlyList<ILayer<double>> layers, int stages)
     {
@@ -680,18 +693,20 @@ public class PanopticVideoFewShotSegmentationReferenceTests
             gradients = tape.ComputeGradients(loss ?? throw new InvalidOperationException("No prediction."), parameters);
         }
 
-        // The stage starts at layer 1 (layer 0 is the initial centers).
+        // The stage starts at layer 1 (layer 0 is the initial centers); its predictor occupies layers 7 to 16.
         AssertGradientReaches(gradients, layers, 0, "the initial cluster centers");
         AssertGradientReaches(gradients, layers, 1, "the pixel bottleneck projection");
         AssertGradientReaches(gradients, layers, 3, "the query projection");
         AssertGradientReaches(gradients, layers, 5, "the k-means value projection");
-        AssertGradientReaches(gradients, layers, 7, "the predictor's pixel key projection");
-        AssertGradientReaches(gradients, layers, 9, "the predictor's mask kernel projection");
-        AssertGradientReaches(gradients, layers, 14, "the k-means output projection");
-        AssertGradientReaches(gradients, layers, 16, "the self-attention Q/K/V projection");
-        AssertGradientReaches(gradients, layers, 20, "the self-attention output projection");
-        AssertGradientReaches(gradients, layers, 22, "the FFN up projection");
-        AssertGradientReaches(gradients, layers, 24, "the FFN down projection");
+        AssertGradientReaches(gradients, layers, 7, "the predictor's 5x5 depthwise pixel-head convolution");
+        AssertGradientReaches(gradients, layers, 9, "the predictor's 1x1 pixel-head convolution");
+        AssertGradientReaches(gradients, layers, 11, "the predictor's pixel key projection");
+        AssertGradientReaches(gradients, layers, 13, "the predictor's mask kernel projection");
+        AssertGradientReaches(gradients, layers, 18, "the k-means output projection");
+        AssertGradientReaches(gradients, layers, 20, "the self-attention Q/K/V projection");
+        AssertGradientReaches(gradients, layers, 24, "the self-attention output projection");
+        AssertGradientReaches(gradients, layers, 26, "the FFN up projection");
+        AssertGradientReaches(gradients, layers, 28, "the FFN down projection");
     }
 
     [Fact]
@@ -752,9 +767,21 @@ public class PanopticVideoFewShotSegmentationReferenceTests
     private static KMaXDeepLabOptions SmallKMaXOptions(double instanceDiscriminationWeight, double semanticWeight) => new()
     {
         NumClasses = 2, NumClusterCenters = 3, PixelEmbeddingDimension = 4, NumKMeansIterations = 2, QueryDimension = 8,
-        NumAttentionHeads = 2, FeedForwardDimension = 16, Seed = 7,
+        NumAttentionHeads = 2, FeedForwardDimension = 16, PixelHeadDimension = 6, Seed = 7,
         InstanceDiscriminationLossWeight = instanceDiscriminationWeight, SemanticLossWeight = semanticWeight,
+        SemanticAsppDimension = 4, SemanticAtrousRates = [1, 2], SemanticDecoderDimension = 4,
+        SemanticLowLevelProjections = [3, 2], SemanticHeadDimension = 4,
     };
+
+    /// <summary>
+    /// The small model's semantic decoder parameters, on <see cref="TinyBackbone"/>'s two 4-channel stages (the ASPP and
+    /// the first low-level projection read the stride-4 stage, the second the stride-2 stage), deeplab2's
+    /// PanopticDeepLabSingleDecoder + SingleHead with bias-free convolutions before BN (2C each): ASPP 1x1 4*4 + 8,
+    /// atrous 3x3 rates 1 and 2 2 * (4*4*9 + 8), pooling 4*4 + 8, projection of the four branches 16*4 + 8 = 424;
+    /// fusion 1 (project to 3): 4*3 + 6, depthwise 7*25 + 14, pointwise 7*4 + 8 = 243; fusion 2 (project to 2): 4*2 + 4,
+    /// 6*25 + 12, 6*4 + 8 = 206; head: depthwise 4*25 + 8, pointwise 4*4 + 8, biased classifier 4*2 + 2 = 142.
+    /// </summary>
+    private const int SmallKMaXSemanticParameters = 424 + 243 + 206 + 142;
 
     [Fact]
     public void KMaXDeepLab_RegistersTheDecoderAndAddsTheAuxiliaryLosses()
@@ -771,6 +798,10 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         Assert.Equal(KMaXTransformerDecoder.LayerCount(2), decoder.Count);
         Assert.All(decoder, layer => Assert.Contains(layer, full.Layers));
         Assert.Equal(SmallKMaXParameters, TapeTrainingStep<double>.CollectParameters(decoder, -1).Sum(p => p.Length));
+        var semantic = full.GetSemanticDecoderLayers();
+        Assert.Equal(28, semantic.Count);
+        Assert.All(semantic, layer => Assert.Contains(layer, full.Layers));
+        Assert.Equal(SmallKMaXSemanticParameters, TapeTrainingStep<double>.CollectParameters(semantic, -1).Sum(p => p.Length));
 
         // Class 0 on the left half, class 1 on the right: the instance discrimination and semantic losses are
         // positive, so the full loss exceeds the PQ-style and mask-ID terms alone.
@@ -779,6 +810,121 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         double without = mainOnly.SetPredictionLoss(input, target).ToArray()[0];
         Assert.False(double.IsNaN(withAuxiliary) || double.IsInfinity(withAuxiliary) || double.IsNaN(without) || double.IsInfinity(without));
         Assert.True(withAuxiliary > without + 1e-6, $"{withAuxiliary} should exceed {without}.");
+    }
+
+    [Fact]
+    public void KMaXPredictor_PixelHeadSeesTheFiveByFiveNeighborhood()
+    {
+        // deeplab2's pixel-space head opens with a 5x5 depthwise convolution, so a pixel's cluster logits move when a
+        // pixel two rows and two columns away changes, and not when it is three away. (The previous head was per-pixel.)
+        var layers = KMaXTransformerDecoder.CreatePredictorLayers<double>(SmallKMaX, 4).ToList();
+        foreach (var layer in layers) layer.SetTrainingMode(false);                 // BN on running statistics: per pixel
+        var embeddings = Pattern(61, 1, 3, 8);
+        var pixels = Pattern(62, 1, 36, 4);                                         // a 6 x 6 map
+        var before = KMaXTransformerDecoder.Predict<double>(layers, 0, embeddings, embeddings, pixels, 6, 6).MaskLogits.ToArray();
+        var changed = pixels.ToArray();
+        for (int c = 0; c < 4; c++) changed[c] += 1.0;                              // pixel (0, 0)
+        var after = KMaXTransformerDecoder.Predict<double>(
+            layers, 0, embeddings, embeddings, T(new[] { 1, 36, 4 }, changed), 6, 6).MaskLogits.ToArray();
+
+        double Change(int pixel) => Enumerable.Range(0, 3).Max(n => Math.Abs(after[n * 36 + pixel] - before[n * 36 + pixel]));
+        Assert.True(Change(2 * 6 + 2) > 1e-9, "Pixel (2, 2) is inside the 5x5 window of (0, 0).");
+        Assert.Equal(0.0, Change(3 * 6 + 3), 12);
+        Assert.Equal(0.0, Change(0 * 6 + 3), 12);
+        Assert.Equal(SmallKMaXPredictorParameters(4), PixelHeadParameters(layers));
+    }
+
+    private static int PixelHeadParameters(IReadOnlyList<ILayer<double>> layers)
+        => TapeTrainingStep<double>.CollectParameters(layers, -1).Sum(p => p.Length);
+
+    [Theory]
+    [InlineData(2, 6, 8)]
+    [InlineData(3, 5, 7)]
+    public void SemanticDecoderAtrousConvolution_IsTheDilatedConvolutionWithSamePadding(int rate, int height, int width)
+    {
+        // TensorFlow's atrous convolution (space to batch, a plain 3x3 convolution, batch to space) against the engine's
+        // dilated convolution with padding = rate.
+        var convolution = new ConvolutionalLayer<double>(3, 3, 1, 1, biasMode: BiasMode.Never);
+        var input = Pattern(70 + rate, 2, 2, height, width);
+        convolution.Forward(input);                                                 // sizes the kernel
+        var kernel = TapeTrainingStep<double>.CollectParameters(new[] { convolution }, -1)[0];
+
+        var atrous = PanopticDeepLabSemanticDecoder.AtrousConvolution(convolution, input, rate);
+        var reference = AiDotNetEngine.Current.Conv2D(input, kernel, new[] { 1, 1 }, new[] { rate, rate }, new[] { rate, rate });
+
+        Assert.Equal(reference.Shape.ToArray(), atrous.Shape.ToArray());
+        AssertValues(atrous, reference.ToArray());
+    }
+
+    /// <summary>A small semantic decoder: ASPP 4 wide with rates 1 and 2, decoder 4, projections 3 then 2, head 4, 2 classes.</summary>
+    private static readonly SemanticDecoderShape SmallSemantic = new(4, new[] { 1, 2 }, 4, new[] { 3, 2 }, 4, 2, 0.1);
+
+    [Fact]
+    public void SemanticDecoder_HasTheReferenceLayersShapesAndParameterCount()
+    {
+        // Backbone stages finest first: 5 channels at 8x8, 6 at 4x4, 7 at 2x2. The ASPP reads the 7-channel stage
+        // (deeplab2's feature_semantic = stage5), the projections read the 6-channel (res3) then the 5-channel (res2).
+        // Parameters (bias-free convolutions before BN, 2C per BN): ASPP 1x1 7*4 + 8 = 36, atrous 2 * (7*4*9 + 8) = 520,
+        // pooling 36, projection 16*4 + 8 = 72 (664); fusion 1: 6*3 + 6, 7*25 + 14, 7*4 + 8 (249); fusion 2: 5*2 + 4,
+        // 6*25 + 12, 6*4 + 8 (208); head: 4*25 + 8, 4*4 + 8, 4*2 + 2 (142).
+        var layers = PanopticDeepLabSemanticDecoder.CreateLayers<double>(SmallSemantic).ToList();
+        var stages = new[] { Pattern(81, 1, 5, 8, 8), Pattern(82, 1, 6, 4, 4), Pattern(83, 1, 7, 2, 2) };
+
+        var logits = PanopticDeepLabSemanticDecoder.Run<double>(layers, 0, SmallSemantic, stages);
+
+        Assert.Equal(28, PanopticDeepLabSemanticDecoder.LayerCount(SmallSemantic));
+        Assert.Equal(28, layers.Count);
+        Assert.Equal(new[] { 1, 2, 8, 8 }, logits.Shape.ToArray());
+        Assert.Equal(664 + 249 + 208 + 142, TapeTrainingStep<double>.CollectParameters(layers, -1).Sum(p => p.Length));
+    }
+
+    [Fact]
+    public void KMaXLoss_SupervisesEveryPredictionWithTheFinalPredictionsMatching()
+    {
+        // One segment (class 0) covering both pixels; two clusters. The final prediction's masks favour cluster 0, so
+        // its matching takes cluster 0; the auxiliary prediction (masks 0.25 / 0.75, class probabilities 0.5) would
+        // match cluster 1 on its own. With the final matching: Dice 0.4, p = 0.5, so L_pos = -(0.5 * 0.4 + 0.4 ln 0.5) =
+        // 0.0772589 and L_neg = -ln 0.5; L_PQ = 0.75 L_pos + 0.25 L_neg = 0.2312310; the mask-ID CE is -ln 0.25 =
+        // 1.3862944; 3 * 0.2312310 + 0.3 * 1.3862944 = 1.1095812. (Matched on its own it would be 0.9786631.)
+        var segments = new[] { new MaskSetPredictionLoss.Segments<double>(T(new[] { 1, 2 }, 1, 1), new[] { 0 }) };
+        var classLogits = T(new[] { 1, 2, 2 }, 0, 0, 0, 0);
+        double ln3 = Math.Log(3);
+        var finalMasks = T(new[] { 1, 2, 2 }, ln3, ln3, 0, 0);
+        var auxiliaryMasks = T(new[] { 1, 2, 2 }, 0, 0, ln3, ln3);
+
+        var matchings = MaskSetPredictionLoss.KMaXMatching(classLogits, finalMasks, segments);
+        var shared = MaskSetPredictionLoss.KMaX(classLogits, auxiliaryMasks, segments, KMaXLossSettings.Default, matchings);
+        var own = MaskSetPredictionLoss.KMaX(classLogits, auxiliaryMasks, segments, KMaXLossSettings.Default);
+
+        Assert.Equal(new[] { 0 }, matchings[0].Prediction);
+        AssertValues(shared, 1.1095812);
+        AssertValues(own, 0.9786631);
+    }
+
+    [Fact]
+    public void KMaXDeepLabOptions_DefaultsAreTheReferenceConfig()
+    {
+        // deeplab2 configs/coco/kmax_deeplab/kmax_meta_r50_os32.textproto (commit 64bc1c1a), Yu et al. 2022 Sec. 4.1 and
+        // deeplab2 model/loss/max_deeplab_loss.py L214.
+        var options = new KMaXDeepLabOptions();
+        Assert.Equal(3.0, options.PanopticQualityLossWeight);
+        Assert.Equal(0.3, options.MaskIdLossWeight);
+        Assert.Equal(1.0, options.InstanceDiscriminationLossWeight);
+        Assert.Equal(1.0, options.SemanticLossWeight);
+        Assert.Equal(0.3, options.InstanceDiscriminationTemperature);
+        Assert.Equal(4096, options.InstanceDiscriminationSampleCount);
+        Assert.Equal(1.5, options.InstanceDiscriminationSampleTemperature);
+        Assert.Equal(4096, options.SemanticSampleCount);
+        Assert.Equal(2.0, options.SemanticSampleTemperature);
+        Assert.Equal(128, options.PixelEmbeddingDimension);
+        Assert.Equal(256, options.PixelHeadDimension);
+        Assert.Equal(256, options.SemanticAsppDimension);
+        Assert.Equal(new[] { 6, 12, 18 }, options.SemanticAtrousRates);
+        Assert.Equal(0.1, options.SemanticAsppDropRate);
+        Assert.Equal(256, options.SemanticDecoderDimension);
+        Assert.Equal(new[] { 64, 32 }, options.SemanticLowLevelProjections);
+        Assert.Equal(256, options.SemanticHeadDimension);
+        Assert.Equal(0.75, KMaXLossSettings.Default.PositiveWeight);
     }
 
     [Fact]
