@@ -219,7 +219,7 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
             // Hessian p(1 - p) of each sampled point (clamped for numerical stability)
             var sampleProbs = SelectElements(probs, sampleIndices).AsTensor();
             var hessian = engine.TensorClampMin(
-                engine.TensorMultiply(sampleProbs, engine.ScalarMinusTensor(NumOps.One, sampleProbs)), NumOps.FromDouble(1e-10));
+                engine.TensorMultiply(sampleProbs, engine.ScalarMinusTensor(NumOps.One, sampleProbs)), Tolerance(1e-10));
 
             // Sums of residuals and hessians in each leaf region (tree output 1 vs anything else)
             var inLeafOne = engine.TensorEquals(samplePreds.AsTensor(), NumOps.One);
@@ -245,7 +245,7 @@ public partial class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, 
     private (T LeafZero, T LeafOne) NewtonLeafValues(T sumResid0, T sumHessian0, T sumResid1, T sumHessian1)
     {
         // Newton step: sum(gradient) / sum(hessian) per leaf region
-        T minHessian = NumOps.FromDouble(1e-10);
+        T minHessian = Tolerance(1e-10);
         T leafVal0 = NumOps.Compare(sumHessian0, minHessian) > 0 ? NumOps.Divide(sumResid0, sumHessian0) : NumOps.Zero;
         T leafVal1 = NumOps.Compare(sumHessian1, minHessian) > 0 ? NumOps.Divide(sumResid1, sumHessian1) : NumOps.Zero;
         return (leafVal0, leafVal1);

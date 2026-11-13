@@ -198,8 +198,8 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
         var engine = Engine;
         var membership = ClassMembership(y);
         var sums = engine.TensorMatMul(engine.TensorTranspose(membership), Tensor<T>.FromMatrix(x));
-        var counts = engine.ReduceSum(membership, new[] { 0 }, false).Reshape(NumClasses, 1);
-        return engine.TensorDivide(sums, engine.TensorClampMin(counts, NumOps.One)).ToMatrix();
+        var counts = CountsToValues(engine.TensorClampMin(CountClasses(y), 1)).Reshape(NumClasses, 1);
+        return engine.TensorDivide(sums, counts).ToMatrix();
     }
 
     /// <summary>
@@ -212,9 +212,9 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
             throw new InvalidOperationException("Model has not been fitted.");
         }
 
+        // Class counts in int (a sum of one-hot rows in T stops at 2048 for Half), divided in double
         int n = y.Length;
-        var counts = Engine.ReduceSum(ClassMembership(y), new[] { 0 }, false);
-        return Engine.TensorDivideScalar(counts, NumOps.FromDouble(n)).ToVector();
+        return n == 0 ? new Vector<T>(NumClasses) : CountFractions(CountClasses(y), n).ToVector();
     }
 
     /// <summary>
@@ -339,7 +339,7 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
         }
 
         var engine = Engine;
-        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), NumOps.FromDouble(1e-15))).ToMatrix();
+        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), Tolerance(1e-15))).ToMatrix();
     }
 
     /// <inheritdoc/>

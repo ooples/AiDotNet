@@ -267,7 +267,7 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         var trainNorms = engine.ReduceSum(engine.TensorMultiply(train, train), new[] { 1 }, false).Reshape(1, n);
         var denominator = engine.TensorSqrt(engine.TensorMultiply(queryNorms, trainNorms));
         var similarity = engine.TensorClamp(engine.TensorDivide(dot, denominator), NumOps.FromDouble(-1.0), NumOps.One);
-        var valid = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
+        var valid = engine.TensorGreaterThan(denominator, Tolerance(1e-10));
         var zeros = new Tensor<T>(new[] { rows, n });
         return engine.ScalarMinusTensor(NumOps.One, engine.TensorWhere(valid, similarity, zeros));
     }
@@ -286,7 +286,7 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         }
 
         // Very close to a training point (distance < 1e-10) gets a large weight, otherwise 1 / distance
-        var close = engine.TensorLessThan(distances, NumOps.FromDouble(1e-10));
+        var close = engine.TensorLessThan(distances, Tolerance(1e-10));
         var large = new Tensor<T>(distances.Shape.ToArray());
         engine.TensorFill(large, NumOps.FromDouble(1e10));
         return engine.TensorWhere(close, large, engine.TensorDivide(ones, distances));

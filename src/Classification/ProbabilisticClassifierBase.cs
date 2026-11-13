@@ -141,7 +141,7 @@ public abstract class ProbabilisticClassifierBase<T> : ClassifierBase<T>, IProba
 
         // Compute log(p) with a small epsilon to avoid log(0)
         var engine = Engine;
-        var clamped = engine.TensorClampMin(Tensor<T>.FromMatrix(probabilities), NumOps.FromDouble(1e-15));
+        var clamped = engine.TensorClampMin(Tensor<T>.FromMatrix(probabilities), Tolerance(1e-15));
         return engine.TensorLog(clamped).ToMatrix();
     }
 

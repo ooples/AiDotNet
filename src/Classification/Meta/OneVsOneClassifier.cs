@@ -257,14 +257,14 @@ public partial class OneVsOneClassifier<T> : MetaClassifierBase<T>
         }
 
         // Aggregate to class probabilities: mean over partners, or 1/NumClasses for a class without partners
-        var counts = ClassIndicesToValues(new Tensor<int>(partnerCounts, new[] { NumClasses }), _estimators.Length + 1).AsTensor();
+        var counts = CountsToValues(new Tensor<int>(partnerCounts, new[] { NumClasses }));
         var denominators = engine.TensorClampMin(counts, NumOps.One).Reshape(1, NumClasses);
         var noPartner = engine.TensorMultiplyScalar(engine.TensorEquals(counts, NumOps.Zero),
             NumOps.Divide(NumOps.One, NumOps.FromDouble(NumClasses))).Reshape(1, NumClasses);
         var classProbs = engine.TensorAdd(engine.TensorDivide(pairwiseSums, denominators), noPartner);
 
         // Normalize
-        var rowSums = engine.TensorClampMin(engine.ReduceSum(classProbs, new[] { 1 }, true), NumOps.FromDouble(1e-15));
+        var rowSums = engine.TensorClampMin(engine.ReduceSum(classProbs, new[] { 1 }, true), Tolerance(1e-15));
         return engine.TensorDivide(classProbs, rowSums).ToMatrix();
     }
 

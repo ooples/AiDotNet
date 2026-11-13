@@ -352,12 +352,13 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
             return;
         }
 
+        // Votes, first voting tree per class and the tie-break key are counted in int: in T a running count
+        // stops at 2048 for Half and count * (numTrees + 1) loses integer precision
         var engine = Engine;
-        var votes = new Tensor<T>(new[] { nSamples, NumClasses });
+        var votes = new Tensor<int>(new[] { nSamples, NumClasses });
         var anyVote = new Tensor<int>(new[] { nSamples });
-        var firstVoter = new Tensor<T>(new[] { nSamples, NumClasses });
-        engine.TensorFill(firstVoter, NumOps.FromDouble(numTrees));
-        var treeIndexValues = engine.TensorArange<T>(0, Math.Max(1, numTrees)).ToArray();
+        var firstVoter = new Tensor<int>(new[] { nSamples, NumClasses });
+        engine.TensorFill(firstVoter, numTrees);
 
         for (int treeIdx = 0; treeIdx < numTrees; treeIdx++)
         {
@@ -368,24 +369,27 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
                 continue;
             }
 
-            // Predict every sample that was OOB for this tree in one call
+            // Predict every sample that was OOB for this tree in one call; labels that are not known classes
+            // land in a dropped leading column
             var oobTensor = new Tensor<int>(oob, new[] { oob.Length });
-            var predicted = ClassMembership(Estimators[treeIdx].Predict(x.GetRows(oob)));
-            var treeVotes = engine.TensorScatterAdd(new Tensor<T>(new[] { nSamples, NumClasses }), oobTensor, predicted, 0);
+            var predictedClass = engine.TensorAddScalar(GetClassIndexTensor(Estimators[treeIdx].Predict(x.GetRows(oob))), 1);
+            var predicted = engine.TensorOneHot<int>(predictedClass, NumClasses + 1).Slice(1, 1, NumClasses + 1);
+            var treeVotes = engine.TensorScatterAdd(new Tensor<int>(new[] { nSamples, NumClasses }), oobTensor, predicted, 0);
             votes = engine.TensorAdd(votes, treeVotes);
             var ones = new Tensor<int>(new[] { oob.Length });
             engine.TensorFill(ones, 1);
             anyVote = engine.TensorScatterAdd(anyVote, oobTensor, ones, 0);
 
             // Remember the first tree that voted for each class (ties go to the class voted first)
-            var voterIndex = new Tensor<T>(new[] { nSamples, NumClasses });
-            engine.TensorFill(voterIndex, treeIndexValues[treeIdx]);
+            var voterIndex = new Tensor<int>(new[] { nSamples, NumClasses });
+            engine.TensorFill(voterIndex, treeIdx);
             firstVoter = engine.TensorMin(firstVoter,
-                engine.TensorWhere(treeVotes, voterIndex, firstVoter));
+                engine.TensorWhere(engine.TensorGreaterThan(treeVotes, 0), voterIndex, firstVoter));
         }
 
         // Majority vote, ties broken by the earliest vote: maximise count * (numTrees + 1) - firstVoter
-        var key = engine.TensorSubtract(engine.TensorMultiplyScalar(votes, NumOps.FromDouble(numTrees + 1)), firstVoter);
+        var key = engine.TensorSubtract(
+            engine.TensorMultiplyScalar(votes.Cast<long>(), (long)numTrees + 1), firstVoter.Cast<long>());
         var majority = engine.TensorArgMax(key, 1).Reshape(nSamples);
         var actual = GetClassIndexTensor(y);
 

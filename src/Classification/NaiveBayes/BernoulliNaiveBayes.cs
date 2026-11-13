@@ -134,17 +134,36 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
             throw new InvalidOperationException("ClassCounts has not been initialized.");
         }
 
-        // Count features present (value > threshold) for each class via the one-hot membership matrix
+        // Count features present (value > threshold) for each class with one bin count over
+        // class * NumFeatures + feature (in int: a sum of ones in T stops at 2048 for Half); absent entries and
+        // unknown labels go to a dropped last bin
         var presenceCounts = new Tensor<T>(new[] { NumClasses, NumFeatures });
         if (y.Length > 0 && NumClasses > 0 && NumFeatures > 0)
         {
-            var present = engine.TensorGreaterThan(Tensor<T>.FromMatrix(x), _binarizeThreshold);
-            presenceCounts = engine.TensorMatMul(engine.TensorTranspose(ClassMembership(y)), present);
+            int n = x.Rows;
+            int bins = NumClasses * NumFeatures;
+            var features = Tensor<T>.FromMatrix(x);
+            if (x.Columns != NumFeatures)
+            {
+                features = features.Slice(1, 0, NumFeatures);
+            }
+
+            var present = ZeroOneToInt(engine.TensorGreaterThan(features, _binarizeThreshold));
+            var classIndex = GetClassIndexTensor(y).Reshape(n, 1);
+            var known = engine.TensorGreaterEqual(classIndex, new Tensor<int>(new[] { n, 1 }));
+            var codes = engine.TensorAdd(engine.TensorMultiplyScalar(classIndex, NumFeatures),
+                engine.TensorArange<int>(0, NumFeatures).Reshape(1, NumFeatures));
+            var dropped = new Tensor<int>(new[] { n, NumFeatures });
+            engine.TensorFill(dropped, bins);
+            var counted = engine.TensorMultiply(present, engine.TensorBroadcastTo(known, new[] { n, NumFeatures }));
+            var binned = engine.TensorWhere(counted, codes, dropped).Reshape(n * NumFeatures);
+            presenceCounts = CountsToValues(engine.TensorBinCount(binned, bins + 1).Slice(0, 0, bins))
+                .Reshape(NumClasses, NumFeatures);
         }
 
         // Compute log probabilities with Laplace smoothing
         // P(f=1|c) = (count + alpha) / (class_count + 2*alpha)
-        var classCounts = ClassIndicesToValues(new Tensor<int>(ClassCounts, new[] { ClassCounts.Length }), y.Length + 1);
+        var classCounts = CountsToValues(new Tensor<int>(ClassCounts, new[] { ClassCounts.Length })).ToVector();
         var denominators = classCounts.Length == 0
             ? new Tensor<T>(new[] { 0, 1 })
             : engine.TensorAddScalar(classCounts.AsTensor(), twoAlpha).Reshape(NumClasses, 1);

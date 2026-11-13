@@ -122,7 +122,8 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
         int maxCats = NumFeatures == 0 ? 0 : _numCategories.Max();
         int width = maxCats + 1; // extra slot collects invalid (negative) categories
 
-        // Count category occurrences per class and feature with one scatter-add
+        // Count category occurrences per class and feature with one bin count (in int: a running count in T
+        // stops at 2048 for Half)
         T alpha = NumOps.FromDouble(Options.Alpha);
         var counts = new Tensor<T>(new[] { NumClasses * NumFeatures * width });
         if (x.Rows > 0 && NumFeatures > 0 && NumClasses > 0)
@@ -131,15 +132,14 @@ public partial class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
             var classOffsets = engine.TensorMultiplyScalar(GetClassIndexTensor(y), NumFeatures * width).Reshape(x.Rows, 1);
             var featureOffsets = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, NumFeatures), width).Reshape(1, NumFeatures);
             var codes = engine.TensorAdd(engine.TensorAdd(choices, classOffsets), featureOffsets).Reshape(x.Rows * NumFeatures);
-            var ones = new Tensor<T>(new[] { x.Rows * NumFeatures });
-            engine.TensorFill(ones, NumOps.One);
-            counts = engine.TensorScatterAdd(counts, codes, ones, 0);
+            int bins = NumClasses * NumFeatures * width;
+            counts = CountsToValues(engine.TensorBinCount(codes, bins).Slice(0, 0, bins));
         }
 
         // P(category | class) = (count + alpha) / (class_count + alpha * num_categories); unused slots stay 0
         var categoryCounts = counts.Reshape(NumClasses, NumFeatures, width).Slice(2, 0, maxCats);
-        var classCounts = ClassIndicesToValues(new Tensor<int>(ClassCounts ?? new int[NumClasses], new[] { NumClasses }), y.Length + 1);
-        var numCats = ClassIndicesToValues(new Tensor<int>(_numCategories, new[] { NumFeatures }), maxCats + 1);
+        var classCounts = CountsToValues(new Tensor<int>(ClassCounts ?? new int[NumClasses], new[] { NumClasses })).ToVector();
+        var numCats = CountsToValues(new Tensor<int>(_numCategories, new[] { NumFeatures })).ToVector();
         var denominators = engine.TensorAdd(
             classCounts.Length == 0 ? new Tensor<T>(new[] { 0, 1, 1 }) : classCounts.AsTensor().Reshape(NumClasses, 1, 1),
             numCats.Length == 0

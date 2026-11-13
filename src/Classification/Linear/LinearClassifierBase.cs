@@ -199,7 +199,7 @@ public abstract partial class LinearClassifierBase<T> : ProbabilisticClassifierB
 
         // Clamp probability to avoid log(0)
         var engine = Engine;
-        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), NumOps.FromDouble(1e-15))).ToMatrix();
+        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), Tolerance(1e-15))).ToMatrix();
     }
 
     /// <summary>

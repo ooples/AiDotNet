@@ -133,6 +133,17 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     }
 
     /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to Half's smallest positive normal value (2^-14) for Half,
+    /// where 1e-10 and similar guards would otherwise round to zero; float, double and decimal keep it unchanged.
+    /// </summary>
+    private protected static T Tolerance(double epsilon)
+    {
+        const double HalfSmallestNormal = 6.103515625e-05;
+        return MathHelper.GetNumericOperations<T>().FromDouble(
+            typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+    }
+
+    /// <summary>
     /// <paramref name="values"/> truncated or zero-padded to <paramref name="length"/> elements.
     /// </summary>
     private protected static Vector<T> FitToLength(Vector<T> values, int length)
@@ -702,7 +713,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
             var actual = LeadingBlock(Tensor<T>.FromMatrix(target), input.Rows, NumLabels);
             var variance = engine.TensorMultiply(pred, engine.ScalarMinusTensor(NumOps.One, pred));
             var deriv = engine.TensorDivide(engine.TensorSubtract(pred, actual),
-                engine.TensorAddScalar(variance, NumOps.FromDouble(1e-15)));
+                engine.TensorAddScalar(variance, Tolerance(1e-15)));
             totalGradient = engine.TensorSum(deriv);
         }
 

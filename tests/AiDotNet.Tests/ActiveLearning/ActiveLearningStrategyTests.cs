@@ -375,6 +375,26 @@ public class ActiveLearningStrategyTests
         Assert.Equal(3, selected.Length);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task BALD_Half_OneHotProbabilities_GiveFiniteZeroScore()
+    {
+        // Arrange - one Monte Carlo pass with probabilities [1, 0]. The entropy terms use
+        // (p + eps) * log(p + eps); 1e-10 rounds to 0 in Half, which made the term for p = 0 equal
+        // 0 * log(0) = NaN. With a single pass the mutual information H(mean p) - mean H(p) is exactly 0.
+        var probabilities = new Tensor<Half>(new[] { 1, 2 });
+        probabilities[0] = (Half)1f;
+        probabilities[1] = (Half)0f;
+
+        // Act
+        var scores = ActiveLearningEngineOps.BaldScores(new List<Tensor<Half>> { probabilities }, 1);
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        double score = ops.ToDouble(scores[0]);
+        Assert.False(double.IsNaN(score));
+        Assert.Equal(0.0, score, 6);
+    }
+
     #endregion
 
     #region BatchBALD Tests

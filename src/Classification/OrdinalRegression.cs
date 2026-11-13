@@ -339,7 +339,7 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
         // Class probabilities P(Y = y), clamped to avoid log(0)
         var classProbs = engine.TensorClamp(
             engine.TensorSubtract(engine.TensorGather(padded, hi, 0), engine.TensorGather(padded, lo, 0)),
-            NumOps.FromDouble(1e-10), NumOps.FromDouble(1.0 - 1e-10));
+            Tolerance(1e-10), NumOps.FromDouble(1.0 - 1e-10));
         T logLikelihood = engine.TensorSum(engine.TensorLog(classProbs));
 
         // dP(Y=y)/dη = -sigmoid'(α_y - η) + sigmoid'(α_{y-1} - η) (end terms are zero)

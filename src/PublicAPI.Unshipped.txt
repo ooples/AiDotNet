@@ -22989,4 +22989,3 @@ AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>.SamplesSe
 AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>.SelectedIndices.get -> int[]!
 AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>.SelectedSamples.get -> TInput[]!
 virtual AiDotNet.ActiveLearning.Core.ActiveLearner<T, TInput, TOutput>.OnSamplesSelected(AiDotNet.ActiveLearning.Interfaces.SamplesSelectedEventArgs<T, TInput>! args) -> void
-override AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void

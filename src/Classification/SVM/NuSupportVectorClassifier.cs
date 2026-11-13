@@ -284,7 +284,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var active = IndicesAbove(_alphas, NumOps.FromDouble(1e-10));
+        var active = IndicesAbove(_alphas, Tolerance(1e-10));
         var coefficients = Engine.Multiply(SelectElements(_alphas, active), SelectElements(_yTrain, active));
         var train = active.Length == 0 ? new Matrix<T>(0, _xTrain.Columns) : _xTrain.GetRows(active);
         return KernelDecisions(input, train, coefficients, NumOps.Negate(_rho)).GetColumn(0);
@@ -300,7 +300,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
             throw new InvalidOperationException("Training data has not been initialized.");
         }
 
-        var svIndices = IndicesAbove(_alphas, NumOps.FromDouble(1e-10));
+        var svIndices = IndicesAbove(_alphas, Tolerance(1e-10));
         if (svIndices.Length > 0)
         {
             var supportVectors = _xTrain.GetRows(svIndices);

@@ -240,7 +240,7 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
 
         // Variances (1 until two samples were seen), plus a small floor to prevent division by zero
         var variances = GetVariances(stats) ?? FilledVector(features.Length, NumOps.One);
-        var variance = engine.TensorClampMin(variances.AsTensor(), NumOps.FromDouble(1e-9));
+        var variance = engine.TensorClampMin(variances.AsTensor(), Tolerance(1e-9));
         var diff = engine.TensorSubtract(features.AsTensor(), means.AsTensor());
 
         // Log likelihood: sum of log(P(xi|class))

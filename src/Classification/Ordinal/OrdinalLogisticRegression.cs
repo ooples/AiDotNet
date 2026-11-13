@@ -375,7 +375,7 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
         var gammaHi = engine.TensorGather(gammas, hi, 0);
 
         // Class probabilities P(Y = y), kept away from zero
-        var probs = engine.TensorClampMin(engine.TensorSubtract(cumHi, cumLo), NumOps.FromDouble(1e-15));
+        var probs = engine.TensorClampMin(engine.TensorSubtract(cumHi, cumLo), Tolerance(1e-15));
         T loss = engine.TensorSum(engine.TensorNegate(engine.TensorLog(probs)));
 
         // Coefficient factor per sample: first class 1 - P(Y<=0), last class -P(Y<=K-2),

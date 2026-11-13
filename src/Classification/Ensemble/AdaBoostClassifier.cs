@@ -225,7 +225,7 @@ public partial class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
         }
 
         T oneMinusError = NumOps.Subtract(NumOps.One, error);
-        T ratio = NumOps.Divide(oneMinusError, NumOps.Add(error, NumOps.FromDouble(1e-10)));
+        T ratio = NumOps.Divide(oneMinusError, NumOps.Add(error, Tolerance(1e-10)));
         alpha = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Log(ratio)),
             NumOps.FromDouble(Options.LearningRate));
         return true;

@@ -506,20 +506,98 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <param name="classes">The class index of every training sample.</param>
     /// <param name="samples">The samples to count.</param>
     /// <returns>The [NumClasses] counts.</returns>
-    private protected Tensor<T> CountClassSamples(Tensor<int> classes, int[] samples)
+    /// <remarks>
+    /// Counted in int: a sum of ones in T stops growing at 2048 for Half.
+    /// </remarks>
+    private protected Tensor<int> CountClassSamples(Tensor<int> classes, int[] samples)
     {
         var engine = Engine;
         if (samples.Length == 0 || NumClasses == 0)
         {
-            return new Tensor<T>(new[] { NumClasses });
+            return new Tensor<int>(new[] { NumClasses });
         }
 
         // Shift by one so -1 (unknown) lands in a dropped bin; indices >= NumClasses land in a dropped last bin
         var selected = engine.TensorGather(classes, new Tensor<int>(samples, new[] { samples.Length }), 0);
         var shifted = engine.TensorClamp(engine.TensorAddScalar(selected, 1), 0, NumClasses + 1);
-        var counts = engine.TensorScatterAdd(new Tensor<T>(new[] { NumClasses + 2 }), shifted,
-            FilledVector(samples.Length, NumOps.One).AsTensor(), 0);
-        return counts.Slice(0, 1, NumClasses + 1);
+        return engine.TensorBinCount(shifted, NumClasses + 2).Slice(0, 1, NumClasses + 1);
+    }
+
+    /// <summary>
+    /// The class counts of <paramref name="y"/> (labels that are not known classes are ignored).
+    /// </summary>
+    /// <param name="y">The label vector.</param>
+    /// <returns>The [NumClasses] counts.</returns>
+    /// <remarks>
+    /// Counted in int: a sum of one-hot rows in T stops growing at 2048 for Half.
+    /// </remarks>
+    private protected Tensor<int> CountClasses(Vector<T> y)
+    {
+        if (y.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<int>(new[] { NumClasses });
+        }
+
+        var shifted = Engine.TensorAddScalar(GetClassIndexTensor(y), 1);
+        return Engine.TensorBinCount(shifted, NumClasses + 1).Slice(0, 1, NumClasses + 1);
+    }
+
+    /// <summary>
+    /// Integer counts as T values.
+    /// </summary>
+    private protected static Tensor<T> CountsToValues(Tensor<int> counts) => counts.Cast<T>();
+
+    /// <summary>
+    /// counts / total as T, with the division done in double so large counts and totals keep their ratio.
+    /// </summary>
+    /// <param name="counts">Integer counts.</param>
+    /// <param name="total">The total to divide by (must be positive).</param>
+    /// <returns>The fractions, same shape as <paramref name="counts"/>.</returns>
+    private protected static Tensor<T> CountFractions(Tensor<int> counts, int total)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorDivideScalar(counts.Cast<double>(), (double)total).Cast<T>();
+    }
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to Half's smallest positive normal value (2^-14) for Half,
+    /// where 1e-10 and similar guards would otherwise round to zero; float, double and decimal keep it unchanged.
+    /// </summary>
+    private protected static T Tolerance(double epsilon)
+    {
+        const double HalfSmallestNormal = 6.103515625e-05;
+        return MathHelper.GetNumericOperations<T>().FromDouble(
+            typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+    }
+
+    /// <summary>
+    /// 1 - <paramref name="epsilon"/> as a T, moved down to the largest T below 1 where 1 - epsilon would round
+    /// to 1 (float and Half cannot hold 1 - 1e-10), so clamping a probability to it keeps log(1 - p) finite.
+    /// </summary>
+    private protected static T OneMinusTolerance(double epsilon)
+    {
+        // The gap below 1: 2^-24 for float, 2^-11 for Half; double keeps epsilon (1 - 1e-10 is representable)
+        double gap = typeof(T) == typeof(float) ? 5.9604644775390625e-08
+            : typeof(T) == typeof(Half) ? 4.8828125e-04
+            : 0.0;
+        return MathHelper.GetNumericOperations<T>().FromDouble(1.0 - Math.Max(epsilon, gap));
+    }
+
+    /// <summary>
+    /// The split threshold between consecutive distinct values lower &lt; upper: their midpoint, computed as
+    /// lower / 2 + upper / 2 so it cannot overflow, and replaced by <paramref name="lower"/> when rounding
+    /// pushes it up to <paramref name="upper"/> (as scikit-learn's tree splitter does), so x &lt;= threshold
+    /// always separates the two values.
+    /// </summary>
+    /// <param name="lower">The lower values, any shape.</param>
+    /// <param name="upper">The upper values, same shape.</param>
+    /// <returns>The thresholds.</returns>
+    private protected Tensor<T> SplitThresholds(Tensor<T> lower, Tensor<T> upper)
+    {
+        var engine = Engine;
+        T half = NumOps.FromDouble(0.5);
+        var midpoint = engine.TensorAdd(engine.TensorMultiplyScalar(lower, half), engine.TensorMultiplyScalar(upper, half));
+        return engine.TensorWhere(engine.TensorGreaterEqual(midpoint, upper), lower, midpoint);
     }
 
     /// <summary>
@@ -544,7 +622,6 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         int total = samples.Length;
         int bestFeature = -1;
         T bestThreshold = NumOps.Zero;
-        T bestGini = NumOps.MaxValue;
         if (total < 2 || NumClasses == 0)
         {
             return (bestFeature, bestThreshold);
@@ -553,10 +630,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         var sampleTensor = new Tensor<int>(samples, new[] { total });
         var nodeClasses = engine.TensorClamp(engine.TensorGather(classes, sampleTensor, 0), -1, NumClasses);
         var nodeRows = engine.TensorGather(x, sampleTensor, 0);
-        T totalCount = NumOps.FromDouble(total);
-        T half = NumOps.FromDouble(0.5);
-        T minLeaf = NumOps.FromDouble(minSamplesLeaf);
-        var featureScores = new List<Tensor<T>>();
+        var featureScores = new List<Tensor<double>>();
         var featureThresholds = new List<Tensor<T>>();
         var featureIds = new List<int>();
 
@@ -573,36 +647,40 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
             }
 
             var sortedClasses = engine.TensorAddScalar(engine.TensorGather(nodeClasses, order, 0), 1);
-            var membership = engine.TensorOneHot<T>(sortedClasses, NumClasses + 2).Slice(1, 1, NumClasses + 1);
+            var membership = engine.TensorOneHot<int>(sortedClasses, NumClasses + 2).Slice(1, 1, NumClasses + 1);
 
-            // Left side of the split after distinct value v: every sample with value <= distinct[v]
-            var candidates = distinct.Slice(0, 0, numDistinct - 1);
-            var lastLeft = engine.TensorAddScalar(engine.TensorSearchSorted(sortedValues, candidates, true), -1);
-            var leftCounts = engine.TensorGather(engine.TensorCumSum(membership, 0), lastLeft, 0);
-            var leftTotal = engine.TensorGather(engine.TensorArange<T>(1, total + 1), lastLeft, 0).Reshape(numDistinct - 1, 1);
-            var rightCounts = engine.TensorSubtract(engine.ReduceSum(membership, new[] { 0 }, true), leftCounts);
-            var rightTotal = engine.ScalarMinusTensor(totalCount, leftTotal);
+            // Left side of the split after distinct value v: every sample with value <= distinct[v]. Counts are
+            // kept in int (a running count in T stops at 2048 for Half) and the impurity is evaluated in double.
+            int candidates = numDistinct - 1;
+            var lastLeft = engine.TensorAddScalar(
+                engine.TensorSearchSorted(sortedValues, distinct.Slice(0, 0, candidates), true), -1);
+            var leftCounts = engine.TensorGather(engine.TensorCumSum(membership, 0), lastLeft, 0).Cast<double>();
+            var leftTotal = engine.TensorAddScalar(lastLeft, 1).Cast<double>().Reshape(candidates, 1);
+            var rightCounts = engine.TensorSubtract(engine.ReduceSum(membership, new[] { 0 }, true).Cast<double>(), leftCounts);
+            var rightTotal = engine.ScalarMinusTensor((double)total, leftTotal);
 
             // weighted Gini = (nL / n) * (1 - sum pL^2) + (nR / n) * (1 - sum pR^2)
             var leftShare = engine.TensorDivide(leftCounts, leftTotal);
             var rightShare = engine.TensorDivide(rightCounts, rightTotal);
-            var leftGini = engine.ScalarMinusTensor(NumOps.One, engine.ReduceSum(engine.TensorMultiply(leftShare, leftShare), new[] { 1 }, true));
-            var rightGini = engine.ScalarMinusTensor(NumOps.One, engine.ReduceSum(engine.TensorMultiply(rightShare, rightShare), new[] { 1 }, true));
+            var leftGini = engine.ScalarMinusTensor(1.0, engine.ReduceSum(engine.TensorMultiply(leftShare, leftShare), new[] { 1 }, true));
+            var rightGini = engine.ScalarMinusTensor(1.0, engine.ReduceSum(engine.TensorMultiply(rightShare, rightShare), new[] { 1 }, true));
             var weighted = engine.TensorAdd(
-                engine.TensorMultiply(engine.TensorDivideScalar(leftTotal, totalCount), leftGini),
-                engine.TensorMultiply(engine.TensorDivideScalar(rightTotal, totalCount), rightGini)).Reshape(numDistinct - 1);
+                engine.TensorMultiply(engine.TensorDivideScalar(leftTotal, (double)total), leftGini),
+                engine.TensorMultiply(engine.TensorDivideScalar(rightTotal, (double)total), rightGini)).Reshape(candidates);
 
+            var minLeaf = engine.TensorAddScalar(new Tensor<double>(new[] { candidates, 1 }), (double)minSamplesLeaf);
             var allowed = engine.TensorMultiply(
-                engine.TensorGreaterEqual(leftTotal, engine.TensorAddScalar(new Tensor<T>(new[] { numDistinct - 1, 1 }), minLeaf)),
-                engine.TensorGreaterEqual(rightTotal, engine.TensorAddScalar(new Tensor<T>(new[] { numDistinct - 1, 1 }), minLeaf))).Reshape(numDistinct - 1);
-            var maxValues = FilledVector(numDistinct - 1, NumOps.MaxValue).AsTensor();
+                engine.TensorGreaterEqual(leftTotal, minLeaf),
+                engine.TensorGreaterEqual(rightTotal, minLeaf)).Reshape(candidates);
+            var maxValues = engine.TensorAddScalar(new Tensor<double>(new[] { candidates }), double.MaxValue);
             var scores = engine.TensorWhere(allowed, weighted, maxValues);
             int v = engine.TensorArgMin(scores, 0).ToArray()[0];
 
-            // Disallowed splits score MaxValue, so they never beat the initial best below
+            // Disallowed splits score double.MaxValue, so they never win below
             featureScores.Add(engine.TensorSlice(scores, new[] { v }, new[] { 1 }));
-            featureThresholds.Add(engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorSlice(distinct, new[] { v }, new[] { 2 }), new[] { 0 }, true), half));
+            featureThresholds.Add(SplitThresholds(
+                engine.TensorSlice(distinct, new[] { v }, new[] { 1 }),
+                engine.TensorSlice(distinct, new[] { v + 1 }, new[] { 1 })));
             featureIds.Add(j);
         }
 
@@ -611,7 +689,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         {
             var allScores = engine.TensorConcatenate(featureScores.ToArray(), 0);
             int best = engine.TensorArgMin(allScores, 0).ToArray()[0];
-            if (NumOps.LessThan(allScores[best], bestGini))
+            if (allScores[best] < double.MaxValue)
             {
                 bestFeature = featureIds[best];
                 bestThreshold = featureThresholds[best][0];
@@ -670,7 +748,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         // Augmented matrix [A | I]
         var identity = engine.TensorEye<T>(n);
         var augmented = engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(matrix), identity }, 1);
-        T minimum = NumOps.FromDouble(1e-12);
+        T minimum = Tolerance(1e-12);
         for (int col = 0; col < n; col++)
         {
             augmented = SwapInPivotRow(augmented, col, n);
@@ -703,8 +781,8 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
             return new Vector<T>(0);
         }
 
-        T clampThreshold = NumOps.FromDouble(1e-12);
-        T skipThreshold = NumOps.FromDouble(1e-10);
+        T clampThreshold = Tolerance(1e-12);
+        T skipThreshold = Tolerance(1e-10);
         var augmented = ForwardEliminate(
             engine.TensorConcatenate(new[] { a, b.AsTensor().Reshape(n, 1) }, 1), n, handling, out _);
         var upper = augmented.Slice(1, 0, n);
@@ -1091,6 +1169,52 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Majority vote over integer vote counts: the label with the most votes per row (ties go to the lowest
+    /// class index).
+    /// </summary>
+    /// <param name="votes">The [n, NumClasses] vote counts.</param>
+    /// <returns>The winning class label per row.</returns>
+    private protected Vector<T> MajorityVoteLabels(Tensor<int> votes)
+    {
+        if (votes.Shape[0] == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return ClassIndicesToLabels(Engine.TensorArgMax(votes, 1));
+    }
+
+    /// <summary>
+    /// Adds one vote per row for the class at <paramref name="predicted"/>[row] to the [n, NumClasses] counts.
+    /// </summary>
+    /// <param name="votes">The running [n, NumClasses] vote counts.</param>
+    /// <param name="predicted">The class index voted for by each row, in [0, NumClasses).</param>
+    /// <returns>The updated counts.</returns>
+    private protected Tensor<int> AddVotes(Tensor<int> votes, int[] predicted)
+    {
+        return Engine.TensorAdd(votes,
+            Engine.TensorOneHot<int>(new Tensor<int>(predicted, new[] { predicted.Length }), NumClasses));
+    }
+
+    /// <summary>
+    /// How often each feature index occurs in <paramref name="splitFeatures"/>, divided by the number of
+    /// entries (all zero when there are none).
+    /// </summary>
+    /// <param name="splitFeatures">The feature index of every split.</param>
+    /// <param name="featureCount">The number of features.</param>
+    /// <returns>The [featureCount] usage fractions.</returns>
+    private protected Tensor<T> FeatureUsageFractions(List<int> splitFeatures, int featureCount)
+    {
+        if (splitFeatures.Count == 0 || featureCount == 0)
+        {
+            return new Tensor<T>(new[] { featureCount });
+        }
+
+        var counts = Engine.TensorBinCount(new Tensor<int>(splitFeatures.ToArray(), new[] { splitFeatures.Count }), featureCount);
+        return CountFractions(counts.Slice(0, 0, featureCount), splitFeatures.Count);
+    }
+
+    /// <summary>
     /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
     /// </summary>
     private protected static Vector<T> FilledVector(int length, T value)
@@ -1146,7 +1270,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
 
     /// <summary>
     /// Mean binary log loss -mean(y * log(p) + (1 - y) * log(1 - p)) with p = sigmoid(logOdds) clamped to
-    /// [1e-10, 1 - 1e-10].
+    /// [1e-10, 1 - 1e-10] (the bounds move inward where float or Half cannot hold them).
     /// </summary>
     /// <param name="logOdds">The log-odds of the positive class per sample.</param>
     /// <param name="yBinary">The 0/1 targets.</param>
@@ -1159,8 +1283,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         }
 
         var engine = Engine;
-        T eps = NumOps.FromDouble(1e-10);
-        var p = engine.TensorClamp(engine.Sigmoid(logOdds).AsTensor(), eps, NumOps.Subtract(NumOps.One, eps));
+        var p = engine.TensorClamp(engine.Sigmoid(logOdds).AsTensor(), Tolerance(1e-10), OneMinusTolerance(1e-10));
         var yT = yBinary.AsTensor();
         var oneMinusY = engine.ScalarMinusTensor(NumOps.One, yT);
         var logP = engine.TensorLog(p);

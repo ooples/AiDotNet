@@ -130,10 +130,10 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
         else if (Options.FitPriors && ClassCounts != null)
         {
             // Learn priors from data: log(count / total)
-            var counts = ClassIndicesToValues(new Tensor<int>(ClassCounts, new[] { ClassCounts.Length }), totalSamples + 1);
-            LogPriors = counts.Length == 0
+            // (the ratio is taken in double so large counts keep their precision)
+            LogPriors = ClassCounts.Length == 0
                 ? new Vector<T>(0)
-                : engine.TensorLog(engine.TensorDivideScalar(counts.AsTensor(), NumOps.FromDouble(totalSamples))).ToVector();
+                : engine.TensorLog(CountFractions(new Tensor<int>(ClassCounts, new[] { ClassCounts.Length }), totalSamples)).ToVector();
         }
         else
         {

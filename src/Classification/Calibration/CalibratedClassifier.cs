@@ -456,7 +456,7 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
         // Store mapping for prediction (remove duplicates, keep unique probability bins)
         var uniqueMapping = new List<(T prob, T calibrated)>();
         T lastProb = NumOps.MinValue;
-        T threshold = NumOps.FromDouble(1e-10);
+        T threshold = Tolerance(1e-10);
         for (int i = 0; i < n; i++)
         {
             if (NumOps.GreaterThan(NumOps.Subtract(indexed[i].prob, lastProb), threshold))
@@ -528,12 +528,13 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     }
 
     /// <summary>
-    /// Clamps probabilities to [1e-10, 1 - 1e-10] so logarithms stay finite.
+    /// Clamps probabilities to [1e-10, 1 - 1e-10] (moved inward where float or Half cannot hold the bounds) so
+    /// logarithms stay finite.
     /// </summary>
     private Tensor<T> ClampProbabilities(Tensor<T> probabilities)
     {
-        T eps = NumOps.FromDouble(1e-10);
-        return Engine.TensorClamp(probabilities, eps, NumOps.Subtract(NumOps.One, eps));
+        // 1 - 1e-10 rounds to 1 in float and Half, which made logit(p) and log(1 - p) infinite for p = 1
+        return Engine.TensorClamp(probabilities, Tolerance(1e-10), OneMinusTolerance(1e-10));
     }
 
     /// <summary>
@@ -589,7 +590,7 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
     /// </summary>
     private bool HasConverged(T loss, ref T previous)
     {
-        if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(loss, previous)), NumOps.FromDouble(1e-8)))
+        if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(loss, previous)), Tolerance(1e-8)))
         {
             return true;
         }
@@ -714,7 +715,7 @@ public partial class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
 
         // Linear interpolation (falls back to the low knot when the bracket is narrower than 1e-10)
         var range = engine.TensorSubtract(xHigh, xLow);
-        var narrow = engine.TensorLessThan(range, NumOps.FromDouble(1e-10));
+        var narrow = engine.TensorLessThan(range, Tolerance(1e-10));
         var safeRange = engine.TensorWhere(narrow, FilledVector(p.Length, NumOps.One).AsTensor(), range);
         var t = engine.TensorDivide(engine.TensorSubtract(p, xLow), safeRange);
         var interpolated = engine.TensorAdd(

@@ -326,7 +326,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         var classCounts = CountClassSamples(sampleClasses, sampleIndices);
         int majorityClass = NumClasses == 0 ? 0 : engine.TensorArgMax(classCounts, 0).ToArray()[0];
         int total = sampleIndices.Length;
-        var classProbs = engine.TensorDivideScalar(classCounts, NumOps.FromDouble(total)).ToVector();
+        var classProbs = CountFractions(classCounts, total).ToVector();
 
         // Stopping conditions
         bool isPure = engine.TensorCountNonzero(classCounts) <= 1;
@@ -389,16 +389,15 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         }
 
         // Majority vote over the trees (the first class wins ties)
-        var engine = Engine;
         int rows = input.Rows;
         var features = Tensor<T>.FromMatrix(input);
         var allRows = Enumerable.Range(0, rows).ToArray();
-        var votes = new Tensor<T>(new[] { rows, NumClasses });
+        var votes = new Tensor<int>(new[] { rows, NumClasses });
         foreach (var tree in _baseClassifiers)
         {
             var predicted = new int[rows];
             AssignPredictions(tree, features, allRows, predicted);
-            votes = engine.TensorAdd(votes, engine.TensorOneHot<T>(new Tensor<int>(predicted, new[] { rows }), NumClasses));
+            votes = AddVotes(votes, predicted);
         }
 
         return MajorityVoteLabels(votes);
@@ -467,15 +466,7 @@ public partial class BalancedBaggingClassifier<T> : ClassifierBase<T>
         }
 
         // Usage count per feature, normalized to sum to 1
-        var engine = Engine;
-        var importance = new Tensor<T>(new[] { NumFeatures });
-        if (splitFeatures.Count > 0 && NumFeatures > 0)
-        {
-            var counts = engine.TensorScatterAdd(importance,
-                new Tensor<int>(splitFeatures.ToArray(), new[] { splitFeatures.Count }),
-                FilledVector(splitFeatures.Count, NumOps.One).AsTensor(), 0);
-            importance = engine.TensorDivideScalar(counts, engine.TensorSum(counts));
-        }
+        var importance = FeatureUsageFractions(splitFeatures, NumFeatures);
 
         var values = importance.ToArray();
         var result = new Dictionary<string, T>();

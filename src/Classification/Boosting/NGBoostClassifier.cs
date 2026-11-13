@@ -156,11 +156,11 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
                 $"Label value at index {unknownAt} does not match any known class label. " +
                 "Ensure all training labels are present in ClassLabels.");
 
-        // Initialize log-odds based on class frequencies: log(clamp(count_c / n, 1e-10, 1 - 1e-10))
-        var classCounts = engine.TensorScatterAdd(new Tensor<T>(new[] { _numClasses }), yIndexTensor,
-            FilledVector(n, NumOps.One).AsTensor(), 0);
-        var priors = engine.TensorClamp(engine.TensorDivideScalar(classCounts, NumOps.FromDouble(n)),
-            NumOps.FromDouble(1e-10), NumOps.FromDouble(1 - 1e-10));
+        // Initialize log-odds based on class frequencies: log(clamp(count_c / n, 1e-10, 1 - 1e-10)); the counts
+        // are taken in int (a sum of ones in T stops at 2048 for Half)
+        var classCounts = engine.TensorBinCount(yIndexTensor, _numClasses).Slice(0, 0, _numClasses);
+        var priors = engine.TensorClamp(CountFractions(classCounts, n),
+            Tolerance(1e-10), NumOps.FromDouble(1 - 1e-10));
         _initialLogOdds = engine.TensorLog(priors).ToVector();
 
         // Current log-odds as a [n, classes] matrix, every row starting at the prior
@@ -307,7 +307,7 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         }
 
         var engine = Engine;
-        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), NumOps.FromDouble(1e-10))).ToMatrix();
+        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), Tolerance(1e-10))).ToMatrix();
     }
 
     /// <summary>

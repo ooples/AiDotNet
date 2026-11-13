@@ -169,7 +169,7 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         var condNeg = engine.TensorGather(_condProbsNeg.Reshape(_condProbsNeg.Length), codes, 0).Reshape(n, NumLabels);
         var pPos = engine.TensorMultiply(condPos, prior);
         var pNeg = engine.TensorMultiply(condNeg, engine.ScalarMinusTensor(NumOps.One, prior));
-        var denominator = engine.TensorAddScalar(engine.TensorAdd(pPos, pNeg), NumOps.FromDouble(1e-10));
+        var denominator = engine.TensorAddScalar(engine.TensorAdd(pPos, pNeg), Tolerance(1e-10));
         return engine.TensorDivide(pPos, denominator).ToMatrix();
     }
 

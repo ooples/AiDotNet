@@ -228,7 +228,7 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
 
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         T l2Reg = NumOps.FromDouble(_options.L2Regularization);
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = Tolerance(1e-10);
 
         for (int outer = 0; outer < _options.OuterBags; outer++)
         {
@@ -548,7 +548,7 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
 
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         T l2Reg = NumOps.FromDouble(_options.L2Regularization);
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = Tolerance(1e-10);
 
         // Cyclic boosting over interaction terms (same structure as main effect training)
         var keys = _interactionTerms.Keys.ToList();
@@ -596,8 +596,8 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         var r = residuals.AsTensor();
         var zeros = new Tensor<T>(new[] { numGroups });
         var groupSums = engine.TensorScatterAdd(zeros, groupIds, r, 0);
-        var groupCounts = engine.TensorScatterAdd(zeros, groupIds, FilledVector(n, NumOps.One).AsTensor(), 0);
-        var groupMeans = engine.TensorDivide(groupSums, engine.TensorClampMin(groupCounts, NumOps.One));
+        var groupCounts = CountsToValues(engine.TensorClampMin(engine.TensorBinCount(groupIds, numGroups).Slice(0, 0, numGroups), 1));
+        var groupMeans = engine.TensorDivide(groupSums, groupCounts);
         var deviation = engine.TensorSubtract(r, engine.TensorGather(groupMeans, groupIds, 0));
         T withinVar = NumOps.Divide(engine.TensorSumOfSquares(deviation), NumOps.FromDouble(n));
 

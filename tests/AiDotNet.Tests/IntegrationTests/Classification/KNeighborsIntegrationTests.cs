@@ -1,3 +1,6 @@
+using AiDotNet.Classification.Calibration;
+using AiDotNet.Classification.DiscriminantAnalysis;
+using AiDotNet.Classification.ImbalancedEnsemble;
 using AiDotNet.Classification.Neighbors;
 using AiDotNet.Models.Options;
 using Xunit;
@@ -671,6 +674,153 @@ public class KNeighborsIntegrationTests
         Assert.Equal(0.0, probs[0, 0], Tolerance);
         Assert.Equal(2.0 / 3.0, probs[0, 1], Tolerance);
         Assert.Equal(1.0 / 3.0, probs[0, 2], Tolerance);
+    }
+
+    #endregion
+
+    #region Shared Classifier Helper Regressions
+
+    // 1 + 2^-23 and 1 + 2^-22: adjacent floats whose midpoint (a + b) / 2 rounds up to b in float, so a
+    // threshold taken as the plain midpoint sends both values to the "<= threshold" side.
+    private static float FloatFromBits(int bits) => BitConverter.ToSingle(BitConverter.GetBytes(bits), 0);
+
+    [Fact(Timeout = 120000)]
+    public async Task BalancedRandomForest_AdjacentFloatValues_SplitSeparatesThem()
+    {
+        // Arrange: one sample per class, at adjacent float values. The best Gini split lies between them; its
+        // threshold must stay below the upper value (scikit-learn uses the lower value when the midpoint rounds
+        // up to the upper one), otherwise every sample goes left and the leaves predict the majority class.
+        float lower = FloatFromBits(0x3F800001);
+        float upper = FloatFromBits(0x3F800002);
+        var x = new Matrix<float>(2, 1);
+        var y = new Vector<float>(2);
+        x[0, 0] = lower; y[0] = 0f;
+        x[1, 0] = upper; y[1] = 1f;
+
+        var forest = new BalancedRandomForestClassifier<float>(nEstimators: 3, maxDepth: 4, seed: 7);
+        forest.Train(x, y);
+
+        // Act
+        var predictions = forest.Predict(x);
+
+        // Assert
+        Assert.Equal(0f, predictions[0]);
+        Assert.Equal(1f, predictions[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EasyEnsemble_AdjacentFloatValues_StumpSeparatesThem()
+    {
+        // Arrange: the stump between two adjacent floats has zero weighted error only if its threshold stays
+        // below the upper value; a threshold that rounds up to it predicts class 0 for both samples.
+        float lower = FloatFromBits(0x3F800001);
+        float upper = FloatFromBits(0x3F800002);
+        var x = new Matrix<float>(2, 1);
+        var y = new Vector<float>(2);
+        x[0, 0] = lower; y[0] = 0f;
+        x[1, 0] = upper; y[1] = 1f;
+
+        var ensemble = new EasyEnsembleClassifier<float>(nSubsets: 1, nEstimatorsPerSubset: 1, seed: 3);
+        ensemble.Train(x, y);
+
+        // Act
+        var predictions = ensemble.Predict(x);
+
+        // Assert
+        Assert.Equal(0f, predictions[0]);
+        Assert.Equal(1f, predictions[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EasyEnsemble_Half_SeparableData_KeepsFiniteBoostingWeights()
+    {
+        // Arrange: a perfectly separating stump has weighted error 0. The error is clamped away from 0 before
+        // log((1 - err) / err); 1e-10 rounds to 0 in Half, which made alpha infinite, the sample weights NaN
+        // and every later prediction class 0.
+        var x = new Matrix<Half>(4, 1);
+        var y = new Vector<Half>(4);
+        for (int i = 0; i < 4; i++)
+        {
+            x[i, 0] = (Half)(float)i;
+            y[i] = i < 2 ? (Half)0f : (Half)1f;
+        }
+
+        var ensemble = new EasyEnsembleClassifier<Half>(nSubsets: 1, nEstimatorsPerSubset: 3, softVoting: false, seed: 5);
+        ensemble.Train(x, y);
+
+        // Act
+        var predictions = ensemble.Predict(x);
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.0, ops.ToDouble(predictions[0]));
+        Assert.Equal(0.0, ops.ToDouble(predictions[1]));
+        Assert.Equal(1.0, ops.ToDouble(predictions[2]));
+        Assert.Equal(1.0, ops.ToDouble(predictions[3]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CalibratedClassifier_Float_PlattScalingOnCertainProbabilities_StaysFinite()
+    {
+        // Arrange: a 1-nearest-neighbor base model gives probabilities of exactly 0 and 1. Platt scaling clamps
+        // them to [1e-10, 1 - 1e-10] before taking logit(p); 1 - 1e-10 rounds to 1 in float, so logit(1) was
+        // infinite and the fitted A and B (and every calibrated probability) became NaN.
+        var x = new Matrix<float>(20, 1);
+        var y = new Vector<float>(20);
+        for (int i = 0; i < 20; i++)
+        {
+            x[i, 0] = i;
+            y[i] = i < 10 ? 0f : 1f;
+        }
+
+        var calibrated = new CalibratedClassifier<float>(
+            new KNeighborsClassifier<float>(new KNeighborsOptions<float> { NNeighbors = 1 }),
+            new CalibratedClassifierOptions<float> { CalibrationMethod = AiDotNet.Enums.ProbabilityCalibrationMethod.PlattScaling, Seed = 11 });
+        calibrated.Train(x, y);
+
+        // Act
+        var probs = calibrated.PredictProbabilities(x);
+
+        // Assert: finite, and the positive class is more likely at the class-1 end than at the class-0 end
+        for (int i = 0; i < probs.Rows; i++)
+        {
+            for (int c = 0; c < probs.Columns; c++)
+            {
+                Assert.False(float.IsNaN(probs[i, c]) || float.IsInfinity(probs[i, c]), $"probs[{i}, {c}] = {probs[i, c]}");
+            }
+        }
+
+        Assert.True(probs[19, 1] > probs[0, 1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LinearDiscriminantAnalysis_Half_PriorsCountEveryClassSample()
+    {
+        // Arrange: both classes have mean 0 (alternating +1/-1), so the posterior equals the class prior,
+        // 3000 / 4000 = 0.75. Counting class samples as a sum of ones in Half stops at 2048, which gave priors
+        // 2048/4000 and 1000/4000 and a posterior of about 0.67.
+        int classZero = 3000;
+        int classOne = 1000;
+        int n = classZero + classOne;
+        var x = new Matrix<Half>(n, 1);
+        var y = new Vector<Half>(n);
+        for (int i = 0; i < n; i++)
+        {
+            x[i, 0] = i % 2 == 0 ? (Half)1f : (Half)(-1f);
+            y[i] = i < classZero ? (Half)0f : (Half)1f;
+        }
+
+        var lda = new LinearDiscriminantAnalysis<Half>();
+        lda.Train(x, y);
+        var query = new Matrix<Half>(1, 1);
+
+        // Act
+        var probs = lda.PredictProbabilities(query);
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.75, ops.ToDouble(probs[0, 0]), 2);
+        Assert.Equal(0.25, ops.ToDouble(probs[0, 1]), 2);
     }
 
     #endregion

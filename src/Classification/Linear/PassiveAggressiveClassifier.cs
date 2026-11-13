@@ -134,9 +134,9 @@ public class PassiveAggressiveClassifier<T> : LinearClassifierBase<T>
     private T ComputeTau(T loss, T squaredNorm, T c)
     {
         // Avoid division by zero
-        if (NumOps.Compare(squaredNorm, NumOps.FromDouble(1e-12)) < 0)
+        if (NumOps.Compare(squaredNorm, Tolerance(1e-12)) < 0)
         {
-            squaredNorm = NumOps.FromDouble(1e-12);
+            squaredNorm = Tolerance(1e-12);
         }
 
         T tau;

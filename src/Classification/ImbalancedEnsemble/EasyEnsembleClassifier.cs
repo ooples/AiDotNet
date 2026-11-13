@@ -364,8 +364,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         var weakLearners = new List<WeakLearner>();
         var alphas = new List<Tensor<T>>();
         T halfLearningRate = NumOps.Multiply(NumOps.FromDouble(_learningRate), NumOps.FromDouble(0.5));
-        T minError = NumOps.FromDouble(1e-10);
-        T maxError = NumOps.FromDouble(1 - 1e-10);
+        T minError = Tolerance(1e-10);
         T two = NumOps.FromDouble(2.0);
 
         for (int t = 0; t < _nEstimatorsPerSubset; t++)
@@ -378,11 +377,14 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
                 engine.TensorMultiply(engine.ScalarMinusTensor(NumOps.One, predictions), isZero));
             var misclassified = engine.ScalarMinusTensor(NumOps.One, correct);
 
-            // [1] weighted error clamped to [1e-10, 1 - 1e-10]; alpha = lr * 0.5 * log((1 - err) / err)
-            var weightedError = engine.TensorClamp(
-                engine.ReduceSum(engine.TensorMultiply(weights, misclassified), new[] { 0 }, true), minError, maxError);
+            // [1] alpha = lr * 0.5 * log((1 - err) / err) with err and 1 - err each kept at or above 1e-10
+            // (raised to Half's smallest normal for Half, and clamped separately because 1 - 1e-10 rounds to 1
+            // in float and Half)
+            var weightedError = engine.ReduceSum(engine.TensorMultiply(weights, misclassified), new[] { 0 }, true);
+            var errorTerm = engine.TensorClampMin(weightedError, minError);
+            var accuracyTerm = engine.TensorClampMin(engine.ScalarMinusTensor(NumOps.One, weightedError), minError);
             var alpha = engine.TensorMultiplyScalar(
-                engine.TensorLog(engine.TensorDivide(engine.ScalarMinusTensor(NumOps.One, weightedError), weightedError)),
+                engine.TensorSubtract(engine.TensorLog(accuracyTerm), engine.TensorLog(errorTerm)),
                 halfLearningRate);
 
             // w *= exp(alpha * sign) with sign = +1 for misclassified and -1 otherwise, then normalize
@@ -432,7 +434,6 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         var featureThresholds = new List<Tensor<T>>();
         var featureIds = new List<int>();
         var featurePolarities = new List<int>();
-        T two = NumOps.FromDouble(2.0);
 
         for (int j = 0; j < NumFeatures && n > 0; j++)
         {
@@ -462,8 +463,9 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             int best = engine.TensorArgMin(errors, 0).ToArray()[0];
             int v = best / 2;
             featureErrors.Add(engine.TensorSlice(errors, new[] { best }, new[] { 1 }));
-            featureThresholds.Add(engine.TensorDivideScalar(
-                engine.ReduceSum(engine.TensorSlice(distinct, new[] { v }, new[] { 2 }), new[] { 0 }, true), two));
+            featureThresholds.Add(SplitThresholds(
+                engine.TensorSlice(distinct, new[] { v }, new[] { 1 }),
+                engine.TensorSlice(distinct, new[] { v + 1 }, new[] { 1 })));
             featureIds.Add(j);
             featurePolarities.Add(best % 2 == 0 ? -1 : 1);
         }

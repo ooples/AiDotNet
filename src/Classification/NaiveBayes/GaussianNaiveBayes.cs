@@ -124,12 +124,12 @@ public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
             return;
         }
 
-        // Per-class sample counts and feature sums via the one-hot membership matrix
+        // Per-class sample counts (in int: a sum of one-hot rows in T stops at 2048 for Half) and feature sums
+        // via the one-hot membership matrix
         var membership = ClassMembership(y);
         var membershipT = engine.TensorTranspose(membership);
         var features = Tensor<T>.FromMatrix(x);
-        var counts = engine.TensorClampMin(engine.ReduceSum(membership, new[] { 0 }, false), NumOps.One)
-            .Reshape(NumClasses, 1);
+        var counts = CountsToValues(engine.TensorClampMin(CountClasses(y), 1)).Reshape(NumClasses, 1);
 
         // Mean of each feature (zero for classes with no samples)
         var means = engine.TensorDivide(engine.TensorMatMul(membershipT, features), counts);
