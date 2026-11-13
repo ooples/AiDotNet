@@ -798,11 +798,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert to ONNX format
-        var inputData = new float[frames.Length];
-        for (int i = 0; i < frames.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(frames.Data.Span[i]);
-        }
+        var inputData = frames.Cast<float>().ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames._shape);
         var inputMeta = _onnxSession.InputMetadata;
@@ -817,11 +813,8 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }

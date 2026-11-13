@@ -329,11 +329,7 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        }
+        var inputData = input.Cast<float>().ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
@@ -348,11 +344,8 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }

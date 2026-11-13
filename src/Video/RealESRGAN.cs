@@ -644,11 +644,7 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert input tensor to ONNX tensor format
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        }
+        var inputData = input.Cast<float>().ToArray();
 
         // Create ONNX input tensor with shape [batch, channels, height, width]
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
@@ -668,11 +664,8 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
         // Convert back to our tensor format
         var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
