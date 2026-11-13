@@ -61,12 +61,12 @@ public class SnacReferenceTests
 
         var audio = reference.GetProperty("audio").EnumerateArray().Select(v => v.GetDouble()).ToArray();
         var expectedCodes = reference.GetProperty("codes").EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32()).ToArray()).ToArray();
-        var codes = snac.Encode(audio);
+        var codes = snac.Encode(new Tensor<double>(new[] { audio.Length }, new Vector<double>(audio)));
         Assert.Equal(expectedCodes.Length, codes.Length);
         for (int q = 0; q < codes.Length; q++) Assert.Equal(expectedCodes[q], codes[q]);
 
         var draws = new Queue<double[]>(reference.GetProperty("noise").EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetDouble()).ToArray()));
-        var decoded = snac.Decode(expectedCodes, _ => draws.Dequeue());
+        var decoded = snac.Decode(expectedCodes, _ => { var d = draws.Dequeue(); return new Tensor<double>(new[] { d.Length }, new Vector<double>(d)); }).ToArray();
         Assert.Empty(draws);
         var expected = reference.GetProperty("decoded").EnumerateArray().Select(v => v.GetDouble()).ToArray();
         Assert.Equal(expected.Length, decoded.Length);
