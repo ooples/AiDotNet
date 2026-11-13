@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -126,7 +127,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
         var features = _features ?? throw new InvalidOperationException("The WaveRNN network has not been created.");
-        return MelTensor(features.LogMel(audio.Cast<double>().ToArray()));
+        return MelTensor(features.LogMel(TensorCopyHelper.CastLogical<T, double>(audio).ToArray()));
     }
 
     /// <summary>A <c>[frames, bands]</c> feature matrix as the <c>[1, bands, frames]</c> mel tensor.</summary>
@@ -151,7 +152,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     {
         // ToSixteenBit per sample, in double whatever T is (65535 is not representable in every T): round half to
         // even of (clamp(x, -1, 1) + 1) * 32767.5, then the high and low bytes.
-        var x = Engine.Reshape(audio.Cast<double>(), new[] { audio.Length });
+        var x = Engine.Reshape(TensorCopyHelper.CastLogical<T, double>(audio), new[] { audio.Length });
         var sixteen = Engine.TensorClamp(
             Engine.TensorRound(Engine.TensorMultiplyScalar(Engine.TensorAddScalar(Engine.TensorClamp(x, -1.0, 1.0), 1.0), 32767.5)),
             0.0, 65535.0);
@@ -268,7 +269,12 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         {
             double progress = Math.Min(1.0, since / (double)o.PruningSteps);
             double z = o.SparsityTarget * (1 - Math.Pow(1 - progress, 3));
-            _mask = PruningMask(z);
+            // The mask is reapplied on every step until the next interval, so it is built outside any caller arena
+            // (the facade trains inside one): an arena reset would reissue its storage and prune unintended weights.
+            using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+            {
+                _mask = PruningMask(z);
+            }
         }
         Core.Recurrent.MaskKernel(_mask);
     }
@@ -287,7 +293,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         // Summed |w| of each block: the kernel viewed as [gate, block row, row, block column, column]
         int[] blockShape = { 3, rowsOfBlocks, br, colsOfBlocks, bc };
         var magnitudes = Engine.ReduceSum(
-            Engine.Reshape(Engine.TensorAbs(kernel.Cast<double>()), blockShape), new[] { 2, 4 }, false).ToArray();
+            Engine.Reshape(Engine.TensorAbs(TensorCopyHelper.CastLogical<T, double>(kernel)), blockShape), new[] { 2, 4 }, false).ToArray();
         var keep = new int[3 * blocks];
         for (int gate = 0; gate < 3; gate++)
         {
