@@ -679,15 +679,15 @@ public class ElementwiseSweepRegressionTests
         sourceM[0] = new double[1];
         sourceV[0] = new double[1];
         RunHalfReadoutStep(source, (Half)0.0001, sourceM[0], sourceV[0], step: 1);
-        var counter = typeof(SpikingNeuralNetwork<Half>).GetField("_adamStep",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var counter = Required(typeof(SpikingNeuralNetwork<Half>).GetField("_adamStep",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
         counter.SetValue(source, 1);
         restored.Deserialize(source.Serialize());
         var restoredM = SnnMoments(restored, "_adamMWide");
         var restoredV = SnnMoments(restored, "_adamVWide");
         Assert.Equal(sourceM[0], restoredM[0]);
         Assert.Equal(sourceV[0], restoredV[0]);
-        Assert.Equal(1, (int)counter.GetValue(restored)!);
+        Assert.Equal(1, (int)Required(counter.GetValue(restored)));
         var expected = RunHalfReadoutStep(source, (Half)0.0002, sourceM[0], sourceV[0], step: 2);
         var actual = RunHalfReadoutStep(restored, (Half)0.0002, restoredM[0], restoredV[0], step: 2);
         Assert.Equal(expected.ToArray(), actual.ToArray());
@@ -726,10 +726,10 @@ public class ElementwiseSweepRegressionTests
         legacy.Train(input, target);
         wide.Deserialize(legacy.Serialize());
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var legacyM = (Dictionary<int, Vector<Half>>)typeof(SpikingNeuralNetwork<Half>)
-            .GetField("_adamM", flags)!.GetValue(legacy)!;
-        var legacyV = (Dictionary<int, Vector<Half>>)typeof(SpikingNeuralNetwork<Half>)
-            .GetField("_adamV", flags)!.GetValue(legacy)!;
+        var legacyM = (Dictionary<int, Vector<Half>>)Required(
+            Required(typeof(SpikingNeuralNetwork<Half>).GetField("_adamM", flags)).GetValue(legacy));
+        var legacyV = (Dictionary<int, Vector<Half>>)Required(
+            Required(typeof(SpikingNeuralNetwork<Half>).GetField("_adamV", flags)).GetValue(legacy));
         foreach (var pair in SnnMoments(legacy, "_adamMWide"))
         {
             legacyM[pair.Key] = new Vector<Half>(Enumerable.Repeat((Half)0.002, pair.Value.Length).ToArray());
@@ -749,8 +749,15 @@ public class ElementwiseSweepRegressionTests
     }
 
     private static Dictionary<int, double[]> SnnMoments(SpikingNeuralNetwork<Half> model, string name) =>
-        (Dictionary<int, double[]>)typeof(SpikingNeuralNetwork<Half>).GetField(name,
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(model)!;
+        (Dictionary<int, double[]>)Required(Required(typeof(SpikingNeuralNetwork<Half>).GetField(name,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)).GetValue(model));
+
+    /// <summary>The value, after asserting that it is not null.</summary>
+    internal static TValue Required<TValue>(TValue? value) where TValue : class
+    {
+        Assert.NotNull(value);
+        return value ?? throw new InvalidOperationException("Assert.NotNull let a null through.");
+    }
 
     private static Vector<Half> RunHalfReadoutStep(SpikingNeuralNetwork<Half> model, Half error,
         double[] firstMoment, double[] secondMoment, int step)
@@ -759,8 +766,8 @@ public class ElementwiseSweepRegressionTests
         var spikes = Enumerable.Range(0, steps).Select(_ => new Vector<Half>(new Half[] { (Half)1 })).ToList();
         var history = new List<List<Vector<Half>>> { spikes };
         var updates = new Vector<Half>(1);
-        var method = typeof(SpikingNeuralNetwork<Half>).GetMethod("ApplyReadoutAdamStep",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var method = Required(typeof(SpikingNeuralNetwork<Half>).GetMethod("ApplyReadoutAdamStep",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
         method.Invoke(model, new object[] { 0, 0, 1, 1, spikes, history,
             new Vector<Half>(new[] { error }), updates, firstMoment, secondMoment, 0.001,
             1 - Math.Pow(0.9, step), 1 - Math.Pow(0.999, step) });
@@ -788,10 +795,10 @@ public class ElementwiseSweepRegressionTests
                 MLPDimensions = new[] { 4 }, TimestepEmbeddingDimension = 4, Seed = 7 });
         var columns = new[] { new ColumnMetadata("constant", ColumnDataType.Continuous) };
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        typeof(TabDDPMGenerator<Half>).GetMethod("AnalyzeColumns", flags)!.Invoke(model, new object[] { columns });
+        Required(typeof(TabDDPMGenerator<Half>).GetMethod("AnalyzeColumns", flags)).Invoke(model, new object[] { columns });
         var data = new Matrix<Half>(new[,] { { (Half)5 }, { (Half)5 }, { (Half)5 }, { (Half)5 } });
-        var prepared = (ValueTuple<Matrix<Half>, Matrix<Half>>)typeof(TabDDPMGenerator<Half>)
-            .GetMethod("PreprocessData", flags)!.Invoke(model, new object[] { data, columns })!;
+        var prepared = (ValueTuple<Matrix<Half>, Matrix<Half>>)Required(Required(typeof(TabDDPMGenerator<Half>)
+            .GetMethod("PreprocessData", flags)).Invoke(model, new object[] { data, columns }));
         Assert.All(prepared.Item1.AsSpan().ToArray(), value => Assert.Equal((Half)0, value));
     }
 
@@ -800,7 +807,7 @@ public class ElementwiseSweepRegressionTests
     {
         const int count = 70000;
         var input = new Vector<Half>(Enumerable.Repeat((Half)1, count).ToArray());
-        var clipped = GradientClippingHelper.ClipByNorm(input, 10)!;
+        var clipped = Required(GradientClippingHelper.ClipByNorm(input, 10));
         double expected = 10 / Math.Sqrt(count);
         Assert.All(clipped.ToArray(), value => Assert.InRange((double)value, expected - 3e-5, expected + 3e-5));
         Assert.Equal(1.0, (double)input[0]);
@@ -811,11 +818,11 @@ public class ElementwiseSweepRegressionTests
     {
         var input = new Vector<double>(new[] { 1e300, -1e300 });
         double expected = 1 / Math.Sqrt(2);
-        var clipped = GradientClippingHelper.ClipByNorm(input, 1)!;
+        var clipped = Required(GradientClippingHelper.ClipByNorm(input, 1));
         Assert.Equal(expected, clipped[0], 12);
         Assert.Equal(-expected, clipped[1], 12);
-        var global = GradientClippingHelper.ClipByGlobalNorm(
-            new List<Vector<double>> { new(new[] { 1e300 }), new(new[] { -1e300 }) }, 1)!;
+        var global = Required(GradientClippingHelper.ClipByGlobalNorm(
+            new List<Vector<double>> { new(new[] { 1e300 }), new(new[] { -1e300 }) }, 1));
         Assert.Equal(expected, global[0][0], 12);
         Assert.Equal(-expected, global[1][0], 12);
     }
@@ -823,7 +830,7 @@ public class ElementwiseSweepRegressionTests
     [Fact]
     public void NormClipping_PreservesARepresentableSubnormalDirection()
     {
-        var clipped = GradientClippingHelper.ClipByNorm(new Vector<float>(new[] { 1e-40f, -1e-40f }), 1e-42)!;
+        var clipped = Required(GradientClippingHelper.ClipByNorm(new Vector<float>(new[] { 1e-40f, -1e-40f }), 1e-42));
         Assert.InRange(clipped[0], 6.9e-43f, 7.2e-43f);
         Assert.InRange(clipped[1], -7.2e-43f, -6.9e-43f);
     }
@@ -856,9 +863,9 @@ public class ElementwiseSweepRegressionTests
         for (int column = 0; column < 32; column++) memory[0, column] = column + 1;
         var weights = new Vector<double>(64);
         weights[0] = 1;
-        var read = typeof(NeuralTuringMachine<double>).GetMethod("ReadFromMemory",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
-        var result = (Vector<double>)read.Invoke(model, new object[] { memory, weights })!;
+        var read = Required(typeof(NeuralTuringMachine<double>).GetMethod("ReadFromMemory",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic));
+        var result = (Vector<double>)Required(read.Invoke(model, new object[] { memory, weights }));
         Assert.Equal(Enumerable.Range(1, 32).Select(value => (double)value).ToArray(), result.ToArray());
     }
 
