@@ -468,150 +468,139 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         int imageSize = 256,
         int numSamples = 64)
     {
-        // Simplified volumetric rendering
-        // Real implementation would use proper ray marching with the NeRF
+        if (imageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), "Image size must be positive.");
+        if (numSamples <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numSamples), "The sample count must be positive.");
 
-        var image = new Tensor<T>(new[] { 1, 3, imageSize, imageSize });
-        var imageSpan = image.AsWritableSpan();
-        var latentSpan = latent.AsSpan();
+        var field = new ShapEImplicitFunction<T>(latent);
+        var directions = RayDirections(cameraPosition, lookAt, imageSize);
+        var origin = new Tensor<double>(new[] { 1, 1, 3 },
+            new Vector<double>(new[] { cameraPosition.x, cameraPosition.y, cameraPosition.z })).Cast<T>();
 
-        // Camera setup
-        var camPos = new double[] { cameraPosition.x, cameraPosition.y, cameraPosition.z };
-        var target = new double[] { lookAt.x, lookAt.y, lookAt.z };
-
-        // Forward direction
-        var forward = new double[3];
-        var length = 0.0;
-        for (int i = 0; i < 3; i++)
+        // Stratified depths t_i = 0.1 + 1.9 i / n with spacing delta = 1.9 / n, and the strictly-upper-triangular
+        // matrix that turns per-sample optical depths into the exclusive prefix sums sum_{j<i} sigma_j delta.
+        double delta = (RenderFar - RenderNear) / numSamples;
+        var depths = Engine.Reshape(
+            Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, numSamples, 1), NumOps.FromDouble(delta)),
+                NumOps.FromDouble(RenderNear)),
+            new[] { 1, numSamples, 1 });
+        var prefixValues = new double[numSamples * numSamples];
+        for (int j = 0; j < numSamples; j++)
         {
-            forward[i] = target[i] - camPos[i];
-            length += forward[i] * forward[i];
+            for (int i = j + 1; i < numSamples; i++)
+                prefixValues[(j * numSamples) + i] = 1.0;
         }
-        length = Math.Sqrt(length);
-        for (int i = 0; i < 3; i++) forward[i] /= length;
+        var exclusivePrefix = new Tensor<double>(new[] { numSamples, numSamples }, new Vector<double>(prefixValues)).Cast<T>();
 
-        // Simple right and up vectors (assuming Y is up)
-        var right = new double[] { forward[2], 0, -forward[0] };
-        var rLen = Math.Sqrt(right[0] * right[0] + right[2] * right[2]);
-        if (rLen > 0.001)
+        var deltaT = NumOps.FromDouble(delta);
+        var background = NumOps.FromDouble(RenderBackground);
+        int pixels = imageSize * imageSize;
+        int raysPerChunk = Math.Max(1, RenderPointsPerChunk / numSamples);
+        var chunks = new List<Tensor<T>>();
+        for (int start = 0; start < pixels; start += raysPerChunk)
         {
-            right[0] /= rLen;
-            right[2] /= rLen;
-        }
-        var up = new double[] {
-            forward[1] * right[2] - forward[2] * right[1],
-            forward[2] * right[0] - forward[0] * right[2],
-            forward[0] * right[1] - forward[1] * right[0]
-        };
+            int rays = Math.Min(raysPerChunk, pixels - start);
+            var chunkDirections = Engine.Reshape(Engine.TensorNarrow(directions, 0, start, rays), new[] { rays, 1, 3 });
+            var sampleShape = new[] { rays, numSamples, 3 };
+            var points = Engine.Reshape(
+                Engine.TensorAdd(
+                    Engine.TensorBroadcastTo(origin, sampleShape),
+                    Engine.TensorBroadcastTo(Engine.TensorMultiply(chunkDirections, depths), sampleShape)),
+                new[] { rays * numSamples, 3 });
+            var outputs = field.Evaluate(points);
 
-        // Render each pixel
-        for (int y = 0; y < imageSize; y++)
-        {
-            for (int x = 0; x < imageSize; x++)
-            {
-                // Normalized coordinates [-1, 1]
-                var u = (2.0 * x / imageSize - 1.0);
-                var v = (2.0 * y / imageSize - 1.0);
-
-                // Ray direction
-                var rayDir = new double[3];
-                for (int i = 0; i < 3; i++)
-                {
-                    rayDir[i] = forward[i] + u * right[i] * 0.5 + v * up[i] * 0.5;
-                }
-                // Normalize
-                length = Math.Sqrt(rayDir[0] * rayDir[0] + rayDir[1] * rayDir[1] + rayDir[2] * rayDir[2]);
-                for (int i = 0; i < 3; i++) rayDir[i] /= length;
-
-                // Sample color using simplified NeRF evaluation
-                var color = SampleNeRFColor(latentSpan, camPos, rayDir, numSamples);
-
-                // Write to image
-                for (int c = 0; c < 3; c++)
-                {
-                    var idx = c * imageSize * imageSize + y * imageSize + x;
-                    imageSpan[idx] = NumOps.FromDouble(color[c]);
-                }
-            }
+            // C = sum_i T_i (1 - exp(-sigma_i delta)) c_i + T_n * background.
+            var opticalDepth = Engine.TensorMultiplyScalar(
+                Engine.Reshape(ShapEImplicitFunction<T>.Density(outputs), new[] { rays, numSamples }), deltaT);
+            var alpha = Engine.TensorSubtract(
+                Engine.TensorOnesLike(opticalDepth), Engine.TensorExp(Engine.TensorNegate(opticalDepth)));
+            var transmittance = Engine.TensorExp(Engine.TensorNegate(Engine.TensorMatMul(opticalDepth, exclusivePrefix)));
+            var weights = Engine.Reshape(Engine.TensorMultiply(transmittance, alpha), new[] { rays, numSamples, 1 });
+            var colour = Engine.Reshape(ShapEImplicitFunction<T>.Colour(outputs), new[] { rays, numSamples, 3 });
+            var composited = Engine.ReduceSum(Engine.TensorMultiply(weights, colour), new[] { 1 }, false);
+            var remaining = Engine.TensorExp(Engine.TensorNegate(Engine.ReduceSum(opticalDepth, new[] { 1 }, true)));
+            chunks.Add(Engine.TensorAdd(composited, Engine.TensorBroadcastTo(
+                Engine.TensorMultiplyScalar(remaining, background), new[] { rays, 3 })));
         }
 
-        return image;
+        // [pixels, 3] -> [1, 3, H, W]
+        var image = Engine.TensorConcatenate(chunks.ToArray(), 0);
+        return Engine.Reshape(Engine.TensorPermute(image, new[] { 1, 0 }).Contiguous(), new[] { 1, 3, imageSize, imageSize });
     }
 
     #endregion
 
     #region Helper Methods
 
+    private const double RenderNear = 0.1;
+    private const double RenderFar = 2.0;
+    private const double RenderBackground = 0.8; // Light gray background
+    private const int RenderPointsPerChunk = 65536;
+    private const int GridPointsPerChunk = 65536;
+
     /// <summary>
-    /// Samples color along a ray using the NeRF representation.
+    /// Unit ray directions [size * size, 3] (row-major pixels, row 0 at the top) of a camera at
+    /// <paramref name="cameraPosition"/> looking at <paramref name="lookAt"/> with world +Y up and a half-extent of
+    /// 0.5 on the image plane at unit distance.
     /// </summary>
-    private double[] SampleNeRFColor(ReadOnlySpan<T> latent, double[] origin, double[] direction, int numSamples)
+    internal Tensor<T> RayDirections(
+        (double x, double y, double z) cameraPosition, (double x, double y, double z) lookAt, int size)
     {
-        // Simplified NeRF sampling
-        // Real implementation would use proper MLP evaluation and alpha compositing
+        var forward = Normalize(lookAt.x - cameraPosition.x, lookAt.y - cameraPosition.y, lookAt.z - cameraPosition.z);
 
-        var color = new double[3];
-        var transmission = 1.0;
-
-        for (int i = 0; i < numSamples; i++)
+        // right = forward x up (+Y), up' = right x forward: x to the right of the image, y to its top.
+        var right = Normalize(-forward[2], 0.0, forward[0]);
+        if (Math.Abs(forward[0]) < 1e-9 && Math.Abs(forward[2]) < 1e-9)
+            right = new[] { 1.0, 0.0, 0.0 };
+        var up = new[]
         {
-            var t = 0.1 + (2.0 - 0.1) * i / numSamples;
-            var point = new double[3];
-            for (int j = 0; j < 3; j++)
-            {
-                point[j] = origin[j] + t * direction[j];
-            }
+            (right[1] * forward[2]) - (right[2] * forward[1]),
+            (right[2] * forward[0]) - (right[0] * forward[2]),
+            (right[0] * forward[1]) - (right[1] * forward[0])
+        };
 
-            // Query NeRF at this point (simplified using latent hash)
-            var (density, sampleColor) = QueryNeRF(latent, point);
+        // Pixel centres: u = 2 (x + 0.5) / size - 1, v = 1 - 2 (y + 0.5) / size, each scaled by 0.5.
+        var u = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, size, 1), NumOps.FromDouble(1.0 / size)),
+            NumOps.FromDouble((0.5 / size) - 0.5));
+        var v = Engine.TensorNegate(u);
+        Tensor<T> Basis(double[] vector) => new Tensor<double>(new[] { 1, 1, 3 }, new Vector<double>(vector)).Cast<T>();
 
-            // Alpha compositing
-            var alpha = 1.0 - Math.Exp(-density * (2.0 - 0.1) / numSamples);
-            for (int c = 0; c < 3; c++)
-            {
-                color[c] += transmission * alpha * sampleColor[c];
-            }
-            transmission *= (1.0 - alpha);
+        var grid = new[] { size, size, 3 };
+        var directions = Engine.TensorAdd(
+            Engine.TensorAdd(
+                Engine.TensorBroadcastTo(Engine.TensorMultiply(Engine.Reshape(u, new[] { 1, size, 1 }), Basis(right)), grid),
+                Engine.TensorBroadcastTo(Engine.TensorMultiply(Engine.Reshape(v, new[] { size, 1, 1 }), Basis(up)), grid)),
+            Engine.TensorBroadcastTo(Basis(forward), grid));
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(directions, directions), new[] { 2 }, true));
+        var unit = Engine.TensorDivide(directions, Engine.TensorBroadcastTo(norm, grid));
+        return Engine.Reshape(unit, new[] { size * size, 3 });
+    }
 
-            if (transmission < 0.01) break;
-        }
-
-        // Background
-        for (int c = 0; c < 3; c++)
-        {
-            color[c] += transmission * 0.8; // Light gray background
-        }
-
-        return color;
+    private static double[] Normalize(double x, double y, double z)
+    {
+        double length = Math.Sqrt((x * x) + (y * y) + (z * z));
+        if (length < 1e-12)
+            return new[] { 0.0, 0.0, -1.0 };
+        return new[] { x / length, y / length, z / length };
     }
 
     /// <summary>
-    /// Queries the NeRF at a 3D point (simplified).
+    /// Evaluates the latent's implicit MLP at <paramref name="points"/> [N, 3] in batches, returning [N, 5].
     /// </summary>
-    private (double density, double[] color) QueryNeRF(ReadOnlySpan<T> latent, double[] point)
+    private Tensor<T> EvaluateField(ShapEImplicitFunction<T> field, Tensor<T> points)
     {
-        // Simplified: use latent to define a basic shape
-        // Real implementation would evaluate an MLP with the latent as weights
-
-        // Hash point to latent indices
-        var latentIdx = Math.Abs((int)(point[0] * 100 + point[1] * 10 + point[2])) % latent.Length;
-
-        // Distance from center (simple sphere SDF)
-        var dist = Math.Sqrt(point[0] * point[0] + point[1] * point[1] + point[2] * point[2]);
-        var radius = 0.5 + 0.1 * NumOps.ToDouble(latent[latentIdx % latent.Length]);
-
-        // Density based on distance to surface
-        var density = dist < radius ? 10.0 : 0.0;
-
-        // Color from latent
-        var color = new double[3];
-        for (int c = 0; c < 3; c++)
+        int total = points.Shape[0];
+        var chunks = new List<Tensor<T>>();
+        for (int start = 0; start < total; start += GridPointsPerChunk)
         {
-            var colorIdx = (latentIdx + c * 100) % latent.Length;
-            color[c] = 0.5 + 0.5 * Math.Tanh(NumOps.ToDouble(latent[colorIdx]));
+            int count = Math.Min(GridPointsPerChunk, total - start);
+            chunks.Add(field.Evaluate(Engine.TensorNarrow(points, 0, start, count)));
         }
 
-        return (density, color);
+        return chunks.Count == 1 ? chunks[0] : Engine.TensorConcatenate(chunks.ToArray(), 0);
     }
 
     /// <summary>
@@ -632,117 +621,52 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     ///
     /// Higher resolution = more triangles = more detail but slower
     /// </para>
+    /// <para>
+    /// The latent's implicit MLP is evaluated on a [-1, 1]^3 grid and its zero level set is extracted by marching
+    /// tetrahedra (a crack-free marching-cubes variant). With no surface in the grid both tensors hold one zero row.
+    /// </para>
     /// </remarks>
     public virtual (Tensor<T> Vertices, Tensor<T> Faces) ExtractMesh(
         Tensor<T> latent,
         int resolution = 64)
     {
-        var latentSpan = latent.AsSpan();
+        var (coordinates, triangles) = ExtractSurface(latent, resolution);
+        int faceCount = triangles.Count / 3;
+        var faceValues = new double[Math.Max(faceCount, 1) * 3];
+        for (int i = 0; i < triangles.Count; i++)
+            faceValues[i] = triangles[i];
 
-        // Evaluate SDF on grid
-        var sdfGrid = new double[resolution, resolution, resolution];
-        for (int x = 0; x < resolution; x++)
-        {
-            for (int y = 0; y < resolution; y++)
-            {
-                for (int z = 0; z < resolution; z++)
-                {
-                    var point = new double[] {
-                        (x / (double)(resolution - 1) - 0.5) * 2,
-                        (y / (double)(resolution - 1) - 0.5) * 2,
-                        (z / (double)(resolution - 1) - 0.5) * 2
-                    };
-                    sdfGrid[x, y, z] = EvaluateSDF(latentSpan, point);
-                }
-            }
-        }
+        return (
+            VertexTensor(coordinates),
+            new Tensor<double>(new[] { Math.Max(faceCount, 1), 3 }, new Vector<double>(faceValues)).Cast<T>());
+    }
 
-        // Simplified marching cubes (generate surface vertices)
-        var vertices = new List<double[]>();
-        var faces = new List<int[]>();
-
-        for (int x = 0; x < resolution - 1; x++)
-        {
-            for (int y = 0; y < resolution - 1; y++)
-            {
-                for (int z = 0; z < resolution - 1; z++)
-                {
-                    // Check if cell contains surface
-                    var hasPositive = false;
-                    var hasNegative = false;
-
-                    for (int dx = 0; dx <= 1; dx++)
-                    {
-                        for (int dy = 0; dy <= 1; dy++)
-                        {
-                            for (int dz = 0; dz <= 1; dz++)
-                            {
-                                if (sdfGrid[x + dx, y + dy, z + dz] > 0) hasPositive = true;
-                                if (sdfGrid[x + dx, y + dy, z + dz] < 0) hasNegative = true;
-                            }
-                        }
-                    }
-
-                    if (hasPositive && hasNegative)
-                    {
-                        // Surface crosses this cell - add vertices
-                        var vIdx = vertices.Count;
-                        var cx = (x + 0.5) / resolution * 2 - 1;
-                        var cy = (y + 0.5) / resolution * 2 - 1;
-                        var cz = (z + 0.5) / resolution * 2 - 1;
-
-                        vertices.Add(new[] { cx, cy, cz });
-                        vertices.Add(new[] { cx + 1.0 / resolution, cy, cz });
-                        vertices.Add(new[] { cx, cy + 1.0 / resolution, cz });
-
-                        faces.Add(new[] { vIdx, vIdx + 1, vIdx + 2 });
-                    }
-                }
-            }
-        }
-
-        // Convert to tensors
-        var vertCount = vertices.Count;
-        var faceCount = faces.Count;
-
-        var vertTensor = new Tensor<T>(new[] { Math.Max(vertCount, 1), 3 });
-        var faceTensor = new Tensor<T>(new[] { Math.Max(faceCount, 1), 3 });
-
-        var vertSpan = vertTensor.AsWritableSpan();
-        var faceSpan = faceTensor.AsWritableSpan();
-
-        for (int i = 0; i < vertCount; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                vertSpan[i * 3 + j] = NumOps.FromDouble(vertices[i][j]);
-            }
-        }
-
-        for (int i = 0; i < faceCount; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                faceSpan[i * 3 + j] = NumOps.FromDouble(faces[i][j]);
-            }
-        }
-
-        return (vertTensor, faceTensor);
+    /// <summary>The vertices [max(count, 1), 3] of the flat coordinate list (one zero row when empty).</summary>
+    private static Tensor<T> VertexTensor(List<double> coordinates)
+    {
+        int vertexCount = Math.Max(coordinates.Count / 3, 1);
+        var values = new double[vertexCount * 3];
+        coordinates.CopyTo(values);
+        return new Tensor<double>(new[] { vertexCount, 3 }, new Vector<double>(values)).Cast<T>();
     }
 
     /// <summary>
-    /// Evaluates the signed distance function at a point.
+    /// The zero level set of the latent's SDF on the grid (i / (resolution - 1) - 0.5) * 2, i &lt; resolution.
     /// </summary>
-    private double EvaluateSDF(ReadOnlySpan<T> latent, double[] point)
+    private (List<double> Coordinates, List<int> Triangles) ExtractSurface(Tensor<T> latent, int resolution)
     {
-        // Simplified SDF evaluation using latent
-        // Real implementation would use proper MLP evaluation
+        if (resolution < 2)
+            throw new ArgumentOutOfRangeException(nameof(resolution), "The grid resolution must be at least 2.");
 
-        var latentIdx = Math.Abs((int)(point[0] * 50 + point[1] * 100 + point[2] * 150)) % latent.Length;
-        var radius = 0.5 + 0.3 * Math.Tanh(NumOps.ToDouble(latent[latentIdx]));
+        var field = new ShapEImplicitFunction<T>(latent);
+        double step = 2.0 / (resolution - 1);
+        var outputs = EvaluateField(field, ShapEImplicitFunction<T>.GridPoints(resolution, -1.0, step));
 
-        var dist = Math.Sqrt(point[0] * point[0] + point[1] * point[1] + point[2] * point[2]);
-        return dist - radius;
+        // Marching tetrahedra treats values above the threshold as inside; inside is SDF < 0.
+        var inside = Engine.TensorNegate(ShapEImplicitFunction<T>.SignedDistance(outputs)).Cast<double>().ToArray();
+        var grid = new double[resolution, resolution, resolution];
+        Buffer.BlockCopy(inside, 0, grid, 0, inside.Length * sizeof(double));
+        return MarchingTetrahedra.Extract(grid, 0.0, -1.0, step);
     }
 
     /// <summary>
@@ -764,24 +688,17 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         int? seed = null)
     {
         var latent = GenerateLatent(prompt, negativePrompt, numInferenceSteps, guidanceScale, seed);
-        var (vertices, faces) = ExtractMesh(latent, resolution);
+        var (coordinates, triangles) = ExtractSurface(latent, resolution);
 
-        // Convert faces tensor to int[,] array
-        var faceCount = faces.Shape[0];
-        var faceArray = new int[faceCount, 3];
-        var facesSpan = faces.AsSpan();
-
-        for (int i = 0; i < faceCount; i++)
-        {
-            for (int j = 0; j < 3; j++)
-            {
-                faceArray[i, j] = (int)NumOps.ToDouble(facesSpan[i * 3 + j]);
-            }
-        }
+        // Faces as int[faceCount, 3] straight from the integer triangle list (one zero row when empty).
+        var faceIndices = new int[Math.Max(triangles.Count / 3, 1) * 3];
+        triangles.CopyTo(faceIndices);
+        var faceArray = new int[faceIndices.Length / 3, 3];
+        Buffer.BlockCopy(faceIndices, 0, faceArray, 0, faceIndices.Length * sizeof(int));
 
         return new Mesh3D<T>
         {
-            Vertices = vertices,
+            Vertices = VertexTensor(coordinates),
             Faces = faceArray
         };
     }
@@ -793,53 +710,50 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="numPoints">Number of points to sample.</param>
     /// <param name="seed">Optional random seed.</param>
     /// <returns>Point cloud tensor [1, numPoints, 6] with XYZ + RGB.</returns>
+    /// <remarks>
+    /// Rejection sampling of uniform points in [-1, 1]^3 with SDF &lt; 0, coloured by the implicit MLP. Candidates
+    /// are drawn (three draws each, in order) and evaluated in blocks and accepted in draw order, up to
+    /// <c>numPoints * 100</c> candidates; rows past the accepted count stay zero.
+    /// </remarks>
     public virtual Tensor<T> SamplePointCloud(
         Tensor<T> latent,
         int? numPoints = null,
         int? seed = null)
     {
         var effectiveNumPoints = numPoints ?? DefaultPointCount;
-        var latentSpan = latent.AsSpan();
+        var field = new ShapEImplicitFunction<T>(latent);
         var rng = CreateInferenceRng(seed);
 
-        var points = new Tensor<T>(new[] { 1, effectiveNumPoints, 6 });
-        var pointsSpan = points.AsWritableSpan();
-
+        var cloud = new double[effectiveNumPoints * 6];
         var sampledCount = 0;
-        var maxAttempts = effectiveNumPoints * 100;
-        var attempts = 0;
+        long maxAttempts = (long)effectiveNumPoints * 100;
+        long attempts = 0;
 
         while (sampledCount < effectiveNumPoints && attempts < maxAttempts)
         {
-            attempts++;
+            int block = (int)Math.Min(maxAttempts - attempts, Math.Max(1024, 2L * (effectiveNumPoints - sampledCount)));
+            block = Math.Min(block, GridPointsPerChunk);
+            var candidates = new double[block * 3];
+            for (int i = 0; i < candidates.Length; i++)
+                candidates[i] = rng.NextDouble() * 2 - 1;
+            attempts += block;
 
-            // Random point in [-1, 1]^3
-            var point = new double[] {
-                rng.NextDouble() * 2 - 1,
-                rng.NextDouble() * 2 - 1,
-                rng.NextDouble() * 2 - 1
-            };
+            var outputs = field.Evaluate(
+                new Tensor<double>(new[] { block, 3 }, new Vector<double>(candidates)).Cast<T>());
+            var sdf = ShapEImplicitFunction<T>.SignedDistance(outputs).Cast<double>().ToArray();
+            var colour = ShapEImplicitFunction<T>.Colour(outputs).Cast<double>().ToArray();
 
-            // Check if inside shape (SDF < 0)
-            var sdf = EvaluateSDF(latentSpan, point);
-            if (sdf < 0)
+            for (int i = 0; i < block && sampledCount < effectiveNumPoints; i++)
             {
-                // Get color
-                var (_, color) = QueryNeRF(latentSpan, point);
-
-                // Store point
-                var baseIdx = sampledCount * 6;
-                for (int i = 0; i < 3; i++)
-                {
-                    pointsSpan[baseIdx + i] = NumOps.FromDouble(point[i]);
-                    pointsSpan[baseIdx + 3 + i] = NumOps.FromDouble(color[i]);
-                }
-
+                if (sdf[i] >= 0)
+                    continue;
+                Array.Copy(candidates, i * 3, cloud, sampledCount * 6, 3);
+                Array.Copy(colour, i * 3, cloud, (sampledCount * 6) + 3, 3);
                 sampledCount++;
             }
         }
 
-        return points;
+        return new Tensor<double>(new[] { 1, effectiveNumPoints, 6 }, new Vector<double>(cloud)).Cast<T>();
     }
 
     /// <inheritdoc />

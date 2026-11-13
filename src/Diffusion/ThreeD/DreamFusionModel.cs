@@ -345,20 +345,19 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
 
         // Fallback: Create a simple embedding
         var embedDim = _config.TextEmbeddingDim;
-        var embedding = new Tensor<T>(new[] { 1, embedDim });
-        var embSpan = embedding.AsWritableSpan();
 
         // Simple hash-based embedding for fallback
         // A stable hash: string.GetHashCode() changes per process (#2361).
         int hash = AiDotNet.Helpers.StableHash.Seed(text);
         var rng = RandomHelper.CreateSeededRandom(hash);
 
-        for (int i = 0; i < embSpan.Length; i++)
+        var values = new double[embedDim];
+        for (int i = 0; i < values.Length; i++)
         {
-            embSpan[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * 0.1);
+            values[i] = (rng.NextDouble() * 2 - 1) * 0.1;
         }
 
-        return embedding;
+        return new Tensor<double>(new[] { 1, embedDim }, new Vector<double>(values)).Cast<T>();
     }
 
     /// <summary>
@@ -402,15 +401,13 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> GenerateNoise(Tensor<T> template)
     {
-        var noise = new Tensor<T>(template._shape);
-        var noiseSpan = noise.AsWritableSpan();
-
-        for (int i = 0; i < noiseSpan.Length; i++)
+        var values = new double[template.Length];
+        for (int i = 0; i < values.Length; i++)
         {
-            noiseSpan[i] = NumOps.FromDouble(RandomGenerator.NextGaussian());
+            values[i] = RandomGenerator.NextGaussian();
         }
 
-        return noise;
+        return new Tensor<double>(template._shape, new Vector<double>(values)).Cast<T>();
     }
 
     /// <summary>
@@ -432,18 +429,32 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Gets the cumulative alpha value for a timestep.
+    /// The cumulative product alpha_bar_t = prod_{i &lt;= t} (1 - beta_i) of the scaled-linear schedule
+    /// beta_i = (sqrt(beta_start) + i / (T - 1) * (sqrt(beta_end) - sqrt(beta_start)))^2 (the Stable Diffusion
+    /// prior's schedule), computed once in double.
     /// </summary>
-    private double GetAlphasCumprod(int timestep)
+    internal static double GetAlphasCumprod(int timestep)
     {
-        double t = (double)timestep / DEFAULT_TIMESTEPS;
+        int index = Math.Max(0, Math.Min(DEFAULT_TIMESTEPS - 1, timestep));
+        return AlphasCumprodTable[index];
+    }
 
-        // Scaled linear schedule
-        double beta = DEFAULT_BETA_START + t * (DEFAULT_BETA_END - DEFAULT_BETA_START);
-        double alpha = 1.0 - beta;
+    private static readonly double[] AlphasCumprodTable = BuildAlphasCumprodTable();
 
-        // Approximate cumulative product
-        return Math.Pow(alpha, timestep);
+    private static double[] BuildAlphasCumprodTable()
+    {
+        var table = new double[DEFAULT_TIMESTEPS];
+        double sqrtStart = Math.Sqrt(DEFAULT_BETA_START);
+        double sqrtEnd = Math.Sqrt(DEFAULT_BETA_END);
+        double product = 1.0;
+        for (int i = 0; i < DEFAULT_TIMESTEPS; i++)
+        {
+            double sqrtBeta = sqrtStart + ((sqrtEnd - sqrtStart) * i / (DEFAULT_TIMESTEPS - 1));
+            product *= 1.0 - (sqrtBeta * sqrtBeta);
+            table[i] = product;
+        }
+
+        return table;
     }
 
     /// <summary>
@@ -483,23 +494,11 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Computes the SDS weight for a timestep.
+    /// The SDS weight w(t) = sigma_t^2 = 1 - alpha_bar_t of DreamFusion (Poole et al., 2022, eq. 3), with the
+    /// variance-preserving sigma_t^2 = 1 - alpha_t^2 of the diffusion prior.
     /// </summary>
-    private double ComputeSDSWeight(int timestep)
-    {
-        // w(t) = sigma(t)^2 in the original paper
-        double sigma = GetSigma(timestep);
-        return sigma * sigma;
-    }
+    internal static double ComputeSDSWeight(int timestep) => 1.0 - GetAlphasCumprod(timestep);
 
-    /// <summary>
-    /// Gets the noise level (sigma) for a timestep.
-    /// </summary>
-    private double GetSigma(int timestep)
-    {
-        double alphasCumprod = GetAlphasCumprod(timestep);
-        return Math.Sqrt((1.0 - alphasCumprod) / alphasCumprod);
-    }
 
     /// <summary>
     /// Extracts a mesh using marching cubes algorithm.
@@ -509,24 +508,9 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         var vertices = new List<DreamVector3<T>>();
         var triangles = new List<int>();
 
-        // Sample density grid
-        var densityGrid = new double[resolution, resolution, resolution];
+        // Sample the density grid (one batched query of every grid point)
         double step = 2.0 / resolution; // Grid from -1 to 1
-
-        for (int x = 0; x < resolution; x++)
-        {
-            for (int y = 0; y < resolution; y++)
-            {
-                for (int z = 0; z < resolution; z++)
-                {
-                    double px = -1.0 + x * step;
-                    double py = -1.0 + y * step;
-                    double pz = -1.0 + z * step;
-
-                    densityGrid[x, y, z] = nerf.QueryDensity(px, py, pz);
-                }
-            }
-        }
+        var densityGrid = nerf.QueryDensityGrid(resolution, -1.0, step);
 
         // Apply marching cubes to extract surface
         ExtractSurface(densityGrid, threshold, step, vertices, triangles);
@@ -539,62 +523,28 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Extracts surface using simplified marching cubes.
+    /// Extracts the iso-surface {density = threshold} of the grid (grid index i at coordinate -1 + i * step) by
+    /// marching tetrahedra, appending its vertices and triangles.
     /// </summary>
-    private void ExtractSurface(
+    internal static void ExtractSurface(
         double[,,] densityGrid,
         double threshold,
         double step,
         List<DreamVector3<T>> vertices,
         List<int> triangles)
     {
-        int resolution = densityGrid.GetLength(0);
+        int vertexOffset = vertices.Count;
+        var (coordinates, surfaceTriangles) = MarchingTetrahedra.Extract(densityGrid, threshold, -1.0, step);
+        foreach (int index in surfaceTriangles)
+            triangles.Add(vertexOffset + index);
+        if (coordinates.Count == 0)
+            return;
 
-        for (int x = 0; x < resolution - 1; x++)
-        {
-            for (int y = 0; y < resolution - 1; y++)
-            {
-                for (int z = 0; z < resolution - 1; z++)
-                {
-                    // Sample cube corners
-                    var corners = new double[8];
-                    corners[0] = densityGrid[x, y, z];
-                    corners[1] = densityGrid[x + 1, y, z];
-                    corners[2] = densityGrid[x + 1, y + 1, z];
-                    corners[3] = densityGrid[x, y + 1, z];
-                    corners[4] = densityGrid[x, y, z + 1];
-                    corners[5] = densityGrid[x + 1, y, z + 1];
-                    corners[6] = densityGrid[x + 1, y + 1, z + 1];
-                    corners[7] = densityGrid[x, y + 1, z + 1];
-
-                    // Compute cube index
-                    int cubeIndex = 0;
-                    for (int i = 0; i < 8; i++)
-                    {
-                        if (corners[i] > threshold)
-                        {
-                            cubeIndex |= (1 << i);
-                        }
-                    }
-
-                    // Skip if entirely inside or outside
-                    if (cubeIndex == 0 || cubeIndex == 255)
-                        continue;
-
-                    // Add center vertex for simplified algorithm
-                    double px = -1.0 + (x + 0.5) * step;
-                    double py = -1.0 + (y + 0.5) * step;
-                    double pz = -1.0 + (z + 0.5) * step;
-
-                    vertices.Add(new DreamVector3<T>
-                    {
-                        X = NumOps.FromDouble(px),
-                        Y = NumOps.FromDouble(py),
-                        Z = NumOps.FromDouble(pz)
-                    });
-                }
-            }
-        }
+        // One bulk conversion of all vertex coordinates to T.
+        var converted = new Tensor<double>(new[] { coordinates.Count }, new Vector<double>(coordinates.ToArray()))
+            .Cast<T>().ToArray();
+        for (int v = 0; v + 2 < converted.Length; v += 3)
+            vertices.Add(new DreamVector3<T> { X = converted[v], Y = converted[v + 1], Z = converted[v + 2] });
     }
 
     /// <inheritdoc />
@@ -825,14 +775,38 @@ public class DreamMesh<T>
 /// Neural Radiance Field network for 3D representation.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
+/// <remarks>
+/// A NeRF MLP (Mildenhall et al., 2020) rendered by batched volume rendering: every ray of a chunk is sampled at
+/// <see cref="SamplesPerRay"/> stratified depths in [0.5, 3], the MLP is evaluated on all samples at once, and the
+/// colour is composited with <c>C = sum_i T_i (1 - exp(-sigma_i delta)) c_i</c>,
+/// <c>T_i = exp(-sum_{j &lt; i} sigma_j delta)</c>. Because the whole render is made of engine ops, the SDS update
+/// back-propagates the score-distillation gradient through the renderer into the MLP weights (DreamFusion,
+/// Poole et al., 2022), instead of perturbing them at random.
+/// </remarks>
 public class NeRFNetwork<T> : IParameterSource<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>Samples taken along every ray.</summary>
+    internal const int SamplesPerRay = 64;
+
+    private const double NearPlane = 0.5;
+    private const double FarPlane = 3.0;
+    private const int PositionFrequencies = 10;
+    private const int DirectionFrequencies = 4;
+    private const int RaysPerChunk = 256;
+    private const int PointsPerChunk = 16384;
+
     private readonly List<DenseLayer<T>> _densityLayers;
     private readonly List<DenseLayer<T>> _colorLayers;
     private readonly int _hiddenDim;
-    private readonly Random _random;
+
+    // Sample depths [1, S, 1] and the strictly-upper-triangular [S, S] matrix whose product with the per-sample
+    // optical depth gives the exclusive prefix sum sum_{j < i} sigma_j delta.
+    private readonly Tensor<T> _sampleDepths;
+    private readonly Tensor<T> _exclusivePrefix;
+
+    private IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Gets the total parameter count.
@@ -841,12 +815,8 @@ public class NeRFNetwork<T> : IParameterSource<T>
     {
         get
         {
-            int count = 0;
-            foreach (var layer in _densityLayers)
-            {
-                count += layer.GetParameters().Length;
-            }
-            foreach (var layer in _colorLayers)
+            long count = 0;
+            foreach (var layer in AllLayers())
             {
                 count += layer.GetParameters().Length;
             }
@@ -859,41 +829,68 @@ public class NeRFNetwork<T> : IParameterSource<T>
     /// </summary>
     /// <param name="hiddenDim">Hidden layer dimension.</param>
     /// <param name="numLayers">Number of hidden layers.</param>
-    /// <param name="seed">Optional random seed.</param>
+    /// <param name="seed">Optional random seed; when set, every layer's initialization is seeded from it.</param>
     public NeRFNetwork(int hiddenDim = 64, int numLayers = 4, int? seed = null)
     {
         _hiddenDim = hiddenDim;
-        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+        var seedSource = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : null;
+        DenseLayer<T> Seeded(DenseLayer<T> layer)
+        {
+            if (seedSource is not null)
+                layer.RandomSeed = seedSource.Next();
+            return layer;
+        }
 
         // Density network: position (3D + positional encoding) -> density
         _densityLayers = new List<DenseLayer<T>>();
-        int inputDim = 3 + 6 * 10; // 3D position + 10 frequencies of positional encoding (sin + cos)
+        int inputDim = EncodedDim(PositionFrequencies);
 
         for (int i = 0; i < numLayers; i++)
         {
             int inDim = i == 0 ? inputDim : hiddenDim;
-            var layer = new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            var layer = Seeded(new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>()));
             // Pre-resolve from the ctor-known input dim so ParameterCount, GetParameters,
             // SetParameters, and Clone reflect the correct layout before any render.
             layer.ResolveFromShape(new[] { 1, inDim });
             _densityLayers.Add(layer);
         }
-        var densityOut = new DenseLayer<T>(1, (IActivationFunction<T>?)null); // Output density
+        var densityOut = Seeded(new DenseLayer<T>(1, (IActivationFunction<T>?)null)); // Output density
         densityOut.ResolveFromShape(new[] { 1, hiddenDim });
         _densityLayers.Add(densityOut);
 
         // Color network: features + direction -> RGB
         _colorLayers = new List<DenseLayer<T>>();
-        int colorInputDim = hiddenDim + 3 + 6 * 4; // Features + direction + positional encoding
+        int colorInputDim = hiddenDim + EncodedDim(DirectionFrequencies); // Features + encoded direction
 
-        var colorMid = new DenseLayer<T>(hiddenDim / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        var colorMid = Seeded(new DenseLayer<T>(hiddenDim / 2, (IActivationFunction<T>)new ReLUActivation<T>()));
         colorMid.ResolveFromShape(new[] { 1, colorInputDim });
         _colorLayers.Add(colorMid);
 
-        var colorOut = new DenseLayer<T>(3, (IActivationFunction<T>)new SigmoidActivation<T>()); // RGB output
+        var colorOut = Seeded(new DenseLayer<T>(3, (IActivationFunction<T>)new SigmoidActivation<T>())); // RGB output
         colorOut.ResolveFromShape(new[] { 1, hiddenDim / 2 });
         _colorLayers.Add(colorOut);
+
+        double delta = SampleSpacing;
+        _sampleDepths = Engine.Reshape(
+            Engine.TensorAddScalar(
+                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, SamplesPerRay, 1), NumOps.FromDouble(delta)),
+                NumOps.FromDouble(NearPlane + (0.5 * delta))),
+            new[] { 1, SamplesPerRay, 1 });
+
+        var prefix = new double[SamplesPerRay * SamplesPerRay];
+        for (int j = 0; j < SamplesPerRay; j++)
+        {
+            for (int i = j + 1; i < SamplesPerRay; i++)
+                prefix[(j * SamplesPerRay) + i] = 1.0;
+        }
+        _exclusivePrefix = new Tensor<double>(new[] { SamplesPerRay, SamplesPerRay }, new Vector<double>(prefix)).Cast<T>();
     }
+
+    /// <summary>The spacing between consecutive samples along a ray.</summary>
+    internal static double SampleSpacing => (FarPlane - NearPlane) / SamplesPerRay;
+
+    /// <summary>The width of the positional encoding of a 3-vector with <paramref name="frequencies"/> octaves.</summary>
+    internal static int EncodedDim(int frequencies) => 3 + (6 * frequencies);
 
     /// <summary>
     /// Initializes network weights.
@@ -908,86 +905,134 @@ public class NeRFNetwork<T> : IParameterSource<T>
     /// </summary>
     /// <param name="cameraPose">The camera pose.</param>
     /// <param name="resolution">Output image resolution.</param>
-    /// <returns>Rendered image as tensor [H, W, 3].</returns>
+    /// <returns>Rendered image as tensor [H, W, 3] (row 0 at the top).</returns>
     public Tensor<T> Render(CameraPose cameraPose, int resolution)
     {
-        var image = new Tensor<T>(new[] { resolution, resolution, 3 });
-        var imageSpan = image.AsWritableSpan();
-        var (camX, camY, camZ) = cameraPose.GetPosition();
-
-        for (int y = 0; y < resolution; y++)
+        var (origin, directions) = BuildRays(cameraPose, resolution);
+        int rays = resolution * resolution;
+        var chunks = new List<Tensor<T>>();
+        for (int start = 0; start < rays; start += RaysPerChunk)
         {
-            for (int x = 0; x < resolution; x++)
-            {
-                // Compute ray direction
-                double u = (2.0 * x / resolution - 1.0) / cameraPose.FocalLength;
-                double v = (2.0 * y / resolution - 1.0) / cameraPose.FocalLength;
-
-                // Simple pinhole camera model
-                double dirX = u;
-                double dirY = v;
-                double dirZ = 1.0;
-
-                // Normalize direction
-                double dirLen = Math.Sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
-                dirX /= dirLen;
-                dirY /= dirLen;
-                dirZ /= dirLen;
-
-                // Sample along ray using volume rendering
-                var (r, g, b) = VolumeRender(camX, camY, camZ, dirX, dirY, dirZ);
-
-                int idx = (y * resolution + x) * 3;
-                imageSpan[idx] = NumOps.FromDouble(r);
-                imageSpan[idx + 1] = NumOps.FromDouble(g);
-                imageSpan[idx + 2] = NumOps.FromDouble(b);
-            }
+            int count = Math.Min(RaysPerChunk, rays - start);
+            chunks.Add(RenderRays(origin, Engine.TensorNarrow(directions, 0, start, count)));
         }
 
-        return image;
+        return Engine.Reshape(Engine.TensorConcatenate(chunks.ToArray(), 0), new[] { resolution, resolution, 3 });
     }
 
     /// <summary>
-    /// Performs volume rendering along a ray.
+    /// Builds the camera origin [1, 1, 3] and unit ray directions [resolution * resolution, 3] (row-major pixels)
+    /// of a pinhole camera at the pose's position looking at its look-at point, with world +Y up.
     /// </summary>
-    private (double R, double G, double B) VolumeRender(
-        double ox, double oy, double oz,
-        double dx, double dy, double dz)
+    internal (Tensor<T> Origin, Tensor<T> Directions) BuildRays(CameraPose cameraPose, int resolution)
     {
-        double r = 0, g = 0, b = 0;
-        double transmittance = 1.0;
+        if (resolution <= 0)
+            throw new ArgumentOutOfRangeException(nameof(resolution), "Resolution must be positive.");
 
-        int numSamples = 64;
-        double near = 0.5;
-        double far = 3.0;
-        double step = (far - near) / numSamples;
+        var (px, py, pz) = cameraPose.GetPosition();
+        var forward = Normalize(cameraPose.LookAtX - px, cameraPose.LookAtY - py, cameraPose.LookAtZ - pz);
 
-        for (int i = 0; i < numSamples; i++)
+        // right = forward x worldUp with worldUp = +Y; looking straight up or down falls back to worldUp = +Z.
+        var right = Normalize(-forward[2], 0.0, forward[0]);
+        if (Math.Abs(forward[0]) < 1e-9 && Math.Abs(forward[2]) < 1e-9)
+            right = Normalize(forward[1], -forward[0], 0.0);
+        var up = new[]
         {
-            double t = near + (i + 0.5) * step;
-            double px = ox + t * dx;
-            double py = oy + t * dy;
-            double pz = oz + t * dz;
+            (right[1] * forward[2]) - (right[2] * forward[1]),
+            (right[2] * forward[0]) - (right[0] * forward[2]),
+            (right[0] * forward[1]) - (right[1] * forward[0])
+        };
 
-            // Query NeRF
-            double density = QueryDensity(px, py, pz);
-            var (cr, cg, cb) = QueryColor(px, py, pz, dx, dy, dz);
+        // Pixel centres: u = (2 (x + 0.5) / R - 1) / f to the right, v = (1 - 2 (y + 0.5) / R) / f upwards.
+        double scale = 2.0 / (resolution * cameraPose.FocalLength);
+        double offset = ((1.0 / resolution) - 1.0) / cameraPose.FocalLength;
+        var pixels = Engine.TensorArange<T>(0, resolution, 1);
+        var u = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(pixels, NumOps.FromDouble(scale)), NumOps.FromDouble(offset));
+        var v = Engine.TensorNegate(u);
 
-            // Volume rendering equation
-            double alpha = 1.0 - Math.Exp(-density * step);
-            double weight = transmittance * alpha;
+        var grid = new[] { resolution, resolution, 3 };
+        var directions = Engine.TensorAdd(
+            Engine.TensorAdd(
+                Engine.TensorBroadcastTo(
+                    Engine.TensorMultiply(Engine.Reshape(u, new[] { 1, resolution, 1 }), Vector3Tensor(right)), grid),
+                Engine.TensorBroadcastTo(
+                    Engine.TensorMultiply(Engine.Reshape(v, new[] { resolution, 1, 1 }), Vector3Tensor(up)), grid)),
+            Engine.TensorBroadcastTo(Vector3Tensor(forward), grid));
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(directions, directions), new[] { 2 }, true));
+        var unit = Engine.TensorDivide(directions, Engine.TensorBroadcastTo(norm, grid));
 
-            r += weight * cr;
-            g += weight * cg;
-            b += weight * cb;
+        var origin = new Tensor<double>(new[] { 1, 1, 3 }, new Vector<double>(new[] { px, py, pz })).Cast<T>();
+        return (origin, Engine.Reshape(unit, new[] { resolution * resolution, 3 }));
+    }
 
-            transmittance *= (1.0 - alpha);
+    private static double[] Normalize(double x, double y, double z)
+    {
+        double length = Math.Sqrt((x * x) + (y * y) + (z * z));
+        if (length < 1e-12)
+            return new[] { 0.0, 0.0, -1.0 };
+        return new[] { x / length, y / length, z / length };
+    }
 
-            if (transmittance < 0.01)
-                break;
-        }
+    private static Tensor<T> Vector3Tensor(double[] vector)
+        => new Tensor<double>(new[] { 1, 1, 3 }, new Vector<double>(vector)).Cast<T>();
 
-        return (r, g, b);
+    /// <summary>
+    /// Volume-renders the rays from <paramref name="origin"/> [1, 1, 3] along <paramref name="directions"/>
+    /// [rays, 3] into colours [rays, 3]; differentiable with respect to the MLP weights.
+    /// </summary>
+    internal Tensor<T> RenderRays(Tensor<T> origin, Tensor<T> directions)
+    {
+        int rays = directions.Shape[0];
+        int samples = rays * SamplesPerRay;
+
+        // Sample points o + t_i d: [rays, S, 3].
+        var sampleShape = new[] { rays, SamplesPerRay, 3 };
+        var points = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(origin, sampleShape),
+            Engine.TensorBroadcastTo(
+                Engine.TensorMultiply(Engine.Reshape(directions, new[] { rays, 1, 3 }), _sampleDepths), sampleShape));
+        var features = DensityFeatures(Encode(Engine.Reshape(points, new[] { samples, 3 }), PositionFrequencies));
+        var sigma = Engine.Reshape(
+            Engine.TensorReLU(_densityLayers[_densityLayers.Count - 1].Forward(features)), new[] { rays, SamplesPerRay });
+
+        int directionDim = EncodedDim(DirectionFrequencies);
+        var encodedDirections = Engine.TensorBroadcastTo(
+            Engine.Reshape(Encode(directions, DirectionFrequencies), new[] { rays, 1, directionDim }),
+            new[] { rays, SamplesPerRay, directionDim });
+        var colour = ColorHead(Engine.TensorConcatenate(
+            new[] { features, Engine.Reshape(encodedDirections.Contiguous(), new[] { samples, directionDim }) }, 1));
+
+        // w_i = T_i (1 - exp(-sigma_i delta)), T_i = exp(-sum_{j<i} sigma_j delta).
+        var opticalDepth = Engine.TensorMultiplyScalar(sigma, NumOps.FromDouble(SampleSpacing));
+        var alpha = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorExp(Engine.TensorNegate(opticalDepth)));
+        var transmittance = Engine.TensorExp(Engine.TensorNegate(Engine.TensorMatMul(opticalDepth, _exclusivePrefix)));
+        var weights = Engine.Reshape(Engine.TensorMultiply(transmittance, alpha), new[] { rays, SamplesPerRay, 1 });
+
+        return Engine.ReduceSum(
+            Engine.TensorMultiply(weights, Engine.Reshape(colour, new[] { rays, SamplesPerRay, 3 })), new[] { 1 }, false);
+    }
+
+    /// <summary>
+    /// The NeRF positional encoding of <paramref name="values"/> [N, 3]: the values followed, for every octave
+    /// k &lt; <paramref name="frequencies"/>, by (sin, cos)(2^k pi v) of each coordinate, giving [N, 3 + 6L].
+    /// </summary>
+    internal Tensor<T> Encode(Tensor<T> values, int frequencies)
+        => NeRFPositionalEncoding.Encode(Engine, values, frequencies);
+
+    private Tensor<T> DensityFeatures(Tensor<T> encoded)
+    {
+        var current = encoded;
+        for (int i = 0; i < _densityLayers.Count - 1; i++)
+            current = _densityLayers[i].Forward(current);
+        return current;
+    }
+
+    private Tensor<T> ColorHead(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in _colorLayers)
+            current = layer.Forward(current);
+        return current;
     }
 
     /// <summary>
@@ -995,178 +1040,114 @@ public class NeRFNetwork<T> : IParameterSource<T>
     /// </summary>
     public double QueryDensity(double x, double y, double z)
     {
-        // Apply positional encoding
-        var encoded = PositionalEncoding(new[] { x, y, z }, 10);
-        var inputData = new T[encoded.Length];
-        for (int i = 0; i < encoded.Length; i++)
-        {
-            inputData[i] = NumOps.FromDouble(encoded[i]);
-        }
-        var input = new Tensor<T>(new[] { 1, encoded.Length }, new Vector<T>(inputData));
-
-        // Forward through density network
-        var current = input;
-        foreach (var layer in _densityLayers)
-        {
-            current = layer.Forward(current);
-        }
-
-        // ReLU activation on density
-        double density = NumOps.ToDouble(current.AsSpan()[0]);
-        return Math.Max(0, density);
+        var point = new Tensor<double>(new[] { 1, 3 }, new Vector<double>(new[] { x, y, z })).Cast<T>();
+        return NumOps.ToDouble(QueryDensities(point).AsSpan()[0]);
     }
 
     /// <summary>
-    /// Queries the color at a 3D point with viewing direction.
+    /// The densities max(0, sigma) [N] at the points [N, 3], evaluated in batches.
     /// </summary>
-    private (double R, double G, double B) QueryColor(
-        double x, double y, double z,
-        double dx, double dy, double dz)
+    internal Tensor<T> QueryDensities(Tensor<T> points)
     {
-        // Get features from density network (before final layer)
-        var posEncoded = PositionalEncoding(new[] { x, y, z }, 10);
-        var inputData = new T[posEncoded.Length];
-        for (int i = 0; i < posEncoded.Length; i++)
+        int total = points.Shape[0];
+        var chunks = new List<Tensor<T>>();
+        for (int start = 0; start < total; start += PointsPerChunk)
         {
-            inputData[i] = NumOps.FromDouble(posEncoded[i]);
-        }
-        var input = new Tensor<T>(new[] { 1, posEncoded.Length }, new Vector<T>(inputData));
-
-        var current = input;
-        for (int i = 0; i < _densityLayers.Count - 1; i++)
-        {
-            current = _densityLayers[i].Forward(current);
+            int count = Math.Min(PointsPerChunk, total - start);
+            var features = DensityFeatures(Encode(Engine.TensorNarrow(points, 0, start, count), PositionFrequencies));
+            chunks.Add(Engine.TensorReLU(_densityLayers[_densityLayers.Count - 1].Forward(features)));
         }
 
-        // Add direction encoding
-        var dirEncoded = PositionalEncoding(new[] { dx, dy, dz }, 4);
-        var currentSpan = current.AsSpan();
-        var combinedData = new T[currentSpan.Length + dirEncoded.Length];
-
-        for (int i = 0; i < currentSpan.Length; i++)
-        {
-            combinedData[i] = currentSpan[i];
-        }
-        for (int i = 0; i < dirEncoded.Length; i++)
-        {
-            combinedData[currentSpan.Length + i] = NumOps.FromDouble(dirEncoded[i]);
-        }
-
-        // Forward through color network
-        var colorInput = new Tensor<T>(new[] { 1, combinedData.Length }, new Vector<T>(combinedData));
-        foreach (var layer in _colorLayers)
-        {
-            colorInput = layer.Forward(colorInput);
-        }
-
-        var colorSpan = colorInput.AsSpan();
-        return (
-            NumOps.ToDouble(colorSpan[0]),
-            NumOps.ToDouble(colorSpan[1]),
-            NumOps.ToDouble(colorSpan[2])
-        );
+        return Engine.Reshape(Engine.TensorConcatenate(chunks.ToArray(), 0), new[] { total });
     }
 
     /// <summary>
-    /// Applies positional encoding to input values.
+    /// Samples the density on the grid point (origin + i step, origin + j step, origin + k step) for
+    /// i, j, k &lt; <paramref name="resolution"/>.
     /// </summary>
-    private double[] PositionalEncoding(double[] values, int numFrequencies)
+    internal double[,,] QueryDensityGrid(int resolution, double origin, double step)
     {
-        var result = new List<double>();
+        var axis = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, resolution, 1), NumOps.FromDouble(step)),
+            NumOps.FromDouble(origin));
+        var shape = new[] { resolution, resolution, resolution, 1 };
+        var xs = Engine.TensorBroadcastTo(Engine.Reshape(axis, new[] { resolution, 1, 1, 1 }), shape);
+        var ys = Engine.TensorBroadcastTo(Engine.Reshape(axis, new[] { 1, resolution, 1, 1 }), shape);
+        var zs = Engine.TensorBroadcastTo(Engine.Reshape(axis, new[] { 1, 1, resolution, 1 }), shape);
+        var points = Engine.Reshape(
+            Engine.TensorConcatenate(new[] { xs, ys, zs }, 3), new[] { resolution * resolution * resolution, 3 });
 
-        // Add original values
-        result.AddRange(values);
-
-        // Add sin/cos of frequencies
-        for (int i = 0; i < numFrequencies; i++)
-        {
-            double freq = Math.Pow(2, i);
-            foreach (double v in values)
-            {
-                result.Add(Math.Sin(freq * Math.PI * v));
-                result.Add(Math.Cos(freq * Math.PI * v));
-            }
-        }
-
-        return result.ToArray();
+        var densities = QueryDensities(points).Cast<double>().ToArray();
+        var grid = new double[resolution, resolution, resolution];
+        Buffer.BlockCopy(densities, 0, grid, 0, densities.Length * sizeof(double));
+        return grid;
     }
 
     /// <summary>
-    /// Updates network parameters using gradient.
+    /// Applies one SDS step: back-propagates the image-space gradient <paramref name="gradient"/>
+    /// [R, R, 3] (the score-distillation residual w(t) (eps_hat - eps)) through the volume renderer at
+    /// <paramref name="cameraPose"/> and descends the MLP weights by <paramref name="learningRate"/> times it.
     /// </summary>
+    /// <remarks>
+    /// SDS (Poole et al., 2022, eq. 3) defines grad_theta L = E[w(t) (eps_hat - eps) dx/dtheta]; the loss
+    /// sum(x(theta) * g) with g held constant has exactly that gradient, so the tape computes it per ray chunk.
+    /// </remarks>
     public void UpdateParameters(Tensor<T> gradient, CameraPose cameraPose, double learningRate)
     {
-        // Simplified gradient update - in practice would use proper backprop
-        var gradSpan = gradient.AsSpan();
-        double gradNorm = 0;
+        int pixels = gradient.Length / 3;
+        int resolution = (int)Math.Round(Math.Sqrt(pixels));
+        if (resolution * resolution * 3 != gradient.Length)
+            throw new ArgumentException(
+                $"The SDS gradient must hold a square RGB image [R, R, 3]; got {gradient.Length} values.", nameof(gradient));
 
-        for (int i = 0; i < gradSpan.Length; i++)
+        var (origin, directions) = BuildRays(cameraPose, resolution);
+        var pixelGradient = Engine.Reshape(gradient, new[] { pixels, 3 });
+        var parameters = TrainableParameters();
+        var accumulated = new Tensor<T>?[parameters.Count];
+
+        for (int start = 0; start < pixels; start += RaysPerChunk)
         {
-            double g = NumOps.ToDouble(gradSpan[i]);
-            gradNorm += g * g;
-        }
-        gradNorm = Math.Sqrt(gradNorm) + 1e-8;
-
-        // Update each layer
-        foreach (var layer in _densityLayers)
-        {
-            var layerParams = layer.GetParameters();
-            var updated = new T[layerParams.Length];
-
-            for (int i = 0; i < layerParams.Length; i++)
+            int count = Math.Min(RaysPerChunk, pixels - start);
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+            var colour = RenderRays(origin, Engine.TensorNarrow(directions, 0, start, count));
+            var loss = Engine.ReduceSum(
+                Engine.TensorMultiply(colour, Engine.TensorNarrow(pixelGradient, 0, start, count)), null);
+            var grads = tape.ComputeGradients(loss, parameters);
+            for (int p = 0; p < parameters.Count; p++)
             {
-                double param = NumOps.ToDouble(layerParams[i]);
-                // Use scaled gradient with noise for exploration
-                double update = -learningRate * (1.0 / gradNorm) * (_random.NextDouble() - 0.5);
-                updated[i] = NumOps.FromDouble(param + update);
+                if (!grads.TryGetValue(parameters[p], out var parameterGradient))
+                    continue;
+                var previous = accumulated[p];
+                accumulated[p] = previous is null ? parameterGradient.Clone() : Engine.TensorAdd(previous, parameterGradient);
             }
-
-            layer.SetParameters(Vector<T>.FromArray(updated));
         }
 
-        foreach (var layer in _colorLayers)
+        var rate = NumOps.FromDouble(learningRate);
+        for (int p = 0; p < parameters.Count; p++)
         {
-            var layerParams = layer.GetParameters();
-            var updated = new T[layerParams.Length];
-
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                double param = NumOps.ToDouble(layerParams[i]);
-                double update = -learningRate * (1.0 / gradNorm) * (_random.NextDouble() - 0.5);
-                updated[i] = NumOps.FromDouble(param + update);
-            }
-
-            layer.SetParameters(Vector<T>.FromArray(updated));
+            var step = accumulated[p];
+            if (step is null)
+                continue;
+            var updated = Engine.TensorSubtract(parameters[p], Engine.TensorMultiplyScalar(step, rate));
+            updated.AsSpan().CopyTo(parameters[p].AsWritableSpan());
         }
     }
+
+    private List<Tensor<T>> TrainableParameters()
+    {
+        var parameters = new List<Tensor<T>>();
+        foreach (var layer in AllLayers())
+            parameters.AddRange(layer.GetTrainableParameters());
+        return parameters;
+    }
+
+    private IEnumerable<DenseLayer<T>> AllLayers() => _densityLayers.Concat(_colorLayers);
 
     /// <summary>
     /// Gets all network parameters.
     /// </summary>
     public Vector<T> GetParameters()
-    {
-        var allParams = new List<T>();
-
-        foreach (var layer in _densityLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
-
-        foreach (var layer in _colorLayers)
-        {
-            var p = layer.GetParameters();
-            for (int i = 0; i < p.Length; i++)
-            {
-                allParams.Add(p[i]);
-            }
-        }
-
-        return Vector<T>.FromArray(allParams.ToArray());
-    }
+        => Vector<T>.Concatenate(AllLayers().Select(layer => layer.GetParameters()).ToArray());
 
     /// <summary>
     /// Sets network parameters.
@@ -1174,33 +1155,11 @@ public class NeRFNetwork<T> : IParameterSource<T>
     public void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-
-        foreach (var layer in _densityLayers)
+        foreach (var layer in AllLayers())
         {
-            var layerParams = layer.GetParameters();
-            var newParams = new T[layerParams.Length];
-
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                newParams[i] = parameters[offset + i];
-            }
-
-            layer.SetParameters(Vector<T>.FromArray(newParams));
-            offset += layerParams.Length;
-        }
-
-        foreach (var layer in _colorLayers)
-        {
-            var layerParams = layer.GetParameters();
-            var newParams = new T[layerParams.Length];
-
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                newParams[i] = parameters[offset + i];
-            }
-
-            layer.SetParameters(Vector<T>.FromArray(newParams));
-            offset += layerParams.Length;
+            int length = layer.GetParameters().Length;
+            layer.SetParameters(parameters.GetSubVector(offset, length));
+            offset += length;
         }
     }
 }
