@@ -161,8 +161,8 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <summary>Each parameter's prior variance σ²_{g(d)} + 1e-10, read from its group's log-variance.</summary>
     private Vector<T> ParameterPriorVariance()
     {
-        var perParameterLogVar = Engine.TensorIndexSelect(
-            Tensor<T>.FromVector(_groupLogVars), new Tensor<int>(_groupOf, new[] { _paramDim }), 0).ToVector();
+        using var groupIndex = new Tensor<int>(_groupOf, new[] { _paramDim });
+        var perParameterLogVar = Engine.TensorIndexSelect(Tensor<T>.FromVector(_groupLogVars), groupIndex, 0).ToVector();
         return Engine.Exp(perParameterLogVar) + NumOps.FromDouble(1e-10);
     }
 

@@ -202,8 +202,8 @@ public partial class NPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInp
         var indices = Enumerable.Range(0, rows * cols)
             .Select(k => (int)((offset + (long)(k / cols) * stride + k % cols) % length))
             .ToArray();
-        return Engine.TensorIndexSelect(
-                Tensor<T>.FromVector(_latentEncoderParams), new Tensor<int>(indices, new[] { indices.Length }), 0)
+        using var indexTensor = new Tensor<int>(indices, new[] { indices.Length });
+        return Engine.TensorIndexSelect(Tensor<T>.FromVector(_latentEncoderParams), indexTensor, 0)
             .Reshape(rows, cols).ToMatrix();
     }
 

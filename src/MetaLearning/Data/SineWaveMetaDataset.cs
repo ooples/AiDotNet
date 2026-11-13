@@ -109,14 +109,14 @@ public class SineWaveMetaDataset<T, TInput, TOutput> : MetaDatasetBase<T, TInput
 
             // Generate random x values for this wave (uniform in [xMin, xMax]), drawn in the
             // dataset's seeded stream order.
-            var xValues = new Tensor<T>(new[] { totalPerWay });
+            using var xValues = new Tensor<T>(new[] { totalPerWay });
             for (int i = 0; i < totalPerWay; i++)
             {
                 xValues[i] = NumOps.FromDouble(_xMin + Rng.NextDouble() * (_xMax - _xMin));
             }
 
             // y = A sin(x + phase) for the whole wave at once.
-            var yValues = engine.TensorMultiplyScalar(
+            using var yValues = engine.TensorMultiplyScalar(
                 engine.TensorSin(engine.TensorAddScalar(xValues, NumOps.FromDouble(phase))),
                 NumOps.FromDouble(amplitude));
 

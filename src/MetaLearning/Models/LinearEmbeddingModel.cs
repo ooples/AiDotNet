@@ -71,9 +71,26 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
         _inputDim = inputDim;
         _embeddingDim = embeddingDim;
         _learningRate = learningRate;
+        int parameterCount = ParameterCount(inputDim, embeddingDim);
         // Distinct values, so every embedding coordinate responds differently to the input from the start.
         _parameters = AiDotNetEngine.Current.TensorMultiplyScalar(
-            AiDotNetEngine.Current.TensorArange<double>(1, embeddingDim * inputDim + embeddingDim + 1, 1), 0.01).ToVector();
+            AiDotNetEngine.Current.TensorArange<double>(1.0, parameterCount + 1.0, 1.0), 0.01).ToVector();
+    }
+
+    /// <summary>
+    /// Number of parameters (W then b), computed in 64-bit so a shape whose count cannot fit in one vector is
+    /// rejected instead of wrapping to a smaller int.
+    /// </summary>
+    private static int ParameterCount(int inputDim, int embeddingDim)
+    {
+        long count = (long)embeddingDim * inputDim + embeddingDim;
+        if (count > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(nameof(embeddingDim),
+                $"embeddingDim * inputDim + embeddingDim = {count} exceeds the largest parameter vector ({int.MaxValue}).");
+        }
+
+        return (int)count;
     }
 
     /// <summary>W as an [embeddingDim, inputDim] tensor (row e holds embedding coordinate e's weights).</summary>
@@ -270,7 +287,7 @@ public partial class LinearEmbeddingModel : ModelBase<double, Matrix<double>, Te
         }
 
         var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-        int expectedCount = _embeddingDim * _inputDim + _embeddingDim;
+        int expectedCount = ParameterCount(_inputDim, _embeddingDim);
         if (parts.Length != expectedCount)
         {
             throw new InvalidDataException(

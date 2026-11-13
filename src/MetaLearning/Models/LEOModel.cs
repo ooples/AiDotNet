@@ -147,7 +147,7 @@ public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
         var logits = engine.TensorMatMul(rows, engine.TensorTranspose(weights));
         var probabilities = engine.Softmax(logits, axis: 1);
 
-        var slots = new Tensor<int>(_classSlots, new[] { classes });
+        using var slots = new Tensor<int>(_classSlots, new[] { classes });
         if (typeof(TOutput) == typeof(Vector<T>))
         {
             // The class slot of each row's most probable class (the first one on ties)

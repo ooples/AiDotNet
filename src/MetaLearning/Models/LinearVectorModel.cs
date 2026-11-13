@@ -153,11 +153,8 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         var errors = lossGradient.GetSubVector(0, count);
         var weightGradient = engine.TensorMatMul(
             engine.TensorTranspose(Features(input, count)), Tensor<double>.FromVector(errors).Reshape(count, 1));
-        return engine.Concat(new[]
-        {
-            weightGradient.Reshape(_inputDim),
-            new Tensor<double>(new[] { engine.Sum(errors) }, new[] { 1 }),
-        }, 0).ToVector();
+        using var biasGradient = new Tensor<double>(new[] { engine.Sum(errors) }, new[] { 1 });
+        return engine.Concat(new[] { weightGradient.Reshape(_inputDim), biasGradient }, 0).ToVector();
     }
 
     /// <inheritdoc/>

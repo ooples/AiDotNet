@@ -112,4 +112,11 @@ public class LinearEmbeddingModelTests
         var model = new LinearEmbeddingModel(InputDim, EmbeddingDim);
         Assert.Throws<ArgumentException>(() => model.Predict(new Matrix<double>(2, InputDim - 1)));
     }
+
+    [Fact]
+    public void Constructor_RejectsAParameterCountBeyondIntRange()
+    {
+        // 65536 * 65536 = 2^32 wraps to 0 in int, which would silently build a 65536-parameter model.
+        Assert.Throws<ArgumentOutOfRangeException>(() => new LinearEmbeddingModel(65536, 65536));
+    }
 }
