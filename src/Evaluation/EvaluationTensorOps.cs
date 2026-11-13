@@ -366,6 +366,33 @@ internal static class EvaluationTensorOps<T>
     }
 
     /// <summary>
+    /// The position of each of <paramref name="values"/> in <paramref name="classes"/>, a label set from
+    /// <see cref="UniqueLabels"/> (ascending, NaN last), so every NaN value maps to the trailing NaN class.
+    /// </summary>
+    internal static Tensor<int> LabelIndices(Tensor<T> values, Tensor<T> classes)
+    {
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        if (Count(NanMask(classes)) == 0)
+        {
+            return engine.TensorSearchSorted(classes, values, false);
+        }
+
+        int nanIndex = classes.Length - 1;
+        var finiteClasses = Select(classes, Not(NanMask(classes)));
+        if (finiteClasses.Length == 0)
+        {
+            return engine.TensorFullLike(new Tensor<int>(new[] { values.Length }), nanIndex);
+        }
+
+        // NaN would not search to a defined slot, so search a finite stand-in and overwrite those positions.
+        var isNaN = engine.TensorIsNan(values);
+        var probe = engine.TensorWhere(isNaN, engine.TensorFullLike(values, finiteClasses[0]), values);
+        var finiteIndices = engine.TensorSearchSorted(finiteClasses, probe, false);
+        return engine.TensorWhere(isNaN, engine.TensorFullLike(finiteIndices, nanIndex), finiteIndices);
+    }
+
+    /// <summary>
     /// The area under the ROC curve of <paramref name="scores"/> for the 1/0 <paramref name="positiveMask"/>, as
     /// the Mann-Whitney statistic: the fraction of (positive, negative) pairs the scores order correctly, ties
     /// counting one half (scikit-learn's <c>roc_auc_score</c>). The caller guarantees both classes are present.

@@ -99,24 +99,26 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
             return NumOps.Zero;
         }
 
-        // Build both marginal histograms in one pass, without rescanning samples for every class.
-        // Boxed native labels retain decimal/integer identity and treat NaN as one class.
-        var counts = new Dictionary<object, (int Predicted, int Actual)>();
-        double correct = 0;
-        for (int i = 0; i < predictions.Length; i++)
+        // Both marginal histograms come from one bincount over the class positions, without rescanning the samples
+        // for every class. Native-T labels keep decimal identity, and NaN is one class (sorted last).
+        var predictionTensor = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actualTensor = EvaluationTensorOps<T>.ToTensor(actuals);
+        var classes = EvaluationTensorOps<T>.UniqueLabels(predictionTensor, actualTensor);
+        int classCount = classes.Length;
+
+        if (classCount == 2)
         {
-            object predicted = predictions[i]!;
-            object actual = actuals[i]!;
-            counts.TryGetValue(predicted, out var p);
-            counts[predicted] = (p.Predicted + 1, p.Actual);
-            counts.TryGetValue(actual, out var a);
-            counts[actual] = (a.Predicted, a.Actual + 1);
-            if (predicted.Equals(actual)) correct++;
+            return ComputeBinaryMCC(predictions, actuals);
         }
 
-        return counts.Count == 2
-            ? ComputeBinaryMCC(predictions, actuals)
-            : ComputeMultiClassMCC(counts.Values, correct, predictions.Length);
+        var engine = AiDotNetEngine.Current;
+        var predictedCounts = engine.TensorBinCount(
+            EvaluationTensorOps<T>.LabelIndices(predictionTensor, classes), classCount).Cast<double>();
+        var actualCounts = engine.TensorBinCount(
+            EvaluationTensorOps<T>.LabelIndices(actualTensor, classes), classCount).Cast<double>();
+        int correct = EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.PairEqualMask(predictionTensor, actualTensor));
+
+        return ComputeMultiClassMCC(predictedCounts, actualCounts, correct, predictions.Length);
     }
 
     private T ComputeBinaryMCC(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
@@ -141,20 +143,16 @@ public class MatthewsCorrelationCoefficientMetric<T> : IClassificationMetric<T>
         return NumOps.FromDouble(numerator / denominator);
     }
 
-    private static T ComputeMultiClassMCC(IEnumerable<(int Predicted, int Actual)> counts, double correct, int n)
+    private static T ComputeMultiClassMCC(Tensor<double> predictedCounts, Tensor<double> actualCounts, int correct, int n)
     {
-        // Gorodkin's multiclass formula needs only the marginal histograms and diagonal total.
-        double sumPkTk = 0, sumPk2 = 0, sumTk2 = 0;
-        foreach (var (predicted, actual) in counts)
-        {
-            double p = predicted, t = actual;
-            sumPkTk += p * t;
-            sumPk2 += p * p;
-            sumTk2 += t * t;
-        }
+        // Gorodkin's multiclass formula needs only the marginal histograms and diagonal total, summed in double.
+        var engine = AiDotNetEngine.Current;
+        double sumPkTk = engine.TensorSum(engine.TensorMultiply(predictedCounts, actualCounts));
+        double sumPk2 = engine.TensorSum(engine.TensorMultiply(predictedCounts, predictedCounts));
+        double sumTk2 = engine.TensorSum(engine.TensorMultiply(actualCounts, actualCounts));
 
         double s = n;
-        double numerator = correct * s - sumPkTk;
+        double numerator = (double)correct * s - sumPkTk;
         double denominator = Math.Sqrt((s * s - sumPk2) * (s * s - sumTk2));
 
         if (denominator == 0)
