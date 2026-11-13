@@ -31,8 +31,8 @@ public class ReferencePdeImplementationTests
     {
         var d = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
         d.FirstDerivatives[0, 1] = dudt;
         d.SecondDerivatives[0, 0, 0] = d2udx2;
@@ -247,7 +247,7 @@ public class ReferencePdeImplementationTests
     {
         var insulated = new NeumannBoundaryCondition<double>(flux: 0.0, lowerBound: 0.0, upperBound: 1.0);
 
-        var derivatives = new PDEDerivatives<double> { FirstDerivatives = new double[1, 2] };
+        var derivatives = new PDEDerivatives<double> { FirstDerivatives = new Tensor<double>(new[] { 1, 2 }) };
         derivatives.FirstDerivatives[0, 0] = 0.25;
 
         double residual = insulated.ComputeBoundaryResidual(

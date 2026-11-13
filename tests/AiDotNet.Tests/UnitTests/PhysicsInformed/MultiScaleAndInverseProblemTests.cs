@@ -393,8 +393,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
         {
             return new PDEDerivatives<double>
             {
-                FirstDerivatives = new double[outputDim, inputDim],
-                SecondDerivatives = new double[outputDim, inputDim, inputDim]
+                FirstDerivatives = new Tensor<double>(new[] { outputDim, inputDim }),
+                SecondDerivatives = new Tensor<double>(new[] { outputDim, inputDim, inputDim })
             };
         }
 
