@@ -539,7 +539,6 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
     private static (Tensor<int> Left, Tensor<int> Right) Partition(Tensor<T> x, Tensor<int> rows, int feature, T threshold)
     {
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         int n = rows.Length;
         var column = engine.Reshape(engine.TensorSlice(x, new[] { 0, feature }, new[] { n, 1 }), new[] { n });
         var goesRight = engine.TensorGreaterThan(column, threshold);

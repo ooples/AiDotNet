@@ -115,7 +115,7 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
 
         double tieSum = engine.TensorSum(engine.TensorSquare(tieSizes.Cast<double>())) - N;
         double variance = Math.Max(0, (double)N * (N + 1) / 12.0 - tieSum / (12.0 * (N - 1)));
-        if (variance == 0)
+        if (variance <= 0)
         {
             for (int i = 0; i < k; i++)
                 for (int j = i + 1; j < k; j++) results[(i, j)] = 1.0;

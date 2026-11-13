@@ -103,7 +103,8 @@ public class FBetaScoreMetric<T> : IClassificationMetric<T>
         if (pp == 0 && ap == 0) return 1;
         double prec = pp > 0 ? (double)tp / pp : 0;
         double rec = ap > 0 ? (double)tp / ap : 0;
-        if (prec + rec == 0) return 0;
+        // Precision and recall are both zero exactly when nothing was predicted correctly.
+        if (tp == 0) return 0;
         double b2 = _beta * _beta;
         return (1 + b2) * prec * rec / (b2 * prec + rec);
     }
