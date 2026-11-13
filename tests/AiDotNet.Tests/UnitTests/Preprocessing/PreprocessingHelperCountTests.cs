@@ -24,7 +24,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task CategoryCounts_Half_CountsPast2048AndSkipsOutOfRangePositions()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var positions = ClassIndex().Concat(new[] { -1, 2, 7 }).ToArray();
 
         var counts = PreprocessingTensorOps.CategoryCounts<Half>(new Tensor<int>(positions, new[] { positions.Length }), 2);
@@ -40,7 +40,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task HistogramMutualInformation_Half_CountsJointCellsPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var oneHot = PreprocessingTensorOps.ClassOneHot<Half>(ClassIndex(), 2);
 
         var mi = PreprocessingTensorOps.HistogramMutualInformation(oneHot, oneHot, 2);
@@ -64,7 +64,7 @@ public class PreprocessingHelperCountTests
     public async Task Tolerance_RaisesTinyEpsilonsToTheSmallestNormalHalf()
     {
         // 1e-10 rounds to 0 in Half; the smallest normal Half is 2^-14. float and double keep the value.
-        await Task.CompletedTask;
+        await Task.Yield();
         Assert.Equal(Math.Pow(2, -14), (double)PreprocessingTensorOps.Tolerance<Half>(1e-10), Tolerance);
         Assert.Equal(0.25, (double)PreprocessingTensorOps.Tolerance<Half>(0.25), Tolerance);
         Assert.Equal(1e-10, PreprocessingTensorOps.Tolerance<double>(1e-10));
@@ -76,7 +76,7 @@ public class PreprocessingHelperCountTests
     {
         // A constant column has range 0 < 1e-10: not varying, every row in bin 0 (width 0 / bins + 1e-10). With the
         // 1e-10 rounded to 0 in Half the width was 0, the bins 0 / 0 = NaN and the column counted as varying.
-        await Task.CompletedTask;
+        await Task.Yield();
         var x = HalfTensor(new[] { 4, 1 }, _ => 3);
 
         var oneHot = PreprocessingTensorOps.EqualWidthBinOneHot(x, 3, out var varying);
@@ -94,7 +94,7 @@ public class PreprocessingHelperCountTests
     public async Task AtLeastHelpers_NaNIsNeverAtLeastTheMinimum()
     {
         // Master tests value >= minimum, which is false for NaN; 1 - (value < minimum) made NaN qualify.
-        await Task.CompletedTask;
+        await Task.Yield();
         var values = new Tensor<double>(new[] { double.NaN, 1.0, 2.0, 0.5 }, new[] { 4 });
         var atLeast = PreprocessingTensorOps.AtLeast(values, 1.0);
         Assert.Equal(new[] { 0.0, 1.0, 1.0, 0.0 }, atLeast.AsSpan().ToArray());
@@ -113,7 +113,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task CenteredCorrelations_Half_SumsMoreThan2048Squares()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 3000;
         var xc = new Tensor<Half>(Enumerable.Range(0, n).Select(i => (Half)(i % 2 == 0 ? 1 : -1)).ToArray(), new[] { n, 1 });
         var yc = new Tensor<Half>(
@@ -129,7 +129,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task TargetCorrelations_Half_CrossProductPast65504IsOne()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var values = Enumerable.Range(0, 10).Select(i => (Half)(i % 2 == 0 ? 300 : -300)).ToArray();
         var x = new Tensor<Half>(values, new[] { 10, 1 });
         var y = new Tensor<Half>(values, new[] { 10 });
@@ -143,7 +143,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task Solve_Half_WidensTheSystemToFloat()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var a = new Tensor<Half>(new[] { (Half)2, (Half)0, (Half)0, (Half)4 }, new[] { 2, 2 });
         var b = new Tensor<Half>(new[] { (Half)2, (Half)8 }, new[] { 2, 1 });
 
@@ -158,7 +158,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task SymmetricEigh_Half_WidensTheDecompositionToFloat()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var symmetric = new Tensor<Half>(new[] { (Half)2, (Half)1, (Half)1, (Half)2 }, new[] { 2, 2 });
 
         var (values, vectors) = PreprocessingTensorOps.SymmetricEigh(symmetric);
@@ -174,7 +174,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task Inverse_Half_WidensTheInversionToFloat()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var matrix = new Tensor<Half>(new[] { (Half)2, (Half)1, (Half)0, (Half)4 }, new[] { 2, 2 });
 
         var inverse = PreprocessingTensorOps.Inverse(matrix);
@@ -190,7 +190,7 @@ public class PreprocessingHelperCountTests
     [Fact(Timeout = 60000)]
     public async Task Svd_Half_WidensTheDecompositionToFloat()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var matrix = new Tensor<Half>(new[] { (Half)3, (Half)0, (Half)4, (Half)5 }, new[] { 2, 2 });
 
         var (u, s, vh) = PreprocessingTensorOps.Svd(matrix, false);
@@ -208,5 +208,121 @@ public class PreprocessingHelperCountTests
                 Assert.Equal(expected[i * 2 + j], rebuilt, 2e-2);
             }
         }
+    }
+
+    // x = [0, 2^-15, 2^-14] in two bins: width = 2^-14 / 2 + 1e-10, so 2^-14 lands in bin 1 (2^-14 / width just below
+    // 2). With 1e-10 raised to Half's smallest normal 2^-14 the width was 3 * 2^-15 and every value fell in bin 0.
+    [Fact(Timeout = 60000)]
+    public async Task EqualWidthBinOneHot_Half_SmallRangeKeepsTheUpperBin()
+    {
+        await Task.Yield();
+        var x = new Tensor<Half>(new[] { (Half)0, (Half)Math.Pow(2, -15), (Half)Math.Pow(2, -14) }, new[] { 3, 1 });
+
+        var oneHot = PreprocessingTensorOps.EqualWidthBinOneHot(x, 2, out var varying);
+
+        Assert.Equal(1.0, (double)varying.GetFlat(0), Tolerance);
+        Assert.Equal(new[] { 1.0, 0.0, 1.0, 0.0, 0.0, 1.0 }, oneHot.ToArray().Select(v => (double)v).ToArray());
+    }
+
+    // [-40000, 0, 40000] in three bins: the range 80000 passes Half's 65504, so in Half the width was infinite, 0 and
+    // 40000 both scaled to 0 and the maximum to inf / inf = NaN. In float the bins are 0, 1 and 2.
+    [Fact(Timeout = 60000)]
+    public async Task EqualWidthBinOneHot_Half_RangePast65504KeepsEveryBin()
+    {
+        await Task.Yield();
+        var x = new Tensor<Half>(new[] { (Half)(-40000), (Half)0, (Half)40000 }, new[] { 3, 1 });
+
+        var oneHot = PreprocessingTensorOps.EqualWidthBinOneHot(x, 3, out _);
+
+        Assert.Equal(new[] { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 }, oneHot.ToArray().Select(v => (double)v).ToArray());
+    }
+
+    // Range-scaled bins (x - min) / (max - min) * (bins - 1) of [-40000, 0, 40000] with three bins are 0, 1 and 2;
+    // the Half range 80000 overflowed to inf, scaling 0 to bin 0 and 40000 to inf / inf = NaN.
+    [Fact(Timeout = 60000)]
+    public async Task RangeScaledBinOneHot_Half_RangePast65504KeepsEveryBin()
+    {
+        await Task.Yield();
+        var x = new Tensor<Half>(new[] { (Half)(-40000), (Half)0, (Half)40000 }, new[] { 3, 1 });
+
+        var oneHot = PreprocessingTensorOps.RangeScaledBinOneHot(x, 3);
+
+        Assert.Equal(new[] { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 }, oneHot.ToArray().Select(v => (double)v).ToArray());
+    }
+
+    // 2049 categories: label 2048 is valid and becomes its category (7). In Half the count 2049 rounds to 2048, so the
+    // label failed 2048 < 2048 and kept its own value.
+    [Fact(Timeout = 60000)]
+    public async Task GatherCategories_Half_LabelPast2048IsACategory()
+    {
+        await Task.Yield();
+        var categories = PreprocessingTensorOps.Filled(new[] { 2049 }, (Half)7);
+        var labels = new Tensor<Half>(new[] { (Half)2048, (Half)(-1) }, new[] { 2 });
+
+        var gathered = PreprocessingTensorOps.GatherCategories(categories, labels);
+
+        Assert.Equal(new[] { 7.0, -1.0 }, gathered.ToArray().Select(v => (double)v).ToArray());
+    }
+
+    // Per-category sums by index-add: categories 0 and 2 collect 1 + 3 and 2, category 1 has no rows.
+    [Fact(Timeout = 60000)]
+    public async Task CategorySums_AddsEveryRowToItsCategory()
+    {
+        await Task.Yield();
+        var index = new Tensor<int>(new[] { 0, 2, 0 }, new[] { 3 });
+        var values = new Tensor<double>(new[] { 1.0, 2.0, 3.0 }, new[] { 3 });
+
+        var sums = PreprocessingTensorOps.CategorySums(index, values, 3);
+
+        Assert.Equal(new[] { 4.0, 0.0, 2.0 }, sums.ToArray());
+    }
+
+    // A 2050-column mask whose only set entry is column 2049: the first non-zero is 2049, and an all-zero row gets the
+    // width 2050. Positions held in Half round 2049 to 2048.
+    [Fact(Timeout = 60000)]
+    public async Task FirstNonZeroPerRow_Half_PositionPast2048IsExact()
+    {
+        await Task.Yield();
+        var mask = HalfTensor(new[] { 2, 2050 }, i => i == 2049 ? 1 : 0);
+
+        var first = PreprocessingTensorOps.FirstNonZeroPerRow(mask);
+
+        Assert.Equal(new[] { 2049, 2050 }, first);
+    }
+
+    // [-40000, 0, 40000] normalizes to [0, 0.5, 1]; the Half range 80000 overflowed to inf, giving 0, 0 and NaN.
+    [Fact(Timeout = 60000)]
+    public async Task MinMaxNormalize_Half_RangePast65504()
+    {
+        await Task.Yield();
+        var x = new Tensor<Half>(new[] { (Half)(-40000), (Half)0, (Half)40000 }, new[] { 3 });
+
+        var normalized = PreprocessingTensorOps.MinMaxNormalize(x);
+
+        Assert.Equal(new[] { 0.0, 0.5, 1.0 }, normalized.ToArray().Select(v => (double)v).ToArray());
+    }
+
+    // [-40000, -20000, 0, 20000, 40000] in five blocks of width 16000 gives blocks 0, 1, 2, 3 and 4 (80000 / 16000 = 5
+    // clamps to 4). In Half the range overflowed, the width was infinite and the blocks collapsed to 0.
+    [Fact(Timeout = 60000)]
+    public async Task EqualWidthBlockIndex_Half_RangePast65504()
+    {
+        await Task.Yield();
+        var x = new Tensor<Half>(new[] { (Half)(-40000), (Half)(-20000), (Half)0, (Half)20000, (Half)40000 }, new[] { 5 });
+
+        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, PreprocessingTensorOps.EqualWidthBlockIndex(x, 5));
+    }
+
+    // A row of 65,536 ones has norm 256. Its sum of squares, 65,536, passes Half's 65504 (or stalls at 2048 when
+    // accumulated in Half), so the norm came out inf or 45.25 instead.
+    [Fact(Timeout = 60000)]
+    public async Task RowNorms_Half_SumOfSquaresPast65504()
+    {
+        await Task.Yield();
+        var x = HalfTensor(new[] { 1, 65536 }, _ => 1);
+
+        var norms = PreprocessingTensorOps.RowNorms(x);
+
+        Assert.Equal(256.0, (double)norms.GetFlat(0), Tolerance);
     }
 }
