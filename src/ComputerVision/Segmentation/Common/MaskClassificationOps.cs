@@ -157,14 +157,74 @@ internal static class MaskClassificationOps
         return engine.Reshape(logScores, new[] { b, k, height, width });
     }
 
-    /// <summary>L2-normalizes <paramref name="x"/> along <paramref name="axis"/> with <c>sqrt(sum(x^2) + 1e-24)</c>.</summary>
+    /// <summary>
+    /// L2-normalizes <paramref name="x"/> along <paramref name="axis"/>: <c>x / sqrt(sum(x^2) + eps)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Each slice is first divided by its largest magnitude (the direction is unchanged), so the squares stay in
+    /// <c>[0, 1]</c>: squaring the raw values overflows Half (65504) once a component exceeds 256, which turned
+    /// (300, 400) into (0, 0). <c>eps</c> is 1e-24 or, where <typeparamref name="T"/> flushes that to zero, the
+    /// smallest power-of-two multiple of it that <typeparamref name="T"/> holds, so an all-zero slice still divides
+    /// by a positive number.
+    /// </remarks>
     internal static Tensor<T> NormalizeAxis<T>(Tensor<T> x, int axis)
     {
         var engine = AiDotNetEngine.Current;
+        var shape = x.Shape.ToArray();
+        var epsilon = PositiveTolerance<T>(1e-24);
+        var scale = engine.TensorClampMin(engine.ReduceMax(engine.TensorAbs(x), new[] { axis }, true), epsilon);
+        var scaled = engine.TensorDivide(x, engine.TensorBroadcastTo(scale, shape));
+        var sumSquares = engine.ReduceSum(engine.TensorSquare(scaled), new[] { axis }, true);
+        var norm = engine.TensorSqrt(engine.TensorAddScalar(sumSquares, epsilon));
+        return engine.TensorDivide(scaled, engine.TensorBroadcastTo(norm, shape));
+    }
+
+    /// <summary>Half's smallest normal value, 2^-14.</summary>
+    private const double HalfSmallestNormal = 6.103515625e-05;
+
+    /// <summary>Half's largest value below one, 1 - 2^-11.</summary>
+    private const double HalfLargestBelowOne = 0.99951171875;
+
+    /// <summary>
+    /// <paramref name="value"/> in <typeparamref name="T"/>, or Half's smallest normal value (2^-14) when
+    /// <typeparamref name="T"/> rounds <paramref name="value"/> to zero (Half flushes 1e-8 and smaller to 0).
+    /// </summary>
+    internal static T PositiveTolerance<T>(double value)
+    {
+        if (!(value > 0)) throw new ArgumentOutOfRangeException(nameof(value), "A tolerance must be positive.");
         var ops = MathHelper.GetNumericOperations<T>();
-        var sumSquares = engine.ReduceSum(engine.TensorSquare(x), new[] { axis }, true);
-        var norm = engine.TensorSqrt(engine.TensorAddScalar(sumSquares, ops.FromDouble(1e-24)));
-        return engine.TensorDivide(x, engine.TensorBroadcastTo(norm, x.Shape.ToArray()));
+        var rounded = ops.FromDouble(value);
+        return ops.ToDouble(rounded) > 0 ? rounded : ops.FromDouble(Math.Max(value, HalfSmallestNormal));
+    }
+
+    /// <summary>
+    /// <c>1 - value</c> in <typeparamref name="T"/>, or Half's largest value below one (1 - 2^-11) when
+    /// <typeparamref name="T"/> rounds <c>1 - value</c> to one (Half rounds 1 - 1e-7 to 1).
+    /// </summary>
+    internal static T BelowOne<T>(double value)
+    {
+        if (!(value > 0 && value < 1)) throw new ArgumentOutOfRangeException(nameof(value), "The gap below one must lie in (0, 1).");
+        var ops = MathHelper.GetNumericOperations<T>();
+        var rounded = ops.FromDouble(1.0 - value);
+        return ops.ToDouble(rounded) < 1.0 ? rounded : ops.FromDouble(Math.Min(1.0 - value, HalfLargestBelowOne));
+    }
+
+    /// <summary>
+    /// The mean of each row of <paramref name="values"/> <c>[R, P]</c> over the entries where <paramref name="mask"/>
+    /// is 1 (0 for an empty row), given the per-row counts <paramref name="counts"/> <c>[R]</c>, reduced in double
+    /// and rounded to T once.
+    /// </summary>
+    /// <remarks>
+    /// A row sum in Half accumulates in Half: it overflows past 65504 and, long before that, stops growing once its
+    /// spacing exceeds twice the addend (3000 probabilities of 0.75 sum to about 2048, not 2250). The engine has no
+    /// Half reduction with a wider accumulator, so the sum is taken in double. These means are post-processing
+    /// statistics and carry no gradient.
+    /// </remarks>
+    internal static Tensor<T> MeanOverMask<T>(Tensor<T> values, Tensor<T> mask, Tensor<int> counts)
+    {
+        var engine = AiDotNetEngine.Current;
+        var sums = engine.ReduceSum(engine.TensorMultiply(values.Cast<double>(), mask.Cast<double>()), new[] { 1 }, false);
+        return engine.TensorDivide(sums, engine.TensorClampMin(counts, 1).Cast<double>()).Cast<T>();
     }
 
     /// <summary>
@@ -179,14 +239,16 @@ internal static class MaskClassificationOps
         if (n == 0) return Array.Empty<int>();
         var column = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { n, 1 }), new[] { n, n }); // [i, j] = s_i
         var row = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { 1, n }), new[] { n, n });    // [i, j] = s_j
-        var index = engine.TensorArange<T>(0, n, 1);
+        // Indices and counts stay in int: Half holds integers exactly only up to 2048, so indices compared in T
+        // tie above it and a rank summed in T stops counting there.
+        var index = engine.TensorArange<int>(0, n, 1);
         var indexColumn = engine.TensorBroadcastTo(engine.Reshape(index, new[] { n, 1 }), new[] { n, n });
         var indexRow = engine.TensorBroadcastTo(engine.Reshape(index, new[] { 1, n }), new[] { n, n });
         // rank_i = #{j : s_j > s_i} + #{j < i : s_j == s_i}
         var ahead = engine.TensorAdd(
-            engine.TensorGreaterThan(row, column),
-            engine.TensorMultiply(engine.TensorEquals(row, column), engine.TensorLessThan(indexRow, indexColumn)));
-        int[] rank = engine.ReduceSum(ahead, new[] { 1 }, false).Cast<int>().ToArray();
+            engine.TensorGreaterThan(row, column).Cast<int>(),
+            engine.TensorMultiply(engine.TensorEquals(row, column).Cast<int>(), engine.TensorLessThan(indexRow, indexColumn)));
+        int[] rank = engine.ReduceSum(ahead, new[] { 1 }, false).ToArray();
 
         var order = new int[n];
         var filled = new bool[n];
@@ -228,10 +290,9 @@ internal static class MaskClassificationOps
         var classLabels = engine.TensorArgMax(classOnly, 1);                           // [N] int
         var masks = engine.Reshape(maskProbabilities, new[] { n, hw });
         var binary = engine.TensorGreaterThan(masks, ops.FromDouble(settings.ObjectMaskThreshold));
-        var pixelCount = engine.ReduceSum(binary, new[] { 1 }, false);
-        var maskScores = engine.TensorDivide(
-            engine.ReduceSum(engine.TensorMultiply(masks, binary), new[] { 1 }, false),
-            engine.TensorClampMin(pixelCount, ops.One));
+        // Pixel counts in int: a 0/1 sum in Half stops at 2048.
+        var pixelCount = engine.ReduceSum(binary.Cast<int>(), new[] { 1 }, false);
+        var maskScores = MeanOverMask(masks, binary, pixelCount);
         var reorder = engine.TensorMultiply(
             engine.TensorPower(classScores, ops.FromDouble(settings.ReorderClassWeight)),
             engine.TensorPower(maskScores, ops.FromDouble(settings.ReorderMaskWeight)));
@@ -244,7 +305,7 @@ internal static class MaskClassificationOps
             engine.TensorMultiplyScalar(engine.ScalarMinusTensor(ops.One, queryIsThing), ops.FromDouble(settings.ClassThresholdStuff)));
         int[] confident = engine.TensorGreaterThan(classScores, threshold).Cast<int>().ToArray();
         int[] labels = classLabels.ToArray();
-        int[] originalCount = pixelCount.Cast<int>().ToArray();
+        int[] originalCount = pixelCount.ToArray();
         double[] confidence = classScores.Cast<double>().ToArray();
         var binaryInt = binary.Cast<int>();
 
@@ -402,13 +463,14 @@ internal static class MaskClassificationOps
             engine.TensorMultiplyScalar(engine.ScalarMinusTensor(1, unclaimed), numClasses));
         var areaTensor = engine.TensorBinCount(binned, numClasses + 1);
         int[] stuffArea = areaTensor.ToArray();
-        // Mean probability of each class over its unclaimed pixels.
+        // Mean probability of each class over its unclaimed pixels, summed in double: a per-class sum in Half stops
+        // growing near 2048 and overflows past 65504 (see MeanOverMask). The confidence is reported as a double.
         var ownProbability = engine.TensorGatherClassValues(
-            engine.TensorPermute(semanticProbabilities, new[] { 1, 0 }), semanticLabels.Cast<T>());
+            engine.TensorPermute(semanticProbabilities, new[] { 1, 0 }), semanticLabels.Cast<T>()).Cast<double>();
         var probabilitySums = engine.TensorScatterAdd(
-            new Tensor<T>(new[] { numClasses + 1 }), binned, engine.TensorMultiply(ownProbability, unclaimed.Cast<T>()), 0);
+            new Tensor<double>(new[] { numClasses + 1 }), binned, engine.TensorMultiply(ownProbability, unclaimed.Cast<double>()), 0);
         double[] stuffConfidence = engine.TensorDivide(
-            probabilitySums, engine.TensorClampMin(areaTensor.Cast<T>(), ops.One)).Cast<double>().ToArray();
+            probabilitySums, engine.TensorClampMin(areaTensor, 1).Cast<double>()).ToArray();
         for (int cls = 0; cls < numClasses; cls++)
         {
             if (isThingClass[cls] || stuffArea[cls] == 0) continue;

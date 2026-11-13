@@ -381,8 +381,10 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
         var ops = MathHelper.GetNumericOperations<T>();
         int d = tokens.Shape[1];
         var initial = engine.ReduceMean(tokens, new[] { 0 }, true);                                         // [1, D]
-        var attention = engine.TensorSoftmax(engine.TensorMultiplyScalar(
-            engine.TensorMatMul(initial, engine.TensorTranspose(tokens)), ops.FromDouble(1.0 / Math.Sqrt(d))), 1);
+        // The 1 / sqrt(D) scale is applied to q0 before the product, so the dot products are formed already scaled:
+        // unscaled, a 64-wide product of entries near 32 is 65536 and overflows Half before the scale could apply.
+        var attention = engine.TensorSoftmax(engine.TensorMatMul(
+            engine.TensorMultiplyScalar(initial, ops.FromDouble(1.0 / Math.Sqrt(d))), engine.TensorTranspose(tokens)), 1);
         return engine.TensorAdd(initial, engine.TensorMatMul(attention, tokens));
     }
 
@@ -500,5 +502,4 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
         _corrections.Clear();
     }
     #endregion
-}    #endregion
 }

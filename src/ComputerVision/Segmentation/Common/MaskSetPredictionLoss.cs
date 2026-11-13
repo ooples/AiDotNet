@@ -102,7 +102,7 @@ internal static class MaskSetPredictionLoss
         if (cost is null) throw new ArgumentNullException(nameof(cost));
         if (cost.Rank != 2) throw new ArgumentException("The matching cost must be [segments, predictions].", nameof(cost));
         if (cost.Shape[0] == 0) return (Array.Empty<int>(), Array.Empty<int>());
-        var assignment = new LinearAssignmentSolver<T>().Solve(cost.ToMatrix());
+        int[] assignment = new LinearAssignmentSolver<T>().Solve(cost.ToMatrix()).ToArray();
         var segments = new List<int>();
         var predictions = new List<int>();
         for (int i = 0; i < assignment.Length; i++)
@@ -138,7 +138,7 @@ internal static class MaskSetPredictionLoss
         var sigmoid = engine.TensorSigmoid(maskLogits);
         var overlap = engine.TensorMatMul(y, engine.TensorTranspose(sigmoid));                             // [M, N]
         var denominator = engine.TensorAdd(
-            engine.TensorBroadcastTo(engine.ReduceSum(y, new[] { 1 }, true), new[] { m, n }),
+            engine.TensorBroadcastTo(engine.Reshape(TruthAreas(y), new[] { m, 1 }), new[] { m, n }),
             engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(sigmoid, new[] { 1 }, false), new[] { 1, n }), new[] { m, n }));
         var dice = engine.ScalarMinusTensor(ops.One, engine.TensorDivide(
             engine.TensorAddScalar(engine.TensorMultiplyScalar(overlap, ops.FromDouble(2.0)), ops.One),
@@ -166,6 +166,10 @@ internal static class MaskSetPredictionLoss
 
         Tensor<T>? weightedNll = null, weightSum = null, maskCrossEntropy = null, maskDice = null;
         int matchedTotal = 0;
+        var matchedWeightGap = ops.FromDouble(1.0 - Mask2FormerNoObjectWeight);
+        var noObjectWeight = ops.FromDouble(Mask2FormerNoObjectWeight);
+        var perPixel = ops.FromDouble(1.0 / hw);
+        var two = ops.FromDouble(2.0);
         for (int i = 0; i < b; i++)
         {
             var cls = engine.Reshape(engine.TensorSlice(classLogits, new[] { i, 0, 0 }, new[] { 1, n, c }), new[] { n, c });
@@ -183,8 +187,8 @@ internal static class MaskSetPredictionLoss
 
             // PyTorch's class-weighted cross-entropy: sum_q w_q * nll_q / sum_q w_q, w = 0.1 on no-object targets.
             var weights = engine.TensorAddScalar(
-                engine.TensorMultiplyScalar(new Tensor<int>(matched, new[] { n }).Cast<T>(), ops.FromDouble(1.0 - Mask2FormerNoObjectWeight)),
-                ops.FromDouble(Mask2FormerNoObjectWeight));
+                engine.TensorMultiplyScalar(new Tensor<int>(matched, new[] { n }).Cast<T>(), matchedWeightGap),
+                noObjectWeight);
             var nll = engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(
                 engine.TensorOneHot<T>(new Tensor<int>(targetClass, new[] { n }), c), engine.TensorLogSoftmax(cls, 1)), new[] { 1 }, false));
             weightedNll = Accumulate(engine, weightedNll, engine.ReduceSum(engine.TensorMultiply(weights, nll), null));
@@ -195,12 +199,12 @@ internal static class MaskSetPredictionLoss
             var (x, y) = MatchedPairs(masks, segments[i], segment, prediction, n);
             var bce = engine.TensorMultiplyScalar(
                 engine.ReduceSum(engine.TensorSubtract(engine.Softplus(x), engine.TensorMultiply(x, y)), null),
-                ops.FromDouble(1.0 / hw));
+                perPixel);
             var sigmoid = engine.TensorSigmoid(x);
             var numerator = engine.TensorAddScalar(
-                engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorMultiply(sigmoid, y), new[] { 1 }, false), ops.FromDouble(2.0)), ops.One);
+                engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorMultiply(sigmoid, y), new[] { 1 }, false), two), ops.One);
             var denominator = engine.TensorAddScalar(
-                engine.TensorAdd(engine.ReduceSum(sigmoid, new[] { 1 }, false), engine.ReduceSum(y, new[] { 1 }, false)), ops.One);
+                engine.TensorAdd(engine.ReduceSum(sigmoid, new[] { 1 }, false), TruthAreas(y)), ops.One);
             var dice = engine.ReduceSum(engine.ScalarMinusTensor(ops.One, engine.TensorDivide(numerator, denominator)), null);
             maskCrossEntropy = Accumulate(engine, maskCrossEntropy, bce);
             maskDice = Accumulate(engine, maskDice, dice);
@@ -212,10 +216,12 @@ internal static class MaskSetPredictionLoss
         var total = engine.TensorMultiplyScalar(classLoss, ops.FromDouble(Mask2FormerClassWeight));
         if (maskCrossEntropy is not null && maskDice is not null)
         {
-            var perMask = ops.FromDouble(1.0 / Math.Max(1, matchedTotal));
+            // weight / num_masks is formed in double and rounded to T once; rounding 1 / num_masks first and then
+            // multiplying in T rounds twice (float: 5 * (1/3) is 1.6666667461 where 5/3 is 1.6666666269).
+            double masks = Math.Max(1, matchedTotal);
             total = engine.TensorAdd(total, engine.TensorAdd(
-                engine.TensorMultiplyScalar(maskCrossEntropy, ops.Multiply(perMask, ops.FromDouble(Mask2FormerMaskWeight))),
-                engine.TensorMultiplyScalar(maskDice, ops.Multiply(perMask, ops.FromDouble(Mask2FormerDiceWeight)))));
+                engine.TensorMultiplyScalar(maskCrossEntropy, ops.FromDouble(Mask2FormerMaskWeight / masks)),
+                engine.TensorMultiplyScalar(maskDice, ops.FromDouble(Mask2FormerDiceWeight / masks))));
         }
 
         return total;
@@ -251,6 +257,11 @@ internal static class MaskSetPredictionLoss
         if (segments.Count != b) throw new ArgumentException("Give one segment set per image.", nameof(segments));
 
         Tensor<T>? total = null;
+        var allVoidWeight = ops.FromDouble(KMaXPanopticQualityWeight * (1 - KMaXPositiveWeight) / n);
+        var positiveWeight = ops.FromDouble(KMaXPositiveWeight);
+        var negativeWeight = ops.FromDouble(1 - KMaXPositiveWeight);
+        var panopticQualityWeight = ops.FromDouble(KMaXPanopticQualityWeight);
+        var maskIdWeight = ops.FromDouble(KMaXMaskIdWeight);
         for (int i = 0; i < b; i++)
         {
             var cls = engine.Reshape(engine.TensorSlice(classLogits, new[] { i, 0, 0 }, new[] { 1, n, c }), new[] { n, c });
@@ -263,8 +274,7 @@ internal static class MaskSetPredictionLoss
             {
                 // Nothing to match: every cluster is a negative.
                 var allVoid = engine.TensorNegate(engine.ReduceSum(engine.TensorNarrow(logProbability, 1, c - 1, 1), null));
-                imageLoss = engine.TensorMultiplyScalar(allVoid,
-                    ops.FromDouble(KMaXPanopticQualityWeight * (1 - KMaXPositiveWeight) / n));
+                imageLoss = engine.TensorMultiplyScalar(allVoid, allVoidWeight);
                 total = Accumulate(engine, total, imageLoss);
                 continue;
             }
@@ -282,30 +292,30 @@ internal static class MaskSetPredictionLoss
             var matchedProbability = engine.TensorExp(matchedLogProbability);
             var softMasks = engine.TensorSoftmax(logits, 0);
             var dice = Dice(engine.TensorMatMul(querySelect, softMasks), y);                                   // [P]
-            var positive = engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorNegate(engine.TensorAdd(
+            var positive = engine.TensorDivide(engine.ReduceSum(engine.TensorNegate(engine.TensorAdd(
                 engine.TensorMultiply(engine.StopGradient(matchedProbability), dice),
-                engine.TensorMultiply(engine.StopGradient(dice), matchedLogProbability))), null), ops.FromDouble(1.0 / p));
-            var panopticQuality = engine.TensorMultiplyScalar(positive, ops.FromDouble(KMaXPositiveWeight));
+                engine.TensorMultiply(engine.StopGradient(dice), matchedLogProbability))), null), Count<T>(p));
+            var panopticQuality = engine.TensorMultiplyScalar(positive, positiveWeight);
             if (n > p)
             {
                 var unmatched = engine.ScalarMinusTensor(ops.One, engine.ReduceSum(querySelect, new[] { 0 }, false)); // [N]
                 var voidLog = engine.Reshape(engine.TensorNarrow(logProbability, 1, c - 1, 1), new[] { n });
-                var negative = engine.TensorMultiplyScalar(
-                    engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(unmatched, voidLog), null)), ops.FromDouble(1.0 / (n - p)));
-                panopticQuality = engine.TensorAdd(panopticQuality,
-                    engine.TensorMultiplyScalar(negative, ops.FromDouble(1 - KMaXPositiveWeight)));
+                var negative = engine.TensorDivide(
+                    engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(unmatched, voidLog), null)), Count<T>(n - p));
+                panopticQuality = engine.TensorAdd(panopticQuality, engine.TensorMultiplyScalar(negative, negativeWeight));
             }
 
             // Mask-ID cross-entropy: every pixel of a matched segment is classified (softmax over the clusters) as
             // the cluster matched to its segment.
             var pixelTarget = engine.TensorMatMul(engine.TensorTranspose(querySelect), y);                     // [N, HW]
-            var coveredPixels = Math.Max(1, ops.ToInt32(engine.TensorSum(y)));
-            var maskId = engine.TensorMultiplyScalar(engine.TensorNegate(engine.ReduceSum(
-                engine.TensorMultiply(pixelTarget, engine.TensorLogSoftmax(logits, 0)), null)), ops.FromDouble(1.0 / coveredPixels));
+            // Counted in int: the 0/1 sum in T stops at 2048 in Half.
+            int coveredPixels = Math.Max(1, engine.TensorSum(y.Cast<int>()));
+            var maskId = engine.TensorDivide(engine.TensorNegate(engine.ReduceSum(
+                engine.TensorMultiply(pixelTarget, engine.TensorLogSoftmax(logits, 0)), null)), Count<T>(coveredPixels));
 
             imageLoss = engine.TensorAdd(
-                engine.TensorMultiplyScalar(panopticQuality, ops.FromDouble(KMaXPanopticQualityWeight)),
-                engine.TensorMultiplyScalar(maskId, ops.FromDouble(KMaXMaskIdWeight)));
+                engine.TensorMultiplyScalar(panopticQuality, panopticQualityWeight),
+                engine.TensorMultiplyScalar(maskId, maskIdWeight));
             total = Accumulate(engine, total, imageLoss);
         }
 
@@ -321,7 +331,7 @@ internal static class MaskSetPredictionLoss
         int m = truth.Shape[0], n = predicted.Shape[0];
         var overlap = engine.TensorMatMul(truth, engine.TensorTranspose(predicted));
         var denominator = engine.TensorAdd(
-            engine.TensorBroadcastTo(engine.ReduceSum(truth, new[] { 1 }, true), new[] { m, n }),
+            engine.TensorBroadcastTo(engine.Reshape(TruthAreas(truth), new[] { m, 1 }), new[] { m, n }),
             engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(predicted, new[] { 1 }, false), new[] { 1, n }), new[] { m, n }));
         return engine.TensorDivide(engine.TensorMultiplyScalar(overlap, ops.FromDouble(2.0)),
             engine.TensorClampMin(denominator, ops.FromDouble(DiceEpsilon)));
@@ -333,10 +343,21 @@ internal static class MaskSetPredictionLoss
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var overlap = engine.ReduceSum(engine.TensorMultiply(predicted, truth), new[] { 1 }, false);
-        var denominator = engine.TensorAdd(engine.ReduceSum(predicted, new[] { 1 }, false), engine.ReduceSum(truth, new[] { 1 }, false));
+        var denominator = engine.TensorAdd(engine.ReduceSum(predicted, new[] { 1 }, false), TruthAreas(truth));
         return engine.TensorDivide(engine.TensorMultiplyScalar(overlap, ops.FromDouble(2.0)),
             engine.TensorClampMin(denominator, ops.FromDouble(DiceEpsilon)));
     }
+
+    /// <summary>A count as a one-element tensor <c>[1]</c> of T, the divisor of a summed loss term.</summary>
+    private static Tensor<T> Count<T>(int count) => new Tensor<int>(new[] { count }, new[] { 1 }).Cast<T>();
+
+    /// <summary>
+    /// The pixel count <c>[M]</c> of each binary ground-truth mask row, counted in int and converted to T once: summed
+    /// in T, Half stops counting at 2048, so a 4096-pixel segment would count as 2048. The masks are constants of the
+    /// loss, so no gradient flows through the count.
+    /// </summary>
+    private static Tensor<T> TruthAreas<T>(Tensor<T> truth)
+        => AiDotNetEngine.Current.ReduceSum(truth.Cast<int>(), new[] { 1 }, false).Cast<T>();
 
     private static (int[] Segment, int[] Prediction) MatchWithoutGradient<T>(Func<Tensor<T>> cost)
     {

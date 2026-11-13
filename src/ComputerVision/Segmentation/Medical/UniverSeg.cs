@@ -320,14 +320,22 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         {
             var skip = skips[skips.Count - 1 - level];
             var size = new[] { skip.Target.Shape[2], skip.Target.Shape[3] };
-            target = Engine.TensorConcatenate(new[] { Engine.Interpolate(target, size, InterpolateMode.Bilinear, false), skip.Target }, 1);
-            support = Engine.TensorConcatenate(new[] { Engine.Interpolate(support, size, InterpolateMode.Bilinear, false), skip.Support }, 1);
+            target = Engine.TensorConcatenate(new[] { Upsample(target, size), skip.Target }, 1);
+            support = Engine.TensorConcatenate(new[] { Upsample(support, size), skip.Support }, 1);
             (target, support) = CrossBlock(layer, target, support, b, s);
             layer += LayersPerCrossBlock;
         }
 
         return Layers[layer].Forward(target);
     }
+
+    /// <summary>
+    /// The decoder's upsampling: the official UniverSeg decoder uses <c>nn.UpsamplingBilinear2d(scale_factor=2)</c>,
+    /// which is bilinear with <c>align_corners=True</c> (the corner pixels of the coarse map land on the corner pixels
+    /// of the fine map), resized here to the skip connection's size.
+    /// </summary>
+    internal static Tensor<T> Upsample(Tensor<T> features, int[] size)
+        => AiDotNetEngine.Current.Interpolate(features, size, InterpolateMode.Bilinear, true);
 
     /// <summary>
     /// Resolves the lazy convolutions' input channels with one real forward: the cross convolutions see the
@@ -481,9 +489,10 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         int area = Engine.TensorSum(mask.Cast<int>());
         if (area > 0)
         {
-            double confidence = Engine.TensorDivide(
-                Engine.ReduceSum(Engine.Reshape(Engine.TensorMultiply(foreground, mask), new[] { h * w }), new[] { 0 }, true),
-                Tensor<T>.CreateDefault(new[] { 1 }, NumOps.FromDouble(area))).Cast<double>().ToArray()[0];
+            // The mean divides before it sums, so the sum stays at most 1 instead of overflowing Half on a large mask.
+            double confidence = Common.MaskClassificationOps.MeanOverMask(
+                Engine.Reshape(foreground, new[] { 1, h * w }), Engine.Reshape(mask, new[] { 1, h * w }),
+                new Tensor<int>(new[] { area }, new[] { 1 })).Cast<double>().ToArray()[0];
             structures.Add(new SegmentedStructure { ClassId = 1, Name = "FewShot_Target", VolumeOrArea = area, MeanConfidence = confidence });
         }
 

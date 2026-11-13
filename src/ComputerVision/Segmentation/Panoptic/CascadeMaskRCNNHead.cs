@@ -137,8 +137,8 @@ internal sealed class CascadeMaskRCNNHead<T> : CvParameterModule<T>
     /// </summary>
     /// <remarks>
     /// Scores are the cascade ensemble (class probabilities averaged over the stages); the last stage's deltas refine
-    /// its boxes; RoIs scoring at least 0.05 go through class-aware NMS at 0.5 and the best 100 are kept (detectron2's
-    /// test settings). Each kept box's mask for its class is pasted into the image and thresholded at 0.5.
+    /// its boxes; every (RoI, class) pair scoring above 0.05 goes through class-aware NMS at 0.5 and the best 100 are
+    /// kept (detectron2's test settings). Each kept box's mask for its class is pasted into the image and thresholded at 0.5.
     /// </remarks>
     internal (Tensor<int> Masks, int[] Classes, Tensor<T> Scores) Detect(IReadOnlyList<Tensor<T>> fpn, int height, int width)
     {
@@ -159,22 +159,9 @@ internal sealed class CascadeMaskRCNNHead<T> : CvParameterModule<T>
         var ensemble = engine.TensorMultiplyScalar(
             probabilitySum ?? throw new InvalidOperationException("No cascade stage ran."), ops.FromDouble(1.0 / outputs.Stages.Count));
         var foreground = engine.TensorNarrow(ensemble, 1, 1, _numClasses);                        // [R, K]
-        T[] scores = engine.ReduceMax(foreground, new[] { 1 }, false).ToArray();
-        int[] labels = engine.TensorArgMax(foreground, 1).ToArray();
         var boxes = CascadeRCNN<T>.RefineBoxes(last.Boxes, last.BoxDeltas, width, height,
             _loss.StageBoxRegressionWeights(outputs.Stages.Count - 1));
-        T[] corners = boxes.ToArray();
-        int[] passes = engine.TensorGreaterEqual(
-            engine.ReduceMax(foreground, new[] { 1 }, false),
-            Tensor<T>.CreateDefault(new[] { scores.Length }, ops.FromDouble(ScoreThreshold))).Cast<int>().ToArray();
-
-        var candidates = new List<Detection<T>>();
-        for (int r = 0; r < scores.Length; r++)
-        {
-            if (passes[r] == 0) continue;
-            var box = new BoundingBox<T>(corners[4 * r], corners[4 * r + 1], corners[4 * r + 2], corners[4 * r + 3]);
-            candidates.Add(new Detection<T>(box, labels[r], scores[r]));
-        }
+        var candidates = Candidates(foreground, boxes, ScoreThreshold);
 
         var kept = _nms.ApplyClassAware(candidates, NmsThreshold)
             .OrderByDescending(detection => detection.Confidence)
@@ -201,6 +188,37 @@ internal sealed class CascadeMaskRCNNHead<T> : CvParameterModule<T>
         var classMasks = engine.TensorSigmoid(ClassChannels(maskLogits, keptClasses));                // [M, 28 * 28]
         var masks = PasteMasks(classMasks, keptBoxes, height, width);
         return (masks, keptClasses, new Tensor<T>(keptScores, new[] { m }));
+    }
+
+    /// <summary>
+    /// The detection candidates of detectron2's <c>fast_rcnn_inference</c>: every (RoI, foreground class) pair whose
+    /// score is strictly above <paramref name="threshold"/>, with the RoI's (class-agnostic) box. A RoI can therefore
+    /// yield several candidates of different classes; class-aware NMS then runs per class.
+    /// </summary>
+    /// <param name="foreground">Foreground class scores <c>[R, K]</c>.</param>
+    /// <param name="boxes">The RoI boxes <c>[R, 4]</c> (x1, y1, x2, y2).</param>
+    /// <param name="threshold">The score threshold (0.05 at test time).</param>
+    internal static List<Detection<T>> Candidates(Tensor<T> foreground, Tensor<T> boxes, double threshold)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int r = foreground.Shape[0], k = foreground.Shape[1];
+        int[] passes = engine.TensorGreaterThan(
+            foreground, Tensor<T>.CreateDefault(new[] { r, k }, ops.FromDouble(threshold))).Cast<int>().ToArray();
+        T[] scores = foreground.ToArray();
+        T[] corners = boxes.ToArray();
+        var candidates = new List<Detection<T>>();
+        for (int i = 0; i < r; i++)
+        {
+            for (int c = 0; c < k; c++)
+            {
+                if (passes[i * k + c] == 0) continue;
+                var box = new BoundingBox<T>(corners[4 * i], corners[4 * i + 1], corners[4 * i + 2], corners[4 * i + 3]);
+                candidates.Add(new Detection<T>(box, c, scores[i * k + c]));
+            }
+        }
+
+        return candidates;
     }
 
     /// <summary>
@@ -277,6 +295,7 @@ internal sealed class CascadeMaskRCNNHead<T> : CvParameterModule<T>
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int m = roiMasks.Shape[0], side = (int)Math.Round(Math.Sqrt(roiMasks.Shape[1]));
+        var half = Tensor<T>.CreateDefault(new[] { height, width }, ops.FromDouble(0.5));
         var low = engine.TensorFloor(boxes).Cast<int>().ToArray();
         var high = engine.TensorCeiling(boxes).Cast<int>().ToArray();
         var pasted = new Tensor<int>[m];
@@ -288,8 +307,7 @@ internal sealed class CascadeMaskRCNNHead<T> : CvParameterModule<T>
             var resized = engine.Reshape(
                 engine.Interpolate(mask, new[] { y2 - y1, x2 - x1 }, InterpolateMode.Bilinear, false), new[] { y2 - y1, x2 - x1 });
             var canvas = engine.Pad(resized, y1, height - y2, x1, width - x2, ops.Zero);
-            pasted[i] = engine.Reshape(engine.TensorGreaterEqual(
-                canvas, Tensor<T>.CreateDefault(new[] { height, width }, ops.FromDouble(0.5))).Cast<int>(), new[] { 1, height * width });
+            pasted[i] = engine.Reshape(engine.TensorGreaterEqual(canvas, half).Cast<int>(), new[] { 1, height * width });
         }
 
         return engine.TensorConcatenate(pasted, 0);

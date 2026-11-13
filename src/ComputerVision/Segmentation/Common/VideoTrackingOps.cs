@@ -46,11 +46,10 @@ internal static class VideoTrackingOps
         int hw = probabilities.Length / o;
         var flat = engine.Reshape(probabilities, new[] { o, hw });
         var foreground = engine.TensorGreaterEqual(flat, Tensor<T>.CreateDefault(new[] { o, hw }, ops.FromDouble(0.5)));
-        var area = engine.ReduceSum(foreground, new[] { 1 }, false);
-        var confidence = engine.TensorDivide(
-            engine.ReduceSum(engine.TensorMultiply(flat, foreground), new[] { 1 }, false),
-            engine.TensorClampMin(area, ops.One));
-        int[] areas = area.Cast<int>().ToArray();
+        // Areas in int (a 0/1 sum in Half stops at 2048); the mean divides before it sums, so it cannot overflow.
+        var area = engine.ReduceSum(foreground.Cast<int>(), new[] { 1 }, false);
+        var confidence = MaskClassificationOps.MeanOverMask(flat, foreground, area);
+        int[] areas = area.ToArray();
         var visible = new bool[o];
         for (int i = 0; i < o; i++) visible[i] = areas[i] >= MinVisibleArea;
         return (confidence.Cast<double>().ToArray(), visible);

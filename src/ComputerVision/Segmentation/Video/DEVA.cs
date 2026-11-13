@@ -422,9 +422,13 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int o = probabilities.Shape[0];
-        var clamped = engine.TensorClamp(probabilities, ops.FromDouble(1e-7), ops.FromDouble(1 - 1e-7));
+        // XMem clamps to [1e-7, 1 - 1e-7]. Half rounds 1 - 1e-7 to 1 (and the logit to +inf), so the bounds are the
+        // nearest values T holds strictly inside (0, 1).
+        var low = Common.MaskClassificationOps.PositiveTolerance<T>(1e-7);
+        var high = Common.MaskClassificationOps.BelowOne<T>(1e-7);
+        var clamped = engine.TensorClamp(probabilities, low, high);
         var background = engine.TensorExp(engine.ReduceSum(engine.TensorLog(engine.ScalarMinusTensor(ops.One, clamped)), new[] { 0 }, true));
-        var all = engine.TensorClamp(engine.TensorConcatenate(new[] { background, clamped }, 0), ops.FromDouble(1e-7), ops.FromDouble(1 - 1e-7));
+        var all = engine.TensorClamp(engine.TensorConcatenate(new[] { background, clamped }, 0), low, high);
         var logits = engine.TensorLog(engine.TensorDivide(all, engine.ScalarMinusTensor(ops.One, all)));
         return engine.Reshape(logits, new[] { o + 1, h, w });
     }
@@ -551,7 +555,7 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
         if (o > 0 && p > 0)
         {
             int[] matches = Engine.TensorGreaterThan(
-                Iou(propagated.Cast<T>(), proposals.Cast<T>()), NumOps.FromDouble(_options.AssociationIoUThreshold)).Cast<int>().ToArray();
+                Iou(propagated, proposals), NumOps.FromDouble(_options.AssociationIoUThreshold)).Cast<int>().ToArray();
             for (int i = 0; i < o; i++)
             {
                 for (int j = 0; j < p; j++)
@@ -604,7 +608,7 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
 
         // Smaller segments win overlaps: paint in descending area order.
         var stacked = Engine.TensorStack(segments.ToArray(), 0);                                           // [S, HW]
-        int[] order = Common.MaskClassificationOps.DescendingOrder(Engine.ReduceSum(stacked, new[] { 1 }, false).Cast<T>());
+        int[] order = Common.MaskClassificationOps.DescendingOrder(Engine.ReduceSum(stacked, new[] { 1 }, false));
         var owner = new Tensor<int>(new[] { plane });
         foreach (int s in order)
         {
@@ -655,17 +659,21 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
             : Engine.TensorIndexSelect(candidates, new Tensor<int>(present.ToArray(), new[] { present.Count }), 0);
     }
 
-    /// <summary>IoU matrix <c>[A, B]</c> of binary masks <c>[A, HW]</c> and <c>[B, HW]</c>.</summary>
-    internal static Tensor<T> Iou(Tensor<T> a, Tensor<T> b)
+    /// <summary>IoU matrix <c>[A, B]</c> of binary masks <c>[A, HW]</c> and <c>[B, HW]</c> (int).</summary>
+    /// <remarks>
+    /// Intersections and areas are counted in int and converted to T once for the division: as a matrix product or
+    /// a sum in T, Half stops counting at 2048, so two 3000-pixel masks sharing 3000 pixels would score 2048 / 2048
+    /// against the wrong union.
+    /// </remarks>
+    internal static Tensor<T> Iou(Tensor<int> a, Tensor<int> b)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int na = a.Shape[0], nb = b.Shape[0];
         var intersection = engine.TensorMatMul(a, engine.TensorTranspose(b));
         var areaA = engine.TensorBroadcastTo(engine.ReduceSum(a, new[] { 1 }, true), new[] { na, nb });
         var areaB = engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(b, new[] { 1 }, false), new[] { 1, nb }), new[] { na, nb });
-        var union = engine.TensorSubtract(engine.TensorAdd(areaA, areaB), intersection);
-        return engine.TensorDivide(intersection, engine.TensorClampMin(union, ops.One));
+        var union = engine.TensorClampMin(engine.TensorSubtract(engine.TensorAdd(areaA, areaB), intersection), 1);
+        return engine.TensorDivide(intersection.Cast<T>(), union.Cast<T>());
     }
 
     /// <inheritdoc/>
@@ -687,5 +695,4 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
         _corrections.Clear();
     }
     #endregion
-}    #endregion
 }

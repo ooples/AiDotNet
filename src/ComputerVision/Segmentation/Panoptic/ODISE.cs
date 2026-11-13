@@ -54,7 +54,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 ///     options: new ODISEOptions { NumClasses = 133, DropRate = 0.1, ModelSize = ODISEModelSize.Base });
 ///
 /// // Or load a pre-trained ONNX model for diffusion-based segmentation
-/// var onnxModel = new ODISE&lt;double&gt;(architecture, "odise.onnx", clip, clip);
+/// var onnxModel = new ODISE&lt;double&gt;(architecture, "odise.onnx", clip, clip, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -184,7 +184,8 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// <param name="textEncoder">CLIP-style text encoder whose embeddings classify the masks.</param>
     /// <param name="clipImageEncoder">The frozen CLIP image encoder whose masked-image classification is fused
     /// with the diffusion classifier.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model options, or null for the defaults. Only the native constructor carries optional
+    /// parameters (RS0026: two new overloads may not both).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained ODISE from ONNX for inference.
@@ -197,7 +198,7 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
         IVisualEncoder<T> clipImageEncoder,
-        ODISEOptions? options = null)
+        ODISEOptions? options)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
         : base(architecture, onnxModelPath, (options ??= new ODISEOptions()).NumClasses,

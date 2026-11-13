@@ -11,6 +11,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.Helpers;
 using Xunit;
@@ -324,7 +325,8 @@ public class PanopticVideoFewShotSegmentationReferenceTests
     [Fact]
     public void Deva_AssociatesSegmentsByIou()
     {
-        var iou = DEVA<double>.Iou(T(new[] { 1, 3 }, 1, 1, 0), T(new[] { 2, 3 }, 0, 1, 1, 1, 1, 0));
+        var iou = DEVA<double>.Iou(
+            new Tensor<int>(new[] { 1, 1, 0 }, new[] { 1, 3 }), new Tensor<int>(new[] { 0, 1, 1, 1, 1, 0 }, new[] { 2, 3 }));
 
         AssertValues(iou, 1.0 / 3.0, 1.0);
     }
@@ -443,5 +445,149 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         Assert.Equal(64, model.Predict(query).Length);
         model.ClearSupportSet();
         Assert.Throws<InvalidOperationException>(() => model.Predict(query));
+    }
+
+    // ---- Review fixes: Half counts, overflow and clamps, detectron2 candidates, UniverSeg upsampling ----
+
+    private static Tensor<Half> H(int[] shape, IEnumerable<double> values)
+    {
+        var half = MathHelper.GetNumericOperations<Half>();
+        return new Tensor<Half>(shape, new Vector<Half>(values.Select(v => half.FromDouble(v)).ToArray()));
+    }
+
+    private static double[] D(Tensor<Half> tensor)
+    {
+        var half = MathHelper.GetNumericOperations<Half>();
+        return tensor.ToArray().Select(v => half.ToDouble(v)).ToArray();
+    }
+
+    [Fact]
+    public void DescendingOrder_HalfRanksPast2048ByIntegerIndex()
+    {
+        // 2100 equal scores: the order is the index order. In Half, indices 2049 and 2050 both round to 2050 and a
+        // rank summed in Half stops at 2048, so ranks collided and the order was rejected.
+        const int n = 2100;
+        int[] order = MaskClassificationOps.DescendingOrder(H(new[] { n }, Enumerable.Repeat(0.5, n)));
+
+        Assert.Equal(Enumerable.Range(0, n).ToArray(), order);
+    }
+
+    [Fact]
+    public void NormalizeAxis_HalfComponentsAbove256DoNotOverflow()
+    {
+        // (300, 400) / 500 = (0.6, 0.8). Squaring first gives 90000 and 160000, past Half's 65504, and a zero vector.
+        var normalized = D(MaskClassificationOps.NormalizeAxis(H(new[] { 2, 1 }, new double[] { 300, 400 }), 0));
+
+        Assert.Equal(0.6, normalized[0], 3);
+        Assert.Equal(0.8, normalized[1], 3);
+    }
+
+    [Fact]
+    public void MergeKMaX_HalfCountsEachMaskInInt()
+    {
+        // 5000 pixels, one thing class. Cluster A (score 0.95, mask 0.9 on pixels 0-2999) is visited first and
+        // claims its 3000 pixels. Cluster B (score 0.9, mask 0.8 on all 5000) then has 2000 free pixels, not more
+        // than 0.8 * 5000 = 4000, so it is dropped. Counted in Half its mask held 2048 pixels and 2000 > 1638.4
+        // let it through as a second segment.
+        const int hw = 5000;
+        var classes = H(new[] { 2, 2 }, new[] { 0.95, 0.05, 0.9, 0.1 });
+        var masks = H(new[] { 2, 1, hw },
+            Enumerable.Range(0, hw).Select(p => p < 3000 ? 0.9 : 0.0).Concat(Enumerable.Repeat(0.8, hw)));
+
+        var result = MaskClassificationOps.MergeKMaX(classes, masks, new[] { true }, KMaXDefaults);
+
+        Assert.Single(result.Segments);
+        Assert.Equal(3000, result.Segments[0].Area);
+    }
+
+    [Fact]
+    public void VideoStatistics_HalfMeanOverMoreThan2048Pixels()
+    {
+        // 3000 pixels at 0.75: the confidence is 0.75. Summed in Half the area stopped at 2048 and the
+        // probability sum near 2048, so the mean came out near 1.
+        var (confidences, visible) = VideoTrackingOps.Statistics(H(new[] { 1, 50, 60 }, Enumerable.Repeat(0.75, 3000)));
+
+        Assert.Equal(0.75, confidences[0], 3);
+        Assert.True(visible[0]);
+    }
+
+    [Fact]
+    public void Deva_IouCountsPast2048InInt()
+    {
+        // A covers pixels 0-2999, B pixels 0-3999: IoU = 3000 / 4000. In Half both areas stopped at 2048.
+        const int hw = 5000;
+        var a = new Tensor<int>(Enumerable.Range(0, hw).Select(p => p < 3000 ? 1 : 0).ToArray(), new[] { 1, hw });
+        var b = new Tensor<int>(Enumerable.Range(0, hw).Select(p => p < 4000 ? 1 : 0).ToArray(), new[] { 1, hw });
+
+        Assert.Equal(0.75, D(DEVA<Half>.Iou(a, b))[0], 3);
+    }
+
+    [Fact]
+    public void Deva_SoftAggregationStaysFiniteInHalf()
+    {
+        // A certain object (p = 1): XMem clamps to 1 - 1e-7, which Half rounds to 1, so the logit log(p / (1 - p))
+        // was +inf and the background's -inf. The clamp now stays strictly inside (0, 1).
+        var logits = D(DEVA<Half>.AggregateLogits(H(new[] { 1, 1 }, new[] { 1.0 }), 1, 1));
+
+        Assert.All(logits, value => Assert.False(double.IsInfinity(value) || double.IsNaN(value)));
+        Assert.True(logits[1] > 7.0);
+        Assert.True(logits[0] < -7.0);
+    }
+
+    [Fact]
+    public void UniVS_PromptQueryScalesBeforeTheProductInHalf()
+    {
+        // Two identical 64-wide tokens of 40: q0 = 40, the attention is uniform, q = 40 + 40 = 80. The unscaled
+        // product 64 * 40 * 40 = 102400 overflows Half to inf and the softmax gave NaN.
+        var query = D(UniVS<Half>.PromptQuery(H(new[] { 2, 64 }, Enumerable.Repeat(40.0, 128))));
+
+        Assert.All(query, value => Assert.Equal(80.0, value, 1));
+    }
+
+    [Fact]
+    public void Cups_MajorityClassCountsPast2048InInt()
+    {
+        var model = new CUPS<Half>(new NeuralNetworkArchitecture<Half>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3), options: new CUPSOptions
+        {
+            NumClasses = 3, ChannelDimensions = new[] { 8, 8, 8, 8 }, StageDepths = new[] { 1, 1, 1, 1 }, DecoderDimension = 8,
+        });
+        // One mask over 5500 pixels: 2500 of class 1, then 3000 of class 2, so its class is 2. As a Half matrix
+        // product both counts stopped at 2048, tied, and the argmax took class 1.
+        const int hw = 5500;
+        var semantic = H(new[] { 50, 110 }, Enumerable.Range(0, hw).Select(p => p < 2500 ? 1.0 : 2.0));
+        var masks = H(new[] { 1, 50, 110 }, Enumerable.Repeat(1.0, hw));
+
+        var (labels, ids) = model.GeneratePanopticPseudoLabels(semantic, masks);
+
+        Assert.All(D(labels), value => Assert.Equal(2.0, value));
+        Assert.All(D(ids), value => Assert.Equal(1.0, value));
+    }
+
+    [Fact]
+    public void CascadeHead_KeepsEveryClassAboveTheScoreThresholdOfARoi()
+    {
+        // detectron2's fast_rcnn_inference keeps each (RoI, class) pair scoring above 0.05, so one RoI scoring 0.6
+        // for class 0 and 0.3 for class 1 gives two candidates; the argmax-only version kept class 0 alone. A score
+        // equal to the threshold is not above it.
+        var foreground = T(new[] { 1, 3 }, 0.6, 0.3, 0.05);
+        var boxes = T(new[] { 1, 4 }, 1, 2, 5, 6);
+
+        var candidates = CascadeMaskRCNNHead<double>.Candidates(foreground, boxes, 0.05);
+
+        Assert.Equal(new[] { 0, 1 }, candidates.Select(c => c.ClassId).ToArray());
+        Assert.Equal(new[] { 0.6, 0.3 }, candidates.Select(c => c.Confidence).ToArray());
+        Assert.All(candidates, c => Assert.Equal(new[] { 1.0, 2, 5, 6 }, new[] { c.Box.X1, c.Box.Y1, c.Box.X2, c.Box.Y2 }));
+    }
+
+    [Fact]
+    public void UniverSeg_DecoderUpsamplesWithAlignedCorners()
+    {
+        // nn.UpsamplingBilinear2d (align_corners=True): [0, 1] -> [0, 1/3, 2/3, 1]. Half-pixel centres give
+        // [0, 0.25, 0.75, 1].
+        var upsampled = UniverSeg<double>.Upsample(T(new[] { 1, 1, 1, 2 }, 0, 1), new[] { 1, 4 });
+
+        AssertValues(upsampled, 0, 1.0 / 3.0, 2.0 / 3.0, 1);
     }
 }

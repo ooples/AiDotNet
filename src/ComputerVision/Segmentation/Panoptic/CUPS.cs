@@ -249,11 +249,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
             Engine.TensorTranspose(Engine.TensorOneHot<T>(ids, idCounts.Length)),
             new Tensor<int>(present.ToArray(), new[] { m }), 0);                                       // [M, HW]
         var labels = Engine.Reshape(semanticLabels, new[] { hw }).Cast<int>();
-        var labelled = Engine.TensorGreaterEqual(labels, Tensor<int>.CreateDefault(new[] { hw }, 0)); // 1 where labelled
-        var classOneHot = Engine.TensorMultiply(
-            Engine.TensorOneHot<T>(Engine.TensorMultiply(labels, labelled), _numClasses),
-            Engine.TensorBroadcastTo(Engine.Reshape(labelled.Cast<T>(), new[] { hw, 1 }), new[] { hw, _numClasses }));
-        int[] classes = Engine.TensorArgMax(Engine.TensorMatMul(masks, classOneHot), 1).ToArray();  // majority class
+        int[] classes = Engine.TensorArgMax(MaskClassHistogram(masks.Cast<int>(), labels), 1).ToArray();  // majority class
 
         var grid = Engine.Reshape(masks, new[] { m, h, w });
         var rows = Engine.ReduceMax(grid, new[] { 2 }, false);                                         // [M, H]
@@ -511,8 +507,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         {
             var flatMasks = Engine.Reshape(Engine.TensorGreaterThan(instanceMasks, NumOps.FromDouble(0.5)), new[] { m, hw });
             // Majority class of every mask: argmax over K of the per-mask class histogram [M, K].
-            var histogram = Engine.TensorMatMul(flatMasks, Engine.TensorOneHot<T>(labels, _numClasses));
-            var maskClass = Engine.TensorArgMax(histogram, 1);                                    // [M]
+            var maskClass = Engine.TensorArgMax(MaskClassHistogram(flatMasks.Cast<int>(), labels), 1);       // [M]
             // The first covering mask of each pixel (argmax returns the first maximum).
             var owner = Engine.TensorArgMax(flatMasks, 0);                                        // [HW]
             var ownerClass = Engine.TensorIndexSelect(maskClass, owner, 0);
@@ -525,6 +520,28 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         // -1 where ignored: semantic * (1 - ignored) - ignored.
         var withIgnore = Engine.TensorSubtract(Engine.TensorMultiply(semantic, Engine.ScalarMinusTensor(1, ignored)), ignored);
         return (Engine.Reshape(withIgnore.Cast<T>(), new[] { h, w }), Engine.Reshape(instanceIds.Cast<T>(), new[] { h, w }));
+    }
+
+    /// <summary>
+    /// The class histogram <c>[M, K]</c> of each binary mask <c>[M, HW]</c> over the pixel labels <c>[HW]</c> (labels
+    /// below zero are not counted), counted in int: entry <c>(m, k)</c> is the joint bin <c>m * K + k</c> of the
+    /// (mask, label) pairs inside the masks. As a matrix product in T the counts stop at 2048 in Half, so a mask with
+    /// 3000 pixels of one class and 2500 of another would tie.
+    /// </summary>
+    private Tensor<int> MaskClassHistogram(Tensor<int> masks, Tensor<int> labels)
+    {
+        int m = masks.Shape[0], hw = masks.Shape[1], k = _numClasses, outside = m * k;
+        var labelled = Engine.TensorGreaterEqual(labels, Tensor<int>.CreateDefault(new[] { hw }, 0));
+        var counted = Engine.TensorMultiply(masks, Engine.TensorBroadcastTo(Engine.Reshape(labelled, new[] { 1, hw }), new[] { m, hw }));
+        var rowStart = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorMultiplyScalar(Engine.TensorArange<int>(0, m, 1), k), new[] { m, 1 }), new[] { m, hw });
+        var label = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorMultiply(labels, labelled), new[] { 1, hw }), new[] { m, hw });
+        // Pairs outside a mask (or on an unlabelled pixel) go to the extra bin m * K, which is dropped.
+        var joint = Engine.TensorAdd(
+            Engine.TensorMultiply(counted, Engine.TensorAdd(rowStart, label)),
+            Engine.TensorMultiplyScalar(Engine.ScalarMinusTensor(1, counted), outside));
+        var bins = Engine.TensorBinCount(Engine.Reshape(joint, new[] { m * hw }), outside + 1);
+        return Engine.Reshape(Engine.TensorSlice(bins, new[] { 0 }, new[] { outside }), new[] { m, k });
     }
 
     /// <summary>Flattened integer pseudo classes <c>[HW]</c> and whether an instance covers each pixel.</summary>
