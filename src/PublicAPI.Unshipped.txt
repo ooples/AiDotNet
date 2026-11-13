@@ -22926,6 +22926,10 @@ AiDotNet.FederatedLearning.ServerOptimizers.FedYogiServerOptimizer<T>.FedYogiSer
 AiDotNet.Audio.SpeechRecognition.RNNTransducer<T>.TranscribeWithBeamSearch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int beamWidth, string? language = null, bool? includeTimestamps = null) -> AiDotNet.Interfaces.TranscriptionResult<T>!
 override AiDotNet.Audio.SpeechRecognition.RNNTransducer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Audio.SpeechRecognition.RNNTransducer<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
+override AiDotNet.Audio.SpeechRecognition.RNNTransducer<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.Audio.SpeechRecognition.RNNTransducer<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.Audio.SpeechRecognition.RNNTransducer<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.Audio.SpeechRecognition.RNNTransducer<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 AiDotNet.Models.Options.FederatedPersonalizationOptions.PFedMeBeta.get -> double
 AiDotNet.Models.Options.FederatedPersonalizationOptions.PFedMeBeta.set -> void
 AiDotNet.Models.Options.FederatedPersonalizationOptions.PFedMeLearningRate.get -> double
