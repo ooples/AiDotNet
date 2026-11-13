@@ -263,6 +263,48 @@ public class AttackReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task ViTPatchAttack_PerturbsOnlyTheMostSalientPatchAlongTheGradientSign()
+    {
+        // 1x1 patches: the attack must spend its whole L-inf budget on the coordinate with the largest
+        // |dLoss/dx| and move it along sign(dLoss/dx); every other coordinate stays untouched.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, -2.0, 0.5, 3.0 }, { -1.0, 0.25, 2.0, -0.5 } },
+            new double[] { 10.0, 0.0 });
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var label = OneHot(0, 2);
+        var options = new AdversarialAttackOptions<double> { Epsilon = 0.1 };
+        var attack = new ViTAdversarialAttack<double, Vector<double>, Vector<double>>(
+            options, patchSize: 1, numAttackPatches: 1, numSteps: 5);
+
+        var adversarial = attack.GenerateAdversarialExample(new Vector<double>(x), label, model);
+
+        var z = model.Logits(x);
+        var gradient = new double[model.Inputs];
+        for (int i = 0; i < model.Inputs; i++)
+        {
+            for (int c = 0; c < model.Classes; c++)
+            {
+                gradient[i] += 2.0 / model.Classes * model.Weight(c, i) * (z[c] - label[c]);
+            }
+        }
+
+        int salient = 0;
+        for (int i = 1; i < gradient.Length; i++)
+        {
+            if (Math.Abs(gradient[i]) > Math.Abs(gradient[salient]))
+            {
+                salient = i;
+            }
+        }
+
+        for (int i = 0; i < model.Inputs; i++)
+        {
+            double expected = i == salient ? x[i] + 0.1 * Math.Sign(gradient[i]) : x[i];
+            Assert.Equal(expected, adversarial[i], 9);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task EvaluateRobustness_UsesRobustBenchAccounting()
     {
         // logits = x. Sample A (label 0) is correct and the swap attack fools it; sample B (label 1) is
