@@ -113,45 +113,43 @@ public partial class HtsatSpectrogramImageLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     internal static Tensor<T> BicubicMatrix(int outputs, int inputs)
     {
+        // The weights are built in double and rounded to T once, as the reference does: Keys' cubic is a
+        // cancelling polynomial (the far taps are small differences of terms near 3), so evaluating it in a
+        // narrow T such as Half loses several ulps per weight.
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         double scale = outputs > 1 ? (inputs - 1) / (double)(outputs - 1) : 0.0;
         const double a = -0.75;
-        T aT = ops.FromDouble(a);
-        T nearLinear = ops.FromDouble(a + 2), nearConstant = ops.FromDouble(-(a + 3));
-        T farFive = ops.FromDouble(-5 * a), farEight = ops.FromDouble(8 * a), farFour = ops.FromDouble(-4 * a);
-        T lastInput = ops.FromDouble(inputs - 1);
 
         // Keys' cubic convolution: Near(x) = ((a+2)x - (a+3))x^2 + 1 for |x| <= 1,
         // Far(x) = ((ax - 5a)x + 8a)x - 4a for 1 < |x| < 2.
-        Tensor<T> Near(Tensor<T> x) => engine.TensorAddScalar(
+        Tensor<double> Near(Tensor<double> x) => engine.TensorAddScalar(
             engine.TensorMultiply(engine.TensorMultiply(
-                engine.TensorAddScalar(engine.TensorMultiplyScalar(x, nearLinear), nearConstant), x), x),
-            ops.One);
-        Tensor<T> Far(Tensor<T> x) => engine.TensorAddScalar(engine.TensorMultiply(
+                engine.TensorAddScalar(engine.TensorMultiplyScalar(x, a + 2), -(a + 3)), x), x),
+            1.0);
+        Tensor<double> Far(Tensor<double> x) => engine.TensorAddScalar(engine.TensorMultiply(
             engine.TensorAddScalar(engine.TensorMultiply(
-                engine.TensorAddScalar(engine.TensorMultiplyScalar(x, aT), farFive), x), farEight), x), farFour);
+                engine.TensorAddScalar(engine.TensorMultiplyScalar(x, a), -5 * a), x), 8 * a), x), -4 * a);
 
         // Source coordinate i * scale per output row, its integer part and fractional offset.
-        var real = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, outputs, 1), ops.FromDouble(scale));
+        var real = engine.TensorMultiplyScalar(engine.TensorArange<double>(0, outputs, 1), scale);
         var index = engine.TensorFloor(real);
         var t = engine.TensorSubtract(real, index);
-        var oneMinusT = engine.ScalarMinusTensor(ops.One, t);
+        var oneMinusT = engine.ScalarMinusTensor(1.0, t);
 
         // Tap k sits at source clamp(index - 1 + k, 0, inputs - 1); taps that clamp onto the same
         // border column accumulate, as the reference's "weights[i, source] += w[k]" does.
-        Tensor<T> Tap(T offset, Tensor<T> weight)
+        Tensor<double> Tap(double offset, Tensor<double> weight)
         {
-            var source = engine.TensorClamp(engine.TensorAddScalar(index, offset), ops.Zero, lastInput).Cast<int>();
-            return engine.TensorMultiply(engine.TensorOneHot<T>(source, inputs),
+            var source = engine.TensorClamp(engine.TensorAddScalar(index, offset), 0.0, inputs - 1.0).Cast<int>();
+            return engine.TensorMultiply(engine.TensorOneHot<double>(source, inputs),
                 engine.TensorBroadcastTo(weight.Reshape(new[] { outputs, 1 }), new[] { outputs, inputs }));
         }
 
-        var matrix = Tap(ops.FromDouble(-1), Far(engine.TensorAddScalar(t, ops.One)));
-        matrix = engine.TensorAdd(matrix, Tap(ops.Zero, Near(t)));
-        matrix = engine.TensorAdd(matrix, Tap(ops.One, Near(oneMinusT)));
-        matrix = engine.TensorAdd(matrix, Tap(ops.FromDouble(2), Far(engine.TensorAddScalar(oneMinusT, ops.One))));
-        return matrix;
+        var matrix = Tap(-1.0, Far(engine.TensorAddScalar(t, 1.0)));
+        matrix = engine.TensorAdd(matrix, Tap(0.0, Near(t)));
+        matrix = engine.TensorAdd(matrix, Tap(1.0, Near(oneMinusT)));
+        matrix = engine.TensorAdd(matrix, Tap(2.0, Far(engine.TensorAddScalar(oneMinusT, 1.0))));
+        return matrix.Cast<T>();
     }
 
     /// <inheritdoc/>

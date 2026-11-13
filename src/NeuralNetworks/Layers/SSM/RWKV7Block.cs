@@ -603,10 +603,12 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         _channelMixK.Fill(half);
 
         // Channel index n = 0..C-1 and its fraction n/(C-1) (all zeros when C == 1), shared by the ramps below.
-        var channelIndex = Engine.TensorArange<T>(0.0, _modelDimension, 1.0);
+        // The ramps are evaluated in double and rounded to T once, as the reference does: w0 is a sum of
+        // terms near +/-6 that cancels toward 0, so evaluating it in a narrow T such as Half loses ulps.
+        var channelIndex = Engine.TensorArange<double>(0.0, _modelDimension, 1.0);
         var channelFraction = _modelDimension > 1
-            ? Engine.TensorDivideScalar(channelIndex, NumOps.FromDouble(_modelDimension - 1))
-            : new Tensor<T>([_modelDimension]);
+            ? Engine.TensorDivideScalar(channelIndex, (double)(_modelDimension - 1))
+            : new Tensor<double>([_modelDimension]);
 
         InitializeProjection(_receptanceWeights);
         InitializeProjection(_keyWeights);
@@ -642,23 +644,23 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // first-layer schedule. Threading a layer index through would let later layers use the
         // steeper curve the reference gives them.
         // zz is the channel's position within its head mapped to [-1, 1]; the head pattern repeats numHeads times.
-        Tensor<T> zz;
+        Tensor<double> zz;
         if (_headDimension > 1)
         {
-            T halfSpan = NumOps.FromDouble((_headDimension - 1) / 2.0);
-            var inHead = Engine.TensorTile(Engine.TensorArange<T>(0.0, _headDimension, 1.0), [_numHeads]);
-            zz = Engine.TensorDivideScalar(Engine.TensorAddScalar(inHead, NumOps.Negate(halfSpan)), halfSpan);
+            double halfSpan = (_headDimension - 1) / 2.0;
+            var inHead = Engine.TensorTile(Engine.TensorArange<double>(0.0, _headDimension, 1.0), [_numHeads]);
+            zz = Engine.TensorDivideScalar(Engine.TensorAddScalar(inHead, -halfSpan), halfSpan);
         }
         else
         {
-            zz = new Tensor<T>([_modelDimension]);
+            zz = new Tensor<double>([_modelDimension]);
         }
 
         var zigzag = Engine.TensorMultiply(zz, Engine.TensorAbs(zz));
         Engine.TensorCopy(
             Engine.TensorAdd(
-                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(channelFraction, NumOps.FromDouble(6.0)), NumOps.FromDouble(-6.0 + 0.5)),
-                Engine.TensorMultiplyScalar(zigzag, NumOps.FromDouble(2.5))),
+                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(channelFraction, 6.0), -6.0 + 0.5),
+                Engine.TensorMultiplyScalar(zigzag, 2.5)).Cast<T>(),
             _aBias);
 
         // ICL-rate LoRA, same scheme. No tanh on this path in the reference â€” the sigmoid applied to
@@ -673,9 +675,9 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // ones; k_a just above 1 starts the injection key a touch beyond a plain delta rule.
         // linear[n] = n/(C-1) - 0.5, or 0 when C == 1.
         var linearRamp = _modelDimension > 1
-            ? Engine.TensorAddScalar(channelFraction, NumOps.FromDouble(-0.5))
-            : new Tensor<T>([_modelDimension]);
-        Engine.TensorCopy(Engine.ScalarMinusTensor(NumOps.FromDouble(0.71), Engine.TensorMultiplyScalar(linearRamp, NumOps.FromDouble(0.1))), _kk);
+            ? Engine.TensorAddScalar(channelFraction, -0.5)
+            : new Tensor<double>([_modelDimension]);
+        Engine.TensorCopy(Engine.ScalarMinusTensor(0.71, Engine.TensorMultiplyScalar(linearRamp, 0.1)).Cast<T>(), _kk);
         _ka.Fill(NumOps.FromDouble(1.02));
 
         // r_k bonus scale, and the gate LoRA (same zero/orthogonal scheme as the decay and ICL pairs).
@@ -683,7 +685,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
         // Value-residual gate. v0 = 0.73 - linear*0.4 puts sigmoid(v0) near 0.6-0.7 at init, so a fresh
         // deeper layer already leans toward the first layer.s values and learns its way off that.
-        Engine.TensorCopy(Engine.ScalarMinusTensor(NumOps.FromDouble(0.73), Engine.TensorMultiplyScalar(linearRamp, NumOps.FromDouble(0.4))), _v0);
+        Engine.TensorCopy(Engine.ScalarMinusTensor(0.73, Engine.TensorMultiplyScalar(linearRamp, 0.4)).Cast<T>(), _v0);
         _v1.Fill(NumOps.Zero);
         OrthogonalLoRA().InitializeWeights(_v2, _mvLoraRank, _modelDimension);
         _g1.Fill(NumOps.Zero);
@@ -691,9 +693,9 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // x_g uses the same 0.2 exponent as x_r in the reference's token-shift ramp.
         // 1 - (n/C)^0.2, or 1 everywhere when C == 1.
         var gateRatio = _modelDimension > 1
-            ? Engine.TensorDivideScalar(channelIndex, NumOps.FromDouble(_modelDimension))
-            : new Tensor<T>([_modelDimension]);
-        Engine.TensorCopy(Engine.ScalarMinusTensor(NumOps.One, Engine.TensorPower(gateRatio, NumOps.FromDouble(0.2))), _timeMixG);
+            ? Engine.TensorDivideScalar(channelIndex, (double)_modelDimension)
+            : new Tensor<double>([_modelDimension]);
+        Engine.TensorCopy(Engine.ScalarMinusTensor(1.0, Engine.TensorPower(gateRatio, 0.2)).Cast<T>(), _timeMixG);
 
         _groupNormGamma.Fill(NumOps.One);
         _groupNormBeta.Fill(NumOps.Zero);

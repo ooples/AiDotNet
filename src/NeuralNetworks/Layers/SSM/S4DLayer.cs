@@ -297,12 +297,13 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
     {
         // S4D-Lin initialization: A_n = -1/2 + n*i
         // Real part: -0.5 for all, Imaginary part: n for each state dim
-        // S4D-Lin: A_n = -1/2 + i * pi * (n + 1), the same row for every channel.
+        // S4D-Lin: A_n = -1/2 + i * pi * (n + 1), the same row for every channel. The frequencies are
+        // formed in double and rounded to T once: pi rounded to T first would be off by an ulp per entry.
         _aReal.Fill(NumOps.FromDouble(-0.5));
         Engine.TensorCopy(
             Engine.TensorBroadcastTo(
                 Engine.Reshape(
-                    Engine.TensorMultiplyScalar(Engine.TensorArange<T>(1, _stateDimension + 1, 1), NumOps.FromDouble(Math.PI)),
+                    Engine.TensorMultiplyScalar(Engine.TensorArange<double>(1, _stateDimension + 1, 1), Math.PI).Cast<T>(),
                     new[] { 1, _stateDimension }),
                 new[] { _innerDimension, _stateDimension }),
             _aImag);

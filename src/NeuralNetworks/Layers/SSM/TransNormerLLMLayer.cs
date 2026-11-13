@@ -256,13 +256,16 @@ public partial class TransNormerLLMLayer<T> : LayerBase<T>, IShapeContract
 
         // Initialize gammas with multi-scale decay rates centered around the specified decay rate
         // Heads get slightly different rates for multi-scale context capture
-        // gamma_h = clamp(decayRate + (h - (H - 1) / 2) / max(1, H - 1) * 0.02, 0.9, 0.9999)
+        // gamma_h = clamp(decayRate + (h - (H - 1) / 2) / max(1, H - 1) * 0.02, 0.9, 0.9999), evaluated in
+        // double and rounded to T once so each decay is the nearest T to the formula.
         const double spread = 0.02;
         var offsets = Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(Engine.TensorArange<T>(0, _numHeads, 1), NumOps.FromDouble(-(_numHeads - 1.0) / 2.0)),
-            NumOps.FromDouble(spread / Math.Max(1, _numHeads - 1)));
+            Engine.TensorDivideScalar(
+                Engine.TensorAddScalar(Engine.TensorArange<double>(0, _numHeads, 1), -(_numHeads - 1.0) / 2.0),
+                (double)Math.Max(1, _numHeads - 1)),
+            spread);
         Engine.TensorCopy(
-            Engine.TensorClamp(Engine.TensorAddScalar(offsets, NumOps.FromDouble(_decayRate)), NumOps.FromDouble(0.9), NumOps.FromDouble(0.9999)),
+            Engine.TensorClamp(Engine.TensorAddScalar(offsets, _decayRate), 0.9, 0.9999).Cast<T>(),
             _gammas);
 
         InitializeTensor2D(_outputGateWeights);

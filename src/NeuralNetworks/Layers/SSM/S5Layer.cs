@@ -260,10 +260,11 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         // HiPPO-LegS diagonal initialization: Lambda_n = -1/2 + n*pi*i
         // Real part: -0.5 (controls decay rate, placing eigenvalues in the stable left half-plane)
         // Imaginary part: n*pi (logarithmically spaced frequencies for multi-scale pattern capture)
-        // S4D-Lin initialization: A_n = -1/2 + i * pi * (n + 1).
+        // S4D-Lin initialization: A_n = -1/2 + i * pi * (n + 1). The frequencies are formed in double and
+        // rounded to T once: pi rounded to T first would be off by an ulp per entry.
         _aReal.Fill(NumOps.FromDouble(-0.5));
         Engine.TensorCopy(
-            Engine.TensorMultiplyScalar(Engine.TensorArange<T>(1, _stateDimension + 1, 1), NumOps.FromDouble(Math.PI)),
+            Engine.TensorMultiplyScalar(Engine.TensorArange<double>(1, _stateDimension + 1, 1), Math.PI).Cast<T>(),
             _aImag);
 
         // B initialized with Xavier/Glorot for both real and imaginary parts
