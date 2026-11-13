@@ -2466,11 +2466,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // forecasts the multivariate X series it was fit on.
             if (variableCount == 1 && mvTraining != null && (object?)mvTraining.Y is Vector<T> mvTargetSeries)
             {
-                mvHistory = new Matrix<T>(mvTargetSeries.Length, 1);
-                for (int i = 0; i < mvTargetSeries.Length; i++)
-                {
-                    mvHistory[i, 0] = mvTargetSeries[i];
-                }
+                mvHistory = Tensor<T>.FromVector(mvTargetSeries, new[] { mvTargetSeries.Length, 1 }).ToMatrix();
             }
             else if (mvTraining != null && (object?)mvTraining.X is Matrix<T> trainX)
             {
@@ -2538,12 +2534,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 nameof(flatForecast));
         }
 
-        var reshaped = new Matrix<T>(rows, cols);
-        int k = 0;
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                reshaped[i, j] = flatForecast[k++];
-        return reshaped;
+        return Tensor<T>.FromVector(flatForecast, new[] { rows, cols }).ToMatrix();
     }
 
     /// <summary>
@@ -2588,12 +2579,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
     private static Vector<T> FlattenRowMajor(Matrix<T> source)
     {
-        var flat = new Vector<T>(source.Rows * source.Columns);
-        int k = 0;
-        for (int i = 0; i < source.Rows; i++)
-            for (int j = 0; j < source.Columns; j++)
-                flat[k++] = source[i, j];
-        return flat;
+        return source.ToRowVector();
     }
 
     /// <summary>
@@ -2933,10 +2919,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // [1, features]. Bounds were validated in the state==0 block above.
         if (input is Tensor<T> tensorInput && tensorInput.Shape.Length == 1)
         {
-            var selected = new Tensor<T>(new[] { featureIndices.Count });
-            for (int j = 0; j < featureIndices.Count; j++)
-                selected[j] = tensorInput[featureIndices[j]];
-            return (TInput)(object)selected;
+            var indices = new Tensor<int>(featureIndices.ToArray(), new[] { featureIndices.Count });
+            return (TInput)(object)ResultEngine.TensorTake(tensorInput, indices);
         }
 
         return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);
@@ -2965,17 +2949,15 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return false;
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < input.Length; i++)
-        {
-            double d = numOps.ToDouble(input[i]);
-            if (double.IsNaN(d) || double.IsInfinity(d))
-            {
-                return false;
-            }
-        }
+        return AllFinite(Tensor<T>.FromVector(input));
+    }
 
-        return true;
+    /// <summary>
+    /// True when no element is NaN or infinite: x - x is 0 for every finite x and NaN otherwise.
+    /// </summary>
+    private static bool AllFinite(Tensor<T> values)
+    {
+        return ResultEngine.TensorCountNonzero(ResultEngine.TensorSubtract(values, values)) == 0;
     }
 
     private Matrix<T> ValidateAndSanitizeMatrix(Matrix<T> input)
@@ -3013,21 +2995,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             }
             if (input.Columns <= opts.MaxInputLength)
             {
-                var numOps = MathHelper.GetNumericOperations<T>();
-                bool allFinite = true;
-                for (int i = 0; i < input.Rows && allFinite; i++)
-                {
-                    for (int j = 0; j < input.Columns; j++)
-                    {
-                        double d = numOps.ToDouble(input[i, j]);
-                        if (double.IsNaN(d) || double.IsInfinity(d))
-                        {
-                            allFinite = false;
-                            break;
-                        }
-                    }
-                }
-                if (allFinite)
+                if (AllFinite(Tensor<T>.FromMatrix(input)))
                 {
                     return input;
                 }
@@ -4924,10 +4892,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         else if (typeof(TInput) == typeof(Matrix<T>))
         {
             // Create a single-row matrix
-            var matrix = new Matrix<T>(1, vector.Length);
-            for (int j = 0; j < vector.Length; j++)
-                matrix[0, j] = vector[j];
-            result = matrix;
+            result = Tensor<T>.FromVector(vector, new[] { 1, vector.Length }).ToMatrix();
         }
         else if (typeof(TInput) == typeof(Tensor<T>))
         {
@@ -4984,24 +4949,26 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         if (actual.Length != predicted.Length || actual.Length == 0)
             return numOps.Zero;
 
-        double meanActual = 0;
-        for (int i = 0; i < actual.Length; i++)
-            meanActual += numOps.ToDouble(actual[i]);
-        meanActual /= actual.Length;
-
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < actual.Length; i++)
-        {
-            double a = numOps.ToDouble(actual[i]);
-            double p = numOps.ToDouble(predicted[i]);
-            ssRes += (a - p) * (a - p);
-            ssTot += (a - meanActual) * (a - meanActual);
-        }
-
-        if (ssTot < 1e-10)
+        // R^2 = 1 - SS_res / SS_tot. The mean is taken from pre-divided values, and both sets of residuals are
+        // divided by their common largest magnitude before squaring so neither sum can overflow in low precision;
+        // the ratio is unchanged by that scale.
+        var y = Tensor<T>.FromVector(actual);
+        T meanActual = ResultEngine.TensorSum(ResultEngine.TensorDivideScalar(y, numOps.FromDouble(actual.Length)));
+        var residuals = ResultEngine.TensorSubtract(y, Tensor<T>.FromVector(predicted));
+        var deviations = ResultEngine.TensorSubtractScalar(y, meanActual);
+        T residualScale = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(residuals));
+        T deviationScale = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(deviations));
+        T scale = numOps.GreaterThan(residualScale, deviationScale) ? residualScale : deviationScale;
+        if (numOps.Equals(scale, numOps.Zero))
             return numOps.Zero;
 
-        return numOps.FromDouble(1 - ssRes / ssTot);
+        T ssRes = ResultEngine.TensorSum(ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(residuals, scale)));
+        T ssTot = ResultEngine.TensorSum(ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(deviations, scale)));
+        double scaleValue = numOps.ToDouble(scale);
+        if (numOps.ToDouble(ssTot) * scaleValue * scaleValue < 1e-10)
+            return numOps.Zero;
+
+        return numOps.Subtract(numOps.One, numOps.Divide(ssRes, ssTot));
     }
 
     /// <summary>
@@ -5196,32 +5163,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                         var weightTensor = layer.GetWeights();
                         if (weightTensor is not null)
                         {
-                            var weightData = weightTensor.ToVector().ToArray();
-
-                            // Create matrix from weight data (assume 2D)
-                            if (weightTensor.Shape.Length >= 2)
-                            {
-                                int rows = weightTensor.Shape[0];
-                                int cols = weightTensor.Shape.Length > 1 ? weightTensor.Shape[1] : 1;
-                                var matrix = new Matrix<T>(rows, cols);
-                                int idx = 0;
-                                for (int r = 0; r < rows && idx < weightData.Length; r++)
-                                {
-                                    for (int c = 0; c < cols && idx < weightData.Length; c++)
-                                    {
-                                        matrix[r, c] = weightData[idx++];
-                                    }
-                                }
-                                layerWeights.Add(matrix);
-                            }
-                            else
-                            {
-                                // 1D weights - treat as single row matrix
-                                var matrix = new Matrix<T>(1, weightData.Length);
-                                for (int c = 0; c < weightData.Length; c++)
-                                    matrix[0, c] = weightData[c];
-                                layerWeights.Add(matrix);
-                            }
+                            layerWeights.Add(WeightsAsMatrix(weightTensor));
                         }
                         else
                         {
@@ -5268,35 +5210,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             var output = EnsureModel.Predict(modelInput);
 
             // If output is a vector, return index of max
+            // Vector or tensor output: the index of the largest value (the first one on ties).
             if (output is Vector<T> probs)
             {
-                int maxIdx = 0;
-                T maxVal = probs[0];
-                for (int i = 1; i < probs.Length; i++)
-                {
-                    if (numOps.GreaterThan(probs[i], maxVal))
-                    {
-                        maxVal = probs[i];
-                        maxIdx = i;
-                    }
-                }
-                return maxIdx;
+                return ResultEngine.TensorArgMax(Tensor<T>.FromVector(probs), 0).ToArray()[0];
             }
 
             if (output is Tensor<T> tensor)
             {
-                var vec = tensor.ToVector();
-                int maxIdx = 0;
-                T maxVal = vec[0];
-                for (int i = 1; i < vec.Length; i++)
-                {
-                    if (numOps.GreaterThan(vec[i], maxVal))
-                    {
-                        maxVal = vec[i];
-                        maxIdx = i;
-                    }
-                }
-                return maxIdx;
+                var flat = ResultEngine.Reshape(tensor, new[] { tensor.Length });
+                return ResultEngine.TensorArgMax(flat, 0).ToArray()[0];
             }
 
             // Binary classification: return 0 or 1 based on threshold
@@ -5469,32 +5392,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
                 if (weightTensor is not null)
                 {
-                    var weightData = weightTensor.ToVector().ToArray();
-
-                    // Create matrix from weight data (assume 2D)
-                    if (weightTensor.Shape.Length >= 2)
-                    {
-                        int rows = weightTensor.Shape[0];
-                        int cols = weightTensor.Shape.Length > 1 ? weightTensor.Shape[1] : 1;
-                        var matrix = new Matrix<T>(rows, cols);
-                        int idx = 0;
-                        for (int r = 0; r < rows && idx < weightData.Length; r++)
-                        {
-                            for (int c = 0; c < cols && idx < weightData.Length; c++)
-                            {
-                                matrix[r, c] = weightData[idx++];
-                            }
-                        }
-                        return matrix;
-                    }
-                    else
-                    {
-                        // 1D weights - treat as single row matrix
-                        var matrix = new Matrix<T>(1, weightData.Length);
-                        for (int c = 0; c < weightData.Length; c++)
-                            matrix[0, c] = weightData[c];
-                        return matrix;
-                    }
+                    return WeightsAsMatrix(weightTensor);
                 }
 
                 // Return identity if layer doesn't have weights
@@ -5503,6 +5401,24 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// A layer's weights as a matrix: the leading [rows, cols] block (in row-major order) of a weight tensor of
+    /// rank 2 or more, or a single row for 1D weights.
+    /// </summary>
+    private static Matrix<T> WeightsAsMatrix(Tensor<T> weightTensor)
+    {
+        var flat = ResultEngine.Reshape(weightTensor, new[] { weightTensor.Length });
+        if (weightTensor.Shape.Length < 2)
+        {
+            return ResultEngine.Reshape(flat, new[] { 1, weightTensor.Length }).ToMatrix();
+        }
+
+        int rows = weightTensor.Shape[0];
+        int cols = weightTensor.Shape[1];
+        var block = ResultEngine.TensorSlice(flat, new[] { 0 }, new[] { rows * cols });
+        return ResultEngine.Reshape(block, new[] { rows, cols }).ToMatrix();
     }
 
     #endregion
