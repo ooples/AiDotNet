@@ -264,10 +264,7 @@ public partial class EmotiVoice<T>
         var x = Encode(p.Phonemes, p.Speaker, p.Style, p.Content, training, random);
         int n = p.Phonemes.Length, frames = p.Mel.Shape[0];
         var logP = AlignmentNetwork.Forward(x, p.Mel);
-        // EmotiVoiceAlignment.Viterbi is a double[,] reference port; the scores cross into it once.
-        var matrix = new double[frames, n];
-        Buffer.BlockCopy(logP.Cast<double>().ToArray(), 0, matrix, 0, frames * n * sizeof(double));
-        var path = EmotiVoiceAlignment<T>.Viterbi(matrix);
+        var path = EmotiVoiceAlignment<T>.Viterbi(logP);
         var durations = EmotiVoiceAlignment<T>.Durations(path, n);
         // Each phoneme's mean pitch and energy over its frames, accumulated as Σ v_f / d in frame order.
         int covered = durations.Sum();
