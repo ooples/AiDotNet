@@ -81,6 +81,25 @@ internal static class ExplainerTensorOps<T>
     }
 
     /// <summary>
+    /// sqrt(sum over rows of x^2 / <paramref name="divisor"/>) for every column of a [rows, columns] tensor, with the
+    /// squares taken of x divided by its largest magnitude and the root scaled back, so no square overflows (a Half
+    /// square overflows above 256) while the result is representable.
+    /// </summary>
+    public static Tensor<T> ColumnRootMeanSquares(Tensor<T> rows, int divisor)
+    {
+        var engine = AiDotNetEngine.Current;
+        T scale = engine.TensorMaxValue(engine.TensorAbs(rows));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero))
+        {
+            return new Tensor<T>(new[] { rows.Shape[1] });
+        }
+
+        var scaledSquares = engine.ReduceSum(engine.TensorSquare(engine.TensorDivideScalar(rows, scale)), new[] { 0 }, false);
+        var root = engine.TensorSqrt(engine.TensorDivideScalar(scaledSquares, NumOps.FromDouble(divisor)));
+        return engine.TensorMultiplyScalar(root, scale);
+    }
+
+    /// <summary>
     /// Index of the largest entry (first one on ties).
     /// </summary>
     public static int ArgMax(Vector<T> values)

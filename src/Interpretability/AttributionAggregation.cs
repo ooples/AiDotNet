@@ -13,31 +13,25 @@ internal static class AttributionAggregation
     /// </summary>
     public static Vector<T> MeanAbsolute<T>(System.Collections.Generic.IEnumerable<IFeatureAttribution<T>> explanations)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        Vector<T>? sums = null;
+        Tensor<double>? sums = null;
         int count = 0;
 
+        // The running sums are kept in double: a sum over many explanations in T can stall (Half stops adding 1
+        // at 2048) or overflow, which would shrink the mean.
         foreach (var explanation in explanations)
         {
             var attributions = explanation.GetFeatureAttributions();
-            sums ??= new Vector<T>(attributions.Length);
-            int d = Math.Min(sums.Length, attributions.Length);
-            var absolute = engine.Abs(d == attributions.Length ? attributions : attributions.GetSubVector(0, d));
-            if (d == sums.Length)
-            {
-                sums = engine.Add(sums, absolute);
-            }
-            else
-            {
-                // Only the leading d features are present in this explanation; the tail keeps its running sum.
-                engine.Add(sums.GetSubVector(0, d), absolute).AsSpan().CopyTo(sums.AsWritableSpan());
-            }
+            sums ??= new Tensor<double>(new[] { attributions.Length });
+
+            // Features missing from a shorter explanation add 0, so the tail keeps its running sum.
+            var absolute = engine.Abs(AiDotNet.Interpretability.Helpers.ExplainerTensorOps<T>.PadOrTruncate(attributions, sums.Length));
+            sums = engine.TensorAdd(sums, absolute.AsTensor().Cast<double>());
             count++;
         }
 
         if (sums is null || count == 0) return new Vector<T>(0);
 
-        return engine.Divide(sums, numOps.FromDouble(count));
+        return engine.TensorDivideScalar(sums, (double)count).Cast<T>().ToVector();
     }
 }

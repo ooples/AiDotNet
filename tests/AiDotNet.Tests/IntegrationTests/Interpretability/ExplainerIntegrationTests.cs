@@ -2290,5 +2290,157 @@ public class ExplainerIntegrationTests
         Assert.Equal(0.01, ops.ToDouble(ssRes) / ops.ToDouble(ssTot), 1e-4);
     }
 
+    [Fact]
+    public void ALE_FirstOrder_MatchesApleyZhuALEPlot()
+    {
+        // f = x1 x2 + x1^2 on 7 points, 2 intervals with bounds [0, 3, 6] on both features. Reference: a numpy
+        // port of ALEPlot's ALEPlot() (Apley and Zhu 2020): right-closed intervals (0..3 holds 4 points, (3, 6]
+        // holds 3) and centring by the count-weighted interval midpoints. An unweighted mean over the grid
+        // points, or [left, right) intervals, give other values.
+        var data = new Matrix<double>(new double[,] { { 0, 0 }, { 1, 4 }, { 2, 5 }, { 3, 1 }, { 4, 2 }, { 5, 6 }, { 6, 3 } });
+        Func<Matrix<double>, Vector<double>> predict = m => new Vector<double>(
+            Enumerable.Range(0, m.Rows).Select(i => m[i, 0] * m[i, 1] + m[i, 0] * m[i, 0]).ToArray());
+        var explainer = new AccumulatedLocalEffectsExplainer<double>(predict, data, numIntervals: 2);
+
+        var result = explainer.ComputeForFeature(0);
+
+        Assert.Equal(new[] { 4, 3 }, result.IntervalCounts[0]);
+        var expected = new[] { -19.928571428571427, -3.428571428571427, 34.57142857142857 };
+        Assert.Equal(expected.Length, result.ALEValues[0].Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], result.ALEValues[0][i], 9);
+        }
+    }
+
+    [Fact]
+    public void ALE_SecondOrder_MatchesApleyZhuALEPlot()
+    {
+        // Same data and model; ALEPlot's second-order effect on the 3 x 3 grid of bounds, with the two first-order
+        // effects removed and a zero data mean. Accumulating without removing them (or on a 2 x 2 grid, centred by
+        // the plain mean) gives a different surface.
+        var data = new Matrix<double>(new double[,] { { 0, 0 }, { 1, 4 }, { 2, 5 }, { 3, 1 }, { 4, 2 }, { 5, 6 }, { 6, 3 } });
+        Func<Matrix<double>, Vector<double>> predict = m => new Vector<double>(
+            Enumerable.Range(0, m.Rows).Select(i => m[i, 0] * m[i, 1] + m[i, 0] * m[i, 0]).ToArray());
+        var explainer = new AccumulatedLocalEffectsExplainer<double>(predict, data, numIntervals: 2);
+
+        var surface = explainer.ComputeInteraction(0, 1).ALEValues2D;
+
+        var expected = new[,]
+        {
+            { 8.678571428571429, -0.3214285714285712, -7.821428571428571 },
+            { -0.3214285714285712, -0.3214285714285712, 1.1785714285714288 },
+            { -7.821428571428571, 1.1785714285714288, 11.678571428571429 },
+        };
+        Assert.Equal(3, surface.Rows);
+        Assert.Equal(3, surface.Columns);
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                Assert.Equal(expected[i, j], surface[i, j], 9);
+            }
+        }
+    }
+
+    [Fact]
+    public void GradientSHAP_Noise_PerturbsTheInputLikeShapGradientExplainer()
+    {
+        // f(x) = x^2 with gradient 2x, input 1, baseline 0, noise sigma = 1. shap's GradientExplainer (and Captum's
+        // GradientShap) add the noise to the input: x' = x + e, point b + t (x' - b), weight (x' - b), whose
+        // expectation is E[(x + e)^2] - b^2 = x^2 + sigma^2 - b^2 = 2. Noise added to the interpolated point with
+        // the clean weight (x - b) has expectation x^2 - b^2 = 1.
+        Func<Vector<double>, Vector<double>> predict = v => new Vector<double>(new[] { v[0] * v[0] });
+        Func<Vector<double>, int, Vector<double>> gradient = (v, _) => new Vector<double>(new[] { 2 * v[0] });
+        var explainer = new GradientSHAPExplainer<double>(
+            predict, gradient, new Matrix<double>(new double[,] { { 0.0 } }),
+            numSamples: 400, numSteps: 50, addNoise: true, noiseStdDev: 1.0, randomState: 11);
+
+        var explanation = explainer.Explain(new Vector<double>(new[] { 1.0 }));
+
+        Assert.InRange(explanation.Attributions[0], 1.85, 2.15);
+    }
+
+    [Fact]
+    public void AttributionAggregation_Half_MeanAbsoluteOver3000Explanations()
+    {
+        // 3000 explanations with |attribution| 1 have a mean absolute attribution of exactly 1. A running sum in Half
+        // stops at 2048 (2048 + 1 rounds back to 2048), which would give 2048 / 3000.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var explanations = Enumerable.Range(0, 3000)
+            .Select(i => (AiDotNet.Interpretability.IFeatureAttribution<Half>)new GradientSHAPExplanation<Half>
+            {
+                Attributions = new Vector<Half>(new[] { i % 2 == 0 ? ops.One : ops.Negate(ops.One) }),
+            })
+            .ToList();
+
+        var mean = AiDotNet.Interpretability.AttributionAggregation.MeanAbsolute(explanations);
+
+        Assert.Equal(1.0, ops.ToDouble(mean[0]));
+    }
+
+    [Fact]
+    public void GlobalSHAP_StdDev_Half_LargeValuesDoNotOverflow()
+    {
+        // SHAP values +300 and -300: mean 0, population standard deviation 300. Each square (90000) overflows Half's
+        // 65504 to infinity, so squaring the raw deviations would report an infinite spread.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var local = new[]
+        {
+            new SHAPExplanation<Half>(new Vector<Half>(new[] { ops.FromDouble(300) }), ops.Zero, ops.Zero),
+            new SHAPExplanation<Half>(new Vector<Half>(new[] { ops.FromDouble(-300) }), ops.Zero, ops.Zero),
+        };
+
+        var spread = new GlobalSHAPExplanation<Half>(local).GetShapValueStdDev();
+
+        Assert.Equal(300.0, ops.ToDouble(spread[0]));
+    }
+
+    [Fact]
+    public void InterpretabilityMetrics_Half_CountsPast2048()
+    {
+        // 3000 positive predictions, 2400 of them actually positive: positive rate 1, precision 0.8. Summing 0/1
+        // masks in Half stops at 2048, which would give 2048 / 3000 and 2048 / 2048.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var predictions = new Vector<Half>(Enumerable.Repeat(ops.One, 3000).ToArray());
+        var labels = new Vector<Half>(Enumerable.Range(0, 3000).Select(i => i < 2400 ? ops.One : ops.Zero).ToArray());
+
+        var positiveRate = AiDotNet.Interpretability.InterpretabilityMetricsHelper<Half>.ComputePositiveRate(predictions);
+        var precision = AiDotNet.Interpretability.InterpretabilityMetricsHelper<Half>.ComputePrecision(predictions, labels);
+
+        Assert.Equal(1.0, ops.ToDouble(positiveRate));
+        Assert.Equal(ops.ToDouble(ops.FromDouble(0.8)), ops.ToDouble(precision));
+    }
+
+    [Fact]
+    public void PermutationFeatureImportance_Half_StdOfLargeDropsDoesNotOverflow()
+    {
+        // Baseline score 0, then the two repeats score 0 and -600: drops 0 and 600, mean 300 and population std
+        // 300. The squared deviations (90000) overflow Half to infinity when squared unscaled.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        int calls = 0;
+        Func<Vector<Half>, Vector<Half>, Half> score = (_, _) => calls++ == 2 ? ops.FromDouble(-600) : ops.Zero;
+        var pfi = new PermutationFeatureImportance<Half>(m => m.GetColumn(0), score, nRepeats: 2, randomState: 1);
+
+        var result = pfi.Calculate(
+            new Matrix<Half>(new[,] { { ops.One }, { ops.Zero } }), new Vector<Half>(new[] { ops.One, ops.Zero }));
+
+        Assert.Equal(300.0, ops.ToDouble(result.Importances[0]));
+        Assert.Equal(300.0, ops.ToDouble(result.ImportanceStds[0]));
+    }
+
+    [Fact]
+    public void FeatureAblation_Global_Half_StdOfLargeAttributionsDoesNotOverflow()
+    {
+        // f(x) = x with a zero baseline: the attributions of the samples 0 and 600 are 0 and 600, so the population
+        // std is 300. Squaring the raw deviations (+-300) overflows Half.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var explainer = new FeatureAblationExplainer<Half>((Vector<Half> v) => v, baseline: new Vector<Half>(1));
+
+        var result = explainer.ExplainGlobal(new Matrix<Half>(new[,] { { ops.Zero }, { ops.FromDouble(600) } }));
+
+        Assert.Equal(300.0, ops.ToDouble(result.StdAttributions[0]));
+    }
+
     #endregion
 }

@@ -138,7 +138,7 @@ namespace AiDotNet.Interpretability
             var engine = AiDotNetEngine.Current;
             var values = predictions.AsTensor();
             var positive = engine.TensorGreaterEqual(values, engine.TensorFullLike(values, _numOps.FromDouble(0.5)));
-            return _numOps.Divide(engine.TensorSum(positive), _numOps.FromDouble(predictions.Length));
+            return CountRatio(engine.TensorCountNonzero(positive), predictions.Length);
         }
 
         /// <summary>
@@ -173,13 +173,10 @@ namespace AiDotNet.Interpretability
             var (actualPositive, _, predictedPositive) = ClassifyAtThreshold(predictions, actualLabels);
             var engine = AiDotNetEngine.Current;
             // TPR = true positives / actual positives.
-            T numerator = engine.TensorSum(engine.TensorMultiply(actualPositive, predictedPositive));
-            T denominator = engine.TensorSum(actualPositive);
+            int numerator = engine.TensorCountNonzero(engine.TensorMultiply(actualPositive, predictedPositive));
+            int denominator = engine.TensorCountNonzero(actualPositive);
 
-            if (_numOps.Equals(denominator, _numOps.Zero))
-                return _numOps.Zero;
-
-            return _numOps.Divide(numerator, denominator);
+            return CountRatio(numerator, denominator);
         }
 
         /// <summary>
@@ -214,13 +211,10 @@ namespace AiDotNet.Interpretability
             var (_, actualNegative, predictedPositive) = ClassifyAtThreshold(predictions, actualLabels);
             var engine = AiDotNetEngine.Current;
             // FPR = false positives / actual negatives.
-            T numerator = engine.TensorSum(engine.TensorMultiply(actualNegative, predictedPositive));
-            T denominator = engine.TensorSum(actualNegative);
+            int numerator = engine.TensorCountNonzero(engine.TensorMultiply(actualNegative, predictedPositive));
+            int denominator = engine.TensorCountNonzero(actualNegative);
 
-            if (_numOps.Equals(denominator, _numOps.Zero))
-                return _numOps.Zero;
-
-            return _numOps.Divide(numerator, denominator);
+            return CountRatio(numerator, denominator);
         }
 
         /// <summary>
@@ -255,13 +249,19 @@ namespace AiDotNet.Interpretability
             var (actualPositive, _, predictedPositive) = ClassifyAtThreshold(predictions, actualLabels);
             var engine = AiDotNetEngine.Current;
             // Precision = true positives / predicted positives.
-            T numerator = engine.TensorSum(engine.TensorMultiply(actualPositive, predictedPositive));
-            T denominator = engine.TensorSum(predictedPositive);
+            int numerator = engine.TensorCountNonzero(engine.TensorMultiply(actualPositive, predictedPositive));
+            int denominator = engine.TensorCountNonzero(predictedPositive);
 
-            if (_numOps.Equals(denominator, _numOps.Zero))
-                return _numOps.Zero;
+            return CountRatio(numerator, denominator);
+        }
 
-            return _numOps.Divide(numerator, denominator);
+        /// <summary>
+        /// count / total as T (0 when total is 0). The counts stay in int: a sum of 0/1 masks in T stops at 2048
+        /// for Half.
+        /// </summary>
+        private static T CountRatio(int count, int total)
+        {
+            return total == 0 ? _numOps.Zero : _numOps.FromDouble((double)count / total);
         }
 
         /// <summary>

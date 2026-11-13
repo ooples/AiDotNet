@@ -187,11 +187,26 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
         var cumulative = engine.TensorCumSum(localEffects, 0);
         var aleValues = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), cumulative }, 0);
 
-        // Center the ALE values (mean should be zero)
-        aleValues = engine.TensorSubtractScalar(aleValues, engine.TensorMean(aleValues));
+        // Center as in Apley and Zhu (2020), eq. (16), and their ALEPlot package: subtract the mean of the
+        // uncentred effect over the data, i.e. the interval midpoint values (f(z_{k-1}) + f(z_k)) / 2 weighted by the
+        // interval counts. (An unweighted mean over the grid points ignores where the data lies.)
+        var midpoints = engine.TensorMultiplyScalar(engine.TensorAdd(
+            engine.TensorSlice(aleValues, new[] { 0 }, new[] { _numIntervals }),
+            engine.TensorSlice(aleValues, new[] { 1 }, new[] { _numIntervals })), NumOps.FromDouble(0.5));
+        T dataMean = engine.TensorSum(engine.TensorMultiply(midpoints, CountWeights(intervalCounts, intervals.Length)));
+        aleValues = engine.TensorSubtractScalar(aleValues, dataMean);
 
         result.ALEValues[featureIndex] = aleValues.ToArray();
         result.IntervalCounts[featureIndex] = intervalCounts;
+    }
+
+    /// <summary>
+    /// The share count / total of every count, as T (the counts themselves can exceed what T holds exactly).
+    /// </summary>
+    private static Tensor<T> CountWeights(int[] counts, int total)
+    {
+        return new Tensor<double>(counts.Select(count => (double)count / total).ToArray(), new[] { counts.Length })
+            .Cast<T>();
     }
 
     /// <summary>
@@ -221,11 +236,12 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
     /// </summary>
     private static int[] FindIntervals(Vector<T> values, Vector<T> bounds)
     {
-        // The interval i with bounds[i] <= value < bounds[i + 1]; values at or past the last bound (or
-        // matching no interval) fall in the last interval, which includes the right bound.
+        // Apley and Zhu (2020) and ALEPlot use right-closed intervals: the interval i with
+        // bounds[i] < value <= bounds[i + 1], the first one also holding bounds[0] (cut(include.lowest = TRUE)).
+        // Values outside the bounds fall in the nearest end interval.
         int last = bounds.Length - 2;
-        var boundsAtOrBelow = AiDotNetEngine.Current.TensorSearchSorted(bounds.AsTensor(), values.AsTensor(), true).ToArray();
-        return boundsAtOrBelow.Select(count => count == 0 || count - 1 > last ? last : count - 1).ToArray();
+        var boundsBelow = AiDotNetEngine.Current.TensorSearchSorted(bounds.AsTensor(), values.AsTensor(), false).ToArray();
+        return boundsBelow.Select(count => Math.Min(Math.Max(count - 1, 0), last)).ToArray();
     }
 
     /// <summary>
@@ -289,15 +305,15 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
         var predLL = PredictWithModifiedFeatures(feature1Index, left1, feature2Index, left2);
         var effects = engine.Add(engine.Subtract(engine.Subtract(predRR, predLR), predRL), predLL);
 
-        // Average and accumulate
+        // Average per cell; an empty cell takes the effect of the nearest non-empty cell (cell centres scaled by
+        // the feature ranges), as in Apley and Zhu's ALEPlot
         var cellIndex = new Tensor<int>(cells, new[] { n });
-        var cellEffects = AverageByGroup(effects, cellIndex, counts).Reshape(new[] { intervals2D, intervals2D });
+        var cellAverages = AverageByGroup(effects, cellIndex, counts);
+        var source = NearestNonEmptyCells(counts, bounds1, bounds2, intervals2D);
+        var cellEffects = engine.TensorIndexSelect(cellAverages, new Tensor<int>(source, new[] { source.Length }), 0)
+            .Reshape(new[] { intervals2D, intervals2D });
 
-        // Accumulate in both dimensions
-        var accumulated = engine.TensorCumSum(engine.TensorCumSum(cellEffects, 0), 1);
-
-        // Center
-        accumulated = engine.TensorSubtractScalar(accumulated, engine.TensorMean(accumulated));
+        var accumulated = SecondOrderAle(cellEffects, CountWeights(counts, n).Reshape(new[] { intervals2D, intervals2D }));
 
         return new ALE2DResult<T>
         {
@@ -309,6 +325,103 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
             Bounds2 = bounds2.ToArray(),
             ALEValues2D = accumulated.ToMatrix()
         };
+    }
+
+    /// <summary>
+    /// The second-order ALE of Apley and Zhu (2020), eqs. (13)-(15), as computed by their ALEPlot package, on the
+    /// (K + 1) x (K + 1) grid of interval bounds: the cell effects accumulated over both features from a zero row
+    /// and column, minus the two first-order effects they contain, centred to a zero data mean.
+    /// </summary>
+    /// <param name="cellEffects">[K, K] average second-order difference per cell.</param>
+    /// <param name="weights">[K, K] share of the data in each cell.</param>
+    private static Tensor<T> SecondOrderAle(Tensor<T> cellEffects, Tensor<T> weights)
+    {
+        var engine = AiDotNetEngine.Current;
+        int k = cellEffects.Shape[0];
+        var half = NumOps.FromDouble(0.5);
+
+        // f[i, j] = sum over cells below i and j, with f[0, :] = f[:, 0] = 0
+        var inner = engine.TensorCumSum(engine.TensorCumSum(cellEffects, 0), 1);
+        var withColumn = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { k, 1 }), inner }, 1);
+        var f = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1, k + 1 }), withColumn }, 0);
+
+        // First-order effect of feature 1: row steps averaged over each cell's two edges, weighted by the cells
+        var rowSteps = engine.TensorSubtract(Block(f, 1, 0, k, k + 1), Block(f, 0, 0, k, k + 1));
+        var rowStepPerCell = engine.TensorMultiplyScalar(
+            engine.TensorAdd(Block(rowSteps, 0, 0, k, k), Block(rowSteps, 0, 1, k, k)), half);
+        var f1 = Accumulate(WeightedAverage(rowStepPerCell, weights, 1));
+
+        // First-order effect of feature 2: column steps averaged over each cell's two edges
+        var columnSteps = engine.TensorSubtract(Block(f, 0, 1, k + 1, k), Block(f, 0, 0, k + 1, k));
+        var columnStepPerCell = engine.TensorMultiplyScalar(
+            engine.TensorAdd(Block(columnSteps, 0, 0, k, k), Block(columnSteps, 1, 0, k, k)), half);
+        var f2 = Accumulate(WeightedAverage(columnStepPerCell, weights, 0));
+
+        var shape = new[] { k + 1, k + 1 };
+        var pure = engine.TensorSubtract(engine.TensorSubtract(f,
+            engine.TensorBroadcastTo(f1.Reshape(new[] { k + 1, 1 }), shape)),
+            engine.TensorBroadcastTo(f2.Reshape(new[] { 1, k + 1 }), shape));
+
+        // Centre: the data mean of the cell averages of the four corners
+        var corners = engine.TensorAdd(
+            engine.TensorAdd(Block(pure, 0, 0, k, k), Block(pure, 0, 1, k, k)),
+            engine.TensorAdd(Block(pure, 1, 0, k, k), Block(pure, 1, 1, k, k)));
+        T dataMean = NumOps.Divide(
+            engine.TensorSum(engine.TensorMultiply(engine.TensorMultiplyScalar(corners, NumOps.FromDouble(0.25)), weights)),
+            engine.TensorSum(weights));
+        return engine.TensorSubtractScalar(pure, dataMean);
+    }
+
+    /// <summary>
+    /// The [rows, columns] block of a matrix tensor starting at (<paramref name="row"/>, <paramref name="column"/>).
+    /// </summary>
+    private static Tensor<T> Block(Tensor<T> matrix, int row, int column, int rows, int columns)
+    {
+        return AiDotNetEngine.Current.TensorSlice(matrix, new[] { row, column }, new[] { rows, columns });
+    }
+
+    /// <summary>
+    /// The weighted average of <paramref name="values"/> along <paramref name="axis"/> (0 where the weights sum to 0).
+    /// </summary>
+    private static Tensor<T> WeightedAverage(Tensor<T> values, Tensor<T> weights, int axis)
+    {
+        var engine = AiDotNetEngine.Current;
+        var sums = engine.ReduceSum(engine.TensorMultiply(values, weights), new[] { axis }, false);
+        var totals = engine.ReduceSum(weights, new[] { axis }, false);
+        var occupied = engine.TensorGreaterThan(totals, NumOps.Zero);
+        var ones = engine.TensorOnesLike(totals);
+        return engine.TensorMultiply(engine.TensorDivide(sums, engine.TensorWhere(occupied, totals, ones)), occupied);
+    }
+
+    /// <summary>
+    /// [0, cumsum(steps)].
+    /// </summary>
+    private static Tensor<T> Accumulate(Tensor<T> steps)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), engine.TensorCumSum(steps, 0) }, 0);
+    }
+
+    /// <summary>
+    /// For every cell of the [k, k] grid (row-major) the cell whose average it takes: itself when it holds data,
+    /// otherwise the nearest non-empty cell by the distance between cell centres, each feature scaled by its range
+    /// (the first such cell on ties).
+    /// </summary>
+    private static int[] NearestNonEmptyCells(int[] counts, Vector<T> bounds1, Vector<T> bounds2, int k)
+    {
+        var z1 = Tensor<T>.FromVector(bounds1).Cast<double>().ToArray();
+        var z2 = Tensor<T>.FromVector(bounds2).Cast<double>().ToArray();
+        double range1 = z1[k] - z1[0] > 0 ? z1[k] - z1[0] : 1.0;
+        double range2 = z2[k] - z2[0] > 0 ? z2[k] - z2[0] : 1.0;
+        var centres1 = Enumerable.Range(0, k).Select(i => (z1[i] + z1[i + 1]) / 2 / range1).ToArray();
+        var centres2 = Enumerable.Range(0, k).Select(j => (z2[j] + z2[j + 1]) / 2 / range2).ToArray();
+        var occupied = Enumerable.Range(0, counts.Length).Where(cell => counts[cell] > 0).ToArray();
+
+        return Enumerable.Range(0, counts.Length).Select(cell => counts[cell] > 0 || occupied.Length == 0
+            ? cell
+            : occupied.OrderBy(other =>
+                Math.Pow(centres1[cell / k] - centres1[other / k], 2) + Math.Pow(centres2[cell % k] - centres2[other % k], 2))
+                .First()).ToArray();
     }
 
     /// <summary>
@@ -438,7 +551,8 @@ public class ALE2DResult<T>
     public T[] Bounds2 { get; set; } = Array.Empty<T>();
 
     /// <summary>
-    /// Gets or sets the 2D ALE values [feature1 interval, feature2 interval].
+    /// Gets or sets the 2D ALE values on the grid of interval bounds [Bounds1 index, Bounds2 index], i.e.
+    /// (K + 1) x (K + 1) for K intervals per feature, as in ALEPlot.
     /// </summary>
     public Matrix<T> ALEValues2D { get; set; } = new Matrix<T>(0, 0);
 }

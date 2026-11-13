@@ -279,7 +279,7 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
             var deviations = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape.ToArray()));
             meanAttributions = mean.ToVector();
             meanAbsAttributions = engine.ReduceMean(engine.TensorAbs(stacked), new[] { 0 }, false).ToVector();
-            stdAttributions = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(deviations), new[] { 0 }, false)).ToVector();
+            stdAttributions = ExplainerTensorOps<T>.ColumnRootMeanSquares(deviations, numSamples).ToVector();
         }
 
         var names = _featureNames ?? groups.Select((g, i) =>

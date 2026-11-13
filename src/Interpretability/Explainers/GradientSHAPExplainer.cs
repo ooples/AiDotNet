@@ -194,7 +194,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
             var sampleAttr = ComputeIntegratedGradients(instance, baseline, outputIndex, rand);
 
             // Store for variance computation
-            sampleAttributions.Add(new Vector<T>(sampleAttr));
+            sampleAttributions.Add(sampleAttr);
         }
 
         // Average attributions and their (population) variances
@@ -252,53 +252,36 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     /// <summary>
     /// Computes Integrated Gradients from baseline to input.
     /// </summary>
-    private T[] ComputeIntegratedGradients(Vector<T> input, Vector<T> baseline, int outputIndex, Random rand)
+    /// <remarks>
+    /// As in shap's GradientExplainer (local_smoothing) and Captum's GradientShap, the noise perturbs the input
+    /// itself: each step draws x' = x + N(0, noiseStdDev^2), evaluates the gradient at b + alpha (x' - b) and
+    /// weighs it by (x' - b). Adding the noise to the interpolated point instead (full strength even next to the
+    /// baseline) and weighing by the clean (x - b) estimates a different quantity.
+    /// </remarks>
+    private Vector<T> ComputeIntegratedGradients(Vector<T> input, Vector<T> baseline, int outputIndex, Random rand)
     {
+        var engine = AiDotNetEngine.Current;
         int numFeatures = input.Length;
-        var attributions = new double[numFeatures];
+        var contributions = new List<Vector<T>>(_numSteps);
 
-        // Create interpolated points and sum gradients
         for (int step = 0; step < _numSteps; step++)
         {
             // Random alpha for stochastic integration
             double alpha = (step + rand.NextDouble()) / _numSteps;
 
-            // Interpolate between baseline and input
-            var interpolated = new T[numFeatures];
-            for (int j = 0; j < numFeatures; j++)
-            {
-                double baseVal = NumOps.ToDouble(baseline[j]);
-                double inputVal = NumOps.ToDouble(input[j]);
-                double interpVal = baseVal + alpha * (inputVal - baseVal);
+            var noisyInput = _addNoise
+                ? engine.Add(input, new Vector<T>(Enumerable.Range(0, numFeatures)
+                    .Select(_ => NumOps.FromDouble(rand.NextGaussian() * _noiseStdDev)).ToArray()))
+                : input;
+            var delta = engine.Subtract(noisyInput, baseline);
+            var point = engine.Add(baseline, engine.Multiply(delta, NumOps.FromDouble(alpha)));
 
-                // Add noise if enabled
-                if (_addNoise)
-                {
-                    interpVal += rand.NextGaussian() * _noiseStdDev;
-                }
-
-                interpolated[j] = NumOps.FromDouble(interpVal);
-            }
-
-            // Compute gradient at this point
-            var gradient = ComputeGradient(new Vector<T>(interpolated), outputIndex);
-
-            // Accumulate
-            for (int j = 0; j < numFeatures; j++)
-            {
-                attributions[j] += NumOps.ToDouble(gradient[j]);
-            }
+            var gradient = ComputeGradient(point, outputIndex);
+            contributions.Add(engine.Multiply(gradient.GetSubVector(0, numFeatures), delta));
         }
 
-        // Multiply by (input - baseline) and normalize
-        var result = new T[numFeatures];
-        for (int j = 0; j < numFeatures; j++)
-        {
-            double deltaInput = NumOps.ToDouble(input[j]) - NumOps.ToDouble(baseline[j]);
-            result[j] = NumOps.FromDouble(attributions[j] * deltaInput / _numSteps);
-        }
-
-        return result;
+        // Average of gradient x (input - baseline) over the steps
+        return engine.ReduceMean(ExplainerTensorOps<T>.Stack(contributions), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>

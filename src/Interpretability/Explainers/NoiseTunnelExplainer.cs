@@ -270,9 +270,9 @@ public class NoiseTunnelExplainer<T, TExplanation>
     /// </remarks>
     private Vector<T> ComputeSquaredMean(List<Vector<T>> attributions)
     {
-        var engine = AiDotNetEngine.Current;
-        var meanSquare = engine.ReduceMean(engine.TensorSquare(Stack(attributions)), new[] { 0 }, false);
-        return engine.TensorSqrt(meanSquare).ToVector();
+        // Root mean square, scaled so no square overflows T
+        return AiDotNet.Interpretability.Helpers.ExplainerTensorOps<T>
+            .ColumnRootMeanSquares(Stack(attributions), attributions.Count).ToVector();
     }
 
     /// <summary>
@@ -297,9 +297,8 @@ public class NoiseTunnelExplainer<T, TExplanation>
         var stacked = Stack(attributions);
         var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
         var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape.ToArray()));
-        var sumOfSquares = engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false);
-        var variance = engine.TensorDivideScalar(sumOfSquares, NumOps.FromDouble(attributions.Count - 1));
-        return engine.TensorSqrt(variance).ToVector();
+        return AiDotNet.Interpretability.Helpers.ExplainerTensorOps<T>
+            .ColumnRootMeanSquares(centered, attributions.Count - 1).ToVector();
     }
 
     /// <summary>
