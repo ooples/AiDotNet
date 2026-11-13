@@ -198,13 +198,12 @@ public class iBOT<T> : TeacherStudentSSL<T>
     private Tensor<T> ApplyMask(Tensor<T> view, bool[,]? mask)
     {
         if (mask is null) return view;
-        var keep = new Tensor<T>(view.Shape.ToArray());
-        int batch = view.Shape[0], tokens = view.Shape[1], dim = view.Shape[2];
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < tokens; t++)
-                for (int d = 0; d < dim; d++)
-                    keep[b, t, d] = mask[b, t] ? NumOps.Zero : NumOps.One;
-        return Engine.TensorMultiply(view, keep);
+        int batch = view.Shape[0], tokens = view.Shape[1];
+
+        // keep[b, t] = 0 for a masked token, 1 otherwise; broadcast over the feature axis
+        var ones = Engine.TensorAddScalar(new Tensor<T>(new[] { batch, tokens }), NumOps.One);
+        var keep = Engine.TensorMaskedFill(ones, mask.Cast<bool>().ToArray(), NumOps.Zero);
+        return Engine.TensorMultiply(view, keep.Reshape(batch, tokens, 1));
     }
 
     // The masked tokens' student and teacher outputs as [count, dim] rows.

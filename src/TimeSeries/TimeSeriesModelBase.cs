@@ -563,11 +563,12 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         // Auto-scale guard threshold from training data: 1000x max observed absolute value.
         // This adapts overflow protection to the dataset scale instead of a fixed magic number.
         double maxAbsY = 0;
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length > 0)
         {
-            double absVal = Math.Abs(NumOps.ToDouble(y[i]));
-            if (absVal > maxAbsY && !double.IsNaN(absVal) && !double.IsInfinity(absVal))
-                maxAbsY = absVal;
+            // Largest finite |y| (NaN and infinite values are ignored)
+            var absY = Tensor<T>.FromVector(Engine.Abs(y));
+            var finiteAbsY = Engine.TensorWhere(Engine.TensorIsFinite(absY), absY, Engine.TensorZerosLike(absY));
+            maxAbsY = Math.Max(maxAbsY, NumOps.ToDouble(Engine.TensorMaxValue(finiteAbsY)));
         }
         _autoGuardThreshold = maxAbsY > 0 ? maxAbsY * 1000.0 : 1e15;
 
@@ -828,16 +829,8 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         // Validate input
         ValidatePredictionInput(input);
 
-        // Create output vector for predictions
-        var predictions = new Vector<T>(input.Rows);
-
         // Generate predictions for each input row
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return predictions;
+        return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
     }
 
     /// <summary>
@@ -888,6 +881,20 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             return NumOps.FromDouble(clamped);
         }
         return value;
+    }
+
+    /// <summary>
+    /// <see cref="GuardPrediction"/> applied to every element of <paramref name="values"/> as whole-tensor ops:
+    /// NaN becomes zero and anything beyond the threshold, infinities included, is clamped to it.
+    /// </summary>
+    /// <returns>The guarded values, flattened in row-major order.</returns>
+    protected Vector<T> GuardPredictions(Tensor<T> values, double maxAbsValue = -1)
+    {
+        double threshold = maxAbsValue > 0
+            ? maxAbsValue
+            : Options.MaxPredictionAbsValue ?? _autoGuardThreshold;
+        var finite = Engine.TensorNanToNum(values, 0.0, threshold, -threshold);
+        return Engine.TensorClamp(finite, NumOps.FromDouble(-threshold), NumOps.FromDouble(threshold)).ToVector();
     }
 
     /// <summary>
@@ -1043,28 +1050,19 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             throw new InvalidOperationException("The model must be trained before making predictions.");
         }
 
-        var window = new Vector<T>(lookback.Length);
-        for (int i = 0; i < lookback.Length; i++)
-        {
-            window[i] = lookback[i];
-        }
+        var window = lookback.Clone();
 
-        var forecast = new Vector<T>(horizon);
+        var forecast = new List<T>(Math.Max(horizon, 0));
         for (int h = 0; h < horizon; h++)
         {
             T next = PredictSingle(window);
-            forecast[h] = next;
+            forecast.Add(next);
 
             // Slide the window forward by one, appending the just-predicted value (recursive strategy).
-            for (int i = 0; i < window.Length - 1; i++)
-            {
-                window[i] = window[i + 1];
-            }
-
-            window[window.Length - 1] = next;
+            window = Vector<T>.Concatenate(window.GetSubVector(1, window.Length - 1), new Vector<T>(new[] { next }));
         }
 
-        return forecast;
+        return new Vector<T>(forecast.ToArray());
     }
 
     /// <summary>
@@ -1167,22 +1165,14 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         var metrics = new Dictionary<string, T>();
 
         // Calculate MAE (Mean Absolute Error)
-        T sumAbsoluteError = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T error = NumOps.Subtract(predictions[i], actuals[i]);
-            sumAbsoluteError = NumOps.Add(sumAbsoluteError, NumOps.Abs(error));
-        }
+        Vector<T> errors = n > 0 ? Engine.Subtract(predictions, actuals.GetSubVector(0, n)) : new Vector<T>(0);
+        Vector<T> absoluteErrors = Engine.Abs(errors);
+        T sumAbsoluteError = n > 0 ? Engine.Sum(absoluteErrors) : NumOps.Zero;
         T mae = NumOps.Divide(sumAbsoluteError, NumOps.FromDouble(n));
         metrics["MAE"] = mae;
 
         // Calculate MSE (Mean Squared Error) and RMSE (Root Mean Squared Error)
-        T sumSquaredError = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T error = NumOps.Subtract(predictions[i], actuals[i]);
-            sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Square(error));
-        }
+        T sumSquaredError = n > 0 ? Engine.DotProduct(errors, errors) : NumOps.Zero;
         T mse = NumOps.Divide(sumSquaredError, NumOps.FromDouble(n));
         T rmse = NumOps.Sqrt(mse);
         metrics["MSE"] = mse;
@@ -1192,19 +1182,17 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         // Only if actuals don't contain zeros or very small values
         bool canCalculateMape = true;
         T sumAbsolutePercentageError = NumOps.Zero;
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            if (NumOps.LessThan(NumOps.Abs(actuals[i]), NumOps.FromDouble(1e-10)))
+            var absoluteActuals = Tensor<T>.FromVector(Engine.Abs(actuals.GetSubVector(0, n)));
+            // Compared in double: 1e-10 rounds to zero in Half, which would let exact zeros through.
+            canCalculateMape = Engine.TensorCountNonzero(
+                Engine.TensorLessThan(absoluteActuals.Cast<double>(), 1e-10)) == 0;
+            if (canCalculateMape)
             {
-                canCalculateMape = false;
-                break;
+                sumAbsolutePercentageError = Engine.TensorSum(
+                    Engine.TensorDivide(Tensor<T>.FromVector(absoluteErrors), absoluteActuals));
             }
-
-            T percentageError = NumOps.Divide(
-                NumOps.Abs(NumOps.Subtract(predictions[i], actuals[i])),
-                NumOps.Abs(actuals[i])
-            );
-            sumAbsolutePercentageError = NumOps.Add(sumAbsolutePercentageError, percentageError);
         }
 
         if (canCalculateMape)
@@ -2229,14 +2217,19 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         var activeSet = new HashSet<int>(featureIndices);
-
-        for (int i = 0; i < ModelParameters.Length; i++)
+        int count = ModelParameters.Length;
+        if (count == 0)
         {
-            if (!activeSet.Contains(i))
-            {
-                ModelParameters[i] = NumOps.Zero;
-            }
+            return;
         }
+
+        // Zero every parameter whose index is not active, in place
+        T one = NumOps.One;
+        T zero = NumOps.Zero;
+        var parameters = Tensor<T>.FromVector(ModelParameters);
+        var active = Tensor<T>.FromVector(new Vector<T>(Enumerable.Range(0, count).Select(i => activeSet.Contains(i) ? one : zero).ToArray()));
+        Engine.TensorWhere(active, parameters, Engine.TensorZerosLike(parameters)).ToVector()
+            .CopyTo(ModelParameters.AsWritableSpan());
     }
 
     /// <summary>
@@ -2247,10 +2240,10 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     {
         var result = new Dictionary<string, T>();
 
-        for (int i = 0; i < ModelParameters.Length; i++)
+        foreach (var (importance, i) in Engine.Abs(ModelParameters).Select((importance, i) => (importance, i)))
         {
             string featureName = $"Lag_{i + 1}";
-            result[featureName] = NumOps.Abs(ModelParameters[i]);
+            result[featureName] = importance;
         }
 
         return result;
@@ -2487,13 +2480,10 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
 
         // Create a working copy of the history that we can extend
         List<T> extendedHistory = new List<T>(history.Length + steps);
-        for (int i = 0; i < history.Length; i++)
-        {
-            extendedHistory.Add(history[i]);
-        }
+        extendedHistory.AddRange(history);
 
         // Generate forecasts one step at a time
-        Vector<T> forecasts = new Vector<T>(steps);
+        var forecasts = new List<T>(steps);
         for (int step = 0; step < steps; step++)
         {
             // Prepare input features for this forecast step
@@ -2503,13 +2493,13 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             T forecast = PredictSingle(features);
 
             // Store forecast
-            forecasts[step] = forecast;
+            forecasts.Add(forecast);
 
             // Add forecast to extended history for next step
             extendedHistory.Add(forecast);
         }
 
-        return forecasts;
+        return new Vector<T>(forecasts.ToArray());
     }
 
     /// <summary>
@@ -2551,39 +2541,26 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             featureCount += Options.SeasonalPeriod;
         }
 
-        Vector<T> features = new Vector<T>(featureCount);
-        int featureIndex = 0;
-
-        // Add lag features
-        for (int lag = 1; lag <= Options.LagOrder; lag++)
-        {
-            if (historyLength - lag >= 0)
-            {
-                features[featureIndex++] = extendedHistory[historyLength - lag];
-            }
-            else
-            {
-                // Not enough history for this lag, use a default value
-                features[featureIndex++] = NumOps.Zero;
-            }
-        }
+        // Lag features: the last LagOrder values, newest first (zero where there is not enough history)
+        int lagOrder = Math.Max(0, Options.LagOrder);
+        int available = Math.Min(lagOrder, historyLength);
+        var recent = new Vector<T>(extendedHistory.GetRange(historyLength - available, available).ToArray());
+        var parts = new List<Vector<T>> { TimeSeriesEngineOps<T>.NewestFirst(recent, lagOrder) };
 
         // Add trend feature if included
         if (Options.IncludeTrend)
         {
-            features[featureIndex++] = NumOps.FromDouble(step + 1);
+            parts.Add(new Vector<T>(new[] { NumOps.FromDouble(step + 1) }));
         }
 
-        // Add seasonal dummies if seasonal
+        // Add seasonal dummies if seasonal: one-hot of the current season
         if (Options.SeasonalPeriod > 0)
         {
             int season = (historyLength + step) % Options.SeasonalPeriod;
-            for (int s = 0; s < Options.SeasonalPeriod; s++)
-            {
-                features[featureIndex++] = NumOps.FromDouble(s == season ? 1.0 : 0.0);
-            }
+            parts.Add(Vector<T>.CreateStandardBasis(Options.SeasonalPeriod, season));
         }
 
+        Vector<T> features = Vector<T>.Concatenate(parts.ToArray());
         return features;
     }
 

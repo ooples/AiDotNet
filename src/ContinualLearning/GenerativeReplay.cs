@@ -56,6 +56,7 @@ namespace AiDotNet.ContinualLearning;
 public class GenerativeReplay<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private IGenerativeModel<T>? _generator;
     private readonly int _replayBatchSize;
     private readonly double _replayRatio;
@@ -162,13 +163,8 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
         var outputs = network.Predict(replayInputs);
 
         // Compute MSE loss on replay samples
-        var loss = _numOps.Zero;
-        for (int i = 0; i < outputs.Length; i++)
-        {
-            var diff = _numOps.Subtract(outputs[i], replayTargets[i]);
-            var squared = _numOps.Multiply(diff, diff);
-            loss = _numOps.Add(loss, squared);
-        }
+        var diffs = Engine.TensorSubtract(outputs, replayTargets.Reshape(outputs._shape));
+        var loss = Engine.TensorSumOfSquares(diffs);
 
         var n = _numOps.FromDouble(outputs.Length);
         loss = _numOps.Divide(loss, n);
@@ -273,18 +269,9 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
             sampleSize *= tensor.Shape[i];
         }
 
-        var data = new Vector<T>(indices.Length * sampleSize);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            var srcStart = indices[i] * sampleSize;
-            var dstStart = i * sampleSize;
-            for (int j = 0; j < sampleSize; j++)
-            {
-                data[dstStart + j] = tensor[srcStart + j];
-            }
-        }
-
-        return new Tensor<T>(newShape, data);
+        var rows = tensor.Reshape(tensor.Shape[0], sampleSize);
+        var gathered = Engine.TensorIndexSelect(rows, new Tensor<int>(indices, new[] { indices.Length }), 0);
+        return gathered.Reshape(newShape);
     }
 
     /// <summary>
@@ -314,18 +301,10 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
 
         var inputData = new Vector<T>(totalBatchSize * inputSampleSize);
 
-        // Copy current inputs
-        for (int i = 0; i < currentInputs.Length; i++)
-        {
-            inputData[i] = currentInputs[i];
-        }
-
-        // Copy replay inputs
+        // Copy current inputs, then replay inputs
+        currentInputs.Contiguous().AsSpan().CopyTo(inputData.AsWritableSpan());
         var offset = currentInputs.Length;
-        for (int i = 0; i < replayInputs.Length; i++)
-        {
-            inputData[offset + i] = replayInputs[i];
-        }
+        replayInputs.Contiguous().AsSpan().CopyTo(inputData.AsWritableSpan().Slice(offset));
 
         // Target tensor
         var targetShape = new int[currentTargets.Shape.Length];
@@ -343,18 +322,10 @@ public class GenerativeReplay<T> : IContinualLearningStrategy<T>
 
         var targetData = new Vector<T>(totalBatchSize * targetSampleSize);
 
-        // Copy current targets
-        for (int i = 0; i < currentTargets.Length; i++)
-        {
-            targetData[i] = currentTargets[i];
-        }
-
-        // Copy replay targets
+        // Copy current targets, then replay targets
+        currentTargets.Contiguous().AsSpan().CopyTo(targetData.AsWritableSpan());
         offset = currentTargets.Length;
-        for (int i = 0; i < replayTargets.Length; i++)
-        {
-            targetData[offset + i] = replayTargets[i];
-        }
+        replayTargets.Contiguous().AsSpan().CopyTo(targetData.AsWritableSpan().Slice(offset));
 
         return (new Tensor<T>(inputShape, inputData), new Tensor<T>(targetShape, targetData));
     }

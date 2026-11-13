@@ -309,12 +309,12 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// <returns>The seasonally differenced time series.</returns>
     private Vector<T> SeasonalDifference(Vector<T> y, int period)
     {
-        Vector<T> result = new Vector<T>(y.Length - period);
-        for (int i = period; i < y.Length; i++)
+        if (y.Length - period <= 0)
         {
-            result[i - period] = NumOps.Subtract(y[i], y[i - period]);
+            return new Vector<T>(y.Length - period);
         }
-        return result;
+
+        return TimeSeriesEngineOps<T>.Difference(y, period);
     }
 
     /// <summary>
@@ -324,17 +324,11 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// <returns>A vector of seasonal AR coefficients.</returns>
     private Vector<T> EstimateSeasonalARCoefficients(Vector<T> y)
     {
-        Matrix<T> X = new Matrix<T>(y.Length - _P * _m, _P);
-        Vector<T> Y = new Vector<T>(y.Length - _P * _m);
-
-        for (int i = _P * _m; i < y.Length; i++)
-        {
-            for (int j = 0; j < _P; j++)
-            {
-                X[i - _P * _m, j] = y[i - (j + 1) * _m];
-            }
-            Y[i - _P * _m] = y[i];
-        }
+        // Rows t = P·m .. n-1 regress y[t] on its seasonal lags y[t - m], ..., y[t - P·m].
+        int start = _P * _m;
+        int count = y.Length - start;
+        Matrix<T> X = TimeSeriesEngineOps<T>.LagMatrix(y, _P, start, count, _m);
+        Vector<T> Y = y.GetSubVector(start, count);
 
         return MatrixSolutionHelper.SolveLinearSystem(X, Y, MatrixDecompositionType.Qr);
     }
@@ -359,28 +353,17 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         int maxLag = Math.Max(_p, _P * _m);
-        Vector<T> residuals = new Vector<T>(n - maxLag);
-
-        for (int i = maxLag; i < n; i++)
+        int count = n - maxLag;
+        if (count <= 0)
         {
-            T predicted = NumOps.Zero;
-
-            // Non-seasonal AR component
-            for (int j = 0; j < _p; j++)
-            {
-                predicted = NumOps.Add(predicted, NumOps.Multiply(_arCoefficients[j], y[i - j - 1]));
-            }
-
-            // Seasonal AR component
-            for (int j = 0; j < _P; j++)
-            {
-                predicted = NumOps.Add(predicted, NumOps.Multiply(_sarCoefficients[j], y[i - (j + 1) * _m]));
-            }
-
-            residuals[i - maxLag] = NumOps.Subtract(y[i], predicted);
+            return new Vector<T>(count);
         }
 
-        return residuals;
+        // residual[t] = y[t] - Σ φ_j y[t-j-1] - Σ Φ_j y[t-(j+1)m] for t >= maxLag
+        var predicted = Engine.Add(
+            Engine.MatrixVectorMultiply(TimeSeriesEngineOps<T>.LagMatrix(y, _p, maxLag, count), _arCoefficients.GetSubVector(0, _p)),
+            Engine.MatrixVectorMultiply(TimeSeriesEngineOps<T>.LagMatrix(y, _P, maxLag, count, _m), _sarCoefficients.GetSubVector(0, _P)));
+        return Engine.Subtract(y.GetSubVector(maxLag, count), predicted);
     }
 
 
@@ -398,13 +381,14 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> EstimateSeasonalMACoefficients(Vector<T> residuals)
     {
-        Vector<T> smaCoefficients = new Vector<T>(_Q);
+        // Θ_i = autocorrelation of the residuals at seasonal lag (i + 1)·m
+        var smaCoefficients = new List<T>(_Q);
         for (int i = 0; i < _Q; i++)
         {
-            smaCoefficients[i] = TimeSeriesHelper<T>.CalculateAutoCorrelation(residuals, (i + 1) * _m);
+            smaCoefficients.Add(TimeSeriesHelper<T>.CalculateAutoCorrelation(residuals, (i + 1) * _m));
         }
 
-        return smaCoefficients;
+        return new Vector<T>(smaCoefficients);
     }
 
     /// <summary>
@@ -456,11 +440,7 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void EnforceStationarity()
     {
-        T absSum = NumOps.Zero;
-        for (int i = 0; i < _arCoefficients.Length; i++)
-            absSum = NumOps.Add(absSum, NumOps.Abs(_arCoefficients[i]));
-        for (int i = 0; i < _sarCoefficients.Length; i++)
-            absSum = NumOps.Add(absSum, NumOps.Abs(_sarCoefficients[i]));
+        T absSum = NumOps.Add(Engine.Sum(Engine.Abs(_arCoefficients)), Engine.Sum(Engine.Abs(_sarCoefficients)));
 
         // Stable-region cap (< 1, with a small margin so forecasts settle toward the series mean
         // rather than persisting a borderline-unit-root cycle indefinitely).
@@ -468,10 +448,8 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
         if (NumOps.GreaterThan(absSum, cap))
         {
             T scale = NumOps.Divide(cap, absSum);
-            for (int i = 0; i < _arCoefficients.Length; i++)
-                _arCoefficients[i] = NumOps.Multiply(_arCoefficients[i], scale);
-            for (int i = 0; i < _sarCoefficients.Length; i++)
-                _sarCoefficients[i] = NumOps.Multiply(_sarCoefficients[i], scale);
+            _arCoefficients = Engine.Multiply(_arCoefficients, scale);
+            _sarCoefficients = Engine.Multiply(_sarCoefficients, scale);
         }
     }
 
@@ -524,17 +502,16 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
             // complex undifferencing at each step. Since we have the original values,
             // returning them is the correct in-sample "fitted values" approach
             // (matching statsmodels' fittedvalues which are training predictions).
-            for (int t = 0; t < inSample; t++)
+            if (inSample > 0)
             {
-                predictions[t] = _trainingSeries[t];
+                _trainingSeries.GetSubVector(0, inSample).CopyTo(predictions.AsWritableSpan());
             }
 
             // Out-of-sample: use Forecast for proper undifferencing
             if (outOfSample > 0)
             {
                 var forecasts = Forecast(_trainingSeries, outOfSample);
-                for (int i = 0; i < outOfSample; i++)
-                    predictions[inSample + i] = forecasts[i];
+                forecasts.GetSubVector(0, outOfSample).CopyTo(predictions.AsWritableSpan().Slice(inSample, outOfSample));
             }
 
             return predictions;
@@ -640,9 +617,7 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Store original training series for Predict(Matrix) with undifferencing
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
 
         // Step 1: Apply seasonal and non-seasonal differencing
         Vector<T> diffY = ApplyDifferencing(y);
@@ -673,32 +648,14 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
         // Step 8: Store last training state for Predict(Matrix) initialization
         int maxLag = Math.Max(_p, _P * _m);
         int maxErrLag = Math.Max(_q, _Q * _m);
-        _lastTrainDiffValues = new Vector<T>(maxLag);
-        for (int i = 0; i < Math.Min(maxLag, diffY.Length); i++)
-        {
-            _lastTrainDiffValues[i] = diffY[diffY.Length - 1 - i];
-        }
+        _lastTrainDiffValues = TimeSeriesEngineOps<T>.NewestFirst(diffY, maxLag);
 
-        _lastTrainResiduals = new Vector<T>(maxErrLag);
-        for (int i = 0; i < Math.Min(maxErrLag, arResiduals.Length); i++)
-        {
-            _lastTrainResiduals[i] = arResiduals[arResiduals.Length - 1 - i];
-        }
+        _lastTrainResiduals = TimeSeriesEngineOps<T>.NewestFirst(arResiduals, maxErrLag);
 
         // Store learned coefficients as ModelParameters for GetParameters() / serialization
-        int totalParams = 1 + _arCoefficients.Length + _maCoefficients.Length
-                            + _sarCoefficients.Length + _smaCoefficients.Length; // +1 for constant
-        ModelParameters = new Vector<T>(totalParams);
-        int idx = 0;
-        ModelParameters[idx++] = _constant;
-        for (int i = 0; i < _arCoefficients.Length; i++)
-            ModelParameters[idx++] = _arCoefficients[i];
-        for (int i = 0; i < _maCoefficients.Length; i++)
-            ModelParameters[idx++] = _maCoefficients[i];
-        for (int i = 0; i < _sarCoefficients.Length; i++)
-            ModelParameters[idx++] = _sarCoefficients[i];
-        for (int i = 0; i < _smaCoefficients.Length; i++)
-            ModelParameters[idx++] = _smaCoefficients[i];
+        // [constant, AR..., MA..., SAR..., SMA...]
+        ModelParameters = Vector<T>.Concatenate(
+            new Vector<T>(new[] { _constant }), _arCoefficients, _maCoefficients, _sarCoefficients, _smaCoefficients);
     }
 
     /// <summary>
@@ -720,7 +677,6 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Validate input
         if (input == null)
         {
             throw new ArgumentNullException(nameof(input), "Input vector cannot be null");
@@ -734,48 +690,37 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
                 nameof(input));
         }
 
-        // Start with the constant term
         T prediction = _constant;
 
-        // Add non-seasonal AR component
-        for (int j = 0; j < _p && j < input.Length; j++)
+        // Non-seasonal AR: φ_j · input[j]
+        prediction = NumOps.Add(prediction,
+            TimeSeriesEngineOps<T>.DotPrefix(_arCoefficients, input, Math.Min(_p, input.Length)));
+
+        // Seasonal AR: Φ_j · input[(j + 1)·m - 1] while that lag is inside the input
+        int seasonalCount = _m > 0 ? Math.Min(_P, input.Length / _m) : 0;
+        if (seasonalCount > 0)
         {
-            prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], input[j]));
+            var seasonalLags = TimeSeriesEngineOps<T>.Gather(input, Enumerable.Range(0, seasonalCount).Select(j => (j + 1) * _m - 1));
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_sarCoefficients.GetSubVector(0, seasonalCount), seasonalLags));
         }
 
-        // Add seasonal AR component
-        for (int j = 0; j < _P && (j + 1) * _m - 1 < input.Length; j++)
-        {
-            prediction = NumOps.Add(prediction,
-                NumOps.Multiply(_sarCoefficients[j], input[(j + 1) * _m - 1]));
-        }
-
-        // Note: For single-point prediction, we typically assume zero errors for MA terms
-        // since the actual errors are unknown until after the prediction is made and
-        // compared to the actual value.
-
-        // If the input contains error terms (optional additional data), we could use them:
         if (input.Length > minRequiredInputLength)
         {
             int errorStartIndex = minRequiredInputLength;
             int errorLength = input.Length - errorStartIndex;
+            var errors = input.GetSubVector(errorStartIndex, errorLength);
 
-            // Add non-seasonal MA component if errors are provided
-            for (int j = 0; j < _q && j < errorLength; j++)
+            // Non-seasonal MA: θ_j · e[j]
+            prediction = NumOps.Add(prediction,
+                TimeSeriesEngineOps<T>.DotPrefix(_maCoefficients, errors, Math.Min(_q, errorLength)));
+
+            // Seasonal MA: Θ_j · e[j·m] while j·m is inside the residuals
+            int seasonalErrorCount = _m > 0 ? Math.Min(_Q, (errorLength + _m - 1) / _m) : 0;
+            if (seasonalErrorCount > 0)
             {
+                var seasonalErrors = TimeSeriesEngineOps<T>.Gather(errors, Enumerable.Range(0, seasonalErrorCount).Select(j => j * _m));
                 prediction = NumOps.Add(prediction,
-                    NumOps.Multiply(_maCoefficients[j], input[errorStartIndex + j]));
-            }
-
-            // Add seasonal MA component if errors are provided
-            for (int j = 0; j < _Q && j * _m < errorLength; j++)
-            {
-                int index = errorStartIndex + j * _m;
-                if (index < input.Length)
-                {
-                    prediction = NumOps.Add(prediction,
-                        NumOps.Multiply(_smaCoefficients[j], input[index]));
-                }
+                    Engine.DotProduct(_smaCoefficients.GetSubVector(0, seasonalErrorCount), seasonalErrors));
             }
         }
 
@@ -881,38 +826,30 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     private void UndoRegularDifferencing(List<T> forecasts, Vector<T> history)
     {
-        // Compute the series after seasonal differencing but before regular differencing
         Vector<T> afterSeasonalDiff = history;
         for (int i = 0; i < _D; i++)
         {
             afterSeasonalDiff = SeasonalDifference(afterSeasonalDiff, _m);
         }
 
-        // Compute tail value at each regular differencing level
+        // regularTailValues[level] = last value of the level-times differenced series (1-element vectors)
         Vector<T> tempSeries = afterSeasonalDiff;
-        var regularTailValues = new T[_d];
+        var regularTailValues = new List<Vector<T>>(_d);
         for (int level = 0; level < _d; level++)
         {
-            regularTailValues[level] = tempSeries[tempSeries.Length - 1];
-            Vector<T> nextLevel = new Vector<T>(tempSeries.Length - 1);
-            for (int i = 1; i < tempSeries.Length; i++)
-            {
-                nextLevel[i - 1] = NumOps.Subtract(tempSeries[i], tempSeries[i - 1]);
-            }
-            tempSeries = nextLevel;
+            regularTailValues.Add(tempSeries.GetSubVector(tempSeries.Length - 1, 1));
+            tempSeries = TimeSeriesEngineOps<T>.Difference(tempSeries, 1);
         }
 
-        // Undo regular differencing in reverse
+        // Undo each level as a running sum continuing from that level's last value
+        var current = new Vector<T>(forecasts);
         for (int level = _d - 1; level >= 0; level--)
         {
-            T lastVal = regularTailValues[level];
-            for (int i = 0; i < forecasts.Count; i++)
-            {
-                T undiff = NumOps.Add(forecasts[i], lastVal);
-                forecasts[i] = undiff;
-                lastVal = undiff;
-            }
+            current = TimeSeriesEngineOps<T>.Integrate(current, regularTailValues[level]);
         }
+
+        forecasts.Clear();
+        forecasts.AddRange(current);
     }
 
     /// <summary>
@@ -921,33 +858,25 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     private void UndoSeasonalDifferencing(List<T> forecasts, Vector<T> history)
     {
+        var current = new Vector<T>(forecasts);
         for (int level = 0; level < _D; level++)
         {
-            // Compute the series at this seasonal differencing level
             Vector<T> seriesAtLevel = history;
             for (int d2 = 0; d2 < _D - 1 - level; d2++)
             {
                 seriesAtLevel = SeasonalDifference(seriesAtLevel, _m);
             }
 
-            // Get the last m values from this series
-            var seasonalTail = new List<T>();
-            for (int i = Math.Max(0, seriesAtLevel.Length - _m); i < seriesAtLevel.Length; i++)
-            {
-                seasonalTail.Add(seriesAtLevel[i]);
-            }
-
-            // Undo seasonal differencing: forecast[i] = diffForecast[i] + value[i - m]
-            var combined = new List<T>(seasonalTail);
-            for (int i = 0; i < forecasts.Count; i++)
-            {
-                int refIdx = combined.Count - _m;
-                T refVal = refIdx >= 0 ? combined[refIdx] : NumOps.Zero;
-                T undiff = NumOps.Add(forecasts[i], refVal);
-                forecasts[i] = undiff;
-                combined.Add(undiff);
-            }
+            // The last m values of this level, zero-filled in front when the series is shorter, seed the
+            // seasonal running sums: forecast[i] += value m steps earlier.
+            int tailLength = Math.Min(_m, seriesAtLevel.Length);
+            var seasonalTail = Vector<T>.Concatenate(
+                new Vector<T>(_m - tailLength), seriesAtLevel.GetSubVector(seriesAtLevel.Length - tailLength, tailLength));
+            current = TimeSeriesEngineOps<T>.IntegrateSeasonal(current, seasonalTail, _m);
         }
+
+        forecasts.Clear();
+        forecasts.AddRange(current);
     }
 
     /// <summary>

@@ -348,13 +348,11 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         int p = _nnarimaOptions.AROrder;
         int q = _nnarimaOptions.MAOrder;
 
-        _arParameters = new Vector<T>(p);
-        _maParameters = new Vector<T>(q);
-
-        // Initialize with small random values
+        // Initialize with small random values in [0, 0.1): AR draws first, then MA
         var rand = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < p; i++) _arParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
-        for (int i = 0; i < q; i++) _maParameters[i] = NumOps.FromDouble(rand.NextDouble() * 0.1);
+        T scale = NumOps.FromDouble(0.1);
+        _arParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, p), scale);
+        _maParameters = Engine.Multiply(Vector<T>.CreateRandom(rand, q), scale);
 
         SyncModelParametersFromState();
     }
@@ -362,23 +360,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     private void SyncModelParametersFromState()
     {
         var nnParameters = _neuralNetwork.GetParameters();
-        var combined = new Vector<T>(_arParameters.Length + _maParameters.Length + nnParameters.Length);
-
-        int index = 0;
-        for (int i = 0; i < _arParameters.Length; i++)
-        {
-            combined[index++] = _arParameters[i];
-        }
-
-        for (int i = 0; i < _maParameters.Length; i++)
-        {
-            combined[index++] = _maParameters[i];
-        }
-
-        for (int i = 0; i < nnParameters.Length; i++)
-        {
-            combined[index++] = nnParameters[i];
-        }
+        var combined = Vector<T>.Concatenate(_arParameters, _maParameters, nnParameters);
 
         base.ApplyParameters(combined);
     }
@@ -446,16 +428,12 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         int paramIndex = 0;
 
         // Update AR parameters
-        for (int i = 0; i < _arParameters.Length; i++)
-        {
-            _arParameters[i] = optimizedParameters[paramIndex++];
-        }
+        optimizedParameters.GetSubVector(paramIndex, _arParameters.Length).CopyTo(_arParameters.AsWritableSpan());
+        paramIndex += _arParameters.Length;
 
         // Update MA parameters
-        for (int i = 0; i < _maParameters.Length; i++)
-        {
-            _maParameters[i] = optimizedParameters[paramIndex++];
-        }
+        optimizedParameters.GetSubVector(paramIndex, _maParameters.Length).CopyTo(_maParameters.AsWritableSpan());
+        paramIndex += _maParameters.Length;
 
         // Calculate the length of neural network parameters
         int nnParamsLength = optimizedParameters.Length - paramIndex;
@@ -564,22 +542,20 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     {
         T prediction = NumOps.Zero;
 
-        // Add AR terms
-        for (int i = 0; i < _arParameters.Length; i++)
+        // Add AR terms: φ_i · predictions[index - i - 1]
+        int arTerms = Math.Max(0, Math.Min(_arParameters.Length, index));
+        if (arTerms > 0)
         {
-            if (index - i - 1 >= 0)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_arParameters[i], predictions[index - i - 1]));
-            }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_arParameters.GetSubVector(0, arTerms),
+                TimeSeriesEngineOps<T>.NewestFirst(predictions.GetSubVector(0, index), arTerms)));
         }
 
-        // Add MA terms
-        for (int i = 0; i < _maParameters.Length; i++)
+        // Add MA terms: θ_i · residuals[index - i - 1]
+        int maTerms = Math.Max(0, Math.Min(_maParameters.Length, index));
+        if (maTerms > 0 && _residuals != null)
         {
-            if (index - i - 1 >= 0 && _residuals != null)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(_maParameters[i], _residuals[index - i - 1]));
-            }
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_maParameters.GetSubVector(0, maTerms),
+                TimeSeriesEngineOps<T>.NewestFirst(_residuals.GetSubVector(0, index), maTerms)));
         }
 
         // Add neural network prediction
@@ -617,25 +593,11 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CreateNeuralNetworkInput(Vector<T> predictions, Vector<T> inputRow, int index)
     {
-        List<T> nnInputList = new List<T>();
-
-        // Add lagged predictions
-        for (int i = 1; i <= _nnarimaOptions.LaggedPredictions; i++)
-        {
-            if (index - i >= 0)
-            {
-                nnInputList.Add(predictions[index - i]);
-            }
-            else
-            {
-                nnInputList.Add(NumOps.Zero);
-            }
-        }
-
-        // Add exogenous variables
-        nnInputList.AddRange(inputRow);
-
-        return new Vector<T>(nnInputList);
+        // Lagged predictions predictions[index - i] for i = 1..LaggedPredictions (zero before the series
+        // start), then the exogenous variables
+        int lags = Math.Max(0, _nnarimaOptions.LaggedPredictions);
+        Vector<T> lagged = TimeSeriesEngineOps<T>.NewestFirst(predictions.GetSubVector(0, Math.Max(0, index)), lags);
+        return Vector<T>.Concatenate(lagged, inputRow);
     }
 
     /// <summary>
@@ -785,11 +747,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         ComputeResiduals(x, _y);
 
         // Populate ModelParameters for GetParameters()
-        int arLen = _arParameters.Length;
-        int maLen = _maParameters.Length;
-        ModelParameters = new Vector<T>(arLen + maLen);
-        for (int i = 0; i < arLen; i++) ModelParameters[i] = _arParameters[i];
-        for (int i = 0; i < maLen; i++) ModelParameters[arLen + i] = _maParameters[i];
+        ModelParameters = Vector<T>.Concatenate(_arParameters, _maParameters);
     }
 
     /// <inheritdoc />
@@ -822,15 +780,11 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
         int paramIndex = 0;
 
-        for (int i = 0; i < p; i++)
-        {
-            _arParameters[i] = parameters[paramIndex++];
-        }
+        parameters.GetSubVector(paramIndex, p).CopyTo(_arParameters.AsWritableSpan());
+        paramIndex += p;
 
-        for (int i = 0; i < q; i++)
-        {
-            _maParameters[i] = parameters[paramIndex++];
-        }
+        parameters.GetSubVector(paramIndex, q).CopyTo(_maParameters.AsWritableSpan());
+        paramIndex += q;
 
         _neuralNetwork.UpdateParameters(parameters.Slice(paramIndex, nnParamCount));
 
@@ -861,11 +815,7 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     public override T PredictSingle(Vector<T> input)
     {
         // Create a temporary matrix with a single row
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
+        Matrix<T> singleRowMatrix = Matrix<T>.CreateFromVector(input);
 
         // Use the existing Predict method and return the first (and only) prediction
         Vector<T> prediction = Predict(singleRowMatrix);
@@ -965,10 +915,12 @@ public partial class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         // Average difference between fitted and pure ARIMA prediction
         T avgContribution = NumOps.Zero;
         int count = Math.Min(_fitted.Length, 10); // Use last 10 samples
-        for (int i = _fitted.Length - count; i < _fitted.Length; i++)
+        if (count > 0)
         {
             // This is an approximation - actual contribution varies
-            avgContribution = NumOps.Add(avgContribution, NumOps.Subtract(_fitted[i], _y[i]));
+            int start = _fitted.Length - count;
+            avgContribution = NumOps.Add(avgContribution,
+                Engine.Sum(Engine.Subtract(_fitted.GetSubVector(start, count), _y.GetSubVector(start, count))));
         }
         return count > 0 ? NumOps.Divide(avgContribution, NumOps.FromDouble(count)) : NumOps.Zero;
     }
