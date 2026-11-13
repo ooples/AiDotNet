@@ -379,6 +379,9 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
     private Episode EpisodeOf(IMetaLearningTask<T, TInput, TOutput> task)
     {
+        // The episode is read again after ComputeGradients resets the step arena, which reissues arena tensors by
+        // element count under other shapes ([4, 2] targets came back as [8]). Build it on the heap.
+        using var heapOwned = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         int support = GetBatchSize(task.SupportInput), query = GetBatchSize(task.QueryInput);
         var supportValues = MannRows<T>.OneHot(MannRows<T>.Labels(task.SupportOutput, support), _mannOptions.MemoryValueSize);
         var queryTargets = MannRows<T>.OneHot(MannRows<T>.Labels(task.QueryOutput, query), _mannOptions.NumClasses);
