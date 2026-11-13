@@ -621,13 +621,17 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
-        // Apply RevIN normalization if enabled
+        // The native forward applies RevIN itself (normalize in, de-normalize out). Wrapping it again normalized twice:
+        // the inner pass overwrote the stored statistics with those of the already-normalized input, so the outer
+        // de-normalization restored the wrong scale. Only the ONNX graph needs RevIN around it here.
+        if (_useNativeMode)
+            return ForecastNative(historicalData, _predictionHorizon);
+
         if (_useRevIN)
             historicalData = ApplyRevIN(historicalData, normalize: true);
 
-        var forecast = _useNativeMode ? ForecastNative(historicalData, _predictionHorizon) : ForecastOnnx(historicalData);
+        var forecast = ForecastOnnx(historicalData);
 
-        // Apply RevIN de-normalization if enabled
         if (_useRevIN)
             forecast = ApplyRevIN(forecast, normalize: false);
 
@@ -871,16 +875,23 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         SetTrainingMode(false);
         var output = Forward(historicalData);
 
-        // Reshape output if needed
-        int totalSteps = Math.Min(horizon, _predictionHorizon);
-        var result = new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
-
-        for (int i = 0; i < totalSteps * _numFeatures && i < output.Length; i++)
+        // [batch, steps, features], every instance kept: the forward forecasts each instance of the batch (and RevIN
+        // de-normalized each with its own statistics), so returning only the first dropped the rest.
+        int batch = historicalData.Rank >= 3 ? historicalData.Shape[0] : 1;
+        int perInstance = batch * _numFeatures;
+        if (perInstance <= 0 || output.Length % perInstance != 0)
         {
-            result.Data.Span[i] = output.Data.Span[i];
+            throw new InvalidOperationException(
+                $"TSMixer's forward produced {output.Length} values, which is not whole steps of {_numFeatures} " +
+                $"feature(s) for each of {batch} instance(s).");
         }
 
-        return result;
+        int steps = output.Length / perInstance;
+        var shaped = Engine.Reshape(output.Contiguous(), new[] { batch, steps, _numFeatures });
+        int totalSteps = Math.Min(Math.Min(horizon, _predictionHorizon), steps);
+        return totalSteps == steps
+            ? shaped
+            : Engine.TensorSlice(shaped, new[] { 0, 0, 0 }, new[] { batch, totalSteps, _numFeatures });
     }
 
     /// <summary>
@@ -966,9 +977,14 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
                 return input;
             }
 
+            // Check the instance and channel axes themselves, not just the element count: a count check alone let an
+            // even number of forecast steps be read as extra instances.
             int batch = _instanceMean.Shape[0];
             int channels = _instanceMean.Shape[2];
-            if (channels <= 0 || input.Length % (batch * channels) != 0)
+            int rank = input.Rank;
+            bool instancesMatch = rank >= 3 ? input.Shape[0] == batch : batch == 1 || rank == 1;
+            bool channelsMatch = rank >= 2 ? input.Shape[rank - 1] == channels : true;
+            if (channels <= 0 || !instancesMatch || !channelsMatch || input.Length % (batch * channels) != 0)
             {
                 throw new InvalidOperationException(
                     $"RevIN cannot de-normalize an output of {input.Length} values with the statistics of " +
