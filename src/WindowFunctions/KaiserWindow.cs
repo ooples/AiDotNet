@@ -107,15 +107,15 @@ public class KaiserWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Kaiser window function formula using the modified Bessel function.
-    /// It calculates the window function value for each point from 0 to windowSize-1 and normalizes
-    /// the result so that the maximum value is 1.0.
+    /// It calculates the window function value for each point from 0 to windowSize-1 and divides
+    /// by I0(beta), so the centre of an odd-length window is exactly 1.0 (scipy.signal.windows.kaiser).
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.
     /// 
     /// For each position in the window:
     /// - The method calculates a value using the Kaiser formula and the Bessel function
     /// - The mathematics are complex, involving the specialized Bessel function
-    /// - The values are normalized so the largest value is exactly 1.0
+    /// - The values are divided by I0(beta), the value at the exact centre
     /// 
     /// The Bessel function helps create a window shape that provides an optimal trade-off
     /// between the width of the main peak and the size of unwanted ripples. When you apply 
@@ -125,29 +125,19 @@ public class KaiserWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-
-        if (windowSize == 1)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            window[0] = _numOps.One;
-            return window;
+            return degenerate;
         }
 
-        for (int n = 0; n < windowSize; n++)
-        {
-            T x = _numOps.Divide(_numOps.FromDouble(2 * n - windowSize + 1), _numOps.FromDouble(windowSize - 1));
-            T arg = _numOps.Sqrt(_numOps.Subtract(_numOps.One, _numOps.Multiply(x, x)));
-            window[n] = MathHelper.BesselI0(_numOps.Multiply(_beta, arg));
-        }
-
-        // Normalize
-        T maxVal = window.Max();
-        for (int n = 0; n < windowSize; n++)
-        {
-            window[n] = _numOps.Divide(window[n], maxVal);
-        }
-
-        return window;
+        // scipy.signal.windows.kaiser: w(n) = I0(beta * sqrt(1 - x^2)) / I0(beta), x = 2n/(N-1) - 1.
+        // The divisor is I0(beta), not the sample maximum: for an even length no sample sits at the
+        // centre, so the peak stays below 1.
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> x = WindowFunctionHelper.SymmetricCoordinate<T>(windowSize);
+        Tensor<T> radicand = engine.TensorClamp(engine.ScalarMinusTensor(_numOps.One, engine.TensorSquare(x)), _numOps.Zero, _numOps.One);
+        Tensor<T> bessel = engine.TensorI0(engine.TensorMultiplyScalar(engine.TensorSqrt(radicand), _beta));
+        return engine.TensorDivideScalar(bessel, MathHelper.BesselI0(_beta)).ToVector();
     }
 
     /// <summary>

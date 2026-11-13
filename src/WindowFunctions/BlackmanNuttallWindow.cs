@@ -27,16 +27,6 @@ namespace AiDotNet.WindowFunctions;
 public class BlackmanNuttallWindow<T> : IWindowFunction<T>
 {
     /// <summary>
-    /// The numeric operations provider for performing calculations with type T.
-    /// </summary>
-    /// <remarks>
-    /// This field stores an object that provides operations like addition, multiplication, and
-    /// trigonometric functions for the generic numeric type T. It's essential for implementing
-    /// the window function's mathematical formula across different numeric types.
-    /// </remarks>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="BlackmanNuttallWindow{T}"/> class.
     /// </summary>
     /// <remarks>
@@ -46,7 +36,6 @@ public class BlackmanNuttallWindow<T> : IWindowFunction<T>
     /// </remarks>
     public BlackmanNuttallWindow()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -74,19 +63,8 @@ public class BlackmanNuttallWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        for (int n = 0; n < windowSize; n++)
-        {
-            // Blackman-Nuttall formula: w(n) = a0 - a1*cos(2πn/(N-1)) + a2*cos(4πn/(N-1)) - a3*cos(6πn/(N-1))
-            T term1 = _numOps.FromDouble(0.3635819);
-            T term2 = _numOps.Multiply(_numOps.FromDouble(0.4891775), MathHelper.Cos(_numOps.FromDouble(2 * Math.PI * n / (windowSize - 1))));
-            T term3 = _numOps.Multiply(_numOps.FromDouble(0.1365995), MathHelper.Cos(_numOps.FromDouble(4 * Math.PI * n / (windowSize - 1))));
-            T term4 = _numOps.Multiply(_numOps.FromDouble(0.0106411), MathHelper.Cos(_numOps.FromDouble(6 * Math.PI * n / (windowSize - 1))));
-            // Formula: term1 - term2 + term3 - term4
-            window[n] = _numOps.Subtract(_numOps.Add(_numOps.Subtract(term1, term2), term3), term4);
-        }
-
-        return window;
+        // Generalized cosine window (scipy.signal.windows.nuttall), built with engine ops.
+        return WindowFunctionHelper.GeneralCosine<T>(windowSize, 0.3635819, 0.4891775, 0.1365995, 0.0106411);
     }
 
     /// <summary>

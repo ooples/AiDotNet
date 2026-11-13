@@ -118,15 +118,15 @@ public class PoissonWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        T halfN = _numOps.Divide(_numOps.FromDouble(windowSize - 1), _numOps.FromDouble(2));
-        for (int n = 0; n < windowSize; n++)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            T x = _numOps.Divide(_numOps.Abs(_numOps.Subtract(_numOps.FromDouble(n), halfN)), halfN);
-            window[n] = _numOps.Exp(_numOps.Multiply(_numOps.Negate(_alpha), x));
+            return degenerate;
         }
 
-        return window;
+        // w(n) = exp(-alpha * |n - (N-1)/2| / ((N-1)/2))
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> x = engine.TensorAbs(WindowFunctionHelper.SymmetricCoordinate<T>(windowSize));
+        return engine.TensorExp(engine.TensorMultiplyScalar(x, _numOps.Negate(_alpha))).ToVector();
     }
 
     /// <summary>

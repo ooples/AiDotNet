@@ -116,23 +116,15 @@ public class GaussianWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-
-        if (windowSize == 1)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            window[0] = _numOps.One;
-            return window;
+            return degenerate;
         }
 
-        T halfN = _numOps.FromDouble((windowSize - 1) / 2.0);
-        for (int n = 0; n < windowSize; n++)
-        {
-            // Standard Gaussian window: w(n) = exp(-0.5 * ((n - (N-1)/2) / (sigma * (N-1)/2))^2)
-            T x = _numOps.Divide(_numOps.Subtract(_numOps.FromDouble(n), halfN), _numOps.Multiply(_sigma, halfN));
-            window[n] = _numOps.Exp(_numOps.Negate(_numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Multiply(x, x))));
-        }
-
-        return window;
+        // Standard Gaussian window: w(n) = exp(-0.5 * ((n - (N-1)/2) / (sigma * (N-1)/2))^2)
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> x = engine.TensorDivideScalar(WindowFunctionHelper.SymmetricCoordinate<T>(windowSize), _sigma);
+        return engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(x), _numOps.FromDouble(-0.5))).ToVector();
     }
 
     /// <summary>
