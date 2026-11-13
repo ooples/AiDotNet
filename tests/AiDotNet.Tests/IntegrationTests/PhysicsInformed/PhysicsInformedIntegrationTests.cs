@@ -544,8 +544,8 @@ public class PhysicsInformedIntegrationTests
         var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new Tensor<double>(new double[] { 0.0, 0.0 }, new[] { , }),
-            ThirdDerivatives = new Tensor<double>(new[] { ,,, }) { { { { 0.0, 0.0 }, { 0.0, 0.0 } }, { { 0.0, 0.0 }, { 0.0, 0.0 } } } }
+            FirstDerivatives = PdeTestTensors.From(new double[,] { { 0.0, 0.0 } }),
+            ThirdDerivatives = PdeTestTensors.From(new double[,,,] { { { { 0.0, 0.0 }, { 0.0, 0.0 } }, { { 0.0, 0.0 }, { 0.0, 0.0 } } } })
         };
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
