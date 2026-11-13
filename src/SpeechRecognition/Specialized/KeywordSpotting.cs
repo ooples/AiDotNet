@@ -168,21 +168,23 @@ public partial class KeywordSpotting<T> : AudioNeuralNetworkBase<T>, ISpeechReco
                 exponentials, engine.TensorBroadcastTo(engine.ReduceSum(exponentials, new[] { 1 }, true), shape));
             var probabilities = engine.TensorWhere(alreadyProbabilities, values, softmax);
 
-            // Chen et al. Eq. (2): smooth each frame posterior over the latest 30 frames, as a difference of
-            // running totals divided by the number of frames actually in the window.
+            // Chen et al. Eq. (2): smooth each frame posterior over the latest 30 frames, divided by the number of
+            // frames actually in the window. The window total is the sum of the posteriors shifted down by 0..29
+            // frames, so it only ever holds frames still in the window: a NaN frame stops affecting the decision
+            // once it leaves, and small posteriors are not lost against a whole-utterance running total.
             const int SmoothingWindow = 30;
-            var runningTotal = engine.TensorCumSum(probabilities, 0);
-            var windowTotal = frameCount > SmoothingWindow
-                ? engine.TensorSubtract(
-                    runningTotal,
-                    engine.TensorConcatenate(
-                        new[]
-                        {
-                            new Tensor<double>(new[] { SmoothingWindow, labelCount }),
-                            engine.TensorNarrow(runningTotal, 0, 0, frameCount - SmoothingWindow),
-                        },
-                        0))
-                : runningTotal;
+            var windowTotal = probabilities;
+            for (int lag = 1; lag < Math.Min(SmoothingWindow, frameCount); lag++)
+            {
+                var shifted = engine.TensorConcatenate(
+                    new[]
+                    {
+                        new Tensor<double>(new[] { lag, labelCount }),
+                        engine.TensorNarrow(probabilities, 0, 0, frameCount - lag),
+                    },
+                    0);
+                windowTotal = engine.TensorAdd(windowTotal, shifted);
+            }
             var windowLength = engine.TensorMin(engine.TensorArange<double>(1, frameCount + 1), (double)SmoothingWindow);
             var smoothed = engine.TensorDivide(
                 windowTotal, engine.TensorBroadcastTo(windowLength.Reshape(frameCount, 1), shape));

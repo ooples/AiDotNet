@@ -112,7 +112,10 @@ public static class TensorCopyHelper
             return;
         }
 
-        // Trailing shapes were validated above, so the sample is one bulk slice copy along dim 0.
-        dest.SetSlice(destIndex, source.GetSlice(sourceIndex));
+        // Trailing shapes were validated above, so the sample is one bulk slice copy along dim 0. GetSlice is a
+        // view over the source's whole storage, which SetSlice would copy from its start, so the sample's own
+        // elements are taken first (ToArray reads a view logically).
+        var sample = source.GetSlice(sourceIndex);
+        dest.SetSlice(destIndex, new Tensor<T>(sample.ToArray(), sample._shape));
     }
 }

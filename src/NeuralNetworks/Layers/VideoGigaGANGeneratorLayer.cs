@@ -430,19 +430,20 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
         int width = input.Shape[3];
         var padded = Engine.Pad(input, 1, 1, 1, 1, NumOps.Zero);
         // The [1, 2, 1] x [1, 2, 1] / 16 kernel is separable: blur the rows with [1, 2, 1] / 4, then the columns.
+        // Each tap is scaled before the taps are added, so a narrow T such as Half cannot overflow on the sum.
         T quarter = NumOps.FromDouble(0.25);
         T half = NumOps.FromDouble(0.5);
         var top = Engine.TensorSlice(padded, new[] { 0, 0, 0, 0 }, new[] { batch, channels, height, width + 2 });
         var middle = Engine.TensorSlice(padded, new[] { 0, 0, 1, 0 }, new[] { batch, channels, height, width + 2 });
         var bottom = Engine.TensorSlice(padded, new[] { 0, 0, 2, 0 }, new[] { batch, channels, height, width + 2 });
         var vertical = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(Engine.TensorAdd(top, bottom), quarter),
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(top, quarter), Engine.TensorMultiplyScalar(bottom, quarter)),
             Engine.TensorMultiplyScalar(middle, half));
         var left = Engine.TensorSlice(vertical, new[] { 0, 0, 0, 0 }, new[] { batch, channels, height, width });
         var center = Engine.TensorSlice(vertical, new[] { 0, 0, 0, 1 }, new[] { batch, channels, height, width });
         var right = Engine.TensorSlice(vertical, new[] { 0, 0, 0, 2 }, new[] { batch, channels, height, width });
         return Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(Engine.TensorAdd(left, right), quarter),
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(left, quarter), Engine.TensorMultiplyScalar(right, quarter)),
             Engine.TensorMultiplyScalar(center, half));
     }
 

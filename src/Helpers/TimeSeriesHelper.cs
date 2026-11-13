@@ -268,7 +268,9 @@ public static class TimeSeriesHelper<T>
         var engine = AiDotNetEngine.Current;
         var values = Tensor<T>.FromVector(coefficients);
         var cleaned = engine.TensorWhere(engine.TensorIsFinite(values), values, new Tensor<T>(values._shape));
-        double absSum = _numOps.ToDouble(engine.TensorSum(engine.TensorAbs(cleaned)));
+        // Summed in double: a narrow T such as Half overflows past 65504 before the norm is read.
+        double absSum = engine.TensorSum(engine.TensorAbs(
+            typeof(T) == typeof(double) ? (Tensor<double>)(object)cleaned : cleaned.Cast<double>()));
 
         if (absSum >= triggerThreshold && absSum > 0)
         {

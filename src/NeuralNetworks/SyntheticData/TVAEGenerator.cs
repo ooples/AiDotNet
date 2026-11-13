@@ -921,10 +921,12 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
 
         var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
 
-        // The moments of a narrow T (Half, BFloat16) are taken in float: its sums overflow past 65504.
-        var (mean, sumSqDiff) = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
-            ? ColumnMoments(column.Cast<float>())
-            : ColumnMoments(column);
+        // A T other than double is reduced in float with the column first divided by its largest magnitude:
+        // the squared deviations of a finite float column (|x| near 1e20) overflow float, and a Half sum
+        // overflows past 65504. Double columns keep the plain double reduction.
+        var (mean, sumSqDiff) = typeof(T) == typeof(double)
+            ? ColumnMoments(column, prescale: false)
+            : ColumnMoments(column.Cast<float>(), prescale: true);
 
         // Sample standard deviation (n - 1), floored at 1e-10.
         double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
@@ -936,12 +938,31 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         meta.Std = std;
     }
 
-    /// <summary>The mean of a column and the sum of its squared deviations from that mean.</summary>
-    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column)
+    /// <summary>
+    /// The mean of a column and the sum of its squared deviations from that mean. With
+    /// <paramref name="prescale"/>, a column whose n * max|x|^2 could overflow float is divided by its largest
+    /// finite magnitude first and the moments are scaled back in double, so neither sum can overflow
+    /// <typeparamref name="TValue"/>.
+    /// </summary>
+    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column, bool prescale)
     {
         var ops = MathHelper.GetNumericOperations<TValue>();
+        double scale = 1.0;
+        if (prescale)
+        {
+            double largest = ops.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(column)));
+            // Only when n * largest^2 could overflow float, so ordinary columns keep their unscaled values.
+            if (largest > 0 && !double.IsInfinity(largest) && !double.IsNaN(largest)
+                && largest * largest * column.Length >= 1e36)
+            {
+                scale = largest;
+                column = Engine.TensorDivideScalar(column, ops.FromDouble(largest));
+            }
+        }
+
         TValue mean = Engine.TensorMean(column);
-        return (ops.ToDouble(mean), ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean))));
+        double sumOfSquares = ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean)));
+        return (ops.ToDouble(mean) * scale, sumOfSquares * scale * scale);
     }
 
     #endregion

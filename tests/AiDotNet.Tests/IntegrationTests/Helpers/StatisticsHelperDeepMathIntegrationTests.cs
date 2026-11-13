@@ -883,6 +883,15 @@ public class ElementwiseSweepRegressionTests
         source.Fit(new Matrix<double>(new[,] { { 10.0 }, { 20.0 }, { 30.0 }, { 40.0 } }), columns, epochs: 1);
         restored.Fit(new Matrix<double>(new[,] { { -40.0 }, { -30.0 }, { -20.0 }, { -10.0 } }), columns, epochs: 1);
         restored.Deserialize(source.Serialize());
+        // Standardized 0 and 1 map back to the source mean 25 and 25 + its sample std sqrt(500 / 3), inside
+        // the [10, 40] clamp, so a restored range with a stale mean or std is caught.
+        var probe = (Matrix<double>)Required(Required(typeof(TabDDPMGenerator<double>)
+            .GetMethod("ReconstructData", PrivateInstance)).Invoke(restored, new object[]
+            {
+                new Matrix<double>(new[,] { { 0.0 }, { 1.0 } }), new Matrix<double>(2, 0), 2,
+            }));
+        Assert.Equal(25.0, probe[0, 0], 10);
+        Assert.Equal(25.0 + Math.Sqrt(500.0 / 3), probe[1, 0], 10);
         var generated = restored.Generate(3);
         Assert.Equal(3, generated.Rows);
         Assert.Equal(1, generated.Columns);
@@ -1210,6 +1219,120 @@ public class ElementwiseSweepRegressionTests
             .GetMethod("ComputeSinusoidalEmbedding", PrivateInstance))
             .Invoke(layer, new object[] { new Tensor<Half>(new[] { (Half)999 }, new[] { 1 }) }));
         AssertSinusoid(embedding.ToArray(), 999, half, Math.Log(10000.0) / half);
+    }
+
+    [Fact]
+    public void CopySample_FromALaterSampleCopiesThatSample()
+    {
+        var source = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
+        var dest = new Tensor<double>(new[] { 1, 3 });
+        TensorCopyHelper.CopySample(source, dest, 1, 0);
+        Assert.Equal(new[] { 4.0, 5.0, 6.0 }, dest.ToArray());
+    }
+
+    [Fact]
+    public void HalfCoefficientStability_L1NormPastTheHalfRangeRescales()
+    {
+        // |40000| + |40000| = 80000 overflows Half; rescaled to an L1 norm of 0.95, each becomes 0.475.
+        var coefficients = new Vector<Half>(new[] { (Half)40000, (Half)40000 });
+        Required(typeof(TimeSeriesHelper<Half>).GetMethod("EnforceCoefficientStability",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic))
+            .Invoke(null, new object[] { coefficients, 0.99, 0.95 });
+        Assert.All(coefficients.ToArray(), value => Assert.InRange((double)value, 0.474, 0.476));
+    }
+
+    [Fact]
+    public void HalfVideoGigaGANAntiAlias_LargeConstantFrameStaysConstant()
+    {
+        var layer = new VideoGigaGANGeneratorLayer<Half>(1, 8, 8, numFeatures: 4, numResBlocks: 1,
+            numStyleLayers: 1, scaleFactor: 2, flowPyramidLevels: 1);
+        var input = new Tensor<Half>(new[] { 1, 1, 3, 3 });
+        input.AsWritableSpan().Fill((Half)40000);
+        // The centre tap sees only 40000s, so the normalized [1, 2, 1] blur returns 40000; summing the taps
+        // before scaling overflows Half past 65504.
+        var blurred = (Tensor<Half>)Required(Required(typeof(VideoGigaGANGeneratorLayer<Half>)
+            .GetMethod("AntiAlias", PrivateInstance)).Invoke(layer, new object[] { input }));
+        Assert.Equal(40000.0, (double)blurred[0, 0, 1, 1]);
+    }
+
+    [Fact]
+    public void RestrictedBoltzmannMachineLearningRule_MarksTheWeightsModified()
+    {
+        var architecture = new NeuralNetworkArchitecture<double>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 3);
+        using var model = new RestrictedBoltzmannMachine<double>(architecture, 4, 3,
+            (AiDotNet.Interfaces.IActivationFunction<double>?)null);
+        var weights = (Tensor<double>)Required(typeof(RestrictedBoltzmannMachine<double>)
+            .GetProperty("_weights", PrivateInstance)?.GetValue(model));
+        int before = weights.Version;
+        var input = new Tensor<double>(new[] { 1, 4 }, new Vector<double>(new[] { 1.0, 0.0, 1.0, 0.0 }));
+        Required(typeof(RestrictedBoltzmannMachine<double>).GetMethod("TryApplyLearningRule", PrivateInstance))
+            .Invoke(model, new object[] { input, input });
+        // GPU caches key on Version, so an in-place write that leaves it unchanged serves stale weights.
+        Assert.True(weights.Version > before, "The learning rule wrote the weights without marking them modified.");
+    }
+
+    [Fact]
+    public void HalfTabFlowRk4Step_WeightedStageSumPastTheHalfRangeStaysFinite()
+    {
+        using var model = new TabFlowGenerator<Half>(
+            new NeuralNetworkArchitecture<Half>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+            new TabFlowOptions<Half> { TimeEmbeddingDimension = 16, Seed = 7 });
+        // k1 + 2 k2 + 2 k3 + k4 = 72000 overflows Half; the step x + dt / 6 * 72000 is 120.
+        var x = new Vector<Half>(new[] { (Half)0 });
+        var k = new Vector<Half>(new[] { (Half)12000 });
+        var next = (Vector<Half>)Required(Required(typeof(TabFlowGenerator<Half>)
+            .GetMethod("Rk4Combine", PrivateInstance)).Invoke(model, new object[] { x, k, k, k, k, 0.01 }));
+        Assert.Equal(120.0, (double)next[0]);
+    }
+
+    [Fact]
+    public void FloatColumnStatistics_SquaresPastTheFloatRangeKeepTheStd()
+    {
+        using var model = new TabDDPMGenerator<float>(
+            new NeuralNetworkArchitecture<float>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+            new TabDDPMOptions<float> { NumTimesteps = 2, NumCategoricalDiffusionSteps = 2,
+                MLPDimensions = new[] { 4 }, TimestepEmbeddingDimension = 4, Seed = 7 });
+        // Squared deviations of 1e40 overflow float (max 3.4e38); the sample std is sqrt(4e40 / 3).
+        var data = new Matrix<float>(new[,] { { -1e20f }, { 1e20f }, { -1e20f }, { 1e20f } });
+        var meta = new ColumnMetadata("value", ColumnDataType.Continuous);
+        Required(typeof(TabDDPMGenerator<float>).GetMethod("ComputeColumnStatistics", PrivateInstance))
+            .Invoke(model, new object[] { data, 0, meta });
+        double expected = Math.Sqrt(4 * (double)1e20f * 1e20f / 3);
+        Assert.Equal(0.0, meta.Mean);
+        Assert.InRange(meta.Std, expected * (1 - 1e-6), expected * (1 + 1e-6));
+    }
+
+    [Fact]
+    public void FloatRwkvTimeMixing_KeyBelowTheFloatExponentRangeKeepsTheValue()
+    {
+        // k = -110: e^-110 = 1.7e-48 underflows float to 0, so wkv = 0 / 0 was zeroed; in double it is v = 1,
+        // and the output is sigmoid(0) * 1 = 0.5.
+        Tensor<float> Scalar(float value) => new Tensor<float>(new[] { 1, 1 }, new Vector<float>(new[] { value }));
+        var mixing = new AiDotNet.SpeechRecognition.ConformerFamily.RwkvTimeMixing<float>(1, 0.5, 0.0, 1.0,
+            Scalar(-110), Scalar(1), Scalar(0), Scalar(1));
+        var output = mixing.Step(new Vector<float>(new[] { 1f }));
+        Assert.Equal(0.5, (double)output[0], 6);
+    }
+
+    [Fact]
+    public void KeywordSpotting_NaNFrameStopsAffectingDecisionsOnceItLeavesTheWindow()
+    {
+        // Frame 0 is NaN and frames 1..40 are certain of label 1. Frames 30..40 smooth over windows that no
+        // longer hold frame 0, so they decide label 1; a running total keeps the NaN in every later frame.
+        const int frames = 41;
+        var logits = new Tensor<double>(new[] { frames, 3 });
+        for (int label = 0; label < 3; label++)
+            logits[0, label] = double.NaN;
+        for (int frame = 1; frame < frames; frame++)
+            logits[frame, 1] = 1.0;
+        var decoded = (ValueTuple<List<int>, double>)Required(Required(
+            typeof(AiDotNet.SpeechRecognition.Specialized.KeywordSpotting<double>).GetMethod("DecodePosteriorsWide",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic))
+            .Invoke(null, new object[] { logits, frames, 3, 10 }));
+        Assert.Equal(new[] { 1 }, decoded.Item1);
     }
 }
 

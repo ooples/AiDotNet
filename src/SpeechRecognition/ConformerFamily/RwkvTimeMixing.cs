@@ -91,13 +91,13 @@ internal sealed class RwkvTimeMixing<T>
     private bool _hasPrevious;
 
     /// <summary>
-    /// For a narrow T (Half, BFloat16) the recurrence runs in float here: e^k reaches e^30 and the decayed
-    /// state sums grow past it, far beyond Half's 65504.
+    /// For any T but double the recurrence runs in double here, as the per-channel loop it replaces did: e^k
+    /// spans e^-110 (below float's smallest value, so both weights would vanish and the output drop to 0) up to
+    /// e^30, and the decayed state sums grow past that, far beyond Half's 65504.
     /// </summary>
-    private readonly RwkvTimeMixing<float>? _wide;
+    private readonly RwkvTimeMixing<double>? _wide;
 
-    private static bool IsNarrow =>
-        typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
+    private static bool IsNarrow => typeof(T) != typeof(double);
 
     /// <summary>Gets the channel count this recurrence is defined over.</summary>
     public int Channels => _channels;
@@ -143,7 +143,7 @@ internal sealed class RwkvTimeMixing<T>
         _stateB = new Tensor<T>(new[] { channels });
         _previousFrame = new Tensor<T>(new[] { channels });
         if (IsNarrow)
-            _wide = new RwkvTimeMixing<float>(channels, timeDecay, currentTokenBonus, tokenShiftMix);
+            _wide = new RwkvTimeMixing<double>(channels, timeDecay, currentTokenBonus, tokenShiftMix);
     }
 
     /// <summary>
@@ -176,9 +176,9 @@ internal sealed class RwkvTimeMixing<T>
         _outputProjection = ToMatrix(outputProjection, channels, nameof(outputProjection));
         if (IsNarrow)
         {
-            _wide = new RwkvTimeMixing<float>(channels, timeDecay, currentTokenBonus, tokenShiftMix,
-                _keyProjection?.Cast<float>(), _valueProjection?.Cast<float>(),
-                _receptanceProjection?.Cast<float>(), _outputProjection?.Cast<float>());
+            _wide = new RwkvTimeMixing<double>(channels, timeDecay, currentTokenBonus, tokenShiftMix,
+                _keyProjection?.Cast<double>(), _valueProjection?.Cast<double>(),
+                _receptanceProjection?.Cast<double>(), _outputProjection?.Cast<double>());
         }
     }
 
@@ -254,7 +254,7 @@ internal sealed class RwkvTimeMixing<T>
 
         // A copy: the frame is kept as the next step's token-shift partner, and the caller may reuse it.
         if (_wide is not null)
-            return Tensor<float>.FromVector(_wide.Step(Tensor<T>.FromVector(frame).Cast<float>().ToVector())).Cast<T>().ToVector();
+            return Tensor<double>.FromVector(_wide.Step(Tensor<T>.FromVector(frame).Cast<double>().ToVector())).Cast<T>().ToVector();
 
         return StepCore(Tensor<T>.FromVector(frame).Clone()).ToVector();
     }
@@ -346,7 +346,7 @@ internal sealed class RwkvTimeMixing<T>
         // width == _channels > 0 makes frames positive, and frames * width is the element count: the
         // frame count is the leading dimension and the width the product of the rest.
         if (_wide is not null)
-            return _wide.Forward(sequence.Cast<float>()).Cast<T>();
+            return _wide.Forward(sequence.Cast<double>()).Cast<T>();
 
         var engine = AiDotNetEngine.Current;
         var rows = sequence.Reshape(frames, width);

@@ -555,12 +555,24 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // k4 = v(x + dt * k3, t + dt)
         var k4 = PredictVelocity(Engine.Add(x, Engine.Multiply(k3, fullDt)), t + dt);
 
-        // x_new = x + dt/6 * (k1 + 2*k2 + 2*k3 + k4)
-        T two = NumOps.FromDouble(2.0);
-        var weighted = Engine.Add(
-            Engine.Add(k1, Engine.Multiply(k2, two)),
-            Engine.Add(Engine.Multiply(k3, two), k4));
-        return Engine.Add(x, Engine.Multiply(weighted, NumOps.FromDouble(dt / 6.0)));
+        return Rk4Combine(x, k1, k2, k3, k4, dt);
+    }
+
+    /// <summary>
+    /// x + dt/6 * (k1 + 2*k2 + 2*k3 + k4), formed in double and converted once: the unscaled weighted sum is six
+    /// times a stage velocity, which overflows a narrow T such as Half long before the step does.
+    /// </summary>
+    private Vector<T> Rk4Combine(Vector<T> x, Vector<T> k1, Vector<T> k2, Vector<T> k3, Vector<T> k4, double dt)
+    {
+        Tensor<double> Wide(Vector<T> v) => typeof(T) == typeof(double)
+            ? (Tensor<double>)(object)Tensor<T>.FromVector(v)
+            : Tensor<T>.FromVector(v).Cast<double>();
+
+        var weighted = Engine.TensorAdd(
+            Engine.TensorAdd(Wide(k1), Engine.TensorMultiplyScalar(Wide(k2), 2.0)),
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(Wide(k3), 2.0), Wide(k4)));
+        var next = Engine.TensorAdd(Wide(x), Engine.TensorMultiplyScalar(weighted, dt / 6.0));
+        return (typeof(T) == typeof(double) ? (Tensor<T>)(object)next : next.Cast<T>()).ToVector();
     }
 
     #endregion
@@ -727,10 +739,12 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
 
-        // The moments of a narrow T (Half, BFloat16) are taken in float: its sums overflow past 65504.
-        var (mean, sumSqDiff) = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
-            ? ColumnMoments(column.Cast<float>())
-            : ColumnMoments(column);
+        // A T other than double is reduced in float with the column first divided by its largest magnitude:
+        // the squared deviations of a finite float column (|x| near 1e20) overflow float, and a Half sum
+        // overflows past 65504. Double columns keep the plain double reduction.
+        var (mean, sumSqDiff) = typeof(T) == typeof(double)
+            ? ColumnMoments(column, prescale: false)
+            : ColumnMoments(column.Cast<float>(), prescale: true);
 
         // Sample standard deviation (n - 1), floored at 1e-10.
         double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
@@ -742,12 +756,31 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         meta.Std = std;
     }
 
-    /// <summary>The mean of a column and the sum of its squared deviations from that mean.</summary>
-    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column)
+    /// <summary>
+    /// The mean of a column and the sum of its squared deviations from that mean. With
+    /// <paramref name="prescale"/>, a column whose n * max|x|^2 could overflow float is divided by its largest
+    /// finite magnitude first and the moments are scaled back in double, so neither sum can overflow
+    /// <typeparamref name="TValue"/>.
+    /// </summary>
+    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column, bool prescale)
     {
         var ops = MathHelper.GetNumericOperations<TValue>();
+        double scale = 1.0;
+        if (prescale)
+        {
+            double largest = ops.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(column)));
+            // Only when n * largest^2 could overflow float, so ordinary columns keep their unscaled values.
+            if (largest > 0 && !double.IsInfinity(largest) && !double.IsNaN(largest)
+                && largest * largest * column.Length >= 1e36)
+            {
+                scale = largest;
+                column = Engine.TensorDivideScalar(column, ops.FromDouble(largest));
+            }
+        }
+
         TValue mean = Engine.TensorMean(column);
-        return (ops.ToDouble(mean), ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean))));
+        double sumOfSquares = ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean)));
+        return (ops.ToDouble(mean) * scale, sumOfSquares * scale * scale);
     }
 
     #endregion

@@ -892,6 +892,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
         Engine.TensorAdd(_weights, Engine.Reshape(
                 Engine.TensorMultiplyScalar(weightUpdateTensor, learningFactor), _weights.Shape.ToArray()))
             .AsSpan().CopyTo(_weights.AsWritableSpan());
+        _weights.MarkModified(); // the span write does not advance Version, which GPU caches key on
 
         // Update biases
         _visibleBiases = Engine.Add(_visibleBiases, Engine.Multiply(visibleBiasUpdates, learningFactor));
