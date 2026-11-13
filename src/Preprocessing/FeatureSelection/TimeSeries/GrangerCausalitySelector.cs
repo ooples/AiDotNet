@@ -140,7 +140,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     /// </summary>
     private Tensor<T> ComputeRSS(Tensor<T> design, Tensor<T> y)
     {
-        var (u, s, _) = LinalgDispatch<T>.Svd(design, false);
+        var (u, s, _) = PreprocessingTensorOps.Svd(design, false);
         var kept = Engine.TensorGreaterThan(s,
             NumOps.Multiply(Engine.TensorMaxValue(s), PreprocessingTensorOps.Tolerance<T>(1e-10)));
         var projections = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(u), y), new[] { s.Length });

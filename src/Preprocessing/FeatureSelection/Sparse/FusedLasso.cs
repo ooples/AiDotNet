@@ -93,7 +93,7 @@ public class FusedLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         var xt = Engine.TensorTranspose(x);
         var system = Engine.TensorAdd(Engine.TensorMatMul(xt, x),
             Engine.TensorMultiplyScalar(Engine.TensorMatMul(dt, difference), rho));
-        var inverse = LinalgDispatch<T>.Inv(system);
+        var inverse = PreprocessingTensorOps.Inverse(system);
         var xty = Engine.TensorMatMul(xt, y);
 
         int rows = difference.Shape[0];

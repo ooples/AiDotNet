@@ -99,7 +99,7 @@ internal static class WrapperScoringOps
         var xc = engine.TensorSubtract(x, xMean);
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, yMean), new[] { m, 1 });
 
-        var (u, s, vh) = LinalgDispatch<T>.Svd(xc, false);
+        var (u, s, vh) = PreprocessingTensorOps.Svd(xc, false);
         int rank = s.Length;
         var kept = engine.TensorGreaterThan(s, ops.Multiply(engine.TensorMaxValue(s), PreprocessingTensorOps.Tolerance<T>(Epsilon)));
         var safe = engine.TensorWhere(kept, s, PreprocessingTensorOps.Filled(new[] { rank }, ops.One));

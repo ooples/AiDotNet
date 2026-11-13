@@ -54,7 +54,7 @@ internal static class SparseRegressionOps
         var hessian = engine.TensorAdd(engine.TensorDivideScalar(engine.TensorMatMul(xt, x), count),
             engine.TensorMultiplyScalar(engine.TensorEye<T>(p), ops.FromDouble(l2)));
         var xty = engine.TensorDivideScalar(engine.TensorMatMul(xt, y), count);
-        T lipschitz = engine.TensorMaxValue(LinalgDispatch<T>.Eigh(hessian).Values);
+        T lipschitz = engine.TensorMaxValue(PreprocessingTensorOps.SymmetricEigh(hessian).Values);
         if (!ops.GreaterThan(lipschitz, ops.Zero))
             return engine.Reshape(coefficients, new[] { p });
 
