@@ -587,12 +587,8 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
             ["MemorySize"] = Configuration.MemorySize,
             ["StrategyName"] = Strategy.Name,
             ["MemoryBufferCount"] = MemoryBuffer.Count,
-            ["InitialAccuracies"] = JObject.FromObject(_initialAccuracies.ToDictionary(
-                kv => kv.Key.ToString(),
-                kv => kv.Value)),
-            ["PeakAccuracies"] = JObject.FromObject(_peakAccuracies.ToDictionary(
-                kv => kv.Key.ToString(),
-                kv => kv.Value))
+            ["InitialAccuracies"] = AccuraciesToJson(_initialAccuracies),
+            ["PeakAccuracies"] = AccuraciesToJson(_peakAccuracies)
         };
 
         File.WriteAllText(metadataPath, metadata.ToString());
@@ -636,25 +632,64 @@ public abstract class ContinualLearnerBase<T, TInput, TOutput> : IContinualLearn
 
             if (metadata.TryGetValue("InitialAccuracies", out var initialAccToken) && initialAccToken is JObject initialObj)
             {
-                foreach (var prop in initialObj.Properties())
-                {
-                    if (int.TryParse(prop.Name, out var taskId) && prop.Value.ToObject<T>() is T accuracy)
-                    {
-                        _initialAccuracies[taskId] = accuracy;
-                    }
-                }
+                AccuraciesFromJson(initialObj, _initialAccuracies);
             }
 
             if (metadata.TryGetValue("PeakAccuracies", out var peakAccToken) && peakAccToken is JObject peakObj)
             {
-                foreach (var prop in peakObj.Properties())
-                {
-                    if (int.TryParse(prop.Name, out var taskId) && prop.Value.ToObject<T>() is T accuracy)
-                    {
-                        _peakAccuracies[taskId] = accuracy;
-                    }
-                }
+                AccuraciesFromJson(peakObj, _peakAccuracies);
             }
+        }
+    }
+
+    /// <summary>
+    /// Writes per-task accuracies as JSON doubles keyed by task id, master's format. The values are
+    /// converted with one tensor cast: serializing T directly is not portable (Newtonsoft has no
+    /// number contract for Half, which would be written as an empty object).
+    /// </summary>
+    internal static JObject AccuraciesToJson(Dictionary<int, T> accuracies)
+    {
+        var json = new JObject();
+        if (accuracies.Count == 0)
+        {
+            return json;
+        }
+
+        double[] values = new Vector<T>(accuracies.Values).AsTensor().Cast<double>().ToArray();
+        int index = 0;
+        foreach (var taskId in accuracies.Keys)
+        {
+            json[taskId.ToString()] = values[index++];
+        }
+
+        return json;
+    }
+
+    /// <summary>
+    /// Reads per-task accuracies written by <see cref="AccuraciesToJson"/> (JSON doubles keyed by task id).
+    /// </summary>
+    internal static void AccuraciesFromJson(JObject json, Dictionary<int, T> accuracies)
+    {
+        var taskIds = new List<int>();
+        var values = new List<double>();
+        foreach (var prop in json.Properties())
+        {
+            if (int.TryParse(prop.Name, out var taskId))
+            {
+                taskIds.Add(taskId);
+                values.Add(prop.Value.Value<double>());
+            }
+        }
+
+        if (taskIds.Count == 0)
+        {
+            return;
+        }
+
+        T[] converted = new Tensor<double>(new[] { values.Count }, new Vector<double>(values)).Cast<T>().ToArray();
+        for (int i = 0; i < taskIds.Count; i++)
+        {
+            accuracies[taskIds[i]] = converted[i];
         }
     }
 

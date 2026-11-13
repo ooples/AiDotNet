@@ -180,6 +180,32 @@ public class ContinualLearningHalfPrecisionTests
         }
     }
 
+    [Fact]
+    public void LearnerAccuracies_Half_SaveAsJsonNumbersAndRoundTrip()
+    {
+        // Master wrote accuracies as JSON doubles. Serializing Half directly through Newtonsoft gives an
+        // empty object, which then cannot be read back.
+        var accuracies = new System.Collections.Generic.Dictionary<int, Half>
+        {
+            [0] = (Half)0.75f,
+            [2] = (Half)0.5f,
+        };
+
+        var json = AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase<Half, Tensor<Half>, Tensor<Half>>.AccuraciesToJson(accuracies);
+
+        Assert.Equal(Newtonsoft.Json.Linq.JTokenType.Float, json["0"]?.Type);
+        Assert.Equal(0.75, json["0"]?.Value<double>() ?? double.NaN, 12);
+        Assert.Equal(0.5, json["2"]?.Value<double>() ?? double.NaN, 12);
+
+        var restored = new System.Collections.Generic.Dictionary<int, Half>();
+        AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase<Half, Tensor<Half>, Tensor<Half>>.AccuraciesFromJson(
+            Newtonsoft.Json.Linq.JObject.Parse(json.ToString()), restored);
+
+        Assert.Equal(2, restored.Count);
+        Assert.Equal(0.75, (double)restored[0], 12);
+        Assert.Equal(0.5, (double)restored[2], 12);
+    }
+
     private static double[] Softmax(double[] logits)
     {
         double max = double.NegativeInfinity;
