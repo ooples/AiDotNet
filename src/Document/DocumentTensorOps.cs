@@ -324,4 +324,11 @@ internal static class DocumentTensorOps
         T confidence = numOps.LessThan(mean, numOps.Zero) ? numOps.Zero : numOps.GreaterThan(mean, numOps.One) ? numOps.One : mean;
         return (tokens, confidence);
     }
+
+    /// <summary>
+    /// Indices of a 1-D tensor by descending value, ties in ascending index order and NaN last (the order a
+    /// stable <c>OrderByDescending</c> gives).
+    /// </summary>
+    internal static int[] DescendingOrder<T>(IEngine engine, Tensor<T> values)
+        => values.Length == 0 ? Array.Empty<int>() : AudioEngineOps.StableDescendingOrder(engine, values);
 }

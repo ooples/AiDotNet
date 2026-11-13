@@ -340,34 +340,15 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
 
     private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
     {
-        var regions = new List<LayoutRegion<T>>();
-        int numDetections = output.Shape[0];
         int numClasses = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-
-        for (int i = 0; i < numDetections; i++)
+        var (rows, classes, scores) = DocumentTensorOps.ForegroundRows(Engine, output, numClasses, NumOps.FromDouble(threshold));
+        return rows.Select((i, k) => new LayoutRegion<T>
         {
-            double maxConf = 0;
-            int maxClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(output[i, c]);
-                if (conf > maxConf) { maxConf = conf; maxClass = c; }
-            }
-
-            if (maxConf >= threshold && maxClass > 0)
-            {
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = Vector<T>.Empty()
-                });
-            }
-        }
-
-        return regions;
+            ElementType = (LayoutElementType)Math.Min(classes[k], (int)LayoutElementType.Other),
+            Confidence = scores[k],
+            Index = i,
+            BoundingBox = Vector<T>.Empty()
+        }).ToList();
     }
 
     #endregion
@@ -398,24 +379,21 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         return new DocumentClassificationResult<T>
         {
             PredictedCategory = topPredictions[0].Category,
-            Confidence = NumOps.FromDouble(topPredictions[0].Score),
-            ConfidenceValue = topPredictions[0].Score,
+            Confidence = topPredictions[0].Score,
             TopPredictions = topPredictions,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
     }
 
-    private List<(string Category, double Score)> GetTopKPredictions(Tensor<T> probs, int k)
+    private List<(string Category, T Score)> GetTopKPredictions(Tensor<T> probs, int k)
     {
-        var predictions = new List<(string Category, double Score)>();
-        int numClasses = Math.Min(probs.Data.Length, AvailableCategories.Count);
-
-        for (int i = 0; i < numClasses; i++)
-        {
-            predictions.Add((AvailableCategories[i], NumOps.ToDouble(probs.Data.Span[i])));
-        }
-
-        return predictions.OrderByDescending(p => p.Score).Take(k).ToList();
+        int numClasses = Math.Min(probs.Length, AvailableCategories.Count);
+        if (numClasses == 0)
+            return new List<(string Category, T Score)>();
+        var head = Engine.TensorSlice(Engine.Reshape(probs, new[] { probs.Length }), new[] { 0 }, new[] { numClasses });
+        int[] order = DocumentTensorOps.DescendingOrder(Engine, head).Take(Math.Max(0, k)).ToArray();
+        T[] scores = DocumentTensorOps.Pick(Engine, head, order);
+        return order.Select((c, r) => (AvailableCategories[c], scores[r])).ToList();
     }
 
     private Tensor<T> ApplySoftmax(Tensor<T> input)
@@ -473,35 +451,8 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// DocFormer uses ImageNet normalization with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies DocFormer's industry-standard postprocessing: pass-through (multimodal outputs are already final).
@@ -570,15 +521,27 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// reference always runs at max_position_embeddings, because the visual stream has exactly that many
     /// tokens). The first <paramref name="keep"/> rows of token logits <c>[keep, numClasses]</c> are returned.
     /// </summary>
-    private Tensor<T> RunDocFormer(int[] tokens, double[][] boxes, Tensor<T>? pageImage, int keep, IDictionary<string, Tensor<T>>? activations = null)
+    /// <summary>
+    /// Runs the model on token ids <c>[S]</c> and their boxes <c>[S, 4]</c> (either may be null: no tokens, or
+    /// zero boxes), padded to <see cref="DocumentNeuralNetworkBase{T}.MaxSequenceLength"/>, and an optional page.
+    /// Token ids are rounded and clamped to the vocabulary.
+    /// </summary>
+    private Tensor<T> RunDocFormer(Tensor<T>? tokens, Tensor<T>? boxes, Tensor<T>? pageImage, int keep, IDictionary<string, Tensor<T>>? activations = null)
     {
         int l = MaxSequenceLength;
+        int s = Math.Min(tokens?.Length ?? 0, l);
         var ids = new Tensor<T>(new[] { l });
         var boxTensor = new Tensor<T>(new[] { l, 4 });
-        for (int i = 0; i < Math.Min(tokens.Length, l); i++)
+        if (s > 0 && tokens is not null)
         {
-            ids[i] = NumOps.FromDouble(Math.Min(Math.Max(tokens[i], 0), _vocabSize - 1));
-            for (int c = 0; c < 4; c++) boxTensor[i, c] = NumOps.FromDouble(boxes[i][c]);
+            var clamped = Engine.TensorClamp(Engine.TensorRound(Engine.TensorSlice(tokens, new[] { 0 }, new[] { s })),
+                NumOps.Zero, NumOps.FromDouble(_vocabSize - 1));
+            ids = s == l ? clamped : Engine.TensorConcatenate(new[] { clamped, new Tensor<T>(new[] { l - s }) }, 0);
+            if (boxes is not null)
+            {
+                var head = Engine.TensorSlice(boxes, new[] { 0, 0 }, new[] { s, 4 });
+                boxTensor = s == l ? head : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { l - s, 4 }) }, 0);
+            }
         }
 
         var text = Layers[_textEmbeddingIndex].Forward(ids);
@@ -626,22 +589,16 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     private Tensor<T> RouteDocFormer(Tensor<T> input, IDictionary<string, Tensor<T>>? activations = null)
     {
         if (input.Rank >= 3)
-            return RunDocFormer(Array.Empty<int>(), Array.Empty<double[]>(), input, MaxSequenceLength, activations);
+            return RunDocFormer(null, null, input, MaxSequenceLength, activations);
         int s = input.Shape[0];
         if (s > MaxSequenceLength)
             throw new ArgumentException($"DocFormer takes at most {MaxSequenceLength} tokens; got {s}.", nameof(input));
         bool packed = input.Rank == 2 && input.Shape[1] == 5;
         if (input.Rank == 2 && !packed && input.Shape[1] != 1)
             throw new ArgumentException("DocFormer expects packed rows [S, 5] (token, x0, y0, x1, y1), token ids [S], or a page image.", nameof(input));
-        var tokens = new int[s];
-        var boxes = new double[s][];
-        for (int i = 0; i < s; i++)
-        {
-            tokens[i] = (int)Math.Round(NumOps.ToDouble(input.Rank == 1 ? input[i] : input[i, 0]));
-            boxes[i] = packed
-                ? new[] { NumOps.ToDouble(input[i, 1]), NumOps.ToDouble(input[i, 2]), NumOps.ToDouble(input[i, 3]), NumOps.ToDouble(input[i, 4]) }
-                : new double[4];
-        }
+        var matrix = Engine.Reshape(input, new[] { s, input.Length / Math.Max(1, s) });
+        var tokens = Engine.Reshape(Engine.TensorSlice(matrix, new[] { 0, 0 }, new[] { s, 1 }), new[] { s });
+        var boxes = packed ? Engine.TensorSlice(matrix, new[] { 0, 1 }, new[] { s, 4 }) : null;
         return RunDocFormer(tokens, boxes, null, s, activations);
     }
 
@@ -659,13 +616,8 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         SetTrainingMode(false);
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int s = packedTokens.Shape[0];
-        var tokens = new int[s];
-        var boxes = new double[s][];
-        for (int i = 0; i < s; i++)
-        {
-            tokens[i] = (int)Math.Round(NumOps.ToDouble(packedTokens[i, 0]));
-            boxes[i] = new[] { NumOps.ToDouble(packedTokens[i, 1]), NumOps.ToDouble(packedTokens[i, 2]), NumOps.ToDouble(packedTokens[i, 3]), NumOps.ToDouble(packedTokens[i, 4]) };
-        }
+        var tokens = Engine.Reshape(Engine.TensorSlice(packedTokens, new[] { 0, 0 }, new[] { s, 1 }), new[] { s });
+        var boxes = Engine.TensorSlice(packedTokens, new[] { 0, 1 }, new[] { s, 4 });
         return RunDocFormer(tokens, boxes, PreprocessDocument(pageImage), s);
     }
 
