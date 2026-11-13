@@ -176,7 +176,7 @@ public partial class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
 
             if (totalPatterns == 0)
             {
-                categoryScores[category] = NumOps.Zero;
+                categoryScores[category] = MatchProportion(0, 1);
                 continue;
             }
 
@@ -196,12 +196,15 @@ public partial class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
             }
 
             // Score is proportion of patterns matched
-            double score = (double)matchCount / totalPatterns;
-            categoryScores[category] = NumOps.FromDouble(score);
+            categoryScores[category] = MatchProportion(matchCount, totalPatterns);
         }
 
         return CreateResultFromScores(categoryScores);
     }
+
+    /// <summary>The proportion of patterns matched, in T.</summary>
+    private static T MatchProportion(int matched, int total) =>
+        NumOps.Divide(NumOps.FromDouble(matched), NumOps.FromDouble(total));
 
     private void InitializeDefaultPatterns()
     {

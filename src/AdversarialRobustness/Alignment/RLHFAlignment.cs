@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -40,6 +41,8 @@ namespace AiDotNet.AdversarialRobustness.Alignment;
 public class RLHFAlignment<T> : IAlignmentMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private AlignmentMethodOptions<T> options;
     private Func<Vector<T>, Vector<T>, double>? rewardModel;
@@ -390,12 +393,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         return (input, output) =>
         {
             // Simple reward heuristic based on output characteristics
-            double sum = 0.0;
-            for (int i = 0; i < output.Length; i++)
-            {
-                sum += NumOps.ToDouble(output[i]);
-            }
-            var outputMean = output.Length > 0 ? (sum / output.Length) : 0.0;
+            var outputMean = output.Length > 0 ? NumOps.ToDouble(Engine.TensorMean(output.AsTensor())) : 0.0;
 
             // Higher reward for moderate values (heuristic for "reasonable" outputs)
             var reward = 1.0 - Math.Abs(outputMean - 0.5);
@@ -438,16 +436,15 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
     private bool IsHarmless(Vector<T> output)
     {
-        // Check for harmful patterns (simplified)
-        double maxValue = double.NegativeInfinity;
-        double minValue = double.PositiveInfinity;
-        for (int i = 0; i < output.Length; i++)
+        // Check for harmful patterns (simplified): the output range is a heuristic for extremity.
+        if (output.Length == 0)
         {
-            var v = NumOps.ToDouble(output[i]);
-            if (v > maxValue) maxValue = v;
-            if (v < minValue) minValue = v;
+            return true;
         }
-        return (maxValue - minValue) < 0.9; // Heuristic for extremity
+
+        var values = output.AsTensor();
+        T range = NumOps.Subtract(Engine.TensorMaxValue(values), Engine.TensorMinValue(values));
+        return NumOps.LessThan(range, NumOps.FromDouble(0.9));
     }
 
     private bool IsHonest(Vector<T> output, Vector<T> input)
@@ -463,19 +460,13 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         // strictly a structural sanity gate, not an honesty metric.
         if (output is null || output.Length == 0) return false;
 
-        bool anyFinite = false;
-        double absMax = 0.0;
-        double sumAbs = 0.0;
-        for (int i = 0; i < output.Length; i++)
-        {
-            double v = NumOps.ToDouble(output[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v)) return false;
-            anyFinite = true;
-            double absV = Math.Abs(v);
-            if (absV > absMax) absMax = absV;
-            sumAbs += absV;
-        }
-        if (!anyFinite || sumAbs == 0.0) return false;
+        var outputTensor = output.AsTensor();
+        var finite = Engine.TensorWhere(Engine.TensorIsFinite(outputTensor), Engine.TensorOnesLike(outputTensor), Engine.TensorZerosLike(outputTensor));
+        if (NumOps.LessThan(Engine.TensorMinValue(finite), NumOps.One)) return false;
+        var magnitudes = Engine.TensorAbs(outputTensor);
+        double absMax = NumOps.ToDouble(Engine.TensorMaxValue(magnitudes));
+        double sumAbs = NumOps.ToDouble(Engine.TensorSum(magnitudes));
+        if (sumAbs == 0.0) return false;
 
         // Input-conditioned engagement: an output uncorrelated with the input
         // (cosine ≈ 0) and saturated to one extreme is a tell-tale "ignore the
@@ -524,21 +515,16 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
     private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(Vector<T> response)
     {
-        // Analyze response for potential misalignment
-        double sum = 0.0;
-        for (int i = 0; i < response.Length; i++)
+        // Analyze response for potential misalignment: population mean and variance.
+        double mean = 0.0;
+        double variance = 0.0;
+        if (response.Length > 0)
         {
-            sum += NumOps.ToDouble(response[i]);
+            var values = response.AsTensor();
+            T average = Engine.TensorMean(values);
+            mean = NumOps.ToDouble(average);
+            variance = NumOps.ToDouble(Engine.TensorMean(Engine.TensorSquare(Engine.TensorAddScalar(values, NumOps.Negate(average)))));
         }
-        var mean = response.Length > 0 ? (sum / response.Length) : 0.0;
-
-        double varianceSum = 0.0;
-        for (int i = 0; i < response.Length; i++)
-        {
-            var delta = NumOps.ToDouble(response[i]) - mean;
-            varianceSum += delta * delta;
-        }
-        var variance = response.Length > 0 ? (varianceSum / response.Length) : 0.0;
 
         if (variance > 0.3)
         {
@@ -559,23 +545,19 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             return string.Empty;
 
         var builder = new StringBuilder();
-        for (int i = 0; i < data.Length; i++)
+        var values = data.AsSpan();
+        for (int i = 0; i < values.Length; i++)
         {
             if (i > 0)
             {
                 builder.Append(',');
             }
 
-            object? value = data[i];
+            object? value = values[i];
             builder.Append(value?.ToString() ?? string.Empty);
         }
 
         return builder.ToString();
-    }
-
-    private static T Clip01(T value)
-    {
-        return MathHelper.Clamp(value, NumOps.Zero, NumOps.One);
     }
 
     private sealed class RlhfFineTunedPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
@@ -601,15 +583,9 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             _ = _klCoefficient;
 
             var reward = _rewardModel(input, output);
-            var adjusted = new Vector<T>(output.Length);
             var adjustment = NumOps.FromDouble(reward * 0.1);
-
-            for (int i = 0; i < output.Length; i++)
-            {
-                adjusted[i] = Clip01(NumOps.Add(output[i], adjustment));
-            }
-
-            return adjusted;
+            var shifted = Engine.TensorAddScalar(output.AsTensor(), adjustment);
+            return Engine.TensorClamp(shifted, NumOps.Zero, NumOps.One).ToVector();
         }
 
         public ModelMetadata<T> GetModelMetadata()
