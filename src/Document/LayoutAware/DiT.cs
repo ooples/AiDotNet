@@ -75,7 +75,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     private readonly int _numHeads;
     private readonly int _patchSize;
     private readonly int _numClasses;
-    private readonly string _modelSize;
+    private readonly DiTModelSize _modelSize;
 
     // Native mode layers
     private readonly List<ILayer<T>> _patchEmbeddingLayers = [];
@@ -107,7 +107,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     /// <summary>
     /// Gets the model size variant (base/large).
     /// </summary>
-    public string ModelSize => _modelSize;
+    public DiTModelSize ModelSize => _modelSize;
 
     /// <inheritdoc/>
     public IReadOnlyList<LayoutElementType> SupportedElementTypes { get; } =
@@ -372,7 +372,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         sb.AppendLine("DiT Model Summary");
         sb.AppendLine("=================");
         sb.AppendLine($"Mode: {(_useNativeMode ? "Native (Trainable)" : "ONNX (Inference)")}");
-        sb.AppendLine($"Architecture: ViT-{_modelSize}");
+        sb.AppendLine($"Architecture: DiT-{_modelSize}");
         sb.AppendLine($"Hidden Dimension: {_hiddenDim}");
         sb.AppendLine($"Number of Layers: {_numLayers}");
         sb.AppendLine($"Attention Heads: {_numHeads}");
@@ -426,7 +426,7 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
                 { "patch_size", _patchSize },
                 { "image_size", ImageSize },
                 { "num_classes", _numClasses },
-                { "model_size", _modelSize },
+                { "model_size", _modelSize.ToString() },
                 { "use_native_mode", _useNativeMode }
             },
             ModelDataProvider = () => SafeSerialize()

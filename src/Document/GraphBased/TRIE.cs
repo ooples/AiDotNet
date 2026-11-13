@@ -302,7 +302,7 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         };
     }
 
-    private IList<FormField<T>> ParseFormFields(Tensor<T> output, double threshold)
+    internal IList<FormField<T>> ParseFormFields(Tensor<T> output, double threshold)
     {
         int numEntities = Math.Min(output.Shape[0], _maxEntities);
         int hiddenDim = output.Shape.Length > 1 ? output.Shape[1] : _textDim;
@@ -316,16 +316,15 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         int[] types = typeColumns <= 0
             ? new int[numEntities]
             : DocumentTensorOps.RowArgMax(Engine, Engine.TensorSlice(matrix, new[] { 0, 1 }, new[] { numEntities, typeColumns }));
-        double[] values = matrix.Cast<double>().ToArray();
-        int width = matrix.Shape[1];
 
         return rows.Select((i, k) =>
         {
             int entityType = types[i];
 
-            // Field name and value from the key and value embedding portions.
-            string fieldName = ExtractFieldText(values, i * width, hiddenDim, startOffset: _numEntityTypes + 1, maxLen: 32);
-            string fieldValue = ExtractFieldText(values, i * width, hiddenDim, startOffset: _numEntityTypes + 1 + 32, maxLen: 64);
+            // Field name and value from the key and value text-reading logits.
+            int keyStart = _numEntityTypes + 1;
+            string fieldName = DecodeFieldText(matrix, i, keyStart, KeySteps);
+            string fieldValue = DecodeFieldText(matrix, i, keyStart + (KeySteps * CharacterVocabulary), ValueSteps);
 
             // Map entity type to field type
             string fieldType = entityType switch
@@ -353,25 +352,27 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         }).ToList<FormField<T>>();
     }
 
+    /// <summary>Character classes of the text-reading head: PAD, BOS, EOS and the 212 characters of <see cref="DecodeTokensToText"/>.</summary>
+    private const int CharacterVocabulary = 215;
+    private const int BosToken = 1, EosToken = 2;
+    private const int KeySteps = 32, ValueSteps = 64;
+
     /// <summary>
-    /// Extracts text from embedding portion of output.
+    /// TRIE's text reading (Zhang et al. 2020, Sec. 3.2): the attention decoder emits, per step, logits over the
+    /// character vocabulary; each step's character is the argmax, PAD and BOS are skipped and EOS ends the text.
+    /// The <paramref name="steps"/> steps of <see cref="CharacterVocabulary"/> logits start at column
+    /// <paramref name="start"/> of row <paramref name="row"/>; steps beyond the row's width are absent.
     /// </summary>
-    private string ExtractFieldText(double[] values, int rowStart, int hiddenDim, int startOffset, int maxLen)
+    private string DecodeFieldText(Tensor<T> matrix, int row, int start, int steps)
     {
-        var tokens = new List<int>();
-        int endOffset = Math.Min(startOffset + maxLen, hiddenDim);
-
-        for (int j = startOffset; j < endOffset; j++)
-        {
-            int tokenId = (int)Math.Round(values[rowStart + j] * 255); // Denormalize from embedding
-
-            // Special tokens
-            if (tokenId <= 2) continue; // PAD, BOS, EOS
-            if (tokenId == 0 || tokenId > 214) break; // End of sequence
-            tokens.Add(tokenId);
-        }
-
-        return DecodeTokensToText(tokens);
+        int available = Math.Min(steps, Math.Max(0, (matrix.Shape[1] - start) / CharacterVocabulary));
+        if (available == 0)
+            return string.Empty;
+        var logits = Engine.Reshape(
+            Engine.TensorSlice(matrix, new[] { row, start }, new[] { 1, available * CharacterVocabulary }),
+            new[] { available, CharacterVocabulary });
+        return DecodeTokensToText(DocumentTensorOps.RowArgMax(Engine, logits)
+            .TakeWhile(t => t != EosToken).Where(t => t > BosToken).ToList());
     }
 
     /// <summary>

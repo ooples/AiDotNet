@@ -30,14 +30,14 @@ public class DiTOptions : DocumentNeuralNetworkOptions
         HiddenDim = 768;
         NumLayers = 12;
         NumHeads = 12;
-        ModelSize = "base";
+        ModelSize = DiTModelSize.Base;
     }
 
 
     /// <summary>
-    /// Gets or sets the model size.
+    /// Gets or sets the published DiT variant this configuration describes (Li et al. 2022, Table 1).
     /// </summary>
-    public string ModelSize { get; set; }
+    public DiTModelSize ModelSize { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
@@ -53,4 +53,14 @@ public class DiTOptions : DocumentNeuralNetworkOptions
         Require(ImageSize, nameof(ImageSize));
         ValidateCore();
     }
+}
+
+/// <summary>The DiT variants released with the paper (Li et al. 2022, Sec. 3).</summary>
+public enum DiTModelSize
+{
+    /// <summary>DiT-Base: ViT-B, 12 layers, hidden size 768, 12 heads.</summary>
+    Base,
+
+    /// <summary>DiT-Large: ViT-L, 24 layers, hidden size 1024, 16 heads.</summary>
+    Large
 }

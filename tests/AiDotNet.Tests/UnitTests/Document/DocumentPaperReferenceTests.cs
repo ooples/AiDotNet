@@ -254,6 +254,127 @@ public sealed class DocumentPaperReferenceTests
         Assert.All(regions, r => Assert.Equal(Math.Exp(3) / (Math.Exp(3) + 3), r.Confidence, 12));
     }
 
+    [Fact]
+    public void DiT_ModelSizeIsTheEnumOfThePublishedVariants()
+    {
+        // DiT ships Base and Large (Li et al. 2022); the size is an enum, not a free-form string.
+        var options = new DiTOptions();
+        Assert.Equal(DiTModelSize.Base, options.ModelSize);
+        using var model = new DiT<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4),
+            options: new DiTOptions { NumClasses = 4, ImageSize = 32, PatchSize = 16, HiddenDim = 32, NumLayers = 1, NumHeads = 2, ModelSize = DiTModelSize.Large });
+        Assert.Equal(DiTModelSize.Large, model.ModelSize);
+        Assert.Contains("DiT-Large", model.GetModelSummary());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Pix2StructAndMatcha_StandardizeEachPageByItsOwnMeanAndStd(bool matcha)
+    {
+        // The Pix2Struct image processor (MatCha reuses it): (x - mean) / max(std, 1/sqrt(N)) over the page. A
+        // page alternating 0 and 1 has mean 0.5 and std 0.5, so it maps to -1 and +1; ImageNet statistics give
+        // (0 - 0.485) / 0.229 on the red channel. A flat page maps to zeros, finite thanks to the std floor.
+        var arch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64);
+        using AiDotNet.Document.DocumentNeuralNetworkBase<double> model = matcha
+            ? new AiDotNet.Document.PixelToSequence.MATCHA<double>(arch, options: new MATCHAOptions { ImageSize = 32, MaxSequenceLength = 8, EncoderDim = 32, DecoderDim = 32, EncoderLayers = 1, DecoderLayers = 1, NumHeads = 2, VocabSize = 64, MaxPatchesPerImage = 4 })
+            : new AiDotNet.Document.PixelToSequence.Pix2Struct<double>(arch, options: new Pix2StructOptions { ImageSize = 32, PatchSize = 16, MaxPatches = 4, MaxSequenceLength = 8, HiddenDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, VocabSize = 64 });
+        var page = new Tensor<double>(new[] { 3, 32, 32 }, new Vector<double>(Enumerable.Range(0, 3 * 32 * 32).Select(i => (double)(i % 2)).ToArray()));
+        var processed = model.PreprocessForInspection(page).ToArray();
+        Assert.All(processed.Select((v, i) => (v, i)), p => Assert.Equal(p.i % 2 == 0 ? -1.0 : 1.0, p.v, 12));
+
+        Assert.All(model.PreprocessForInspection(ConstantPage(32, 0.7)).ToArray(), v => Assert.Equal(0.0, v, 12));
+    }
+
+    [Fact]
+    public void Trie_DecodesFieldTextByArgmaxOverTheCharacterLogits()
+    {
+        // TRIE's text reading emits per-step logits over its character vocabulary (PAD 0, BOS 1, EOS 2, then
+        // the characters): the key "Ab" (tokens 35, 62) and value "7" (token 26) each end at EOS. The old
+        // parser read one column per character and multiplied it by 255.
+        const int vocabulary = 215, types = 4, keySteps = 32, valueSteps = 64;
+        using var model = new AiDotNet.Document.GraphBased.TRIE<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: types),
+            options: new TRIEOptions { ImageSize = 64, VisualDim = 16, TextDim = 16, GraphDim = 16, NumEntityTypes = types, MaxEntities = 8 });
+        int width = 1 + types + ((keySteps + valueSteps) * vocabulary) + 4;
+        var row = new double[width];
+        row[0] = 0.9;
+        row[1 + 1] = 2.0; // entity type 1 ("name")
+        void Step(int start, int step, int token) => row[start + (step * vocabulary) + token] = 5.0;
+        int key = 1 + types, value = key + (keySteps * vocabulary);
+        Step(key, 0, 35); Step(key, 1, 62); Step(key, 2, 2); Step(key, 3, 40);
+        Step(value, 0, 26); Step(value, 1, 2);
+        var fields = model.ParseFormFields(new Tensor<double>(new[] { 1, width }, new Vector<double>(row)), 0.5);
+
+        var field = Assert.Single(fields);
+        Assert.Equal("Ab", field.FieldName);
+        Assert.Equal("7", field.FieldValue);
+        Assert.Equal("name", field.FieldType);
+        Assert.Equal(0.9, field.Confidence, 12);
+    }
+
+    [Fact]
+    public void LayoutGraph_ReadingOrderConfidenceIsTheNodeSoftmaxProbability()
+    {
+        // GLAM classifies each node with a softmax; the confidence is that probability, not a constant 0.9.
+        using var model = new AiDotNet.Document.GraphBased.LayoutGraph<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 4, inputWidth: 8, outputSize: 4),
+            new LayoutGraphOptions { NodeDim = 8, EdgeDim = 8, GraphLayers = 1, NumClasses = 4, MaxNodes = 8 });
+        var logits = new Tensor<double>(new[] { 2, 4 }, new Vector<double>(new[] { 2.0, 0, 0, 0, 0, 0, 0, 1.0 }));
+        var order = model.PredictReadingOrder(logits);
+
+        Assert.Equal(new[] { 0, 1 }, order.Select(e => e.ElementIndex).ToArray());
+        Assert.Equal(Math.Exp(2) / (Math.Exp(2) + 3), order[0].Confidence, 12);
+        Assert.Equal(Math.E / (Math.E + 3), order[1].Confidence, 12);
+    }
+
+    [Fact]
+    public void LayoutGraph_PageGraphJoinsNearestNeighboursSymmetricallyAndNormalizes()
+    {
+        // Three boxes on a line, centres at x = 0.1, 0.2 and 0.9, one neighbour each: 0-1, 1-0 and 2-1. Made
+        // symmetric with self-loops the degrees are 2, 3 and 2, so the normalized 0-1 weight is 1/sqrt(2 * 3).
+        var boxes = new Tensor<double>(new[] { 3, 4 }, new Vector<double>(new[]
+        {
+            0.05, 0.4, 0.15, 0.6,
+            0.15, 0.4, 0.25, 0.6,
+            0.85, 0.4, 0.95, 0.6
+        }));
+        var a = AiDotNet.Document.GraphBased.LayoutGraph<double>.SpatialAdjacency(AiDotNet.Tensors.Engines.AiDotNetEngine.Current, boxes, 1);
+        double s23 = 1 / Math.Sqrt(6);
+        var expected = new[] { 0.5, s23, 0, s23, 1.0 / 3, s23, 0, s23, 0.5 };
+        Assert.Equal(expected, a.ToArray(), new Tolerance(1e-12));
+    }
+
+    [Fact]
+    public void DocBank_TokensAreLabelledWithTheTwelveDocBankClassesBySoftmax()
+    {
+        // DocBank's baselines are LayoutLM token classifiers over its 12 labels (no background class).
+        using var model = new DocBank<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 13),
+            options: new DocBankOptions
+            {
+                ImageSize = 64,
+                TokenClassifierOptions = new LayoutLMOptions { MaxSequenceLength = 16, HiddenDim = 16, NumLayers = 1, NumHeads = 2, VocabSize = 50 }
+            });
+        Assert.Equal(12, DocBank<double>.TokenLabels.Count);
+        var logits = new double[2 * 12];
+        logits[7] = 3.0;       // token 0: Paragraph
+        logits[12 + 11] = 3.0; // token 1: Title
+        var labels = model.TokenPredictions(new Tensor<double>(new[] { 2, 12 }, new Vector<double>(logits)));
+
+        Assert.Equal(new[] { DocumentRegionType.Paragraph, DocumentRegionType.Title }, labels.Select(l => l.Label).ToArray());
+        Assert.All(labels, l => Assert.Equal(Math.Exp(3) / (Math.Exp(3) + 11), l.Confidence, 12));
+
+        var packed = new Tensor<double>(new[] { 3, 5 }, new Vector<double>(new[] { 5.0, 10, 10, 200, 40, 6.0, 210, 10, 400, 40, 7.0, 10, 60, 300, 90 }));
+        Assert.Equal(3, model.ClassifyTokens(packed).Count);
+    }
+
     private sealed class Tolerance : System.Collections.Generic.IEqualityComparer<double>
     {
         private readonly double _epsilon;

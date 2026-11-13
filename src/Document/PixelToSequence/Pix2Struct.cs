@@ -411,15 +411,11 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     #region Preprocessing
 
     /// <summary>
-    /// Applies Pix2Struct's industry-standard preprocessing: ImageNet normalization.
+    /// Applies Pix2Struct's preprocessing: per-image standardization, as the Pix2Struct image processor does
+    /// (Lee et al. 2023; MatCha reuses it): <c>(x - mean) / max(std, 1 / sqrt(N))</c> over each whole page.
     /// </summary>
-    /// <remarks>
-    /// Pix2Struct (Google paper) uses patch-based encoding with ImageNet normalization
-    /// with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
-    /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
-            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
+        => DocumentTensorOps.StandardizePerImage(Engine, EnsureBatchDimension(rawImage));
 
     /// <summary>
     /// Applies Pix2Struct's industry-standard postprocessing: pass-through (patch-to-text outputs are already final).

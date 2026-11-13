@@ -383,4 +383,26 @@ internal static class DocumentTensorOps
             BoundingBox = new Vector<T>(boxes.Skip(4 * node).Take(4).ToArray())
         }).ToList();
     }
+
+    /// <summary>
+    /// Per-image standardization (the Pix2Struct image processor, also used by MatCha): each image of the batch
+    /// becomes <c>(x - mean) / max(std, 1 / sqrt(N))</c> with its own mean and population std over all its
+    /// <c>N</c> values. The floor keeps a flat page finite (it maps to zeros).
+    /// </summary>
+    internal static Tensor<T> StandardizePerImage<T>(IEngine engine, Tensor<T> batch)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int images = batch.Shape[0];
+        int n = batch.Length / Math.Max(1, images);
+        if (images == 0 || n == 0)
+            return batch;
+
+        var flat = engine.Reshape(batch, new[] { images, n });
+        var centered = engine.TensorSubtract(flat,
+            engine.TensorBroadcastTo(engine.ReduceMean(flat, new[] { 1 }, keepDims: true), new[] { images, n }));
+        var std = engine.TensorMax(
+            engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 1 }, keepDims: true)),
+            numOps.FromDouble(1.0 / Math.Sqrt(n)));
+        return engine.Reshape(engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { images, n })), batch.Shape.ToArray());
+    }
 }

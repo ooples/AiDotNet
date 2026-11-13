@@ -1,4 +1,6 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors;
 using Xunit;
 using System.Threading.Tasks;
@@ -79,8 +81,8 @@ public abstract class DocumentNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
-        var doc1 = CreateConstantTensor(InputShape, 0.2);
-        var doc2 = CreateConstantTensor(InputShape, 0.8);
+        var doc1 = CreateDistinctProbe(InputShape, 0.2);
+        var doc2 = CreateDistinctProbe(InputShape, 0.8);
 
         var output1 = network.Predict(doc1);
         var output2 = network.Predict(doc2);
@@ -97,6 +99,29 @@ public abstract class DocumentNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
         }
         Assert.True(anyDifferent,
             "Document model produces identical output for different inputs — content is being ignored.");
+    }
+
+    /// <summary>
+    /// Document probes are pages, not flat fields: rows of "text lines" two pixels tall alternate between
+    /// <paramref name="level"/> and <c>1 - level</c>, so the 0.2 and 0.8 (or 0.1 and 0.9) pages have their ink
+    /// and background swapped. A flat page carries no content -- per-image standardization (Pix2Struct,
+    /// MatCha) maps every flat page to zeros by design -- so two constants do not test whether content
+    /// reaches the output. Token-index inputs keep the constant probe.
+    /// </summary>
+    protected override Tensor<T> CreateDistinctProbe(int[] shape, double level)
+    {
+        var domain = InputDomainFor(shape);
+        if (domain.IsIndices || domain.Kind == LayerInputDomainKind.Custom)
+            return base.CreateDistinctProbe(shape, level);
+
+        var page = new Tensor<T>(shape);
+        int width = shape.Length >= 2 ? shape[shape.Length - 1] : 1;
+        for (int i = 0; i < page.Length; i++)
+        {
+            int row = i / width;
+            page[i] = NumOps.FromDouble((row / 2) % 2 == 0 ? level : 1.0 - level);
+        }
+        return page;
     }
 
     // =====================================================

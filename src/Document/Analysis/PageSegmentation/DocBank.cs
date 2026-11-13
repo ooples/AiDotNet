@@ -1,6 +1,7 @@
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.LayoutAware;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -423,6 +424,77 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
 
     #endregion
 
+    #region Token Classification
+
+    /// <summary>
+    /// DocBank's twelve token labels (Li et al. 2020, Sec. 3), in the order of the token classifier's outputs.
+    /// </summary>
+    public static IReadOnlyList<DocumentRegionType> TokenLabels { get; } =
+    [
+        DocumentRegionType.Abstract,
+        DocumentRegionType.Author,
+        DocumentRegionType.Caption,
+        DocumentRegionType.Equation,
+        DocumentRegionType.Figure,
+        DocumentRegionType.Footer,
+        DocumentRegionType.List,
+        DocumentRegionType.Paragraph,
+        DocumentRegionType.Reference,
+        DocumentRegionType.Section,
+        DocumentRegionType.Table,
+        DocumentRegionType.Title
+    ];
+
+    private LayoutLM<T>? _tokenClassifier;
+
+    /// <summary>
+    /// The paper's baseline (Li et al. 2020, Sec. 4): a LayoutLM token classifier over each token and its
+    /// 2-D box, with one output per <see cref="TokenLabels"/> entry. Built on first use from
+    /// <see cref="DocBankOptions.TokenClassifierOptions"/> (LayoutLM-base when unset) so a pixel-only caller
+    /// never allocates it; train it with its own <c>Train</c> on packed <c>(tokenId, x0, y0, x1, y1)</c> rows.
+    /// </summary>
+    public LayoutLM<T> TokenClassifier => _tokenClassifier ??= CreateTokenClassifier();
+
+    private LayoutLM<T> CreateTokenClassifier()
+    {
+        var options = _options.TokenClassifierOptions ?? new LayoutLMOptions();
+        options.NumClasses = TokenLabels.Count;
+        return new LayoutLM<T>(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: options.MaxSequenceLength,
+            inputWidth: 5,
+            outputSize: TokenLabels.Count), options);
+    }
+
+    /// <summary>
+    /// Labels each token of a page as DocBank's baselines do: <paramref name="packedTokens"/> is
+    /// <c>[seq, 5]</c> rows of <c>(tokenId, x0, y0, x1, y1)</c> with boxes on LayoutLM's 0-1000 grid; each
+    /// token gets the softmax argmax of the <see cref="TokenClassifier"/> and that probability.
+    /// </summary>
+    public IReadOnlyList<(DocumentRegionType Label, T Confidence)> ClassifyTokens(Tensor<T> packedTokens)
+    {
+        if (packedTokens is null)
+            throw new ArgumentNullException(nameof(packedTokens));
+        if (packedTokens.Rank != 2 || packedTokens.Shape[1] != 5)
+            throw new ArgumentException("DocBank token classification expects packed [seq, 5] (tokenId, x0, y0, x1, y1) rows.", nameof(packedTokens));
+        return TokenPredictions(TokenClassifier.Predict(packedTokens));
+    }
+
+    /// <summary>Per-token label (softmax argmax over the <see cref="TokenLabels"/> logits) and its probability.</summary>
+    internal IReadOnlyList<(DocumentRegionType Label, T Confidence)> TokenPredictions(Tensor<T> logits)
+    {
+        int classes = TokenLabels.Count;
+        int rows = logits.Length / classes;
+        if (rows == 0)
+            return Array.Empty<(DocumentRegionType, T)>();
+        var (labels, scores) = DocumentTensorOps.RowMax(Engine, Engine.Softmax(Engine.Reshape(logits, new[] { rows, classes }), 1), classes);
+        T[] confidences = scores.ToArray();
+        return labels.Select((label, i) => (TokenLabels[label], confidences[i])).ToList();
+    }
+
+    #endregion
+
     #region IDocumentModel Implementation
 
     /// <inheritdoc/>
@@ -582,6 +654,7 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         if (disposing)
         {
             _onnxSession?.Dispose();
+            _tokenClassifier?.Dispose();
         }
         base.Dispose(disposing);
     }

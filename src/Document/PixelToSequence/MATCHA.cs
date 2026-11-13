@@ -551,15 +551,11 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     #region Preprocessing
 
     /// <summary>
-    /// Applies MATCHA's industry-standard preprocessing: ImageNet normalization.
+    /// Applies MATCHA's preprocessing: per-image standardization, as the Pix2Struct image processor does
+    /// (Lee et al. 2023; MatCha reuses it): <c>(x - mean) / max(std, 1 / sqrt(N))</c> over each whole page.
     /// </summary>
-    /// <remarks>
-    /// MATCHA (Math-Aware Chart Handling Architecture) uses ImageNet normalization with
-    /// mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225] (Google paper).
-    /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
-            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
+        => DocumentTensorOps.StandardizePerImage(Engine, EnsureBatchDimension(rawImage));
 
     /// <summary>
     /// Applies MATCHA's industry-standard postprocessing: pass-through (chart QA outputs are already final).

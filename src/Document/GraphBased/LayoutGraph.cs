@@ -14,13 +14,15 @@ using Microsoft.ML.OnnxRuntime;
 namespace AiDotNet.Document.GraphBased;
 
 /// <summary>
-/// LayoutGraph for graph-based document layout analysis.
+/// LayoutGraph: graph-based document layout analysis after GLAM (Wang et al. 2023).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
 /// LayoutGraph constructs and analyzes graphs from document layouts, where nodes
-/// represent document elements and edges encode spatial relationships. It excels
+/// represent document elements and edges encode spatial relationships: as in GLAM, a node-feature input
+/// <c>[N, F]</c> whose first four columns are each element's normalized box is joined into a k-nearest-centre
+/// page graph, graph convolutions propagate over it, and each node is classified with a softmax. It excels
 /// at understanding hierarchical document structures.
 /// </para>
 /// <para>
@@ -50,7 +52,7 @@ namespace AiDotNet.Document.GraphBased;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Rethinking Table Structure Recognition Using Sequence Labeling Methods", "https://doi.org/10.48550/arXiv.2209.14469", Year = 2022, Authors = "Yibo Li, Yilun Huang, Ziyi Zhu, Lemeng Pan, Yongshuai Huang, Lin Du, Zhi Tang")]
+[ResearchPaper("A Graphical Approach to Document Layout Analysis", "https://doi.org/10.48550/arXiv.2308.02051", Year = 2023, Authors = "Jilin Wang, Michael Krumdick, Baojia Tong, Hamima Halim, Maxim Sokolov, Vadym Barda, Delphine Vendryes, Chris Tanner")]
 public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IReadingOrderDetector<T>
 {
     private readonly LayoutGraphOptions _options;
@@ -269,8 +271,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         return new ReadingOrderResult<T>
         {
             OrderedElements = orderedElements,
-            Confidence = NumOps.FromDouble(0.85),
-            ConfidenceValue = 0.85,
+            Confidence = DocumentTensorOps.Mean(Engine, orderedElements.Select(e => e.Confidence).ToArray()),
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
     }
@@ -284,30 +285,85 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
             {
                 ElementIndex = r.Index,
                 ReadingOrderPosition = idx,
-                Confidence = r.Confidence,
-                ConfidenceValue = r.ConfidenceValue
+                Confidence = r.Confidence
             })
             .ToList();
 
         return new ReadingOrderResult<T>
         {
             OrderedElements = orderedElements,
-            Confidence = NumOps.FromDouble(0.8),
-            ConfidenceValue = 0.8,
+            Confidence = DocumentTensorOps.Mean(Engine, orderedElements.Select(e => e.Confidence).ToArray()),
             ProcessingTimeMs = 0
         };
     }
 
-    private List<OrderedElement<T>> PredictReadingOrder(Tensor<T> output)
+    internal List<OrderedElement<T>> PredictReadingOrder(Tensor<T> output)
     {
-        int numNodes = Math.Min(output.Shape[0], _maxNodes);
-        T confidence = NumOps.FromDouble(0.9);
+        // Each node row's confidence is its softmax probability of the predicted class; the order is the node order.
+        int width = output.Shape.Length > 1 ? output.Shape[output.Shape.Length - 1] : output.Length;
+        int rows = width == 0 ? 0 : output.Length / width;
+        int numNodes = Math.Min(rows, _maxNodes);
+        int classes = Math.Min(width, _numClasses);
+        if (numNodes <= 0 || classes <= 0)
+            return new List<OrderedElement<T>>();
+
+        var logits = Engine.TensorSlice(Engine.Reshape(output, new[] { rows, width }), new[] { 0, 0 }, new[] { numNodes, classes });
+        T[] confidences = DocumentTensorOps.RowMax(Engine, Engine.Softmax(logits, 1), classes).Max.ToArray();
         return Enumerable.Range(0, numNodes).Select(i => new OrderedElement<T>
         {
             ElementIndex = i,
             ReadingOrderPosition = i,
-            Confidence = confidence
+            Confidence = confidences[i]
         }).ToList();
+    }
+
+    /// <summary>
+    /// GLAM's page graph (Wang et al. 2023, Sec. 3.1): every node is joined to its
+    /// <paramref name="neighbours"/> nearest nodes by box-centre distance (ties at the k-th distance included),
+    /// made symmetric, with self-loops, and normalized as <c>D^-1/2 (A + I) D^-1/2</c> for the graph
+    /// convolutions. <paramref name="boxes"/> is <c>[N, 4]</c> normalized <c>(x1, y1, x2, y2)</c>.
+    /// </summary>
+    internal static Tensor<T> SpatialAdjacency(IEngine engine, Tensor<T> boxes, int neighbours)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = boxes.Shape[0];
+        var centers = engine.TensorMultiplyScalar(engine.TensorAdd(
+            engine.TensorSlice(boxes, new[] { 0, 0 }, new[] { n, 2 }),
+            engine.TensorSlice(boxes, new[] { 0, 2 }, new[] { n, 2 })), numOps.FromDouble(0.5));
+        var diff = engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(centers, new[] { n, 1, 2 }), new[] { n, n, 2 }),
+            engine.TensorBroadcastTo(engine.Reshape(centers, new[] { 1, n, 2 }), new[] { n, n, 2 }));
+        var distance = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 2 }, keepDims: false);
+
+        int k = Math.Max(0, Math.Min(neighbours, n - 1));
+        var sorted = engine.TensorSort(distance, 1, false).Values;
+        var radius = engine.TensorBroadcastTo(engine.TensorSlice(sorted, new[] { 0, k }, new[] { n, 1 }), new[] { n, n });
+        var near = engine.TensorGreaterEqual(radius, distance);
+        var adjacency = engine.TensorMax(near, engine.TensorTranspose(near));
+        var inverseRoot = engine.TensorRsqrt(engine.ReduceSum(adjacency, new[] { 1 }, keepDims: true));
+        return engine.TensorMultiply(
+            engine.TensorMultiply(adjacency, engine.TensorBroadcastTo(inverseRoot, new[] { n, n })),
+            engine.TensorBroadcastTo(engine.Reshape(inverseRoot, new[] { 1, n }), new[] { n, n }));
+    }
+
+    /// <summary>Spatial neighbours per node in the page graph.</summary>
+    internal const int SpatialNeighbours = 4;
+
+    /// <summary>
+    /// Wires the page graph into every graph convolution before a pass: a node-feature input <c>[N, F]</c> whose
+    /// first four columns are the node's normalized box gets <see cref="SpatialAdjacency"/>; any other input
+    /// (a page image) has no node boxes, so its rows propagate through self-loops only.
+    /// </summary>
+    private void WireSpatialGraph(Tensor<T> input)
+    {
+        var graphLayers = Layers.OfType<GraphConvolutionalLayer<T>>().ToList();
+        if (graphLayers.Count == 0)
+            return;
+        var adjacency = input.Rank == 2 && input.Shape[0] > 0 && input.Shape[1] >= 4
+            ? SpatialAdjacency(Engine, Engine.StopGradient(Engine.TensorSlice(input, new[] { 0, 0 }, new[] { input.Shape[0], 4 })), SpatialNeighbours)
+            : Engine.TensorEye<T>(input.Rank >= 2 ? input.Shape[input.Rank - 2] : 1);
+        foreach (var layer in graphLayers)
+            layer.SetAdjacencyMatrix(adjacency);
     }
 
     #endregion
@@ -335,7 +391,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         sb.AppendLine("LayoutGraph Model Summary");
         sb.AppendLine("=========================");
         sb.AppendLine($"Mode: {(_useNativeMode ? "Native (Trainable)" : "ONNX (Inference)")}");
-        sb.AppendLine($"Architecture: Hierarchical Graph Network");
+        sb.AppendLine($"Architecture: GLAM-style spatial graph convolution network");
         sb.AppendLine($"Node Dimension: {_nodeDim}");
         sb.AppendLine($"Edge Dimension: {_edgeDim}");
         sb.AppendLine($"Graph Layers: {_graphLayers}");
@@ -417,6 +473,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     /// </summary>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
+        WireSpatialGraph(input);
         // Unchanged when no node types are supplied -- the plain walk below IS the previous
         // behaviour, and keeping it byte-identical matters: routing the default path through a
         // hand-written walk instead of the base one made the analytic and finite-difference
@@ -443,6 +500,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        WireSpatialGraph(input);
         // Default path stays on base.ForwardForTraining, which owns seed wiring, gradient
         // checkpointing and weight streaming. Only a call that actually supplies node types diverts,
         // and that one wires seeds itself per EnsureLayerRandomSeedsWired's contract.
