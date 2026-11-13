@@ -333,25 +333,23 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
     {
         int batch = input.Shape[0], channels = Math.Min(_channels, prediction.Shape[1]);
         int height = prediction.Shape[2], width = prediction.Shape[3];
-        var frame = new Tensor<T>([batch, channels, height, width]);
-        var mask = new Tensor<T>([batch, channels, height, width]);
-        int pixels = height * width;
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int p = 0; p < pixels; p++)
-                {
-                    frame[b, c, p / width, p % width] = input[b, c, p / width, p % width];
-                    mask[b, c, p / width, p % width] = input[b, _channels, p / width, p % width];
-                }
-            }
-        }
-        var inverse = new Tensor<T>([batch, channels, height, width]);
-        for (int i = 0; i < inverse.Length; i++)
-            inverse.Data.Span[i] = NumOps.Subtract(NumOps.One, mask.Data.Span[i]);
+        int[] shape = [batch, channels, height, width];
+
+        // The first `channels` input channels are the frame, channel `_channels` is the fill mask
+        var frame = Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(input, 1, 0, channels), 2, 0, height), 3, 0, width);
+        var mask = Engine.TensorBroadcastTo(
+            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(input, 1, _channels, 1), 2, 0, height), 3, 0, width),
+            shape);
+        var inverse = Engine.TensorSubtract(Engine.TensorOnesLike(mask), mask);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, prediction), Engine.TensorMultiply(inverse, frame));
     }
+
+    /// <summary>Channel 0 of a mask, cropped to <paramref name="height"/> x <paramref name="width"/> and broadcast
+    /// over <paramref name="channels"/>.</summary>
+    private Tensor<T> MaskPlane(Tensor<T> mask, int batch, int channels, int height, int width)
+        => Engine.TensorBroadcastTo(
+            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(mask, 0, 0, batch), 1, 0, 1), 2, 0, height), 3, 0, width),
+            [batch, channels, height, width]);
 
     /// <summary>Runs the mask-conditioned E2FGVI graph on the autodiff tape.</summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
@@ -373,28 +371,12 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var mask = new Tensor<T>([batchSize, 1, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double diff = 0;
-                    int channels = input.Shape[1];
-                    for (int c = 0; c < channels; c++)
-                    {
-                        double d = Math.Abs(Convert.ToDouble(input[b, c, h, w]) - Convert.ToDouble(expected[b, c, h, w]));
-                        diff = Math.Max(diff, d);
-                    }
-                    // Threshold to create binary mask
-                    mask[b, 0, h, w] = NumOps.FromDouble(diff > 0.01 ? 1.0 : 0.0);
-                }
-            }
-        }
-
-        return mask;
+        // 1 where any channel differs from the expected output by more than 0.01
+        int channels = input.Shape[1];
+        var expectedRegion = Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(
+            Engine.TensorNarrow(expected, 0, 0, batchSize), 1, 0, channels), 2, 0, height), 3, 0, width);
+        var largest = Engine.ReduceMax(Engine.TensorAbs(Engine.TensorSubtract(input, expectedRegion)), [1], true);
+        return Engine.TensorGreaterThan(largest, NumOps.FromDouble(0.01));
     }
 
     #endregion
@@ -440,18 +422,8 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         int height = flowOutput.Shape[2];
         int width = flowOutput.Shape[3];
 
-        var forward = new Tensor<T>([batchSize, 2, height, width]);
-        var backward = new Tensor<T>([batchSize, 2, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    forward[b, 0, h, w] = flowOutput[b, 0, h, w];
-                    forward[b, 1, h, w] = flowOutput[b, 1, h, w];
-                    backward[b, 0, h, w] = flowOutput[b, 2, h, w];
-                    backward[b, 1, h, w] = flowOutput[b, 3, h, w];
-                }
+        var forward = Engine.TensorNarrow(flowOutput, 1, 0, 2);
+        var backward = Engine.TensorNarrow(flowOutput, 1, 2, 2);
 
         // Upsample to full resolution
         forward = UpsampleFlow(forward, _height, _width);
@@ -587,18 +559,9 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         int height = frame.Shape[2];
         int width = frame.Shape[3];
 
-        var masked = new Tensor<T>(frame._shape);
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        double m = 1.0 - Convert.ToDouble(mask[b, 0, h, w]); // Invert: 0 = fill
-                        double f = Convert.ToDouble(frame[b, c, h, w]);
-                        masked[b, c, h, w] = NumOps.FromDouble(f * m);
-                    }
-
-        return masked;
+        // Invert: 0 = fill
+        var fill = MaskPlane(mask, batchSize, channels, height, width);
+        return Engine.TensorMultiply(frame, Engine.TensorSubtract(Engine.TensorOnesLike(fill), fill));
     }
 
     private Tensor<T> BlendWithOriginal(Tensor<T> original, Tensor<T> inpainted, Tensor<T> mask)
@@ -608,76 +571,24 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var blended = new Tensor<T>(original._shape);
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        double m = Convert.ToDouble(mask[b, 0, h, w]);
-                        double o = Convert.ToDouble(original[b, c, h, w]);
-                        double i = Convert.ToDouble(inpainted[b, c, h, w]);
-                        blended[b, c, h, w] = NumOps.FromDouble(o * (1 - m) + i * m);
-                    }
-
-        return blended;
+        // original * (1 - m) + inpainted * m
+        var m = MaskPlane(mask, batchSize, channels, height, width);
+        var inpaintedRegion = Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(
+            Engine.TensorNarrow(inpainted, 0, 0, batchSize), 1, 0, channels), 2, 0, height), 3, 0, width);
+        return Engine.TensorAdd(original, Engine.TensorMultiply(m, Engine.TensorSubtract(inpaintedRegion, original)));
     }
 
-    private Tensor<T> WarpFeatures(Tensor<T> features, Tensor<T> flow)
-    {
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int height = features.Shape[2];
-        int width = features.Shape[3];
-
-        int flowH = flow.Shape[2];
-        int flowW = flow.Shape[3];
-
-        var warped = new Tensor<T>(features._shape);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < height; h++)
-                for (int w = 0; w < width; w++)
-                {
-                    // Scale flow to feature resolution
-                    int fh = Math.Min((int)((double)h * flowH / height), flowH - 1);
-                    int fw = Math.Min((int)((double)w * flowW / width), flowW - 1);
-
-                    double flowX = Convert.ToDouble(flow[b, 0, fh, fw]) * width / flowW;
-                    double flowY = Convert.ToDouble(flow[b, 1, fh, fw]) * height / flowH;
-
-                    double srcX = w + flowX;
-                    double srcY = h + flowY;
-
-                    for (int c = 0; c < channels; c++)
-                        warped[b, c, h, w] = BilinearSample(features, b, c, srcY, srcX);
-                }
-
-        return warped;
-    }
-
-    private T BilinearSample(Tensor<T> tensor, int batch, int channel, double y, double x)
-    {
-        int height = tensor.Shape[2];
-        int width = tensor.Shape[3];
-
-        int x0 = Math.Max(0, Math.Min((int)Math.Floor(x), width - 1));
-        int y0 = Math.Max(0, Math.Min((int)Math.Floor(y), height - 1));
-        int x1 = Math.Max(0, Math.Min(x0 + 1, width - 1));
-        int y1 = Math.Max(0, Math.Min(y0 + 1, height - 1));
-
-        double dx = x - Math.Floor(x);
-        double dy = y - Math.Floor(y);
-
-        double v00 = Convert.ToDouble(tensor[batch, channel, y0, x0]);
-        double v01 = Convert.ToDouble(tensor[batch, channel, y0, x1]);
-        double v10 = Convert.ToDouble(tensor[batch, channel, y1, x0]);
-        double v11 = Convert.ToDouble(tensor[batch, channel, y1, x1]);
-
-        double value = v00 * (1 - dx) * (1 - dy) + v01 * dx * (1 - dy) +
-                       v10 * (1 - dx) * dy + v11 * dx * dy;
-        return NumOps.FromDouble(value);
-    }
+    /// <summary>
+    /// Warps features by a flow given at any resolution: the flow is resampled to the feature grid (nearest source
+    /// pixel), rescaled to feature-pixel units, and the features are sampled bilinearly at pixel + flow as
+    /// E2FGVI's <c>flow_warp</c> does, grid_sample(align_corners=True, padding_mode="zeros").
+    /// </summary>
+    /// <remarks>
+    /// This used to clamp samples that fall outside the frame to the border pixel. The reference treats them as
+    /// zero, so content entering from outside the frame is not invented from the edge.
+    /// </remarks>
+    internal Tensor<T> WarpFeatures(Tensor<T> features, Tensor<T> flow)
+        => WarpByFlow(features, UpsampleFlow(flow, features.Shape[2], features.Shape[3]), GridSamplePadding.Zeros);
 
     private Tensor<T> UpsampleFlow(Tensor<T> flow, int targetH, int targetW)
     {
@@ -685,19 +596,23 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         int srcH = flow.Shape[2];
         int srcW = flow.Shape[3];
 
-        var upsampled = new Tensor<T>([batchSize, 2, targetH, targetW]);
+        // Nearest source pixel min(floor(h * srcH / targetH), srcH - 1), magnitudes rescaled to the new grid
+        var rows = NearestSourceIndices(srcH, targetH);
+        var cols = NearestSourceIndices(srcW, targetW);
+        var resized = Engine.TensorIndexSelect(Engine.TensorIndexSelect(Engine.TensorNarrow(flow, 1, 0, 2), rows, 2), cols, 3);
+        var scale = new Tensor<T>(new[] { NumOps.FromDouble((double)targetW / srcW), NumOps.FromDouble((double)targetH / srcH) }, [1, 2, 1, 1]);
+        return Engine.TensorMultiply(resized, Engine.TensorBroadcastTo(scale, [batchSize, 2, targetH, targetW]));
+    }
 
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < targetH; h++)
-                for (int w = 0; w < targetW; w++)
-                {
-                    int srcY = Math.Min((int)((double)h * srcH / targetH), srcH - 1);
-                    int srcX = Math.Min((int)((double)w * srcW / targetW), srcW - 1);
-                    upsampled[b, 0, h, w] = NumOps.FromDouble(Convert.ToDouble(flow[b, 0, srcY, srcX]) * targetW / srcW);
-                    upsampled[b, 1, h, w] = NumOps.FromDouble(Convert.ToDouble(flow[b, 1, srcY, srcX]) * targetH / srcH);
-                }
+    private static Tensor<int> NearestSourceIndices(int source, int target)
+    {
+        var indices = new int[target];
+        for (int i = 0; i < target; i++)
+        {
+            indices[i] = Math.Min((int)((double)i * source / target), source - 1);
+        }
 
-        return upsampled;
+        return new Tensor<int>(indices, [target]);
     }
 
     private Tensor<T> ZeroTensor(int[] shape) => new Tensor<T>(shape);
@@ -720,25 +635,12 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var output = new Tensor<T>([batchSize, channels, height * 2, width * 2]);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        T val = input[b, c, h, w];
-                        output[b, c, h * 2, w * 2] = val;
-                        output[b, c, h * 2, w * 2 + 1] = val;
-                        output[b, c, h * 2 + 1, w * 2] = val;
-                        output[b, c, h * 2 + 1, w * 2 + 1] = val;
-                    }
-
-        return output;
+        return Engine.Upsample(input, 2, 2);
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> input) =>
-        input.Transform((v, _) => NumOps.FromDouble(Math.Max(0, Convert.ToDouble(v))));
+    // Recorded ReLU: the element transform it replaces was invisible to the tape, so the flow network
+    // received no gradient.
+    private Tensor<T> ApplyReLU(Tensor<T> input) => Engine.ReLU(input);
 
     private Tensor<T> ApplySigmoid(Tensor<T> input) =>
         Engine.Sigmoid(input);
@@ -805,29 +707,16 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
 
     private Tensor<T> BlendKnownPixels(Tensor<T> frames, Tensor<T> masks, Tensor<T> prediction)
     {
+        // Known pixels pass through, masked ones come from the prediction: m * prediction + (1 - m) * frame.
+        // This used to add 1e-3 x the mean mask value to the first output pixel so different masks could not give
+        // identical outputs; that corrupted a pixel the model is required to reproduce exactly.
         int batch = frames.Shape[0], channels = prediction.Shape[1];
-        var expanded = new Tensor<T>([batch, channels, prediction.Shape[2], prediction.Shape[3]]);
-        var known = new Tensor<T>([batch, channels, prediction.Shape[2], prediction.Shape[3]]);
-        for (int b = 0; b < batch; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < prediction.Shape[2]; h++)
-                    for (int w = 0; w < prediction.Shape[3]; w++)
-                    {
-                        expanded[b, c, h, w] = masks[b, 0, h, w];
-                        known[b, c, h, w] = frames[b, c, h, w];
-                    }
-        var inverse = new Tensor<T>([batch, channels, prediction.Shape[2], prediction.Shape[3]]);
-        for (int i = 0; i < inverse.Length; i++)
-            inverse.Data.Span[i] = NumOps.Subtract(NumOps.One, expanded.Data.Span[i]);
-        var result = Engine.TensorAdd(Engine.TensorMultiply(expanded, prediction), Engine.TensorMultiply(inverse, known));
-        // Retain a tiny aggregate mask signal in the output contract. This is
-        // numerically negligible for reconstruction, yet guarantees distinct masks
-        // cannot collapse to byte-identical outputs before training has learned the head.
-        double maskMean = 0.0;
-        for (int i = 0; i < masks.Length; i++) maskMean += NumOps.ToDouble(masks.Data.Span[i]);
-        maskMean /= Math.Max(1, masks.Length);
-        result.Data.Span[0] = NumOps.Add(result.Data.Span[0], NumOps.FromDouble(maskMean * 1e-3));
-        return result;
+        int height = prediction.Shape[2], width = prediction.Shape[3];
+        var expanded = MaskPlane(masks, batch, channels, height, width);
+        var known = Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(
+            Engine.TensorNarrow(frames, 0, 0, batch), 1, 0, channels), 2, 0, height), 3, 0, width);
+        var inverse = Engine.TensorSubtract(Engine.TensorOnesLike(expanded), expanded);
+        return Engine.TensorAdd(Engine.TensorMultiply(expanded, prediction), Engine.TensorMultiply(inverse, known));
     }
 
     /// <inheritdoc/>

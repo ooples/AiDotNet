@@ -503,27 +503,30 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         int height = src.Shape[2];
         int width = src.Shape[3];
 
-        // Initialize coarse flow (zero)
-        var flow = new Tensor<T>([batchSize, 2, height, width]);
-
-        // Simple optical flow estimation (differential)
-        for (int b = 0; b < batchSize; b++)
+        // Simple optical flow estimation (differential) on channel 0 of the interior pixels, zero on the border:
+        // flow = -I_t * (I_x, I_y) / (I_x^2 + I_y^2 + 1e-8) with central differences
+        Tensor<T> flow;
+        if (height < 3 || width < 3)
         {
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    // Compute gradients
-                    double ix = Convert.ToDouble(src[b, 0, h, w + 1]) - Convert.ToDouble(src[b, 0, h, w - 1]);
-                    double iy = Convert.ToDouble(src[b, 0, h + 1, w]) - Convert.ToDouble(src[b, 0, h - 1, w]);
-                    double it = Convert.ToDouble(dst[b, 0, h, w]) - Convert.ToDouble(src[b, 0, h, w]);
+            flow = new Tensor<T>([batchSize, 2, height, width]);
+        }
+        else
+        {
+            var srcPlane = Engine.TensorNarrow(src, 1, 0, 1);
+            var dstPlane = Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(
+                Engine.TensorNarrow(dst, 0, 0, batchSize), 1, 0, 1), 2, 1, height - 2), 3, 1, width - 2);
+            Tensor<T> Shifted(int dh, int dw) =>
+                Engine.TensorNarrow(Engine.TensorNarrow(srcPlane, 2, 1 + dh, height - 2), 3, 1 + dw, width - 2);
 
-                    // Simple flow computation
-                    double denom = ix * ix + iy * iy + 1e-8;
-                    flow[b, 0, h, w] = NumOps.FromDouble(-it * ix / denom);
-                    flow[b, 1, h, w] = NumOps.FromDouble(-it * iy / denom);
-                }
-            }
+            var ix = Engine.TensorSubtract(Shifted(0, 1), Shifted(0, -1));
+            var iy = Engine.TensorSubtract(Shifted(1, 0), Shifted(-1, 0));
+            var it = Engine.TensorSubtract(dstPlane, Shifted(0, 0));
+            var denom = Engine.TensorAddScalar(
+                Engine.TensorAdd(Engine.TensorMultiply(ix, ix), Engine.TensorMultiply(iy, iy)), NumOps.FromDouble(1e-8));
+            var negativeRate = Engine.TensorDivide(Engine.TensorNegate(it), denom);
+            var interior = Engine.TensorConcatenate(
+                new[] { Engine.TensorMultiply(negativeRate, ix), Engine.TensorMultiply(negativeRate, iy) }, 1);
+            flow = Engine.Pad(interior, 1, 1, 1, 1, NumOps.Zero);
         }
 
         // Run through flow completion network
@@ -550,37 +553,12 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         return BilinearUpsample(features, 8);
     }
 
-    private Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)
-    {
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var result = new Tensor<T>(image._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double dx = Convert.ToDouble(flow[b, 0, h, w]);
-                    double dy = Convert.ToDouble(flow[b, 1, h, w]);
-
-                    double srcH = h + dy;
-                    double srcW = w + dx;
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        result[b, c, h, w] = BilinearSample(image, b, c, srcH, srcW, height, width);
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
+    /// <summary>
+    /// ProPainter's <c>flow_warp</c>: bilinear sampling at pixel + flow, grid_sample(align_corners=True,
+    /// padding_mode="zeros"). Samples outside the frame used to repeat the border pixel instead of being zero.
+    /// </summary>
+    internal Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)
+        => WarpByFlow(image, flow, GridSamplePadding.Zeros);
 
     private Tensor<T> ApplyMask(Tensor<T> image, Tensor<T> mask)
     {
@@ -590,27 +568,15 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double m = Convert.ToDouble(mask[b, 0, h, w]);
-                    for (int c = 0; c < channels; c++)
-                    {
-                        result[b, c, h, w] = m > 0.5
-                            ? NumOps.Zero
-                            : image[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return result;
+        var masked = Engine.TensorGreaterThan(MaskPlane(mask, batchSize, channels, height, width), NumOps.FromDouble(0.5));
+        return Engine.TensorWhere(masked, Engine.TensorZerosLike(image), image);
     }
+
+    /// <summary>Channel 0 of a mask, cropped to the image and broadcast over its channels.</summary>
+    private Tensor<T> MaskPlane(Tensor<T> mask, int batch, int channels, int height, int width)
+        => Engine.TensorBroadcastTo(
+            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(mask, 0, 0, batch), 1, 0, 1), 2, 0, height), 3, 0, width),
+            [batch, channels, height, width]);
 
     private Tensor<T> BlendWithMask(Tensor<T> original, Tensor<T> inpainted, Tensor<T> mask)
     {
@@ -619,29 +585,12 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var result = new Tensor<T>(original._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double m = Convert.ToDouble(mask[b, 0, h, w]);
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T orig = original[b, c, h, w];
-                        T inp = inpainted[b, c, h, w];
-                        // blend = m * inpainted + (1-m) * original
-                        result[b, c, h, w] = NumOps.Add(
-                            NumOps.Multiply(inp, NumOps.FromDouble(m)),
-                            NumOps.Multiply(orig, NumOps.FromDouble(1 - m)));
-                    }
-                }
-            }
-        }
-
-        return result;
+        // blend = m * inpainted + (1 - m) * original
+        var m = MaskPlane(mask, batchSize, channels, height, width);
+        var inverse = Engine.TensorSubtract(Engine.TensorOnesLike(m), m);
+        var inpaintedRegion = Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(
+            Engine.TensorNarrow(inpainted, 0, 0, batchSize), 1, 0, channels), 2, 0, height), 3, 0, width);
+        return Engine.TensorAdd(Engine.TensorMultiply(inpaintedRegion, m), Engine.TensorMultiply(original, inverse));
     }
 
     private Tensor<T> SingleChannelMask(Tensor<T> mask)
@@ -649,23 +598,7 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         // Ensure mask is single channel
         if (mask.Shape[1] == 1) return mask;
 
-        int batchSize = mask.Shape[0];
-        int height = mask.Shape[2];
-        int width = mask.Shape[3];
-
-        var result = new Tensor<T>([batchSize, 1, height, width]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    result[b, 0, h, w] = mask[b, 0, h, w];
-                }
-            }
-        }
-
-        return result;
+        return Engine.TensorNarrow(mask, 1, 0, 1);
     }
 
     private Tensor<T> ConcatenateChannelsDim1(Tensor<T> t1, Tensor<T> t2)
@@ -673,25 +606,11 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         return Engine.TensorConcatenate([t1, t2], axis: 1);
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> input)
-    {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            return NumOps.FromDouble(Math.Max(0, x));
-        });
-    }
+    // Recorded activations: the element transforms they replace were invisible to the tape, so the layers
+    // before them received no gradient. GELU is torch's nn.GELU, as ProPainter uses.
+    private Tensor<T> ApplyReLU(Tensor<T> input) => Engine.ReLU(input);
 
-    private Tensor<T> ApplyGELU(Tensor<T> input)
-    {
-        return input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            double c = Math.Sqrt(2.0 / Math.PI);
-            double gelu = 0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x)));
-            return NumOps.FromDouble(gelu);
-        });
-    }
+    private Tensor<T> ApplyGELU(Tensor<T> input) => Engine.GELU(input);
 
     /// <summary>
     /// Element-wise addition of two tensors (residual connection).
@@ -711,48 +630,20 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var result = new Tensor<T>(input._shape);
-        const double eps = 1e-5;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Compute mean and variance across C, H, W
-            double sum = 0;
-            double sumSq = 0;
-            int count = channels * height * width;
-
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = Convert.ToDouble(input[b, c, h, w]);
-                        sum += val;
-                        sumSq += val * val;
-                    }
-                }
-            }
-
-            double mean = sum / count;
-            double variance = (sumSq / count) - (mean * mean);
-            double std = Math.Sqrt(variance + eps);
-
-            // Normalize
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = Convert.ToDouble(input[b, c, h, w]);
-                        result[b, c, h, w] = NumOps.FromDouble((val - mean) / std);
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Standardize each sample over C, H, W with the biased variance and eps = 1e-5. The centred values are
+        // scaled by their peak before squaring so the variance cannot overflow T.
+        int[] sampleAxes = [1, 2, 3];
+        var centered = Engine.TensorSubtract(
+            input, Engine.TensorBroadcastTo(Engine.ReduceMean(input, sampleAxes, true), input._shape));
+        var peak = Engine.ReduceMax(Engine.TensorAbs(centered), sampleAxes, true);
+        var safePeak = Engine.TensorWhere(
+            Engine.TensorGreaterThan(peak, NumOps.Zero), peak, Engine.TensorOnesLike(peak));
+        var unit = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(safePeak, input._shape));
+        var variance = Engine.TensorMultiply(
+            Engine.ReduceMean(Engine.TensorMultiply(unit, unit), sampleAxes, true),
+            Engine.TensorMultiply(safePeak, safePeak));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5)));
+        return Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, input._shape));
     }
 
     /// <summary>
@@ -769,164 +660,47 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         int width = inputShape[3];
         int seqLen = height * width;
 
-        var output = new Tensor<T>(inputShape);
-        double scale = 1.0 / Math.Sqrt(_headDim);
+        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
 
-        for (int b = 0; b < batchSize; b++)
+        // [B, C, S] queries, keys and values
+        Tensor<T> Part(int index) => Engine.Reshape(
+            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(
+                Engine.TensorNarrow(qkv, 0, 0, batchSize), 1, index * channels, channels), 2, 0, height), 3, 0, width),
+            [batchSize, channels, seqLen]);
+        var q = Part(0);
+        var k = Part(1);
+        var v = Part(2);
+
+        // Each head attends over its own channel slice; channels past the last head stay zero
+        var heads = new List<Tensor<T>>();
+        int covered = 0;
+        for (int headIdx = 0; headIdx < _numHeads && headIdx * _headDim < channels; headIdx++)
         {
-            // Split QKV into separate tensors
-            var q = new double[channels, seqLen];
-            var k = new double[channels, seqLen];
-            var v = new double[channels, seqLen];
+            int headStart = headIdx * _headDim;
+            int headChannels = Math.Min(_headDim, channels - headStart);
+            var qh = Engine.TensorNarrow(q, 1, headStart, headChannels);
+            var kh = Engine.TensorNarrow(k, 1, headStart, headChannels);
+            var vh = Engine.TensorNarrow(v, 1, headStart, headChannels);
 
-            for (int c = 0; c < channels; c++)
-            {
-                int pos = 0;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        q[c, pos] = Convert.ToDouble(qkv[b, c, h, w]);
-                        k[c, pos] = Convert.ToDouble(qkv[b, channels + c, h, w]);
-                        v[c, pos] = Convert.ToDouble(qkv[b, channels * 2 + c, h, w]);
-                        pos++;
-                    }
-                }
-            }
-
-            // Multi-head attention
-            var attOutput = new double[channels, seqLen];
-
-            for (int headIdx = 0; headIdx < _numHeads; headIdx++)
-            {
-                int headStart = headIdx * _headDim;
-                int headEnd = Math.Min(headStart + _headDim, channels);
-
-                // Compute attention scores for this head
-                var scores = new double[seqLen, seqLen];
-                for (int i = 0; i < seqLen; i++)
-                {
-                    double maxScore = double.MinValue;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        double score = 0;
-                        for (int c = headStart; c < headEnd; c++)
-                        {
-                            score += q[c, i] * k[c, j];
-                        }
-                        score *= scale;
-                        scores[i, j] = score;
-                        if (score > maxScore) maxScore = score;
-                    }
-
-                    // Softmax normalization
-                    double sumExp = 0;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        scores[i, j] = Math.Exp(scores[i, j] - maxScore);
-                        sumExp += scores[i, j];
-                    }
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        scores[i, j] /= Math.Max(sumExp, 1e-12);
-                    }
-                }
-
-                // Apply attention weights to values
-                for (int c = headStart; c < headEnd; c++)
-                {
-                    for (int i = 0; i < seqLen; i++)
-                    {
-                        double weightedSum = 0;
-                        for (int j = 0; j < seqLen; j++)
-                        {
-                            weightedSum += scores[i, j] * v[c, j];
-                        }
-                        attOutput[c, i] = weightedSum;
-                    }
-                }
-            }
-
-            // Copy to output tensor
-            for (int c = 0; c < channels; c++)
-            {
-                int pos = 0;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[b, c, h, w] = NumOps.FromDouble(attOutput[c, pos]);
-                        pos++;
-                    }
-                }
-            }
+            // scores[i, j] = scale * sum_c q[c, i] k[c, j], softmax over j, out[c, i] = sum_j p[i, j] v[c, j]
+            var scores = Engine.TensorMultiplyScalar(
+                Engine.BatchMatMul(Engine.TensorPermute(qh, [0, 2, 1]), kh), scale);
+            var probabilities = Engine.TensorSoftmax(scores, 2);
+            heads.Add(Engine.BatchMatMul(vh, Engine.TensorPermute(probabilities, [0, 2, 1])));
+            covered = headStart + headChannels;
         }
 
-        return output;
+        if (covered < channels)
+        {
+            heads.Add(new Tensor<T>([batchSize, channels - covered, seqLen]));
+        }
+
+        return Engine.Reshape(Engine.TensorConcatenate(heads.ToArray(), 1), inputShape);
     }
 
-    private T BilinearSample(Tensor<T> tensor, int b, int c, double h, double w, int height, int width)
-    {
-        int h0 = (int)Math.Floor(h);
-        int w0 = (int)Math.Floor(w);
-        int h1 = h0 + 1;
-        int w1 = w0 + 1;
-
-        h0 = Math.Max(0, Math.Min(h0, height - 1));
-        h1 = Math.Max(0, Math.Min(h1, height - 1));
-        w0 = Math.Max(0, Math.Min(w0, width - 1));
-        w1 = Math.Max(0, Math.Min(w1, width - 1));
-
-        double hWeight = h - Math.Floor(h);
-        double wWeight = w - Math.Floor(w);
-
-        T v00 = tensor[b, c, h0, w0];
-        T v01 = tensor[b, c, h0, w1];
-        T v10 = tensor[b, c, h1, w0];
-        T v11 = tensor[b, c, h1, w1];
-
-        T top = NumOps.Add(
-            NumOps.Multiply(v00, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v01, NumOps.FromDouble(wWeight)));
-        T bottom = NumOps.Add(
-            NumOps.Multiply(v10, NumOps.FromDouble(1 - wWeight)),
-            NumOps.Multiply(v11, NumOps.FromDouble(wWeight)));
-
-        return NumOps.Add(
-            NumOps.Multiply(top, NumOps.FromDouble(1 - hWeight)),
-            NumOps.Multiply(bottom, NumOps.FromDouble(hWeight)));
-    }
-
+    // Half-pixel bilinear resampling with edge clamping: torch interpolate(mode="bilinear", align_corners=False)
     private Tensor<T> BilinearUpsample(Tensor<T> input, int factor)
-    {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int inHeight = input.Shape[2];
-        int inWidth = input.Shape[3];
-
-        int outHeight = inHeight * factor;
-        int outWidth = inWidth * factor;
-
-        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outHeight; h++)
-                {
-                    for (int w = 0; w < outWidth; w++)
-                    {
-                        double srcH = (h + 0.5) / factor - 0.5;
-                        double srcW = (w + 0.5) / factor - 0.5;
-                        output[b, c, h, w] = BilinearSample(input, b, c, srcH, srcW, inHeight, inWidth);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+        => Engine.Interpolate(input, [input.Shape[2] * factor, input.Shape[3] * factor], InterpolateMode.Bilinear, false);
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
