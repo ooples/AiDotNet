@@ -1152,6 +1152,65 @@ public class ElementwiseSweepRegressionTests
         Assert.Empty(decoded.Item1);
         Assert.InRange(decoded.Item2 / 1e-300, 1 - 1e-9, 1 + 1e-9);
     }
+
+    [Fact]
+    public async Task HalfSuperNetFeatureInteraction_SumsPastTheHalfRangeKeepTheCorrelation()
+    {
+        var supernet = new SuperNet<Half>(new AiDotNet.AutoML.SearchSpace.SearchSpaceBase<Half>(), numNodes: 1);
+        // Column 1 is half of column 0, so the correlation is 1; n * sum(x^2) = 4 * 160000 passes 65504.
+        var alpha = new Matrix<Half>(4, 2);
+        double[] column = { 200, -200, 200, -200 };
+        for (int row = 0; row < 4; row++)
+        {
+            alpha[row, 0] = (Half)column[row];
+            alpha[row, 1] = (Half)(column[row] / 2);
+        }
+        var parameters = (List<Matrix<Half>>)Required(
+            typeof(SuperNet<Half>).GetField("_architectureParams", PrivateInstance)?.GetValue(supernet));
+        parameters.Clear();
+        parameters.Add(alpha);
+        double correlation = (double)await supernet.GetFeatureInteractionAsync(0, 1);
+        Assert.InRange(correlation, 1 - 1e-3, 1 + 1e-3);
+    }
+
+    [Fact]
+    public void HalfRelationalGCNMeanAggregation_CountsMoreThan2048Neighbours()
+    {
+        const int nodes = 2100;
+        var adjacency = new Tensor<Half>(new[] { 1, nodes, nodes });
+        adjacency.AsWritableSpan().Fill((Half)1);
+        using var model = new AiDotNet.Finance.Graph.RelationalGCN<Half>(
+            new NeuralNetworkArchitecture<Half>(inputType: AiDotNet.Enums.InputType.OneDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+            new RelationalGCNOptions<Half>
+            {
+                NumNodes = nodes, NumRelations = 1, NumFeatures = 1, SequenceLength = 1, ForecastHorizon = 1,
+                HiddenDimension = 2, NumLayers = 1, UseBasisDecomposition = false, UseBlockDecomposition = false,
+                Aggregation = AiDotNet.Enums.RelationalAggregation.Mean, Seed = 7,
+            },
+            adjacency);
+        // Every node has all 2100 nodes as neighbours, so each mean weight is 1 / 2100.
+        var propagation = (Tensor<Half>)Required(Required(typeof(AiDotNet.Finance.Graph.RelationalGCN<Half>)
+            .GetMethod("Propagation", PrivateInstance)).Invoke(model, Array.Empty<object>()));
+        var firstRow = propagation.ToArray().Take(nodes).Select(value => (double)value).ToArray();
+        Assert.All(firstRow, value => Assert.InRange(value, 1.0 / nodes * (1 - 1e-3), 1.0 / nodes * (1 + 1e-3)));
+    }
+
+    [Fact]
+    public void HalfTimeEmbeddingLayer_FormsFrequenciesAndAnglesWide()
+    {
+        const int dim = 16, half = dim / 2;
+        var layer = new TimeEmbeddingLayer<Half>(dim, 4);
+        var frequencies = ((Tensor<Half>)Required(
+            typeof(TimeEmbeddingLayer<Half>).GetField("_frequencies", PrivateInstance)?.GetValue(layer))).ToArray();
+        for (int i = 0; i < half; i++)
+            Assert.Equal((Half)Math.Exp(-Math.Log(10000.0) * i / half), frequencies[i]);
+
+        var embedding = (Tensor<Half>)Required(Required(typeof(TimeEmbeddingLayer<Half>)
+            .GetMethod("ComputeSinusoidalEmbedding", PrivateInstance))
+            .Invoke(layer, new object[] { new Tensor<Half>(new[] { (Half)999 }, new[] { 1 }) }));
+        AssertSinusoid(embedding.ToArray(), 999, half, Math.Log(10000.0) / half);
+    }
 }
 
 public class CtcGreedyDecodingTests
