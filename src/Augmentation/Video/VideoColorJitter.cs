@@ -141,21 +141,26 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
         var chw = frame.ToChannelOrder(ChannelOrder.CHW).Data;
         int colorChannels = channels >= 3 ? 3 : 1;
         var color = engine.TensorSlice(chw, new[] { 0, 0, 0 }, new[] { colorChannels, height, width });
+        T brightnessFactor = NumOps.FromDouble(brightness);
+        T contrastFactor = NumOps.FromDouble(contrast);
+        T saturationFactor = NumOps.FromDouble(saturation);
 
         foreach (var adjustment in order)
         {
             color = adjustment switch
             {
-                ColorAdjustment.Brightness => Blend(color, NumOps.FromDouble(brightness), null, maxVal),
+                ColorAdjustment.Brightness => Blend(color, brightnessFactor, null, maxVal),
                 ColorAdjustment.Contrast => Blend(
                     color,
-                    NumOps.FromDouble(contrast),
-                    engine.TensorAddScalar(new Tensor<T>(new[] { colorChannels, height, width }), engine.TensorMean(Grayscale(color))),
+                    contrastFactor,
+                    engine.TensorAddScalar(
+                        new Tensor<T>(new[] { colorChannels, height, width }),
+                        OverflowSafeReductions.Mean(Grayscale(color))),
                     maxVal),
                 ColorAdjustment.Saturation => colorChannels == 3
                     ? Blend(
                         color,
-                        NumOps.FromDouble(saturation),
+                        saturationFactor,
                         engine.TensorBroadcastTo(Grayscale(color), new[] { 3, height, width }),
                         maxVal)
                     : color,
