@@ -237,14 +237,14 @@ public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
         int minLen = Math.Min(data1.Length, data2.Length);
         if (minLen == 0) return 0;
 
-        var a = new Tensor<T>(data1, [data1.Length]);
-        var b = new Tensor<T>(data2, [data2.Length]);
+        var a = new Tensor<T>(data1, [data1.Length]).Cast<double>();
+        var b = new Tensor<T>(data2, [data2.Length]).Cast<double>();
         if (data1.Length != minLen) a = Engine.TensorSlice(a, [0], [minLen]);
         if (data2.Length != minLen) b = Engine.TensorSlice(b, [0], [minLen]);
 
-        double sum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(a, b)));
-        double norm1 = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(a)));
-        double norm2 = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(b)));
+        double sum = Engine.TensorSum(Engine.TensorMultiply(a, b));
+        double norm1 = Engine.TensorSum(Engine.TensorSquare(a));
+        double norm2 = Engine.TensorSum(Engine.TensorSquare(b));
 
         double denominator = Math.Sqrt(norm1 * norm2);
         if (denominator < 1e-10) return 0;

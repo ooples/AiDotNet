@@ -166,10 +166,8 @@ internal static class AudioEngineOps
     internal static double SpectralCentroidBins<T>(IEngine engine, Tensor<T> spec)
     {
         if (spec.Shape[0] == 0 || spec.Shape[1] == 0) return 0;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var (weighted, total) = BinMoment(engine, spec);
-        double totalSum = numOps.ToDouble(total);
-        return totalSum > 0 ? numOps.ToDouble(weighted) / totalSum : 0;
+        var (weighted, total) = BinMoment(engine, spec.Cast<double>());
+        return total > 0 ? weighted / total : 0;
     }
 
     /// <summary>
@@ -180,10 +178,9 @@ internal static class AudioEngineOps
     {
         int count = spec.Shape[0] * spec.Shape[1];
         if (count == 0) return 0;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var mag = engine.TensorMax(spec, numOps.FromDouble(1e-10));
-        double logSum = numOps.ToDouble(engine.TensorSum(engine.TensorLog(mag)));
-        double sum = numOps.ToDouble(engine.TensorSum(mag));
+        var mag = engine.TensorMax(spec.Cast<double>(), 1e-10);
+        double logSum = engine.TensorSum(engine.TensorLog(mag));
+        double sum = engine.TensorSum(mag);
         double geometricMean = Math.Exp(logSum / count);
         double arithmeticMean = sum / count;
         return arithmeticMean > 0 ? geometricMean / arithmeticMean : 0;
@@ -194,10 +191,11 @@ internal static class AudioEngineOps
     /// </summary>
     internal static (Tensor<T> Mean, Tensor<T> Std) ColumnMeanStd<T>(IEngine engine, Tensor<T> x)
     {
-        var mean = engine.ReduceMean(x, new[] { 0 }, keepDims: true);
-        var deviation = engine.TensorSubtract(x, engine.TensorBroadcastTo(mean, x.Shape.ToArray()));
+        var wide = x.Cast<double>();
+        var mean = engine.ReduceMean(wide, new[] { 0 }, keepDims: true);
+        var deviation = engine.TensorSubtract(wide, engine.TensorBroadcastTo(mean, x.Shape.ToArray()));
         var variance = engine.ReduceMean(engine.TensorSquare(deviation), new[] { 0 }, keepDims: false);
-        return (engine.Reshape(mean, new[] { x.Shape[1] }), engine.TensorSqrt(variance));
+        return (engine.Reshape(mean, new[] { x.Shape[1] }).Cast<T>(), engine.TensorSqrt(variance).Cast<T>());
     }
 
     /// <summary>
@@ -328,15 +326,14 @@ internal static class AudioEngineOps
     }
 
     /// <summary>
-    /// The symmetric Hann window <c>0.5 * (1 - cos(2 pi i / (size - 1)))</c>; a one-sample window
-    /// evaluates 0/0 like the closed form and is NaN.
+    /// The symmetric Hann window, using the standard value one for a one-sample window.
     /// </summary>
     internal static Tensor<T> SymmetricHannWindow<T>(IEngine engine, int size)
     {
-        if (size == 1) return Tensor<T>.CreateDefault(new[] { 1 }, MathHelper.GetNumericOperations<T>().FromDouble(double.NaN));
-        if (size < 0) throw new OverflowException("Window size must be non-negative.");
+        if (size == 1) return Tensor<T>.CreateDefault(new[] { 1 }, MathHelper.GetNumericOperations<T>().One);
+        if (size < 0) throw new ArgumentOutOfRangeException(nameof(size), "Window size must be non-negative.");
         if (size == 0) return new Tensor<T>(new[] { 0 });
-        return engine.TensorHannWindow<T>(size, periodic: false);
+        return engine.TensorHannWindow<double>(size, periodic: false).Cast<T>();
     }
 
     /// <summary>
@@ -421,11 +418,11 @@ internal static class AudioEngineOps
     internal static T[] L2NormalizedData<T>(IEngine engine, Tensor<T> embedding)
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var numOps = MathHelper.GetNumericOperations<T>();
         if (embedding.Length == 0) return new T[0];
-        T norm = numOps.Sqrt(engine.TensorSum(engine.TensorSquare(embedding)));
-        return numOps.GreaterThan(norm, numOps.Zero)
-            ? engine.TensorDivideScalar(embedding, norm).ToArray()
+        var wide = embedding.Cast<double>();
+        double norm = Math.Sqrt(engine.TensorSum(engine.TensorSquare(wide)));
+        return norm > 0
+            ? engine.TensorDivideScalar(wide, norm).Cast<T>().ToArray()
             : embedding.ToArray();
     }
 
@@ -676,15 +673,14 @@ internal static class AudioEngineOps
         int cols = matrix.Shape[1];
         if (rows == 0) return new int[0];
         if (cols == 0) return new int[rows];
-        var numOps = MathHelper.GetNumericOperations<T>();
         var shape = new[] { rows, cols };
         var ranked = engine.TensorWhere(
             engine.TensorIsNan(matrix), Tensor<T>.CreateDefault(shape, NegativeInfinityOrMin<T>()), matrix);
         var best = engine.TensorBroadcastTo(engine.ReduceMax(ranked, new[] { 1 }, keepDims: true), shape);
-        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, cols, 1), new[] { 1, cols }), shape);
+        var column = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<int>(0, cols, 1), new[] { 1, cols }), shape);
         var firstBest = engine.TensorWhere(
-            engine.TensorEquals(ranked, best), column, Tensor<T>.CreateDefault(shape, numOps.FromDouble(cols)));
-        return engine.TensorAmin(firstBest, new[] { 1 }, keepDims: false).Cast<int>().ToArray();
+            engine.TensorEquals(ranked, best).Cast<int>(), column, Tensor<int>.CreateDefault(shape, cols));
+        return engine.TensorAmin(firstBest, new[] { 1 }, keepDims: false).ToArray();
     }
 
     /// <summary>

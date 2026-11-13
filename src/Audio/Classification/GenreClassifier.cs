@@ -412,7 +412,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         if (segmentConfidence.Count > 0)
         {
             double[] totals = Engine.ScatterAdd(
-                new Tensor<T>(segmentConfidence.ToArray(), [segmentConfidence.Count]),
+                new Tensor<T>(segmentConfidence.ToArray(), [segmentConfidence.Count]).Cast<double>(),
                 new Tensor<int>(segmentGenre.ToArray(), [segmentGenre.Count]),
                 0,
                 genreIndex.Count).Cast<double>().ToArray();
