@@ -257,6 +257,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         var previous = new Tensor<T>(new[] { 1, groupWidth });
         var groups = new List<Tensor<T>>();
         var stops = new List<Tensor<T>>();
+        var stopThreshold = NumOps.FromDouble(o.StopThreshold);
         for (int step = 0; step < steps; step++)
         {
             var prenet = Prenet(previous);
@@ -273,7 +274,8 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
             if (target is null)
             {
                 previous = group;
-                if (1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(stop[0, 0]))) > o.StopThreshold)
+                // The stop decision σ(logit) > threshold, read once per step.
+                if (Engine.TensorGreaterThan(Engine.Sigmoid(stop), stopThreshold).Cast<int>().ToArray()[0] != 0)
                     break;
             }
             else
