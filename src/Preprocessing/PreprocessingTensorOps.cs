@@ -371,7 +371,6 @@ internal static class PreprocessingTensorOps
 
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        int n = x.Shape[0];
         int p = x.Shape[1];
         var min = ColumnMin(x);
         var range = engine.TensorSubtract(ColumnMax(x), min);
