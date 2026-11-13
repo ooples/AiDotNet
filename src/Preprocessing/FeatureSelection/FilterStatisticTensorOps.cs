@@ -174,29 +174,36 @@ internal static class FilterStatisticTensorOps
     /// frequencies <c>k = 1 .. kCount</c> ([kCount, p]), evaluated as cos/sin basis matrix products built in blocks of
     /// frequencies so the basis never holds more than a few million elements.
     /// </summary>
+    /// <remarks>
+    /// The basis depends on n alone, so it is built in double and taken to T: the phase index <c>k i</c> (an exact
+    /// integer in double, below 2^53) is reduced modulo n first, so the angle <c>2 pi ((k i) mod n) / n</c> stays in
+    /// <c>[0, 2 pi)</c>. Formed in T, <c>k i</c> reached about n^2 / 2: past 65504 in Half once n passed about 360
+    /// (cos and sin of infinity are NaN), and past 2^24 in float, where it is no longer exact.
+    /// </remarks>
     public static Tensor<T> ColumnDftPower<T>(Tensor<T> x, int kCount)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int p = x.Shape[1];
         if (kCount <= 0 || n == 0)
             return new Tensor<T>(new[] { Math.Max(kCount, 0), p });
 
-        var sampleIndex = engine.Reshape(engine.TensorArange<T>(0, n, 1), new[] { 1, n });
+        var sampleIndex = engine.Reshape(engine.TensorArange<double>(0, n, 1), new[] { 1, n });
         int block = Math.Max(1, Math.Min(kCount, DftBlockElements / n));
         var blocks = new List<Tensor<T>>();
-        T angleScale = ops.FromDouble(2.0 * Math.PI / n);
+        double angleScale = 2.0 * Math.PI / n;
         for (int start = 1; start <= kCount; start += block)
         {
             int count = Math.Min(block, kCount - start + 1);
-            var frequency = engine.Reshape(engine.TensorArange<T>(start, start + count, 1), new[] { count, 1 });
+            var frequency = engine.Reshape(engine.TensorArange<double>(start, start + count, 1), new[] { count, 1 });
 
-            // angle[k, i] = 2 pi k i / n
-            var angle = engine.TensorMultiplyScalar(
-                engine.TensorMatMul(frequency, sampleIndex), angleScale);
-            var real = engine.TensorMatMul(engine.TensorCos(angle), x);
-            var imaginary = engine.TensorMatMul(engine.TensorSin(angle), x);
+            // angle[k, i] = 2 pi ((k i) mod n) / n, the residue r = k i - n trunc(k i / n) (k i and n are non-negative)
+            var phase = engine.TensorMatMul(frequency, sampleIndex);
+            var residue = engine.TensorSubtract(
+                phase, engine.TensorMultiplyScalar(engine.TensorTrunc(engine.TensorDivideScalar(phase, (double)n)), (double)n));
+            var angle = engine.TensorMultiplyScalar(residue, angleScale);
+            var real = engine.TensorMatMul(engine.TensorCos(angle).Cast<T>(), x);
+            var imaginary = engine.TensorMatMul(engine.TensorSin(angle).Cast<T>(), x);
             blocks.Add(engine.TensorAdd(engine.TensorSquare(real), engine.TensorSquare(imaginary)));
         }
 
