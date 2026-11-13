@@ -551,6 +551,28 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     }
 
     /// <summary>
+    /// Euclidean norm of <paramref name="vector"/>, scaled by its largest magnitude first so the squares
+    /// cannot overflow T: for Half, |v| above 256 would otherwise square past 65504 to infinity, where
+    /// master's double accumulation stayed finite.
+    /// </summary>
+    internal static T StableL2Norm(Vector<T> vector)
+    {
+        if (vector.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        T scale = Engine.TensorMaxValue(Engine.TensorAbs(vector.AsTensor()));
+        if (NumOps.Equals(scale, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+
+        var unit = Engine.Divide(vector, scale);
+        return NumOps.Multiply(scale, NumOps.Sqrt(Engine.DotProduct(unit, unit)));
+    }
+
+    /// <summary>
     /// Computes importance using random projection method.
     /// Projects output onto random directions and measures sensitivity.
     /// </summary>
@@ -771,7 +793,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 var outputVec = ConvertToVector(output);
 
                 // Compute output magnitude as activation proxy
-                T outputMag = Engine.Norm(outputVec);
+                T outputMag = StableL2Norm(outputVec);
                 outputMagnitudes.Add(outputMag);
 
                 // Get parameter values and weight by output magnitude
@@ -802,8 +824,11 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
 
             // Apply exponential weighting to emphasize high-activation parameters
             // This follows the Hebbian principle more closely
-            T meanMag = Engine.Mean(new Vector<T>(outputMagnitudes));
-            if (NumOps.GreaterThan(meanMag, NumOps.FromDouble(1e-8)))
+            // Divide before summing so the magnitudes cannot overflow T (Half tops out at 65504); the
+            // 1e-8 guard is compared in double because it rounds to zero in Half.
+            var magnitudes = new Vector<T>(outputMagnitudes);
+            T meanMag = Engine.Sum(Engine.Divide(magnitudes, NumOps.FromDouble(magnitudes.Length)));
+            if (NumOps.ToDouble(meanMag) > 1e-8)
             {
                 var scaleFactor = NumOps.Divide(NumOps.One, meanMag);
                 omega = Engine.Multiply(omega, scaleFactor);

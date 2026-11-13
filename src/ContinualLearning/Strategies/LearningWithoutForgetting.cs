@@ -343,13 +343,13 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         var softTeacher = SoftmaxWithTemperature(teacherLogits, _temperature);
         var softStudent = SoftmaxWithTemperature(studentLogits, _temperature);
 
-        // sum over teacher probabilities above 1e-10 of t * log(t / max(s, 1e-10))
-        var floor = NumOps.FromDouble(1e-10);
+        // sum over teacher probabilities above 1e-10 of t * (log t - log max(s, 1e-10)); the log
+        // difference avoids the ratio t / s, which overflows Half when s is tiny
         var teacher = softTeacher.AsTensor();
-        var studentProb = Engine.TensorMax(softStudent.AsTensor(), floor);
-        var terms = Engine.TensorMultiply(teacher, Engine.TensorLog(Engine.TensorDivide(teacher, studentProb)));
+        var terms = Engine.TensorMultiply(teacher,
+            Engine.TensorSubtract(Engine.TensorLog(teacher), FlooredLog(softStudent)));
         var kept = Engine.TensorWhere(
-            Engine.TensorGreaterThan(teacher, floor),
+            Engine.TensorGreaterThan(teacher, NumOps.FromDouble(1e-10)),
             terms,
             new Tensor<T>(new[] { teacher.Length }));
         T kl = Engine.TensorSum(kept);
@@ -381,9 +381,22 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         var softStudent = SoftmaxWithTemperature(studentLogits, _temperature);
 
         // -sum t * log(max(s, 1e-10))
-        var studentProb = Engine.TensorMax(softStudent.AsTensor(), NumOps.FromDouble(1e-10));
-        var weightedLog = Engine.TensorMultiply(softTeacher.AsTensor(), Engine.TensorLog(studentProb));
+        var weightedLog = Engine.TensorMultiply(softTeacher.AsTensor(), FlooredLog(softStudent));
         return NumOps.Negate(Engine.TensorSum(weightedLog));
+    }
+
+    /// <summary>
+    /// <c>log(max(p, 1e-10))</c> for every probability. The floor is applied in the log domain: 1e-10
+    /// rounds to zero in Half, where <c>max(p, floor)</c> would leave <c>log 0 = -inf</c>, while
+    /// <c>log 1e-10 ≈ -23.03</c> is representable in every T.
+    /// </summary>
+    internal static Tensor<T> FlooredLog(Vector<T> probabilities)
+    {
+        var p = probabilities.AsTensor();
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(p, NumOps.FromDouble(1e-10)),
+            Engine.TensorLog(p),
+            Engine.TensorFullLike(p, NumOps.FromDouble(Math.Log(1e-10))));
     }
 
     /// <summary>
