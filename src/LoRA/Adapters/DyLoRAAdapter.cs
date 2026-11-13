@@ -378,7 +378,12 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <param name="targets">Training target tensors.</param>
     /// <param name="epochs">Number of training epochs.</param>
     /// <param name="learningRate">Learning rate for parameter updates.</param>
-    /// <param name="lossFunction">Loss function to minimize.</param>
+    /// <param name="lossFunction">
+    /// Scalar loss evaluated on every sample. A scalar value carries no gradient, so this overload
+    /// differentiates the half squared error 0.5 * ||output - target||² (output gradient
+    /// output - target). To train on a different objective, use the overload that takes a
+    /// tensor-valued tape loss.
+    /// </param>
     /// <remarks>
     /// <para>
     /// This training method ensures that all active ranks are trained by randomly selecting
@@ -403,6 +408,47 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         T learningRate,
         Func<Tensor<T>, Tensor<T>, T> lossFunction)
     {
+        if (lossFunction == null)
+        {
+            throw new ArgumentNullException(nameof(lossFunction));
+        }
+
+        TrainWithNestedDropout(inputs, targets, epochs, learningRate, (output, target) =>
+        {
+            _ = lossFunction(output, target);
+            var diff = Engine.TensorSubtract(output, Engine.Reshape(target, output.Shape.ToArray()));
+            var squared = Engine.Reshape(Engine.TensorMultiply(diff, diff), [diff.Length]);
+            return Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(squared, [0], keepDims: true), NumOps.FromDouble(0.5));
+        });
+    }
+
+    /// <summary>
+    /// Trains the adapter with nested dropout across all active ranks, differentiating a
+    /// caller-supplied tensor-valued loss.
+    /// </summary>
+    /// <param name="inputs">Training input tensors.</param>
+    /// <param name="targets">Training target tensors.</param>
+    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="learningRate">Learning rate for parameter updates.</param>
+    /// <param name="lossObjective">
+    /// Computes the loss for one sample from (output, target) with Engine tensor operations and
+    /// returns it as a single-element tensor. The operations are recorded on the gradient tape, so
+    /// the parameters are updated along the gradient of exactly this objective.
+    /// </param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this overload when you want to train on something other than
+    /// squared error, for example absolute error or a cross-entropy. Build the loss from Engine
+    /// tensor operations so its gradient can flow back into the adapter.
+    /// </para>
+    /// </remarks>
+    public void TrainWithNestedDropout(
+        Tensor<T>[] inputs,
+        Tensor<T>[] targets,
+        int epochs,
+        T learningRate,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> lossObjective)
+    {
         if (inputs == null)
         {
             throw new ArgumentNullException(nameof(inputs));
@@ -411,6 +457,11 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         if (targets == null)
         {
             throw new ArgumentNullException(nameof(targets));
+        }
+
+        if (lossObjective == null)
+        {
+            throw new ArgumentNullException(nameof(lossObjective));
         }
 
         if (inputs.Length != targets.Length)
@@ -430,25 +481,14 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
                 {
                     // One tape training step on this sample. The forward samples rank b, the
                     // masked factors give zero gradient above b, and the base layer is trained
-                    // through the same tape when it is not frozen. The loss differentiated is
-                    // 0.5 * ||output - target||², whose output gradient is (output - target)
-                    // (simplified - assumes MSE loss); the supplied loss function is still
-                    // evaluated per sample. Apply SGD while the tape's gradient buffers are alive.
+                    // through the same tape when it is not frozen. The caller's objective is
+                    // differentiated; SGD is applied while the tape's gradient buffers are alive.
                     TapeTrainingStepper<T>.EagerSgdObjectiveStep(
                         () => TapeTrainingStep<T>.CollectParameters(
                             _freezeBaseLayer
                                 ? new ILayer<T>[] { _loraLayer }
                                 : new ILayer<T>[] { _baseLayer, _loraLayer }, structureVersion: -1),
-                        () =>
-                        {
-                            var output = Forward(inputs[i]);
-                            var target = targets[i];
-                            _ = lossFunction(output, target);
-                            var diff = Engine.TensorSubtract(output, Engine.Reshape(target, output.Shape.ToArray()));
-                            var squared = Engine.Reshape(Engine.TensorMultiply(diff, diff), [diff.Length]);
-                            return Engine.TensorMultiplyScalar(
-                                Engine.ReduceSum(squared, [0], keepDims: true), NumOps.FromDouble(0.5));
-                        },
+                        () => lossObjective(Forward(inputs[i]), targets[i]),
                         learningRate);
                 }
             }
