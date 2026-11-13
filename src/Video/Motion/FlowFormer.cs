@@ -208,37 +208,12 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
     /// <summary>
     /// Warps an image using the estimated flow.
     /// </summary>
+    /// <remarks>
+    /// Bilinear backward warp at <c>(x + dx, y + dy)</c> as in the reference's <c>bilinear_sampler</c>:
+    /// <c>grid_sample(align_corners=True)</c> with zero padding, so pixels outside the image contribute zero.
+    /// </remarks>
     public Tensor<T> WarpWithFlow(Tensor<T> image, Tensor<T> flow)
-    {
-        int b = image.Rank == 4 ? image.Shape[0] : 1;
-        int c = image.Rank == 4 ? image.Shape[1] : image.Shape[0];
-        int h = image.Rank == 4 ? image.Shape[2] : image.Shape[1];
-        int w = image.Rank == 4 ? image.Shape[3] : image.Shape[2];
-
-        var warped = new Tensor<T>(image._shape);
-
-        for (int batch = 0; batch < b; batch++)
-        {
-            for (int y = 0; y < h; y++)
-            {
-                for (int x = 0; x < w; x++)
-                {
-                    double fx = Convert.ToDouble(flow[batch, 0, y, x]);
-                    double fy = Convert.ToDouble(flow[batch, 1, y, x]);
-
-                    double srcX = x + fx;
-                    double srcY = y + fy;
-
-                    for (int ch = 0; ch < c; ch++)
-                    {
-                        warped[batch, ch, y, x] = BilinearSample(image, batch, ch, srcY, srcX, h, w);
-                    }
-                }
-            }
-        }
-
-        return warped;
-    }
+        => WarpByFlow(image, flow, GridSamplePadding.Zeros);
 
     #endregion
 
@@ -280,25 +255,6 @@ public partial class FlowFormer<T> : OpticalFlowBase<T>
         frame1.Data.Span.CopyTo(concat.Data.Span.Slice(0, frame1.Data.Length));
         frame2.Data.Span.CopyTo(concat.Data.Span.Slice(frame1.Data.Length, frame2.Data.Length));
         return concat;
-    }
-
-    private T BilinearSample(Tensor<T> tensor, int b, int c, double y, double x, int h, int w)
-    {
-        int x0 = MathHelper.Clamp((int)Math.Floor(x), 0, w - 1);
-        int x1 = MathHelper.Clamp(x0 + 1, 0, w - 1);
-        int y0 = MathHelper.Clamp((int)Math.Floor(y), 0, h - 1);
-        int y1 = MathHelper.Clamp(y0 + 1, 0, h - 1);
-
-        double dx = x - Math.Floor(x);
-        double dy = y - Math.Floor(y);
-
-        double v00 = Convert.ToDouble(tensor[b, c, y0, x0]);
-        double v01 = Convert.ToDouble(tensor[b, c, y0, x1]);
-        double v10 = Convert.ToDouble(tensor[b, c, y1, x0]);
-        double v11 = Convert.ToDouble(tensor[b, c, y1, x1]);
-
-        double value = v00 * (1 - dx) * (1 - dy) + v01 * dx * (1 - dy) + v10 * (1 - dx) * dy + v11 * dx * dy;
-        return NumOps.FromDouble(value);
     }
 
     /// <inheritdoc />

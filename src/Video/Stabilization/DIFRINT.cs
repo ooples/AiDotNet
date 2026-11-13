@@ -296,15 +296,11 @@ public partial class DIFRINT<T> : VideoStabilizationBase<T>
         int h = source.Rank == 4 ? source.Shape[2] : source.Shape[1];
         int w = source.Rank == 4 ? source.Shape[3] : source.Shape[2];
 
-        var flow = new Tensor<T>([2, h, w]);
-        var negDx = NumOps.FromDouble(-dx);
-        var negDy = NumOps.FromDouble(-dy);
-        int plane = h * w;
-        for (int p = 0; p < plane; p++)
+        var flow = Engine.TensorConcatenate(new[]
         {
-            flow[p] = negDx;
-            flow[plane + p] = negDy;
-        }
+            Tensor<T>.CreateDefault([1, h, w], NumOps.FromDouble(-dx)),
+            Tensor<T>.CreateDefault([1, h, w], NumOps.FromDouble(-dy)),
+        }, 0);
 
         // Engine read per use rather than captured, so the warp follows a later engine switch.
         return FlowWarpHelper.Warp(AiDotNetEngine.Current, source, flow);

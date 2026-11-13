@@ -280,6 +280,16 @@ public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <param name="flow">Optical flow tensor [2, height, width] (dx, dy).</param>
     /// <returns>Warped feature tensor with the same shape as input.</returns>
     protected Tensor<T> WarpFeature(Tensor<T> feature, Tensor<T> flow)
+        => WarpByFlow(feature, flow, GridSamplePadding.Border);
+
+    /// <summary>
+    /// Backward-warps a feature map by a pixel-unit flow with bilinear sampling at <c>(w + dx, h + dy)</c>,
+    /// grid_sample(align_corners=True) with the given out-of-image <paramref name="padding"/>.
+    /// </summary>
+    /// <param name="feature">Feature tensor [channels, height, width] or [batch, channels, height, width].</param>
+    /// <param name="flow">Flow whose first batch x 2 planes are dx then dy.</param>
+    /// <param name="padding">Border clamps samples to the edge pixels; Zeros treats outside pixels as zero.</param>
+    private protected Tensor<T> WarpByFlow(Tensor<T> feature, Tensor<T> flow, GridSamplePadding padding)
     {
         bool hasBatch = feature.Rank == 4;
         int batch = hasBatch ? feature.Shape[0] : 1;
@@ -289,9 +299,7 @@ public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
 
         int pixels = height * width;
 
-        // Bilinear sampling at (w + dx, h + dy) in pixel units with the corner taps clamped to the image,
-        // which is grid_sample(align_corners=True, padding_mode="border"). The flow is read as its first
-        // batch x 2 planes, dx then dy.
+        // The flow is read as its first batch x 2 planes, dx then dy.
         var flowPlanes = Engine.Reshape(
             Engine.TensorNarrow(Engine.Reshape(flow, [flow.Length]), 0, 0, batch * 2 * pixels),
             [batch, 2, height, width]);
@@ -304,7 +312,7 @@ public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
 
         var grid = Engine.TensorStack([AlignedCornerCoordinate(srcX, width), AlignedCornerCoordinate(srcY, height)], 3);
         var input = hasBatch ? feature : Engine.Reshape(feature, [1, channels, height, width]);
-        var warped = Engine.GridSample(input, grid, GridSampleMode.Bilinear, GridSamplePadding.Border, true);
+        var warped = Engine.GridSample(input, grid, GridSampleMode.Bilinear, padding, true);
 
         return hasBatch ? warped : Engine.Reshape(warped, [channels, height, width]);
     }

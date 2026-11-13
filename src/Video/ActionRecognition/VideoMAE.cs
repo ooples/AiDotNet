@@ -1082,79 +1082,41 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         int pixelsPerPatchChannel = _tubeletSize * patch * patch;
         bool normalize = _options.NormalizeTarget;
 
-        var target = new Tensor<T>([batchSize * numTubelets, patchDim, patchesH, patchesW]);
-        var destination = target.Data.Span;
-        int plane = patchesH * patchesW;
-        var values = new double[pixelsPerPatchChannel];
+        // [B, tubelet, ts, C, patchRow, y, patchCol, x] over the frames and pixels the patches cover
+        var clip = Engine.TensorNarrow(
+            Engine.TensorNarrow(
+                Engine.TensorNarrow(original, 1, 0, numTubelets * _tubeletSize), 3, 0, patchesH * patch),
+            4, 0, patchesW * patch);
+        var grouped = Engine.Reshape(
+            clip, [batchSize, numTubelets, _tubeletSize, channels, patchesH, patch, patchesW, patch]);
 
-        for (int b = 0; b < batchSize; b++)
+        if (normalize)
         {
-            for (int t = 0; t < numTubelets; t++)
-            {
-                int row = b * numTubelets + t;
-                for (int ph = 0; ph < patchesH; ph++)
-                {
-                    for (int pw = 0; pw < patchesW; pw++)
-                    {
-                        for (int c = 0; c < channels; c++)
-                        {
-                            int k = 0;
-                            for (int ts = 0; ts < _tubeletSize; ts++)
-                            {
-                                int frame = t * _tubeletSize + ts;
-                                for (int y = 0; y < patch; y++)
-                                {
-                                    for (int x = 0; x < patch; x++)
-                                    {
-                                        values[k++] = NumOps.ToDouble(
-                                            original[b, frame, c, ph * patch + y, pw * patch + x]);
-                                    }
-                                }
-                            }
+            // Each channel of each tubelet patch over its own ts x P x P pixels: (x - mean) / (std + 1e-6)
+            int[] pixelAxes = [2, 5, 7];
+            var shape = grouped._shape;
+            var centered = Engine.TensorSubtract(
+                grouped, Engine.TensorBroadcastTo(Engine.ReduceMean(grouped, pixelAxes, true), shape));
 
-                            double mean = 0.0;
-                            double scale = 1.0;
-                            if (normalize)
-                            {
-                                for (int i = 0; i < values.Length; i++)
-                                {
-                                    mean += values[i];
-                                }
-                                mean /= values.Length;
-
-                                double sumSquares = 0.0;
-                                for (int i = 0; i < values.Length; i++)
-                                {
-                                    double d = values[i] - mean;
-                                    sumSquares += d * d;
-                                }
-
-                                double unbiasedVariance = values.Length > 1 ? sumSquares / (values.Length - 1) : 0.0;
-                                scale = 1.0 / (Math.Sqrt(unbiasedVariance) + ReconstructionTargetStdOffset);
-                            }
-
-                            k = 0;
-                            for (int ts = 0; ts < _tubeletSize; ts++)
-                            {
-                                for (int y = 0; y < patch; y++)
-                                {
-                                    for (int x = 0; x < patch; x++)
-                                    {
-                                        int channel = (((ts * channels) + c) * patch + y) * patch + x;
-                                        double value = normalize ? (values[k] - mean) * scale : values[k];
-                                        destination[(row * patchDim + channel) * plane + ph * patchesW + pw] =
-                                            NumOps.FromDouble(value);
-                                        k++;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // Unbiased standard deviation, with the deviations scaled by their largest magnitude before squaring
+            var peak = Engine.ReduceMax(Engine.TensorAbs(centered), pixelAxes, true);
+            var safePeak = Engine.TensorWhere(
+                Engine.TensorGreaterThan(peak, NumOps.Zero), peak, Engine.TensorOnesLike(peak));
+            var unit = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(safePeak, shape));
+            var std = pixelsPerPatchChannel > 1
+                ? Engine.TensorMultiply(
+                    Engine.TensorSqrt(Engine.TensorMultiplyScalar(
+                        Engine.ReduceSum(Engine.TensorMultiply(unit, unit), pixelAxes, true),
+                        NumOps.FromDouble(1.0 / (pixelsPerPatchChannel - 1)))),
+                    safePeak)
+                : Engine.TensorZerosLike(peak);
+            var denominator = Engine.TensorAddScalar(std, NumOps.FromDouble(ReconstructionTargetStdOffset));
+            grouped = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(denominator, shape));
         }
 
-        return target;
+        // -> [B, tubelet, ts, C, y, x, patchRow, patchCol], then channel ((ts * C + c) * P + y) * P + x
+        var ordered = Engine.TensorPermute(grouped, [0, 1, 2, 3, 5, 7, 4, 6]);
+        return Engine.Reshape(ordered, [batchSize * numTubelets, patchDim, patchesH, patchesW]);
     }
 
     private Tensor<T> GlobalAveragePool(Tensor<T> input)

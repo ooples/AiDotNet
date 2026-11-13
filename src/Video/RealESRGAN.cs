@@ -908,66 +908,6 @@ public partial class RealESRGAN<T> : VideoSuperResolutionBase<T>
         return tensor;
     }
 
-    /// <summary>
-    /// Calculates the gradient of binary cross-entropy loss.
-    /// </summary>
-    private Tensor<T> CalculateBCEGradient(Tensor<T> output, Tensor<T> target)
-    {
-        var gradient = new Tensor<T>(output._shape);
-        double epsilon = 1e-7;
-
-        for (int i = 0; i < output.Length; i++)
-        {
-            double o = NumOps.ToDouble(output.Data.Span[i]);
-            double t = NumOps.ToDouble(target.Data.Span[i]);
-
-            // BCE gradient: (output - target) / (output * (1 - output))
-            double oClipped = Math.Max(epsilon, Math.Min(o, 1.0 - epsilon));
-            double grad = (o - t) / (oClipped * (1.0 - oClipped) + epsilon);
-
-            gradient.Data.Span[i] = NumOps.FromDouble(grad);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Calculates the reconstruction (L1) loss gradient.
-    /// </summary>
-    private Tensor<T> CalculateReconstructionGradient(Tensor<T> generated, Tensor<T> target)
-    {
-        var gradient = new Tensor<T>(generated._shape);
-
-        for (int i = 0; i < generated.Length; i++)
-        {
-            T diff = NumOps.Subtract(generated.Data.Span[i], target.Data.Span[i]);
-            // L1 gradient is sign(diff)
-            if (NumOps.GreaterThan(diff, NumOps.Zero))
-                gradient.Data.Span[i] = NumOps.FromDouble(_l1Lambda / generated.Length);
-            else if (NumOps.LessThan(diff, NumOps.Zero))
-                gradient.Data.Span[i] = NumOps.FromDouble(-_l1Lambda / generated.Length);
-            else
-                gradient.Data.Span[i] = NumOps.Zero;
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Combines multiple gradient tensors.
-    /// </summary>
-    private Tensor<T> CombineGradients(Tensor<T> grad1, Tensor<T> grad2)
-    {
-        var combined = new Tensor<T>(grad1._shape);
-
-        for (int i = 0; i < grad1.Length; i++)
-        {
-            combined.Data.Span[i] = NumOps.Add(grad1.Data.Span[i], grad2.Data.Span[i]);
-        }
-
-        return combined;
-    }
-
     #endregion
 
     #region Serialization

@@ -107,23 +107,8 @@ public sealed class GroupedSpatialTemporalShift<T>
                 $"The channel count must be even to split into equal a/b groups; got {c}.", nameof(features));
 
         int half = c / 2;
-        var a = new Tensor<T>(new[] { h, w, half });
-        var b = new Tensor<T>(new[] { h, w, half });
-
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                int src = ((y * w) + x) * c;
-                int dst = ((y * w) + x) * half;
-                for (int k = 0; k < half; k++)
-                {
-                    a[dst + k] = features[src + k];
-                    b[dst + k] = features[src + half + k];
-                }
-            }
-        }
-        return (a, b);
+        var engine = AiDotNetEngine.Current;
+        return (engine.TensorNarrow(features, 2, 0, half), engine.TensorNarrow(features, 2, half, half));
     }
 
     /// <summary>
@@ -142,25 +127,34 @@ public sealed class GroupedSpatialTemporalShift<T>
             throw new ArgumentException(
                 $"Expected [height, width, channels]; got rank {features.Shape.Length}.", nameof(features));
 
-        int h = features.Shape[0], w = features.Shape[1], c = features.Shape[2];
-        var result = new Tensor<T>(new[] { h, w, c });
+        var engine = AiDotNetEngine.Current;
+        return ShiftAxis(engine, ShiftAxis(engine, features, 0, dy), 1, dx);
+    }
 
-        for (int y = 0; y < h; y++)
+    /// <summary>
+    /// Moves the content of <paramref name="features"/> by <paramref name="displacement"/> positions along
+    /// <paramref name="axis"/> (output index = source index + displacement), filling vacated positions with zeros.
+    /// </summary>
+    private static Tensor<T> ShiftAxis(IEngine engine, Tensor<T> features, int axis, int displacement)
+    {
+        if (displacement == 0)
         {
-            int sy = y - dy;
-            if (sy < 0 || sy >= h) continue;    // zero-filled
-
-            for (int x = 0; x < w; x++)
-            {
-                int sx = x - dx;
-                if (sx < 0 || sx >= w) continue;
-
-                int dst = ((y * w) + x) * c;
-                int src = ((sy * w) + sx) * c;
-                for (int k = 0; k < c; k++) result[dst + k] = features[src + k];
-            }
+            return features;
         }
-        return result;
+
+        int extent = features.Shape[axis];
+        var zeroShape = (int[])features._shape.Clone();
+        zeroShape[axis] = Math.Min(Math.Abs(displacement), extent);
+        var zeros = new Tensor<T>(zeroShape);
+        if (Math.Abs(displacement) >= extent)
+        {
+            return zeros;
+        }
+
+        int kept = extent - Math.Abs(displacement);
+        return displacement > 0
+            ? engine.TensorConcatenate(new[] { zeros, engine.TensorNarrow(features, axis, 0, kept) }, axis)
+            : engine.TensorConcatenate(new[] { engine.TensorNarrow(features, axis, -displacement, kept), zeros }, axis);
     }
 
     /// <summary>
@@ -193,45 +187,23 @@ public sealed class GroupedSpatialTemporalShift<T>
 
         int per = c / slices;              // channels per slice
         int assigned = per * slices;       // any remainder stays unshifted, see below
-        var result = new Tensor<T>(new[] { h, w, c });
+        var engine = AiDotNetEngine.Current;
+        var parts = new List<Tensor<T>>(slices + 1);
 
         for (int m = 0; m < slices; m++)
         {
             var (dx, dy) = Offsets[m];
-            int lo = m * per;
-
-            for (int y = 0; y < h; y++)
-            {
-                int sy = y - dy;
-                if (sy < 0 || sy >= h) continue;
-
-                for (int x = 0; x < w; x++)
-                {
-                    int sx = x - dx;
-                    if (sx < 0 || sx >= w) continue;
-
-                    int dst = (((y * w) + x) * c) + lo;
-                    int src = (((sy * w) + sx) * c) + lo;
-                    for (int k = 0; k < per; k++) result[dst + k] = features[src + k];
-                }
-            }
+            parts.Add(Shift(engine.TensorNarrow(features, 2, m * per, per), dx, dy));
         }
 
         // Channels beyond M*per (when c is not a multiple of M) are copied through unshifted rather than
         // dropped. Leaving them zero would silently discard a slice of the neighbour's features.
         if (assigned < c)
         {
-            for (int y = 0; y < h; y++)
-            {
-                for (int x = 0; x < w; x++)
-                {
-                    int off = ((y * w) + x) * c;
-                    for (int k = assigned; k < c; k++) result[off + k] = features[off + k];
-                }
-            }
+            parts.Add(engine.TensorNarrow(features, 2, assigned, c - assigned));
         }
 
-        return result;
+        return engine.TensorConcatenate(parts.ToArray(), 2);
     }
 
     /// <summary>
@@ -278,24 +250,7 @@ public sealed class GroupedSpatialTemporalShift<T>
         // passes through untouched.
         var shiftedB = GroupedSpatialShift(neighbourB);
 
-        int h = current.Shape[0], w = current.Shape[1], c = current.Shape[2];
-        int half = c / 2;
-        var result = new Tensor<T>(new[] { h, w, c });
-
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                int dst = ((y * w) + x) * c;
-                int srcHalf = ((y * w) + x) * half;
-                for (int k = 0; k < half; k++)
-                {
-                    result[dst + k] = a[srcHalf + k];
-                    result[dst + half + k] = shiftedB[srcHalf + k];
-                }
-            }
-        }
-        return result;
+        return AiDotNetEngine.Current.TensorConcatenate(new[] { a, shiftedB }, 2);
     }
 
     /// <summary>
@@ -314,9 +269,12 @@ public sealed class GroupedSpatialTemporalShift<T>
                 $"Predicted ({predicted.Length}) and target ({target.Length}) must be the same length.",
                 nameof(predicted));
 
-        double sum = 0.0;
-        for (int i = 0; i < predicted.Length; i++)
-            sum += Math.Abs(Ops.ToDouble(predicted[i]) - Ops.ToDouble(target[i]));
-        return predicted.Length == 0 ? 0.0 : sum / predicted.Length;
+        if (predicted.Length == 0)
+        {
+            return 0.0;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        return Ops.ToDouble(engine.Mean(engine.Abs(engine.Subtract(predicted, target))));
     }
 }
