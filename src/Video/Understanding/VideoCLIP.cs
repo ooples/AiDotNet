@@ -435,8 +435,8 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
             // Pre-LayerNorm
             var normed = TextLayerNorm(features);
 
-            // Multi-head self-attention with causal mask
-            var attnOut = TextMultiHeadAttention(normed, layer);
+            // Bidirectional multi-head self-attention over the real tokens (BERT, as VideoCLIP's text encoder)
+            var attnOut = TextMultiHeadAttention(normed, layer, seqLen);
 
             // Residual connection
             features = AddTensors(features, attnOut);
@@ -844,9 +844,15 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Text transformer multi-head self-attention following CLIP architecture.
+    /// Text transformer multi-head self-attention: bidirectional, as in VideoCLIP's BERT text encoder (Xu et al.,
+    /// EMNLP 2021, Sec. 3.1), with the padding positions at and after <paramref name="validLength"/> excluded as keys
+    /// (BERT's attention mask).
     /// </summary>
-    private Tensor<T> TextMultiHeadAttention(Tensor<T> input, int layerIdx)
+    /// <remarks>
+    /// This used to apply CLIP's causal mask, so a token never saw the tokens after it; VideoCLIP's text tower is a
+    /// BERT encoder that attends in both directions.
+    /// </remarks>
+    internal Tensor<T> TextMultiHeadAttention(Tensor<T> input, int layerIdx, int validLength)
     {
         int batchSize = input.Shape[0];
         int channels = input.Shape[1];
@@ -870,13 +876,19 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
         var key = Heads(Part(1));
         var value = Heads(Part(2));
 
-        // Causal mask: position i attends to j <= i; masked scores are set to -1e9 before the softmax
+        // Every query attends to every real token; padding keys are set to -1e9 before the softmax
         var scores = Engine.TensorMultiplyScalar(
             Engine.BatchMatMul(Engine.TensorPermute(query, [0, 2, 1]), key), NumOps.FromDouble(scale));
-        var (columns, rows) = Engine.TensorMeshgrid(Engine.TensorArange<T>(0, seqLen, 1), Engine.TensorArange<T>(0, seqLen, 1));
-        var future = Engine.TensorBroadcastTo(
-            Engine.Reshape(Engine.TensorGreaterThan(columns, rows), [1, seqLen, seqLen]), [batchSize * numHeads, seqLen, seqLen]);
-        scores = Engine.TensorWhere(future, Tensor<T>.CreateDefault(scores._shape, NumOps.FromDouble(-1e9)), scores);
+        int valid = Math.Max(1, Math.Min(validLength, seqLen));
+        if (valid < seqLen)
+        {
+            var padding = new int[seqLen];
+            for (int j = valid; j < seqLen; j++) padding[j] = 1;
+            var paddingKeys = Engine.TensorBroadcastTo(
+                new Tensor<int>(padding, [1, 1, seqLen]).Cast<T>(), [batchSize * numHeads, seqLen, seqLen]);
+            scores = Engine.TensorWhere(paddingKeys, Tensor<T>.CreateDefault(scores._shape, NumOps.FromDouble(-1e9)), scores);
+        }
+
         var probabilities = Engine.TensorSoftmax(scores, 2);
 
         // Weighted sum of values: out[d, i] = sum_j p[i, j] v[d, j]
