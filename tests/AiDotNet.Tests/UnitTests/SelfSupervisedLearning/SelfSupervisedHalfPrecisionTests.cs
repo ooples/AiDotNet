@@ -74,4 +74,20 @@ public class SelfSupervisedHalfPrecisionTests
         Assert.Equal(Math.Pow(2, -14), (double)ObjectiveOps.Epsilon<Half>(1e-8));
         Assert.Equal(1e-8, ObjectiveOps.Epsilon<double>(1e-8));
     }
+
+    [Fact]
+    public void BilinearCropMatrix_Half_KeepsTheSourceFraction()
+    {
+        // size 1500, crop 500, offset 1000: output 1 reads source 1000 + 500 / 1500 = 1000.333..., so it weighs
+        // pixel 1000 by 2/3 and pixel 1001 by 1/3. Computed in Half the position rounded to 1000.5 (Half resolves
+        // 0.5 there) and both weights were 0.5.
+        var method = typeof(AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningAugmentationPolicies<Half>)
+            .GetMethod("BilinearCropMatrix", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+        var matrix = method?.Invoke(null, new object[] { 1500, 500, 1000 }) as Tensor<Half>;
+        Assert.NotNull(matrix);
+
+        Assert.Equal(2.0 / 3.0, (double)(matrix?[1, 1000] ?? Half.NaN), 3);
+        Assert.Equal(1.0 / 3.0, (double)(matrix?[1, 1001] ?? Half.NaN), 3);
+    }
 }

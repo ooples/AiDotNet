@@ -374,42 +374,39 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
     /// [size, size] bilinear resampling matrix: output o reads source position
     /// offset + o / size * cropSize, weighting floor(pos) by 1 - frac and min(floor(pos) + 1, size - 1) by frac.
     /// </summary>
+    /// <remarks>
+    /// Built in double, as master computed the positions, and cast to T. In Half a source position past 1024
+    /// is only resolved to 0.5 (and a cumulative sum of ones stops at 2048), so the fractions were lost.
+    /// </remarks>
     private static Tensor<T> BilinearCropMatrix(int size, int cropSize, int offset)
     {
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
         var positions = Arange(size);
         var source = Engine.TensorAddScalar(
-            Engine.TensorMultiplyScalar(
-                Engine.TensorDivideScalar(positions, NumOps.FromDouble(size)), NumOps.FromDouble(cropSize)),
-            NumOps.FromDouble(offset));
+            Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(positions, (double)size), (double)cropSize),
+            (double)offset);
         var lower = Engine.TensorFloor(source);
         var frac = Engine.TensorSubtract(source, lower).Reshape(size, 1);
-        var upper = Engine.TensorClampMax(Engine.TensorAddScalar(lower, NumOps.One), NumOps.FromDouble(size - 1));
+        var upper = Engine.TensorClampMax(Engine.TensorAddScalar(lower, 1.0), (double)(size - 1));
 
         var lowerHit = IndexHits(lower.Reshape(size, 1), positions.Reshape(1, size));
         var upperHit = IndexHits(upper.Reshape(size, 1), positions.Reshape(1, size));
         return Engine.TensorAdd(
-            Engine.TensorMultiply(lowerHit, Engine.ScalarMinusTensor(NumOps.One, frac)),
-            Engine.TensorMultiply(upperHit, frac));
+            Engine.TensorMultiply(lowerHit, Engine.ScalarMinusTensor(1.0, frac)),
+            Engine.TensorMultiply(upperHit, frac)).Cast<T>();
     }
 
     /// <summary>
     /// 1 where an integer-valued index equals a candidate position (|index - position| &lt; 0.5), else 0; broadcasts.
     /// </summary>
-    private static Tensor<T> IndexHits(Tensor<T> indices, Tensor<T> positions)
+    private static Tensor<double> IndexHits(Tensor<double> indices, Tensor<double> positions)
     {
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return Engine.TensorLessThan(
-            Engine.TensorAbs(Engine.TensorSubtract(indices, positions)), NumOps.FromDouble(0.5));
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        return Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(indices, positions)), 0.5);
     }
 
-    /// <summary>[0, 1, ..., count - 1] as T, built from a cumulative sum of ones.</summary>
-    private static Tensor<T> Arange(int count)
-    {
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var ones = Engine.TensorAddScalar(new Tensor<T>(new[] { count }), NumOps.One);
-        return Engine.TensorAddScalar(Engine.TensorCumSum(ones, 0), NumOps.Negate(NumOps.One));
-    }
+    /// <summary>[0, 1, ..., count - 1] in double.</summary>
+    private static Tensor<double> Arange(int count) => Engine.TensorArange<double>(0, count, 1);
 
     /// <summary>
     /// out[b, c] = rows @ image[b, c] @ columns^T for a [B, C, H, W] image: columns act along the width first,
@@ -566,10 +563,9 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
             var radius = kernelSize / 2;
 
             // Generate the normalized 1D Gaussian kernel: exp(-0.5 x^2 / sigma^2), x = -radius..radius
-            var offsets = Engine.TensorAddScalar(Arange(kernelSize), NumOps.FromDouble(-radius));
+            var offsets = Engine.TensorAddScalar(Arange(kernelSize), (double)(-radius));
             var kernel = Engine.TensorExp(Engine.TensorDivideScalar(
-                Engine.TensorMultiplyScalar(Engine.TensorSquare(offsets), NumOps.FromDouble(-0.5)),
-                NumOps.FromDouble(sigma * sigma)));
+                Engine.TensorMultiplyScalar(Engine.TensorSquare(offsets), -0.5), sigma * sigma));
             kernel = Engine.TensorDivideScalar(kernel, Engine.TensorSum(kernel));
 
             // Apply separable convolution (horizontal then vertical) with edge clamping
@@ -588,22 +584,23 @@ public class SelfSupervisedLearningAugmentationPolicies<T>
 
     /// <summary>
     /// [size, size] blur matrix: M[o, s] = sum_k kernel[k] where clamp(o + offset[k], 0, size - 1) == s.
+    /// Built in double, as master computed the kernel and the indices, and cast to T.
     /// </summary>
-    private static Tensor<T> ClampedBlurMatrix(int size, Tensor<T> offsets, Tensor<T> kernel)
+    private static Tensor<T> ClampedBlurMatrix(int size, Tensor<double> offsets, Tensor<double> kernel)
     {
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
         var kernelSize = offsets.Shape[0];
         var positions = Arange(size);
 
         // Source index of tap k for output o: [K, size, 1]
         var taps = Engine.TensorClamp(
             Engine.TensorAdd(positions.Reshape(1, size), offsets.Reshape(kernelSize, 1)),
-            NumOps.Zero, NumOps.FromDouble(size - 1)).Reshape(kernelSize, size, 1);
+            0.0, (double)(size - 1)).Reshape(kernelSize, size, 1);
 
         // Weighted one-hots over the source axis, summed over taps
         var hits = IndexHits(taps, positions.Reshape(1, 1, size));
         var weighted = Engine.TensorMultiply(hits, kernel.Reshape(kernelSize, 1, 1));
-        return Engine.ReduceSum(weighted, new[] { 0 }, keepDims: false);
+        return Engine.ReduceSum(weighted, new[] { 0 }, keepDims: false).Cast<T>();
     }
 
     private Tensor<T> Solarize(Tensor<T> image, double threshold)
