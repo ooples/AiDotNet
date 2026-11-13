@@ -90,8 +90,11 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
     /// <summary>
     /// The layer each body parameter belongs to, built once from <see cref="_layers"/> (which never changes) so
-    /// the per-step rate expansion does not rebuild a parameter-sized index.
+    /// the per-step rate expansion does not rebuild a parameter-sized index. It is an integer lookup derived
+    /// entirely from the model's layer layout, rebuilt by every constructor, so it is scratch: not trained,
+    /// not counted and not saved.
     /// </summary>
+    [Scratch]
     private readonly Tensor<int> _layerIndex;
 
     /// <summary>
