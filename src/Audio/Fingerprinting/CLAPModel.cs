@@ -956,6 +956,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     {
         Guard.NotNull(proposedTarget);
         // min(round(|x|), VocabSize - 1) with banker's rounding; NaN stays NaN (a fresh tensor)
+        // The ids outlive this call -- every later step trains on them -- so they are not taken from a step arena,
+        // which would reissue their buffer to the next allocation and hand the text encoder whatever was written there.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var noGrad = new NoGradScope<T>();
         var id = Engine.TensorRound(Engine.TensorAbs(proposedTarget));
         T cap = NumOps.FromDouble(_options.VocabSize - 1);
