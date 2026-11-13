@@ -148,7 +148,15 @@ public class WOEEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int k = categories.Length;
         var position = PreprocessingTensorOps.LookupSorted(categories, column, out _);
         var counts = PreprocessingTensorOps.CategoryCounts<T>(position, k);
-        var eventCounts = PreprocessingTensorOps.CategorySums(position, events, k);
+
+        // Event counts per category, counted in int (a 0/1 sum in T stops counting at 2048 for Half): the rows that
+        // are not events take position -1, which is not counted
+        var eventPosition = position.AsSpan().ToArray();
+        var isEvent = events.Cast<int>().AsSpan().ToArray();
+        for (int i = 0; i < eventPosition.Length; i++)
+            eventPosition[i] = isEvent[i] != 0 ? eventPosition[i] : -1;
+        var eventCounts = PreprocessingTensorOps.CategoryCounts<T>(
+            new Tensor<int>(eventPosition, new[] { eventPosition.Length }), k);
         var nonEventCounts = engine.TensorSubtract(counts, eventCounts);
 
         // Add regularization to prevent log(0)

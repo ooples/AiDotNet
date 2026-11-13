@@ -87,11 +87,18 @@ public class CovariateShiftSplitter<T> : DataSplitterBase<T>
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var values = PreprocessingTensorOps.Column(X, shiftDim);
 
-        // Calculate percentiles
-        var sortedValues = engine.TensorSort(values).Item1;
-        T median = sortedValues.GetFlat(nSamples / 2);
-        T q25 = sortedValues.GetFlat((int)(nSamples * 0.25));
-        T q75 = sortedValues.GetFlat((int)(nSamples * 0.75));
+        // Calculate percentiles: order statistics with the NaNs first, as master's OrderBy over doubles sorts them
+        var numberPositions = PreprocessingTensorOps.MaskPositions(engine.TensorEquals(values, values));
+        int nanCount = nSamples - numberPositions.Length;
+        var sortedNumbers = numberPositions.Length == 0
+            ? new Tensor<T>(new[] { 0 })
+            : engine.TensorSort(engine.TensorIndexSelect(
+                values, new Tensor<int>(numberPositions, new[] { numberPositions.Length }), 0)).Item1;
+        T OrderStatistic(int index) =>
+            index < nanCount ? NumOps.FromDouble(double.NaN) : sortedNumbers.GetFlat(index - nanCount);
+        T median = OrderStatistic(nSamples / 2);
+        T q25 = OrderStatistic((int)(nSamples * 0.25));
+        T q75 = OrderStatistic((int)(nSamples * 0.75));
 
         // Determine shift threshold based on shift strength
         // Higher shift strength means more separation
@@ -99,8 +106,9 @@ public class CovariateShiftSplitter<T> : DataSplitterBase<T>
         T trainThreshold = NumOps.Subtract(median, NumOps.Multiply(NumOps.Subtract(median, q25), strength));
         T testThreshold = NumOps.Add(median, NumOps.Multiply(NumOps.Subtract(q75, median), strength));
 
-        // Categorize samples: at most the train threshold, else at least the test threshold, else middle
-        var trainMask = PreprocessingTensorOps.Not(engine.TensorGreaterThan(values, trainThreshold));
+        // Categorize samples: at most the train threshold, else at least the test threshold, else middle. A NaN is
+        // neither (every comparison with it is false, as in master), so it is a middle sample.
+        var trainMask = engine.TensorLessEqual(values, PreprocessingTensorOps.Filled(new[] { nSamples }, trainThreshold));
         var testMask = engine.TensorMultiply(PreprocessingTensorOps.AtLeast(values, testThreshold), PreprocessingTensorOps.Not(trainMask));
         var middleMask = PreprocessingTensorOps.Not(engine.TensorAdd(trainMask, testMask));
         var trainCandidates = PreprocessingTensorOps.MaskPositions(trainMask).ToList();

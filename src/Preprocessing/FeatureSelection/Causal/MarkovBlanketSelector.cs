@@ -154,6 +154,11 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// The sum over groups g with more than 5 rows of MI_g(x; y) * |g| / n, where the groups are the values of
     /// the conditioning variable and MI_g uses the probabilities within the group. Returns a [1] tensor.
     /// </summary>
+    /// <remarks>
+    /// The bin counts and the MI are computed in double (exact counts up to 2^53) and only the result is converted
+    /// to T: a 0/1 count summed in a narrow T such as Half stops growing at 2048, as in
+    /// <see cref="PreprocessingTensorOps.HistogramMutualInformation{T}"/>.
+    /// </remarks>
     private Tensor<T> GroupedMutualInformation(Tensor<T> groupBins, Tensor<T> featureBins, Tensor<T> yBins, int n, out bool anyGroup)
     {
         var engine = Engine;
@@ -162,10 +167,10 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // joint[g, x, y] counts from the row-wise outer product of the group and feature one-hots
         var groupFeature = engine.TensorMultiply(
-            engine.TensorBroadcastTo(engine.Reshape(groupBins, new[] { n, b, 1 }), new[] { n, b, b }),
-            engine.TensorBroadcastTo(engine.Reshape(featureBins, new[] { n, 1, b }), new[] { n, b, b }));
+            engine.TensorBroadcastTo(engine.Reshape(groupBins.Cast<double>(), new[] { n, b, 1 }), new[] { n, b, b }),
+            engine.TensorBroadcastTo(engine.Reshape(featureBins.Cast<double>(), new[] { n, 1, b }), new[] { n, b, b }));
         var joint = engine.Reshape(
-            engine.TensorMatMul(engine.TensorTranspose(engine.Reshape(groupFeature, new[] { n, b * b })), yBins), cube);
+            engine.TensorMatMul(engine.TensorTranspose(engine.Reshape(groupFeature, new[] { n, b * b })), yBins.Cast<double>()), cube);
 
         var groupSize = engine.ReduceSum(joint, new[] { 1, 2 }, true);   // [b, 1, 1]
         var xCounts = engine.ReduceSum(joint, new[] { 2 }, true);        // [b, b, 1]
@@ -175,14 +180,14 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var px = engine.TensorDivide(engine.TensorBroadcastTo(xCounts, cube), size);
         var py = engine.TensorDivide(engine.TensorBroadcastTo(yCounts, cube), size);
         var terms = engine.TensorMultiply(pxy, engine.TensorLog(engine.TensorDivide(pxy, engine.TensorMultiply(px, py))));
-        var cells = engine.TensorWhere(engine.TensorGreaterThan(joint, NumOps.Zero), terms, new Tensor<T>(cube));
+        var cells = engine.TensorWhere(engine.TensorGreaterThan(joint, 0.0), terms, new Tensor<double>(cube));
         var miPerGroup = engine.ReduceSum(cells, new[] { 1, 2 }, false);  // [b]
 
         var sizes = engine.Reshape(groupSize, new[] { b });
-        var large = engine.TensorGreaterThan(sizes, NumOps.FromDouble(5));
+        var large = engine.TensorGreaterThan(sizes, 5.0);
         anyGroup = PreprocessingTensorOps.CountNonZero(large) > 0;
-        var weighted = engine.TensorMultiply(engine.TensorMultiply(miPerGroup, large), engine.TensorDivideScalar(sizes, NumOps.FromDouble(n)));
-        return engine.ReduceSum(engine.Reshape(weighted, new[] { 1, b }), new[] { 1 }, false);
+        var weighted = engine.TensorMultiply(engine.TensorMultiply(miPerGroup, large), engine.TensorDivideScalar(sizes, (double)n));
+        return engine.ReduceSum(engine.Reshape(weighted, new[] { 1, b }), new[] { 1 }, false).Cast<T>();
     }
 
     /// <inheritdoc />

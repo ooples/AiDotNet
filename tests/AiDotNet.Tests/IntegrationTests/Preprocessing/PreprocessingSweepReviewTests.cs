@@ -1,12 +1,15 @@
+using AiDotNet.Preprocessing.DataPreparation.Splitting.ActiveLearning;
 using AiDotNet.Preprocessing.DataPreparation.Splitting.Specialized;
 using AiDotNet.Preprocessing.Encoders;
 using AiDotNet.Preprocessing.FeatureGeneration;
 using AiDotNet.Preprocessing.FeatureSelection.Association;
 using AiDotNet.Preprocessing.FeatureSelection.Bayesian;
 using AiDotNet.Preprocessing.FeatureSelection.Boundary;
+using AiDotNet.Preprocessing.FeatureSelection.Causal;
 using AiDotNet.Preprocessing.FeatureSelection.Classification;
 using Xunit;
 using System.Threading.Tasks;
+using BorutaSelector = AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.Boruta<System.Half>;
 using SamSelector = AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM<System.Half>;
 using SignificanceAnalysisSelector = AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SignificanceAnalysis<System.Half>;
 
@@ -388,5 +391,176 @@ public class PreprocessingSweepReviewTests
 
         Assert.Equal(3.0, restored[0, 0], Tolerance);
         Assert.Equal(7.0, restored[1, 0], Tolerance);
+    }
+
+    // Master keys categories by double (double.NaN.Equals(double.NaN) is true) and sorts them with OrderBy, which puts
+    // NaN first: the column [NaN, 1, NaN, 2] has the categories [NaN, 1, 2], each NaN row is a known category and
+    // transforming the fitted data with unknown-category errors enabled does not throw.
+    [Fact(Timeout = 120000)]
+    public async Task Encoders_NaN_IsOneCategoryOrderedFirstAsInMaster()
+    {
+        await Task.CompletedTask;
+        var data = M(new double[,] { { double.NaN }, { 1 }, { double.NaN }, { 2 } });
+
+        var oneHot = new OneHotEncoder<double>(handleUnknown: OneHotUnknownHandling.Error).FitTransform(data);
+        double[,] expectedOneHot = { { 1, 0, 0 }, { 0, 1, 0 }, { 1, 0, 0 }, { 0, 0, 1 } };
+        Assert.Equal(3, oneHot.Columns);
+        for (int i = 0; i < 4; i++)
+            for (int j = 0; j < 3; j++)
+                Assert.Equal(expectedOneHot[i, j], oneHot[i, j], Tolerance);
+
+        var labels = new LabelEncoder<double>().FitTransform(data);
+        double[] expectedLabels = { 0, 1, 0, 2 };
+        for (int i = 0; i < 4; i++)
+            Assert.Equal(expectedLabels[i], labels[i, 0], Tolerance);
+
+        var counts = new CountEncoder<double>(handleUnknown: CountEncoderHandleUnknown.Error).FitTransform(data);
+        double[] expectedCounts = { 2, 1, 2, 1 };
+        for (int i = 0; i < 4; i++)
+            Assert.Equal(expectedCounts[i], counts[i, 0], Tolerance);
+    }
+
+    // Category 0 has 3000 events and 1000 non-events, category 1 the reverse (4000 of each in total). With
+    // regularization 0.5 the WOE of category 0 is ln(3000.5 / 1000.5) = 1.098279 and category 1 the negative. An
+    // event count summed in Half stops at 2048.
+    [Fact(Timeout = 120000)]
+    public async Task WOEEncoder_Half_CountsMoreThan2048EventsPerCategory()
+    {
+        await Task.CompletedTask;
+        const int n = 8000;
+        var data = HalfColumn(n, i => i < 4000 ? 0.0 : 1.0);
+        var target = HalfVector(n, i => i < 3000 || (i >= 4000 && i < 5000) ? 1.0 : 0.0);
+        var encoder = new WOEEncoder<Half>();
+        encoder.Fit(data, target);
+
+        var encoded = encoder.Transform(data);
+        Assert.Equal(1.098279, (double)encoded[0, 0], 5e-3);
+        Assert.Equal(-1.098279, (double)encoded[n - 1, 0], 5e-3);
+    }
+
+    // The feature always beats its shadow, so all 4200 iterations are hits: far above Boruta's acceptance bound it
+    // is confirmed, and its mean importance is 1. Counted in Half, the hits and the summed importance stop at 2048
+    // (tentative, mean 0.49).
+    [Fact(Timeout = 120000)]
+    public async Task Boruta_Half_CountsMoreThan2048Hits()
+    {
+        await Task.CompletedTask;
+        var selector = new BorutaSelector(
+            maxIterations: 4200,
+            importanceFunction: (extended, _) => new Vector<Half>(new[] { (Half)1, (Half)0 }),
+            randomState: 3);
+        selector.Fit(HalfColumn(4, i => i), HalfVector(4, i => i % 2));
+
+        var decisions = selector.Decisions;
+        var importances = selector.Importances;
+        Assert.NotNull(decisions);
+        Assert.NotNull(importances);
+        if (decisions is null || importances is null)
+            return;
+        Assert.Equal(BorutaSelector.BorutaDecision.Confirmed, decisions[0]);
+        Assert.Equal(1.0, (double)importances[0], Tolerance);
+    }
+
+    // Master sorts the shift column with OrderBy (NaN first): [NaN, 0..9] has median 4, q25 1 and q75 7, so with
+    // strength 0.5 the train threshold is 2.5 and the test threshold 5.5. A NaN fails both comparisons and is a
+    // middle sample; the 4 test and 4 middle samples fill the 8 test slots and only rows 1-3 (values 0-2) train.
+    [Fact(Timeout = 120000)]
+    public async Task CovariateShiftSplitter_NaN_IsAMiddleSampleAsInMaster()
+    {
+        await Task.CompletedTask;
+        var values = new double[11, 1];
+        values[0, 0] = double.NaN;
+        for (int i = 1; i < 11; i++)
+            values[i, 0] = i - 1;
+
+        var result = new CovariateShiftSplitter<double>(testSize: 0.8, shiftStrength: 0.5).Split(M(values));
+
+        Assert.Equal(new[] { 1, 2, 3 }, result.TrainIndices.OrderBy(i => i).ToArray());
+        Assert.Contains(0, result.TestIndices);
+    }
+
+    // Diverse selection adds the sample farthest from the first one. The points 0, 300 and -310 are more than 256
+    // apart, so their squared distances overflow Half: summed directly every distance is inf and the tie went to
+    // the lowest index instead of the farthest point.
+    [Fact(Timeout = 120000)]
+    public async Task PoolBasedSplitter_Half_DiverseSelectionDoesNotOverflow()
+    {
+        await Task.CompletedTask;
+        double[] points = { 0, 300, -310 };
+        var splitter = new PoolBasedSplitter<Half>(
+            initialLabeledRatio: 0.1, minLabeledSamples: 2, strategy: PoolBasedSplitter<Half>.SelectionStrategy.Diverse);
+
+        var result = splitter.Split(HalfColumn(3, i => points[i]));
+
+        Assert.Equal(2, result.TrainIndices.Length);
+        int first = result.TrainIndices[0];
+        int farthest = Enumerable.Range(0, 3).Where(j => j != first)
+            .OrderByDescending(j => Math.Abs(points[j] - points[first])).First();
+        Assert.Equal(farthest, result.TrainIndices[1]);
+    }
+
+    // Mean 5, so the standardized distances are |x - 5| / 168 (population std sqrt(282250 / 10) = 168): row 8 (400)
+    // is the most distant and the only test sample. Squared in Half, 395^2 overflows, the std became inf and every
+    // distance 0, which put row 0 in the test set.
+    [Fact(Timeout = 120000)]
+    public async Task OutOfDistributionSplitter_Half_StandardizationDoesNotOverflow()
+    {
+        await Task.CompletedTask;
+        var splitter = new OutOfDistributionSplitter<Half>(testSize: 0.1, oodPercentile: 0.5);
+
+        var result = splitter.Split(HalfColumn(10, i => i == 8 ? 400.0 : i == 9 ? -350.0 : 0.0));
+
+        Assert.Equal(new[] { 8 }, result.TestIndices);
+    }
+
+    // Feature 1 (MI 0.121) joins the blanket first. Feature 0 given feature 1: the 4100 rows with feature 1 at 0
+    // have cells 3000 / 1000 / 100 and MI 0.032934, weighted 4100 / 8100 to 0.016670 > 0.015, so feature 0 joins
+    // too. Counted in Half the 3000-row cell stops at 2048, giving 0.013362 and dropping feature 0.
+    [Fact(Timeout = 120000)]
+    public async Task MarkovBlanketSelector_Half_CountsMoreThan2048PerGroup()
+    {
+        await Task.CompletedTask;
+        const int n = 8100;
+        var data = new Half[n, 2];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            // (feature 0, feature 1, target): 3000 x (0,0,0), 1000 x (0,0,1), 1000 x (0,1,0), 3000 x (0,1,1),
+            // 100 x (1,0,1)
+            int a = i >= 8000 ? 1 : 0;
+            int b = i >= 4000 && i < 8000 ? 1 : 0;
+            int y = (i >= 3000 && i < 4000) || i >= 5000 ? 1 : 0;
+            data[i, 0] = (Half)a;
+            data[i, 1] = (Half)b;
+            target[i] = (Half)y;
+        }
+
+        var selector = new MarkovBlanketSelector<Half>(threshold: 0.015, nBins: 2);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        var selected = selector.SelectedIndices;
+        Assert.NotNull(selected);
+        if (selected is null)
+            return;
+        Assert.Equal(new[] { 0, 1 }, selected.OrderBy(i => i).ToArray());
+    }
+
+    // Uniform knots are min + (i + 1) / (nKnots + 1) * (max - min): 15000, 30000 and 45000 for the range [0, 60000].
+    // Formed as (i + 1) * (max - min) first, 120000 and 180000 overflow Half to inf.
+    [Fact(Timeout = 120000)]
+    public async Task SplineTransformer_Half_UniformKnotsDoNotOverflow()
+    {
+        await Task.CompletedTask;
+        var spline = new SplineTransformer<Half>(nKnots: 3, degree: 3, knotStrategy: SplineKnotStrategy.Uniform);
+        spline.Fit(HalfColumn(2, i => i * 60000.0));
+
+        var allKnots = spline.Knots;
+        Assert.NotNull(allKnots);
+        if (allKnots is null)
+            return;
+        var knots = allKnots[0];
+        Assert.Equal(15000.0, (double)knots[4], Tolerance);
+        Assert.Equal(30000.0, (double)knots[5], Tolerance);
+        Assert.Equal(45000.0, (double)knots[6], Tolerance);
     }
 }

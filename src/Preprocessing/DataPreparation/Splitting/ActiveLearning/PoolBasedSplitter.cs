@@ -192,13 +192,15 @@ public class PoolBasedSplitter<T> : DataSplitterBase<T>
         return (labeled.ToArray(), unlabeled.ToArray());
     }
 
-    /// <summary>The Euclidean distance from every row of <paramref name="points"/> to row <paramref name="row"/>.</summary>
+    /// <summary>
+    /// The Euclidean distance from every row of <paramref name="points"/> to row <paramref name="row"/>, scaled so the
+    /// squared differences cannot overflow a narrow T such as Half (master summed them in double).
+    /// </summary>
     private static Tensor<T> DistancesTo(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> points, int row)
     {
         int n = points.Shape[0];
         int p = points.Shape[1];
         var reference = engine.TensorBroadcastTo(PreprocessingTensorOps.RowVector(points, row), new[] { n, p });
-        var diff = engine.TensorSubtract(points, reference);
-        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false));
+        return PreprocessingTensorOps.RowNorms(engine.TensorSubtract(points, reference));
     }
 }

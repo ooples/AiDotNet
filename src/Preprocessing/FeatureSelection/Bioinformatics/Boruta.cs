@@ -95,8 +95,10 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         var X = Tensor<T>.FromMatrix(data);
 
         // Track hits (times feature beats max shadow) and summed importances
-        var hitCounts = new Tensor<T>(new[] { p });
-        var importanceSum = new Tensor<T>(new[] { p });
+        // Hits are counted in int and importances summed in double: over more than 2048 iterations a running
+        // total in a narrow T such as Half stops growing (2048 + 1 rounds back to 2048)
+        var hitCounts = new Tensor<int>(new[] { p });
+        var importanceSum = new Tensor<double>(new[] { p });
         var shadowOrder = new int[n * p];
 
         for (int iter = 0; iter < _maxIterations; iter++)
@@ -118,14 +120,14 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
             var maxShadow = engine.TensorMaxValue(engine.TensorSlice(allImportances, new[] { p }, new[] { p }));
 
             // Count hits
-            hitCounts = engine.TensorAdd(hitCounts, engine.TensorGreaterThan(real, maxShadow));
-            importanceSum = engine.TensorAdd(importanceSum, real);
+            hitCounts = engine.TensorAdd(hitCounts, engine.TensorGreaterThan(real, maxShadow).Cast<int>());
+            importanceSum = engine.TensorAdd(importanceSum, real.Cast<double>());
         }
 
         // Average importances
-        var importances = engine.TensorDivideScalar(importanceSum, NumOps.FromDouble(_maxIterations));
+        var importances = engine.TensorDivideScalar(importanceSum, (double)_maxIterations).Cast<T>();
         _importances = importances.ToVector();
-        var hits = hitCounts.Cast<int>().AsSpan().ToArray();
+        var hits = hitCounts.AsSpan().ToArray();
 
         // Make decisions using binomial test
         _decisions = new BorutaDecision[p];
