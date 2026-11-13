@@ -491,6 +491,61 @@ public class NTMPaperTests
         }
     }
 
+    /// <summary>
+    /// The controller and memory are the whole learner (Graves et al. 2014; Santoro et al. 2016): meta-training
+    /// leaves the supplied meta-model's parameters untouched. Every outer step used to copy the leading controller
+    /// weights over them.
+    /// </summary>
+    [Fact]
+    public void MetaTrain_LeavesTheSuppliedMetaModelUntouched()
+    {
+        var metaModel = new TensorEmbeddingModel(2, 2);
+        var before = metaModel.GetParameters().Clone();
+        var algorithm = new NTMAlgorithm<double, Matrix<double>, Tensor<double>>(
+            new NTMOptions<double, Matrix<double>, Tensor<double>>(metaModel)
+            {
+                MemorySize = 4, MemoryWidth = 3, NumReadHeads = 1, NumClasses = 2, ControllerHiddenSize = 5,
+                ControllerType = NTMControllerType.LSTM, InitializeMemory = false, OuterLearningRate = 0.01,
+                RandomSeed = 11,
+            });
+
+        algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { Task() }));
+
+        var after = metaModel.GetParameters();
+        Assert.Equal(before.Length, after.Length);
+        for (int i = 0; i < before.Length; i++)
+            Assert.Equal(before[i], after[i]);
+    }
+
+    /// <summary>
+    /// The algorithm's parameters are the controller's: GetParameters reads them and SetParameters writes them
+    /// back. They used to be the supplied meta-model's, which the NTM never trains.
+    /// </summary>
+    [Theory]
+    [InlineData(NTMControllerType.LSTM)]
+    [InlineData(NTMControllerType.MLP)]
+    public void Parameters_RoundTripTheController(NTMControllerType type)
+    {
+        var algorithm = Algorithm(type, 0.01);
+        algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { Task() }));
+
+        var controllerParameters = algorithm.Controller.GetParameters();
+        var parameters = algorithm.GetParameters();
+        Assert.Equal(controllerParameters.Length, parameters.Length);
+        Assert.Equal(controllerParameters.Length, algorithm.ParameterCount);
+        for (int i = 0; i < parameters.Length; i++)
+            Assert.Equal(controllerParameters[i], parameters[i]);
+
+        var shifted = parameters.Clone();
+        for (int i = 0; i < shifted.Length; i++)
+            shifted[i] += 0.25;
+        algorithm.SetParameters(shifted);
+
+        var restored = algorithm.Controller.GetParameters();
+        for (int i = 0; i < shifted.Length; i++)
+            Assert.Equal(shifted[i], restored[i]);
+    }
+
     /// <summary>A controller that records every input and addresses by content only.</summary>
     private sealed class RecordingController : INTMController<double>
     {

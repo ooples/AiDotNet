@@ -226,6 +226,51 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.NTM;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The NTM's trained parameters are its controller's (Graves et al. 2014: the controller and memory are the
+    /// learner), so GetParameters, SetParameters and ParameterCount expose the controller, in
+    /// <see cref="INTMController{T}.GetParameters"/> order. They used to expose the supplied meta-model, which
+    /// the NTM never trains, so a parameter round trip neither saved nor restored the controller.
+    /// </remarks>
+    protected override void RegisterComponents()
+    {
+        RegisterParameterComponent(new ControllerParameterSource(() => _controller));
+    }
+
+    /// <summary>The controller's flat parameter vector as a parameter component.</summary>
+    private sealed class ControllerParameterSource : IParameterSource<T>
+    {
+        private readonly Func<INTMController<T>?> _controller;
+
+        public ControllerParameterSource(Func<INTMController<T>?> controller)
+        {
+            _controller = controller;
+        }
+
+        // The LSTM controller resolves its input width at its first forward, so the count is read live.
+        public long ParameterCount => _controller()?.GetParameters().Length ?? 0;
+
+        public Vector<T> GetParameters() => _controller()?.GetParameters() ?? new Vector<T>(0);
+
+        public void SetParameters(Vector<T> parameters)
+        {
+            Guard.NotNull(parameters);
+            var controller = _controller();
+            if (controller is null)
+            {
+                if (parameters.Length != 0)
+                {
+                    throw new InvalidOperationException("The NTM controller has not been built yet.");
+                }
+
+                return;
+            }
+
+            controller.SetParameters(parameters);
+        }
+    }
+
     /// <summary>The controller the algorithm trains, shared with every adapted model.</summary>
     internal INTMController<T> Controller => _controller;
 
@@ -596,21 +641,16 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <summary>
     /// Sets controller parameters (updates internal weights).
     /// </summary>
+    /// <remarks>
+    /// The controller and its memory are the whole learner (Graves et al. 2014; Santoro et al. 2016), so only the
+    /// controller is written. This used to also copy the leading controller weights over the supplied meta-model's
+    /// parameters, a different network: every outer step overwrote the caller's model with unrelated values.
+    /// </remarks>
     private void SetControllerParameters(Vector<T> parameters)
     {
-        // Update the controller's internal weights directly
-        if (_controller != null && parameters.Length > 0)
+        if (parameters.Length > 0)
         {
             _controller.SetParameters(parameters);
-        }
-
-        // Also update the meta model with the new parameters for consistency
-        if (MetaModel != null && parameters.Length > 0)
-        {
-            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-            int copyLength = Math.Min(parameters.Length, currentParams.Length);
-            parameters.AsSpan().Slice(0, copyLength).CopyTo(currentParams.AsWritableSpan());
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(currentParams);
         }
     }
 

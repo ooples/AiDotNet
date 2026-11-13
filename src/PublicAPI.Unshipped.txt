@@ -22954,3 +22954,4 @@ AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.ShiftRange.get -> i
 AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.ShiftRange.set -> void
 AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.PresentPreviousLabel.get -> bool
 AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.PresentPreviousLabel.set -> void
+override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.RegisterComponents() -> void
