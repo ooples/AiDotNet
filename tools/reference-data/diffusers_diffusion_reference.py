@@ -16,6 +16,8 @@ Consistency models: one CMStochasticIterativeScheduler step (Song et al. 2023, A
 Karras sigmas (sigma_min 0.002, sigma_max 80, rho 7) re-noises the boundary-conditioned denoised sample to
 sigma_next with z = sin(1.3 (i + 1)). Prints sigma_next, the denoised sample and the re-noised sample used by
 DiffusersSchedulerReferenceTests.ConsistencyRenoise_MatchesDiffusers.
+
+Run it in its own environment from requirements-diffusers.txt (diffusers 0.35.0); see the README.
 """
 import os
 import re

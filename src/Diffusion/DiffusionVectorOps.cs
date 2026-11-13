@@ -114,6 +114,13 @@ internal static class DiffusionVectorOps
     /// <remarks>
     /// Half squares overflow above 255 (an ordinary STFT magnitude), so Half is reduced in double and returned as T.
     /// </remarks>
+    /// <summary>
+    /// The L2 norm of <paramref name="values"/> reduced and returned in double, for a caller whose norm or a
+    /// quantity derived from it would overflow T (a Half norm above 65504).
+    /// </summary>
+    internal static double NormInDouble<T>(Vector<T> values)
+        => AiDotNetEngine.Current.Norm(TensorCopyHelper.CastLogical<T, double>(values.AsTensor()).ToVector());
+
     internal static T RelativeSquaredError<T>(Tensor<T> reference, Tensor<T> estimate)
     {
         var ops = MathHelper.GetNumericOperations<T>();

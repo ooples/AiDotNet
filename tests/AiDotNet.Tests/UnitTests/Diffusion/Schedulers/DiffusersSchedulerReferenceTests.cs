@@ -164,7 +164,7 @@ public class DiffusersGuidanceReferenceTests
         var half = new AiDotNet.WindowFunctions.HanningWindow<Half>().Create(size);
         var single = new AiDotNet.WindowFunctions.HanningWindow<float>().Create(size);
         var precise = new AiDotNet.WindowFunctions.HanningWindow<double>().Create(size);
-        Assert.All(half.ToArray(), value => Assert.True(Half.IsFinite(value)));
+        Assert.All(half.ToArray(), value => Assert.False(Half.IsNaN(value) || Half.IsInfinity(value)));
         foreach (int index in new[] { 0, size / 3, size / 2, size - 1 })
         {
             double expected = size == 1 ? 1 : 0.5 * (1 - Math.Cos(2 * Math.PI * index / (size - 1)));
@@ -484,5 +484,96 @@ public class DiffusersGuidanceReferenceTests
         {
             0.695981480687581, 0.804728587045016, 0.956974535945424, -1.21796759120327, 1.17446874866029, -0.108747106357434, -1.11369009479563, 1.61594249048778, 1.76880191526366, 1.63777955117005, -1.37573482298284, 0.174696485458139,
         }, result);
+    }
+}
+
+/// <summary>
+/// Narrow-type regressions in the diffusion sweep: each computes an intermediate that leaves Half's (or float's)
+/// range unless it stays in double.
+/// </summary>
+public class DiffusionNarrowTypeRegressionTests
+{
+    [Fact]
+    public void RewardGuidance_HalfGradientAbove65504_IsClippedNotZeroed()
+    {
+        // |[40000] x 4| = 80000 overflows Half; 1 / infinity zeroed the gradient. Clipped to norm 1 it is 0.5 each.
+        var guidance = new AiDotNet.Diffusion.Alignment.RewardGuidance<Half>(guidanceScale: 1.0);
+        var noise = new Vector<Half>(4);
+        var gradient = new Vector<Half>(Enumerable.Repeat((Half)40000, 4).ToArray());
+        var guided = guidance.ApplyGuidance(noise, gradient, 0.0);
+        Assert.All(guided.ToArray(), value => Assert.Equal(-0.5, (double)value, 3));
+    }
+
+    [Fact]
+    public void ConsistencyRenoise_HalfAtTheMinimumSigma_IsFinite()
+    {
+        // (Half)0.1 squared rounds below 0.1^2, so sqrt(sigma^2 - sigmaMin^2) was NaN.
+        var denoised = new Tensor<Half>(new[] { 2 });
+        var noise = Tensor<Half>.CreateDefault(new[] { 2 }, (Half)1);
+        var renoised = ConsistencyModel<Half>.RenoiseToSigma(denoised, noise, (Half)0.1, 0.1);
+        Assert.All(renoised.ToArray(), value => Assert.False(Half.IsNaN(value) || Half.IsInfinity(value)));
+    }
+
+    [Fact]
+    public void Apg_FloatLargeLogits_ProjectWithoutOverflow()
+    {
+        // c = [1e20, 0], u = 0: d = c is all parallel, so the update is (1 - 0.5) c and the output 5e19. In float the
+        // reductions overflowed to infinity and inf / inf was NaN.
+        var apg = new AdaptiveProjectedGuidance<float>(0.5);
+        var unconditional = new Tensor<float>(new[] { 1, 2 });
+        var conditional = new Tensor<float>(new[] { 1e20f, 0f }, new[] { 1, 2 });
+        var output = apg.Apply(unconditional, conditional, 1.0, 0.0).ToArray();
+        Assert.Equal(5e19, output[0], 5e19 * 1e-6);
+        Assert.Equal(0f, output[1]);
+    }
+
+    [Fact]
+    public void AlphaComposite_HalfZeroAlpha_IsZeroNotNaN()
+    {
+        // 1e-10 rounds to zero in Half, so the transparent test never matched and 0 / 0 was kept.
+        var compositor = new AiDotNet.Diffusion.MaskUtilities.AlphaCompositor<Half>();
+        var one = new Vector<Half>(new[] { (Half)1 });
+        var zero = new Vector<Half>(1);
+        var result = compositor.CompositeOver(one, zero, one, zero);
+        Assert.Equal((Half)0, result[0]);
+    }
+
+    [Fact]
+    public void MaskBlur_HalfTinySigma_IsNearlyTheIdentity()
+    {
+        // -1 / (2 * 0.001^2) is -500000, outside Half; 0 * -infinity at the center tap was NaN everywhere.
+        var mask = new Tensor<Half>(new[] { 3, 3 });
+        mask[1, 1] = (Half)1;
+        var blurred = new AiDotNet.Diffusion.MaskUtilities.MaskBlur<Half>(0.001).Apply(mask).ToArray();
+        Assert.Equal(1.0, (double)blurred[4], 3);
+        Assert.All(blurred.Where((_, i) => i != 4), value => Assert.Equal(0.0, (double)value, 3));
+    }
+
+    [Fact]
+    public void MaskFeather_HalfRadius128_KeepsAMaskOfOnes()
+    {
+        // The window size 257^2 overflowed Half, so a mask of ones averaged to 0.
+        var mask = Tensor<Half>.CreateDefault(new[] { 4, 4 }, (Half)1);
+        var feathered = new AiDotNet.Diffusion.MaskUtilities.MaskFeatherer<Half>(128).Apply(mask);
+        Assert.All(feathered.ToArray(), value => Assert.Equal((Half)1, value));
+    }
+
+    [Fact]
+    public void MaskFromSegmentation_HalfDoesNotMergeLabels()
+    {
+        // Label 2049 rounds to 2048 in Half; a pixel labelled 2048 is not label 2049.
+        var map = Tensor<Half>.CreateDefault(new[] { 2 }, (Half)2048);
+        var mask = new AiDotNet.Diffusion.MaskUtilities.MaskFromSegmentation<Half>(new[] { 2049 }).Apply(map);
+        Assert.All(mask.ToArray(), value => Assert.Equal((Half)0, value));
+    }
+
+    [Fact]
+    public void SgraceStylePresence_FloatLargeDelta_IsTheAlignedCosine()
+    {
+        // delta = [1e20] along style [1]: the cosine is 1, but the float delta . delta overflowed and gave 0.
+        var eraser = new AiDotNet.Diffusion.Safety.SGRACEEraser<float>();
+        eraser.AddStyleVector(new Vector<float>(new[] { 1f }));
+        float presence = eraser.MeasureStylePresence(new Vector<float>(new[] { 1e20f }), new Vector<float>(new[] { 0f }), 0);
+        Assert.Equal(1f, presence, 6);
     }
 }

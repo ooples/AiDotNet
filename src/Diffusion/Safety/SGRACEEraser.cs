@@ -123,24 +123,30 @@ public class SGRACEEraser<T>
         var engine = AiDotNetEngine.Current;
         var styleVec = _styleVectors[styleIndex];
         var len = Math.Min(Math.Min(currentParameters.Length, baseParameters.Length), styleVec.Length);
+        // Half and float dot products accumulate in T and overflow (ordinary Half vectors, a float delta of 1e20):
+        // reduce in double, as the converted loop did, and return only the cosine as T.
+        bool narrow = typeof(T) == typeof(float);
 #if NET5_0_OR_GREATER
-        // Half dot products accumulate in Half and overflow for ordinary parameter vectors: reduce in double, as the
-        // converted loop did, and return the cosine as Half.
-        if (typeof(T) == typeof(Half))
+        narrow |= typeof(T) == typeof(Half);
+#endif
+        if (narrow)
         {
             var wide = new SGRACEEraser<double>();
-            wide.AddStyleVector(DiffusionVectorOps.Fit(styleVec, len).AsTensor().Cast<double>().ToVector());
+            wide.AddStyleVector(Widen(DiffusionVectorOps.Fit(styleVec, len)));
             return NumOps.FromDouble(wide.MeasureStylePresence(
-                DiffusionVectorOps.Fit(currentParameters, len).AsTensor().Cast<double>().ToVector(),
-                DiffusionVectorOps.Fit(baseParameters, len).AsTensor().Cast<double>().ToVector(), 0));
+                Widen(DiffusionVectorOps.Fit(currentParameters, len)),
+                Widen(DiffusionVectorOps.Fit(baseParameters, len)), 0));
         }
-#endif
+
         var delta = engine.Subtract(DiffusionVectorOps.Fit(currentParameters, len), DiffusionVectorOps.Fit(baseParameters, len));
         var style = DiffusionVectorOps.Fit(styleVec, len);
         var dotProduct = engine.DotProduct(delta, style);
         var denom = NumOps.Multiply(NumOps.Sqrt(engine.DotProduct(delta, delta)), NumOps.Sqrt(engine.DotProduct(style, style)));
         return NumOps.GreaterThan(denom, NumOps.FromDouble(1e-10)) ? NumOps.Divide(NumOps.Abs(dotProduct), denom) : NumOps.Zero;
     }
+
+    private static Vector<double> Widen(Vector<T> values)
+        => TensorCopyHelper.CastLogical<T, double>(values.AsTensor()).ToVector();
 
     /// <summary>
     /// Gets the number of registered style vectors.

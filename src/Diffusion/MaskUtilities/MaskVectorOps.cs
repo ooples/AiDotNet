@@ -79,6 +79,42 @@ internal static class MaskVectorOps
         return engine.TensorLessEqual(distanceSq, limit).Cast<T>();
     }
 
+    /// <summary>
+    /// Sets the rectangle [top, bottom) x [left, right) of <paramref name="mask"/> to one, touching only the
+    /// rectangle clipped to the mask (nothing when the clipped rectangle is empty).
+    /// </summary>
+    internal static Tensor<T> UnionRectangle<T>(Tensor<T> mask, int top, int left, int bottom, int right)
+    {
+        int height = mask.Shape[0], width = mask.Shape[1];
+        int r0 = Math.Max(0, top), r1 = Math.Min(height, bottom);
+        int c0 = Math.Max(0, left), c1 = Math.Min(width, right);
+        if (r1 <= r0 || c1 <= c0)
+            return mask;
+
+        var ones = Tensor<T>.CreateDefault(new[] { r1 - r0, c1 - c0 }, MathHelper.GetNumericOperations<T>().One);
+        return AiDotNetEngine.Current.TensorSetSlice(mask, ones, new[] { r0, c0 });
+    }
+
+    /// <summary>
+    /// Sets the disk (y - centerY)^2 + (x - centerX)^2 &lt;= radius^2 of <paramref name="mask"/> to one, computing
+    /// distances only over the disk's bounding square clipped to the mask (nothing when it lies outside).
+    /// </summary>
+    internal static Tensor<T> UnionDisk<T>(Tensor<T> mask, int centerY, int centerX, int radius)
+    {
+        int height = mask.Shape[0], width = mask.Shape[1];
+        long r0 = Math.Max(0L, (long)centerY - radius), r1 = Math.Min(height, (long)centerY + radius + 1);
+        long c0 = Math.Max(0L, (long)centerX - radius), c1 = Math.Min(width, (long)centerX + radius + 1);
+        if (r1 <= r0 || c1 <= c0)
+            return mask;
+
+        var engine = AiDotNetEngine.Current;
+        int rows = (int)(r1 - r0), cols = (int)(c1 - c0);
+        var start = new[] { (int)r0, (int)c0 };
+        var window = engine.TensorSlice(mask, start, new[] { rows, cols });
+        var disk = Disk<T>(rows, cols, (int)(centerY - r0), (int)(centerX - c0), radius * radius);
+        return engine.TensorSetSlice(mask, engine.TensorMax(window, disk), start);
+    }
+
     private static Tensor<T> Indicator<T>(int length, int start, int end)
     {
         int from = Math.Max(0, Math.Min(start, length));

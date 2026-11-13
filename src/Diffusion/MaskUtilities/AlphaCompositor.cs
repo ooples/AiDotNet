@@ -69,11 +69,18 @@ public class AlphaCompositor<T>
         var outAlpha = engine.Add(fgA, engine.Multiply(bgA, oneMinusFgA));
 
         // out_color = (fg * fg_alpha + bg * bg_alpha * (1 - fg_alpha)) / out_alpha, and 0 where out_alpha < 1e-10
+        // or out_alpha <= 0 (1e-10 rounds to zero in Half). The division runs before the selection, so those
+        // pixels divide by one instead of evaluating 0 / 0.
         var fgContrib = engine.Multiply(fg, fgA);
         var bgContrib = engine.Multiply(engine.Multiply(bg, bgA), oneMinusFgA);
-        var color = engine.Divide(engine.Add(fgContrib, bgContrib), outAlpha);
-        var transparent = engine.TensorLessThan(outAlpha.AsTensor(), NumOps.FromDouble(1e-10));
-        return engine.TensorWhere(transparent, new Tensor<T>(new[] { len }), color.AsTensor()).ToVector();
+        var alpha = outAlpha.AsTensor();
+        var visible = engine.TensorMultiply(
+            engine.TensorGreaterThan(alpha, NumOps.Zero),
+            engine.TensorSubtract(Tensor<T>.CreateDefault(new[] { len }, NumOps.One),
+                engine.TensorLessThan(alpha, NumOps.FromDouble(1e-10))));
+        var safeAlpha = engine.TensorWhere(visible, alpha, Tensor<T>.CreateDefault(new[] { len }, NumOps.One));
+        var color = engine.TensorDivide(engine.Add(fgContrib, bgContrib).AsTensor(), safeAlpha);
+        return engine.TensorWhere(visible, color, new Tensor<T>(new[] { len })).ToVector();
     }
 
     /// <summary>
