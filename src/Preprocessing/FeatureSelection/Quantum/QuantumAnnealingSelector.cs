@@ -154,10 +154,11 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var gain = engine.ReduceSum(engine.TensorMultiply(solution, correlations), new[] { 0 }, true);
-        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
-        var count = engine.ReduceSum(solution.Cast<int>(), new[] { 0 }, true).Cast<T>();
+        // counted and compared with the target in int: a 0/1 sum in T stops counting at 2048 for Half, and a count of
+        // 2049 cast to Half rounds to 2048 before the subtraction
+        var count = engine.ReduceSum(solution.Cast<int>(), new[] { 0 }, true);
         var penalty = engine.TensorMultiplyScalar(
-            engine.TensorAbs(engine.TensorAddScalar(count, ops.FromDouble(-targetCount))), ops.FromDouble(0.1));
+            engine.TensorAbs(engine.TensorAddScalar(count, -targetCount)).Cast<T>(), ops.FromDouble(0.1));
         return engine.TensorSubtract(penalty, gain);
     }
 

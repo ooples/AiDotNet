@@ -152,18 +152,18 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         int nExplain = Math.Min(_nSamples, n);
         var explainIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(nExplain).ToArray();
 
-        // Accumulate |SHAP values|
-        var shapAccum = new Tensor<T>(new[] { p });
+        // Accumulate |SHAP values| (in double: a Half sum of attributions near 1024 overflows after 64 instances)
+        var shapAccum = new Tensor<double>(new[] { p });
         foreach (int explainIdx in explainIndices)
         {
             // Coalitions: one uniform draw per feature, a feature joins when its draw exceeds 1/2
             var draws = PopulationSearchOps.Uniform<T>(random, _nCoalitions, p);
             var instanceShap = KernelShap(PopulationSearchOps.Row(x, explainIdx), baseline, draws, Predict);
-            shapAccum = engine.TensorAdd(shapAccum, engine.TensorAbs(instanceShap));
+            shapAccum = engine.TensorAdd(shapAccum, engine.TensorAbs(instanceShap.Cast<double>()));
         }
 
         // Average SHAP values
-        var shapValues = engine.TensorDivideScalar(shapAccum, NumOps.FromDouble(nExplain));
+        var shapValues = engine.TensorDivideScalar(shapAccum, (double)nExplain).Cast<T>();
         _shapValues = shapValues.ToVector();
 
         // Select top features by SHAP importance

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic;
@@ -19,7 +20,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task AbsTargetCorrelations_Half_DoesNotOverflowTheNormaliser()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 300;
         var data = new Half[n, 1];
         var target = new Half[n];
@@ -39,7 +40,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task SubsetFitness_Half_CountsTheSubsetPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int p = 3000;
         var ones = new Half[p];
         for (int j = 0; j < p; j++)
@@ -57,7 +58,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task OnePointCrossover_Half_SplitsExactlyPastPosition2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int p = 3000;
         var ones = new Half[p];
         for (int j = 0; j < p; j++)
@@ -76,7 +77,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 120000)]
     public async Task KernelShap_Float_RecoversLinearShapleyValuesFor200Features()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int p = 200;
         const int coalitions = 800;
         var w = new float[p];
@@ -124,7 +125,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task NSGAII_Half_CountsSelectedFeaturesPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var (_, count) = AiDotNet.Preprocessing.FeatureSelection.MultiObjective.NSGAIISelector<Half>.EvaluateObjectives(
             AllSelected(3000), new Tensor<Half>(new[] { 3000 }));
         Assert.Equal(3000.0, (double)count[0]);
@@ -133,7 +134,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task SPEAII_Half_CountsSelectedFeaturesPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var (_, count) = AiDotNet.Preprocessing.FeatureSelection.MultiObjective.SPEAIISelector<Half>.EvaluateObjectives(
             AllSelected(3000), new Tensor<Half>(new[] { 3000 }));
         Assert.Equal(3000.0, (double)count[0]);
@@ -142,7 +143,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task MOEAD_Half_CountsSelectedFeaturesPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var (_, count) = AiDotNet.Preprocessing.FeatureSelection.MultiObjective.MOEADSelector<Half>.EvaluateObjectives(
             AllSelected(3000), new Tensor<Half>(new[] { 3000 }));
         Assert.Equal(3000.0, (double)count[0]);
@@ -167,7 +168,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task SineCosine_ExplorationScale_MatchesScaFromOneToT()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         Assert.Equal(0.0, AiDotNet.Preprocessing.FeatureSelection.Metaheuristic.SineCosine<double>.ExplorationScale(99, 100, 2.0), 12);
         Assert.Equal(1.98, AiDotNet.Preprocessing.FeatureSelection.Metaheuristic.SineCosine<double>.ExplorationScale(0, 100, 2.0), 12);
     }
@@ -177,7 +178,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task SalpSwarm_LeaderCoefficient_StartsAtIterationOne()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         Assert.Equal(2 * Math.Exp(-Math.Pow(4.0 / 50, 2)),
             AiDotNet.Preprocessing.FeatureSelection.Metaheuristic.SalpSwarm<double>.LeaderCoefficient(0, 50), 12);
         Assert.Equal(2 * Math.Exp(-16.0),
@@ -189,7 +190,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task Dragonfly_OneNeighbour_KeepsOwnStepAndNoCohesion()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var positions = new Tensor<double>(new[] { 0.5, 0.5, 0.6, 0.6 }, new[] { 2, 2 });
         var steps = new Tensor<double>(new[] { 0.02, -0.01, 0.0, 0.0 }, new[] { 2, 2 });
         var food = new Tensor<double>(new[] { 0.55, 0.55 }, new[] { 2 });
@@ -209,7 +210,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task Dragonfly_RandomWalk_DrawsPerDimension()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var positions = new Tensor<double>(new[] { 0.5, 0.5, 0.6, 0.6, 0.4, 0.45 }, new[] { 3, 2 });
         var steps = new Tensor<double>(new[] { 0.0, 0.0, 0.01, 0.02, 0.03, -0.02 }, new[] { 3, 2 });
         var far = new Tensor<double>(new[] { 5.0, 5.0 }, new[] { 2 });
@@ -231,7 +232,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task StabilitySelection_Half_CountsPast2048Bootstraps()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = new AiDotNet.Tensors.LinearAlgebra.Matrix<Half>(4, 2);
         var target = new AiDotNet.Tensors.LinearAlgebra.Vector<Half>(4);
         for (int i = 0; i < 4; i++)
@@ -257,7 +258,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task LIME_ReplacedFraction_Half_CountsPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var fraction = LIMESelector<Half>.ReplacedFraction(new Tensor<Half>(new[] { 1, 3000 }));
         Assert.Equal(1.0, (double)fraction[0]);
     }
@@ -266,7 +267,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task VAE_StandardNormal_Half_IsFiniteForADrawOfOne()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var normal = AiDotNet.Preprocessing.FeatureSelection.Neural.VariationalAutoencoderSelector<Half>.StandardNormal(
             HalfTensor(new[] { 1.0, 0.25 }, 1, 2));
         AssertAllFinite(normal);
@@ -276,7 +277,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task VAE_MinMaxScale_Half_MapsConstantColumnToZero()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var scaled = AiDotNet.Preprocessing.FeatureSelection.Neural.VariationalAutoencoderSelector<Half>.MinMaxScale(
             HalfTensor(new[] { 3.0, 1.0, 3.0, 2.0, 3.0, 5.0 }, 3, 2));
         Assert.Equal(0.0, (double)scaled[0, 0]);
@@ -290,7 +291,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task StandardizeSample_Half_MapsConstantColumnToZero()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var standardized = NeuralSelectorOps.StandardizeSample(HalfTensor(new[] { 2.0, 1.0, 2.0, 3.0 }, 2, 2));
         Assert.Equal(0.0, (double)standardized[0, 0]);
         Assert.Equal(0.0, (double)standardized[1, 0]);
@@ -302,7 +303,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task Cuckoo_GaussianFromUniforms_Half_IsFiniteForAZeroDraw()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var normal = AiDotNet.Preprocessing.FeatureSelection.Metaheuristic.CuckooSearch<Half>.GaussianFromUniforms(
             HalfTensor(new[] { 0.0, 0.0 }, 1, 2), 0);
         AssertAllFinite(normal);
@@ -313,7 +314,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task NMF_Half_ZeroDataGivesFiniteScores()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var data = new AiDotNet.Tensors.LinearAlgebra.Matrix<Half>(4, 3);
         for (int i = 0; i < 4; i++)
             for (int j = 0; j < 3; j++)
@@ -333,7 +334,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task ConcreteAutoencoder_Half_GumbelOfADrawOfOneIsFinite()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var network = new AiDotNet.Preprocessing.FeatureSelection.Neural.ConcreteAutoencoderSelector<Half>.ConcreteNetwork
         {
             Logits = new Tensor<Half>(new[] { 1, 2 }),
@@ -351,7 +352,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task Tabu_TabuMask_Half_ExactPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var tabu = AiDotNet.Preprocessing.FeatureSelection.Optimization.TabuSearchSelector<Half>.TabuMask(
             new[] { 2052, 2051 }, 2051);
         Assert.Equal(1.0, (double)tabu[0]);
@@ -363,7 +364,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task Tabu_BestSwap_Half_CountsSubsetPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int p = 3001;
         var current = new double[p];
         var scores = new double[p];
@@ -383,7 +384,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task QuantumAnnealing_ComputeEnergy_Half_CountsPast2048()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var ones = new double[3000];
         for (int j = 0; j < 3000; j++)
             ones[j] = 1;
@@ -397,7 +398,7 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task Frequency_Half_ExactPastHalfRange()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var frequency = PopulationSearchOps.Frequency<Half>(new Tensor<int>(new[] { 3000, 70000, 0 }, new[] { 3 }), 3000);
         Assert.Equal(1.0, (double)frequency[0]);
         Assert.Equal(0.0, (double)frequency[2]);
@@ -410,9 +411,218 @@ public class FeatureSelectionPopulationReviewTests
     [Fact(Timeout = 60000)]
     public async Task DifferentialPrivacy_GumbelNoise_Half_IsFinite()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var noise = AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<Half>.GumbelNoise(
             RandomHelper.CreateSeededRandom(11), 50000);
         AssertAllFinite(noise);
+    }
+
+    // Two identical columns x = 1..4 with y = 2x: (D'D + 1e-6 I) c = D'y gives c = [1, 1] (60 c = 60 - 1e-6 c).
+    // In Half the 1e-6 ridge rounded away against the Gram entries 30, so the system was exactly singular.
+    [Fact(Timeout = 60000)]
+    public async Task RidgeCoefficients_Half_DuplicateColumnsKeepTheRidge()
+    {
+        await Task.Yield();
+        var design = HalfTensor(new double[] { 1, 1, 2, 2, 3, 3, 4, 4 }, 4, 2);
+        var y = HalfTensor(new double[] { 2, 4, 6, 8 }, 4);
+
+        var coefficients = SubsetRegressionOps.RidgeCoefficients(design, y, 1e-6);
+
+        Assert.Equal(1.0, (double)coefficients[0], 3);
+        Assert.Equal(1.0, (double)coefficients[1], 3);
+    }
+
+    // y = (-300, 300) with zero predictions about center 0: SS_res = SS_tot = 180,000, so R^2 = 0. Both Half sums
+    // overflowed and inf / inf gave NaN.
+    [Fact(Timeout = 60000)]
+    public async Task RSquared_Half_SquaredErrorsPast65504()
+    {
+        await Task.Yield();
+        var y = HalfTensor(new double[] { -300, 300 }, 2);
+
+        var r2 = SubsetRegressionOps.RSquared(y, new Tensor<Half>(new[] { 2 }), new Tensor<Half>(new[] { 1 }), out bool valid);
+
+        Assert.True(valid);
+        Assert.Equal(0.0, (double)r2[0], 6);
+    }
+
+    // 4096 rows of x = +-1 and y = 20 x: one sweep gives beta = (mean(x y) - alpha) / mean(x^2) = 20 - 0.01. The
+    // Half correlation sum 81,920 overflowed before the 1 / n scaling.
+    [Fact(Timeout = 60000)]
+    public async Task LassoCoordinateDescent_Half_CorrelationSumPast65504()
+    {
+        await Task.Yield();
+        const int n = 4096;
+        var x = new double[n];
+        var y = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            x[i] = i % 2 == 0 ? 1 : -1;
+            y[i] = 20 * x[i];
+        }
+
+        var beta = AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapperHybridSelector<Half>
+            .LassoCoordinateDescent(HalfTensor(x, n, 1), HalfTensor(y, n), 0.01, 1);
+
+        Assert.Equal(19.99, (double)beta[0], 0.02);
+    }
+
+    // The scout replaces the exhausted source and, scoring 0.8 against the retained best 0.5, becomes the best.
+    // Before, the scout was never compared with the best, so a scout found in the last cycle was lost.
+    [Fact(Timeout = 60000)]
+    public async Task ArtificialBeeColony_ScoutBetterThanTheBestBecomesTheBest()
+    {
+        await Task.Yield();
+        var foodSources = new Tensor<double>(new[] { 0.9, 0.1, 0.2, 0.3 }, new[] { 2, 2 });
+        var fitness = new Tensor<double>(new[] { 0.5, 0.1 }, new[] { 2 });
+        var trials = new[] { 0, 3 };
+        var best = PopulationSearchOps.Row(foodSources, 0);
+        var bestFitness = PopulationSearchOps.At(fitness, 0);
+        var scout = new Tensor<double>(new[] { 0.7, 0.6 }, new[] { 1, 2 });
+
+        AiDotNet.Preprocessing.FeatureSelection.Metaheuristic.ArtificialBeeColony<double>.ScoutPhase(
+            ref foodSources, ref fitness, trials, 1, scout, _ => new Tensor<double>(new[] { 0.8 }, new[] { 1 }),
+            ref best, ref bestFitness);
+
+        Assert.Equal(0.8, bestFitness[0], 12);
+        Assert.Equal(new[] { 0.7, 0.6 }, best.ToArray());
+        Assert.Equal(0.8, fitness[1], 12);
+        Assert.Equal(0, trials[1]);
+    }
+
+    // Two fireflies over a target-equal feature and an uncorrelated one, one generation with alpha = 1: the result
+    // must score at least as well as the best initial firefly (the initial population is the first draws of the
+    // seeded stream). A firefly with no brighter peer moves randomly and can lose fitness, and the old code kept
+    // only the final population.
+    [Fact(Timeout = 120000)]
+    public async Task FireflyAlgorithm_KeepsTheBestEvaluatedPosition()
+    {
+        await Task.Yield();
+        const int n = 40;
+        var data = new Matrix<double>(n, 2);
+        var target = new Vector<double>(n);
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = i % 2;
+            data[i, 1] = (i / 2) % 2;
+            target[i] = i % 2;
+        }
+
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, 0.0);
+        for (int seed = 0; seed < 30; seed++)
+        {
+            var initial = PopulationSearchOps.Uniform<double>(RandomHelper.CreateSeededRandom(seed), 2, 2);
+            double initialBest = PopulationSearchOps.ThresholdFitness(initial, correlations, 1, 0.1).ToArray().Max();
+
+            var selector = new AiDotNet.Preprocessing.FeatureSelection.Metaheuristic.FireflyAlgorithm<double>(
+                nFeaturesToSelect: 1, populationSize: 2, maxIterations: 1, alpha: 1.0, randomState: seed);
+            selector.Fit(data, target);
+
+            Assert.NotNull(selector.FeatureScores);
+            var final = new Tensor<double>(selector.FeatureScores.ToArray(), new[] { 1, 2 });
+            Assert.True(PopulationSearchOps.ThresholdFitness(final, correlations, 1, 0.1)[0] >= initialBest,
+                $"seed {seed}: the returned position scores below the best initial firefly {initialBest}");
+        }
+    }
+
+    // One perturbation per instance gives a rank-one [1, mask] system. In Half the 1e-6 ridge was lost, so an
+    // all-kept mask left (D'WD + ridge I) singular and the importance non-finite. Solved in double it is finite.
+    [Fact(Timeout = 60000)]
+    public async Task LimeSelector_Half_SinglePerturbationSystemKeepsTheRidge()
+    {
+        await Task.Yield();
+        const int n = 20;
+        var data = new Half[n, 1];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)i;
+            target[i] = (Half)i;
+        }
+
+        var selector = new LIMESelector<Half>(nFeaturesToSelect: 1, nSamplesToExplain: n, nPerturbations: 1, randomState: 5);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        Assert.NotNull(selector.Importances);
+        Assert.True(Half.IsFinite(selector.Importances[0]));
+    }
+
+    // 100 rows alternating -1024 / 1024 with the default mean-of-features prediction: each local coefficient is about
+    // +-1024 (instance minus the mean of the uniform replacements), so the importance is about 1024. The Half
+    // right-hand side (up to 500 * 1024) and the running sum of 100 coefficients overflowed.
+    [Fact(Timeout = 120000)]
+    public async Task LimeSelector_Half_ImportanceSumPast65504()
+    {
+        await Task.Yield();
+        const int n = 100;
+        var data = new Half[n, 1];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)(i % 2 == 0 ? -1024 : 1024);
+            target[i] = data[i, 0];
+        }
+
+        var selector = new LIMESelector<Half>(nFeaturesToSelect: 1, nSamplesToExplain: n, randomState: 5);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        Assert.NotNull(selector.Importances);
+        Assert.Equal(1024.0, (double)selector.Importances[0], 150.0);
+    }
+
+    // 100 rows alternating -1024 / 1024 with the default mean-of-features prediction: the background mean is 0 and
+    // every attribution is +-1024, so the mean |SHAP| is 1024. The Half running sum overflowed after 64 rows.
+    [Fact(Timeout = 120000)]
+    public async Task ShapSelector_Half_AttributionSumPast65504()
+    {
+        await Task.Yield();
+        const int n = 100;
+        var data = new Half[n, 1];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)(i % 2 == 0 ? -1024 : 1024);
+            target[i] = data[i, 0];
+        }
+
+        var selector = new SHAPSelector<Half>(nFeaturesToSelect: 1, nSamples: n, randomState: 5);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        Assert.NotNull(selector.ShapValues);
+        Assert.Equal(1024.0, (double)selector.ShapValues[0]);
+    }
+
+    // Baseline 1024, then permutation scores 1024 and 0: drops 0 and 1024, mean 512 and population std 512. The
+    // centred drops +-512 squared past Half's 65504, so the std was inf.
+    [Fact(Timeout = 60000)]
+    public async Task PermutationImportance_Half_DropDeviationsPast65504()
+    {
+        await Task.Yield();
+        int calls = 0;
+        var scores = new[] { 1024.0, 1024.0, 0.0 };
+        var selector = new PermutationImportance<Half>(
+            nFeaturesToSelect: 1, nPermutations: 2, scorer: (_, _) => (Half)scores[calls++], randomState: 5);
+        var data = new Half[4, 1];
+        for (int i = 0; i < 4; i++)
+            data[i, 0] = (Half)i;
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(new[] { (Half)0, (Half)1, (Half)2, (Half)3 }));
+
+        Assert.NotNull(selector.ImportanceStd);
+        Assert.NotNull(selector.ImportanceScores);
+        Assert.Equal(512.0, (double)selector.ImportanceScores[0]);
+        Assert.Equal(512.0, (double)selector.ImportanceStd[0]);
+    }
+
+    // 2049 selected features, zero correlations and a target count of 2048: the energy is the count penalty
+    // 0.1 * |2049 - 2048| = 0.1. The count cast to Half rounded to 2048, giving 0.
+    [Fact(Timeout = 60000)]
+    public async Task QuantumAnnealing_Half_CountPenaltyPast2048()
+    {
+        await Task.Yield();
+        const int p = 2049;
+        var energy = AiDotNet.Preprocessing.FeatureSelection.Quantum.QuantumAnnealingSelector<Half>.ComputeEnergy(
+            new Tensor<Half>(new[] { p }), HalfTensor(Enumerable.Repeat(1.0, p).ToArray(), p), 2048);
+
+        Assert.Equal(0.1, (double)energy[0], 3);
     }
 }

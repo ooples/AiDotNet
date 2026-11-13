@@ -30,6 +30,11 @@ internal static class SubsetRegressionOps
     /// <summary>The coefficients (D^T D + ridge I)^-1 D^T y of a design D [n, k] and response y [n] ([k]).</summary>
     public static Tensor<T> RidgeCoefficients<T>(Tensor<T> design, Tensor<T> y, double ridge)
     {
+        // Half and BFloat16 form and solve the system in double: the 1e-6 ridge is below Half's spacing near the
+        // Gram diagonal (2 + 1e-6 rounds to 2), so a collinear design stayed singular
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return RidgeCoefficients(design.Cast<double>(), y.Cast<double>(), ridge).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = design.Shape[0];
@@ -73,14 +78,30 @@ internal static class SubsetRegressionOps
     /// </summary>
     public static Tensor<T> RSquared<T>(Tensor<T> y, Tensor<T> prediction, Tensor<T> center, out bool valid)
     {
+        // The validity floor stays the T-aware tolerance; Half and BFloat16 form the sums and ratio in double, since
+        // squared errors past 256 overflow Half (targets -300, 300 gave inf / inf = NaN instead of 0)
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            double wideFloor = MathHelper.GetNumericOperations<T>().ToDouble(floor);
+            return RSquaredCore(y.Cast<double>(), prediction.Cast<double>(), center.Cast<double>(), wideFloor, out valid)
+                .Cast<T>();
+        }
+
+        return RSquaredCore(y, prediction, center, floor, out valid);
+    }
+
+    private static Tensor<TC> RSquaredCore<TC>(
+        Tensor<TC> y, Tensor<TC> prediction, Tensor<TC> center, TC floor, out bool valid)
+    {
         var engine = AiDotNetEngine.Current;
         int n = y.Length;
         var ssRes = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(y, prediction)), new[] { 0 }, true);
         var ssTot = engine.ReduceSum(
             engine.TensorSquare(engine.TensorSubtract(y, engine.TensorBroadcastTo(center, new[] { n }))), new[] { 0 }, true);
-        valid = PopulationSearchOps.Greater(ssTot, PreprocessingTensorOps.Filled(new[] { 1 }, PreprocessingTensorOps.Tolerance<T>(1e-10)));
+        valid = PopulationSearchOps.Greater(ssTot, PreprocessingTensorOps.Filled(new[] { 1 }, floor));
         return valid
             ? PreprocessingTensorOps.OneMinus(engine.TensorDivide(ssRes, ssTot))
-            : new Tensor<T>(new[] { 1 });
+            : new Tensor<TC>(new[] { 1 });
     }
 }

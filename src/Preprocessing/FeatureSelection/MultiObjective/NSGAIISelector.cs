@@ -201,7 +201,9 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             var frontCrowding = AiDotNetEngine.Current.TensorIndexSelect(
                 crowding, new Tensor<int>((int[])front.Clone(), new[] { front.Length }), 0);
             var order = PreprocessingTensorOps.StableOrder(frontCrowding, descending: true);
-            for (int r = 0; r < size - selected.Count && r < order.Length; r++)
+            // The free places are fixed before the loop: re-reading selected.Count shrank the bound with every add
+            int remaining = size - selected.Count;
+            for (int r = 0; r < remaining && r < order.Length; r++)
                 selected.Add(front[order[r]]);
         }
 

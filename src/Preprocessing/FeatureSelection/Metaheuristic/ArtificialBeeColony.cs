@@ -141,11 +141,10 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 
             if (trials[exhausted] >= _limit)
             {
-                var scout = PopulationSearchOps.Uniform<T>(random, 1, p);
-                foodSources = PopulationSearchOps.ScatterRows(foodSources, new[] { exhausted }, scout);
-                fitness = PopulationSearchOps.ReplaceAt(
-                    fitness, exhausted, PopulationSearchOps.ThresholdFitness(scout, correlations, targetCount, 0.1));
-                trials[exhausted] = 0;
+                ScoutPhase(
+                    ref foodSources, ref fitness, trials, exhausted, PopulationSearchOps.Uniform<T>(random, 1, p),
+                    scout => PopulationSearchOps.ThresholdFitness(scout, correlations, targetCount, 0.1),
+                    ref bestSolution, ref bestFitness);
             }
         }
 
@@ -155,6 +154,26 @@ public class ArtificialBeeColony<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(bestSolution, numToSelect);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The scout phase: the exhausted source is replaced by the <paramref name="scout"/> [1, p], its trial count is
+    /// reset, and the scout becomes the retained best when it beats <paramref name="bestFitness"/> (a scout found in
+    /// the last cycle is otherwise never compared with the best).
+    /// </summary>
+    internal static void ScoutPhase(
+        ref Tensor<T> foodSources, ref Tensor<T> fitness, int[] trials, int exhausted, Tensor<T> scout,
+        Func<Tensor<T>, Tensor<T>> evaluate, ref Tensor<T> bestSolution, ref Tensor<T> bestFitness)
+    {
+        var scoutFitness = evaluate(scout);
+        foodSources = PopulationSearchOps.ScatterRows(foodSources, new[] { exhausted }, scout);
+        fitness = PopulationSearchOps.ReplaceAt(fitness, exhausted, scoutFitness);
+        trials[exhausted] = 0;
+        if (PopulationSearchOps.Greater(scoutFitness, bestFitness))
+        {
+            bestFitness = scoutFitness;
+            bestSolution = PopulationSearchOps.Row(foodSources, exhausted);
+        }
     }
 
     /// <summary>

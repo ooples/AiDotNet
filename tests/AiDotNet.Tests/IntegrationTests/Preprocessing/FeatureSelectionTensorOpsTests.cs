@@ -18,7 +18,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task PairwiseSquaredDistances_Half_HasAnExactZeroDiagonalWhenDistancesOverflow()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var x = new Tensor<Half>(new[] { (Half)300, (Half)0 }, new[] { 2, 1 });
 
         var squared = FeatureSelectionTensorOps.PairwiseSquaredDistances(x);
@@ -34,7 +34,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task TopKWhere_RanksOnlyTheMaskedEntries()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var scores = new Tensor<float>(new[] { 3e8f, 3e8f, 5e8f }, new[] { 3 });
         var mask = new Tensor<float>(new[] { 0f, 1f, 1f }, new[] { 3 });
 
@@ -48,7 +48,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task KNearestMask_BreaksTiesTowardTheLowerIndex()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var points = new Tensor<double>(new[] { 0.0, 1.0, 1.0, 2.0 }, new[] { 4, 1 });
         var distances = FeatureSelectionTensorOps.PairwiseDistances(points);
 
@@ -74,7 +74,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 120000)]
     public async Task KNearestMask_Half_TakesExactlyKNeighboursAmongMoreThan2048Ties()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 2100;
         const int k = 2051;
         var distances = new Tensor<Half>(new[] { n, n });
@@ -103,7 +103,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task ShortestPaths_Half_KeepsEdgeLengthsWhenTheirSumOverflows()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 4;
         var lengthValues = new Half[n * n];
         var edgeValues = new Half[n * n];
@@ -144,7 +144,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task BarycenterWeights_Float_NormalizesWhenTheGramMatrixOverflows()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var x = new Tensor<float>(new[] { 0f, 2e19f }, new[] { 2, 1 });
 
         var weights = FeatureSelectionTensorOps.BarycenterWeights(x, new[] { 1, 0 }, 1, 1e-3);
@@ -160,7 +160,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task BarycenterWeights_Double_MatchesTheDirectSolve()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var x = new Tensor<double>(new[] { 0.0, -1.0, 2.0 }, new[] { 3, 1 });
 
         var weights = FeatureSelectionTensorOps.BarycenterWeights(x, new[] { 1, 2, 0, 2, 0, 1 }, 2, 1e-3);
@@ -180,7 +180,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task ColumnCorrelations_Half_IsExactPastTheSquareOverflow()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var a = new Tensor<Half>(new[] { (Half)0, (Half)300, (Half)0, (Half)300 }, new[] { 4, 1 });
         var b = new Tensor<Half>(
             new[] { (Half)0, (Half)0, (Half)600, (Half)(-600), (Half)0, (Half)0, (Half)600, (Half)(-600) },
@@ -198,7 +198,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task ColumnCorrelations_Half_IsZeroBelowTheHalfTolerance()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var a = new Tensor<Half>(new[] { (Half)0, (Half)0.01 }, new[] { 2, 1 });
 
         var r = FeatureSelectionTensorOps.ColumnCorrelations(a, a);
@@ -210,7 +210,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task ColumnCorrelations_Double_KeepsTheTenToTheMinusTenGuard()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var a = new Tensor<double>(new[] { 0.0, 0.01 }, new[] { 2, 1 });
 
         var r = FeatureSelectionTensorOps.ColumnCorrelations(a, a);
@@ -218,13 +218,13 @@ public class FeatureSelectionTensorOpsTests
         Assert.Equal(1.0, r[0, 0], 12);
     }
 
-    // A centred column -300, 300 has population std 300. The former square of the raw values, 90000, overflowed
+    // A centred column -300, 300 (column 0 of the row-major [2, 2]; column 1 is 0, 0) has population std 300. The former square of the raw values, 90000, overflowed
     // Half, so the std was +infinity.
     [Fact(Timeout = 60000)]
     public async Task CenteredColumnStd_Half_DoesNotOverflowPast256()
     {
-        await Task.CompletedTask;
-        var centered = new Tensor<Half>(new[] { (Half)(-300), (Half)300, (Half)0, (Half)0 }, new[] { 2, 2 });
+        await Task.Yield();
+        var centered = new Tensor<Half>(new[] { (Half)(-300), (Half)0, (Half)300, (Half)0 }, new[] { 2, 2 });
 
         var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
 
@@ -236,7 +236,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task StandardizeColumnsOrKeep_Half_StandardizesColumnsPast256()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var x = new Tensor<Half>(new[] { (Half)(-300), (Half)300 }, new[] { 2, 1 });
 
         var standardized = FeatureSelectionTensorOps.StandardizeColumnsOrKeep(x);
@@ -251,7 +251,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task StandardizeColumnsOrKeep_Half_KeepsAColumnWhoseStdIsBelowTheHalfTolerance()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var x = new Tensor<Half>(new[] { (Half)0, (Half)2e-5 }, new[] { 2, 1 });
 
         var standardized = FeatureSelectionTensorOps.StandardizeColumnsOrKeep(x);
@@ -266,7 +266,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task SampleCovariance_Half_DividesBeforeTheProduct()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         const int n = 20;
         var values = new Half[n * 2];
         for (int i = 0; i < n; i++)
@@ -291,7 +291,7 @@ public class FeatureSelectionTensorOpsTests
     [Fact(Timeout = 60000)]
     public async Task TopEigenpairs_Half_WidensTheEigendecompositionToFloat()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
         var symmetric = new Tensor<Half>(new[] { (Half)1, (Half)0, (Half)0, (Half)3 }, new[] { 2, 2 });
 
         var vectors = FeatureSelectionTensorOps.TopEigenpairs(symmetric, 1, out var values);

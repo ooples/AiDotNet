@@ -98,18 +98,35 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             : RandomHelper.CreateSecureRandom();
 
         var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
-        Func<Tensor<T>, Tensor<T>> evaluate = rows => PopulationSearchOps.ThresholdFitness(rows, correlations, targetCount, 0.1);
+        Func<Tensor<T>, Tensor<T>> score = rows => PopulationSearchOps.ThresholdFitness(rows, correlations, targetCount, 0.1);
 
         // Initialize fireflies
         var fireflies = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
-        var intensity = evaluate(fireflies);
+        var intensity = score(fireflies);
+
+        // The best position over every evaluation is retained: a firefly with no brighter peer moves randomly and
+        // can lose fitness, so the final population alone can miss the best solution found
+        int bestIndex = PopulationSearchOps.ArgMax(intensity);
+        var best = PopulationSearchOps.Row(fireflies, bestIndex);
+        var bestFitness = PopulationSearchOps.At(intensity, bestIndex);
+        Func<Tensor<T>, Tensor<T>> evaluate = rows =>
+        {
+            var result = score(rows);
+            int index = PopulationSearchOps.ArgMax(result);
+            var candidate = PopulationSearchOps.At(result, index);
+            if (PopulationSearchOps.Greater(candidate, bestFitness))
+            {
+                bestFitness = candidate;
+                best = PopulationSearchOps.Row(rows, index);
+            }
+
+            return result;
+        };
 
         // Main loop
         for (int iter = 0; iter < _maxIterations; iter++)
             Generation(ref fireflies, ref intensity, evaluate, random, _alpha, _beta0, _gamma);
 
-        // Find best firefly
-        var best = PopulationSearchOps.Row(fireflies, PopulationSearchOps.ArgMax(intensity));
         _featureScores = best.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -133,26 +150,30 @@ public class FireflyAlgorithm<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int p = fireflies.Shape[1];
         for (int i = 0; i < m; i++)
         {
+            // Firefly i's position and intensity are kept locally through its moves and written back once: replacing
+            // the row in the population after every pairwise move rewrote all m * p entries each time
+            var position = PopulationSearchOps.Row(fireflies, i);
+            var brightness = PopulationSearchOps.At(intensity, i);
             bool moved = false;
             for (int j = 0; j < m; j++)
             {
-                if (!PopulationSearchOps.Greater(PopulationSearchOps.At(intensity, j), PopulationSearchOps.At(intensity, i)))
+                if (j == i || !PopulationSearchOps.Greater(PopulationSearchOps.At(intensity, j), brightness))
                     continue;
 
-                var position = Attract(
-                    PopulationSearchOps.Row(fireflies, i), PopulationSearchOps.Row(fireflies, j),
-                    PopulationSearchOps.Uniform<T>(random, p), alpha, beta0, gamma);
-                fireflies = PopulationSearchOps.ReplaceRow(fireflies, i, position);
-                intensity = PopulationSearchOps.ReplaceAt(intensity, i, evaluate(engine.Reshape(position, new[] { 1, p })));
+                position = Attract(
+                    position, PopulationSearchOps.Row(fireflies, j), PopulationSearchOps.Uniform<T>(random, p), alpha, beta0, gamma);
+                brightness = evaluate(engine.Reshape(position, new[] { 1, p }));
                 moved = true;
             }
 
             if (!moved)
             {
-                var position = RandomMove(PopulationSearchOps.Row(fireflies, i), PopulationSearchOps.Uniform<T>(random, p), alpha);
-                fireflies = PopulationSearchOps.ReplaceRow(fireflies, i, position);
-                intensity = PopulationSearchOps.ReplaceAt(intensity, i, evaluate(engine.Reshape(position, new[] { 1, p })));
+                position = RandomMove(position, PopulationSearchOps.Uniform<T>(random, p), alpha);
+                brightness = evaluate(engine.Reshape(position, new[] { 1, p }));
             }
+
+            fireflies = PopulationSearchOps.ReplaceRow(fireflies, i, position);
+            intensity = PopulationSearchOps.ReplaceAt(intensity, i, brightness);
         }
     }
 

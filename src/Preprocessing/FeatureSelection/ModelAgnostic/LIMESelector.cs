@@ -161,16 +161,17 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var explainIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(nExplain).ToArray();
 
         // Accumulate |coefficient| of the local surrogate of every explained instance
-        var importanceAccum = new Tensor<T>(new[] { p });
+        // (in double: a Half sum of |coefficients| near 1024 overflows after 64 instances)
+        var importanceAccum = new Tensor<double>(new[] { p });
         foreach (int explainIdx in explainIndices)
         {
             var instance = PopulationSearchOps.Row(x, explainIdx);
             var coefficients = ExplainInstance(instance, means, stds, random);
-            importanceAccum = engine.TensorAdd(importanceAccum, engine.TensorAbs(coefficients));
+            importanceAccum = engine.TensorAdd(importanceAccum, engine.TensorAbs(coefficients.Cast<double>()));
         }
 
         // Average importance
-        var importances = engine.TensorDivideScalar(importanceAccum, NumOps.FromDouble(nExplain));
+        var importances = engine.TensorDivideScalar(importanceAccum, (double)nExplain).Cast<T>();
         _importances = importances.ToVector();
 
         // Select top features by importance
@@ -228,16 +229,17 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var weights = engine.TensorExp(engine.TensorMultiplyScalar(
             engine.TensorSquare(distance), NumOps.FromDouble(-1.0 / (_kernelWidth * _kernelWidth))));
 
-        // Weighted least squares on [1, mask]: (D^T W D + 1e-6 I)^-1 D^T W y
+        // Weighted least squares on [1, mask]: (D^T W D + 1e-6 I)^-1 D^T W y, formed and solved in double: in Half
+        // the 1e-6 ridge is lost against Gram entries near 1, which left an all-kept system singular
         var predictions = Predict(perturbed);
-        var design = SubsetRegressionOps.WithIntercept(mask);
-        var weighted = PopulationSearchOps.ScaleRows(design, weights);
+        var design = SubsetRegressionOps.WithIntercept(mask).Cast<double>();
+        var weighted = PopulationSearchOps.ScaleRows(design, weights.Cast<double>());
         var transposed = engine.TensorTranspose(weighted);
         var gram = engine.TensorAdd(
-            engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<T>(p + 1), NumOps.FromDouble(1e-6)));
-        var rhs = engine.TensorMatMul(transposed, engine.Reshape(predictions, new[] { count, 1 }));
+            engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<double>(p + 1), 1e-6));
+        var rhs = engine.TensorMatMul(transposed, engine.Reshape(predictions.Cast<double>(), new[] { count, 1 }));
         var coefficients = engine.Reshape(PreprocessingTensorOps.Solve(gram, rhs), new[] { p + 1 });
-        return engine.TensorSlice(coefficients, new[] { 1 }, new[] { p });
+        return engine.TensorSlice(coefficients, new[] { 1 }, new[] { p }).Cast<T>();
     }
 
     /// <summary>

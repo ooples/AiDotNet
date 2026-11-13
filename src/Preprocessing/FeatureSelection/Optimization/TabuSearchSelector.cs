@@ -154,38 +154,72 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        int p = current.Length;
-        var square = new[] { p, p };
         moveScore = new Tensor<T>(new[] { 1 });
+
+        // Only selected-to-unselected pairs are swaps: they are scored in blocks of selected rows against every
+        // unselected feature ([rows, u], not a dense [p, p]: 800 MB of doubles for 10,000 features). Both index
+        // lists are ascending and a later block only wins when strictly better, so ties still go to the lowest r,
+        // then the lowest a.
+        var selected = PreprocessingTensorOps.MaskPositions(current);
+        var unselected = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.OneMinus(current));
+        int k = selected.Length;
+        int u = unselected.Length;
+        if (k == 0 || u == 0)
+            return null;
 
         // counted in int: a 0/1 sum in T stops counting at 2048 for Half
         var count = engine.ReduceSum(current.Cast<int>(), new[] { 0 }, true).Cast<T>();
         var total = engine.ReduceSum(engine.TensorMultiply(current, scores), new[] { 0 }, true);
-        var removed = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { p, 1 }), square);
-        var added = engine.TensorBroadcastTo(engine.Reshape(scores, new[] { 1, p }), square);
-        var swapScore = engine.TensorDivide(
-            engine.TensorAdd(engine.TensorSubtract(engine.TensorBroadcastTo(engine.Reshape(total, new[] { 1, 1 }), square), removed), added),
-            engine.TensorBroadcastTo(engine.Reshape(count, new[] { 1, 1 }), square));
+        var unselectedIndex = new Tensor<int>(unselected, new[] { u });
+        var addedScores = engine.Reshape(engine.TensorIndexSelect(scores, unselectedIndex, 0), new[] { 1, u });
+        var addedTabu = engine.Reshape(engine.TensorIndexSelect(tabu, unselectedIndex, 0), new[] { 1, u });
 
-        var outOf = engine.TensorBroadcastTo(engine.Reshape(current, new[] { p, 1 }), square);
-        var into = engine.TensorBroadcastTo(engine.Reshape(PreprocessingTensorOps.OneMinus(current), new[] { 1, p }), square);
-        var free = PreprocessingTensorOps.OneMinus(engine.TensorClamp(
-            engine.TensorAdd(
-                engine.TensorBroadcastTo(engine.Reshape(tabu, new[] { p, 1 }), square),
-                engine.TensorBroadcastTo(engine.Reshape(tabu, new[] { 1, p }), square)),
-            ops.Zero, ops.One));
-        var aspiration = engine.TensorGreaterThan(swapScore, engine.TensorBroadcastTo(engine.Reshape(bestScore, new[] { 1, 1 }), square));
-        var admissible = engine.TensorMultiply(
-            engine.TensorMultiply(outOf, into), engine.TensorClamp(engine.TensorAdd(free, aspiration), ops.Zero, ops.One));
-        if (!PopulationSearchOps.Any(admissible))
-            return null;
+        int blockRows = Math.Max(1, SwapBlockElements / u);
+        (int Remove, int Add)? bestMove = null;
+        Tensor<T>? bestValue = null;
+        for (int start = 0; start < k; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, k - start);
+            var shape = new[] { rows, u };
+            var removedIndex = new Tensor<int>(selected.Skip(start).Take(rows).ToArray(), new[] { rows });
+            var removed = engine.TensorBroadcastTo(
+                engine.Reshape(engine.TensorIndexSelect(scores, removedIndex, 0), new[] { rows, 1 }), shape);
+            var swapScore = engine.TensorDivide(
+                engine.TensorAdd(engine.TensorSubtract(
+                    engine.TensorBroadcastTo(engine.Reshape(total, new[] { 1, 1 }), shape), removed),
+                    engine.TensorBroadcastTo(addedScores, shape)),
+                engine.TensorBroadcastTo(engine.Reshape(count, new[] { 1, 1 }), shape));
 
-        var candidates = engine.Reshape(
-            engine.TensorWhere(admissible, swapScore, PreprocessingTensorOps.Filled(square, ops.MinValue)), new[] { p * p });
-        int flat = PopulationSearchOps.ArgMax(candidates);
-        moveScore = PopulationSearchOps.At(candidates, flat);
-        return (flat / p, flat % p);
+            var free = PreprocessingTensorOps.OneMinus(engine.TensorClamp(
+                engine.TensorAdd(
+                    engine.TensorBroadcastTo(
+                        engine.Reshape(engine.TensorIndexSelect(tabu, removedIndex, 0), new[] { rows, 1 }), shape),
+                    engine.TensorBroadcastTo(addedTabu, shape)),
+                ops.Zero, ops.One));
+            var aspiration = engine.TensorGreaterThan(
+                swapScore, engine.TensorBroadcastTo(engine.Reshape(bestScore, new[] { 1, 1 }), shape));
+            var admissible = engine.TensorClamp(engine.TensorAdd(free, aspiration), ops.Zero, ops.One);
+            if (!PopulationSearchOps.Any(admissible))
+                continue;
+
+            var candidates = engine.Reshape(
+                engine.TensorWhere(admissible, swapScore, PreprocessingTensorOps.Filled(shape, ops.MinValue)), new[] { rows * u });
+            int flat = PopulationSearchOps.ArgMax(candidates);
+            var value = PopulationSearchOps.At(candidates, flat);
+            if (bestValue is null || PopulationSearchOps.Greater(value, bestValue))
+            {
+                bestValue = value;
+                bestMove = (selected[start + flat / u], unselected[flat % u]);
+            }
+        }
+
+        if (bestValue is not null)
+            moveScore = bestValue;
+        return bestMove;
     }
+
+    // Upper bound on the elements of one block of selected-by-unselected swap scores ([rows, u]).
+    private const int SwapBlockElements = 1 << 22;
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

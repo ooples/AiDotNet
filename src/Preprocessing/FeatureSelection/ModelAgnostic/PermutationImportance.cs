@@ -119,13 +119,14 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 drops[perm] = engine.TensorSubtract(baselineScore, permScore);
             }
 
-            // Mean importance and (population) standard deviation over the permutations
-            var all = engine.TensorConcatenate(drops, 0);
+            // Mean importance and (population) standard deviation over the permutations, in double: centred drops
+            // past 256 square past Half's 65504
+            var all = engine.TensorConcatenate(drops, 0).Cast<double>();
             var mean = engine.ReduceMean(all, new[] { 0 }, true);
-            importances[j] = mean;
+            importances[j] = mean.Cast<T>();
             deviations[j] = engine.TensorSqrt(engine.ReduceMean(
                 engine.TensorSquare(engine.TensorSubtract(all, engine.TensorBroadcastTo(mean, new[] { _nPermutations }))),
-                new[] { 0 }, true));
+                new[] { 0 }, true)).Cast<T>();
         }
 
         var importanceScores = engine.TensorConcatenate(importances, 0);

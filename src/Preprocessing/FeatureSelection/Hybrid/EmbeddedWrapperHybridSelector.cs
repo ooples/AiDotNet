@@ -154,6 +154,12 @@ public class EmbeddedWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Ma
     /// </summary>
     internal static Tensor<T> LassoCoordinateDescent(Tensor<T> x, Tensor<T> y, double alpha, int sweeps)
     {
+        // Half and BFloat16 run in double, residual updates included: a correlation sum (4096 rows of 1 * 20 is
+        // 81,920) passes Half's 65504 before the 1 / n scaling
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return EmbeddedWrapperHybridSelector<double>.LassoCoordinateDescent(
+                x.Cast<double>(), y.Cast<double>(), alpha, sweeps).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
