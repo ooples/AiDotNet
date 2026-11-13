@@ -22932,3 +22932,4 @@ AiDotNet.Models.Options.FederatedPersonalizationOptions.PFedMeLearningRate.get -
 AiDotNet.Models.Options.FederatedPersonalizationOptions.PFedMeLearningRate.set -> void
 AiDotNet.Models.Options.FederatedPersonalizationOptions.PFedMePersonalLearningRate.get -> double
 AiDotNet.Models.Options.FederatedPersonalizationOptions.PFedMePersonalLearningRate.set -> void
+AiDotNet.FederatedLearning.Unlearning.InfluenceFunctionUnlearner<T>.InfluenceFunctionUnlearner(AiDotNet.Models.Options.FederatedUnlearningOptions! options, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! hessianVectorProduct) -> void
