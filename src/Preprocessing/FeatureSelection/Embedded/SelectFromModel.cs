@@ -86,23 +86,23 @@ public class SelectFromModel<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     /// Creates a new instance with precomputed feature importances.
     /// </summary>
     /// <param name="featureImportances">Precomputed feature importance scores.</param>
-    /// <param name="thresholdType">Type of threshold to use (pass <see cref="SelectFromModelThreshold.Mean"/> for the default).</param>
-    /// <param name="thresholdValue">Threshold value (used when type is Value; pass 0 for the default).</param>
+    /// <param name="thresholdType">Type of threshold to use. Defaults to Mean.</param>
+    /// <param name="thresholdValue">Threshold value (used when type is Value). Defaults to 0.</param>
     /// <param name="maxFeatures">Maximum number of features to select. Null for no limit.</param>
     /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
+    /// <returns>A selector that fits from <paramref name="featureImportances"/> alone.</returns>
     /// <remarks>
-    /// Only the importance-function overload declares optional parameters, so every argument is
-    /// required here (RS0026: optional parameters on at most one public overload).
+    /// A factory rather than a second constructor: the importance-function constructor is the one public
+    /// constructor with optional parameters, and a precomputed-importances overload of the same length would
+    /// break RS0026/RS0027 (optional parameters on one overload, which must also have the most parameters).
     /// </remarks>
-    public SelectFromModel(
+    public static SelectFromModel<T> FromImportances(
         Vector<T> featureImportances,
-        SelectFromModelThreshold thresholdType,
-        double thresholdValue,
-        int? maxFeatures,
-        int[]? columnIndices)
-        : this(null, RequireImportances(featureImportances), thresholdType, thresholdValue, maxFeatures, columnIndices)
-    {
-    }
+        SelectFromModelThreshold thresholdType = SelectFromModelThreshold.Mean,
+        double thresholdValue = 0.0,
+        int? maxFeatures = null,
+        int[]? columnIndices = null)
+        => new(null, RequireImportances(featureImportances), thresholdType, thresholdValue, maxFeatures, columnIndices);
 
     private SelectFromModel(
         Func<Matrix<T>, Vector<T>, Vector<T>>? importanceFunc,
