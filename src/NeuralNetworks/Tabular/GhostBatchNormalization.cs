@@ -186,7 +186,7 @@ public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
             var bMean = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
             var bCentered = engine.TensorAdd(input, engine.TensorMultiplyScalar(bMean, minusOne));
             var bVar = engine.ReduceMean(engine.TensorMultiply(bCentered, bCentered), new[] { 0 }, keepDims: true);
-            UpdateRunningStatistics(bMean, bVar);
+            UpdateRunningStatistics(bMean, bVar, batchSize);
         }
         else if (useBatchStats)
         {
@@ -195,7 +195,7 @@ public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
             var meanRow = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
             var centered = engine.TensorAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
             var varRow = engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true);
-            UpdateRunningStatistics(meanRow, varRow);
+            UpdateRunningStatistics(meanRow, varRow, batchSize);
             var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
             normalized = engine.TensorDivide(centered, std);
         }
@@ -214,19 +214,22 @@ public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
         return engine.TensorAdd(scaled, _beta.Reshape(new[] { 1, _numFeatures }));
     }
 
-    private void UpdateRunningStatistics(Tensor<T> meanRow, Tensor<T> varRow)
+    private void UpdateRunningStatistics(Tensor<T> meanRow, Tensor<T> varRow, int sampleCount)
     {
         // Running stats are a non-tape side effect: running = (1 - momentum) running + momentum batch, written
-        // in place so the registered buffer keeps its identity
+        // in place so the registered buffer keeps its identity. As in torch.nn.BatchNorm1d (which the reference
+        // pytorch-tabnet GBN wraps), the batch is normalized with the biased variance but the running variance
+        // tracks the unbiased one, var * n / (n - 1); callers guarantee n >= 2.
         var engine = Engine;
         var keep = NumOps.FromDouble(1 - _momentum);
         var take = NumOps.FromDouble(_momentum);
+        var unbiasedTake = NumOps.FromDouble(_momentum * sampleCount / (sampleCount - 1.0));
         var mean = engine.TensorAdd(
             engine.TensorMultiplyScalar(_runningMean, keep),
             engine.TensorMultiplyScalar(meanRow.Contiguous().Reshape(_numFeatures), take));
         var variance = engine.TensorAdd(
             engine.TensorMultiplyScalar(_runningVar, keep),
-            engine.TensorMultiplyScalar(varRow.Contiguous().Reshape(_numFeatures), take));
+            engine.TensorMultiplyScalar(varRow.Contiguous().Reshape(_numFeatures), unbiasedTake));
         mean.AsSpan().CopyTo(_runningMean.AsWritableSpan());
         variance.AsSpan().CopyTo(_runningVar.AsWritableSpan());
         engine.InvalidatePersistentTensor(_runningMean);
