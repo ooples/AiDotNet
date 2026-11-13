@@ -67,12 +67,19 @@ public class DocumentClassificationResult<T>
     /// <summary>
     /// Gets or sets the confidence score as double.
     /// </summary>
-    public double ConfidenceValue { get; set; }
+    /// <remarks>Defaults to <see cref="Confidence"/> converted to double when it is not set.</remarks>
+    public double ConfidenceValue
+    {
+        get => _confidenceValue ?? MathHelper.GetNumericOperations<T>().ToDouble(Confidence);
+        set => _confidenceValue = value;
+    }
+
+    private double? _confidenceValue;
 
     /// <summary>
     /// Gets or sets the top-K predictions with their scores.
     /// </summary>
-    public IList<(string Category, double Score)> TopPredictions { get; set; } = [];
+    public IList<(string Category, T Score)> TopPredictions { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the processing time in milliseconds.

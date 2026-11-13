@@ -99,4 +99,173 @@ internal static class DocumentTensorOps
         var matrix = engine.Reshape(output, new[] { output.Shape[0], columns });
         return engine.Reshape(engine.TensorSlice(matrix, new[] { 0, column }, new[] { rows, 1 }), new[] { rows });
     }
+
+    /// <summary>
+    /// The greedy token of every row of <c>[rows, vocab]</c> logits and its softmax probability
+    /// <c>1 / sum_v exp(l_v - max)</c>; the probability is 0 where that sum is not positive (NaN rows).
+    /// </summary>
+    internal static (int[] Tokens, Tensor<T> Probabilities) GreedyWithProbabilities<T>(IEngine engine, Tensor<T> logits)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = logits.Shape[0];
+        var shape = logits.Shape.ToArray();
+        int[] tokens = RowArgMax(engine, logits);
+        var max = engine.TensorBroadcastTo(engine.ReduceMax(logits, new[] { 1 }, true), shape);
+        var sumExp = engine.ReduceSum(engine.TensorExp(engine.TensorSubtract(logits, max)), new[] { 1 }, false);
+        var zeros = Tensor<T>.CreateDefault(new[] { rows }, numOps.Zero);
+        var ones = Tensor<T>.CreateDefault(new[] { rows }, numOps.One);
+        var positive = engine.TensorGreaterThan(sumExp, numOps.Zero);
+        var probabilities = engine.TensorWhere(positive, engine.TensorDivide(ones, engine.TensorWhere(positive, sumExp, ones)), zeros);
+        return (tokens, probabilities);
+    }
+
+    /// <summary>
+    /// Temperature sampling of one token per row of <c>[rows, vocab]</c> logits: with scores
+    /// <c>s_v = exp(l_v / t - max)</c>, the token is the first v whose cumulative score reaches
+    /// <c>u * sum(s)</c> for a uniform draw u (the last token, with probability 0, when rounding leaves
+    /// none), and its probability is <c>s_v / sum(s)</c>. Rows whose sum is not positive give token 0 with
+    /// probability 0. The draws come from one seeded engine call.
+    /// </summary>
+    internal static (int[] Tokens, Tensor<T> Probabilities) SampleWithProbabilities<T>(
+        IEngine engine, Tensor<T> logits, T temperature, int seed)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = logits.Shape[0];
+        int vocab = logits.Shape[1];
+        var shape = new[] { rows, vocab };
+        var column = new[] { rows, 1 };
+        var scaled = engine.TensorDivideScalar(logits, temperature);
+        var scores = engine.TensorExp(engine.TensorSubtract(scaled,
+            engine.TensorBroadcastTo(engine.ReduceMax(scaled, new[] { 1 }, true), shape)));
+        var cumulative = engine.TensorCumSum(scores, 1);
+        var sum = engine.TensorSlice(cumulative, new[] { 0, vocab - 1 }, column);
+        var positive = engine.TensorGreaterThan(sum, numOps.Zero);
+        var ones = Tensor<T>.CreateDefault(column, numOps.One);
+        var zeros = Tensor<T>.CreateDefault(column, numOps.Zero);
+        var safeSum = engine.TensorWhere(positive, sum, ones);
+        var normalized = engine.TensorDivide(cumulative, engine.TensorBroadcastTo(safeSum, shape));
+        var draw = engine.TensorUniform<T>(column, 0.0, 1.0, seed);
+        var count = engine.ReduceSum(engine.TensorLessThan(normalized, engine.TensorBroadcastTo(draw, shape)), new[] { 1 }, true);
+        var inRange = engine.TensorLessThan(count, numOps.FromDouble(vocab));
+        var selected = engine.TensorWhere(inRange, count, Tensor<T>.CreateDefault(column, numOps.FromDouble(vocab - 1)));
+        var index = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, vocab, 1), new[] { 1, vocab }), shape);
+        var picked = engine.TensorEquals(index, engine.TensorBroadcastTo(selected, shape));
+        var score = engine.ReduceSum(engine.TensorWhere(picked, scores, Tensor<T>.CreateDefault(shape, numOps.Zero)), new[] { 1 }, true);
+        var probability = engine.TensorWhere(positive, engine.TensorWhere(inRange, engine.TensorDivide(score, safeSum), zeros), zeros);
+        var tokens = engine.TensorWhere(positive, selected, zeros);
+        return (engine.Reshape(tokens, new[] { rows }).Cast<int>().ToArray(), engine.Reshape(probability, new[] { rows }));
+    }
+
+    /// <summary>
+    /// The mean of the positive values among the first <paramref name="count"/> of <paramref name="values"/>,
+    /// or 0 when none is positive.
+    /// </summary>
+    internal static T MeanOfPositivePrefix<T>(IEngine engine, Tensor<T> values, int count)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (count <= 0)
+            return numOps.Zero;
+        var head = count == values.Length ? values : engine.TensorSlice(values, new[] { 0 }, new[] { count });
+        var positive = engine.TensorGreaterThan(head, numOps.Zero);
+        int hits = engine.TensorCountNonzero(positive);
+        if (hits == 0)
+            return numOps.Zero;
+        var total = engine.TensorSum(engine.TensorWhere(positive, head, Tensor<T>.CreateDefault(new[] { count }, numOps.Zero)));
+        return numOps.Divide(total, numOps.FromDouble(hits));
+    }
+
+    /// <summary>
+    /// Category indices ordered by descending logit (ties in ascending index order, NaN last - the order a
+    /// stable <c>OrderByDescending</c> gives) with their softmax probabilities in that order.
+    /// </summary>
+    internal static (int[] Order, T[] Probabilities) RankedSoftmax<T>(IEngine engine, Tensor<T> logits)
+    {
+        var flat = AudioEngineOps.Flatten(engine, logits);
+        int n = flat.Length;
+        if (n == 0)
+            return (Array.Empty<int>(), Array.Empty<T>());
+        int[] order = AudioEngineOps.StableDescendingOrder(engine, flat);
+        var probabilities = engine.Softmax(flat, 0);
+        var ranked = engine.TensorIndexSelect(probabilities, new Tensor<int>((int[])order.Clone(), new[] { n }), 0);
+        return (order, ranked.ToArray());
+    }
+
+    /// <summary>
+    /// The first <paramref name="count"/> values of row <paramref name="row"/> of an output viewed as
+    /// <c>[rows, columns]</c>.
+    /// </summary>
+    internal static Tensor<T> RowHead<T>(IEngine engine, Tensor<T> output, int row, int count)
+    {
+        int columns = output.Length / output.Shape[0];
+        var matrix = engine.Reshape(output, new[] { output.Shape[0], columns });
+        return engine.Reshape(engine.TensorSlice(matrix, new[] { row, 0 }, new[] { 1, count }), new[] { count });
+    }
+
+    /// <summary>
+    /// <c>sum_t scores[t, labels[t]]</c> over a <c>[steps, classes]</c> score matrix (for example the
+    /// log-likelihood of a label sequence under per-step log-probabilities).
+    /// </summary>
+    internal static T PickedSum<T>(IEngine engine, Tensor<T> scores, int[] labels)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int steps = labels.Length;
+        if (steps == 0)
+            return numOps.Zero;
+        int classes = scores.Shape[1];
+        var shape = new[] { steps, classes };
+        var head = scores.Shape[0] == steps ? scores : engine.TensorSlice(scores, new[] { 0, 0 }, shape);
+        var picked = OneHot<T>(engine, labels, classes);
+        return engine.TensorSum(engine.TensorWhere(picked, head, Tensor<T>.CreateDefault(shape, numOps.Zero)));
+    }
+
+    /// <summary>A <c>[labels, classes]</c> 0/1 matrix with a 1 at <c>(t, labels[t])</c>.</summary>
+    internal static Tensor<T> OneHot<T>(IEngine engine, int[] labels, int classes)
+    {
+        int steps = labels.Length;
+        var shape = new[] { steps, classes };
+        var index = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, classes, 1), new[] { 1, classes }), shape);
+        var label = engine.TensorBroadcastTo(new Tensor<int>((int[])labels.Clone(), new[] { steps, 1 }).Cast<T>(), shape);
+        return engine.TensorEquals(index, label);
+    }
+
+    /// <summary>
+    /// For each row of an output viewed as <c>[rows, columns]</c> (first <paramref name="columns"/> columns),
+    /// the first strict maximum's column and the row maximum.
+    /// </summary>
+    internal static (int[] Arg, Tensor<T> Max) RowMax<T>(IEngine engine, Tensor<T> output, int columns)
+    {
+        int rows = output.Shape[0];
+        int width = output.Length / rows;
+        var matrix = engine.Reshape(output, new[] { rows, width });
+        var head = columns == width ? matrix : engine.TensorSlice(matrix, new[] { 0, 0 }, new[] { rows, columns });
+        return (RowArgMax(engine, head), engine.ReduceMax(head, new[] { 1 }, false));
+    }
+
+    /// <summary>The 1-D 0/1 mask of the <paramref name="values"/> that are at least <paramref name="threshold"/>.</summary>
+    internal static Tensor<T> AtLeast<T>(IEngine engine, Tensor<T> values, T threshold)
+        => engine.TensorGreaterEqual(values, Tensor<T>.CreateDefault(values.Shape.ToArray(), threshold));
+
+    /// <summary>The positions of the nonzero entries of a 1-D mask, ascending.</summary>
+    internal static int[] Hits<T>(IEngine engine, Tensor<T> mask)
+        => mask.Length == 0 ? Array.Empty<int>() : engine.TensorNonzero(mask).ToArray();
+
+    /// <summary>The entries of a 1-D tensor at the given positions.</summary>
+    internal static T[] Pick<T>(IEngine engine, Tensor<T> values, int[] positions)
+        => positions.Length == 0
+            ? Array.Empty<T>()
+            : engine.TensorIndexSelect(values, new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0).ToArray();
+
+    /// <summary>Integer values (pixel coordinates, counts) converted to T in one bulk cast.</summary>
+    internal static T[] ToT<T>(int[] values)
+        => values.Length == 0 ? Array.Empty<T>() : new Tensor<int>((int[])values.Clone(), new[] { values.Length }).Cast<T>().ToArray();
+
+    /// <summary>The integer <paramref name="values"/> as a 1-D T tensor.</summary>
+    internal static Tensor<T> IntTensor<T>(int[] values)
+        => new Tensor<int>((int[])values.Clone(), new[] { values.Length }).Cast<T>();
+
+    /// <summary>The mean of <paramref name="values"/>, or 0 when there are none.</summary>
+    internal static T Mean<T>(IEngine engine, T[] values)
+        => values.Length == 0
+            ? MathHelper.GetNumericOperations<T>().Zero
+            : engine.TensorMean(new Tensor<T>((T[])values.Clone(), new[] { values.Length }));
 }

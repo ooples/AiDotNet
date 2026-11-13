@@ -326,8 +326,7 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return new DocumentQAResult<T>
         {
             Answer = markdown,
-            Confidence = NumOps.FromDouble(confidence),
-            ConfidenceValue = confidence,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -351,15 +350,15 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         var kvPairs = parser.ParseKeyValuePairs(markdown);
 
         var results = new Dictionary<string, DocumentQAResult<T>>();
+        T found = NumOps.FromDouble(0.5);
+        T missing = NumOps.Zero;
         foreach (var field in fieldPrompts)
         {
             kvPairs.TryGetValue(field, out var value);
-            double confidence = string.IsNullOrWhiteSpace(value) ? 0.0 : 0.5;
             results[field] = new DocumentQAResult<T>
             {
                 Answer = value ?? string.Empty,
-                Confidence = NumOps.FromDouble(confidence),
-                ConfidenceValue = confidence,
+                Confidence = string.IsNullOrWhiteSpace(value) ? missing : found,
                 Question = field,
                 ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
             };
@@ -368,28 +367,28 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return results;
     }
 
-    private (string markdown, double confidence) DecodeToMarkdown(Tensor<T> output, int maxLength, double temperature)
+    private (string markdown, T confidence) DecodeToMarkdown(Tensor<T> output, int maxLength, double temperature)
     {
         if (output.Shape.Length == 0 || maxLength <= 0)
-            return (string.Empty, 0.0);
+            return (string.Empty, NumOps.Zero);
 
         int cappedMaxLength = Math.Min(maxLength, MaxSequenceLength);
         if (cappedMaxLength <= 0)
-            return (string.Empty, 0.0);
+            return (string.Empty, NumOps.Zero);
 
         string eosToken = _tokenizer.SpecialTokens.EosToken;
         bool hasEosToken = !string.IsNullOrWhiteSpace(eosToken);
 
         var tokens = new List<int>();
-        double totalConfidence = 0.0;
-        int confidenceSteps = 0;
 
         if (output.Shape.Length == 1)
         {
             int length = Math.Min(cappedMaxLength, output.Shape[0]);
-            for (int i = 0; i < length; i++)
+            int[] ids = length == 0
+                ? Array.Empty<int>()
+                : Engine.TensorRound(Engine.TensorSlice(output, new[] { 0 }, new[] { length })).Cast<int>().ToArray();
+            foreach (int tokenId in ids)
             {
-                int tokenId = Convert.ToInt32(NumOps.ToDouble(output[i]));
                 if (hasEosToken && _tokenizer.Vocabulary.GetToken(tokenId) == eosToken)
                     break;
 
@@ -397,7 +396,7 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             }
 
             string text = tokens.Count == 0 ? string.Empty : _tokenizer.Decode(tokens);
-            return (text, 0.0);
+            return (text, NumOps.Zero);
         }
 
         double clampedTemperature = Math.Max(0.0, Math.Min(temperature, 2.0));
@@ -406,46 +405,32 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             clampedTemperature = Math.Max(clampedTemperature, 0.01);
 
         int rank = output.Shape.Length;
-        int seqDim = rank - 2;
-        int vocabDim = rank - 1;
-        int seqLength = output.Shape[seqDim];
-        int vocabSize = output.Shape[vocabDim];
+        int seqLength = output.Shape[rank - 2];
+        int vocabSize = output.Shape[rank - 1];
         int maxSteps = Math.Min(cappedMaxLength, seqLength);
         if (maxSteps <= 0 || vocabSize <= 0)
-            return (string.Empty, 0.0);
+            return (string.Empty, NumOps.Zero);
 
-        int[] indices = new int[rank];
-        var random = RandomHelper.Shared;
+        // The logits of the first sequence (every leading index 0), one row per decoding step.
+        int leading = output.Length / (seqLength * vocabSize);
+        var steps = Engine.Reshape(
+            Engine.TensorSlice(Engine.Reshape(output, new[] { leading, seqLength, vocabSize }),
+                new[] { 0, 0, 0 }, new[] { 1, maxSteps, vocabSize }),
+            new[] { maxSteps, vocabSize });
+        var (stepTokens, probabilities) = useSampling
+            ? DocumentTensorOps.SampleWithProbabilities(Engine, steps, NumOps.FromDouble(clampedTemperature), RandomHelper.Shared.Next())
+            : DocumentTensorOps.GreedyWithProbabilities(Engine, steps);
 
-        for (int i = 0; i < maxSteps; i++)
+        foreach (int tokenId in stepTokens)
         {
-            indices[seqDim] = i;
-            int tokenId;
-            double tokenProb;
-
-            if (useSampling)
-            {
-                tokenId = SampleToken(output, indices, vocabDim, vocabSize, clampedTemperature, random, out tokenProb);
-            }
-            else
-            {
-                tokenId = SelectGreedyToken(output, indices, vocabDim, vocabSize, out tokenProb);
-            }
-
             if (hasEosToken && _tokenizer.Vocabulary.GetToken(tokenId) == eosToken)
                 break;
 
             tokens.Add(tokenId);
-            if (tokenProb > 0)
-            {
-                totalConfidence += tokenProb;
-                confidenceSteps++;
-            }
         }
 
         string decoded = tokens.Count == 0 ? string.Empty : _tokenizer.Decode(tokens);
-        double confidence = confidenceSteps > 0 ? totalConfidence / confidenceSteps : 0.0;
-        return (decoded, confidence);
+        return (decoded, DocumentTensorOps.MeanOfPositivePrefix(Engine, probabilities, tokens.Count));
     }
 
     private static bool IsMarkdownPrompt(string question)
@@ -456,83 +441,6 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return question.Contains("markdown", StringComparison.OrdinalIgnoreCase)
             || question.Contains("convert", StringComparison.OrdinalIgnoreCase)
             || question.Contains("parse", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private int SelectGreedyToken(Tensor<T> output, int[] indices, int vocabDim, int vocabSize, out double probability)
-    {
-        double maxLogit = double.MinValue;
-        int maxIdx = 0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            indices[vocabDim] = v;
-            double logit = NumOps.ToDouble(output[indices]);
-            if (logit > maxLogit)
-            {
-                maxLogit = logit;
-                maxIdx = v;
-            }
-        }
-
-        double sumExp = 0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            indices[vocabDim] = v;
-            double logit = NumOps.ToDouble(output[indices]);
-            sumExp += Math.Exp(logit - maxLogit);
-        }
-
-        probability = sumExp > 0 ? 1.0 / sumExp : 0.0;
-        return maxIdx;
-    }
-
-    private int SampleToken(Tensor<T> output, int[] indices, int vocabDim, int vocabSize, double temperature, Random random, out double probability)
-    {
-        double maxLogit = double.MinValue;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            indices[vocabDim] = v;
-            double logit = NumOps.ToDouble(output[indices]) / temperature;
-            if (logit > maxLogit)
-            {
-                maxLogit = logit;
-            }
-        }
-
-        double sumExp = 0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            indices[vocabDim] = v;
-            double logit = NumOps.ToDouble(output[indices]) / temperature;
-            sumExp += Math.Exp(logit - maxLogit);
-        }
-
-        if (sumExp <= 0)
-        {
-            probability = 0.0;
-            return 0;
-        }
-
-        double sample = random.NextDouble() * sumExp;
-        double cumulative = 0;
-        int selected = vocabSize - 1;
-        double selectedScore = 0;
-
-        for (int v = 0; v < vocabSize; v++)
-        {
-            indices[vocabDim] = v;
-            double logit = NumOps.ToDouble(output[indices]) / temperature;
-            double score = Math.Exp(logit - maxLogit);
-            cumulative += score;
-            if (sample <= cumulative)
-            {
-                selected = v;
-                selectedScore = score;
-                break;
-            }
-        }
-
-        probability = selectedScore / sumExp;
-        return selected;
     }
 
     /// <summary>
@@ -618,36 +526,8 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     /// with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225] (Meta paper).
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        // Normalize with ImageNet stats
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies Nougat's industry-standard postprocessing: pass-through (Markdown outputs are already final).

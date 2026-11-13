@@ -513,6 +513,12 @@ public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T
         }
     }
 
+    /// <summary>
+    /// The model's preprocessing of <paramref name="rawImage"/> exactly as inference and training apply it,
+    /// exposed so reference tests can check it against a model's published image processor.
+    /// </summary>
+    internal Tensor<T> PreprocessForInspection(Tensor<T> rawImage) => PreprocessDocument(rawImage);
+
     protected void ValidateImageShape(Tensor<T> image)
     {
         if (image is null)

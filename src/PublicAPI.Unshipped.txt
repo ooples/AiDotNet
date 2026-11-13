@@ -22921,3 +22921,5 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.Document.Interfaces.DocumentClassificationResult<T>.TopPredictions.get -> System.Collections.Generic.IList<(string! Category, double Score)>!
+AiDotNet.Document.Interfaces.DocumentClassificationResult<T>.TopPredictions.get -> System.Collections.Generic.IList<(string! Category, T Score)>!

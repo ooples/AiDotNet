@@ -456,46 +456,11 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             throw new ArgumentException("Region crop resulted in empty area.", nameof(region));
 
         if (image.Rank == 3)
-        {
-            int channels = image.Shape[0];
-            var cropped = new Tensor<T>([channels, cropHeight, cropWidth]);
-            for (int c = 0; c < channels; c++)
-            {
-                for (int y = 0; y < cropHeight; y++)
-                {
-                    int srcY = startY + y;
-                    for (int x = 0; x < cropWidth; x++)
-                    {
-                        int srcX = startX + x;
-                        cropped[c, y, x] = image[c, srcY, srcX];
-                    }
-                }
-            }
-            return cropped;
-        }
+            return Engine.TensorSlice(image, new[] { 0, startY, startX }, new[] { image.Shape[0], cropHeight, cropWidth }).Clone();
 
         if (image.Rank == 4)
-        {
-            int batch = image.Shape[0];
-            int channels = image.Shape[1];
-            var cropped = new Tensor<T>([batch, channels, cropHeight, cropWidth]);
-            for (int b = 0; b < batch; b++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int y = 0; y < cropHeight; y++)
-                    {
-                        int srcY = startY + y;
-                        for (int x = 0; x < cropWidth; x++)
-                        {
-                            int srcX = startX + x;
-                            cropped[b, c, y, x] = image[b, c, srcY, srcX];
-                        }
-                    }
-                }
-            }
-            return cropped;
-        }
+            return Engine.TensorSlice(image, new[] { 0, 0, startY, startX },
+                new[] { image.Shape[0], image.Shape[1], cropHeight, cropWidth }).Clone();
 
         throw new ArgumentException($"Expected 3D or 4D tensor, got {image.Rank}D.", nameof(image));
     }
@@ -753,9 +718,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             ?? throw new InvalidOperationException(
                 "The Donut decoder model has no encoder_hidden_states input; its inputs are: " + string.Join(", ", inputNames) + ".");
 
-        var ids = new Tensor<T>([1, tokens.Count]);
-        for (int t = 0; t < tokens.Count; t++)
-            ids[0, t] = NumOps.FromDouble(tokens[t]);
+        var ids = new Tensor<int>(tokens.ToArray(), new[] { 1, tokens.Count }).Cast<T>();
 
         var outputs = decoder.Run(new Dictionary<string, Tensor<T>> { [idsName] = ids, [encoderName] = encoderOutput });
         return outputs.TryGetValue("logits", out var logits) ? logits : outputs.Values.First();
@@ -776,9 +739,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         var encoderDecoder = RequireEncoderDecoder();
         for (int i = 0; i < maxLength && generatedTokens.Count < _maxGenerationLength; i++)
         {
-            var decoderIds = new Tensor<T>([1, generatedTokens.Count]);
-            for (int t = 0; t < generatedTokens.Count; t++)
-                decoderIds[0, t] = NumOps.FromDouble(generatedTokens[t]);
+            var decoderIds = new Tensor<int>(generatedTokens.ToArray(), new[] { 1, generatedTokens.Count }).Cast<T>();
 
             // Cross-attends to the encoded page at every step.
             var decoderOutput = encoderDecoder.Decode(encoderOutput, decoderIds);
@@ -841,20 +802,8 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
                 $"Invalid vocabStart={vocabStart} for logits.Data length {logits.Data.Length} and _vocabSize={_vocabSize}.");
         }
 
-        double maxVal = double.MinValue;
-        int maxIdx = 0;
-
-        for (int i = 0; i < _vocabSize; i++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[vocabStart + i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        var last = Engine.TensorSlice(Engine.Reshape(logits, new[] { logits.Length }), new[] { vocabStart }, new[] { _vocabSize });
+        return DocumentTensorOps.RowArgMax(Engine, Engine.Reshape(last, new[] { 1, _vocabSize }))[0];
     }
 
     private static string CleanGeneratedText(string text)
@@ -878,41 +827,8 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     /// (NAVER paper). Expects large input images (2560x1920 typical).
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-
-        // Donut uses different normalization than standard ImageNet
-        double[] means = [0.5, 0.5, 0.5];
-        double[] stds = [0.5, 0.5, 0.5];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data.Span[idx]);
-                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
-                    }
-                }
-            }
-        }
-
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.HalfStatistics, DocumentTensorOps.HalfStatistics);
 
     /// <summary>
     /// Applies Donut's industry-standard postprocessing: pass-through (autoregressive outputs are already final).
