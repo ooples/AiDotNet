@@ -10054,9 +10054,9 @@ AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.KaniTTS2(AiDotNet.NeuralNetworks.Neural
 AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.KaniTTS2(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> void
 AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.LanguageTag.get -> string?
 AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.LanguageTag.set -> void
-AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.SpeakerEmbedding.get -> double[]?
+AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.SpeakerEmbedding.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.SpeakerEmbedding.set -> void
-AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.TrainingSpeakerEmbeddings.get -> System.Collections.Generic.IDictionary<int, double[]!>!
+AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.TrainingSpeakerEmbeddings.get -> System.Collections.Generic.IDictionary<int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 static AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.LoadLatent(string! path) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
 override AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
@@ -10148,7 +10148,7 @@ override AiDotNet.TextToSpeech.Latest.MegaTTS2<T>.RequiredVoice.get -> AiDotNet.
 AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.CodecFrameRate.get -> int
 override AiDotNet.TextToSpeech.Latest.MegaTTS2<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
 override AiDotNet.TextToSpeech.Latest.MegaTTS2<T>.TrainsOnSampleObjective.get -> bool
-AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.EmbedSpeaker(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording) -> double[]!
+AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.EmbedSpeaker(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.TopK.get -> int
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.TopK.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.TopP.get -> double
@@ -10219,7 +10219,7 @@ override AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.TrainsOnSampleObjective.get
 override AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.CodecTokenVocabulary.get -> int
 AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.HasPaperLayers.get -> bool
 override AiDotNet.TextToSpeech.Latest.MegaTTS2<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
-AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.AverageSpeakerEmbedding(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! recordings) -> double[]!
+AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.AverageSpeakerEmbedding(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! recordings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.LoadTokenizer(string! path) -> void
 override AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 AiDotNet.TextToSpeech.CodecBased.ChatTTS<T>.LoadPretrainedWeights(string! assetDirectory) -> void
@@ -22936,3 +22936,5 @@ AiDotNet.TextToSpeech.TtsModelBase<T>.BatchRow(AiDotNet.Tensors.LinearAlgebra.Te
 AiDotNet.TextToSpeech.TtsModelBase<T>.PadAndStack(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! outputs, int columns) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.RowMask(System.Collections.Generic.IReadOnlyList<bool>! flags, int columns) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.DurationAlignment(int[]! durations) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.AlignmentScores(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! means, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.MonotonicDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scores) -> int[]!
