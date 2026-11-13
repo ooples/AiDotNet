@@ -460,11 +460,24 @@ public partial class UnobservedComponentsModel<T, TInput, TOutput> : TimeSeriesM
         // reaches it; the counts are integers (a 0/1 sum in a narrow T stops at 2048 in Half).
         var detrended = engine.TensorSubtract(y.AsTensor(), trend.AsTensor());
         var pad = new Tensor<T>(new[] { padded - n });
-        var sums = engine.ReduceSum(engine.Reshape(PadEnd(detrended, pad), shape), new[] { 0 }, false);
+        var columns = engine.Reshape(PadEnd(detrended, pad), shape);
         int lastCycle = n - ((cycles - 1) * period);
         var counts = new Tensor<int>(
-            Enumerable.Range(0, period).Select(i => i < lastCycle ? cycles : cycles - 1).ToArray(), new[] { period }).Cast<T>();
-        var seasonalIndices = engine.TensorDivide(sums, counts);
+            Enumerable.Range(0, period).Select(i => i < lastCycle ? cycles : cycles - 1).ToArray(), new[] { period });
+
+        // A narrow T (Half, BFloat16) sums in float: the sum over a long series of large values passes 65504 and turns
+        // infinite, and a running Half sum drops every increment below its spacing. Only the means come back to T.
+        Tensor<T> seasonalIndices;
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+        {
+            var sums = engine.ReduceSum(columns.Cast<float>(), new[] { 0 }, false);
+            seasonalIndices = engine.TensorDivide(sums, counts.Cast<float>()).Cast<T>();
+        }
+        else
+        {
+            var sums = engine.ReduceSum(columns, new[] { 0 }, false);
+            seasonalIndices = engine.TensorDivide(sums, counts.Cast<T>());
+        }
 
         // Normalize seasonal indices to sum to zero
         seasonalIndices = engine.TensorSubtractScalar(seasonalIndices, engine.TensorMean(seasonalIndices));

@@ -100,6 +100,27 @@ public class UnobservedComponentsReferenceTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Half_seasonal_sums_of_large_values_do_not_overflow()
+    {
+        // Period 2 over 400 points: position 0 is always 1000, position 1 always 0, so the indices are 1000 and 0,
+        // centred to +500 / -500. Position 0's sum (200 x 1000 = 200,000) is past Half's 65,504; summed in Half it was
+        // infinite and every index NaN or infinite.
+        const int n = 400;
+        var model = new UnobservedComponentsModel<Half, Matrix<Half>, Vector<Half>>(
+            new AiDotNet.Models.Options.UnobservedComponentsOptions<Half, Matrix<Half>, Vector<Half>> { SeasonalPeriod = 2 });
+        var y = new Vector<Half>(n);
+        for (int t = 0; t < n; t += 2) y[t] = (Half)1000;
+
+        var seasonal = model.InitializeSeasonal(y, new Vector<Half>(n));
+
+        for (int t = 0; t < n; t += 37)
+        {
+            Assert.Equal(t % 2 == 0 ? 500.0 : -500.0, (double)seasonal[t]);
+        }
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Band_pass_keeps_both_halves_of_the_spectrum_as_numpy()
     {
         // X = np.fft.fft(x); f = np.minimum(k, n - k) / n; np.real(np.fft.ifft(X * ((f >= 1/8) & (f <= 1/4)))).
