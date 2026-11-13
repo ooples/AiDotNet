@@ -39,6 +39,29 @@ public class LinalgDispatchExactnessTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Determinant_of_an_integer_matrix_is_the_exact_integer()
+    {
+        // det [[9,5,1],[2,2,1],[8,1,5]] = 57; the double LU kernel returns 56.99999999999999, which a truncating cast
+        // turned into 56.
+        var matrix = new Tensor<int>(new[] { 9, 5, 1, 2, 2, 1, 8, 1, 5 }, new[] { 3, 3 });
+
+        var determinant = LinalgDispatch<int>.Det(matrix);
+
+        Assert.Equal(57, determinant.ToArray()[0]);
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Lu_decomposition_of_an_integer_matrix_is_refused_rather_than_truncated()
+    {
+        // The P, L, U form carries the same 0.5 multiplier as the packed factor; an int L would hold it as 0.
+        var matrix = new Tensor<int>(new[] { 2, 1, 1, 1 }, new[] { 2, 2 });
+
+        Assert.Throws<NotSupportedException>(() => LinalgDispatch<int>.LU(matrix));
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Cramer_rejects_a_singular_decimal_matrix()
     {
         // decimal's determinant is computed in double; its residue on this singular matrix is double round-off, far

@@ -41,7 +41,19 @@ internal static class LinalgDispatch<T>
 
     private static Tensor<double> Wide(Tensor<T> value) => value.Cast<double>();
 
-    private static Tensor<T> Narrow(Tensor<double> value) => value.Cast<T>();
+    // An integral T takes the nearest integer: the double kernels leave round-off on exact integer results (the LU
+    // determinant of [[9,5,1],[2,2,1],[8,1,5]] is 56.99999999999999, not 57), which a plain cast truncates.
+    private static Tensor<T> Narrow(Tensor<double> value)
+        => Integral ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorRound(value).Cast<T>() : value.Cast<T>();
+
+    // A factorization's factors are fractional in general, so an integral T cannot carry them.
+    private static void RefuseIntegralFactors(string operation)
+    {
+        if (Integral)
+            throw new NotSupportedException(
+                $"A {operation} of a {typeof(T).Name} matrix has fractional factors, which {typeof(T).Name} cannot "
+                + "hold; use a floating-point or decimal element type, or Solve, which returns only the solution.");
+    }
 
     /// <summary>Cholesky factor with per-matrix failure info (<c>Linalg.CholeskyEx</c>).</summary>
     internal static (Tensor<T> L, Tensor<int> Info) CholeskyEx(Tensor<T> input, bool upper = false)
@@ -49,6 +61,7 @@ internal static class LinalgDispatch<T>
         if (Native)
             return (_choleskyEx ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<int>)>>(
                 nameof(Linalg.CholeskyEx), 2))(input, upper);
+        RefuseIntegralFactors("Cholesky factorization");
         var (l, info) = LinalgDispatch<double>.CholeskyEx(Wide(input), upper);
         return (Narrow(l), info);
     }
@@ -71,6 +84,7 @@ internal static class LinalgDispatch<T>
         if (Native)
             return (_eigh ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>)>>(
                 nameof(Linalg.Eigh), 2))(input, upper);
+        RefuseIntegralFactors("symmetric eigendecomposition");
         var (values, vectors) = LinalgDispatch<double>.Eigh(Wide(input), upper);
         return (Narrow(values), Narrow(vectors));
     }
@@ -80,6 +94,7 @@ internal static class LinalgDispatch<T>
     {
         if (Native)
             return (_eig ??= Bind<Func<Tensor<T>, (Tensor<T>, Tensor<T>)>>(nameof(Linalg.Eig), 1))(input);
+        RefuseIntegralFactors("eigendecomposition");
         var (values, vectors) = LinalgDispatch<double>.Eig(Wide(input));
         return (Narrow(values), Narrow(vectors));
     }
@@ -99,6 +114,7 @@ internal static class LinalgDispatch<T>
     {
         if (Native)
             return (_qr ??= Bind<Func<Tensor<T>, string, (Tensor<T>, Tensor<T>)>>(nameof(Linalg.QR), 2))(input, mode);
+        RefuseIntegralFactors("QR decomposition");
         var (q, r) = LinalgDispatch<double>.QR(Wide(input), mode);
         return (Narrow(q), Narrow(r));
     }
@@ -108,6 +124,7 @@ internal static class LinalgDispatch<T>
     {
         if (Native)
             return (_lu ??= Bind<Func<Tensor<T>, (Tensor<T>, Tensor<T>, Tensor<T>)>>(nameof(Linalg.LU), 1))(input);
+        RefuseIntegralFactors("LU decomposition");
         var (permutation, lower, upper) = LinalgDispatch<double>.LU(Wide(input));
         return (Narrow(permutation), Narrow(lower), Narrow(upper));
     }
@@ -125,6 +142,7 @@ internal static class LinalgDispatch<T>
         if (Native)
             return (_svd ??= Bind<Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>, Tensor<T>)>>(
                 nameof(Linalg.Svd), 2))(input, fullMatrices);
+        RefuseIntegralFactors("singular value decomposition");
         var (u, singular, vh) = LinalgDispatch<double>.Svd(Wide(input), fullMatrices);
         return (Narrow(u), Narrow(singular), Narrow(vh));
     }
@@ -170,10 +188,7 @@ internal static class LinalgDispatch<T>
     {
         if (Native)
             return (_luFactor ??= Bind<Func<Tensor<T>, (Tensor<T>, Tensor<int>)>>(nameof(Linalg.LuFactor), 1))(input);
-        if (Integral)
-            throw new NotSupportedException(
-                $"An LU factorization of a {typeof(T).Name} matrix has fractional factors, which {typeof(T).Name} cannot "
-                + "hold; use a floating-point or decimal element type, or Solve, which returns only the solution.");
+        RefuseIntegralFactors("LU factorization");
         var (lu, pivots) = LinalgDispatch<double>.LuFactor(Wide(input));
         return (Narrow(lu), pivots);
     }
