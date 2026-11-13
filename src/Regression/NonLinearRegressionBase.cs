@@ -818,7 +818,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
         clone.B = parameters[0];
 
         // Set the alpha coefficients
-        clone.Alphas = parameters.GetSubVector(1, Alphas.Length);
+        clone.Alphas = RegressionEngineOps2.Slice(parameters, 1, Alphas.Length);
 
         return clone;
     }
@@ -939,7 +939,7 @@ public abstract partial class NonLinearRegressionBase<T> : INonLinearRegression<
 
         // Resize Alphas if needed (optimizer may call before training initializes Alphas)
         int alphaCount = parameters.Length - 1;
-        Alphas = alphaCount == 0 ? new Vector<T>(0) : parameters.GetSubVector(1, alphaCount);
+        Alphas = alphaCount == 0 ? new Vector<T>(0) : RegressionEngineOps2.Slice(parameters, 1, alphaCount);
     }
 
     /// <summary>

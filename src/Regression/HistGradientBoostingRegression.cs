@@ -711,7 +711,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             }
 
             return engine.Divide(
-                engine.Add(uniqueValues.GetSubVector(0, count), uniqueValues.GetSubVector(1, count)),
+                engine.Add(uniqueValues.GetSubVector(0, count), RegressionEngineOps2.Slice(uniqueValues, 1, count)),
                 NumOps.FromDouble(2.0));
         }
 
