@@ -55,6 +55,7 @@ public class ModelParameterGenerator : IIncrementalGenerator
     private const string ExtraTensorsHook = "GetExtraTrainableTensors";
     private const string ExtraLayersHook = "GetExtraTrainableLayers";
     private const string RebindLayerAliasesHook = "RebindLayerAliases";
+    private const string LayerAliasOwnerInterface = "AiDotNet.NeuralNetworks.Layers.ILayerAliasOwner<T>";
     private const string AdditionalLayerGroupsHook = "GetGeneratedAdditionalLayerGroups";
     private const string NestedNetworkLayerViewsHook = "GetGeneratedNestedNetworkLayerViews";
 
@@ -1236,6 +1237,14 @@ public class ModelParameterGenerator : IIncrementalGenerator
                     ? $"{member.Name} = RebindLayerAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));"
                     : $"{member.Name} = RebindRequiredLayerAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));"
                 : $"ValidateReadonlyLayerAlias({member.Name}, previousLayers, replacementLayers, nameof({member.Name}));";
+        }
+
+        // A helper object that holds layers (a paper network builder) rebinds its own references; without this the
+        // clone kept running the helper's constructor layers while serializing the trained ones.
+        if (bare is INamedTypeSymbol named && named.AllInterfaces.Any(i =>
+                i.OriginalDefinition.ToDisplayString() == LayerAliasOwnerInterface))
+        {
+            return $"{member.Name}?.RebindLayerAliases(previousLayers, replacementLayers);";
         }
 
         var element = LayerCollectionElementType(bare);

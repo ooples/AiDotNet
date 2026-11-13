@@ -808,23 +808,40 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
     /// i.e. the constant interior overlap of a fully-covered output sample. Used as the single scalar
     /// overlap-add normalizer (see IstftDifferentiable).
     /// </summary>
+    /// <remarks>
+    /// Plain arithmetic rather than engine ops: this runs inside the forward a compiled training step traces,
+    /// and a value read out of an engine result there is whatever the buffer holds at trace time, frozen into
+    /// the plan as a constant. The traced normalizer was garbage, so the fused step scaled the output toward
+    /// zero by a different factor in every process: its loss sat at the target's variance, never fell, and
+    /// differed between identically seeded builds while the eager step trained. The value depends only on the
+    /// window, the hop and the frame count, so nothing here needs the engine.
+    /// </remarks>
     private double PeakWindowOverlap(int numFrames, int fullLen)
     {
         if (fullLen < 0) throw new OverflowException("Signal length must be non-negative.");
         if (numFrames <= 0 || fullLen == 0) return 1e-8;
 
-        // Peak of the overlap-added squared analysis window.
-        var squared = Engine.TensorSquare(HannWindow());
-        var frames = new List<Tensor<T>>(numFrames);
-        var starts = new List<int>(numFrames);
+        // Squared symmetric Hann window, the one HannWindow() builds: 0.5 - 0.5 cos(2 pi i / (L - 1)).
+        int L = FrameLen;
+        var squared = new double[L];
+        for (int i = 0; L > 1 && i < L; i++)
+        {
+            double w = 0.5 - 0.5 * Math.Cos(2.0 * Math.PI * i / (L - 1));
+            squared[i] = w * w;
+        }
+
+        // Overlap-add it at every frame start and take the peak.
+        var sum = new double[fullLen];
         for (int t = 0; t < numFrames; t++)
         {
-            frames.Add(squared);
-            starts.Add(t * _hopSize);
+            int start = t * _hopSize;
+            for (int i = 0; i < L && start + i < fullLen; i++)
+                sum[start + i] += squared[i];
         }
-        var sum = AudioEngineOps.OverlapAdd(Engine, frames, starts, fullLen);
 
-        double peak = Math.Max(0.0, NumOps.ToDouble(Engine.TensorMaxValue(sum)));
+        double peak = 0.0;
+        foreach (double value in sum)
+            peak = Math.Max(peak, value);
         return peak < 1e-8 ? 1e-8 : peak;
     }
 

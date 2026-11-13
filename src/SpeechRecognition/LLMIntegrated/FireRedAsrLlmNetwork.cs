@@ -13,8 +13,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// the FireRedASR-AED Conformer encoder, the adapter (frame splicing, linear with ReLU, linear) and the Qwen2 decoder that
 /// reads the adapter's output in place of the <c>&lt;speech&gt;</c> token.
 /// </summary>
-internal sealed class FireRedAsrLlmNetwork<T>
+internal sealed class FireRedAsrLlmNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     // Qwen2-7B-Instruct's tokenizer with the release's added <speech> token (id 151646).
     private static readonly Lazy<QwenTokenizer> QwenText = new(() => QwenTokenizer.Qwen2(new[] { SpeechToken }));

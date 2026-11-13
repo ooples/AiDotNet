@@ -12,8 +12,12 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// converter (four frames spliced along the features, then a linear projection, for 160 ms) and the decoder-only LLM that
 /// reads the converter's output ahead of the transcript.
 /// </summary>
-internal sealed class SeedAsrNetwork<T>
+internal sealed class SeedAsrNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
     private readonly int _llmWidth, _vocabulary;

@@ -209,7 +209,7 @@ internal static class RegressionEngineOps
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
         return engine.Divide(
-            engine.Add(sortedValues.GetSubVector(0, n - 1), sortedValues.GetSubVector(1, n - 1)),
+            engine.Add(sortedValues.GetSubVector(0, n - 1), RegressionEngineOps2.Slice(sortedValues, 1, n - 1)),
             numOps.FromDouble(2));
     }
 
@@ -221,7 +221,7 @@ internal static class RegressionEngineOps
     {
         int n = sortedValues.Length;
         return AiDotNetEngine.Current.TensorGreaterThan(
-            Tensor<T>.FromVector(sortedValues.GetSubVector(1, n - 1)),
+            Tensor<T>.FromVector(RegressionEngineOps2.Slice(sortedValues, 1, n - 1)),
             Tensor<T>.FromVector(sortedValues.GetSubVector(0, n - 1)));
     }
 

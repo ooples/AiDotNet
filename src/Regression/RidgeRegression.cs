@@ -168,7 +168,7 @@ public class RidgeRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             Intercept = solution[0];
-            Coefficients = solution.GetSubVector(1, numFeatures - 1);
+            Coefficients = RegressionEngineOps2.Slice(solution, 1, numFeatures - 1);
         }
         else
         {

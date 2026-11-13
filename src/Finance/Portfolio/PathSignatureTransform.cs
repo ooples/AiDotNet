@@ -119,19 +119,25 @@ public class PathSignatureTransform<T>
         // running total before step k (the exclusive cumulative sum of D). Detached, like the vector it fills.
         var engine = AiDotNetEngine.Current;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var widePath = path.Cast<double>();
         var increments = engine.TensorSubtract(
-            engine.TensorNarrow(path, 0, 1, steps - 1), engine.TensorNarrow(path, 0, 0, steps - 1));
+            engine.TensorNarrow(widePath, 0, 1, steps - 1), engine.TensorNarrow(widePath, 0, 0, steps - 1));
         var total = engine.ReduceSum(increments, new[] { 0 }, false);                         // [dim]
-        Tensor<T> terms = total;
+        Tensor<double> terms = total;
         if (_level == 2)
         {
-            var before = engine.TensorSubtract(engine.TensorCumSum(increments, 0), increments);
-            var left = engine.TensorAdd(before, engine.TensorMultiplyScalar(increments, NumOps.FromDouble(0.5)));
+            // Shift the cumulative sum rather than subtracting the current increment, which can cancel a small prefix.
+            using var zeroRow = new Tensor<double>([1, dim]);
+            var before = steps == 2
+                ? zeroRow
+                : engine.TensorConcatenate(new[] { zeroRow,
+                    engine.TensorNarrow(engine.TensorCumSum(increments, 0), 0, 0, steps - 2) }, 0);
+            var left = engine.TensorAdd(before, engine.TensorMultiplyScalar(increments, 0.5));
             var second = engine.TensorMatMul(engine.TensorTranspose(left), increments);       // [dim, dim]
             terms = engine.TensorConcatenate(new[] { total, engine.Reshape(second, new[] { dim * dim }) }, 0);
         }
 
-        terms.AsSpan().CopyTo(result.AsWritableSpan());
+        terms.Cast<T>().AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
 
@@ -171,17 +177,16 @@ public class PathSignatureTransform<T>
         var engine = AiDotNetEngine.Current;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int n = first.Length;
-        var xs = Tensor<T>.FromVector(first);
-        var ys = Tensor<T>.FromVector(second);
+        var xs = Tensor<T>.FromVector(first).Cast<double>();
+        var ys = Tensor<T>.FromVector(second).Cast<double>();
         var xHead = engine.TensorNarrow(xs, 0, 0, n - 1);
         var yHead = engine.TensorNarrow(ys, 0, 0, n - 1);
-        var x = engine.TensorSubtractScalar(xHead, first[0]);
-        var y = engine.TensorSubtractScalar(yHead, second[0]);
+        var x = engine.TensorSubtractScalar(xHead, NumOps.ToDouble(first[0]));
+        var y = engine.TensorSubtractScalar(yHead, NumOps.ToDouble(second[0]));
         var dx = engine.TensorSubtract(engine.TensorNarrow(xs, 0, 1, n - 1), xHead);
         var dy = engine.TensorSubtract(engine.TensorNarrow(ys, 0, 1, n - 1), yHead);
-        T twice = NumOps.Subtract(
-            engine.TensorSum(engine.TensorMultiply(x, dy)), engine.TensorSum(engine.TensorMultiply(y, dx)));
-        return NumOps.Multiply(NumOps.FromDouble(0.5), twice);
+        double twice = engine.TensorSum(engine.TensorMultiply(x, dy)) - engine.TensorSum(engine.TensorMultiply(y, dx));
+        return NumOps.FromDouble(0.5 * twice);
     }
 
     /// <summary>
@@ -211,11 +216,13 @@ public class PathSignatureTransform<T>
         // D[k] = P[k + 1] - P[k], i.e. 0.5 * (X^T D - (X^T D)^T). Antisymmetric with a zero diagonal.
         var engine = AiDotNetEngine.Current;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var head = engine.TensorNarrow(panel, 0, 0, steps - 1);
-        var relative = engine.TensorSubtract(head, engine.TensorNarrow(panel, 0, 0, 1));
-        var increments = engine.TensorSubtract(engine.TensorNarrow(panel, 0, 1, steps - 1), head);
+        var widePanel = panel.Cast<double>();
+        var head = engine.TensorNarrow(widePanel, 0, 0, steps - 1);
+        var relative = engine.TensorSubtract(head, engine.TensorNarrow(widePanel, 0, 0, 1));
+        var increments = engine.TensorSubtract(engine.TensorNarrow(widePanel, 0, 1, steps - 1), head);
         var cross = engine.TensorMatMul(engine.TensorTranspose(relative), increments);        // [assets, assets]
-        return engine.TensorMultiplyScalar(
-            engine.TensorSubtract(cross, engine.TensorTranspose(cross)), NumOps.FromDouble(0.5));
+        var areas = engine.TensorMultiplyScalar(engine.TensorSubtract(cross, engine.TensorTranspose(cross)), 0.5);
+        using var zeros = new Tensor<double>([assets, assets]);
+        return engine.TensorWhere(engine.TensorEye<double>(assets), zeros, areas).Cast<T>();
     }
 }

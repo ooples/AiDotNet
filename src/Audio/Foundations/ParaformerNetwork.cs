@@ -80,8 +80,12 @@ internal sealed record ParaformerConfiguration
 /// between the target length and Σα, plus the encoder's CTC loss when weighted (Equation 6 without MWER, which the release
 /// does not train either).</para>
 /// </remarks>
-internal sealed class ParaformerNetwork<T>
+internal sealed class ParaformerNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
     private readonly ParaformerConfiguration _o;

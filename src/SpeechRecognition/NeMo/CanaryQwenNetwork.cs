@@ -13,8 +13,12 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 /// Conformer encoder, the identity modality adapter, the linear projection to the LLM's width, and Qwen3-1.7B, which
 /// reads the projection's output in place of <c>&lt;|audioplaceholder|&gt;</c>.
 /// </summary>
-internal sealed class CanaryQwenNetwork<T>
+internal sealed class CanaryQwenNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     // Qwen3's tokenizer (Qwen2.5's added tokens, then <tool_response>, </tool_response>, <think>, </think>) with the
     // release's audio locator tag added.

@@ -511,7 +511,7 @@ public partial class ExplainableBoostingMachineRegression<T> : AsyncDecisionTree
 
             // Neighbours with the end values repeated: left = [sf0, sf0..sf(len-2)], right = [sf1..sf(len-1), sf(len-1)]
             var leftNeighbor = Vector<T>.Concatenate(new[] { sf.GetSubVector(0, 1), sf.GetSubVector(0, len - 1) });
-            var rightNeighbor = Vector<T>.Concatenate(new[] { sf.GetSubVector(1, len - 1), sf.GetSubVector(len - 1, 1) });
+            var rightNeighbor = Vector<T>.Concatenate(new[] { RegressionEngineOps2.Slice(sf, 1, len - 1), sf.GetSubVector(len - 1, 1) });
 
             // (lambda * left + lambda * right + sf) / (1 + 2 lambda)
             var smoothed = Engine.Add(Engine.Multiply(leftNeighbor, lambda), Engine.Multiply(rightNeighbor, lambda));
