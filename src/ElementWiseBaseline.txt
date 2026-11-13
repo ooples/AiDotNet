@@ -17378,7 +17378,7 @@
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoice2Lm<T>.Loss((AiDotNet.Tensors.LinearAlgebra.Tensor<T> Input, int[] Targets))
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoice2Lm<T>.Rows(AiDotNet.NeuralNetworks.Layers.TiedEmbeddingLayer<T>, System.Collections.Generic.IReadOnlyList<int>)
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.TokensToMel(System.Collections.Generic.IReadOnlyList<int>, System.Random)
-3	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoice3Flow<T>.Sample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, bool)
+1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoice3Flow<T>.Sample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, bool)
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoice3Flow<T>.TrainingLoss(System.Collections.Generic.IReadOnlyList<int>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, bool, System.Random)
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.HarvestF0(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.Ids(System.Collections.Generic.IReadOnlyList<int>)
