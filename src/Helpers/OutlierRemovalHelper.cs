@@ -47,14 +47,7 @@ public static class OutlierRemovalHelper<T, TInput, TOutput>
             var inputRows = inputTensor.Shape[0];
             var inputCols = inputTensor.Shape[1];
             var inputMatrix2 = new Matrix<T>(inputRows, inputCols);
-
-            for (int i = 0; i < inputRows; i++)
-            {
-                for (int j = 0; j < inputCols; j++)
-                {
-                    inputMatrix2[i, j] = inputTensor[i, j];
-                }
-            }
+            inputTensor.CopyLogicalTo(inputMatrix2.AsWritableSpan());
 
             return (inputMatrix2, outputTensor.ToVector());
         }

@@ -315,6 +315,7 @@ public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>, IShapeContract
         var vitMap = _vitPatchEmbedding.Forward(input);
         var vitTokens = ToTokens(vitMap);
 
+        T half = NumOps.FromDouble(0.5);
         for (int stage = 0; stage < 4; stage++)
         {
             // MRFP: split 3x3/5x5 depthwise receptive fields and retain the spatial-prior residual.
@@ -324,7 +325,7 @@ public partial class ViTCoMerSegmentationLayer<T> : LayerBase<T>, IShapeContract
                 var local3 = _mrfp3[index].Forward(cnn[level]);
                 var local5 = _mrfp5[index].Forward(cnn[level]);
                 var refined = Engine.TensorMultiplyScalar(
-                    Engine.TensorAdd(local3, local5), NumOps.FromDouble(0.5));
+                    Engine.TensorAdd(local3, local5), half);
                 cnn[level] = Engine.TensorAdd(cnn[level], refined);
             }
 

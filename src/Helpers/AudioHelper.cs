@@ -575,20 +575,14 @@ public static class AudioHelper<T>
         }
 
         int numSamples = shape[^1];
-        var result = new Tensor<T>(new[] { 1, 1, numSamples });
-        var srcSpan = audio.AsSpan();
-        var dstSpan = result.AsWritableSpan();
 
-        for (int s = 0; s < numSamples; s++)
-        {
-            double sum = 0;
-            for (int c = 0; c < channels; c++)
-            {
-                sum += NumOps.ToDouble(srcSpan[c * numSamples + s]);
-            }
-            dstSpan[s] = NumOps.FromDouble(sum / channels);
-        }
+        // The leading [channels, samples] block (batch 0 for a [batch, channels, samples] input),
+        // averaged over the channel axis.
+        var channelBlock = new Tensor<T>(new[] { channels, numSamples });
+        audio.AsSpan().Slice(0, channels * numSamples).CopyTo(channelBlock.AsWritableSpan());
 
-        return result;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.ReduceMean(channelBlock, new[] { 0 }, false)
+            .Reshape(new[] { 1, 1, numSamples });
     }
 }

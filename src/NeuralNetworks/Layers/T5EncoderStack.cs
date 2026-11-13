@@ -168,11 +168,7 @@ public partial class T5EncoderStack<T> : LayerBase<T>, IShapeContract
     {
         if (_cachedSeqLen != seqLen || _bucketIndices is null)
         {
-            var idx = new Tensor<int>(new[] { seqLen, seqLen });
-            for (int q = 0; q < seqLen; q++)
-                for (int k = 0; k < seqLen; k++)
-                    idx[q, k] = T5RelativeBiasAttentionLayer<T>.RelativePositionBucket(k - q, true, _numBuckets, _maxDistance);
-            _bucketIndices = idx;
+            _bucketIndices = T5RelativeBiasAttentionLayer<T>.BucketIndexGrid(seqLen, true, _numBuckets, _maxDistance);
             _cachedSeqLen = seqLen;
         }
 

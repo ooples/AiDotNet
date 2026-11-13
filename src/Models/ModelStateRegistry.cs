@@ -2697,7 +2697,7 @@ public sealed class ModelStateRegistry<T>
     /// <param name="set">Installs a restored value.</param>
     public void DeclareScalar(string name, Func<T> get, Action<T> set)
         => Add(name,
-            w => w.Write(Convert.ToDouble(get())),
+            w => w.Write(Ops.ToDouble(get())),
             r => Assign(set, Ops.FromDouble(r.ReadDouble())));
 
     /// <summary>Declares a string, such as a fitted category name or a chosen kernel.</summary>
@@ -2922,7 +2922,7 @@ public sealed class ModelStateRegistry<T>
     {
         if (v is null) { w.Write(-1); return; }
         w.Write(v.Length);
-        for (int i = 0; i < v.Length; i++) w.Write(Convert.ToDouble(v[i]));
+        WriteNumericValues(w, v.AsSpan());
     }
 
     private static Vector<T>? ReadVector(BinaryReader r)
@@ -2963,7 +2963,21 @@ public sealed class ModelStateRegistry<T>
         w.Write(shape.Length);
         for (int i = 0; i < shape.Length; i++) w.Write(shape[i]);
         w.Write(t.Length);
-        for (int i = 0; i < t.Length; i++) w.Write(Convert.ToDouble(t[i]));
+        WriteNumericValues(w, t.Contiguous().AsSpan());
+    }
+
+    private static void WriteNumericValues(BinaryWriter writer, ReadOnlySpan<T> values)
+    {
+        using var noGradSource = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noGradDouble = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        const int blockSize = 4096;
+        for (int offset = 0; offset < values.Length; offset += blockSize)
+        {
+            int count = Math.Min(blockSize, values.Length - offset);
+            var converted = Tensor<T>.FromVector(Vector<T>.FromSpan(values.Slice(offset, count)))
+                .Cast<double>().ToArray();
+            for (int i = 0; i < converted.Length; i++) writer.Write(converted[i]);
+        }
     }
 
     private static Tensor<T>? ReadTensor(BinaryReader r)

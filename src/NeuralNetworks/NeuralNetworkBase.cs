@@ -17014,10 +17014,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private static int ParameterWidth(SerializedParameterEncoding encoding)
         => encoding == SerializedParameterEncoding.Float32 ? sizeof(float) : sizeof(double);
 
-    private static void WriteParameterValue(BinaryWriter writer, T value, SerializedParameterEncoding encoding)
+    private static void WriteParameterValue(
+        BinaryWriter writer, INumericOperations<T> numOps, T value, SerializedParameterEncoding encoding)
     {
-        if (encoding == SerializedParameterEncoding.Float32) writer.Write(Convert.ToSingle(value));
-        else writer.Write(Convert.ToDouble(value));
+        double numeric = numOps.ToDouble(value);
+        if (encoding == SerializedParameterEncoding.Float32) writer.Write((float)numeric);
+        else writer.Write(numeric);
     }
 
     private T ReadParameterValue(BinaryReader reader, SerializedParameterEncoding encoding)
@@ -17180,7 +17182,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             writer.Write(parameters.Length);
             foreach (var param in parameters)
             {
-                WriteParameterValue(writer, param, encoding);
+                WriteParameterValue(writer, NumOps, param, encoding);
             }
 
             // Write any optional extra parameter blocks required to fully reconstruct the layer (e.g., frozen base weights in LoRA adapters).
@@ -17190,7 +17192,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 writer.Write(extraParameters.Length);
                 foreach (var param in extraParameters)
                 {
-                    WriteParameterValue(writer, param, encoding);
+                    WriteParameterValue(writer, NumOps, param, encoding);
                 }
             }
             else

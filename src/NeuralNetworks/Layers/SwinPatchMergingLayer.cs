@@ -182,21 +182,13 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
         // [x0, x2, x1, x3], which trains identically from a random start but scrambles the reduction
         // weights of any published Swin / HTS-AT checkpoint: its column blocks 1 and 2 would read the
         // wrong neighbours.
-        var topLeft = new Tensor<int>([newSeqLen]);
-        var topRight = new Tensor<int>([newSeqLen]);
-        var bottomLeft = new Tensor<int>([newSeqLen]);
-        var bottomRight = new Tensor<int>([newSeqLen]);
-        for (int i = 0; i < newH; i++)
-        {
-            for (int j = 0; j < newW; j++)
-            {
-                int newIdx = i * newW + j;
-                topLeft[newIdx] = (2 * i) * w + (2 * j);
-                topRight[newIdx] = (2 * i) * w + (2 * j + 1);
-                bottomLeft[newIdx] = (2 * i + 1) * w + (2 * j);
-                bottomRight[newIdx] = (2 * i + 1) * w + (2 * j + 1);
-            }
-        }
+        // topLeft[i * newW + j] = (2i) * w + 2j; the other three corners are offsets +1, +w and +w+1.
+        var evenRowStarts = Engine.Reshape(Engine.TensorArange<int>(0, 2 * w * newH, 2 * w), [newH, 1]);
+        var evenColumns = Engine.Reshape(Engine.TensorArange<int>(0, 2 * newW, 2), [1, newW]);
+        var topLeft = Engine.Reshape(Engine.TensorAdd(evenRowStarts, evenColumns), [newSeqLen]);
+        var topRight = Engine.TensorAddScalar(topLeft, 1);
+        var bottomLeft = Engine.TensorAddScalar(topLeft, w);
+        var bottomRight = Engine.TensorAddScalar(topLeft, w + 1);
 
         var merged = Engine.TensorConcatenate(
             [

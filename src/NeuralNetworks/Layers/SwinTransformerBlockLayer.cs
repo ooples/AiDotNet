@@ -319,9 +319,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
 
     private static Tensor<int> CreateIndices(int[] values)
     {
-        var indices = new Tensor<int>([values.Length]);
-        for (int i = 0; i < values.Length; i++) indices[i] = values[i];
-        return indices;
+        return new Tensor<int>((int[])values.Clone(), [values.Length]);
     }
 
     private Tensor<T> CyclicShift(Tensor<T> x, int h, int w, int shift)
@@ -498,7 +496,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
 
         int windowArea = _windowSize * _windowSize;
         int windowsPerBatch = numWindowsH * numWindowsW;
-        var mask = new Tensor<T>([batch * windowsPerBatch, 1, windowArea, windowArea]);
         T blocked = NumOps.FromDouble(-100.0);
 
         static int Region(int coordinate, int length, int windowSize, int shiftSize)
@@ -509,31 +506,41 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
             return 2;
         }
 
-        for (int b = 0; b < batch; b++)
+        // Region label of every padded pixel: Region(row) * 3 + Region(column), in 0..8.
+        var rowRegion = new int[paddedH];
+        for (int i = 0; i < paddedH; i++) rowRegion[i] = Region(i, paddedH, _windowSize, shift) * 3;
+        var columnRegion = new int[paddedW];
+        for (int j = 0; j < paddedW; j++) columnRegion[j] = Region(j, paddedW, _windowSize, shift);
+
+        Tensor<T> mask;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int wh = 0; wh < numWindowsH; wh++)
-            {
-                for (int ww = 0; ww < numWindowsW; ww++)
-                {
-                    int window = b * windowsPerBatch + wh * numWindowsW + ww;
-                    for (int query = 0; query < windowArea; query++)
-                    {
-                        int qi = wh * _windowSize + query / _windowSize;
-                        int qj = ww * _windowSize + query % _windowSize;
-                        int queryRegion = Region(qi, paddedH, _windowSize, shift) * 3
-                            + Region(qj, paddedW, _windowSize, shift);
-                        for (int key = 0; key < windowArea; key++)
-                        {
-                            int ki = wh * _windowSize + key / _windowSize;
-                            int kj = ww * _windowSize + key % _windowSize;
-                            int keyRegion = Region(ki, paddedH, _windowSize, shift) * 3
-                                + Region(kj, paddedW, _windowSize, shift);
-                            if (queryRegion != keyRegion || ki >= h || kj >= w)
-                                mask[window, 0, query, key] = blocked;
-                        }
-                    }
-                }
-            }
+            var label = Engine.TensorAdd(
+                new Tensor<int>(rowRegion, [paddedH, 1]),
+                new Tensor<int>(columnRegion, [1, paddedW]));
+
+            // A padding key (row >= h or column >= w) is always blocked: shift its label out of 0..8.
+            var paddingRow = Engine.Reshape(
+                Engine.TensorGreaterThan(Engine.TensorArange<int>(0, paddedH, 1), h - 1), [paddedH, 1]);
+            var paddingColumn = Engine.Reshape(
+                Engine.TensorGreaterThan(Engine.TensorArange<int>(0, paddedW, 1), w - 1), [1, paddedW]);
+            var isPadding = Engine.TensorGreaterThan(Engine.TensorAdd(paddingRow, paddingColumn), 0);
+            var keyLabel = Engine.TensorAdd(label, Engine.TensorMultiplyScalar(isPadding, 9));
+
+            // [paddedH, paddedW] -> [windowsPerBatch, windowArea] in window-major, row-major-within-window order.
+            Tensor<int> PerWindow(Tensor<int> grid) => Engine.Reshape(
+                Engine.TensorPermute(Engine.Reshape(grid, [numWindowsH, _windowSize, numWindowsW, _windowSize]), [0, 2, 1, 3]),
+                [windowsPerBatch, windowArea]);
+
+            var queryLabels = Engine.Reshape(PerWindow(label), [windowsPerBatch, windowArea, 1]);
+            var keyLabels = Engine.Reshape(PerWindow(keyLabel), [windowsPerBatch, 1, windowArea]);
+            var differs = Engine.TensorNotEquals(Engine.TensorSubtract(queryLabels, keyLabels), 0);
+            var windowMask = Engine.Reshape(
+                Engine.TensorMultiplyScalar(differs.Cast<T>(), blocked),
+                [1, windowsPerBatch, 1, windowArea, windowArea]);
+            mask = Engine.Reshape(
+                Engine.TensorTile(windowMask, [batch, 1, 1, 1, 1]),
+                [batch * windowsPerBatch, 1, windowArea, windowArea]);
         }
 
         return mask;
@@ -586,15 +593,12 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
 
         int seqLen = branch.Shape[1];
         int dim = branch.Shape[2];
-        var mask = new Tensor<T>([batch, seqLen, dim]);
+        // One keep/drop decision per sample — the whole branch survives or vanishes together. The
+        // [batch, 1, 1] factor broadcasts over the sample's tokens and channels.
+        var sampleFactor = new T[batch];
         for (int b = 0; b < batch; b++)
-        {
-            // One keep/drop decision per sample — the whole branch survives or vanishes together.
-            T v = rng.NextDouble() < _dropPathRate ? NumOps.Zero : scale;
-            for (int s = 0; s < seqLen; s++)
-                for (int d = 0; d < dim; d++)
-                    mask[b, s, d] = v;
-        }
+            sampleFactor[b] = rng.NextDouble() < _dropPathRate ? NumOps.Zero : scale;
+        var mask = Engine.TensorBroadcastTo(new Tensor<T>(sampleFactor, [batch, 1, 1]), [batch, seqLen, dim]);
         return Engine.TensorMultiply(branch, mask);
     }
 

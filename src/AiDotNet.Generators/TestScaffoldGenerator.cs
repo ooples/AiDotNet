@@ -22931,6 +22931,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             "GraphWaveNet" => "207, 12",
             "MTGNN" => "207, 12",
 
+            // RelationalGCN (Schlichtkrull et al. 2018): per-node output [numNodes, forecastHorizon] = [100, 12]
+            // (RelationalGCNOptions defaults). Pairs with input "100, 12, 16".
+            "RelationalGCN" => "100, 12",
+
             // All others: [B, forecastHorizon]. Common paper defaults 96.
             _ => "96",
         };
@@ -23037,6 +23041,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // = [207, 12, 2], reshaped per-node for shared-weight WaveNet layers.
             "GraphWaveNet" => "207, 12, 2",
             "MTGNN" => "207, 12, 2",
+
+            // RelationalGCN: [numNodes, seqLen, numFeatures] = [100, 12, 16] (RelationalGCNOptions defaults),
+            // one history row per node for the per-node encoder ahead of the R-GCN layers.
+            "RelationalGCN" => "100, 12, 16",
 
             _ => ctx,
         };

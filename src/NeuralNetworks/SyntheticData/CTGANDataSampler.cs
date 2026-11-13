@@ -101,10 +101,11 @@ public class CTGANDataSampler<T>
                 rowsByCategory[c] = new List<int>();
             }
 
+            // Category index of every row: the value rounded half to even, as Math.Round does.
+            var categoryOfRow = AiDotNetEngine.Current.TensorRound(data.GetColumn(col).AsTensor()).Cast<int>().ToArray();
             for (int row = 0; row < data.Rows; row++)
             {
-                double val = NumOps.ToDouble(data[row, col]);
-                int catIdx = (int)Math.Round(val);
+                int catIdx = categoryOfRow[row];
                 if (catIdx >= 0 && catIdx < numCats)
                 {
                     rowsByCategory[catIdx].Add(row);
@@ -144,12 +145,10 @@ public class CTGANDataSampler<T>
     public (Vector<T> CondVector, Vector<T> Mask, int DiscreteColIndex, int CategoryIndex, int RowIndex) SampleCondVecWithMask()
     {
         var condVector = new Vector<T>(_condVectorWidth);
-        var mask = new Vector<T>(_condVectorWidth);
-
         if (_discreteColumnInfos.Count == 0)
         {
             int randomRow = _totalRows > 0 ? _random.Next(_totalRows) : 0;
-            return (condVector, mask, -1, -1, randomRow);
+            return (condVector, new Vector<T>(_condVectorWidth), -1, -1, randomRow);
         }
 
         int colIdx = _random.Next(_discreteColumnInfos.Count);
@@ -160,7 +159,10 @@ public class CTGANDataSampler<T>
         for (int c = 0; c < colIdx; c++) condOffset += _discreteColumnInfos[c].NumCategories;
 
         condVector[condOffset + catIdx] = NumOps.One;
-        for (int c = 0; c < colInfo.NumCategories; c++) mask[condOffset + c] = NumOps.One;
+        // 1 over the selected column's category block, 0 elsewhere.
+        var mask = new Vector<T>(Enumerable.Repeat(NumOps.Zero, condOffset)
+            .Concat(Enumerable.Repeat(NumOps.One, colInfo.NumCategories))
+            .Concat(Enumerable.Repeat(NumOps.Zero, _condVectorWidth - condOffset - colInfo.NumCategories)));
 
         var rows = colInfo.RowsByCategory[catIdx];
         int rowIdx = rows.Count > 0 ? rows[_random.Next(rows.Count)] : (_totalRows > 0 ? _random.Next(_totalRows) : 0);

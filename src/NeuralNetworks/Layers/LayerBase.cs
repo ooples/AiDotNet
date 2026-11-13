@@ -6472,9 +6472,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         WriteResolvedShape(writer);
         WriteRegisteredBuffers(writer);
         writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+        WriteNumericValues(writer, parameters.AsSpan());
+    }
+
+    private static void WriteNumericValues(BinaryWriter writer, ReadOnlySpan<T> values)
+    {
+        // Preserve the double wire format without requiring T to implement IConvertible.
+        // Bound conversion memory even when a model owns a very large parameter tensor.
+        using var noGradSource = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noGradDouble = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        const int blockSize = 4096;
+        for (int offset = 0; offset < values.Length; offset += blockSize)
         {
-            writer.Write(Convert.ToDouble(parameters[i]));
+            int count = Math.Min(blockSize, values.Length - offset);
+            var converted = Tensor<T>.FromVector(Vector<T>.FromSpan(values.Slice(offset, count)))
+                .Cast<double>().ToArray();
+            for (int i = 0; i < converted.Length; i++) writer.Write(converted[i]);
         }
     }
 
@@ -6680,7 +6693,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
 
             writer.Write(tensor.Length);
-            for (int i = 0; i < tensor.Length; i++) writer.Write(Convert.ToDouble(tensor[i]));
+            WriteNumericValues(writer, tensor.Contiguous().AsSpan());
         }
     }
 

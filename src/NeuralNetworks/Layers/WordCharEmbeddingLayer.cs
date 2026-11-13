@@ -240,29 +240,43 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // is masked: padded sequence rows and padded character slots must NOT contribute trainable
         // features, and they must NOT be averaged into the character pooling, or short words and
         // padding rows would learn a spurious PAD embedding.
-        var wordOneHot = new Tensor<T>([seq, _wordVocabSize]);
-        var charOneHot = new Tensor<T>([seq, _maxWordLength, _charVocabSize]);
-        var tokenMask = new Tensor<T>([seq, OutputEmbeddingDim]); // 1 on real tokens, 0 on PAD rows
-        var charCounts = new int[seq];                            // real (non-PAD) chars per word
+        // Packed ids are rounded half to even (Math.Round's default), then normalized per stream.
+        var packedIds = Engine.TensorRound(input).Cast<int>().ToArray();
+        var wordIds = new int[seq];
+        var charIds = new int[seq * _maxWordLength];
         for (int s = 0; s < seq; s++)
         {
-            int wordId = NormalizeIndex(input[s, 0], _wordVocabSize);
-            if (wordId > 0) // 0 == PAD: leave the row's one-hot empty and the mask zero
-            {
-                wordOneHot[s, wordId] = NumOps.One;
-                for (int d = 0; d < OutputEmbeddingDim; d++)
-                    tokenMask[s, d] = NumOps.One;
-            }
-
+            wordIds[s] = NormalizeIndex(packedIds[s * packedWidth], _wordVocabSize);
             for (int c = 0; c < _maxWordLength; c++)
-            {
-                int charId = NormalizeIndex(input[s, 1 + c], _charVocabSize);
-                if (charId > 0) // 0 == PAD char: skip
-                {
-                    charOneHot[s, c, charId] = NumOps.One;
-                    charCounts[s]++;
-                }
-            }
+                charIds[s * _maxWordLength + c] = NormalizeIndex(packedIds[s * packedWidth + 1 + c], _charVocabSize);
+        }
+
+        Tensor<T> wordOneHot, charOneHot, tokenMask, charMask, charScale;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // 0 == PAD: a PAD word leaves its one-hot row empty and its token mask zero; a PAD char is skipped.
+            var wordIdTensor = new Tensor<int>(wordIds, [seq]);
+            var charIdTensor = new Tensor<int>(charIds, [seq, _maxWordLength]);
+            var realWord = Engine.Reshape(Engine.TensorGreaterThan(wordIdTensor, 0).Cast<T>(), [seq, 1]);
+            var realChar = Engine.Reshape(
+                Engine.TensorGreaterThan(charIdTensor, 0).Cast<T>(), [seq, _maxWordLength, 1]);
+            wordOneHot = Engine.TensorMultiply(
+                Engine.TensorOneHot<T>(wordIdTensor, _wordVocabSize),
+                Engine.TensorBroadcastTo(realWord, [seq, _wordVocabSize]));
+            charOneHot = Engine.TensorMultiply(
+                Engine.TensorOneHot<T>(charIdTensor, _charVocabSize),
+                Engine.TensorBroadcastTo(realChar, [seq, _maxWordLength, _charVocabSize]));
+            tokenMask = Engine.TensorBroadcastTo(realWord, [seq, OutputEmbeddingDim]); // 1 on real tokens, 0 on PAD rows
+
+            // Real (non-PAD) chars per word; the first count positions of the char BiLSTM output are pooled.
+            var charCounts = Engine.ReduceSum(Engine.Reshape(realChar, [seq, _maxWordLength]), [1], keepDims: true);
+            var positions = Engine.TensorBroadcastTo(
+                Engine.Reshape(Engine.TensorArange<T>(0, _maxWordLength, 1), [1, _maxWordLength]), [seq, _maxWordLength]);
+            var pooled = Engine.TensorLessThan(positions, Engine.TensorBroadcastTo(charCounts, [seq, _maxWordLength]));
+            charMask = Engine.TensorBroadcastTo(
+                Engine.Reshape(pooled, [seq, _maxWordLength, 1]), [seq, _maxWordLength, _charHiddenDim]);
+            charScale = Engine.TensorBroadcastTo(
+                Engine.TensorReciprocal(Engine.TensorClampMin(charCounts, NumOps.One)), [seq, _charHiddenDim]);
         }
 
         // Word stream: [seq, wordVocab] -> [seq, wordEmbeddingDim].
@@ -281,20 +295,7 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // Zero the padded character positions before pooling, and divide by the real char count so a
         // 3-letter word isn't diluted by maxWordLength-3 zero rows.
         // charBi has shape [seq, maxWordLength, charHiddenDim] (BiLSTM output, merged directions).
-        var charMask = new Tensor<T>([seq, _maxWordLength, _charHiddenDim]);
-        for (int s = 0; s < seq; s++)
-            for (int c = 0; c < Math.Min(charCounts[s], _maxWordLength); c++)
-                for (int d = 0; d < _charHiddenDim; d++)
-                    charMask[s, c, d] = NumOps.One;
-
         var charSum = Engine.ReduceSum(Engine.TensorMultiply(charBi, charMask), [1], keepDims: false);
-        var charScale = new Tensor<T>([seq, _charHiddenDim]);
-        for (int s = 0; s < seq; s++)
-        {
-            T inv = NumOps.FromDouble(1.0 / Math.Max(1, charCounts[s]));
-            for (int d = 0; d < _charHiddenDim; d++)
-                charScale[s, d] = inv;
-        }
         var charFeat = Engine.TensorMultiply(charSum, charScale);
 
         // Concatenate the two streams per token, then mask PAD rows to zero: [seq, wordEmbeddingDim + charHiddenDim].
@@ -302,11 +303,10 @@ public partial class WordCharEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorMultiply(fused, tokenMask);
     }
 
-    private int NormalizeIndex(T value, int vocabSize)
+    private static int NormalizeIndex(int idx, int vocabSize)
     {
-        int idx = (int)Math.Round(NumOps.ToDouble(value));
         if (idx < 0)
-            throw new ArgumentOutOfRangeException(nameof(value), "Packed indices must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(idx), "Packed indices must be non-negative.");
         // Out-of-range positive ids map to UNK (index 1), NOT PAD (index 0) — an unseen token is
         // "unknown", not "absent". Falls back to PAD only for a degenerate size-1 vocabulary.
         if (idx >= vocabSize) return vocabSize > 1 ? 1 : 0;
