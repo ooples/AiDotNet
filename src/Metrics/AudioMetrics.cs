@@ -628,7 +628,7 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
     {
         int up = _upFactor;
         int down = _downFactor;
-        double cutoff = 1.0 / (2 * Math.Max(up, down));
+        double cutoff = 1.0 / (2.0 * Math.Max(up, down));
         double rejectionDb = 60.0;
         double rollOffWidth = cutoff / 10.0;
         int half = (int)Math.Ceiling((rejectionDb - 8.0) / (28.714 * rollOffWidth));
@@ -638,7 +638,7 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
         var positions = engine.TensorArange<T>(-half, half + 1, 1);
         var ideal = engine.TensorMultiplyScalar(
             engine.TensorSinc(engine.TensorMultiplyScalar(positions, _numOps.FromDouble(2 * cutoff))),
-            _numOps.FromDouble(2 * up * cutoff));
+            _numOps.FromDouble(2.0 * up * cutoff));
         var filter = engine.TensorMultiply(engine.TensorKaiserWindow<T>(taps, false, beta), ideal);
         filter = engine.TensorMultiplyScalar(
             engine.TensorDivideScalar(filter, engine.TensorSum(filter)), _numOps.FromDouble(up));

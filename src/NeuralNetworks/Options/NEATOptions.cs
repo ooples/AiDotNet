@@ -154,13 +154,13 @@ public class NEATOptions : ModelHyperparameterOptions
         RequireProbability(DisableInheritedRate, nameof(DisableInheritedRate));
         RequireProbability(InterspeciesMatingRate, nameof(InterspeciesMatingRate));
         RequireProbability(SurvivalThreshold, nameof(SurvivalThreshold));
-        if (!(CompatibilityThreshold > 0))
+        if (double.IsNaN(CompatibilityThreshold) || CompatibilityThreshold <= 0)
         {
             throw new ArgumentException(
                 $"{GetType().Name}.CompatibilityThreshold is {CompatibilityThreshold}, but it must be positive.",
                 OptionsParameterName);
         }
-        if (!(WeightCap > 0) || WeightPerturbPower < 0)
+        if (double.IsNaN(WeightCap) || WeightCap <= 0 || double.IsNaN(WeightPerturbPower) || WeightPerturbPower < 0)
         {
             throw new ArgumentException(
                 $"{GetType().Name}.WeightCap must be positive and WeightPerturbPower non-negative.",

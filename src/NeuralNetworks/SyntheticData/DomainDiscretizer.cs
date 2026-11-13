@@ -204,7 +204,7 @@ internal sealed class DomainDiscretizer<T>
         {
             if (double.TryParse(categories[c], NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
                 && parsed.ToString(CultureInfo.InvariantCulture) == categories[c]
-                && !named.Any(pair => pair.Key == parsed))
+                && !named.Any(pair => pair.Key.Equals(parsed)))
             {
                 named.Add(new KeyValuePair<double, int>(parsed, c));
             }

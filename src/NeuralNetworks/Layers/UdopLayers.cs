@@ -118,6 +118,10 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
 [AutoParameters]
 public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
 {
+    // The padding boxes UDOP gives special tokens are all 0 or all 1 (mean exactly 0 or 1); a box whose mean is
+    // within this of either is treated as that padding box rather than a real layout box.
+    private const double DegenerateBoxTolerance = 1e-12;
+
     /// <summary>Boxes arrive on the 0-1000 grid the UDOP processor emits; the model works on 0-1.</summary>
     public const int CoordinateGrid = 1000;
 
@@ -381,7 +385,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
                     points[i] = px + (py * grid);
                     claimed[points[i]] = true;
                     double mean = (b[0] + b[1] + b[2] + b[3]) / 4.0;
-                    keepRow[i] = mean != 0.0 && mean != 1.0 ? 1 : 0;
+                    keepRow[i] = Math.Abs(mean) > DegenerateBoxTolerance && Math.Abs(mean - 1.0) > DegenerateBoxTolerance ? 1 : 0;
                 }
 
                 // Each token row keeps its patch feature only when its box is not degenerate.

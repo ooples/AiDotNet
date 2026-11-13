@@ -200,11 +200,12 @@ public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
 
     private void ValidateOptions()
     {
-        if (!(_options.Epsilon > 0) || double.IsInfinity(_options.Epsilon))
+        if (double.IsNaN(_options.Epsilon) || _options.Epsilon <= 0 || double.IsInfinity(_options.Epsilon))
             throw new ArgumentOutOfRangeException(nameof(_options.Epsilon), "Epsilon must be positive and finite.");
-        if (!(_options.Delta > 0) || _options.Delta >= 1)
+        if (double.IsNaN(_options.Delta) || _options.Delta <= 0 || _options.Delta >= 1)
             throw new ArgumentOutOfRangeException(nameof(_options.Delta), "Delta must be in (0, 1).");
-        if (!(_options.MeasurementBudgetFraction > 0) || _options.MeasurementBudgetFraction >= 1)
+        if (double.IsNaN(_options.MeasurementBudgetFraction) || _options.MeasurementBudgetFraction <= 0
+            || _options.MeasurementBudgetFraction >= 1)
             throw new ArgumentOutOfRangeException(nameof(_options.MeasurementBudgetFraction),
                 "MeasurementBudgetFraction must be in (0, 1).");
         if (_options.Rounds is int r && r < 1)
@@ -236,7 +237,7 @@ public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
     /// <summary>The smallest delta for which rho-zCDP implies (epsilon, delta)-DP.</summary>
     internal static double CdpDelta(double rho, double epsilon)
     {
-        if (rho == 0) return 0.0;
+        if (rho <= 0) return 0.0;
 
         double aMin = 1.01;
         double aMax = (epsilon + 1.0) / (2.0 * rho) + 2.0;
@@ -320,7 +321,7 @@ public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
             .Select(c => Quality(truth(c.Clique), ModelMarginal(c.Clique), c.Weight, sigma))
             .ToArray();
         double sensitivity = candidates.Max(c => Math.Abs(c.Weight));
-        if (candidates.Count == 1 || !(sensitivity > 0)) return candidates[Random.Next(candidates.Count)].Clique;
+        if (candidates.Count == 1 || double.IsNaN(sensitivity) || sensitivity <= 0) return candidates[Random.Next(candidates.Count)].Clique;
 
         var q = engine.TensorConcatenate(qualities, 0);
         var shifted = engine.TensorSubtractScalar(q, engine.TensorMaxValue(q));
