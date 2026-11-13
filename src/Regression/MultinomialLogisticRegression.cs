@@ -240,6 +240,12 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
                 hessian = hessian.Add(Regularization.Regularize(hessian));
             }
 
+            // The full-softmax Hessian is singular by construction: the classes' parameters are identified only up to a
+            // shift shared across classes, and that shift is its null space. The gradient is orthogonal to it (per
+            // feature, the class residuals p - y sum to zero), so a scale-relative ridge makes the Newton system
+            // solvable without changing the step in any identified direction.
+            hessian = RegressionEngineOps2.AddRelativeDiagonalJitter(hessian, NumOps.FromDouble(1e-8), NumOps.FromDouble(1e-12));
+
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
 
