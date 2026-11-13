@@ -368,39 +368,21 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
             onlineNextQ = onlineNextQTensor.ToVector();
         }
 
-        // Greedy next action per row over the LEGAL actions (first maximum wins, as a strict > scan does),
-        // scored by the target network.
+        // Targets = current Q with the taken-action slot overwritten by the TD target.
         var shape = new[] { n, actionCount };
-        var zeros = new Tensor<T>(shape);
         var legal = batch
             .SelectMany(exp => ActionMasking.Validate(exp.NextLegalActions, actionCount)
                 ?? Enumerable.Repeat(true, actionCount).ToArray())
             .ToArray();
-        var selection = engine.Reshape(Tensor<T>.FromVector(onlineNextQ ?? nextQ), shape);
-        var negativeInfinity = engine.TensorAddScalar(zeros, NumOps.FromDouble(double.NegativeInfinity));
-        var bestAction = engine.TensorArgMax(engine.TensorWhere(legal, selection, negativeInfinity), 1).Cast<T>();
-        var classIds = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorArange<T>(0, actionCount), new[] { 1, actionCount }), shape);
-        var bestSlot = engine.TensorEquals(
-            classIds, engine.TensorBroadcastTo(engine.Reshape(bestAction, new[] { n, 1 }), shape));
-        var target = engine.Reshape(Tensor<T>.FromVector(nextQ), shape);
-        var maxNextQ = engine.ReduceSum(engine.TensorWhere(bestSlot, target, zeros), new[] { 1 }, keepDims: false);
-
-        // TD target r + gamma * maxNextQ, or r alone on terminal transitions.
-        var rewards = new Tensor<T>(batch.Select(exp => exp.Reward).ToArray(), new[] { n });
-        var done = batch.Select(exp => exp.Done).ToArray();
-        var tdTarget = engine.TensorWhere(
-            done, rewards, engine.TensorAdd(rewards, engine.TensorMultiplyScalar(maxNextQ, gamma)));
-
-        // Targets = current Q with the taken-action slot overwritten by the TD target.
-        var takenAction = engine.Reshape(
-            ActionIndices(engine.TensorStack(batch.Select(exp => Tensor<T>.FromVector(exp.Action)).ToArray(), 0)).Cast<T>(),
-            new[] { n, 1 });
-        var takenSlot = engine.TensorEquals(classIds, engine.TensorBroadcastTo(takenAction, shape));
-        using var expected = engine.TensorWhere(
-            takenSlot,
-            engine.TensorBroadcastTo(engine.Reshape(tdTarget, new[] { n, 1 }), shape),
-            engine.Reshape(currentQTensor, shape));
+        using var expected = TemporalDifferenceTargets(
+            engine.Reshape(currentQTensor, shape),
+            engine.Reshape(Tensor<T>.FromVector(onlineNextQ ?? nextQ), shape),
+            engine.Reshape(Tensor<T>.FromVector(nextQ), shape),
+            legal,
+            new Tensor<T>(batch.Select(exp => exp.Reward).ToArray(), new[] { n }),
+            batch.Select(exp => exp.Done).ToArray(),
+            engine.TensorStack(batch.Select(exp => Tensor<T>.FromVector(exp.Action)).ToArray(), 0),
+            gamma);
         _qNetwork.Train(states, expected);
 
         CompleteGradientUpdate();
@@ -471,15 +453,50 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
     }
 
     /// <summary>
-    /// Per row of one-hot actions <c>[rows, actions]</c>: the first slot within 1e-5 of 1, or 0 when none is.
+    /// The DQN regression targets <c>[n, actions]</c>: <paramref name="currentQ"/> with each row's taken-action slot
+    /// replaced by the TD target <c>r + gamma * Q_eval(s', a*)</c> (<c>r</c> alone on terminal rows), where
+    /// <c>a*</c> is the first legal action of greatest <paramref name="selectionQ"/> (the online network under
+    /// Double DQN, the target network otherwise) and <paramref name="evaluationQ"/> is the target network.
+    /// </summary>
+    /// <remarks>
+    /// Action indices stay <c>int</c> throughout (argmax, gather, one-hot): comparing indices in
+    /// <typeparamref name="T"/> merges neighbouring actions once they exceed what <typeparamref name="T"/>
+    /// represents exactly (2048 in Half, where 2049 rounds to 2048).
+    /// </remarks>
+    internal static Tensor<T> TemporalDifferenceTargets(
+        Tensor<T> currentQ, Tensor<T> selectionQ, Tensor<T> evaluationQ, bool[] legal,
+        Tensor<T> rewards, bool[] done, Tensor<T> actions, T gamma)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = currentQ.Shape[0];
+        var negativeInfinity = new Tensor<T>(currentQ.Shape.ToArray());
+        engine.TensorFill(negativeInfinity, ops.FromDouble(double.NegativeInfinity));
+
+        var bestAction = engine.Reshape(
+            engine.TensorArgMax(engine.TensorWhere(legal, selectionQ, negativeInfinity), 1), new[] { n, 1 });
+        var maxNextQ = engine.Reshape(engine.TensorTakeAlongDim(evaluationQ, bestAction, 1), new[] { n });
+        var tdTarget = engine.TensorWhere(
+            done, rewards, engine.TensorAdd(rewards, engine.TensorMultiplyScalar(maxNextQ, gamma)));
+
+        var takenSlot = engine.TensorOneHot<T>(ActionIndices(actions), currentQ.Shape[1]);
+        return engine.TensorWhere(
+            takenSlot,
+            engine.TensorBroadcastTo(engine.Reshape(tdTarget, new[] { n, 1 }), currentQ.Shape.ToArray()),
+            currentQ);
+    }
+
+    /// <summary>
+    /// Per row of one-hot actions <c>[rows, actions]</c>: the first slot within 1e-5 of 1, or 0 when none is
+    /// (the argmax of the 0/1 hit mask, whose first maximum is the first hit).
     /// </summary>
     private static Tensor<int> ActionIndices(Tensor<T> actions)
     {
         var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var hit = engine.TensorLessThan(
-            engine.TensorAbs(engine.TensorSubtractScalar(actions, NumOps.One)), NumOps.FromDouble(1e-5));
-        var firstHit = engine.TensorMultiply(hit, engine.TensorEquals(engine.TensorCumSum(hit, 1), NumOps.One));
-        return engine.TensorArgMax(firstHit, 1);
+            engine.TensorAbs(engine.TensorSubtractScalar(actions, ops.One)), ops.FromDouble(1e-5));
+        return engine.TensorArgMax(hit, 1);
     }
 
     #endregion

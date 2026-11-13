@@ -709,20 +709,27 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     }
 
     /// <summary>rho^tem: sinusoidal position encoding over the full window.</summary>
-    private Matrix<T> TemporalEmbedding(int time)
+    private Matrix<T> TemporalEmbedding(int time) => TemporalEmbedding(time, _options.HiddenDimension);
+
+    /// <summary>
+    /// The sinusoidal table <c>[time, width]</c>: <c>angle[t, f] = t / 10000^(2*(f/2) / width)</c> (2*(f/2): the
+    /// sin/cos pair index), sin on even f and cos on odd f.
+    /// </summary>
+    /// <remarks>
+    /// The table is a constant, so it is computed in double and rounded to <typeparamref name="T"/> once, as master
+    /// did. Forming the angle in <typeparamref name="T"/> rounds the frequency and the product first, an absolute
+    /// angle error that grows with t (about 1e-5 by t = 2000 in float).
+    /// </remarks>
+    internal static Matrix<T> TemporalEmbedding(int time, int width)
     {
-        int width = _options.HiddenDimension;
-        // angle[t, f] = t / 10000^(2*(f/2) / width) (2*(f/2): the sin/cos pair index); sin on even f, cos on odd.
         var engine = AiDotNetEngine.Current;
         var shape = new[] { time, width };
-        var f = engine.TensorArange<T>(0, width);
-        var pairBase = engine.TensorMultiplyScalar(
-            engine.TensorFloor(engine.TensorMultiplyScalar(f, Ops.FromDouble(0.5))), Ops.FromDouble(2.0));
-        var inverseFrequency = engine.TensorExp(
-            engine.TensorMultiplyScalar(pairBase, Ops.FromDouble(-Math.Log(10000.0) / width)));
-        var angle = engine.TensorOuter(engine.TensorArange<T>(0, time), inverseFrequency);
+        var f = engine.TensorArange<double>(0, width);
+        var pairBase = engine.TensorMultiplyScalar(engine.TensorFloor(engine.TensorMultiplyScalar(f, 0.5)), 2.0);
+        var inverseFrequency = engine.TensorExp(engine.TensorMultiplyScalar(pairBase, -Math.Log(10000.0) / width));
+        var angle = engine.TensorOuter(engine.TensorArange<double>(0, time), inverseFrequency);
         var even = engine.TensorBroadcastTo(
             engine.Reshape(engine.TensorEquals(f, pairBase), new[] { 1, width }), shape);
-        return engine.TensorWhere(even, engine.TensorSin(angle), engine.TensorCos(angle)).ToMatrix();
+        return engine.TensorWhere(even, engine.TensorSin(angle), engine.TensorCos(angle)).Cast<T>().ToMatrix();
     }
 }

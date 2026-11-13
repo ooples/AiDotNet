@@ -74,12 +74,13 @@ public static class StockformerMultiTaskLoss<T>
         // A NaN error is NOT skipped. The mask exists to drop missing LABELS, and an entry with a label
         // keeps its error: NaN there means the PREDICTION diverged, and the loss must report it.
         var error = engine.TensorAbs(engine.TensorSubtract(Tensor<T>.FromVector(predictions), label));
-        T count = engine.TensorSum(valid);
+        // The valid entries are counted in int: a 0/1 sum in Half stops growing at 2048.
+        int count = (int)engine.TensorCountNonzero(valid);
         T sumAbsolute = engine.TensorSum(engine.TensorWhere(valid, error, zeros));
 
         // Every entry masked out. The reference's mask/mean(mask) would be 0/0 here; returning zero
         // keeps the objective finite rather than propagating NaN into the summed loss.
-        return Ops.Equals(count, Ops.Zero) ? Ops.Zero : Ops.Divide(sumAbsolute, count);
+        return count == 0 ? Ops.Zero : Ops.Divide(sumAbsolute, Ops.FromDouble(count));
     }
 
     /// <summary>
@@ -122,16 +123,14 @@ public static class StockformerMultiTaskLoss<T>
                 $"Target class {bad} is outside [0, {numClasses - 1}].", nameof(targets));
         }
 
-        // -log softmax(target) = logsumexp(row) - logit(target), averaged over samples.
+        // -log softmax(target) = logsumexp(row) - logit(target), averaged over samples. The target logit is
+        // gathered by int class index: comparing class ids in T merges neighbouring classes once they pass what T
+        // represents exactly (in Half 2049 rounds to 2048).
         var shape = new[] { samples, numClasses };
         var rows = engine.Reshape(Tensor<T>.FromVector(logits), shape);
         var logSumExp = engine.TensorLogSumExp(rows, 1, keepDims: false);
-        var classIds = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorArange<T>(0, numClasses), new[] { 1, numClasses }), shape);
-        var oneHot = engine.TensorEquals(
-            classIds, engine.TensorBroadcastTo(engine.Reshape(target, new[] { samples, 1 }), shape));
-        var picked = engine.ReduceSum(
-            engine.TensorWhere(oneHot, rows, new Tensor<T>(shape)), new[] { 1 }, keepDims: false);
+        var classIndex = engine.Reshape(target.Cast<int>(), new[] { samples, 1 });
+        var picked = engine.Reshape(engine.TensorTakeAlongDim(rows, classIndex, 1), new[] { samples });
         return Ops.Divide(engine.TensorSum(engine.TensorSubtract(logSumExp, picked)), Ops.FromDouble(samples));
     }
 

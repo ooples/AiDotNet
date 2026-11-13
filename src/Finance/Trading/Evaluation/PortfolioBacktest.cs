@@ -207,9 +207,12 @@ public static class BaselinePolicies
             var first = engine.TensorSlice(prices, new[] { 0, 0 }, new[] { 1, tradableCount });
             var last = engine.TensorSlice(prices, new[] { windowSize - 1, 0 }, new[] { 1, tradableCount });
             var winners = engine.Reshape(engine.TensorGreaterThan(last, first), new[] { tradableCount });
-            T count = engine.TensorSum(winners);
-            return ops.GreaterThan(count, ops.Zero)
-                ? engine.TensorDivideScalar(winners, count).ToVector()
+
+            // The winners are counted in int (a 0/1 sum in Half stops at 2048) and each gets 1 / count, formed in
+            // double and rounded once as master did.
+            int count = (int)engine.TensorCountNonzero(winners);
+            return count > 0
+                ? engine.TensorMultiplyScalar(winners, ops.FromDouble(1.0 / count)).ToVector()
                 : new Vector<T>(tradableCount);
         };
     }
@@ -239,7 +242,8 @@ public static class BaselinePolicies
             var valid = engine.TensorGreaterThan(prev, ops.Zero);
             var safePrev = engine.TensorWhere(valid, prev, engine.TensorAddScalar(zeros, ops.One));
             var r = engine.TensorWhere(valid, engine.TensorDivide(engine.TensorSubtract(cur, prev), safePrev), zeros);
-            var m = engine.ReduceSum(valid, new[] { 0 }, keepDims: false);
+            // Valid-return counts per asset are summed in int: a 0/1 sum in Half stops at 2048.
+            var m = engine.ReduceSum(valid.Cast<int>(), new[] { 0 }, keepDims: false).Cast<T>();
             var sr = engine.ReduceSum(r, new[] { 0 }, keepDims: false);
             var sr2 = engine.ReduceSum(engine.TensorSquare(r), new[] { 0 }, keepDims: false);
 
@@ -249,7 +253,9 @@ public static class BaselinePolicies
             var mu = engine.TensorDivide(sr, mSafe);
             var variance = engine.TensorClampMin(
                 engine.TensorSubtract(engine.TensorDivide(sr2, mSafe), engine.TensorSquare(mu)), ops.Zero);
-            var vol = engine.TensorAddScalar(engine.TensorSqrt(variance), ops.FromDouble(1e-6));
+            // The 1e-6 floor is a Tolerance: in Half 1e-6 is subnormal and 1 / 1e-6 overflows to infinity, which
+            // turned a zero-volatility asset into an inf / inf = NaN weight.
+            var vol = engine.TensorAddScalar(engine.TensorSqrt(variance), FinanceNumerics.Tolerance<T>(1e-6));
             var invVol = engine.TensorWhere(
                 engine.TensorGreaterThan(m, ops.One),
                 engine.TensorReciprocal(vol),

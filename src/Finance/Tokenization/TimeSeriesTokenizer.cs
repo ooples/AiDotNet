@@ -223,15 +223,22 @@ public class TimeSeriesTokenizer<T>
         if (len == 0)
             return (Array.Empty<int>(), new Tensor<T>(new[] { NumOps.Zero, NumOps.One }, new[] { 2 }));
 
+        // The range and its degenerate-range guard are formed in double from the two extremes: in Half the 1e-10
+        // guard rounds to zero, so a constant series divided 0 by 0.
         var engine = AiDotNetEngine.Current;
         T min = engine.TensorMinValue(series);
-        T range = NumOps.Subtract(engine.TensorMaxValue(series), min);
-        if (NumOps.LessThan(range, NumOps.FromDouble(1e-10))) range = NumOps.One;
+        double minValue = NumOps.ToDouble(min);
+        double rangeValue = NumOps.ToDouble(engine.TensorMaxValue(series)) - minValue;
+        if (rangeValue < 1e-10) rangeValue = 1.0;
+        T range = NumOps.FromDouble(rangeValue);
 
-        // Edges min + range * i / V for i = 0..V.
+        // Edges min + range * i / V for i = 0..V: a schedule, computed in double and rounded to T once.
         T vocabulary = NumOps.FromDouble(VocabularySize);
         var binEdges = engine.TensorAddScalar(
-            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, VocabularySize + 1), NumOps.Divide(range, vocabulary)), min);
+            engine.TensorDivideScalar(
+                engine.TensorMultiplyScalar(engine.TensorArange<double>(0, VocabularySize + 1), rangeValue),
+                (double)VocabularySize),
+            minValue).Cast<T>();
 
         // Map value to bin index [0, VocabularySize-1] using consistent binEdges spacing
         var scaled = engine.TensorMultiplyScalar(

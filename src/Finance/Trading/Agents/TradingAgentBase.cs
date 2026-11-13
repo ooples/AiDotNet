@@ -532,39 +532,50 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// We annualize assuming 252 trading days per year.
     /// </para>
     /// </remarks>
-    protected virtual T CalculateSharpeRatio()
+    protected virtual T CalculateSharpeRatio() => ComputeSharpeRatio(PortfolioHistory, TradingOptions.RiskFreeRate);
+
+    /// <summary>
+    /// Annualized Sharpe ratio of the simple returns of <paramref name="history"/> over steps whose previous value is
+    /// positive: <c>(mean - riskFreeRate / 252) / std * sqrt(252)</c> with the sample (n - 1) standard deviation;
+    /// zero with fewer than two valid returns or a degenerate standard deviation.
+    /// </summary>
+    /// <remarks>
+    /// The number of valid returns is counted in <c>int</c>: a 0/1 sum in Half stops growing at 2048, which would
+    /// skew the mean and the variance of any longer history.
+    /// </remarks>
+    internal static T ComputeSharpeRatio(IReadOnlyList<T> history, double riskFreeRate)
     {
-        if (PortfolioHistory.Count < 2) return NumOps.Zero;
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (history.Count < 2) return ops.Zero;
 
         // Simple returns over steps whose previous value is positive.
         var engine = AiDotNetEngine.Current;
-        int steps = PortfolioHistory.Count - 1;
-        var history = new Tensor<T>(PortfolioHistory.ToArray(), new[] { PortfolioHistory.Count });
-        var prev = engine.TensorSlice(history, new[] { 0 }, new[] { steps });
-        var curr = engine.TensorSlice(history, new[] { 1 }, new[] { steps });
-        var valid = engine.TensorGreaterThan(prev, NumOps.Zero);
-        T count = engine.TensorSum(valid);
-        if (NumOps.LessThan(count, NumOps.FromDouble(2))) return NumOps.Zero;
+        int steps = history.Count - 1;
+        var values = new Tensor<T>(history.ToArray(), new[] { history.Count });
+        var prev = engine.TensorSlice(values, new[] { 0 }, new[] { steps });
+        var curr = engine.TensorSlice(values, new[] { 1 }, new[] { steps });
+        var valid = engine.TensorGreaterThan(prev, ops.Zero);
+        int count = (int)engine.TensorCountNonzero(valid);
+        if (count < 2) return ops.Zero;
 
         var zeros = new Tensor<T>(new[] { steps });
-        var safePrev = engine.TensorWhere(valid, prev, engine.TensorAddScalar(zeros, NumOps.One));
+        var safePrev = engine.TensorWhere(valid, prev, engine.TensorAddScalar(zeros, ops.One));
         var returns = engine.TensorWhere(valid, engine.TensorDivide(engine.TensorSubtract(curr, prev), safePrev), zeros);
 
         // Mean and sample standard deviation of the valid returns.
-        T meanReturn = NumOps.Divide(engine.TensorSum(returns), count);
+        T meanReturn = ops.Divide(engine.TensorSum(returns), ops.FromDouble(count));
         var deviations = engine.TensorWhere(valid, engine.TensorSubtractScalar(returns, meanReturn), zeros);
-        T variance = NumOps.Divide(engine.TensorSumOfSquares(deviations), NumOps.Subtract(count, NumOps.One));
-        T stdDev = NumOps.Sqrt(variance);
+        T variance = ops.Divide(engine.TensorSumOfSquares(deviations), ops.FromDouble(count - 1));
+        T stdDev = ops.Sqrt(variance);
 
-        if (NumOps.LessThan(stdDev, NumOps.FromDouble(1e-10))) return NumOps.Zero;
+        if (ops.LessThan(stdDev, AiDotNet.Finance.FinanceNumerics.Tolerance<T>(1e-10))) return ops.Zero;
 
-        // Calculate Sharpe ratio (annualized, assuming risk-free rate = 0)
-        T riskFreeRate = NumOps.FromDouble(TradingOptions.RiskFreeRate / 252.0); // Daily rate
-        T excessReturn = NumOps.Subtract(meanReturn, riskFreeRate);
-        T sharpe = NumOps.Divide(excessReturn, stdDev);
+        // Calculate Sharpe ratio (annualized)
+        T dailyRiskFreeRate = ops.FromDouble(riskFreeRate / 252.0);
+        T sharpe = ops.Divide(ops.Subtract(meanReturn, dailyRiskFreeRate), stdDev);
 
         // Annualize
-        return NumOps.Multiply(sharpe, NumOps.FromDouble(Math.Sqrt(252)));
+        return ops.Multiply(sharpe, ops.FromDouble(Math.Sqrt(252)));
     }
 
     /// <summary>
@@ -683,16 +694,15 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// </summary>
     protected Vector<T> AddGaussianExplorationNoise(Vector<T> action, double standardDeviation)
     {
-        // The standard-normal draws in master's order; action + sigma * z on the whole vector.
-        var draws = new Tensor<T>(new[] { action.Length });
+        // The noise sigma * z, one standard-normal draw per component in master's order, each formed in double and
+        // rounded to T once (rounding z and sigma to T first would add two roundings); then action + noise.
+        var noise = new Tensor<T>(new[] { action.Length });
         for (int i = 0; i < action.Length; i++)
         {
-            draws[i] = NumOps.FromDouble(NextStandardNormal());
+            noise[i] = NumOps.FromDouble(standardDeviation * NextStandardNormal());
         }
 
-        var engine = AiDotNetEngine.Current;
-        return engine.TensorAdd(
-            Tensor<T>.FromVector(action), engine.TensorMultiplyScalar(draws, NumOps.FromDouble(standardDeviation))).ToVector();
+        return AiDotNetEngine.Current.TensorAdd(Tensor<T>.FromVector(action), noise).ToVector();
     }
 
     /// <summary>
@@ -730,7 +740,8 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// <para>
     /// This is the log-probability of the behaviour policy an agent with a deterministic actor head plus
     /// Gaussian exploration actually follows, which is exactly the <c>log pi(a|s)</c> the SAC soft value
-    /// target needs. Computed in double precision so a float agent does not lose the tail.
+    /// target needs. Computed in <typeparamref name="T"/> with engine operations; only the constant normalizer
+    /// <c>n/2 * log(2 pi)</c> is formed in double.
     /// </para>
     /// </remarks>
     protected T GaussianLogProbability(Vector<T> action, Vector<T> mean, Vector<T> logStds)

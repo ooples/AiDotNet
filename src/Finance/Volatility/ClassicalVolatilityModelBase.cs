@@ -109,11 +109,21 @@ public abstract class ClassicalVolatilityModelBase<T> :
     {
         var engine = AiDotNetEngine.Current;
         int tau = Math.Min(BackcastLength, residuals.Length);
-        var weights = engine.TensorExp(engine.TensorMultiplyScalar(
-            engine.TensorArange<T>(0, tau), NumOps.FromDouble(Math.Log(BackcastDecay))));
         var head = engine.TensorSlice(residuals, new[] { 0 }, new[] { tau });
-        T weighted = engine.TensorSum(engine.TensorMultiply(engine.TensorSquare(head), weights));
-        return NumOps.Divide(weighted, engine.TensorSum(weights));
+        return engine.TensorSum(engine.TensorMultiply(engine.TensorSquare(head), BackcastWeights(tau)));
+    }
+
+    /// <summary>
+    /// arch's backcast weights <c>w_i = 0.94^i / sum_j 0.94^j</c> for <c>i &lt; tau</c>. They are a constant schedule,
+    /// so they are computed and normalised in double and rounded to <typeparamref name="T"/> once; forming
+    /// <c>i * ln 0.94</c> in <typeparamref name="T"/> would round the decay first and let the error grow with i.
+    /// </summary>
+    internal static Tensor<T> BackcastWeights(int tau)
+    {
+        var engine = AiDotNetEngine.Current;
+        var weights = engine.TensorExp(engine.TensorMultiplyScalar(
+            engine.TensorArange<double>(0, tau), Math.Log(BackcastDecay)));
+        return engine.TensorDivideScalar(weights, engine.TensorSum(weights)).Cast<T>();
     }
 
     /// <summary>

@@ -274,19 +274,34 @@ public sealed class StockformerDualEncoder<T>
     {
         if (_causalWindowOperators.TryGetValue(time, out var cached)) return cached;
 
-        // op[t, u] = 1 / (window size) for t - kernelWidth < u <= t: lag = t - u in [0, kernelWidth).
-        var positions = Engine.TensorArange<T>(0, time);
-        var lag = Engine.TensorSubtract(
-            Engine.TensorBroadcastTo(Engine.Reshape(positions, new[] { time, 1 }), new[] { time, time }),
-            Engine.TensorBroadcastTo(Engine.Reshape(positions, new[] { 1, time }), new[] { time, time }));
-        var inWindow = Engine.TensorMultiply(
-            Engine.TensorGreaterThan(lag, Ops.FromDouble(-0.5)),
-            Engine.TensorLessThan(lag, Ops.FromDouble(_kernelWidth - 0.5)));
-        var count = Engine.ReduceSum(inWindow, new[] { 1 }, keepDims: true);
-        var op = Engine.TensorDivide(inWindow, Engine.TensorBroadcastTo(count, new[] { time, time }));
-
+        var op = BuildCausalWindowOperator(time, _kernelWidth);
         _causalWindowOperators[time] = op;
         return op;
+    }
+
+    /// <summary>
+    /// The causal moving-average operator <c>[time, time]</c>: <c>op[t, u] = 1 / (window size)</c> for
+    /// <c>t - kernelWidth &lt; u &lt;= t</c>, i.e. lag <c>t - u</c> in <c>[0, kernelWidth)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Positions, lags and window sizes are <c>int</c>; only the 0/1 window and its row weights become
+    /// <typeparamref name="T"/>. Positions held in <typeparamref name="T"/> merge once they pass what it
+    /// represents exactly (in Half 2049 rounds to 2048), which widened windows past that point.
+    /// </remarks>
+    internal static Tensor<T> BuildCausalWindowOperator(int time, int kernelWidth)
+    {
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { time, time };
+        var positions = engine.TensorArange<int>(0, time);
+        var lag = engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(positions, new[] { time, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(positions, new[] { 1, time }), shape));
+        var inWindow = engine.TensorMultiply(
+            engine.TensorGreaterThan(lag, -1),
+            engine.TensorLessThan(lag, kernelWidth));
+        var windowSize = engine.ReduceSum(inWindow, new[] { 1 }, keepDims: true);
+        return engine.TensorDivide(
+            inWindow.Cast<T>(), engine.TensorBroadcastTo(windowSize.Cast<T>(), shape));
     }
 
     /// <summary>Causal local mean over the last <c>kernelWidth</c> steps, as a matmul so it stays on the tape.</summary>

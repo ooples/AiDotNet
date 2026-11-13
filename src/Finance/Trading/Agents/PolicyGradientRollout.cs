@@ -21,7 +21,12 @@ internal static class PolicyGradientRollout<T>
     private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>The per-step loss weights adv_t · 0.5 / σ², from the discounted returns whitened over the episode.</summary>
-    public static Tensor<T> LossWeights(IReadOnlyList<T> rewards, T gamma, T sigma)
+    /// <remarks>
+    /// The 1e-8 floor on the standard deviation is a <see cref="FinanceNumerics.Tolerance{T}"/> (it rounds to zero
+    /// in Half), and the whitening divides before it scales: a constant-return episode then gives 0 / floor = 0
+    /// rather than 0 times an overflowed 0.5 / (σ² · floor).
+    /// </remarks>
+    public static Tensor<T> LossWeights(IReadOnlyList<T> rewards, T gamma, double sigma)
     {
         int n = rewards.Count;
         if (n == 0)
@@ -34,10 +39,10 @@ internal static class PolicyGradientRollout<T>
         var centred = Engine.TensorSubtractScalar(returns, Engine.TensorMean(returns));
         T std = NumOps.Add(
             NumOps.Sqrt(NumOps.Divide(Engine.TensorSumOfSquares(centred), NumOps.FromDouble(n))),
-            NumOps.FromDouble(1e-8));
+            FinanceNumerics.Tolerance<T>(1e-8));
 
-        T halfInvSigma2 = NumOps.Divide(NumOps.FromDouble(0.5), NumOps.Multiply(sigma, sigma));
-        return Engine.TensorMultiplyScalar(centred, NumOps.Divide(halfInvSigma2, std));
+        T halfInvSigma2 = NumOps.FromDouble(0.5 / (sigma * sigma));
+        return Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(centred, std), halfInvSigma2);
     }
 
     /// <summary>
@@ -64,12 +69,12 @@ internal static class PolicyGradientRollout<T>
         }, 0);
 
     /// <summary>
-    /// The explored action <c>clip(μ + σ·z, −1, 1)</c> for policy means and standard-normal draws of the same shape;
+    /// The explored action <c>clip(μ + noise, −1, 1)</c> for policy means and exploration noise of the same shape;
     /// without exploration the clipped mean.
     /// </summary>
-    public static Vector<T> Act(Tensor<T> mean, Tensor<T>? draws, T sigma)
+    public static Vector<T> Act(Tensor<T> mean, Tensor<T>? noise)
     {
-        var perturbed = draws is null ? mean : Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(draws, sigma));
+        var perturbed = noise is null ? mean : Engine.TensorAdd(mean, noise);
         var flat = Engine.Reshape(perturbed, new[] { perturbed.Length });
         return Engine.TensorClamp(flat, NumOps.Negate(NumOps.One), NumOps.One).ToVector();
     }

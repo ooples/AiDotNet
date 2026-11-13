@@ -39,7 +39,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     private readonly int _stateDim;
     private readonly int _actionDim;
     private readonly int _hidden;
-    private readonly T _sigma;
+    private readonly double _sigma;
     private readonly T _gamma;
     private readonly Random _rng;
 
@@ -84,7 +84,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         _stateDim = stateDim;
         _actionDim = actionDim;
         _hidden = hidden;
-        _sigma = NumOps.FromDouble(explorationSigma > 1e-6 ? explorationSigma : 1e-6);
+        _sigma = explorationSigma > 1e-6 ? explorationSigma : 1e-6;
         _gamma = NumOps.FromDouble(gamma);
         _rng = RandomHelper.CreateSeededRandom(seed);
 
@@ -106,15 +106,18 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         ResetHidden();
     }
 
-    private static Tensor<T> CreateRandom(int[] shape, double stddev, int seed)
+    /// <summary>
+    /// Weights uniform on <c>(-stddev, stddev)</c> from a generator seeded with <paramref name="seed"/>. Each draw is
+    /// <c>(2u - 1) · stddev</c> formed in double and rounded to <typeparamref name="T"/> once; rounding u to
+    /// <typeparamref name="T"/> before scaling would add a second rounding to every weight.
+    /// </summary>
+    internal static Tensor<T> CreateRandom(int[] shape, double stddev, int seed)
     {
-        // The uniform draws in master's order; U(-stddev, stddev) = (2u - 1) * stddev on the whole tensor.
         var rng = RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<T>(shape);
         for (int i = 0; i < t.Length; i++)
-            t[i] = NumOps.FromDouble(rng.NextDouble());
-        var centred = Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(t, NumOps.FromDouble(2.0)), NumOps.One);
-        return Engine.TensorMultiplyScalar(centred, NumOps.FromDouble(stddev));
+            t[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * stddev);
+        return t;
     }
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(_h), nameof(_c))]
@@ -141,18 +144,18 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         var xt = Engine.Reshape(PolicyGradientRollout<T>.Column(state, _stateDim), new[] { _stateDim, 1 });
         var mean = Forward(xt); // advances the recurrent state (must happen on every act, incl. inference) -> [A,1]
 
-        // The Gaussian draws in master's order (one per action, only when exploring); the action is then
-        // clip(mean + sigma * z, -1, 1) on the whole tensor.
-        Tensor<T>? draws = null;
+        // The exploration noise sigma * z, one Gaussian draw per action in master's order (only when exploring), each
+        // formed in double and rounded to T once; the action is then clip(mean + noise, -1, 1) on the whole tensor.
+        Tensor<T>? noise = null;
         if (explore)
         {
-            draws = new Tensor<T>(new[] { _actionDim, 1 });
-            for (int a = 0; a < _actionDim; a++) draws[a, 0] = NumOps.FromDouble(_rng.NextGaussian());
+            noise = new Tensor<T>(new[] { _actionDim, 1 });
+            for (int a = 0; a < _actionDim; a++) noise[a, 0] = NumOps.FromDouble(_sigma * _rng.NextGaussian());
         }
 
         // The hidden state advances above (a recurrent policy must), but the rollout is NOT recorded here — so a
         // greedy backtest that never calls StoreExperience cannot grow or contaminate the training buffers.
-        return PolicyGradientRollout<T>.Act(mean, draws, _sigma);
+        return PolicyGradientRollout<T>.Act(mean, noise);
     }
 
     /// <inheritdoc />
