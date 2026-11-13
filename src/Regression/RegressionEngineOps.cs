@@ -136,11 +136,34 @@ internal static class RegressionEngineOps
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var raw = engine.Subtract(sumWy2, engine.Divide(engine.Multiply(sumWy, sumWy), sumW));
+        var raw = engine.Subtract(sumWy2, DivideWherePositive(engine.Multiply(sumWy, sumWy), sumW));
         return engine.TensorWhere(
             engine.TensorGreaterThan(Tensor<T>.FromVector(sumW), numOps.Zero),
             Tensor<T>.FromVector(raw),
             Tensor<T>.FromVector(engine.FillZero<T>(sumW.Length))).ToVector();
+    }
+
+    /// <summary>
+    /// Element-wise numerator / denominator where the denominator is positive, else 0.
+    /// </summary>
+    /// <remarks>
+    /// The engine's vector Divide throws on a zero divisor, where scalar division gave NaN or infinity for the
+    /// masking that followed to discard. The divisor is replaced by one outside the positive positions first, so an
+    /// empty group (a zero count, weight or hessian) yields 0 instead of failing the whole split search.
+    /// </remarks>
+    public static Vector<T> DivideWherePositive<T>(Vector<T> numerator, Vector<T> denominator)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var positive = engine.TensorGreaterThan(Tensor<T>.FromVector(denominator), numOps.Zero);
+        var safeDenominator = engine.TensorWhere(
+            positive,
+            Tensor<T>.FromVector(denominator),
+            Tensor<T>.FromVector(engine.Fill(denominator.Length, numOps.One))).ToVector();
+        return engine.TensorWhere(
+            positive,
+            Tensor<T>.FromVector(engine.Divide(numerator, safeDenominator)),
+            Tensor<T>.FromVector(engine.FillZero<T>(denominator.Length))).ToVector();
     }
 
     /// <summary>
