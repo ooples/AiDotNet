@@ -4540,8 +4540,6 @@
 2	ADNELEM001|AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.TryBuildModelPredict()
 2	ADNELEM001|AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.TryCreateLayerWeightsFunction()
 1	ADNELEM001|AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.ValidateAndSanitizeMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix<T>)
-2	ADNELEM001|AiDotNet.Models.Results.MetaTrainingResult<T>.FindBestAccuracy()
-2	ADNELEM001|AiDotNet.Models.Results.MetaTrainingResult<T>.FindBestLoss()
 3	ADNELEM001|AiDotNet.Models.Results.SegmentationVisualizer.EncodeBmp<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM001|AiDotNet.Models.Results.SegmentationVisualizer.OwnerAt<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, AiDotNet.Tensors.Interfaces.INumericOperations<T>, int, int)
 3	ADNELEM001|AiDotNet.Models.VectorModel<T>.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>, T)
