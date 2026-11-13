@@ -166,7 +166,7 @@ public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var masked = distances.Clone();
         engine.TensorFillDiagonalInPlace(masked, NumOps.FromDouble(double.PositiveInfinity));
         var (sorted, _) = engine.TensorSort(masked, 1, false);
-        var epsilon = engine.TensorClampMin(engine.TensorNarrow(sorted, 1, k - 1, 1), NumOps.FromDouble(1e-10));   // [n, 1]
+        var epsilon = engine.TensorClampMin(engine.TensorNarrow(sorted, 1, k - 1, 1), DimensionalityReductionOps.Tolerance<T>(1e-10));   // [n, 1]
 
         // Adaptive bandwidth: geometric mean of bandwidths
         var bandwidth = engine.TensorSqrt(engine.TensorMatMul(epsilon, engine.TensorTranspose(epsilon)));
@@ -183,7 +183,7 @@ public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         var engine = Engine;
         var rowSum = engine.ReduceSum(kernel, new[] { 1 }, true);
-        var valid = engine.TensorGreaterThan(rowSum, NumOps.FromDouble(1e-10));
+        var valid = engine.TensorGreaterThan(rowSum, DimensionalityReductionOps.Tolerance<T>(1e-10));
         var normalized = engine.TensorDivide(kernel, engine.TensorWhere(valid, rowSum, engine.TensorOnesLike(rowSum)));
         var validRows = engine.TensorMultiply(engine.TensorOnesLike(kernel), valid);
         return engine.TensorWhere(validRows, normalized, DimensionalityReductionOps.Identity<T>(n));
@@ -216,7 +216,7 @@ public class PHATE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private Tensor<T> ComputePotentialDistance(Tensor<T> pt)
     {
         var engine = Engine;
-        var shifted = engine.TensorAddScalar(pt, NumOps.FromDouble(1e-10));
+        var shifted = engine.TensorAddScalar(pt, DimensionalityReductionOps.Tolerance<T>(1e-10));
         var potential = _gamma == 1
             ? engine.TensorLog(shifted)
             : engine.TensorPow(shifted, NumOps.FromDouble(1.0 / _gamma));

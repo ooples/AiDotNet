@@ -185,7 +185,7 @@ public class PCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // scikit-learn's PCA(whiten=True). Components with (near) zero variance are left unscaled.
         var componentStd = engine.TensorSqrt(keptVariance);
         _whitenScale = engine.TensorWhere(
-            engine.TensorGreaterThan(componentStd, NumOps.FromDouble(1e-10)),
+            engine.TensorGreaterThan(componentStd, DimensionalityReductionOps.Tolerance<T>(1e-10)),
             componentStd,
             engine.TensorOnesLike(componentStd));
     }

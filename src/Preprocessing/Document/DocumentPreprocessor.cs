@@ -207,7 +207,7 @@ public class DocumentPreprocessor<T> : IDisposable
 
         // Normalize to 0-1 range
         T range = _numOps.Subtract(max, min);
-        if (_numOps.LessThan(range, _numOps.FromDouble(1e-10)))
+        if (_numOps.LessThan(range, AiDotNet.Preprocessing.DimensionalityReduction.DimensionalityReductionOps.Tolerance<T>(1e-10)))
         {
             range = _numOps.One;
         }

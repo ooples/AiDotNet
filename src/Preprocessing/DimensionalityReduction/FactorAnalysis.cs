@@ -136,15 +136,15 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Initialize loadings using PCA: W = U_k sqrt(max(lambda, 1e-10))
         var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(s, descending: true);
-        var scale = engine.TensorSqrt(engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), NumOps.FromDouble(1e-10)));
+        var scale = engine.TensorSqrt(engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), DimensionalityReductionOps.Tolerance<T>(1e-10)));
         var loadings = DimensionalityReductionOps.ScaleColumns(DimensionalityReductionOps.FirstColumns(eigenvectors, k), scale);
 
         // Initialize noise variances: psi = max(S_ii - communality, 1e-6)
-        T psiFloor = NumOps.FromDouble(1e-6);
+        T psiFloor = DimensionalityReductionOps.Tolerance<T>(1e-6);
         var noiseVariance = engine.TensorClampMin(
             engine.TensorSubtract(sDiagonal, DimensionalityReductionOps.RowSums(engine.TensorSquare(loadings))), psiFloor);
 
-        T tol = NumOps.FromDouble(_tol);
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
         var identity = DimensionalityReductionOps.Identity<T>(k);
         var count = DimensionalityReductionOps.Scalar(NumOps.FromDouble(n));
 

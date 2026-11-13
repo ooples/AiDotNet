@@ -151,7 +151,10 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             engine.TensorReciprocal(rootDegree),
             engine.TensorOnesLike(rootDegree));
         var selected = DimensionalityReductionOps.SelectColumns(eigenvectors, DimensionalityReductionOps.IndexTensor(columns));
-        _embedding = DimensionalityReductionOps.ScaleRows(selected, inverseRootDegree).ToMatrix();
+        // Each vector signed so its largest-magnitude entry is positive (sklearn _deterministic_vector_sign_flip,
+        // applied after the D^(-1/2) scaling)
+        _embedding = DimensionalityReductionOps.AlignColumnSigns(
+            DimensionalityReductionOps.ScaleRows(selected, inverseRootDegree)).ToMatrix();
     }
 
     private Tensor<T> ComputeAffinityMatrix(Tensor<T> x, int n)

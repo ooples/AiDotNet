@@ -190,7 +190,7 @@ public class Isomap<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         {
             // Closest unsettled vertex for every source (first index among equal distances)
             var open = engine.TensorWhere(settled, infinite, dist);
-            var closest = engine.Reshape(engine.TensorArgMin(open, 1), new[] { n, 1 });
+            var closest = engine.Reshape(AiDotNet.AnomalyDetection.AnomalyTensorOps.FirstArgMinRows(open), new[] { n, 1 });
             settled = engine.TensorScatter(settled, closest, settleMark, 1);
 
             // Relax through the settled vertex; an unreachable vertex (infinite distance) changes nothing

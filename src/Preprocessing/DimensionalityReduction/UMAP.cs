@@ -600,7 +600,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             engine.TensorSubtractScalar(x, ops.FromDouble(minDist)), ops.FromDouble(-1.0 / spread)));
         var y = engine.TensorWhere(
             engine.TensorLessThan(x, ops.FromDouble(minDist)), engine.TensorOnesLike(x), decay);
-        var logX = engine.TensorLog(engine.TensorClampMin(x, ops.FromDouble(1e-30)));   // u log x = 0 at x = 0
+        var logX = engine.TensorLog(engine.TensorClampMin(x, DimensionalityReductionOps.Tolerance<T>(1e-30)));   // u log x = 0 at x = 0
 
         // Least squares fit of 1 / (1 + a x^(2b)) from (a, b) = (1, 1) by Levenberg-Marquardt
         T a = ops.One;
@@ -608,7 +608,7 @@ public class UMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var (residual, jacobian) = AbResidual(x, logX, y, a, b);
         T cost = engine.TensorSum(engine.TensorSquare(residual));
         double damping = 1e-3;
-        T stepTolerance = ops.FromDouble(1e-15);
+        T stepTolerance = DimensionalityReductionOps.Tolerance<T>(1e-15);
         for (int iter = 0; iter < 200; iter++)
         {
             var normal = DimensionalityReductionOps.TransposeMatMul(jacobian, jacobian);

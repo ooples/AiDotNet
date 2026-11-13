@@ -161,7 +161,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
     {
         var engine = Engine;
         var lambda = initial;
-        T tol = NumOps.FromDouble(_tol);
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
         T beta = NumOps.FromDouble(_topicWordPrior);
 
         for (int iter = 0; iter < _maxIter; iter++)
@@ -248,7 +248,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         var active = DimensionalityReductionOps.Full(new[] { docs, 1 }, NumOps.One);
         var activeOnes = DimensionalityReductionOps.Full(new[] { docs, k }, NumOps.One);
         var alpha = NumOps.FromDouble(_docTopicPrior);
-        var tolerance = NumOps.FromDouble(1e-4);
+        var tolerance = DimensionalityReductionOps.Tolerance<T>(1e-4);
 
         for (int innerIter = 0; innerIter < 20; innerIter++)
         {
@@ -340,7 +340,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
 
         // Descending stable ranking of every topic row (ties in index order, like OrderByDescending)
         int take = Math.Max(0, Math.Min(nTopWords, _nVocab));
-        var ranking = Engine.TensorArgsort(Tensor<T>.FromMatrix(_components), 1, true).AsSpan().ToArray();
+        var ranking = AiDotNet.AnomalyDetection.AnomalyTensorOps.StableSortRows(Tensor<T>.FromMatrix(_components), descending: true).Order.AsSpan().ToArray();
 
         for (int t = 0; t < k; t++)
         {

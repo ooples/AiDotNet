@@ -133,7 +133,7 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 engine.TensorSum(engine.TensorNarrow(eigenvalues, 0, _nComponents, numSmall)), NumOps.FromDouble(numSmall));
         }
 
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
         _noiseVariance = NumOps.GreaterThan(noiseVariance, floor) ? noiseVariance : floor;
 
         // W = U_d * sqrt(max(lambda_d - sigma^2, 1e-10))
@@ -221,7 +221,7 @@ public class ProbabilisticPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // log|C| from the eigenvalues of the symmetric positive-definite C
         var (eigenvalues, _) = DimensionalityReductionOps.SymmetricEigen(c, descending: true);
-        T logDet = engine.TensorSum(engine.TensorLog(engine.TensorClampMin(eigenvalues, NumOps.FromDouble(1e-10))));
+        T logDet = engine.TensorSum(engine.TensorLog(engine.TensorClampMin(eigenvalues, DimensionalityReductionOps.Tolerance<T>(1e-10))));
 
         // Mahalanobis terms (x - mu)^T C^-1 (x - mu) for every row
         var xc = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));

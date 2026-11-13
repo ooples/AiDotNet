@@ -186,7 +186,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Whitening matrix: D^(-1/2) * E^T
         var scale = engine.TensorWhere(
-            engine.TensorGreaterThan(eigenvalues, NumOps.FromDouble(1e-10)),
+            engine.TensorGreaterThan(eigenvalues, DimensionalityReductionOps.Tolerance<T>(1e-10)),
             engine.TensorRsqrt(eigenvalues),
             engine.TensorZerosLike(eigenvalues));
         var whitening = engine.TensorTranspose(DimensionalityReductionOps.ScaleColumns(eigenvectors, scale));
@@ -203,8 +203,8 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var random = RandomHelper.CreateSeededRandom(_randomState);
         T half = NumOps.FromDouble(0.5);
         T sampleCount = NumOps.FromDouble(n);
-        T tolerance = NumOps.FromDouble(_tolerance);
-        T floor = NumOps.FromDouble(1e-10);
+        T tolerance = DimensionalityReductionOps.Tolerance<T>(_tolerance);
+        T floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
         var rows = new Tensor<T>[nComponents];
 
         for (int c = 0; c < nComponents; c++)
@@ -260,7 +260,7 @@ public class FastICA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int p = x.Shape[1];
         var random = RandomHelper.CreateSeededRandom(_randomState);
         T sampleCount = NumOps.FromDouble(n);
-        T tolerance = NumOps.FromDouble(_tolerance);
+        T tolerance = DimensionalityReductionOps.Tolerance<T>(_tolerance);
         var ones = DimensionalityReductionOps.Full(new[] { nComponents }, NumOps.One);
 
         // Random initialization, then symmetric decorrelation (sklearn _ica_par)

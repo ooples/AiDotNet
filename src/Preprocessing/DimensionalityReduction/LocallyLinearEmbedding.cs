@@ -161,7 +161,7 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
 
         var weights = DimensionalityReductionOps.SolveEach(regularized, DimensionalityReductionOps.Full(new[] { n, k }, NumOps.One));
         var sums = DimensionalityReductionOps.RowSums(weights);
-        var nonZero = engine.TensorGreaterThan(engine.TensorAbs(sums), NumOps.FromDouble(1e-10));
+        var nonZero = engine.TensorGreaterThan(engine.TensorAbs(sums), DimensionalityReductionOps.Tolerance<T>(1e-10));
         var divisor = engine.TensorWhere(nonZero, sums, DimensionalityReductionOps.Full(n, NumOps.One));
         weights = engine.TensorDivide(weights, DimensionalityReductionOps.AsColumn(divisor));
 
@@ -266,7 +266,7 @@ public class LocallyLinearEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         var gram = engine.TensorAdd(
             DimensionalityReductionOps.BatchTransposeMatMul(theta, theta),
             engine.Reshape(
-                engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(dt), NumOps.FromDouble(1e-6)),
+                engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(dt), DimensionalityReductionOps.Tolerance<T>(1e-6)),
                 new[] { 1, dt, dt }));
         var solved = DimensionalityReductionOps.SolveEach(gram, engine.TensorSwapAxes(theta, 1, 2));   // [n, dt, k]
         var w = engine.TensorBatchMatMul(theta, solved);                                                    // [n, k, k]

@@ -93,18 +93,30 @@ public class Binarization<T> : IDisposable
         var flat = engine.Reshape(gray, new[] { gray.Length });
         var bins = engine.TensorClamp(engine.TensorFloor(engine.TensorMultiplyScalar(flat, _numOps.FromDouble(255.0))),
             _numOps.Zero, _numOps.FromDouble(255.0)).Cast<int>();
-        var histogram = engine.TensorIndexAdd(new Tensor<T>(new[] { 256 }), 0, bins, engine.TensorOnesLike(flat));
+        // Histogram counted in int (a running count in Half stops at 2048), then turned into bin probabilities
+        // count / n without materialising a count in T: count = hi * 2048 + lo, p = hi * (2048 / n) + lo / n, so
+        // every value cast to T is below 2048 (exact in Half) as long as n < 2048^2
+        var histogram = engine.TensorBinCount(bins, 256);
+        int total = gray.Length;
+        var counts = histogram.ToArray();
+        var high = new Tensor<int>(counts.Select(count => count / 2048).ToArray(), new[] { 256 });
+        var low = new Tensor<int>(counts.Select(count => count % 2048).ToArray(), new[] { 256 });
+        var probabilities = engine.TensorAdd(
+            engine.TensorMultiplyScalar(high.Cast<T>(), _numOps.FromDouble(2048.0 / total)),
+            engine.TensorMultiplyScalar(low.Cast<T>(), _numOps.FromDouble(1.0 / total)));
 
-        // Otsu between-class variance for every threshold t: wB wF (mB - mF)^2, zero where a class is empty
+        // Otsu between-class variance for every threshold t in class probabilities: wB wF (mB - mF)^2 (the count
+        // form divided by n^2, so the same maximiser), zero where a class is empty; class emptiness is decided on the
+        // int counts
         var levels = Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, 256))).Cast<T>();
-        var wB = engine.TensorCumSum(histogram, 0);
-        var sumB = engine.TensorCumSum(engine.TensorMultiply(levels, histogram), 0);
-        var total = engine.TensorSum(histogram);
-        var sum = engine.TensorSum(engine.TensorMultiply(levels, histogram));
-        var wF = engine.TensorSubtract(Tensor<T>.CreateDefault(new[] { 256 }, total), wB);
+        var wB = engine.TensorCumSum(probabilities, 0);
+        var sumB = engine.TensorCumSum(engine.TensorMultiply(levels, probabilities), 0);
+        T sum = engine.TensorSum(engine.TensorMultiply(levels, probabilities));
+        var wF = engine.TensorSubtract(Tensor<T>.CreateDefault(new[] { 256 }, _numOps.One), wB);
 
-        var zero = _numOps.Zero;
-        var valid = engine.TensorMultiply(engine.TensorGreaterThan(wB, zero), engine.TensorGreaterThan(wF, zero));
+        var countB = engine.TensorCumSum(histogram, 0);
+        var valid = engine.TensorMultiply(
+            engine.TensorGreaterThan(countB, 0), engine.TensorLessThan(countB, total)).Cast<T>();
         var ones = engine.TensorOnesLike(wB);
         var mB = engine.TensorDivide(sumB, engine.TensorWhere(valid, wB, ones));
         var mF = engine.TensorDivide(
@@ -112,8 +124,9 @@ public class Binarization<T> : IDisposable
         var variance = engine.TensorMultiply(
             engine.TensorMultiply(engine.TensorMultiply(wB, wF), engine.TensorSquare(engine.TensorSubtract(mB, mF))), valid);
 
-        // First threshold with the largest variance (0 when no split exists)
-        int threshold = engine.TensorArgMax(variance, 0)[0];
+        // First threshold with the largest variance (0 when no split exists); the engine arg max does not promise
+        // the first index on ties
+        int threshold = AiDotNet.AnomalyDetection.AnomalyTensorOps.FirstArgMax(variance);
 
         double normalizedThreshold = threshold / 255.0;
         return ApplyThreshold(gray, normalizedThreshold);

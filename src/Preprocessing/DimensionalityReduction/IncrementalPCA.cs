@@ -266,7 +266,7 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>Explained variance divided by the total, or zeros when the total is (near) zero.</summary>
     private Tensor<T> VarianceRatio(Tensor<T> explainedVariance, T totalVariance)
     {
-        return NumOps.GreaterThan(totalVariance, NumOps.FromDouble(1e-10))
+        return NumOps.GreaterThan(totalVariance, DimensionalityReductionOps.Tolerance<T>(1e-10))
             ? Engine.TensorDivideScalar(explainedVariance, totalVariance)
             : Engine.TensorZerosLike(explainedVariance);
     }
@@ -279,7 +279,7 @@ public class IncrementalPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         var engine = Engine;
         var std = engine.TensorSqrt(Tensor<T>.FromVector(explainedVariance));
-        return engine.TensorWhere(engine.TensorGreaterThan(std, NumOps.FromDouble(1e-10)), std, engine.TensorOnesLike(std));
+        return engine.TensorWhere(engine.TensorGreaterThan(std, DimensionalityReductionOps.Tolerance<T>(1e-10)), std, engine.TensorOnesLike(std));
     }
 
     /// <summary>

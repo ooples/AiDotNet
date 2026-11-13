@@ -123,21 +123,31 @@ public class TruncatedSVD<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Right singular vectors are the eigenvectors of X^T X; the singular values are sqrt(eigenvalues)
         var gram = DimensionalityReductionOps.TransposeMatMul(x, x);
+        // Components signed like scikit-learn's svd_flip(u_based_decision=False): largest-magnitude entry positive
         var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(gram, descending: true);
-        // Signs as the original deflated power iteration converges to them from its seeded start vectors
-        eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors,
-            DimensionalityReductionOps.PowerIterationStarts<T>(RandomHelper.CreateSeededRandom(_randomState), k, p, 0.5));
-        var explainedVariance = engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), NumOps.Zero);
+        var squaredSingularValues = engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), NumOps.Zero);
+        var components = engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, k));
 
-        T totalVariance = engine.TensorSum(engine.TensorSquare(x));
-        var explainedVarianceRatio = NumOps.GreaterThan(totalVariance, NumOps.FromDouble(1e-10))
+        // As scikit-learn: explained_variance_ = var(X V^T, axis=0) and the ratio is over var(X, axis=0).sum()
+        // (population variances, the data itself is not centred)
+        var projected = DimensionalityReductionOps.MatMulTranspose(x, components);
+        var explainedVariance = ColumnVariances(projected);
+        T totalVariance = engine.TensorSum(ColumnVariances(x));
+        var explainedVarianceRatio = NumOps.GreaterThan(totalVariance, DimensionalityReductionOps.Tolerance<T>(1e-10))
             ? engine.TensorDivideScalar(explainedVariance, totalVariance)
             : new Tensor<T>(new[] { k });
 
-        _components = engine.TensorTranspose(DimensionalityReductionOps.FirstColumns(eigenvectors, k)).ToMatrix();
-        _singularValues = engine.TensorSqrt(explainedVariance).ToVector();
+        _components = components.ToMatrix();
+        _singularValues = engine.TensorSqrt(squaredSingularValues).ToVector();
         _explainedVariance = explainedVariance.ToVector();
         _explainedVarianceRatio = explainedVarianceRatio.ToVector();
+    }
+
+    /// <summary>Population (ddof = 0) variance of every column of a [n, p] tensor.</summary>
+    private Tensor<T> ColumnVariances(Tensor<T> x)
+    {
+        var centered = DimensionalityReductionOps.SubtractRow(x, DimensionalityReductionOps.ColumnMeans(x));
+        return Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, false);
     }
 
     /// <summary>

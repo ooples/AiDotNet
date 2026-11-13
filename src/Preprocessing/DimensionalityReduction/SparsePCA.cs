@@ -146,7 +146,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Alternating optimization
         var errorHistory = new List<T>();
-        T tol = NumOps.FromDouble(_tol);
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
 
         for (int iter = 0; iter < _maxIter; iter++)
         {
@@ -194,7 +194,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var engine = Engine;
         int k = components.Shape[0];
         var alpha = DimensionalityReductionOps.Scalar(NumOps.FromDouble(_alpha));
-        var floor = NumOps.FromDouble(1e-10);
+        var floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
 
         for (int c = 0; c < k; c++)
         {

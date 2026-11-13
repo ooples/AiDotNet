@@ -133,7 +133,7 @@ public class ModifiedLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var reg = engine.TensorMultiplyScalar(
             DimensionalityReductionOps.BatchTrace(covariances), NumOps.FromDouble(_regParam / k));
         reg = engine.TensorWhere(
-            engine.TensorLessThan(reg, NumOps.FromDouble(1e-10)), DimensionalityReductionOps.Full(n, NumOps.FromDouble(1e-3)), reg);
+            engine.TensorLessThan(reg, DimensionalityReductionOps.Tolerance<T>(1e-10)), DimensionalityReductionOps.Full(n, DimensionalityReductionOps.Tolerance<T>(1e-3)), reg);
         var regularized = engine.TensorAdd(
             covariances,
             engine.TensorMultiply(
@@ -143,7 +143,7 @@ public class ModifiedLLE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Solve C_i w_i = 1 and normalize to sum one where the sum is not ~0
         var weights = DimensionalityReductionOps.SolveEach(regularized, DimensionalityReductionOps.Full(new[] { n, k }, NumOps.One));
         var sums = DimensionalityReductionOps.RowSums(weights);
-        var nonZero = engine.TensorGreaterThan(engine.TensorAbs(sums), NumOps.FromDouble(1e-10));
+        var nonZero = engine.TensorGreaterThan(engine.TensorAbs(sums), DimensionalityReductionOps.Tolerance<T>(1e-10));
         var divisor = engine.TensorWhere(nonZero, sums, DimensionalityReductionOps.Full(n, NumOps.One));
         weights = engine.TensorDivide(weights, DimensionalityReductionOps.AsColumn(divisor));
 

@@ -155,7 +155,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         var components = DimensionalityReductionOps.NormalizeRows(engine.TensorConcatenate(atoms, 0));
-        T tol = NumOps.FromDouble(_tol);
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
 
         // Alternating optimization
         for (int iter = 0; iter < _maxIter; iter++)
@@ -209,7 +209,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var engine = Engine;
         int k = components.Shape[0];
         int p = components.Shape[1];
-        T tolerance = NumOps.FromDouble(1e-6);
+        T tolerance = DimensionalityReductionOps.Tolerance<T>(1e-6);
         T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
 
         // Maximum number of atoms per sample (controls sparsity via alpha)
@@ -279,8 +279,8 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var dtd = DimensionalityReductionOps.MatMulTranspose(components, components);   // [k, k]
         var dtx = DimensionalityReductionOps.MatMulTranspose(data, components);         // [n, k]
         var alpha = DimensionalityReductionOps.Scalar(NumOps.FromDouble(_alpha));
-        T floor = NumOps.FromDouble(1e-10);
-        T stop = NumOps.FromDouble(1e-6);
+        T floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
+        T stop = DimensionalityReductionOps.Tolerance<T>(1e-6);
 
         var codes = new Tensor<T>(new[] { n, k });
         var active = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.One);
@@ -328,7 +328,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         var engine = Engine;
         int k = components.Shape[0];
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
 
         for (int c = 0; c < k; c++)
         {
@@ -361,7 +361,7 @@ public class DictionaryLearning<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         var ata = engine.TensorAdd(
             DimensionalityReductionOps.TransposeMatMul(codes, codes),
-            engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(k), NumOps.FromDouble(1e-6)));
+            engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(k), DimensionalityReductionOps.Tolerance<T>(1e-6)));
         var atx = DimensionalityReductionOps.TransposeMatMul(codes, data);
         return DimensionalityReductionOps.NormalizeRows(DimensionalityReductionOps.Solve(ata, atx));
     }

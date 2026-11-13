@@ -181,7 +181,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Full neighbour ranking of every row (the point itself last), ties in index order
         var masked = distances.Clone();
         engine.TensorFillDiagonalInPlace(masked, NumOps.FromDouble(double.PositiveInfinity));
-        var sorted = engine.TensorArgsort(masked, 1, false).AsSpan().ToArray();
+        var sorted = AiDotNet.AnomalyDetection.AnomalyTensorOps.StableSortRows(masked, descending: false).Order.AsSpan().ToArray();
 
         var anchors = new List<int>();
         var positives = new List<int>();
@@ -263,7 +263,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var maxDist = engine.ReduceMax(flat, new[] { 0 }, true);
         var scale = engine.TensorWhere(engine.TensorGreaterThan(maxDist, NumOps.Zero), maxDist, engine.TensorOnesLike(maxDist));
 
-        var epsilon = NumOps.FromDouble(1e-10);
+        var epsilon = DimensionalityReductionOps.Tolerance<T>(1e-10);
         var ratio = engine.TensorDivide(dNeg, engine.TensorAddScalar(dPos, epsilon));
         var weights = engine.TensorLog(engine.TensorAddScalar(ratio, NumOps.One));
         weights = engine.TensorDivide(engine.TensorMultiply(weights, scale), engine.TensorAddScalar(dNeg, epsilon));
@@ -306,7 +306,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         y = DimensionalityReductionOps.SubtractRow(y, DimensionalityReductionOps.ColumnMeans(y));
         var std = engine.TensorSqrt(DimensionalityReductionOps.ColumnMeans(engine.TensorSquare(y)));
         var divisor = engine.TensorWhere(
-            engine.TensorGreaterThan(std, NumOps.FromDouble(1e-10)), std, engine.TensorOnesLike(std));
+            engine.TensorGreaterThan(std, DimensionalityReductionOps.Tolerance<T>(1e-10)), std, engine.TensorOnesLike(std));
         return DimensionalityReductionOps.ScaleColumns(y, engine.TensorReciprocal(divisor));
     }
 
@@ -324,7 +324,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var velocity = new Tensor<T>(new[] { n, _nComponents });
         var momentum = NumOps.FromDouble(0.5);
         var lateMomentum = NumOps.FromDouble(0.8);
-        var epsilon = NumOps.FromDouble(1e-10);
+        var epsilon = DimensionalityReductionOps.Tolerance<T>(1e-10);
         var margin = NumOps.FromDouble(1.0);
 
         for (int iter = 0; iter < _nIter; iter++)

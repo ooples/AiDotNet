@@ -379,6 +379,262 @@ public class DimensionalityReductionReferenceTests
         AssertColumnsEqualUpToSign(expected, embedding, 1e-8);
     }
 
+    // Every PCA component of this fixture has a negative entry sum but a positive largest-magnitude entry, so a
+    // sum-based sign rule and scikit-learn's svd_flip give opposite signs.
+    private static readonly double[,] SignData =
+    {
+        { 3.7, 2.1, 0.2 }, { 1.7, 2.9, 0.6 }, { 0.2, 2.8, 3.5 }, { 0.7, 0.1, 2.4 },
+        { 3.2, 0.8, 1.9 }, { 1.4, 2.5, 1.9 }, { 2.7, 1.1, 0.2 }, { 3.5, 0.4, 3.0 },
+    };
+
+    // sklearn.decomposition.PCA(2, svd_solver='full').fit(SignData).components_ (svd_flip, u_based_decision=False);
+    // PCA(2, svd_solver='randomized', random_state=0) and IncrementalPCA(2, batch_size=8) give the same rows.
+    private static readonly double[,] SignComponents =
+    {
+        { 0.767701768260, -0.168799646714, -0.618175277959 },
+        { -0.270911202331, 0.788738488936, -0.551814023491 },
+    };
+
+    [Fact(Timeout = 120000)]
+    public async Task PCA_ComponentSigns_FollowSklearnSvdFlip()
+    {
+        await Task.Yield();
+
+        // sklearn.decomposition.PCA(2, svd_solver='full').fit_transform(SignData)
+        var expected = new double[,]
+        {
+            { 2.048014301878, 0.815548432468 }, { 0.130300936803, 1.767636018883 },
+            { -2.797080056996, 0.494868305362 }, { -1.277477320983, -1.163185790092 },
+            { 0.832704985946, -1.012439841919 }, { -0.836117596336, 0.816055753469 },
+            { 1.449112180332, 0.297721145863 }, { 0.450542569355, -2.016204024034 },
+        };
+
+        var pca = new PCA<double>(nComponents: 2);
+        var result = pca.FitTransform(new Matrix<double>(SignData));
+        AssertMatrixEqual(expected, result, 1e-9);
+        AssertMatrixEqual(SignComponents, pca.Components, 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task IncrementalPCA_ComponentSigns_FollowSklearnSvdFlip()
+    {
+        await Task.Yield();
+        var ipca = new IncrementalPCA<double>(nComponents: 2, batchSize: 8);
+        ipca.Fit(new Matrix<double>(SignData));
+        AssertMatrixEqual(SignComponents, ipca.Components, 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RandomizedPCA_ComponentSigns_FollowSklearnSvdFlip()
+    {
+        await Task.Yield();
+        var rpca = new RandomizedPCA<double>(nComponents: 2, randomState: 0);
+        rpca.Fit(new Matrix<double>(SignData));
+        AssertMatrixEqual(SignComponents, rpca.Components, 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TruncatedSVD_ComponentsAndExplainedVariance_MatchSklearn()
+    {
+        await Task.Yield();
+
+        // sklearn.decomposition.TruncatedSVD(2, algorithm='arpack').fit(SignData): explained_variance_ is the variance
+        // of each projected column and the ratio is over np.var(X, axis=0).sum(), not s^2 / ||X||^2
+        var expectedComponents = new double[,]
+        {
+            { 0.691155087877, 0.489524576040, 0.531667503196 },
+            { -0.687598570111, 0.218907507222, 0.692306080909 },
+        };
+
+        var svd = new TruncatedSVD<double>(nComponents: 2);
+        svd.Fit(new Matrix<double>(SignData));
+        AssertMatrixEqual(expectedComponents, svd.Components, 1e-9);
+        AssertVectorEqual(new[] { 9.169451345107, 4.147514608579 }, svd.SingularValues, 1e-9);
+        AssertVectorEqual(new[] { 0.492978753976, 2.146221723676 }, svd.ExplainedVariance, 1e-9);
+        AssertVectorEqual(new[] { 0.122189846460, 0.531963093278 }, svd.ExplainedVarianceRatio, 1e-9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KernelPCA_Signs_FollowSklearnSvdFlip()
+    {
+        await Task.Yield();
+
+        // sklearn.decomposition.KernelPCA(2, kernel='rbf', gamma=0.5, eigen_solver='dense')
+        //     .fit(SignData[:6]).transform(SignData[6:]); eigenvectors_ go through svd_flip (u-based). The centred
+        // kernel's eigenvectors sum to zero, so only the largest-magnitude rule fixes their sign.
+        var expected = new double[,]
+        {
+            { -0.170496307912, -0.251310071341 },
+            { -0.258933656833, -0.114992136705 },
+        };
+
+        var kpca = new KernelPCA<double>(
+            nComponents: 2, kernel: AiDotNet.Preprocessing.DimensionalityReduction.KernelType.RBF, gamma: 0.5);
+        kpca.Fit(new Matrix<double>(SignRows(0, 6)));
+        AssertMatrixEqual(expected, kpca.Transform(new Matrix<double>(SignRows(6, 2))), 1e-8);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Isomap_Signs_FollowSklearnKernelPcaFlip()
+    {
+        await Task.Yield();
+
+        // sklearn.manifold.Isomap(n_neighbors=4, n_components=2, path_method='D').fit_transform(SignData)
+        var expected = new double[,]
+        {
+            { -2.058730468239, -0.906665779542 }, { -0.180794457901, -1.702932846116 },
+            { 2.813747912854, -1.129914063237 }, { 1.976787151642, 1.687443048832 },
+            { -0.680055206323, 0.982411069744 }, { 0.799143305935, -0.618055922955 },
+            { -1.711225608510, -0.597363971672 }, { -0.958872629459, 2.285078464946 },
+        };
+
+        var result = new Isomap<double>(nComponents: 2, nNeighbors: 4, pathAlgorithm: IsomapPathAlgorithm.Dijkstra)
+            .FitTransform(new Matrix<double>(SignData));
+        AssertMatrixEqual(expected, result, 1e-8);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpectralEmbedding_Rbf_MatchesSklearn()
+    {
+        await Task.Yield();
+
+        // sklearn.manifold.SpectralEmbedding(2, affinity='rbf', gamma=0.5).fit_transform(SignData): the Laplacian
+        // ignores self loops, eigenvectors are divided by sqrt(degree) and sign-flipped (largest entry positive)
+        var expected = new double[,]
+        {
+            { -0.056346198972, 0.755095630050 }, { 0.534542937956, 0.018107718432 },
+            { 0.847765252319, -0.744304288895 }, { 0.136382007942, -0.678891203990 },
+            { -0.504718869659, -0.256018235630 }, { 0.634421647935, -0.321580118087 },
+            { -0.087529712449, 0.611966907158 }, { -0.663063124567, -0.528530563781 },
+        };
+
+        var result = new SpectralEmbedding<double>(nComponents: 2, affinity: SpectralAffinity.RBF, gamma: 0.5)
+            .FitTransform(new Matrix<double>(SignData));
+        AssertMatrixEqual(expected, result, 1e-7);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SpectralEmbedding_NearestNeighbors_MatchesSklearn()
+    {
+        await Task.Yield();
+
+        // sklearn.manifold.SpectralEmbedding(2, affinity='nearest_neighbors', n_neighbors=4).fit_transform(SignData):
+        // 0/1 kneighbors_graph(include_self=True) symmetrized as (A + A^T) / 2
+        var expected = new double[,]
+        {
+            { -0.217338616381, -0.172145719346 }, { 0.030045657412, -0.257209558926 },
+            { 0.386114008833, -0.076719677106 }, { 0.157654014760, 0.308900027044 },
+            { -0.140753688257, 0.120330401967 }, { 0.286991963188, -0.092102682922 },
+            { -0.210848405159, -0.086126269290 }, { -0.071799489939, 0.357715313718 },
+        };
+
+        var result = new SpectralEmbedding<double>(
+                nComponents: 2, affinity: SpectralAffinity.NearestNeighbors, nNeighbors: 4)
+            .FitTransform(new Matrix<double>(SignData));
+        AssertMatrixEqual(expected, result, 1e-7);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NearestNeighbors_EqualDistances_KeepIndexOrder()
+    {
+        await Task.Yield();
+
+        // Points 0, 1, -1, 2, -2 on a line: from point 0 the distances to 1 and 2 tie (1) as do those to 3 and 4 (2),
+        // so the neighbours must come in index order, like LINQ OrderBy (the engine sort is not documented as stable)
+        var x = new Tensor<double>(new[] { 0.0, 1.0, -1.0, 2.0, -2.0 }, new[] { 5, 1 });
+        var neighbors = DimensionalityReductionOps.NearestNeighbors(DimensionalityReductionOps.EuclideanDistances(x, x), 4);
+
+        Assert.Equal(new[] { 1, 2, 3, 4 }, new[] { neighbors[0, 0], neighbors[0, 1], neighbors[0, 2], neighbors[0, 3] });
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SymmetricEigen_RepeatedEigenvalues_KeepIndexOrderAndSvdFlipSigns()
+    {
+        await Task.Yield();
+
+        // diag(2, 5, 5, 1): the tied eigenvalue 5 keeps its eigenvectors e1, e2 in index order and every vector's
+        // largest entry is positive
+        var a = new Tensor<double>(new[]
+        {
+            2.0, 0.0, 0.0, 0.0,
+            0.0, 5.0, 0.0, 0.0,
+            0.0, 0.0, 5.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        }, new[] { 4, 4 });
+        var (values, vectors) = DimensionalityReductionOps.SymmetricEigen(a, descending: true);
+
+        Assert.Equal(new[] { 5.0, 5.0, 2.0, 1.0 }, values.ToArray());
+        int[] expectedAxis = { 1, 2, 0, 3 };
+        for (int col = 0; col < 4; col++)
+        {
+            for (int row = 0; row < 4; row++)
+            {
+                Assert.Equal(row == expectedAxis[col] ? 1.0 : 0.0, vectors[row, col], 1e-12);
+            }
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Tolerance_Half_StaysPositive()
+    {
+        await Task.Yield();
+
+        // Half rounds 1e-10 to 0, which would switch every "above epsilon" guard off
+        var half = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.0, half.ToDouble(half.FromDouble(1e-10)));
+        Assert.Equal(6.103515625e-05, half.ToDouble(DimensionalityReductionOps.Tolerance<Half>(1e-10)));
+        Assert.Equal(1e-10, DimensionalityReductionOps.Tolerance<double>(1e-10));
+        Assert.Equal(1e-3, half.ToDouble(DimensionalityReductionOps.Tolerance<Half>(1e-3)), 1e-6);
+    }
+
+    private static double[,] SignRows(int start, int count)
+    {
+        var rows = new double[count, SignData.GetLength(1)];
+        for (int i = 0; i < count; i++)
+        {
+            for (int j = 0; j < SignData.GetLength(1); j++)
+            {
+                rows[i, j] = SignData[start + i, j];
+            }
+        }
+
+        return rows;
+    }
+
+    private static void AssertMatrixEqual(double[,] expected, Matrix<double>? actual, double tolerance)
+    {
+        Assert.NotNull(actual);
+        if (actual is null)
+        {
+            return;
+        }
+
+        Assert.Equal(expected.GetLength(0), actual.Rows);
+        Assert.Equal(expected.GetLength(1), actual.Columns);
+        for (int row = 0; row < actual.Rows; row++)
+        {
+            for (int col = 0; col < actual.Columns; col++)
+            {
+                Assert.Equal(expected[row, col], actual[row, col], tolerance);
+            }
+        }
+    }
+
+    private static void AssertVectorEqual(double[] expected, Vector<double>? actual, double tolerance)
+    {
+        Assert.NotNull(actual);
+        if (actual is null)
+        {
+            return;
+        }
+
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], actual[i], tolerance);
+        }
+    }
+
     private static double[,] Standardize(Matrix<double> m)
     {
         var result = new double[m.Rows, m.Columns];

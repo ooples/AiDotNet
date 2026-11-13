@@ -208,7 +208,7 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var squaredNorms = DimensionalityReductionOps.RowSums(engine.TensorSquare(x));
                 var denom = engine.TensorSqrt(engine.TensorMatMul(
                     DimensionalityReductionOps.AsColumn(squaredNorms), DimensionalityReductionOps.AsRow(squaredNorms)));
-                var valid = engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10));
+                var valid = engine.TensorGreaterThan(denom, DimensionalityReductionOps.Tolerance<T>(1e-10));
                 var cosine = engine.TensorWhere(
                     valid,
                     engine.TensorSubtract(engine.TensorOnesLike(dot), engine.TensorDivide(dot, engine.TensorWhere(valid, denom, engine.TensorOnesLike(denom)))),
@@ -235,14 +235,14 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             DimensionalityReductionOps.Full(new[] { n, n }, one), DimensionalityReductionOps.Identity<T>(n));
 
         var sigma = DimensionalityReductionOps.Full(new[] { n, 1 }, one);
-        var sigmaLow = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1e-20));
+        var sigmaLow = DimensionalityReductionOps.Full(new[] { n, 1 }, DimensionalityReductionOps.Tolerance<T>(1e-20));
         var sigmaHigh = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1e20));
         var active = DimensionalityReductionOps.Full(new[] { n, 1 }, one);
         var conditional = new Tensor<T>(new[] { n, n });
 
         var logPerplexity = NumOps.FromDouble(Math.Log(_perplexity));
-        var floor = NumOps.FromDouble(1e-10);
-        var tolerance = NumOps.FromDouble(1e-5);
+        var floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
+        var tolerance = DimensionalityReductionOps.Tolerance<T>(1e-5);
         var unboundedColumn = DimensionalityReductionOps.Full(new[] { n, 1 }, NumOps.FromDouble(1e19));
         var allOnes = DimensionalityReductionOps.Full(new[] { n, n }, one);
         var half = NumOps.FromDouble(0.5);
@@ -294,7 +294,7 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Symmetrize and ensure minimum probability
         var symmetric = engine.TensorDivideScalar(
             engine.TensorAdd(conditional, engine.TensorTranspose(conditional)), NumOps.FromDouble(2.0 * n));
-        return engine.TensorClampMin(symmetric, NumOps.FromDouble(1e-12));
+        return engine.TensorClampMin(symmetric, DimensionalityReductionOps.Tolerance<T>(1e-12));
     }
 
     private Tensor<T> InitializeEmbedding(Tensor<T> x, int n, Random random)
@@ -318,7 +318,7 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 var firstColumn = engine.TensorNarrow(projected, 1, 0, 1);
                 var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(firstColumn), new[] { 0 }, true));
                 var scale = engine.TensorDivide(
-                    DimensionalityReductionOps.Full(new[] { 1, 1 }, NumOps.FromDouble(1e-4)),
+                    DimensionalityReductionOps.Full(new[] { 1, 1 }, DimensionalityReductionOps.Tolerance<T>(1e-4)),
                     engine.TensorWhere(
                         engine.TensorGreaterThan(std, NumOps.Zero), std, engine.TensorOnesLike(std)));
                 return engine.TensorMultiply(projected, scale);
@@ -343,7 +343,7 @@ public class TSNE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var sumQ = engine.ReduceSum(engine.Reshape(kernel, new[] { 1, n * n }), new[] { 1 }, true);
         var positive = engine.TensorGreaterThan(sumQ, NumOps.Zero);
         var q = engine.TensorClampMin(
-            engine.TensorDivide(kernel, engine.TensorWhere(positive, sumQ, engine.TensorOnesLike(sumQ))), NumOps.FromDouble(1e-12));
+            engine.TensorDivide(kernel, engine.TensorWhere(positive, sumQ, engine.TensorOnesLike(sumQ))), DimensionalityReductionOps.Tolerance<T>(1e-12));
         return (q, kernel);
     }
 

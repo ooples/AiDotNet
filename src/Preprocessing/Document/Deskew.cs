@@ -266,7 +266,7 @@ public class Deskew<T> : IDisposable
         }
 
         // Find peak in accumulator (first maximum; 0 when nothing voted)
-        int maxIdx = engine.TensorArgMax(accumulator, 0)[0];
+        int maxIdx = AiDotNet.AnomalyDetection.AnomalyTensorOps.FirstArgMax(accumulator);
         return -maxAngle + maxIdx * angleStep;
     }
 

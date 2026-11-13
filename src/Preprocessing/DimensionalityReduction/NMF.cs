@@ -186,7 +186,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 // NNDSVD with (near) zero entries filled by the data average
                 var (w, h) = InitializeNNDSVD(v, k);
                 T avg = engine.TensorMean(v);
-                T floor = NumOps.FromDouble(1e-10);
+                T floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
                 w = engine.TensorWhere(engine.TensorLessThan(w, floor), engine.TensorFullLike(w, avg), w);
                 h = engine.TensorWhere(engine.TensorLessThan(h, floor), engine.TensorFullLike(h, avg), h);
                 return (w, h);
@@ -228,7 +228,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private (Tensor<T> W, Tensor<T> H, int Iterations) SolveMultiplicativeUpdate(Tensor<T> v, Tensor<T> w, Tensor<T> h)
     {
         var engine = Engine;
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = DimensionalityReductionOps.Tolerance<T>(1e-10);
         T betaMinus2 = NumOps.FromDouble(_beta - 2);
         T betaMinus1 = NumOps.FromDouble(_beta - 1);
         T l1Reg = NumOps.FromDouble(_alpha * _l1Ratio);
@@ -278,7 +278,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Simplified coordinate descent
         var engine = Engine;
         int k = h.Shape[0];
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = DimensionalityReductionOps.Tolerance<T>(1e-10);
         T l2Reg = NumOps.FromDouble(_alpha * (1 - _l1Ratio));
         T l1Penalty = NumOps.FromDouble(_alpha * _l1Ratio);
         T l2Eps = NumOps.Add(eps, l2Reg);
@@ -338,8 +338,8 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private bool RelativeChangeBelow(T previous, T current)
     {
         T relChange = NumOps.Divide(
-            NumOps.Abs(NumOps.Subtract(previous, current)), NumOps.Add(previous, NumOps.FromDouble(1e-10)));
-        return NumOps.LessThan(relChange, NumOps.FromDouble(_tolerance));
+            NumOps.Abs(NumOps.Subtract(previous, current)), NumOps.Add(previous, DimensionalityReductionOps.Tolerance<T>(1e-10)));
+        return NumOps.LessThan(relChange, DimensionalityReductionOps.Tolerance<T>(_tolerance));
     }
 
     /// <summary>Frobenius norm of V - W H.</summary>
@@ -387,7 +387,7 @@ public class NMF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var w = engine.TensorAbs(engine.TensorMultiplyScalar(DimensionalityReductionOps.Uniform<T>(random, n, k), scale));
 
         // Multiplicative updates for W with H fixed: W *= (V H^T) / (W H H^T + eps)
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = DimensionalityReductionOps.Tolerance<T>(1e-10);
         var vht = DimensionalityReductionOps.MatMulTranspose(v, h);
         var hht = DimensionalityReductionOps.MatMulTranspose(h, h);
         for (int iter = 0; iter < 100; iter++)

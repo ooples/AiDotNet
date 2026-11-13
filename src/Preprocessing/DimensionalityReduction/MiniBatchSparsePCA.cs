@@ -163,7 +163,7 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var a = engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(k), NumOps.FromDouble(_ridge));
         var b = new Tensor<T>(new[] { k, p });
         T ridge = NumOps.FromDouble(_ridge);
-        T tol = NumOps.FromDouble(_tol);
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
 
         _nSamplesSeen = 0;
 

@@ -83,7 +83,8 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="nComponents">Target dimensionality. Defaults to 2.</param>
     /// <param name="affinity">How to construct the affinity matrix. Defaults to NearestNeighbors.</param>
     /// <param name="gamma">Kernel coefficient for RBF. If null, uses 1/n_features.</param>
-    /// <param name="nNeighbors">Number of neighbors for NN affinity. Defaults to 10.</param>
+    /// <param name="nNeighbors">Number of neighbors for NN affinity, the sample itself included (scikit-learn's
+    /// kneighbors_graph(include_self=True)). Defaults to 10.</param>
     /// <param name="randomState">Random seed for reproducibility.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public SpectralEmbedding(
@@ -129,35 +130,38 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var affinity = ComputeAffinityMatrix(Tensor<T>.FromMatrix(data), n, gamma);
         _affinityMatrix = affinity.ToMatrix();
 
-        // Step 2: Compute normalized graph Laplacian
-        var laplacian = ComputeNormalizedLaplacian(affinity, n);
-
-        // Step 3: Find smallest eigenvectors of Laplacian
-        _embedding = ComputeEmbedding(laplacian, n).ToMatrix();
+        // Steps 2 and 3: the bottom eigenvectors of the normalized graph Laplacian (scikit-learn spectral_embedding)
+        _embedding = ComputeEmbedding(affinity, n).ToMatrix();
     }
 
     private Tensor<T> ComputeAffinityMatrix(Tensor<T> x, int n, T gamma)
     {
         var engine = Engine;
-        var negGamma = NumOps.Negate(gamma);
         Tensor<T> affinity;
 
         switch (_affinity)
         {
             case SpectralAffinity.RBF:
-                // Radial Basis Function (Gaussian) kernel
+                // Radial Basis Function (Gaussian) kernel, rbf_kernel(X, gamma) (diagonal 1)
                 affinity = engine.TensorExp(engine.TensorMultiplyScalar(
-                    DimensionalityReductionOps.SquaredDistances(x, x), negGamma));
+                    DimensionalityReductionOps.SquaredDistances(x, x), NumOps.Negate(gamma)));
                 break;
 
             case SpectralAffinity.NearestNeighbors:
-                // Symmetric kNN graph: exp(-gamma d^2) where j is a neighbor of i or i a neighbor of j
-                var distances = DimensionalityReductionOps.EuclideanDistances(x, x);
-                var neighbors = DimensionalityReductionOps.NearestNeighbors(distances, _nNeighbors);
-                var neighborDistances = DimensionalityReductionOps.TakeRows(distances, neighbors);
-                var weights = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(neighborDistances), negGamma));
-                var directed = DimensionalityReductionOps.ScatterRows(neighbors, weights, n, NumOps.Zero);
-                affinity = engine.TensorMax(directed, engine.TensorTranspose(directed));
+                // scikit-learn: A = kneighbors_graph(X, n_neighbors, include_self=True) (0/1 connectivity, the
+                // sample itself counting as one of its n_neighbors), affinity = (A + A^T) / 2
+                var directed = DimensionalityReductionOps.Full(new[] { n, n }, NumOps.Zero);
+                int others = Math.Min(_nNeighbors - 1, n - 1);
+                if (others > 0)
+                {
+                    var neighbors = DimensionalityReductionOps.NearestNeighbors(
+                        DimensionalityReductionOps.EuclideanDistances(x, x), others);
+                    directed = DimensionalityReductionOps.ScatterRows(
+                        neighbors, DimensionalityReductionOps.Full(new[] { n, others }, NumOps.One), n, NumOps.Zero);
+                }
+
+                affinity = engine.TensorMultiplyScalar(
+                    engine.TensorAdd(directed, engine.TensorTranspose(directed)), NumOps.FromDouble(0.5));
                 break;
 
             case SpectralAffinity.Precomputed:
@@ -169,39 +173,41 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 break;
         }
 
-        // Set diagonal to 1
+        // Every sample is fully similar to itself (rbf_kernel's diagonal, include_self's self connection)
         engine.TensorFillDiagonalInPlace(affinity, NumOps.One);
         return affinity;
     }
 
-    private Tensor<T> ComputeNormalizedLaplacian(Tensor<T> w, int n)
+    /// <summary>
+    /// scikit-learn spectral_embedding(norm_laplacian=True, drop_first=True): the graph Laplacian ignores self loops
+    /// (scipy csgraph.laplacian zeroes the diagonal), L = I - D^(-1/2) W D^(-1/2), its eigenvectors 1 .. nComponents in
+    /// ascending eigenvalue order are divided by sqrt(degree) and each is signed so its largest-magnitude entry is
+    /// positive (_deterministic_vector_sign_flip).
+    /// </summary>
+    private Tensor<T> ComputeEmbedding(Tensor<T> affinity, int n)
     {
         var engine = Engine;
+        var w = affinity.Clone();
+        engine.TensorFillDiagonalInPlace(w, NumOps.Zero);
 
         // D^(-1/2), zero where the degree is at most 1e-10
         var degree = DimensionalityReductionOps.RowSums(w);
-        var positive = engine.TensorGreaterThan(degree, NumOps.FromDouble(1e-10));
+        var positive = engine.TensorGreaterThan(degree, DimensionalityReductionOps.Tolerance<T>(1e-10));
         var safeDegree = engine.TensorWhere(positive, degree, DimensionalityReductionOps.Full(n, NumOps.One));
         var dInv = engine.TensorWhere(
             positive, engine.TensorRsqrt(safeDegree), DimensionalityReductionOps.Full(n, NumOps.Zero));
 
         // L = I - D^(-1/2) W D^(-1/2)
         var normalized = DimensionalityReductionOps.ScaleColumns(DimensionalityReductionOps.ScaleRows(w, dInv), dInv);
-        return engine.TensorSubtract(DimensionalityReductionOps.Identity<T>(n), normalized);
-    }
+        var laplacian = engine.TensorSubtract(DimensionalityReductionOps.Identity<T>(n), normalized);
 
-    private Tensor<T> ComputeEmbedding(Tensor<T> laplacian, int n)
-    {
-        // Eigenvectors of L in ascending eigenvalue order (ties in index order)
+        // Eigenvectors of L in ascending eigenvalue order (ties in index order); skip the first (trivial) one
         var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(laplacian, descending: false);
-        // Signs as the original deflated power iteration converges to them from its seeded start vectors
-        // (on L itself, largest first, so their start vectors are reversed for this ascending order)
-        var starts = DimensionalityReductionOps.SeededPowerIterationStarts<T>(_randomState ?? 42, n, n, 0.5);
-        eigenvectors = DimensionalityReductionOps.MatchStartSigns(eigenvectors, Engine.TensorFlip(starts, new[] { 0 }));
-
-        // Take eigenvectors 1 to nComponents (skip the first which is constant)
         int nComp = Math.Min(_nComponents, n - 1);
-        return Engine.TensorNarrow(eigenvectors, 1, 1, nComp);
+        var selected = engine.TensorNarrow(eigenvectors, 1, 1, nComp);
+
+        // Undo the symmetric normalisation (y = D^(-1/2) v), then fix the signs on the scaled vectors
+        return DimensionalityReductionOps.AlignColumnSigns(DimensionalityReductionOps.ScaleRows(selected, dInv));
     }
 
     /// <summary>

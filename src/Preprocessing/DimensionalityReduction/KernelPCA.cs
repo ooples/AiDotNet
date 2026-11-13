@@ -137,7 +137,7 @@ public class KernelPCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Normalize eigenvectors: alpha = v / sqrt(lambda) (0 for lambda ~ 0)
         var scale = engine.TensorWhere(
-            engine.TensorGreaterThan(lambdas, NumOps.FromDouble(1e-10)),
+            engine.TensorGreaterThan(lambdas, DimensionalityReductionOps.Tolerance<T>(1e-10)),
             engine.TensorRsqrt(lambdas),
             engine.TensorZerosLike(lambdas));
 

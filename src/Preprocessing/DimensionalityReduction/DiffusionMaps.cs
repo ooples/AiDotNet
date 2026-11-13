@@ -137,7 +137,7 @@ public class DiffusionMaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var distSq = engine.TensorSquare(distances);
 
         // Step 2: Compute epsilon (kernel bandwidth) if not provided
-        T eps = NumOps.FromDouble(_epsilon);
+        T eps = DimensionalityReductionOps.Tolerance<T>(_epsilon);
         if (_epsilon <= 0)
         {
             // Median of the n(n-1)/2 pairwise distances, squared. With the diagonal at +inf every pair appears

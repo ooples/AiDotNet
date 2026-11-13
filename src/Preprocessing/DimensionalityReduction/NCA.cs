@@ -151,8 +151,8 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             engine.TensorSubtract(DimensionalityReductionOps.AsColumn(labelValues), DimensionalityReductionOps.AsRow(labelValues)),
             NumOps.Zero);
 
-        T tol = NumOps.FromDouble(_tol);
-        T sumFloor = NumOps.FromDouble(1e-10);
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
+        T sumFloor = DimensionalityReductionOps.Tolerance<T>(1e-10);
         T infinity = NumOps.FromDouble(double.PositiveInfinity);
         T two = NumOps.FromDouble(2.0);
         T prevObjective = NumOps.Zero;

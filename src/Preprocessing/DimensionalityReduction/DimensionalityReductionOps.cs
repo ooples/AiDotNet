@@ -1,3 +1,4 @@
+using AiDotNet.AnomalyDetection;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -9,12 +10,25 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 /// </summary>
 /// <remarks>
 /// Every member works on <see cref="Tensor{T}"/> through <see cref="AiDotNetEngine.Current"/>, so the transformers
-/// never stage numeric data in <c>double</c> buffers. Sorting relies on <see cref="IEngine.TensorArgsort{T}"/>,
-/// which keeps equal keys in increasing index order (the same tie order as LINQ <c>OrderBy</c>/<c>OrderByDescending</c>).
+/// never stage numeric data in <c>double</c> buffers. The engine sort is not documented as stable, so every ordering
+/// goes through <see cref="AnomalyTensorOps.StableSortRows{T}"/>, which keeps equal keys in increasing index order
+/// (the same tie order as LINQ <c>OrderBy</c>/<c>OrderByDescending</c>).
 /// </remarks>
 internal static class DimensionalityReductionOps
 {
     private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>The smallest positive normal Half, 2^-14.</summary>
+    private const double HalfSmallestNormal = 6.103515625e-05;
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to the smallest positive normal Half when T is Half. Half cannot hold
+    /// 1e-10 (it rounds to 0), which turns "below epsilon" guards off and "+ epsilon" floors back into divisions by
+    /// zero; float, double and decimal keep <paramref name="epsilon"/> unchanged.
+    /// </summary>
+    internal static T Tolerance<T>(double epsilon) =>
+        MathHelper.GetNumericOperations<T>().FromDouble(
+            typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
 
     /// <summary>Wraps an index list as a rank-1 index tensor.</summary>
     internal static Tensor<int> IndexTensor(int[] indices) => new Tensor<int>(indices, new[] { indices.Length });
@@ -75,27 +89,29 @@ internal static class DimensionalityReductionOps
     internal static Tensor<T> Identity<T>(int n) => Engine.TensorEye<T>(n);
 
     /// <summary>
-    /// Eigen-decomposition of a symmetric matrix by cyclic Jacobi rotations (accurate to working precision for
-    /// every eigenpair, unlike power iteration with deflation). Eigenvalues are ordered by value (descending or
-    /// ascending, ties in index order) and the eigenvectors are the matching columns, each signed so its entries
-    /// sum to a non-negative value (the sign power iteration from the uniform start vector converges to).
+    /// Eigen-decomposition of a symmetric matrix. Eigenvalues are ordered by value (descending or ascending, ties in
+    /// index order) and the eigenvectors are the matching columns, each signed like scikit-learn's svd_flip so its
+    /// largest-magnitude entry is positive (see <see cref="AlignColumnSigns{T}"/>).
     /// </summary>
     internal static (Tensor<T> Values, Tensor<T> Vectors) SymmetricEigen<T>(Tensor<T> a, bool descending)
     {
         var engine = Engine;
         var (values, vectors) = LinalgDispatch<T>.Eigh(Symmetrize(a));
-        var order = engine.TensorArgsort(values, 0, descending);
+        var order = AnomalyTensorOps.StableOrder(values, descending);
         return (engine.TensorIndexSelect(values, order, 0), AlignColumnSigns(engine.TensorIndexSelect(vectors, order, 1)));
     }
 
-    /// <summary>Flips each column whose entries sum to a negative value.</summary>
+    /// <summary>
+    /// Signs every column so that its largest-magnitude entry (the first among equal magnitudes) is positive, as
+    /// scikit-learn's svd_flip does for PCA, TruncatedSVD, IncrementalPCA and KernelPCA and
+    /// _deterministic_vector_sign_flip does for spectral embeddings. A sum-of-entries rule is not usable: the
+    /// eigenvectors of a centred kernel or a normalized graph Laplacian are orthogonal to the constant (or degree)
+    /// vector, so their entries sum to rounding noise and the sign would be arbitrary.
+    /// </summary>
     internal static Tensor<T> AlignColumnSigns<T>(Tensor<T> columns)
     {
         var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var negative = engine.TensorLessThan(engine.ReduceSum(columns, new[] { 0 }, true), numOps.Zero);
-        var sign = engine.TensorAddScalar(engine.TensorMultiplyScalar(negative, numOps.FromDouble(-2.0)), numOps.One);
-        return engine.TensorMultiply(columns, sign);
+        return engine.TensorTranspose(AnomalyTensorOps.WithLargestComponentPositive(engine.TensorTranspose(columns)));
     }
 
     /// <summary>Euclidean distances between the rows of a [n, p] and b [m, p] (direct differences, no Gram expansion).</summary>
@@ -116,7 +132,7 @@ internal static class DimensionalityReductionOps
         int take = Math.Min(k, n - 1);
         var masked = distances.Clone();
         engine.TensorFillDiagonalInPlace(masked, numOps.FromDouble(double.PositiveInfinity));
-        var order = engine.TensorArgsort(masked, 1, false);
+        var order = AnomalyTensorOps.StableSortRows(masked, descending: false).Order;
         return take == n ? order : engine.TensorNarrow(order, 1, 0, take);
     }
 
@@ -200,7 +216,7 @@ internal static class DimensionalityReductionOps
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
         var draws = engine.Reshape(Uniform<T>(random, rows * columns, 2), new[] { rows * columns, 2 });
-        var u1 = engine.TensorClampMin(engine.TensorSliceAxis(draws, 1, 0), numOps.FromDouble(double.Epsilon));
+        var u1 = engine.TensorClampMin(engine.TensorSliceAxis(draws, 1, 0), Tolerance<T>(double.Epsilon));
         var u2 = engine.TensorSliceAxis(draws, 1, 1);
         var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(engine.TensorLog(u1), numOps.FromDouble(-2.0)));
         var angle = engine.TensorSin(engine.TensorMultiplyScalar(u2, numOps.FromDouble(2.0 * Math.PI)));
@@ -226,10 +242,10 @@ internal static class DimensionalityReductionOps
         MathHelper.GetNumericOperations<T>().Sqrt(Engine.TensorSum(Engine.TensorSquare(x)));
 
     /// <summary>Index of the first largest entry of a rank-1 tensor.</summary>
-    internal static int FirstArgMax<T>(Tensor<T> values) => Engine.TensorArgMax(values, 0)[0];
+    internal static int FirstArgMax<T>(Tensor<T> values) => AnomalyTensorOps.FirstArgMax(values);
 
     /// <summary>Index of the first smallest entry of a rank-1 tensor.</summary>
-    internal static int FirstArgMin<T>(Tensor<T> values) => Engine.TensorArgMin(values, 0)[0];
+    internal static int FirstArgMin<T>(Tensor<T> values) => AnomalyTensorOps.FirstArgMin(values);
 
     /// <summary>Returns a copy of a rank-1 0/1 mask with position <paramref name="index"/> set to 1.</summary>
     internal static Tensor<T> MarkIndex<T>(Tensor<T> mask, int index)
@@ -291,7 +307,7 @@ internal static class DimensionalityReductionOps
     {
         var engine = Engine;
         var numOps = MathHelper.GetNumericOperations<T>();
-        T tol = numOps.FromDouble(tolerance);
+        T tol = Tolerance<T>(tolerance);
         int n = a.Shape[1];
         var columns = new Tensor<T>[n];
         var remaining = a;
@@ -332,7 +348,7 @@ internal static class DimensionalityReductionOps
         var numOps = MathHelper.GetNumericOperations<T>();
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(x), new[] { 1 }, true));
         var divisor = engine.TensorWhere(
-            engine.TensorGreaterThan(norm, numOps.FromDouble(tolerance)), norm, engine.TensorOnesLike(norm));
+            engine.TensorGreaterThan(norm, Tolerance<T>(tolerance)), norm, engine.TensorOnesLike(norm));
         return engine.TensorDivide(x, divisor);
     }
 
@@ -343,7 +359,7 @@ internal static class DimensionalityReductionOps
         var numOps = MathHelper.GetNumericOperations<T>();
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(x), new[] { 0 }, true));
         var divisor = engine.TensorWhere(
-            engine.TensorGreaterThan(norm, numOps.FromDouble(tolerance)), norm, engine.TensorOnesLike(norm));
+            engine.TensorGreaterThan(norm, Tolerance<T>(tolerance)), norm, engine.TensorOnesLike(norm));
         return engine.TensorDivide(x, divisor);
     }
 
@@ -386,7 +402,7 @@ internal static class DimensionalityReductionOps
         bool wide = a.Shape[0] <= a.Shape[1];
         var gram = wide ? MatMulTranspose(a, a) : TransposeMatMul(a, a);
         var (values, vectors) = SymmetricEigen(gram, descending: true);
-        T cutoff = numOps.Multiply(engine.TensorMaxValue(engine.TensorAbs(values)), numOps.FromDouble(1e-10));
+        T cutoff = numOps.Multiply(engine.TensorMaxValue(engine.TensorAbs(values)), Tolerance<T>(1e-10));
         var inverted = engine.TensorWhere(
             engine.TensorGreaterThan(values, cutoff), engine.TensorReciprocal(values), engine.TensorZerosLike(values));
         var gramPinv = MatMulTranspose(ScaleColumns(vectors, inverted), vectors);
@@ -447,14 +463,16 @@ internal static class DimensionalityReductionOps
         var engine = Engine;
         var (values, vectors) = LinalgDispatch<T>.Eigh(engine.TensorMultiplyScalar(
             engine.TensorAdd(a, engine.TensorSwapAxes(a, 1, 2)), MathHelper.GetNumericOperations<T>().FromDouble(0.5)));
-        var order = engine.TensorArgsort(values, 1, descending);
-        var sortedValues = engine.TensorTakeAlongDim(values, order, 1);
+        var (sortedValues, order) = AnomalyTensorOps.StableSortRows(values, descending);
+        int m = a.Shape[0];
         int k = a.Shape[1];
-        var columnOrder = engine.TensorTile(engine.Reshape(order, new[] { order.Shape[0], 1, k }), new[] { 1, k, 1 });
+        var columnOrder = engine.TensorTile(engine.Reshape(order, new[] { m, 1, k }), new[] { 1, k, 1 });
         var sortedVectors = engine.TensorTakeAlongDim(vectors, columnOrder, 2);
-        var negative = engine.TensorLessThan(engine.ReduceSum(sortedVectors, new[] { 1 }, true), MathHelper.GetNumericOperations<T>().Zero);
-        var sign = engine.TensorAddScalar(engine.TensorMultiplyScalar(negative, MathHelper.GetNumericOperations<T>().FromDouble(-2.0)), MathHelper.GetNumericOperations<T>().One);
-        return (sortedValues, engine.TensorMultiply(sortedVectors, sign));
+
+        // svd_flip per matrix: the largest-magnitude entry of every eigenvector column is positive
+        var rows = engine.Reshape(engine.TensorSwapAxes(sortedVectors, 1, 2), new[] { m * k, k });
+        var flipped = engine.Reshape(AnomalyTensorOps.WithLargestComponentPositive(rows), new[] { m, k, k });
+        return (sortedValues, engine.TensorSwapAxes(flipped, 1, 2));
     }
 
     /// <summary>Per-matrix trace of an [n, k, k] batch.</summary>
@@ -493,7 +511,7 @@ internal static class DimensionalityReductionOps
         var numOps = MathHelper.GetNumericOperations<T>();
         int k = a.Shape[1];
         int count = Math.Min(k, a.Shape[2]);
-        var tol = numOps.FromDouble(tolerance);
+        var tol = Tolerance<T>(tolerance);
         var basis = engine.Reshape(Identity<T>(k), new[] { 1, k, k });
         var columns = new Tensor<T>[count];
         for (int j = 0; j < count; j++)
