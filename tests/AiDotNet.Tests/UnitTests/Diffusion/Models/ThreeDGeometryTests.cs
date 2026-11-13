@@ -101,6 +101,54 @@ public class ThreeDGeometryTests
     }
 
     [Fact]
+    public void MarchingTetrahedra_EveryTriangleNormalPointsOutOfTheSphere()
+    {
+        // The six cube tetrahedra alternate in handedness, so emitting crossings in table order gave half the
+        // faces inward normals. A closed surface needs every normal to face outward (towards decreasing values).
+        const int resolution = 17;
+        const double radius = 0.6;
+        double step = 2.0 / (resolution - 1);
+        var grid = new double[resolution, resolution, resolution];
+        for (int x = 0; x < resolution; x++)
+        {
+            for (int y = 0; y < resolution; y++)
+            {
+                for (int z = 0; z < resolution; z++)
+                {
+                    double px = -1 + (x * step), py = -1 + (y * step), pz = -1 + (z * step);
+                    grid[x, y, z] = radius - Math.Sqrt((px * px) + (py * py) + (pz * pz));
+                }
+            }
+        }
+
+        var (c, triangles) = MarchingTetrahedra.Extract(grid, 0.0, -1.0, step);
+
+        Assert.NotEmpty(triangles);
+        for (int t = 0; t < triangles.Count; t += 3)
+        {
+            int a = 3 * triangles[t], b = 3 * triangles[t + 1], d = 3 * triangles[t + 2];
+            double ux = c[b] - c[a], uy = c[b + 1] - c[a + 1], uz = c[b + 2] - c[a + 2];
+            double vx = c[d] - c[a], vy = c[d + 1] - c[a + 1], vz = c[d + 2] - c[a + 2];
+            double nx = (uy * vz) - (uz * vy), ny = (uz * vx) - (ux * vz), nz = (ux * vy) - (uy * vx);
+            double cx = (c[a] + c[b] + c[d]) / 3, cy = (c[a + 1] + c[b + 1] + c[d + 1]) / 3;
+            double cz = (c[a + 2] + c[b + 2] + c[d + 2]) / 3;
+            Assert.True((nx * cx) + (ny * cy) + (nz * cz) > 0, $"Triangle {t / 3} faces inward.");
+        }
+    }
+
+    [Fact]
+    public void ShapE_FaceTensor_Half_RejectsIndicesHalfCannotHoldExactly()
+    {
+        // Half stores integers exactly only up to 2048 (2049 rounds to 2048, 3001 to 3000), so a face holding them
+        // would silently point at the wrong vertex.
+        var exact = ShapEModel<Half>.FaceTensor(new List<int> { 0, 1, 2048 }).ToArray();
+        Assert.Equal(new[] { 0.0, 1.0, 2048.0 }, exact.Select(h => (double)h).ToArray());
+
+        Assert.Throws<InvalidOperationException>(() => ShapEModel<Half>.FaceTensor(new List<int> { 0, 1, 2049 }));
+        Assert.Throws<InvalidOperationException>(() => ShapEModel<Half>.FaceTensor(new List<int> { 3001, 1, 2 }));
+    }
+
+    [Fact]
     public void NeRF_SingleRayLooksAtTheTarget_AndTopRowLooksUp()
     {
         var nerf = new NeRFNetwork<double>(hiddenDim: 8, numLayers: 1, seed: 1);

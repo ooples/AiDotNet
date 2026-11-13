@@ -100,6 +100,11 @@ internal static class MarchingTetrahedra
                             }
                         }
 
+                        // Wind every triangle counter-clockwise seen from outside, so its normal points from the
+                        // inside corners to the outside ones (the direction the field decreases through the surface).
+                        if (!FacesOutward(crossing, values, points, threshold))
+                            crossing.Reverse();
+
                         int baseIndex = coordinates.Count / 3;
                         foreach (var point in crossing)
                             coordinates.AddRange(point);
@@ -118,6 +123,38 @@ internal static class MarchingTetrahedra
         }
 
         return (coordinates, triangles);
+    }
+
+    /// <summary>
+    /// True when the normal (p1 - p0) x (p2 - p0) of the first crossing triangle points from the mean of the inside
+    /// corners towards the mean of the outside corners.
+    /// </summary>
+    private static bool FacesOutward(List<double[]> crossing, double[] values, double[][] points, double threshold)
+    {
+        var inside = new double[3];
+        var outside = new double[3];
+        int insideCount = 0, outsideCount = 0;
+        for (int k = 0; k < 4; k++)
+        {
+            bool isInside = values[k] > threshold;
+            var target = isInside ? inside : outside;
+            for (int axis = 0; axis < 3; axis++)
+                target[axis] += points[k][axis];
+            if (isInside) insideCount++; else outsideCount++;
+        }
+
+        var p0 = crossing[0];
+        var p1 = crossing[1];
+        var p2 = crossing[2];
+        double ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
+        double vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
+        double nx = (uy * vz) - (uz * vy);
+        double ny = (uz * vx) - (ux * vz);
+        double nz = (ux * vy) - (uy * vx);
+        double dx = (outside[0] / outsideCount) - (inside[0] / insideCount);
+        double dy = (outside[1] / outsideCount) - (inside[1] / insideCount);
+        double dz = (outside[2] / outsideCount) - (inside[2] / insideCount);
+        return (nx * dx) + (ny * dy) + (nz * dz) >= 0.0;
     }
 
     private static double[] Interpolate(double[] p0, double v0, double[] p1, double v1, double threshold)

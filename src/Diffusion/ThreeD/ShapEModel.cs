@@ -631,14 +631,31 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         int resolution = 64)
     {
         var (coordinates, triangles) = ExtractSurface(latent, resolution);
+        return (VertexTensor(coordinates), FaceTensor(triangles));
+    }
+
+    /// <summary>
+    /// The faces [max(count, 1), 3] of the flat triangle index list as T (one zero row when empty).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// An index is too large for T to hold exactly (above 2048 for Half): the face tensor would silently point at
+    /// the wrong vertices. <see cref="GenerateMesh"/> returns integer faces and has no such limit.
+    /// </exception>
+    internal static Tensor<T> FaceTensor(List<int> triangles)
+    {
+        double exactLimit = Math.Pow(2.0, MathHelper.GetNumericOperations<T>().PrecisionBits);
         int faceCount = triangles.Count / 3;
         var faceValues = new double[Math.Max(faceCount, 1) * 3];
         for (int i = 0; i < triangles.Count; i++)
+        {
+            if (triangles[i] > exactLimit)
+                throw new InvalidOperationException(
+                    $"Vertex index {triangles[i]} cannot be stored exactly in {typeof(T).Name} (integers are exact only " +
+                    $"up to {exactLimit}); lower the resolution or use GenerateMesh, whose faces are integers.");
             faceValues[i] = triangles[i];
+        }
 
-        return (
-            VertexTensor(coordinates),
-            new Tensor<double>(new[] { Math.Max(faceCount, 1), 3 }, new Vector<double>(faceValues)).Cast<T>());
+        return new Tensor<double>(new[] { Math.Max(faceCount, 1), 3 }, new Vector<double>(faceValues)).Cast<T>();
     }
 
     /// <summary>The vertices [max(count, 1), 3] of the flat coordinate list (one zero row when empty).</summary>
