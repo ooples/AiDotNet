@@ -45,6 +45,31 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class CopulaGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
+    /// <summary>Initializes a new instance with the default settings.</summary>
+    public CopulaGANOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying every setting of another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public CopulaGANOptions(CopulaGANOptions<T> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        EmbeddingDimension = other.EmbeddingDimension;
+        GeneratorDimensions = (int[])other.GeneratorDimensions.Clone();
+        DiscriminatorDimensions = (int[])other.DiscriminatorDimensions.Clone();
+        BatchSize = other.BatchSize;
+        Epochs = other.Epochs;
+        DiscriminatorSteps = other.DiscriminatorSteps;
+        LearningRate = other.LearningRate;
+        GradientPenaltyWeight = other.GradientPenaltyWeight;
+        PacSize = other.PacSize;
+        VGMModes = other.VGMModes;
+        DiscriminatorDropout = other.DiscriminatorDropout;
+        GumbelTemperature = other.GumbelTemperature;
+    }
+
     /// <summary>
     /// Gets or sets the dimension of the random noise vector fed to the generator.
     /// </summary>
@@ -146,5 +171,18 @@ public class CopulaGANOptions<T> : SyntheticDataGeneratorOptions<T>
     /// </summary>
     /// <value>The dropout rate, defaulting to 0.5.</value>
     public double DiscriminatorDropout { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the Gumbel-softmax temperature of the generator's mode and discrete-column heads.
+    /// </summary>
+    /// <value>Defaults to 0.2, the <c>gumbel_softmax(tau=0.2)</c> of the sdv-dev/CTGAN code CopulaGAN inherits.</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> During training the generator's category outputs are noisy, nearly one-hot samples
+    /// instead of smooth probabilities, so the critic sees rows that look like real one-hot data. Lower values make
+    /// the samples closer to one-hot.
+    /// </para>
+    /// </remarks>
+    public double GumbelTemperature { get; set; } = 0.2;
 
 }

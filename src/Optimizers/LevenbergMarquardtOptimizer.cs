@@ -254,12 +254,11 @@ public partial class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientB
             // Get the i-th example from the input batch
             var exampleX = InputHelper<T, TInput>.GetItem(X, i);
 
-            for (int j = 0; j < n; j++)
-            {
-                // Calculate the partial derivative of the model output with respect to parameter j
-                // for the current example
-                jacobian[i, j] = CalculatePartialDerivative(model, exampleX, j);
-            }
+            // Row i: the partial derivative of the model output for this example with respect to each parameter j.
+            var row = Vector<T>.FromList(Enumerable.Range(0, n)
+                .Select(j => CalculatePartialDerivative(model, exampleX, j))
+                .ToList());
+            row.AsSpan().CopyTo(jacobian.GetRowSpan(i));
         }
 
         return jacobian;

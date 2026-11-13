@@ -100,6 +100,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         : base(architecture, optimizer, lossFunction ?? MaskLoss(options ??= new SAMOptions()), 1)
     {
         _options = options ?? new SAMOptions(); Options = _options;
+        _options.Validate();
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         InitializeLayers();
@@ -112,6 +113,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         : base(architecture, onnxModelPath, 1)
     {
         _options = options ?? new SAMOptions(); Options = _options;
+        _options.Validate();
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
     }

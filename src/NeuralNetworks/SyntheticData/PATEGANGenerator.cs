@@ -78,8 +78,8 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private List<ColumnMetadata> _columns = new();
     // The [0, 1]^d encoding: per column its minimum and maximum (continuous) or category count (categorical).
-    private double[] _columnMin = System.Array.Empty<double>();
-    private double[] _columnMax = System.Array.Empty<double>();
+    private Vector<T> _columnMin = new Vector<T>(0);
+    private Vector<T> _columnMax = new Vector<T>(0);
     private int[] _columnWidth = System.Array.Empty<int>();
     private int _dataWidth;
     private Random _random;
@@ -114,11 +114,10 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     internal double MeanTeacherScore(Tensor<T> encoded)
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return _teacherLayers.Average(teacher =>
-        {
-            var p = Classify(teacher, encoded);
-            return Enumerable.Range(0, p.Length).Average(i => NumOps.ToDouble(p[i]));
-        });
+        // Every teacher scores the same rows, so the mean of the stacked scores is the mean of the teachers' means.
+        var scores = _teacherLayers.Select(teacher => Classify(teacher, encoded)).ToArray();
+        var all = scores.Length == 1 ? scores[0] : Engine.TensorConcatenate(scores, axis: 0);
+        return NumOps.ToDouble(Engine.TensorMean(all));
     }
 
     /// <summary>The encoding of <paramref name="data"/> into [0, 1]^d.</summary>
@@ -216,8 +215,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 }
             }
             var biases = layer.GetBiases();
-            if (biases is not null)
-                for (int i = 0; i < biases.Length; i++) biases[i] = NumOps.Zero;
+            biases?.Fill(NumOps.Zero);
             fanIn = layer.GetOutputShape()[^1];
             Layers.Add(layer);
         }
@@ -363,23 +361,28 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var votes = new int[n];
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
+            // n1 per row: the number of teachers scoring it above 0.5 (a NaN score is no vote).
+            var half = NumOps.FromDouble(0.5);
+            Tensor<T>? voteCounts = null;
             foreach (var teacher in _teacherLayers)
             {
-                var p = Classify(teacher, fake);
-                for (int j = 0; j < n; j++)
-                    if (NumOps.ToDouble(p[j, 0]) > 0.5) votes[j]++;
+                var p = Engine.TensorSlice(Classify(teacher, fake), new[] { 0, 0 }, new[] { n, 1 });
+                var above = Engine.TensorGreaterThan(p, half);
+                voteCounts = voteCounts is null ? above : Engine.TensorAdd(voteCounts, above);
             }
+            if (voteCounts is not null) votes = voteCounts.Reshape(new[] { n }).Cast<int>().ToArray();
         }
 
-        var labels = new Tensor<T>(new[] { n, 1 });
+        var labelBits = new int[n];
         int k = _teacherLayers.Count;
         for (int j = 0; j < n; j++)
         {
             int n1 = votes[j], n0 = k - n1;
             // Eq. 4: argmax over the classes of the Laplace-noised counts.
-            labels[j, 0] = NumOps.FromDouble(n1 + Laplace(_options.LaplaceScale) > n0 + Laplace(_options.LaplaceScale) ? 1.0 : 0.0);
+            labelBits[j] = n1 + Laplace(_options.LaplaceScale) > n0 + Laplace(_options.LaplaceScale) ? 1 : 0;
             AccountQuery(Math.Abs(n0 - n1));
         }
+        var labels = new Tensor<int>(labelBits, new[] { n, 1 }).Cast<T>();
 
         AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
             () => AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(_studentLayers.Cast<ILayer<T>>().ToList()),
@@ -479,7 +482,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private Tensor<T> Labels(int n, double value)
     {
         var y = new Tensor<T>(new[] { n, 1 });
-        for (int i = 0; i < n; i++) y[i, 0] = NumOps.FromDouble(value);
+        y.Fill(NumOps.FromDouble(value));
         return y;
     }
 
@@ -493,13 +496,12 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     // n rows drawn with replacement from one partition (Algorithm 1, line 8).
     private Tensor<T> Rows(Tensor<T> encoded, int[] partition, int n)
     {
-        var rows = new Tensor<T>(new[] { n, _dataWidth });
+        var rowIndices = new int[n];
         for (int b = 0; b < n; b++)
         {
-            int row = partition[_random.Next(partition.Length)];
-            for (int j = 0; j < _dataWidth; j++) rows[b, j] = encoded[row, j];
+            rowIndices[b] = partition[_random.Next(partition.Length)];
         }
-        return rows;
+        return SyntheticTensorOps<T>.GatherRows(encoded, rowIndices, _dataWidth);
     }
 
     #endregion
@@ -510,21 +512,52 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private void FitEncoding(Matrix<T> data)
     {
+        var engine = Engine;
         int count = _columns.Count;
-        _columnMin = new double[count];
-        _columnMax = new double[count];
+        var x = SelectColumns(data);
+
+        // Column minimum and maximum as Enumerable.Min/Max give them: a NaN makes the minimum NaN, and the maximum is
+        // NaN only when the whole column is NaN.
+        var zeros = new Tensor<T>(x._shape);
+        var ones = new Tensor<T>(x._shape);
+        ones.Fill(NumOps.One);
+        var isNaN = engine.TensorWhere(engine.TensorIsFinite(x), zeros, engine.TensorWhere(engine.TensorIsInf(x), zeros, ones));
+        var min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(
+            engine.TensorNanToNum(x, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity)), new[] { 0 }, keepDims: false));
+        var max = engine.ReduceMax(
+            engine.TensorNanToNum(x, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity), new[] { 0 }, keepDims: false);
+        var anyNaN = engine.ReduceMax(isNaN, new[] { 0 }, keepDims: false);
+        if (count > 0 && NumOps.GreaterThan(engine.TensorMaxValue(anyNaN), NumOps.Zero))
+        {
+            var allNaN = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(isNaN), new[] { 0 }, keepDims: false));
+            var nan = new Tensor<T>(new[] { count });
+            nan.Fill(NumOps.FromDouble(double.NaN));
+            min = engine.TensorWhere(anyNaN, nan, min);
+            max = engine.TensorWhere(allNaN, nan, max);
+        }
+        _columnMin = min.ToVector();
+        _columnMax = max.ToVector();
+
+        // A categorical column spans its categories and every index up to round(max); a non-finite maximum adds none.
+        // At least one slot, so an all-negative index column still has a block to encode into.
+        var roundedMax = engine.TensorRound(engine.TensorNanToNum(max, -1.0, -1.0, -1.0)).Cast<int>().ToArray();
         _columnWidth = new int[count];
         for (int c = 0; c < count; c++)
         {
-            int source = SourceColumn(c, data);
-            var values = Enumerable.Range(0, data.Rows).Select(i => NumOps.ToDouble(data[i, source])).ToArray();
-            _columnMin[c] = values.Min();
-            _columnMax[c] = values.Max();
             _columnWidth[c] = IsCategorical(c)
-                ? Math.Max(_columns[c].Categories.Count, (int)Math.Round(_columnMax[c]) + 1)
+                ? Math.Max(1, Math.Max(_columns[c].Categories.Count, roundedMax[c] + 1))
                 : 1;
         }
         _dataWidth = _columnWidth.Sum();
+    }
+
+    // The source column of each metadata column, as a [rows, columns] tensor.
+    private Tensor<T> SelectColumns(Matrix<T> data)
+    {
+        int count = _columns.Count;
+        var sources = new int[count];
+        for (int c = 0; c < count; c++) sources[c] = SourceColumn(c, data);
+        return Engine.TensorIndexSelect(Tensor<T>.FromMatrix(data), new Tensor<int>(sources, new[] { count }), 1);
     }
 
     private int SourceColumn(int c, Matrix<T> data)
@@ -532,54 +565,78 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private Tensor<T> Encode(Matrix<T> data)
     {
-        var encoded = new Tensor<T>(new[] { data.Rows, _dataWidth });
-        for (int i = 0; i < data.Rows; i++)
+        var engine = Engine;
+        int rows = data.Rows;
+        int count = _columns.Count;
+        if (count == 0) return new Tensor<T>(new[] { rows, _dataWidth });
+        var x = SelectColumns(data);
+
+        // Continuous columns: (value - min) / (max - min), or 0.5 when the range is not positive.
+        var min = engine.TensorTile(Tensor<T>.FromVector(_columnMin).Reshape(new[] { 1, count }), new[] { rows, 1 });
+        var range = engine.TensorTile(engine.TensorSubtract(Tensor<T>.FromVector(_columnMax), Tensor<T>.FromVector(_columnMin))
+            .Reshape(new[] { 1, count }), new[] { rows, 1 });
+        var half = new Tensor<T>(x._shape);
+        half.Fill(NumOps.FromDouble(0.5));
+        var scaled = engine.TensorWhere(engine.TensorGreaterThan(range, NumOps.Zero),
+            engine.TensorDivide(engine.TensorSubtract(x, min), range), half);
+        // Categorical columns: the one-hot of round(value) clamped to the column's slots; NaN is index 0.
+        var lastSlot = new int[count];
+        for (int c = 0; c < count; c++) lastSlot[c] = _columnWidth[c] - 1;
+        var upper = engine.TensorTile(new Tensor<int>(lastSlot, new[] { 1, count }).Cast<T>(), new[] { rows, 1 });
+        var index = engine.TensorMin(engine.TensorMax(engine.TensorRound(engine.TensorNanToNum(x, 0.0)), NumOps.Zero), upper);
+
+        var blocks = new List<Tensor<T>>(count);
+        for (int c = 0; c < count; c++)
         {
-            int offset = 0;
-            for (int c = 0; c < _columns.Count; c++)
+            if (IsCategorical(c))
             {
-                double value = NumOps.ToDouble(data[i, SourceColumn(c, data)]);
-                if (IsCategorical(c))
-                {
-                    int category = Math.Min(Math.Max((int)Math.Round(value), 0), _columnWidth[c] - 1);
-                    encoded[i, offset + category] = NumOps.One;
-                }
-                else
-                {
-                    double range = _columnMax[c] - _columnMin[c];
-                    encoded[i, offset] = NumOps.FromDouble(range > 0 ? (value - _columnMin[c]) / range : 0.5);
-                }
-                offset += _columnWidth[c];
+                int width = _columnWidth[c];
+                var category = engine.TensorSlice(index, new[] { 0, c }, new[] { rows, 1 });
+                var slots = engine.TensorTile(engine.TensorArange<T>(0, width, 1).Reshape(new[] { 1, width }), new[] { rows, 1 });
+                blocks.Add(engine.TensorEquals(engine.TensorTile(category, new[] { 1, width }), slots));
+            }
+            else
+            {
+                blocks.Add(engine.TensorSlice(scaled, new[] { 0, c }, new[] { rows, 1 }));
             }
         }
-        return encoded;
+        return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), axis: 1);
     }
 
     private Matrix<T> Decode(Tensor<T> encoded)
     {
+        var engine = Engine;
         int n = encoded.Shape[0];
-        var rows = new Matrix<T>(n, _columns.Count);
-        for (int i = 0; i < n; i++)
+        int count = _columns.Count;
+        if (count == 0) return new Matrix<T>(n, 0);
+        var columnMin = Tensor<T>.FromVector(_columnMin);
+        var span = engine.TensorSubtract(Tensor<T>.FromVector(_columnMax), columnMin);
+        var zero = NumOps.Zero;
+        var one = NumOps.One;
+        var blocks = new List<Tensor<T>>(count);
+        int offset = 0;
+        for (int c = 0; c < count; c++)
         {
-            int offset = 0;
-            for (int c = 0; c < _columns.Count; c++)
+            int width = _columnWidth[c];
+            if (IsCategorical(c))
             {
-                if (IsCategorical(c))
-                {
-                    int best = 0;
-                    for (int j = 1; j < _columnWidth[c]; j++)
-                        if (NumOps.ToDouble(encoded[i, offset + j]) > NumOps.ToDouble(encoded[i, offset + best])) best = j;
-                    rows[i, c] = NumOps.FromDouble(best);
-                }
-                else
-                {
-                    double v = Math.Min(Math.Max(NumOps.ToDouble(encoded[i, offset]), 0.0), 1.0);
-                    rows[i, c] = NumOps.FromDouble(_columnMin[c] + v * (_columnMax[c] - _columnMin[c]));
-                }
-                offset += _columnWidth[c];
+                // The first largest slot; a NaN slot never wins.
+                var slots = engine.TensorSlice(encoded, new[] { 0, offset }, new[] { n, width });
+                blocks.Add(engine.TensorArgMax(slots, 1).Cast<T>().Reshape(new[] { n, 1 }));
             }
+            else
+            {
+                // min + clamp(v, 0, 1) * (max - min).
+                var v = engine.TensorClamp(engine.TensorSlice(encoded, new[] { 0, offset }, new[] { n, 1 }), zero, one);
+                var scale = engine.TensorTile(engine.TensorSlice(span, new[] { c }, new[] { 1 }).Reshape(new[] { 1, 1 }), new[] { n, 1 });
+                var shift = engine.TensorTile(engine.TensorSlice(columnMin, new[] { c }, new[] { 1 })
+                    .Reshape(new[] { 1, 1 }), new[] { n, 1 });
+                blocks.Add(engine.TensorAdd(shift, engine.TensorMultiply(v, scale)));
+            }
+            offset += width;
         }
-        return rows;
+        var rows = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), axis: 1);
+        return rows.ToMatrix();
     }
 
     #endregion

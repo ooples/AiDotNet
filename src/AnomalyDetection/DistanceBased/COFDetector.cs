@@ -28,7 +28,7 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
     private readonly int _k;
     [Buffer]
     private Matrix<T>? _trainingData;
-    private T[,]? _trainingDistanceMatrix;
+    private Tensor<T>? _trainingDistanceMatrix;
     [Buffer]
     private Vector<T>? _chainingDistances;
 
@@ -73,8 +73,10 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
         // neighbors themselves. Cache the square training matrix once so scoring a new,
         // differently-sized query set never indexes the rectangular query matrix as if
         // both of its axes referred to training samples.
-        _trainingDistanceMatrix = ComputeDistanceMatrix(X, X);
-        _chainingDistances = ComputeChainingDistances(_trainingDistanceMatrix);
+        var data = AnomalyTensorOps.ToTensor(X);
+        _trainingDistanceMatrix = AnomalyTensorOps.PairwiseDistances(data, data);
+        _chainingDistances = ComputeAverageChainDistances(
+            _trainingDistanceMatrix, _trainingDistanceMatrix, excludeSameIndex: true, out _).ToVector();
 
         // Calculate scores for training data to set threshold
         // The threshold is calibrated on leave-one-out training scores: each training point's neighbourhood
@@ -113,137 +115,81 @@ public partial class COFDetector<T> : AnomalyDetectorBase<T>
             ?? throw new InvalidOperationException(
                 $"{nameof(COFDetector<T>)} is not fitted: the training data is missing.");
 
-        var scores = new Vector<T>(X.Rows);
+        var chainingDist = _chainingDistances ?? throw new InvalidOperationException("_chainingDistances has not been initialized.");
+        var engine = Engine;
         var distanceMatrix = scoringTrainingData
             ? trainingDistanceMatrix
-            : ComputeDistanceMatrix(X, trainingData);
+            : AnomalyTensorOps.PairwiseDistances(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData));
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var neighbors = GetKNearestNeighbors(distanceMatrix, i, _k, scoringTrainingData);
+        var acDist = ComputeAverageChainDistances(distanceMatrix, trainingDistanceMatrix, scoringTrainingData, out var neighbors);
+        var avgNeighborAcDist = engine.TensorDivideScalar(
+            engine.ReduceSum(AnomalyTensorOps.GatherByIndex(chainingDist.AsTensor(), neighbors), new[] { 1 }, false),
+            NumOps.FromDouble(_k));
 
-            T acDist = ComputeAverageChainDist(distanceMatrix, trainingDistanceMatrix, i, neighbors);
-
-            T avgNeighborAcDist = NumOps.Zero;
-            var chainingDist = _chainingDistances ?? throw new InvalidOperationException("_chainingDistances has not been initialized.");
-            foreach (int neighborIdx in neighbors)
-            {
-                avgNeighborAcDist = NumOps.Add(avgNeighborAcDist, chainingDist[neighborIdx]);
-            }
-            avgNeighborAcDist = NumOps.Divide(avgNeighborAcDist, NumOps.FromDouble(neighbors.Count));
-
-            // COF = ac-dist(point) / average(ac-dist(neighbors))
-            T cof = NumOps.GreaterThan(avgNeighborAcDist, NumOps.Zero)
-                ? NumOps.Divide(acDist, avgNeighborAcDist)
-                : NumOps.One;
-            scores[i] = cof;
-        }
-
-        return scores;
+        // COF = ac-dist(point) / average(ac-dist(neighbors)), 1 when that average is not positive
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(avgNeighborAcDist, NumOps.Zero),
+            engine.TensorDivide(acDist, avgNeighborAcDist),
+            Tensor<T>.CreateOnes(new[] { X.Rows })).ToVector();
     }
 
-    private Vector<T> ComputeChainingDistances(T[,] distanceMatrix)
+    // Average chaining distance of every query row over its k nearest training neighbours.
+    // The chain is built greedily from the query point: at each step the remaining neighbour with the
+    // shortest edge to *any* point already in the chain (the query or a visited neighbour) joins, the
+    // first in nearest-neighbour order on ties; sorting once by distance to the query is not equivalent
+    // and overstates the cost for curved or corridor-shaped clusters. Step s costs weight
+    // 2 * (k - s) / (k * (k + 1)). All query rows advance through the k steps together.
+    private Tensor<T> ComputeAverageChainDistances(Tensor<T> queryToTrainingDistances, Tensor<T> trainingDistances,
+        bool excludeSameIndex, out Tensor<int> neighbors)
     {
-        int sampleCount = distanceMatrix.GetLength(0);
-        var chainDist = new Vector<T>(sampleCount);
+        var engine = Engine;
+        int m = queryToTrainingDistances.Shape[0];
+        int nTraining = trainingDistances.Shape[0];
+        int k = _k;
+        T maxValue = NumOps.MaxValue;
 
-        for (int i = 0; i < sampleCount; i++)
+        // k nearest neighbours (by index on ties of the stable order) and the query-to-neighbour edges
+        var masked = queryToTrainingDistances;
+        if (excludeSameIndex)
         {
-            var neighbors = GetKNearestNeighbors(distanceMatrix, i, _k, excludeSameIndex: true);
-            chainDist[i] = ComputeAverageChainDist(distanceMatrix, distanceMatrix, i, neighbors);
+            masked = engine.TensorMaskedFill(masked, engine.TensorEqScalar(engine.TensorEye<T>(m), NumOps.One), maxValue);
         }
 
-        return chainDist;
-    }
+        var (sorted, order) = AnomalyTensorOps.StableSortRows(masked, descending: false);
+        neighbors = engine.TensorSlice(order, new[] { 0, 0 }, new[] { m, k });
+        var edge = engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { m, k });
 
-    private T ComputeAverageChainDist(
-        T[,] queryToTrainingDistances,
-        T[,] trainingDistances,
-        int queryIndex,
-        List<int> neighbors)
-    {
-        if (neighbors.Count == 0) return NumOps.Zero;
+        var remaining = Tensor<T>.CreateOnes(new[] { m, k });
+        var unavailable = engine.Fill(m * k, maxValue).AsTensor().Reshape(new[] { m, k });
+        var positions = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(0, k, 1), new[] { 1, k }), new[] { m, k });
+        var flatTraining = engine.Reshape(trainingDistances, new[] { nTraining * nTraining });
+        var neighborRowOffsets = engine.TensorMultiplyScalar(neighbors, nTraining);
+        var steps = new Tensor<T>[k];
 
-        var visitedNeighbors = new List<int>(neighbors.Count);
-        // Preserve nearest-neighbour order for deterministic tie-breaking.
-        var remainingNeighbors = new List<int>(neighbors);
-        T totalChainDist = NumOps.Zero;
-
-        // Build the minimum-cost chaining set from the query point. At each step COF
-        // selects the remaining neighbour with the shortest edge to *any* point
-        // already in the chain; sorting once by distance to the query is not
-        // equivalent and overstates the cost for curved or corridor-shaped clusters.
-        for (int i = 0; i < neighbors.Count; i++)
+        for (int s = 0; s < k; s++)
         {
-            int current = -1;
-            T minDist = NumOps.Zero;
-            bool found = false;
-            foreach (int candidate in remainingNeighbors)
-            {
-                // The query-to-neighbour edge comes from the rectangular matrix.
-                // Neighbour-to-neighbour edges come from the cached square matrix.
-                T candidateDistance = queryToTrainingDistances[queryIndex, candidate];
-                foreach (int visited in visitedNeighbors)
-                {
-                    if (NumOps.LessThan(trainingDistances[candidate, visited], candidateDistance))
-                    {
-                        candidateDistance = trainingDistances[candidate, visited];
-                    }
-                }
+            // The remaining neighbour with the shortest edge to the chain, and that edge
+            var candidates = engine.TensorWhere(remaining, edge, unavailable);
+            var chosen = AnomalyTensorOps.FirstArgMinRows(candidates);
+            steps[s] = engine.TensorAmin(candidates, new[] { 1 }, false);
 
-                if (!found || NumOps.LessThan(candidateDistance, minDist))
-                {
-                    current = candidate;
-                    minDist = candidateDistance;
-                    found = true;
-                }
-            }
-
-            if (!found)
-            {
-                break;
-            }
-
-            // Weight: 2 * (k - i) / (k * (k + 1))
-            int neighborCount = neighbors.Count;
-            T weight = NumOps.Divide(
-                NumOps.FromDouble(2.0 * (neighborCount - i)),
-                NumOps.FromDouble((double)neighborCount * (neighborCount + 1)));
-            totalChainDist = NumOps.Add(totalChainDist, NumOps.Multiply(weight, minDist));
-            visitedNeighbors.Add(current);
-            remainingNeighbors.Remove(current);
+            // It leaves the remaining set, and every other neighbour's edge to the chain can now go
+            // through it: edge[i, j] = min(edge[i, j], d(neighbor_ij, chosen_i))
+            var chosenColumn = engine.Reshape(chosen, new[] { m, 1 });
+            var chosenMask = engine.TensorEquals(positions,
+                engine.TensorBroadcastTo(engine.Reshape(chosen.Cast<T>(), new[] { m, 1 }), new[] { m, k }));
+            remaining = engine.TensorSubtract(remaining, chosenMask);
+            var chosenIndex = engine.TensorTakeAlongDim(neighbors, chosenColumn, 1);
+            var flat = engine.TensorAdd(neighborRowOffsets, engine.TensorBroadcastTo(chosenIndex, new[] { m, k }));
+            edge = engine.TensorMin(edge, AnomalyTensorOps.GatherByIndex(flatTraining, flat));
         }
 
-        return totalChainDist;
-    }
-
-    private T[,] ComputeDistanceMatrix(Matrix<T> X, Matrix<T> reference)
-    {
-        var matrix = new T[X.Rows, reference.Rows];
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var pointI = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            for (int k = 0; k < reference.Rows; k++)
-            {
-                var pointK = new Vector<T>(reference.GetRowReadOnlySpan(k).ToArray());
-
-                // Vectorized Euclidean distance via Engine
-                var diff = Engine.Subtract(pointI, pointK);
-                matrix[i, k] = NumOps.Sqrt(Engine.DotProduct(diff, diff));
-            }
-        }
-
-        return matrix;
-    }
-
-    private List<int> GetKNearestNeighbors(T[,] distanceMatrix, int pointIdx, int k, bool excludeSameIndex)
-    {
-        return Enumerable.Range(0, distanceMatrix.GetLength(1))
-            .Where(i => !excludeSameIndex || i != pointIdx)
-            .OrderBy(i => NumOps.ToDouble(distanceMatrix[pointIdx, i]))
-            .Take(k)
-            .ToList();
+        // Weighted sum of the step costs with weights 2 * (k - s) / (k * (k + 1))
+        var weights = engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(NumOps.FromDouble(k), engine.TensorArange<T>(0, k, 1)), NumOps.FromDouble(2)),
+            NumOps.FromDouble((double)k * (k + 1)));
+        var stepCosts = engine.TensorStack(steps, 1);
+        return engine.ReduceSum(AnomalyTensorOps.MultiplyRow(stepCosts, weights), new[] { 1 }, false);
     }
 }

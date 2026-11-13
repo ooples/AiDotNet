@@ -281,6 +281,26 @@ public class IcaDecompositionIntegrationTests
 
     #region Convergence Tests
 
+    [Fact]
+    public void IcaDecomposition_FastIcaConvergenceCheck_CompletesWithFiniteUnmixingMatrix()
+    {
+        // The FastICA convergence test takes |w . w_old| of [n, 1] column vectors; the engine dot
+        // product needs rank-1 operands, so the first iteration must not throw.
+        var X = CreateMixedSignals(200, 2, seed: 11);
+
+        var ica = new IcaDecomposition<double>(X, components: 2);
+
+        Assert.Equal(2, ica.UnmixingMatrix.Rows);
+        for (int i = 0; i < ica.UnmixingMatrix.Rows; i++)
+        {
+            for (int j = 0; j < ica.UnmixingMatrix.Columns; j++)
+            {
+                double value = ica.UnmixingMatrix[i, j];
+                Assert.True(!double.IsNaN(value) && !double.IsInfinity(value), $"UnmixingMatrix[{i},{j}] is not finite");
+            }
+        }
+    }
+
     [Fact(Timeout = 120000)]
     public async Task IcaDecomposition_VaryingIterations_ProducesValidResults()
     {

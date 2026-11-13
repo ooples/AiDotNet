@@ -331,6 +331,48 @@ public class LqDecompositionIntegrationTests
 
     #region Solve Tests
 
+    [Theory]
+    [InlineData(LqAlgorithmType.Householder)]
+    [InlineData(LqAlgorithmType.GramSchmidt)]
+    [InlineData(LqAlgorithmType.Givens)]
+    public void LqDecomposition_Solve_Wide2x3_ReturnsMinimumNormSolution(LqAlgorithmType algorithm)
+    {
+        // A = [[1,0,1],[0,1,1]], b = [2,3]: the minimum-norm solution is A^T (A A^T)^-1 b
+        // = [1/3, 4/3, 5/3].
+        var A = new Matrix<double>(2, 3);
+        A[0, 0] = 1; A[0, 1] = 0; A[0, 2] = 1;
+        A[1, 0] = 0; A[1, 1] = 1; A[1, 2] = 1;
+        var b = new Vector<double>(new[] { 2.0, 3.0 });
+
+        var x = new LqDecomposition<double>(A, algorithm).Solve(b);
+
+        Assert.Equal(3, x.Length);
+        Assert.Equal(1.0 / 3.0, x[0], 1e-10);
+        Assert.Equal(4.0 / 3.0, x[1], 1e-10);
+        Assert.Equal(5.0 / 3.0, x[2], 1e-10);
+    }
+
+    [Theory]
+    [InlineData(LqAlgorithmType.Householder)]
+    [InlineData(LqAlgorithmType.GramSchmidt)]
+    [InlineData(LqAlgorithmType.Givens)]
+    public void LqDecomposition_Solve_Tall3x2_ReturnsLeastSquaresSolution(LqAlgorithmType algorithm)
+    {
+        // A = [[1,0],[0,1],[1,1]], b = [1,2,4]: the normal equations A^T A x = A^T b give
+        // [[2,1],[1,2]] x = [5,6], so x = [4/3, 7/3].
+        var A = new Matrix<double>(3, 2);
+        A[0, 0] = 1; A[0, 1] = 0;
+        A[1, 0] = 0; A[1, 1] = 1;
+        A[2, 0] = 1; A[2, 1] = 1;
+        var b = new Vector<double>(new[] { 1.0, 2.0, 4.0 });
+
+        var x = new LqDecomposition<double>(A, algorithm).Solve(b);
+
+        Assert.Equal(2, x.Length);
+        Assert.Equal(4.0 / 3.0, x[0], 1e-10);
+        Assert.Equal(7.0 / 3.0, x[1], 1e-10);
+    }
+
 
     #endregion
 

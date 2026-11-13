@@ -245,10 +245,8 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
 
             // Reshape update into _coefficients shape: _numClasses × (numFeatures+1)
             Matrix<T> updateMatrix = new Matrix<T>(_coefficients.Rows, _coefficients.Columns);
-            for (int i = 0; i < Math.Min(update.Length, _coefficients.Rows * _coefficients.Columns); i++)
-            {
-                updateMatrix[i / _coefficients.Columns, i % _coefficients.Columns] = update[i];
-            }
+            int copied = Math.Min(update.Length, _coefficients.Rows * _coefficients.Columns);
+            update.AsSpan().Slice(0, copied).CopyTo(updateMatrix.AsWritableSpan());
 
             _coefficients = _coefficients.Subtract(updateMatrix);
 
@@ -271,16 +269,13 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         // carries across the classes -- zero exactly when no class uses the feature. Per-class values
         // remain available through the model's own coefficient matrix.
         int featureCount = _coefficients.Columns - 1;
-        var perFeature = new Vector<T>(featureCount);
-        for (int j = 0; j < featureCount; j++)
+        var perFeature = new Vector<T>(Math.Max(0, featureCount));
+        if (featureCount > 0 && _coefficients.Rows > 0)
         {
-            T total = NumOps.Zero;
-            for (int c = 0; c < _coefficients.Rows; c++)
-            {
-                total = NumOps.Add(total, NumOps.Abs(_coefficients[c, j]));
-            }
-
-            perFeature[j] = NumOps.Divide(total, NumOps.FromDouble(_coefficients.Rows));
+            var featureWeights = Tensor<T>.FromMatrix(_coefficients.GetSubMatrix(0, 0, _coefficients.Rows, featureCount));
+            perFeature = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorAbs(featureWeights), new[] { 0 }, keepDims: false),
+                NumOps.FromDouble(_coefficients.Rows)).ToVector();
         }
 
         Coefficients = perFeature;
@@ -318,20 +313,19 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
             throw new InvalidOperationException("Coefficients have not been initialized.");
 
         Matrix<T> scores = x.Multiply(_coefficients.Transpose());
-        Vector<T> maxScores = scores.RowWiseMax();
-        Matrix<T> expScores = scores.Transform((s, i, j) => NumOps.Exp(NumOps.Subtract(s, maxScores[i])));
-        Vector<T> sumExpScores = expScores.RowWiseSum();
-
-        // Normalize: divide each row element by the row sum (broadcast division)
-        var result = new Matrix<T>(expScores.Rows, expScores.Columns);
-        for (int i = 0; i < expScores.Rows; i++)
+        if (scores.Rows == 0 || scores.Columns == 0)
         {
-            for (int j = 0; j < expScores.Columns; j++)
-            {
-                result[i, j] = NumOps.Divide(expScores[i, j], sumExpScores[i]);
-            }
+            return new Matrix<T>(scores.Rows, scores.Columns);
         }
-        return result;
+
+        // Row-wise softmax with the row maximum subtracted for stability
+        var shape = new[] { scores.Rows, scores.Columns };
+        var scoreTensor = Tensor<T>.FromMatrix(scores);
+        var maxScores = Engine.TensorBroadcastTo(
+            new Tensor<T>(new[] { scores.Rows, 1 }, scores.RowWiseMax()), shape);
+        var expScores = Engine.TensorExp(Engine.TensorSubtract(scoreTensor, maxScores));
+        var sumExpScores = Engine.TensorBroadcastTo(Engine.ReduceSum(expScores, new[] { 1 }, keepDims: true), shape);
+        return Engine.TensorDivide(expScores, sumExpScores).ToMatrix();
     }
 
     /// <summary>
@@ -435,14 +429,17 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> CreateOneHotEncoding(Vector<T> y)
     {
-        Matrix<T> oneHot = new Matrix<T>(y.Length, _numClasses);
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0 || _numClasses == 0)
         {
-            int classIndex = Convert.ToInt32(NumOps.ToInt32(y[i]));
-            oneHot[i, classIndex] = NumOps.One;
+            return new Matrix<T>(y.Length, _numClasses);
         }
 
-        return oneHot;
+        // oneHot[i, c] = 1 where the encoded label y[i] equals class index c
+        var shape = new[] { y.Length, _numClasses };
+        var labels = Engine.TensorBroadcastTo(new Tensor<T>(new[] { y.Length, 1 }, y), shape);
+        var classIndices = Engine.TensorBroadcastTo(
+            Engine.TensorArange<T>(0, _numClasses).Reshape(new[] { 1, _numClasses }), shape);
+        return Engine.TensorEquals(labels, classIndices).ToMatrix();
     }
 
     /// <summary>
@@ -508,15 +505,15 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
             return indices;
         }
 
-        var labelled = new Vector<T>(indices.Length);
-        for (int i = 0; i < indices.Length; i++)
+        if (indices.Length == 0)
         {
-            int index = (int)Math.Round(NumOps.ToDouble(indices[i]));
-            index = Math.Max(0, Math.Min(_classLabels.Count - 1, index));
-            labelled[i] = _classLabels[index];
+            return new Vector<T>(0);
         }
 
-        return labelled;
+        var classIndices = Engine.TensorClamp(
+            Engine.TensorArgMax(Tensor<T>.FromMatrix(probabilities), 1), 0, _classLabels.Count - 1);
+        var labelTensor = Tensor<T>.FromVector(new Vector<T>(_classLabels));
+        return Engine.TensorGather(labelTensor, classIndices, 0).ToVector();
     }
 
     /// <summary>

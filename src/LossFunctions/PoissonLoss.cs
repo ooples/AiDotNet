@@ -56,16 +56,11 @@ public class PoissonLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Poisson loss: predicted - actual * log(predicted)
-            // (Omitting log(actual!) as it's constant wrt predictions)
-            sum = NumOps.Add(sum, NumOps.Subtract(
-                predicted[i],
-                NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon))
-            ));
-        }
+        // Poisson loss: predicted - actual * log(predicted)
+        // (Omitting log(actual!) as it's constant wrt predictions)
+        var p = predicted.AsTensor();
+        var logP = SafeLogTensor(p, NumericalStabilityHelper.SmallEpsilon);
+        T sum = Engine.TensorSum(Engine.TensorSubtract(p, Engine.TensorMultiply(actual.AsTensor(), logP)));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }

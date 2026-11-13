@@ -34,14 +34,11 @@ public class BornRuleMseLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // measured probability = amplitude²
-            T p = NumOps.Multiply(predicted[i], predicted[i]);
-            T diff = NumOps.Subtract(p, actual[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
+        // measured probability = amplitude²
+        var amplitude = predicted.AsTensor();
+        var p = Engine.TensorMultiply(amplitude, amplitude);
+        var diff = Engine.TensorSubtract(p, actual.AsTensor());
+        T sum = Engine.TensorSum(Engine.TensorMultiply(diff, diff));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }

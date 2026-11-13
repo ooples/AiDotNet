@@ -39,23 +39,9 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeKurtosis(Vector<T> x)
     {
-        int n = x.Length;
-        T mean = NumOps.Zero;
-        for (int i = 0; i < n; i++) mean = NumOps.Add(mean, x[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(n));
-
-        T m2 = NumOps.Zero, m4 = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T d = NumOps.Subtract(x[i], mean);
-            T d2 = NumOps.Multiply(d, d);
-            m2 = NumOps.Add(m2, d2);
-            m4 = NumOps.Add(m4, NumOps.Multiply(d2, d2));
-        }
-
-        T nT = NumOps.FromDouble(n);
-        m2 = NumOps.Divide(m2, nT);
-        m4 = NumOps.Divide(m4, nT);
+        var d2 = Engine.TensorSquare(CenterVector(Tensor<T>.FromVector(x)));
+        T m2 = Engine.TensorMean(d2);
+        T m4 = Engine.TensorMean(Engine.TensorSquare(d2));
         T m2Sq = NumOps.Multiply(m2, m2);
 
         double m2Sq_d = NumOps.ToDouble(m2Sq);
@@ -67,31 +53,10 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected Matrix<T> StandardizeData(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-        var result = new Matrix<T>(n, d);
-        T nT = NumOps.FromDouble(n);
-
-        for (int j = 0; j < d; j++)
-        {
-            T mean = NumOps.Zero;
-            for (int i = 0; i < n; i++) mean = NumOps.Add(mean, data[i, j]);
-            mean = NumOps.Divide(mean, nT);
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, nT);
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
-
-            for (int i = 0; i < n; i++)
-                result[i, j] = NumOps.Divide(NumOps.Subtract(data[i, j], mean), std);
-        }
-
-        return result;
+        var centered = CenterColumns(Tensor<T>.FromMatrix(data));
+        var variance = Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, true);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-15)));
+        return Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, centered.Shape.ToArray())).ToMatrix();
     }
 
     /// <summary>
@@ -99,39 +64,16 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected Vector<T> RegressOut(Vector<T> y, Vector<T> x)
     {
-        int n = x.Length;
-        T nT = NumOps.FromDouble(n);
-        T mx = NumOps.Zero, my = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            mx = NumOps.Add(mx, x[i]);
-            my = NumOps.Add(my, y[i]);
-        }
-        mx = NumOps.Divide(mx, nT);
-        my = NumOps.Divide(my, nT);
-
-        // Engine-accelerated regression via centered dot products
-        var centX = new Vector<T>(n);
-        var centY = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            centX[i] = NumOps.Subtract(x[i], mx);
-            centY[i] = NumOps.Subtract(y[i], my);
-        }
-        T sxy = Engine.DotProduct(centX, centY);
-        T sxx = Engine.DotProduct(centX, centX);
+        var centX = CenterVector(Tensor<T>.FromVector(x));
+        var centY = CenterVector(Tensor<T>.FromVector(y));
+        T sxy = Engine.TensorSum(Engine.TensorMultiply(centX, centY));
+        T sxx = Engine.TensorSum(Engine.TensorSquare(centX));
 
         T beta = NumOps.GreaterThan(sxx, NumOps.FromDouble(1e-10))
             ? NumOps.Divide(sxy, sxx)
             : NumOps.Zero;
 
-        var residuals = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            residuals[i] = NumOps.Subtract(
-                NumOps.Subtract(y[i], my),
-                NumOps.Multiply(beta, NumOps.Subtract(x[i], mx)));
-
-        return residuals;
+        return Engine.TensorSubtract(centY, Engine.TensorMultiplyScalar(centX, beta)).ToVector();
     }
 
     /// <summary>
@@ -140,32 +82,11 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double GaussianMI(Vector<T> x, Vector<T> y)
     {
-        int n = x.Length;
-        T nT = NumOps.FromDouble(n);
-        T mx = NumOps.Zero, my = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            mx = NumOps.Add(mx, x[i]);
-            my = NumOps.Add(my, y[i]);
-        }
-        mx = NumOps.Divide(mx, nT);
-        my = NumOps.Divide(my, nT);
-
-        // Engine-accelerated correlation via centered dot products
-        var cX = new Vector<T>(n);
-        var cY = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            cX[i] = NumOps.Subtract(x[i], mx);
-            cY[i] = NumOps.Subtract(y[i], my);
-        }
-        T sxx = Engine.DotProduct(cX, cX);
-        T syy = Engine.DotProduct(cY, cY);
-        T sxy = Engine.DotProduct(cX, cY);
-
-        sxx = NumOps.Divide(sxx, nT);
-        syy = NumOps.Divide(syy, nT);
-        sxy = NumOps.Divide(sxy, nT);
+        var cX = CenterVector(Tensor<T>.FromVector(x));
+        var cY = CenterVector(Tensor<T>.FromVector(y));
+        T sxx = Engine.TensorMean(Engine.TensorSquare(cX));
+        T syy = Engine.TensorMean(Engine.TensorSquare(cY));
+        T sxy = Engine.TensorMean(Engine.TensorMultiply(cX, cY));
 
         double sxx_d = NumOps.ToDouble(sxx), syy_d = NumOps.ToDouble(syy), sxy_d = NumOps.ToDouble(sxy);
         double corr = (sxx_d > 1e-15 && syy_d > 1e-15) ? sxy_d / Math.Sqrt(sxx_d * syy_d) : 0;
@@ -179,26 +100,11 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeCorrelation(Vector<T> x, Vector<T> y)
     {
-        int n = x.Length;
-        T nT = NumOps.FromDouble(n);
-        T mx = NumOps.Zero, my = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            mx = NumOps.Add(mx, x[i]);
-            my = NumOps.Add(my, y[i]);
-        }
-        mx = NumOps.Divide(mx, nT);
-        my = NumOps.Divide(my, nT);
-
-        T sxy = NumOps.Zero, sxx = NumOps.Zero, syy = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T dx = NumOps.Subtract(x[i], mx);
-            T dy = NumOps.Subtract(y[i], my);
-            sxy = NumOps.Add(sxy, NumOps.Multiply(dx, dy));
-            sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
-            syy = NumOps.Add(syy, NumOps.Multiply(dy, dy));
-        }
+        var dx = CenterVector(Tensor<T>.FromVector(x));
+        var dy = CenterVector(Tensor<T>.FromVector(y));
+        T sxy = Engine.TensorSum(Engine.TensorMultiply(dx, dy));
+        T sxx = Engine.TensorSum(Engine.TensorSquare(dx));
+        T syy = Engine.TensorSum(Engine.TensorSquare(dy));
 
         double sxx_d = NumOps.ToDouble(sxx), syy_d = NumOps.ToDouble(syy);
         return (sxx_d > 1e-10 && syy_d > 1e-10)
@@ -210,20 +116,8 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected T ComputeColumnVariance(Matrix<T> data, int col)
     {
-        int n = data.Rows;
-        T nT = NumOps.FromDouble(n);
-        T mean = NumOps.Zero;
-        for (int i = 0; i < n; i++) mean = NumOps.Add(mean, data[i, col]);
-        mean = NumOps.Divide(mean, nT);
-
-        T variance = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T d = NumOps.Subtract(data[i, col], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(d, d));
-        }
-
-        return NumOps.Divide(variance, nT);
+        var centered = CenterVector(Tensor<T>.FromVector(Engine.GetColumn(data, col)));
+        return Engine.TensorMean(Engine.TensorSquare(centered));
     }
 
     /// <summary>
@@ -232,43 +126,8 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected Vector<T> KernelSmooth(Matrix<T> data, int predictorCol, Vector<T> response)
     {
-        int n = data.Rows;
-
-        // Scott's rule: h = sigma * n^(-1/5)
-        double mean = 0;
-        for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, predictorCol]);
-        mean /= n;
-        double variance = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(data[i, predictorCol]) - mean;
-            variance += diff * diff;
-        }
-        double sigma = Math.Max(Math.Sqrt(variance / n), 1e-10);
-        T h = NumOps.FromDouble(sigma * Math.Pow(n, -1.0 / 5.0));
-        var smoothed = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            T xi = data[i, predictorCol];
-            T numerator = NumOps.Zero;
-            T denominator = NumOps.Zero;
-
-            for (int j = 0; j < n; j++)
-            {
-                T diff = NumOps.Divide(NumOps.Subtract(xi, data[j, predictorCol]), h);
-                double diffD = NumOps.ToDouble(diff);
-                T kernel = NumOps.FromDouble(Math.Exp(-0.5 * diffD * diffD));
-                numerator = NumOps.Add(numerator, NumOps.Multiply(kernel, response[j]));
-                denominator = NumOps.Add(denominator, kernel);
-            }
-
-            smoothed[i] = NumOps.GreaterThan(denominator, NumOps.FromDouble(1e-15))
-                ? NumOps.Divide(numerator, denominator)
-                : NumOps.Zero;
-        }
-
-        return smoothed;
+        var predictor = Tensor<T>.FromVector(Engine.GetColumn(data, predictorCol));
+        return NadarayaWatson(predictor, Tensor<T>.FromVector(response)).ToVector();
     }
 
     /// <summary>
@@ -277,42 +136,55 @@ public abstract class FunctionalBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected Vector<T> KernelRegressOut(Vector<T> predictor, Vector<T> response)
     {
+        var y = Tensor<T>.FromVector(response);
+        return Engine.TensorSubtract(y, NadarayaWatson(Tensor<T>.FromVector(predictor), y)).ToVector();
+    }
+
+    /// <summary>
+    /// Subtracts the mean from a 1-D tensor.
+    /// </summary>
+    private protected Tensor<T> CenterVector(Tensor<T> x)
+        => Engine.TensorSubtractScalar(x, Engine.TensorMean(x));
+
+    /// <summary>
+    /// Gaussian-kernel Nadaraya–Watson fit of <paramref name="response"/> on <paramref name="predictor"/>
+    /// (both [n]) with Scott's rule bandwidth h = max(sigma, 1e-10) * n^(-1/5); an entry whose kernel
+    /// weights sum to at most 1e-15 is 0.
+    /// </summary>
+    private protected Tensor<T> NadarayaWatson(Tensor<T> predictor, Tensor<T> response)
+    {
         int n = predictor.Length;
+        if (n == 0)
+            return new Tensor<T>(new[] { 0 });
 
-        // Scott's rule: h = sigma * n^(-1/5)
-        double mean = 0;
-        for (int i = 0; i < n; i++) mean += NumOps.ToDouble(predictor[i]);
-        mean /= n;
-        double variance = 0;
-        for (int i = 0; i < n; i++)
+        T sigma = NumOps.Sqrt(Engine.TensorMean(Engine.TensorSquare(CenterVector(predictor))));
+        T minSigma = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(sigma, minSigma))
+            sigma = minSigma;
+        T h = NumOps.Multiply(sigma, NumOps.FromDouble(Math.Pow(n, -1.0 / 5.0)));
+        T minusHalf = NumOps.FromDouble(-0.5);
+        T tiny = NumOps.FromDouble(1e-15);
+
+        // Kernel rows are formed in blocks so the [rows x n] weight matrix stays bounded.
+        var column = predictor.Reshape(new[] { n, 1 });
+        var row = predictor.Reshape(new[] { 1, n });
+        var y = response.Reshape(new[] { n, 1 });
+        int block = Math.Max(1, Math.Min(n, (1 << 22) / Math.Max(1, n)));
+        var parts = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += block)
         {
-            double diff = NumOps.ToDouble(predictor[i]) - mean;
-            variance += diff * diff;
-        }
-        double sigma = Math.Max(Math.Sqrt(variance / n), 1e-10);
-        double h = sigma * Math.Pow(n, -1.0 / 5.0);
-        var residuals = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            T xi = predictor[i];
-            T numerator = NumOps.Zero;
-            T denominator = NumOps.Zero;
-
-            for (int j = 0; j < n; j++)
-            {
-                double diffD = NumOps.ToDouble(NumOps.Subtract(xi, predictor[j])) / h;
-                T kernel = NumOps.FromDouble(Math.Exp(-0.5 * diffD * diffD));
-                numerator = NumOps.Add(numerator, NumOps.Multiply(kernel, response[j]));
-                denominator = NumOps.Add(denominator, kernel);
-            }
-
-            T predicted = NumOps.GreaterThan(denominator, NumOps.FromDouble(1e-15))
-                ? NumOps.Divide(numerator, denominator)
-                : NumOps.Zero;
-            residuals[i] = NumOps.Subtract(response[i], predicted);
+            int len = Math.Min(block, n - start);
+            var xi = Engine.TensorSlice(column, new[] { start, 0 }, new[] { len, 1 });
+            var diff = Engine.TensorDivideScalar(Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(xi, new[] { len, n }), Engine.TensorBroadcastTo(row, new[] { len, n })), h);
+            var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorSquare(diff), minusHalf));
+            var numerator = Engine.TensorMatMul(kernel, y).Reshape(new[] { len });
+            var denominator = Engine.ReduceSum(kernel, new[] { 1 }, false);
+            var valid = Engine.TensorGreaterThan(denominator, tiny);
+            var safe = Engine.TensorWhere(valid, denominator, Engine.TensorOnesLike(denominator));
+            parts.Add(Engine.TensorWhere(valid, Engine.TensorDivide(numerator, safe), Engine.TensorZerosLike(numerator)));
         }
 
-        return residuals;
+        return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
     }
 }

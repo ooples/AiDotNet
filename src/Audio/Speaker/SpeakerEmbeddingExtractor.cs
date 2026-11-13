@@ -52,6 +52,8 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("X-Vectors: Robust DNN Embeddings for Speaker Recognition", "https://doi.org/10.1109/ICASSP.2018.8461375")]
+[AiDotNet.Attributes.PreprocessesInput("XVectorNetwork transposes the [batch, frames, features] input to channel-first [B, features, frames] before the first TDNN convolution.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Time)]
 public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Execution Mode

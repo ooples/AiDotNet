@@ -217,19 +217,18 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         var instrTokens = TokenizeText(instruction);
         int instrLen = instrTokens.Length;
 
-        // Step 3: Build backbone input with observation and task tokens
-        var backboneInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            // Add task conditioning from instruction
-            if (instrLen > 0)
-            {
-                double instrSignal = NumOps.ToDouble(instrTokens[d % instrLen]);
-                vis += Math.Tanh(instrSignal / 100.0) * 0.3;
-            }
-            backboneInput[d] = NumOps.FromDouble(vis);
-        }
+        var engine = Engine;
+
+        // Step 3: Build backbone input with observation and task tokens:
+        // vis[d] + 0.3 tanh(instr[d % instrLen] / 100).
+        var visFlat = visualFeatures.Reshape([dim]);
+        var backboneInput = instrLen > 0
+            ? engine.TensorAdd(
+                visFlat,
+                engine.TensorMultiplyScalar(
+                    engine.TensorTanh(engine.TensorDivideScalar(CyclicTake(instrTokens, dim), NumOps.FromDouble(100.0))),
+                    NumOps.FromDouble(0.3)))
+            : visFlat.Clone();
 
         // Step 4: Process through transformer backbone
         var backboneOut = backboneInput;
@@ -237,68 +236,67 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
             backboneOut = Layers[i].Forward(backboneOut);
 
         // Step 5: Readout token cross-attention
-        // Readout tokens attend to backbone output to extract action-relevant features
+        // Readout tokens attend to backbone output to extract action-relevant features:
+        // attn[r, d] = exp(key[d] sin((r + 1) d pi / dim) / sqrt(dim)); readout[r] is the
+        // attention-weighted mean of the keys, or 0 when the attention mass is not above 1e-8.
         int numReadout = actionDim;
-        var readoutFeatures = new double[numReadout];
-
-        for (int r = 0; r < numReadout; r++)
+        Tensor<T> readoutFeatures;
+        if (dim == 0 || numReadout == 0)
         {
-            double attnSum = 0;
-            double valSum = 0;
-            int stride = Math.Max(1, dim / numReadout);
-
-            for (int d = 0; d < dim; d++)
-            {
-                double key = NumOps.ToDouble(backboneOut[d]);
-                // Readout query: each readout token attends to different features
-                double query = Math.Sin((r + 1.0) * d * Math.PI / dim);
-                double attn = Math.Exp(key * query / Math.Sqrt(dim));
-                attnSum += attn;
-                valSum += attn * key;
-            }
-
-            readoutFeatures[r] = attnSum > 1e-8 ? valSum / attnSum : 0;
+            readoutFeatures = new Tensor<T>([numReadout]);
+        }
+        else
+        {
+            var key = engine.TensorSlice(backboneOut.Reshape([backboneOut.Length]), [0], [dim]).Reshape([1, dim]);
+            var query = engine.TensorSin(engine.TensorMultiplyScalar(
+                engine.TensorOuter(engine.TensorArange<T>(1, numReadout + 1, 1), engine.TensorArange<T>(0, dim, 1)),
+                NumOps.FromDouble(Math.PI / dim)));
+            var logits = engine.TensorDivideScalar(engine.TensorMultiply(query, key), NumOps.FromDouble(Math.Sqrt(dim)));
+            // Shift each row by its maximum logit before exponentiating so a float T cannot overflow
+            // (the weighted mean is unchanged). The "mass above 1e-8" test of the unshifted weights is
+            // rowMax + log(sum exp(logit - rowMax)) > log(1e-8).
+            var rowMax = engine.ReduceMax(logits, [1], true);
+            var attn = engine.TensorExp(engine.TensorSubtract(logits, engine.TensorBroadcastTo(rowMax, [numReadout, dim])));
+            var attnSum = engine.ReduceSum(attn, [1], false);
+            var valSum = engine.ReduceSum(engine.TensorMultiply(attn, key), [1], false);
+            var logMass = engine.TensorAdd(rowMax.Reshape([numReadout]), engine.TensorLog(attnSum));
+            readoutFeatures = engine.TensorWhere(
+                engine.TensorGreaterThan(logMass, NumOps.FromDouble(Math.Log(1e-8))),
+                engine.TensorDivide(valSum, attnSum),
+                new Tensor<T>([numReadout]));
         }
 
         // Step 6: Diffusion action head - iterative denoising
         // Start from Gaussian noise and denoise over T steps
         int diffusionSteps = 10;
         int totalActions = actionDim * horizon;
-        var actions = new double[totalActions];
+        if (totalActions == 0)
+            return new Tensor<T>([totalActions]);
 
-        // Initialize with structured noise
-        for (int t = 0; t < totalActions; t++)
+        // Initial structured noise readout[t % actionDim] * 0.1 and the predicted clean action
+        // readout[t % actionDim] * exp(-0.05 (t / actionDim)), the same for every step.
+        var tiledReadout = engine.TensorBroadcastTo(readoutFeatures.Reshape([1, actionDim]), [horizon, actionDim]);
+        var temporalDecay = engine.TensorExp(engine.TensorMultiplyScalar(
+            engine.TensorArange<T>(0, horizon, 1), NumOps.FromDouble(-0.05))).Reshape([horizon, 1]);
+        var predicted = engine.TensorMultiply(tiledReadout, temporalDecay).Reshape([totalActions]);
+        var actions = engine.TensorMultiplyScalar(tiledReadout, NumOps.FromDouble(0.1)).Reshape([totalActions]);
+
+        // DDPM-style iterative denoising. Iteration k runs step = diffusionSteps - 1 - k with
+        // noiseScale = step / diffusionSteps and signalScale = 1 - noiseScale.
+        var noiseScales = engine.TensorDivideScalar(
+            engine.ScalarMinusTensor(NumOps.FromDouble(diffusionSteps - 1), engine.TensorArange<T>(0, diffusionSteps, 1)),
+            NumOps.FromDouble(diffusionSteps));
+        var signalScales = engine.ScalarMinusTensor(NumOps.One, noiseScales);
+        for (int k = 0; k < diffusionSteps; k++)
         {
-            int dimIdx = t % actionDim;
-            // Initial noise based on readout features (not pure random)
-            actions[t] = readoutFeatures[dimIdx] * 0.1;
-        }
-
-        // DDPM-style iterative denoising
-        for (int step = diffusionSteps - 1; step >= 0; step--)
-        {
-            double noiseScale = (double)step / diffusionSteps;
-            double signalScale = 1.0 - noiseScale;
-
-            for (int t = 0; t < totalActions; t++)
-            {
-                int dimIdx = t % actionDim;
-                int stepIdx = t / actionDim;
-
-                // Predicted clean action from readout features
-                double predicted = readoutFeatures[dimIdx];
-                // Temporal modulation for multi-step prediction
-                predicted *= Math.Exp(-0.05 * stepIdx);
-
-                // Denoise: move toward predicted clean action
-                actions[t] = signalScale * predicted + noiseScale * actions[t];
-            }
+            // Denoise: move toward predicted clean action
+            actions = engine.TensorAdd(
+                engine.TensorMultiply(predicted, Pick(signalScales, k)),
+                engine.TensorMultiply(actions, Pick(noiseScales, k)));
         }
 
         // Step 7: Package as tensor with tanh bounding
-        var result = new Tensor<T>([totalActions]);
-        for (int t = 0; t < totalActions; t++)
-            result[t] = NumOps.FromDouble(Math.Tanh(actions[t]));
+        var result = engine.TensorTanh(actions);
 
         return result;
     }
@@ -354,10 +352,7 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

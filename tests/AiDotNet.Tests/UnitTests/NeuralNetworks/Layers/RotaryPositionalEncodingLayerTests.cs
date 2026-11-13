@@ -135,6 +135,33 @@ public class RotaryPositionalEncodingLayerTests
         Assert.InRange(rotQ[new[] { 0, 0, 0, 1 }], -0.01f, 0.01f);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task ConcurrentCacheGrowth_EverySnapshotPairsEqualLengthTables()
+    {
+        // Readers race the growth path; each returned pair must come from one snapshot, so the cos
+        // and sin tables always have the same number of rows, at least the requested length, and
+        // match cos/sin(pos * theta^(-2i/d)).
+        var layer = new RotaryPositionalEncodingLayer<double>(4, 8);
+        var lengths = Enumerable.Range(5, 64).ToArray();
+        var pairs = await Task.WhenAll(lengths.Select(length => Task.Run(() => (length, caches: layer.GetInterleavedCaches(length)))));
+
+        foreach (var (length, caches) in pairs)
+        {
+            Assert.Equal(caches.Cos.Shape[0], caches.Sin.Shape[0]);
+            Assert.True(caches.Cos.Shape[0] >= length);
+            Assert.Equal(4, caches.Cos.Shape[1]);
+            for (int pos = 0; pos < length; pos++)
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    double angle = pos * Math.Pow(10000.0, -2.0 * i / 8);
+                    Assert.Equal(Math.Cos(angle), caches.Cos[new[] { pos, i }], 9);
+                    Assert.Equal(Math.Sin(angle), caches.Sin[new[] { pos, i }], 9);
+                }
+            }
+        }
+    }
+
     #region Helpers
 
     private static Tensor<float> CreateRandomTensor(int[] shape)

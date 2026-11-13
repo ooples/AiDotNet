@@ -161,9 +161,7 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _numParams = initialDist.NumParameters;
         _initialParameters = initialDist.Parameters;
 
-        var currentParams = new Vector<T>[_numParams];
-        for (int p = 0; p < _numParams; p++)
-            currentParams[p] = Vector<T>.CreateDefault(n, _initialParameters[p]);
+        var currentParams = _initialParameters.Take(_numParams).Select(value => Engine.Fill(n, value)).ToArray();
 
         _trees = [];
         FeatureImportances = new Vector<T>(x.Columns);
@@ -177,44 +175,30 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             int[] sampleIndices = GetSampleIndices(n);
             int sampleSize = sampleIndices.Length;
 
-            // Compute gradients for the sample
-            var gradients = new Vector<T>[_numParams];
-            for (int p = 0; p < _numParams; p++)
-            {
-                gradients[p] = new Vector<T>(sampleSize);
-            }
-
             // Accumulate Fisher Information Matrix
             var fisherSum = new Matrix<T>(_numParams, _numParams);
 
-            for (int i = 0; i < sampleSize; i++)
+            // Score gradient of every sampled row's distribution, one row per sample
+            var sampleParameters = StackParameters(currentParams).GetRows(sampleIndices);
+            var sampleTargets = RegressionEngineOps.Gather(y, sampleIndices);
+            var scoreGradients = new List<Vector<T>>(sampleSize);
+            foreach (var (parameters, target) in sampleParameters.GetRows().Zip(sampleTargets, (row, value) => (row, value)))
             {
-                int idx = sampleIndices[i];
-
                 // Create distribution with current parameters
-                var dist = CreateDistributionFromParams(currentParams, idx);
+                var dist = CreateDistributionWithParams(parameters);
 
                 // Compute score gradient
-                var scoreGrad = _scoringRule.ScoreGradient(dist, y[idx]);
-
-                for (int p = 0; p < _numParams; p++)
-                {
-                    gradients[p][i] = scoreGrad[p];
-                }
+                scoreGradients.Add(_scoringRule.ScoreGradient(dist, target).GetSubVector(0, _numParams));
 
                 // Accumulate Fisher Information if using natural gradients
                 if (_options.UseNaturalGradient)
                 {
-                    var fisher = dist.FisherInformation();
-                    for (int p1 = 0; p1 < _numParams; p1++)
-                    {
-                        for (int p2 = 0; p2 < _numParams; p2++)
-                        {
-                            fisherSum[p1, p2] = NumOps.Add(fisherSum[p1, p2], fisher[p1, p2]);
-                        }
-                    }
+                    fisherSum = Engine.MatrixAdd(fisherSum, LeadingBlock(dist.FisherInformation()));
                 }
             }
+
+            // gradients[p] = the p-th score-gradient component over the sample
+            var gradients = UnstackParameters(scoreGradients, sampleSize);
 
             // Compute natural gradients by preconditioning with Fisher
             var naturalGradients = gradients;
@@ -258,7 +242,7 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
             if (_options.EarlyStoppingRounds.HasValue)
             {
                 T currentScore = ComputeMeanScore(currentParams, y);
-                if (NumOps.LessThan(currentScore, bestScore))
+                if (Improves(currentScore, bestScore))
                 {
                     bestScore = currentScore;
                     roundsWithoutImprovement = 0;
@@ -284,15 +268,14 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
         var distributions = await PredictDistributionsAsync(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (distributions.Length == 0)
         {
-            // Denormalize: prediction = standardized_mean * yStd + yMean
-            predictions[i] = NumOps.Add(NumOps.Multiply(distributions[i].Mean, _yStd), _yMean);
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Denormalize: prediction = standardized_mean * yStd + yMean
+        var means = new Vector<T>(distributions.Select(distribution => distribution.Mean));
+        return Engine.Add(Engine.Multiply(means, _yStd), Engine.Fill(means.Length, _yMean));
     }
 
     /// <summary>
@@ -319,9 +302,7 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = input.Rows;
         var distributions = new IParametricDistribution<T>[n];
 
-        var currentParams = new Vector<T>[_numParams];
-        for (int p = 0; p < _numParams; p++)
-            currentParams[p] = Vector<T>.CreateDefault(n, _initialParameters[p]);
+        var currentParams = _initialParameters.Take(_numParams).Select(value => Engine.Fill(n, value)).ToArray();
 
         var treePredictionTasks = _trees.Select(iterTrees =>
             Task.Run(() =>
@@ -346,9 +327,9 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
 
         // Create distributions
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            distributions[i] = CreateDistributionFromParams(currentParams, i);
+            distributions = StackParameters(currentParams, n).GetRows().Select(CreateDistributionWithParams).ToArray();
         }
 
         return distributions;
@@ -389,16 +370,12 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         var quantileMatrix = await PredictQuantilesAsync(input, quantiles);
 
-        var lower = new Vector<T>(input.Rows);
-        var upper = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            lower[i] = quantileMatrix[i, 0];
-            upper[i] = quantileMatrix[i, 1];
+            return (new Vector<T>(0), new Vector<T>(0));
         }
 
-        return (lower, upper);
+        return (quantileMatrix.GetColumn(0), quantileMatrix.GetColumn(1));
     }
 
     /// <summary>
@@ -442,17 +419,51 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
-    /// Creates a distribution from the current parameter values for a specific sample.
+    /// Stacks the per-parameter vectors as the columns of a [samples, numParameters] matrix.
     /// </summary>
-    private IParametricDistribution<T> CreateDistributionFromParams(Vector<T>[] currentParams, int sampleIndex)
+    private Matrix<T> StackParameters(Vector<T>[] currentParams, int rowsWhenEmpty = 0)
     {
-        var params_ = new Vector<T>(_numParams);
-        for (int p = 0; p < _numParams; p++)
+        // With no parameters (an untrained model) keep one empty row per sample, as before.
+        int rows = currentParams.Length == 0 ? rowsWhenEmpty : currentParams[0].Length;
+        if (currentParams.Length == 0)
         {
-            params_[p] = currentParams[p][sampleIndex];
+            return new Matrix<T>(rows, 0);
         }
 
-        return CreateDistributionWithParams(params_);
+        var columns = currentParams.Select(column => new Tensor<T>(new[] { rows, 1 }, column)).ToArray();
+        return Engine.TensorConcatenate(columns, 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Splits per-sample [numParams] vectors into numParams per-parameter vectors over the samples.
+    /// </summary>
+    private Vector<T>[] UnstackParameters(List<Vector<T>> perSample, int sampleCount)
+    {
+        if (sampleCount == 0 || _numParams == 0)
+        {
+            return Enumerable.Range(0, _numParams).Select(_ => new Vector<T>(sampleCount)).ToArray();
+        }
+
+        var stacked = new Tensor<T>(new[] { sampleCount, _numParams }, Vector<T>.Concatenate(perSample));
+        return Engine.MatrixTranspose(stacked.ToMatrix()).GetRows().ToArray();
+    }
+
+    /// <summary>
+    /// The leading [numParams, numParams] block of a Fisher information matrix.
+    /// </summary>
+    private Matrix<T> LeadingBlock(Matrix<T> fisher)
+    {
+        return fisher.Rows == _numParams && fisher.Columns == _numParams
+            ? fisher
+            : fisher.GetSubMatrix(0, 0, _numParams, _numParams);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="score"/> is strictly lower (better) than <paramref name="best"/>.
+    /// </summary>
+    private bool Improves(T score, T best)
+    {
+        return NumOps.LessThan(score, best);
     }
 
     /// <summary>
@@ -491,38 +502,26 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         // Average Fisher Information Matrix
         T sampleSizeT = NumOps.FromDouble(sampleSize);
-        var fisherAvg = new Matrix<T>(_numParams, _numParams);
-        for (int i = 0; i < _numParams; i++)
-        {
-            for (int j = 0; j < _numParams; j++)
-            {
-                fisherAvg[i, j] = NumOps.Divide(fisherSum[i, j], sampleSizeT);
-            }
-        }
+        var fisherAvg = Engine.TensorDivideScalar(Tensor<T>.FromMatrix(fisherSum), sampleSizeT).ToMatrix();
 
         // Invert Fisher Information Matrix (with regularization for stability)
         var fisherInv = InvertMatrix(fisherAvg);
 
-        // Apply Fisher inverse to gradients
-        for (int p = 0; p < _numParams; p++)
-        {
-            naturalGrads[p] = new Vector<T>(gradients[0].Length);
-        }
-
-        for (int i = 0; i < gradients[0].Length; i++)
+        // Apply Fisher inverse to gradients: natural[p] = sum_q fisherInv[p, q] * gradients[q]
+        int sampleCount = gradients[0].Length;
+        if (sampleCount == 0)
         {
             for (int p = 0; p < _numParams; p++)
             {
-                T sum = NumOps.Zero;
-                for (int q = 0; q < _numParams; q++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(fisherInv[p, q], gradients[q][i]));
-                }
-                naturalGrads[p][i] = sum;
+                naturalGrads[p] = new Vector<T>(0);
             }
+
+            return naturalGrads;
         }
 
-        return naturalGrads;
+        var gradientRows = Engine.TensorConcatenate(
+            gradients.Select(g => new Tensor<T>(new[] { 1, sampleCount }, g)).ToArray(), 0).ToMatrix();
+        return Engine.MatrixMultiply(fisherInv, gradientRows).GetRows().ToArray();
     }
 
     /// <summary>
@@ -535,10 +534,7 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         T detThreshold = NumOps.FromDouble(DeterminantThreshold);
 
         // Add small regularization for numerical stability
-        for (int i = 0; i < n; i++)
-        {
-            matrix[i, i] = NumOps.Add(matrix[i, i], reg);
-        }
+        matrix = Engine.MatrixAdd(matrix, Matrix<T>.CreateDiagonal(Engine.Fill(n, reg)));
 
         // For small matrices (2x2 or 3x3), use analytical formulas
         if (n == 1)
@@ -576,71 +572,21 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         T pivotThreshold = NumOps.FromDouble(PivotThreshold);
 
         // Create augmented matrix [A | I]
-        var augmented = new Matrix<T>(n, 2 * n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
+        var augmented = Engine.TensorConcatenate(
+            new[]
             {
-                augmented[i, j] = matrix[i, j];
-            }
-            augmented[i, n + i] = NumOps.One;
-        }
+                Tensor<T>.FromMatrix(matrix.GetSubMatrix(0, 0, n, n)),
+                Tensor<T>.FromMatrix(Matrix<T>.CreateDiagonal(Engine.Fill(n, NumOps.One)))
+            }, 1).ToMatrix();
 
-        // Forward elimination
+        // Forward elimination, one pivot column at a time
         for (int col = 0; col < n; col++)
         {
-            // Find pivot
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
-                {
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            for (int j = 0; j < 2 * n; j++)
-            {
-                (augmented[col, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[col, j]);
-            }
-
-            // Scale pivot row
-            T pivot = augmented[col, col];
-            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
-            {
-                pivot = pivotThreshold;
-            }
-            for (int j = 0; j < 2 * n; j++)
-            {
-                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
-            }
-
-            // Eliminate column
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = augmented[row, col];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        augmented[row, j] = NumOps.Subtract(augmented[row, j], NumOps.Multiply(factor, augmented[col, j]));
-                    }
-                }
-            }
+            augmented = RegressionEngineOps.GaussJordanStep(augmented, col, n, pivotThreshold);
         }
 
         // Extract inverse
-        var inverse = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                inverse[i, j] = augmented[i, n + j];
-            }
-        }
-
-        return inverse;
+        return augmented.GetSubMatrix(0, n, n, n);
     }
 
     /// <summary>
@@ -663,11 +609,14 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private T ComputeMeanScore(Vector<T>[] currentParams, Vector<T> y)
     {
         T sum = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length > 0)
         {
-            var dist = CreateDistributionFromParams(currentParams, i);
-            sum = NumOps.Add(sum, _scoringRule.Score(dist, y[i]));
+            var scores = StackParameters(currentParams).GetRows()
+                .Zip(y, (parameters, target) => _scoringRule.Score(CreateDistributionWithParams(parameters), target))
+                .ToList();
+            sum = Engine.Sum(new Vector<T>(scores));
         }
+
         return NumOps.Divide(sum, NumOps.FromDouble(y.Length));
     }
 
@@ -680,38 +629,29 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         var importanceTasks = _trees.SelectMany(iterTrees =>
             iterTrees.Select(tree => Task.Run(() =>
             {
-                var treeImportances = new Vector<T>(featureCount);
                 var fi = tree.FeatureImportances;
                 int copyCount = Math.Min(featureCount, fi.Length);
-                for (int i = 0; i < copyCount; i++)
+                if (copyCount == featureCount)
                 {
-                    treeImportances[i] = fi[i];
+                    return fi.GetSubVector(0, featureCount);
                 }
-                return treeImportances;
+
+                // Pad a shorter importance vector with zeros
+                return Vector<T>.Concatenate(new[] { fi.GetSubVector(0, copyCount), new Vector<T>(featureCount - copyCount) });
             })));
 
         var allImportances = await ParallelProcessingHelper.ProcessTasksInParallel(importanceTasks);
 
-        for (int i = 0; i < featureCount; i++)
+        foreach (var ti in allImportances)
         {
-            foreach (var ti in allImportances)
-            {
-                importances[i] = NumOps.Add(importances[i], ti[i]);
-            }
+            importances = Engine.Add(importances, ti);
         }
 
         // Normalize
-        T sum = NumOps.Zero;
-        for (int i = 0; i < featureCount; i++)
-        {
-            sum = NumOps.Add(sum, importances[i]);
-        }
+        T sum = featureCount == 0 ? NumOps.Zero : Engine.Sum(importances);
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int i = 0; i < featureCount; i++)
-            {
-                importances[i] = NumOps.Divide(importances[i], sum);
-            }
+            importances = Engine.Divide(importances, sum);
         }
 
         FeatureImportances = importances;
