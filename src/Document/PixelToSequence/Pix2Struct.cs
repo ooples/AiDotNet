@@ -284,13 +284,12 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
             : RunOnnxInference(preprocessed);
 
         // Decode output to text
-        var answer = DecodeOutput(output, maxAnswerLength, temperature);
+        var (answer, confidence) = DecodeOutput(output, maxAnswerLength, temperature);
 
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(0.85),
-            ConfidenceValue = 0.85,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -312,19 +311,26 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
         return results;
     }
 
-    private string DecodeOutput(Tensor<T> output, int maxLength, double temperature)
+    /// <summary>
+    /// Decodes the answer rows: greedy at temperature 0, sampled otherwise. The confidence is the mean softmax
+    /// probability of the tokens kept in the answer (0 when none is).
+    /// </summary>
+    private (string Text, T Confidence) DecodeOutput(Tensor<T> output, int maxLength, double temperature)
     {
-        // Greedy decoding with token-to-character conversion
         var tokens = new List<int>();
-        foreach (int maxIdx in DocumentTensorOps.GreedyRowTokens(Engine, output, maxLength))
+        var probabilities = new List<T>();
+        var (steps, stepProbabilities) = DocumentTensorOps.DecodeRows(Engine, output, maxLength, temperature, RandomHelper.Shared.Next());
+        for (int step = 0; step < steps.Length; step++)
         {
+            int maxIdx = steps[step];
             // Special tokens: 0=PAD, 1=EOS
             if (maxIdx == 1) break; // EOS token
             if (maxIdx == 0) continue; // Skip PAD
             tokens.Add(maxIdx);
+            probabilities.Add(stepProbabilities[step]);
         }
 
-        return DecodeTokensToText(tokens);
+        return (DecodeTokensToText(tokens), DocumentTensorOps.Mean(Engine, probabilities.ToArray()));
     }
 
     /// <summary>

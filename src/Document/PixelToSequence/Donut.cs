@@ -468,7 +468,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     private OCRResult<T> RecognizeTextNative(Tensor<T> image)
     {
         var encodedImage = EncodeImage(image);
-        var generatedText = GenerateText(encodedImage, "<s_ocr>");
+        var (generatedText, confidence) = GenerateText(encodedImage, "<s_ocr>");
 
         return new OCRResult<T>
         {
@@ -476,7 +476,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             Words = [],
             Lines = [],
             Blocks = [],
-            AverageConfidence = NumOps.FromDouble(0.85)
+            AverageConfidence = confidence
         };
     }
 
@@ -487,7 +487,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
         var preprocessed = PreprocessDocument(image);
         var encoderOutput = RunEncoderOnnx(preprocessed);
-        var generatedText = GenerateTextOnnx(encoderOutput, "<s_ocr>");
+        var (generatedText, confidence) = GenerateTextOnnx(encoderOutput, "<s_ocr>");
 
         return new OCRResult<T>
         {
@@ -495,7 +495,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             Words = [],
             Lines = [],
             Blocks = [],
-            AverageConfidence = NumOps.FromDouble(0.85)
+            AverageConfidence = confidence
         };
     }
 
@@ -520,8 +520,8 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         string prompt = $"<s_docvqa><s_question>{question}</s_question><s_answer>";
 
         var result = _useNativeMode
-            ? AnswerQuestionNative(documentImage, prompt, maxAnswerLength)
-            : AnswerQuestionOnnx(documentImage, prompt, maxAnswerLength);
+            ? AnswerQuestionNative(documentImage, prompt, maxAnswerLength, temperature)
+            : AnswerQuestionOnnx(documentImage, prompt, maxAnswerLength, temperature);
 
         return new DocumentQAResult<T>
         {
@@ -535,10 +535,10 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         };
     }
 
-    private DocumentQAResult<T> AnswerQuestionNative(Tensor<T> image, string prompt, int maxLength)
+    private DocumentQAResult<T> AnswerQuestionNative(Tensor<T> image, string prompt, int maxLength, double temperature)
     {
         var encodedImage = EncodeImage(image);
-        var answer = GenerateText(encodedImage, prompt, maxLength);
+        var (answer, confidence) = GenerateText(encodedImage, prompt, maxLength, temperature);
 
         // Extract answer from generated text (remove special tokens)
         answer = CleanGeneratedText(answer);
@@ -546,27 +546,25 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(0.8),
-            ConfidenceValue = 0.8
+            Confidence = confidence
         };
     }
 
-    private DocumentQAResult<T> AnswerQuestionOnnx(Tensor<T> image, string prompt, int maxLength)
+    private DocumentQAResult<T> AnswerQuestionOnnx(Tensor<T> image, string prompt, int maxLength, double temperature)
     {
         if (OnnxEncoder is null || OnnxDecoder is null)
             throw new InvalidOperationException("ONNX sessions not initialized.");
 
         var preprocessed = PreprocessDocument(image);
         var encoderOutput = RunEncoderOnnx(preprocessed);
-        var answer = GenerateTextOnnx(encoderOutput, prompt, maxLength);
+        var (answer, confidence) = GenerateTextOnnx(encoderOutput, prompt, maxLength, temperature);
 
         answer = CleanGeneratedText(answer);
 
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(0.8),
-            ConfidenceValue = 0.8
+            Confidence = confidence
         };
     }
 
@@ -615,13 +613,13 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         if (_useNativeMode)
         {
             var encodedImage = EncodeImage(documentImage);
-            return GenerateText(encodedImage, prompt);
+            return GenerateText(encodedImage, prompt).Text;
         }
         else
         {
             var preprocessed = PreprocessDocument(documentImage);
             var encoderOutput = RunEncoderOnnx(preprocessed);
-            return GenerateTextOnnx(encoderOutput, prompt);
+            return GenerateTextOnnx(encoderOutput, prompt).Text;
         }
     }
 
@@ -724,7 +722,12 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         return outputs.TryGetValue("logits", out var logits) ? logits : outputs.Values.First();
     }
 
-    private string GenerateText(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
+    /// <summary>
+    /// Generates from <paramref name="prompt"/> until EOS or the length cap: greedy at temperature 0 (Donut's
+    /// decoding), sampled otherwise. The confidence is the mean softmax probability of the generated tokens (0
+    /// when none is generated).
+    /// </summary>
+    private (string Text, T Confidence) GenerateText(Tensor<T> encoderOutput, string prompt, int maxLength = -1, double temperature = 0.0)
     {
         if (maxLength < 0) maxLength = _maxGenerationLength;
 
@@ -737,6 +740,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
         // Donut's decoding is greedy: argmax of the last position, fed back until EOS or the length cap.
         var encoderDecoder = RequireEncoderDecoder();
+        var probabilities = new List<T>();
         for (int i = 0; i < maxLength && generatedTokens.Count < _maxGenerationLength; i++)
         {
             var decoderIds = new Tensor<int>(generatedTokens.ToArray(), new[] { 1, generatedTokens.Count }).Cast<T>();
@@ -744,19 +748,19 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             // Cross-attends to the encoded page at every step.
             var decoderOutput = encoderDecoder.Decode(encoderOutput, decoderIds);
 
-            // Get next token (greedy - take argmax)
-            int nextToken = GetNextToken(decoderOutput);
+            var (nextToken, probability) = NextToken(decoderOutput, temperature);
 
             if (nextToken == eosTokenId)
                 break;
 
             generatedTokens.Add(nextToken);
+            probabilities.Add(probability);
         }
 
-        return _tokenizer.Decode(generatedTokens);
+        return (_tokenizer.Decode(generatedTokens), DocumentTensorOps.Mean(Engine, probabilities.ToArray()));
     }
 
-    private string GenerateTextOnnx(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
+    private (string Text, T Confidence) GenerateTextOnnx(Tensor<T> encoderOutput, string prompt, int maxLength = -1, double temperature = 0.0)
     {
         if (maxLength < 0) maxLength = _maxGenerationLength;
 
@@ -764,24 +768,29 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         // fed back until EOS or the length cap.
         var generatedTokens = new List<int>(_tokenizer.Encode(prompt).TokenIds);
         const int eosTokenId = 2;
+        var probabilities = new List<T>();
         for (int i = 0; i < maxLength && generatedTokens.Count < _maxGenerationLength; i++)
         {
-            int nextToken = GetNextToken(DecodeStepOnnx(encoderOutput, generatedTokens));
+            var (nextToken, probability) = NextToken(DecodeStepOnnx(encoderOutput, generatedTokens), temperature);
             if (nextToken == eosTokenId)
                 break;
             generatedTokens.Add(nextToken);
+            probabilities.Add(probability);
         }
 
-        return _tokenizer.Decode(generatedTokens);
+        return (_tokenizer.Decode(generatedTokens), DocumentTensorOps.Mean(Engine, probabilities.ToArray()));
     }
 
     private VisionEncoderDecoderLayer<T> RequireEncoderDecoder() => _encoderDecoder
         ?? throw new InvalidOperationException(
             "Donut generation requires a VisionEncoderDecoderLayer; the custom Architecture.Layers supplied none.");
 
-    private int GetNextToken(Tensor<T> logits)
+    /// <summary>
+    /// The next token from the last position's logits and its softmax probability: the argmax at temperature 0,
+    /// a temperature sample otherwise.
+    /// </summary>
+    internal (int Token, T Probability) NextToken(Tensor<T> logits, double temperature)
     {
-        // Get the last position's logits and find argmax
         if (logits.Shape.Length < 3)
         {
             throw new InvalidOperationException(
@@ -803,7 +812,11 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         }
 
         var last = Engine.TensorSlice(Engine.Reshape(logits, new[] { logits.Length }), new[] { vocabStart }, new[] { _vocabSize });
-        return DocumentTensorOps.RowArgMax(Engine, Engine.Reshape(last, new[] { 1, _vocabSize }))[0];
+        var row = Engine.Reshape(last, new[] { 1, _vocabSize });
+        var (tokens, probabilities) = temperature > 0.0
+            ? DocumentTensorOps.SampleWithProbabilities(Engine, row, NumOps.FromDouble(temperature), RandomHelper.Shared.Next())
+            : DocumentTensorOps.GreedyWithProbabilities(Engine, row);
+        return (tokens[0], probabilities.ToArray()[0]);
     }
 
     private static string CleanGeneratedText(string text)

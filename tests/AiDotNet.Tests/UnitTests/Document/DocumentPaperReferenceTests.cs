@@ -375,6 +375,161 @@ public sealed class DocumentPaperReferenceTests
         Assert.Equal(3, model.ClassifyTokens(packed).Count);
     }
 
+    // ---------------------------------------------------------------------------------------------------------
+    // Review fixes: index handling and reductions that Half cannot carry, joint span decoding, PSE seed filter.
+    // ---------------------------------------------------------------------------------------------------------
+
+    private static AiDotNet.Tensors.Engines.IEngine CpuEngine => AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+
+    private static Tensor<Half> HalfRow(int length, params (int Index, double Value)[] set)
+    {
+        var values = Enumerable.Repeat((Half)0.0, length).ToArray();
+        foreach (var (index, value) in set) values[index] = (Half)value;
+        return new Tensor<Half>(values, new[] { 1, length });
+    }
+
+    [Fact]
+    public void RowArgMax_ReturnsTheExactVocabularyIdPast2048InHalf()
+    {
+        // Half holds integers exactly only up to 2048 (spacing 2 above it). An index ramp kept in T maps id 2501 to
+        // 2500, so the greedy token came out as a neighbouring id; the arg-max index must stay an int.
+        var logits = HalfRow(3000, (2501, 1.0));
+        Assert.Equal(new[] { 2501 }, DocumentTensorOps.RowArgMax(CpuEngine, logits));
+    }
+
+    [Fact]
+    public void Sampling_ReturnsTheExactVocabularyIdPast2048InHalf()
+    {
+        // All the mass is on token 3001 (every other logit is -30, whose exp underflows to 0 in Half), so any draw
+        // must return 3001 with probability 1. Counting "cumulative share below the draw" as a 0/1 sum in Half
+        // stops at 2048 and returned token 2048.
+        var values = Enumerable.Repeat((Half)(-30.0), 4000).ToArray();
+        values[3001] = (Half)0.0;
+        var (tokens, probabilities) = DocumentTensorOps.SampleWithProbabilities(
+            CpuEngine, new Tensor<Half>(values, new[] { 1, 4000 }), (Half)1.0, 12345);
+        Assert.Equal(new[] { 3001 }, tokens);
+        Assert.Equal(1.0, (double)probabilities[0], 3);
+    }
+
+    [Fact]
+    public void GreedyProbability_SumsTheLargeVocabularyPartitionFunctionWithoutStalling()
+    {
+        // 5000 equal logits: the greedy token's softmax probability is 1/5000. A Half running sum of the 5000 ones
+        // stalls at 2048 and reported 1/2048.
+        var (tokens, probabilities) = DocumentTensorOps.GreedyWithProbabilities(CpuEngine, HalfRow(5000));
+        Assert.Equal(new[] { 0 }, tokens);
+        Assert.Equal(1.0 / 5000, (double)probabilities[0], 6);
+    }
+
+    [Fact]
+    public void PickedSum_GathersTheLabelledEntryPast2048InHalf()
+    {
+        // sum_t scores[t, labels[t]] with label 2501 in row 0 and 7 in row 1: 1 + 3. Half rounds both the ramp entry
+        // 2501 and the label 2501 to 2500, so matching them in T also picked the neighbouring id 2500 (10).
+        var values = Enumerable.Repeat((Half)0.0, 2 * 3000).ToArray();
+        values[2500] = (Half)10.0;
+        values[2501] = (Half)1.0;
+        values[2502] = (Half)100.0;
+        values[3000 + 7] = (Half)3.0;
+        var sum = DocumentTensorOps.PickedSum(CpuEngine, new Tensor<Half>(values, new[] { 2, 3000 }), new[] { 2501, 7 });
+        Assert.Equal(4.0, (double)sum, 12);
+    }
+
+    [Fact]
+    public void Mean_OfManyHalfProbabilitiesIsNotCappedByTheRunningSum()
+    {
+        // The mean of 3000 ones is 1. A Half running sum stops at 2048, which gave 2048 / 3000 = 0.68: every region
+        // or token confidence averaged over more than 2048 values (PSENet, DocBank, decoders) came out too small.
+        var values = Enumerable.Repeat((Half)1.0, 3000).ToArray();
+        Assert.Equal(1.0, (double)DocumentTensorOps.Mean(CpuEngine, values), 12);
+    }
+
+    [Fact]
+    public void StandardizePerImage_KeepsItsMomentsExactForALargeHalfPage()
+    {
+        // A 3 x 64 x 64 page alternating 0.25 and 0.75 has mean 0.5 and std 0.25, so it maps to -1 and +1. Its
+        // 12288 values summed in Half stall at 2048, which put the mean at 0.17 and wrecked the output.
+        int n = 3 * 64 * 64;
+        var page = new Tensor<Half>(Enumerable.Range(0, n).Select(i => (Half)(i % 2 == 0 ? 0.25 : 0.75)).ToArray(), new[] { 1, 3, 64, 64 });
+        var processed = DocumentTensorOps.StandardizePerImage(CpuEngine, page).ToArray();
+        Assert.All(processed.Select((v, i) => (v, i)), p => Assert.Equal(p.i % 2 == 0 ? -1.0 : 1.0, (double)p.v, 12));
+    }
+
+    [Fact]
+    public void SpanAnswer_DecodesTheJointBestSpanWithTheProductOfStartAndEndProbabilities()
+    {
+        // BERT's span decoding: the (s, e) with s <= e < s + 2 maximizing start[s] + end[e]. Start logits
+        // 5, 0, 4, 0 and end logits 0, -10, 0, 9: the best pair is (2, 3) with 4 + 9 = 13. Taking the best start
+        // (0) first and then the best end after it gives (0, 0) with 5. The confidence is
+        // softmax(start)[2] * softmax(end)[3]; row 3's greedy token over the two columns is 1, row 2's is 0 (dropped).
+        var output = new Tensor<double>(new[] { 4, 2 }, new Vector<double>(new[] { 5.0, 0, 0, -10, 4, 0, 0, 9 }));
+        var (tokens, confidence) = DocumentTensorOps.SpanAnswer(CpuEngine, output, 2, 2, 2);
+
+        double[] start = { 5, 0, 4, 0 }, end = { 0, -10, 0, 9 };
+        double pStart = Math.Exp(4) / start.Sum(Math.Exp), pEnd = Math.Exp(9) / end.Sum(Math.Exp);
+        Assert.Equal(new[] { 1 }, tokens);
+        Assert.Equal(pStart * pEnd, confidence, 12);
+    }
+
+    [Fact]
+    public void Pse_DropsSeedComponentsSmallerThanTheMinimumKernelArea()
+    {
+        // The reference pse drops smallest-kernel components below min_kernel_area (5) before expanding. A
+        // one-pixel seed in the far corner of an 8 x 8 text region would otherwise grow into an instance of its
+        // own and split the page; without it the 12-pixel seed claims the whole region.
+        var seeds = Map(Enumerable.Range(0, 2).SelectMany(y => Enumerable.Range(0, 6).Select(x => (y, x))).Append((7, 7)).ToArray());
+        var text = Map(Enumerable.Range(0, 8).SelectMany(y => Enumerable.Range(0, 8).Select(x => (y, x))).ToArray());
+        using var model = SmallPseNet(2);
+        var region = Assert.Single(model.ParsePSENetOutput(KernelLogits(seeds, text), 0.5));
+        Assert.Equal(new[] { 0.0, 0.0, 7.0, 7.0 }, region.BoundingBox.ToArray());
+    }
+
+    [Fact]
+    public void DecodeRows_IsGreedyAtZeroTemperatureAndReportsEachStepsSoftmaxProbability()
+    {
+        // Step 0 favours token 3 (logit 2 among four), step 1 token 1 (logit 1). Each probability is the softmax.
+        var output = new Tensor<double>(new[] { 2, 4 }, new Vector<double>(new[] { 0, 0, 0, 2.0, 0, 1.0, 0, 0 }));
+        var (tokens, probabilities) = DocumentTensorOps.DecodeRows(CpuEngine, output, 8, 0.0, 0);
+        Assert.Equal(new[] { 3, 1 }, tokens);
+        Assert.Equal(new[] { Math.Exp(2) / (Math.Exp(2) + 3), Math.E / (Math.E + 3) }, probabilities, new Tolerance(1e-12));
+    }
+
+    [Fact]
+    public void DecodeRows_SamplesWhenTheTemperatureIsPositive()
+    {
+        // Two equal logits: greedy always returns token 0, while sampling at temperature 1 returns token 1 about
+        // half the time (never in 64 seeded draws has probability 2^-64), each with probability 1/2.
+        var output = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new[] { 0.0, 0.0 }));
+        var draws = Enumerable.Range(0, 64).Select(seed => DocumentTensorOps.DecodeRows(CpuEngine, output, 1, 1.0, seed)).ToList();
+        Assert.Contains(draws, d => d.Tokens[0] == 1);
+        Assert.All(draws, d => Assert.Equal(0.5, d.Probabilities[0], 12));
+    }
+
+    [Fact]
+    public void DiT_UseModelSizeAppliesThePublishedVariantDimensions()
+    {
+        // DiT-Large is ViT-L: hidden size 1024, 24 layers, 16 heads (Li et al. 2022). Setting the size used to be a
+        // label only, leaving the Base dimensions in place.
+        var large = new DiTOptions().UseModelSize(DiTModelSize.Large);
+        Assert.Equal((DiTModelSize.Large, 1024, 24, 16), (large.ModelSize, large.HiddenDim, large.NumLayers, large.NumHeads));
+        var baseSize = new DiTOptions().UseModelSize(DiTModelSize.Base);
+        Assert.Equal((DiTModelSize.Base, 768, 12, 12), (baseSize.ModelSize, baseSize.HiddenDim, baseSize.NumLayers, baseSize.NumHeads));
+    }
+
+    [Fact]
+    public void Trie_ReportsNoCheckboxesOrSignaturesBecauseItHasNoSuchHead()
+    {
+        // TRIE has no checkbox or signature head. It used to return one fabricated "Sample checkbox" (0.8) and one
+        // signature result (0.7) for every page.
+        using var model = new AiDotNet.Document.GraphBased.TRIE<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4),
+            options: new TRIEOptions { ImageSize = 64, VisualDim = 16, TextDim = 16, GraphDim = 16, NumEntityTypes = 4, MaxEntities = 8 });
+        var page = ConstantPage(64, 0.5);
+        Assert.Empty(model.DetectCheckboxes(page));
+        Assert.Empty(model.DetectSignatures(page));
+    }
+
     private sealed class Tolerance : System.Collections.Generic.IEqualityComparer<double>
     {
         private readonly double _epsilon;

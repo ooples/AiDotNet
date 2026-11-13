@@ -269,37 +269,25 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// TRIE (Zhang et al. 2020) extracts entities from text reading; it has no checkbox head, so it detects no
+    /// checkboxes. It used to return one fabricated "Sample checkbox" with a constant 0.8 confidence.
+    /// </remarks>
     public IEnumerable<CheckboxResult<T>> DetectCheckboxes(Tensor<T> documentImage)
     {
         ValidateImageShape(documentImage);
-        var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
-
-        // Simplified checkbox detection
-        yield return new CheckboxResult<T>
-        {
-            IsChecked = false,
-            Label = "Sample checkbox",
-            Confidence = NumOps.FromDouble(0.8),
-            ConfidenceValue = 0.8,
-            BoundingBox = Vector<T>.Empty()
-        };
+        return Array.Empty<CheckboxResult<T>>();
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// TRIE has no signature head, so it detects no signatures. It used to return one fabricated result with a
+    /// constant 0.7 confidence.
+    /// </remarks>
     public IEnumerable<SignatureResult<T>> DetectSignatures(Tensor<T> documentImage)
     {
         ValidateImageShape(documentImage);
-        var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
-
-        yield return new SignatureResult<T>
-        {
-            IsPresent = false,
-            Confidence = NumOps.FromDouble(0.7),
-            ConfidenceValue = 0.7,
-            BoundingBox = Vector<T>.Empty()
-        };
+        return Array.Empty<SignatureResult<T>>();
     }
 
     internal IList<FormField<T>> ParseFormFields(Tensor<T> output, double threshold)
@@ -383,13 +371,9 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         // Last 4 values in hidden dimension represent normalized bbox [x1, y1, x2, y2]
         if (hiddenDim < 4) return Vector<T>.Empty();
 
-        int bboxStart = hiddenDim - 4;
-        return new Vector<T>([
-            NumOps.FromDouble(NumOps.ToDouble(output[entityIdx, bboxStart]) * ImageSize),
-            NumOps.FromDouble(NumOps.ToDouble(output[entityIdx, bboxStart + 1]) * ImageSize),
-            NumOps.FromDouble(NumOps.ToDouble(output[entityIdx, bboxStart + 2]) * ImageSize),
-            NumOps.FromDouble(NumOps.ToDouble(output[entityIdx, bboxStart + 3]) * ImageSize)
-        ]);
+        var matrix = Engine.Reshape(output, new[] { output.Shape[0], output.Length / output.Shape[0] });
+        var box = Engine.TensorSlice(matrix, new[] { entityIdx, hiddenDim - 4 }, new[] { 1, 4 });
+        return new Vector<T>(Engine.TensorMultiplyScalar(box, NumOps.FromDouble(ImageSize)).ToArray());
     }
 
     /// <summary>

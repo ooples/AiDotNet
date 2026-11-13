@@ -213,7 +213,6 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         MaxSequenceLength = _options.MaxSequenceLength;
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -246,14 +245,6 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
             vocabSize: _vocabSize));
     }
 
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-        int numPatches = (ImageSize / 16) * (ImageSize / 16);
-
-
-    }
-
     #endregion
 
     #region IDocumentQA Implementation
@@ -273,13 +264,12 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         var preprocessed = PreprocessDocument(documentImage);
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
-        var answer = DecodeOutput(output, maxAnswerLength);
+        var (answer, confidence) = DecodeOutput(output, maxAnswerLength, temperature);
 
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(0.82),
-            ConfidenceValue = 0.82,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -301,18 +291,26 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         return results;
     }
 
-    private string DecodeOutput(Tensor<T> output, int maxLength)
+    /// <summary>
+    /// Decodes the answer rows: greedy at temperature 0, sampled otherwise. The confidence is the mean softmax
+    /// probability of the tokens kept in the answer (0 when none is).
+    /// </summary>
+    private (string Text, T Confidence) DecodeOutput(Tensor<T> output, int maxLength, double temperature)
     {
         var tokens = new List<int>();
-        foreach (int maxIdx in DocumentTensorOps.GreedyRowTokens(Engine, output, maxLength))
+        var probabilities = new List<T>();
+        var (steps, stepProbabilities) = DocumentTensorOps.DecodeRows(Engine, output, maxLength, temperature, RandomHelper.Shared.Next());
+        for (int step = 0; step < steps.Length; step++)
         {
+            int maxIdx = steps[step];
             // BERT-style special tokens: 0=PAD, 101=CLS, 102=SEP
             if (maxIdx == 102) break; // SEP token
             if (maxIdx == 0 || maxIdx == 101) continue; // Skip PAD and CLS
             tokens.Add(maxIdx);
+            probabilities.Add(stepProbabilities[step]);
         }
 
-        return DecodeTokensToText(tokens);
+        return (DecodeTokensToText(tokens), DocumentTensorOps.Mean(Engine, probabilities.ToArray()));
     }
 
     /// <summary>

@@ -345,12 +345,15 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         ValidateImageShape(documentImage);
         var startTime = DateTime.UtcNow;
 
-        var markdown = ParseAcademicDocument(documentImage);
+        // A field found in the page's Markdown carries that decode's confidence (the mean token probability);
+        // a missing field has 0. It used to report a constant 0.5.
+        var page = AnswerQuestion(documentImage, "Convert to Markdown");
+        var markdown = page.Answer ?? string.Empty;
         using var parser = new StructuredOutputParser<T>();
         var kvPairs = parser.ParseKeyValuePairs(markdown);
 
         var results = new Dictionary<string, DocumentQAResult<T>>();
-        T found = NumOps.FromDouble(0.5);
+        T found = page.Confidence;
         T missing = NumOps.Zero;
         foreach (var field in fieldPrompts)
         {

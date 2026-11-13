@@ -69,6 +69,28 @@ public sealed class PSENetLossTests
     }
 
     [Fact]
+    public void Ohem_CountsPositivesAndPicksTheKthNegativeExactlyInHalf()
+    {
+        // 9000 pixels: 2100 positives, then 6144 negatives at logit 2, 156 at logit 1 and 600 at -5. OHEM keeps the
+        // k = 3 x 2100 = 6300 hardest negatives, i.e. every negative at 1 or above, and drops the -5s. Counting the
+        // positives as a 0/1 sum in Half stops at 2048 (k = 6144), and picking the k-th value by an index ramp in
+        // Half matched several neighbouring positions, so the threshold moved.
+        const int plane = 9000;
+        var logits = new Half[plane];
+        var target = new Half[plane];
+        for (int i = 0; i < plane; i++)
+        {
+            target[i] = (Half)(i < 2100 ? 1.0 : 0.0);
+            logits[i] = (Half)(i < 2100 ? 0.0 : i < 8244 ? 2.0 : i < 8400 ? 1.0 : -5.0);
+        }
+        var mask = new PSENetLoss<Half>().OhemMask(
+            new Tensor<Half>(logits, new[] { 1, plane }), new Tensor<Half>(target, new[] { 1, plane }), 1, plane).ToArray();
+
+        Assert.All(mask.Take(8400), m => Assert.Equal(1.0, (double)m));
+        Assert.All(mask.Skip(8400), m => Assert.Equal(0.0, (double)m));
+    }
+
+    [Fact]
     public void FlatVector_IsTheSmoothedDiceOfTheSigmoid()
     {
         double[] logits = { 2.0, -1.0, 0.5, -3.0 };

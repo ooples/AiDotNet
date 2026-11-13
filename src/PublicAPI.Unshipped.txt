@@ -22932,6 +22932,7 @@ AiDotNet.Document.Options.DiTOptions.ModelSize.get -> AiDotNet.Document.Options.
 AiDotNet.Document.Options.DiTModelSize
 AiDotNet.Document.Options.DiTModelSize.Base = 0 -> AiDotNet.Document.Options.DiTModelSize
 AiDotNet.Document.Options.DiTModelSize.Large = 1 -> AiDotNet.Document.Options.DiTModelSize
+AiDotNet.Document.Options.DiTOptions.UseModelSize(AiDotNet.Document.Options.DiTModelSize size) -> AiDotNet.Document.Options.DiTOptions!
 AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.ClassifyTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! packedTokens) -> System.Collections.Generic.IReadOnlyList<(AiDotNet.Document.DocumentRegionType Label, T Confidence)>!
 AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.TokenClassifier.get -> AiDotNet.Document.LayoutAware.LayoutLM<T>!
 AiDotNet.Document.Options.DocBankOptions.TokenClassifierOptions.get -> AiDotNet.Document.Options.LayoutLMOptions?

@@ -46,24 +46,40 @@ internal static class DocumentTensorOps
 
     /// <summary>
     /// The greedy token of every row of a <c>[rows, vocab]</c> score matrix: the first strict maximum of the
-    /// row (later ties never replace it, NaN never wins, 0 when nothing beats -infinity).
+    /// row (later ties never replace it, NaN never wins, 0 when nothing beats -infinity). The column index is
+    /// produced as an int by the engine's arg-max, never compared in T: Half holds every integer only up to
+    /// 2048, so an index ramp in T would merge neighbouring vocabulary ids.
     /// </summary>
     internal static int[] RowArgMax<T>(IEngine engine, Tensor<T> scores)
-        => AudioEngineOps.RowFirstArgMax(engine, scores);
+    {
+        int rows = scores.Shape[0];
+        if (rows == 0)
+            return Array.Empty<int>();
+        if (scores.Length == 0)
+            return new int[rows];
+        var ranked = engine.TensorWhere(engine.TensorIsNan(scores),
+            Tensor<T>.CreateDefault(scores.Shape.ToArray(), AudioEngineOps.NegativeInfinityOrMin<T>()), scores);
+        return engine.TensorArgMax(ranked, 1).ToArray();
+    }
 
     /// <summary>
-    /// The greedy token of each of the first <c>min(rows, maxLength)</c> rows of a decoder output whose first
-    /// axis is the sequence (the remaining axes are the vocabulary).
+    /// The token of each of the first <c>min(rows, maxLength)</c> rows of a decoder output whose first axis is the
+    /// sequence (the remaining axes are the vocabulary), with its softmax probability: the greedy token at
+    /// <paramref name="temperature"/> 0, otherwise a temperature sample (one seeded engine draw per row, see
+    /// <see cref="SampleWithProbabilities{T}"/>).
     /// </summary>
-    internal static int[] GreedyRowTokens<T>(IEngine engine, Tensor<T> output, int maxLength)
+    internal static (int[] Tokens, T[] Probabilities) DecodeRows<T>(IEngine engine, Tensor<T> output, int maxLength, double temperature, int seed)
     {
-        int rows = Math.Min(output.Shape[0], maxLength);
+        int rows = output.Rank == 0 ? 0 : Math.Min(output.Shape[0], maxLength);
         if (rows <= 0 || output.Length == 0)
-            return Array.Empty<int>();
+            return (Array.Empty<int>(), Array.Empty<T>());
         int vocab = output.Length / output.Shape[0];
         var matrix = engine.Reshape(output, new[] { output.Shape[0], vocab });
         var head = rows == output.Shape[0] ? matrix : engine.TensorSlice(matrix, new[] { 0, 0 }, new[] { rows, vocab });
-        return RowArgMax(engine, head);
+        var (tokens, probabilities) = temperature > 0.0
+            ? SampleWithProbabilities(engine, head, MathHelper.GetNumericOperations<T>().FromDouble(temperature), seed)
+            : GreedyWithProbabilities(engine, head);
+        return (tokens, probabilities.ToArray());
     }
 
     /// <summary>
@@ -106,17 +122,18 @@ internal static class DocumentTensorOps
     /// </summary>
     internal static (int[] Tokens, Tensor<T> Probabilities) GreedyWithProbabilities<T>(IEngine engine, Tensor<T> logits)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         int rows = logits.Shape[0];
         var shape = logits.Shape.ToArray();
         int[] tokens = RowArgMax(engine, logits);
         var max = engine.TensorBroadcastTo(engine.ReduceMax(logits, new[] { 1 }, true), shape);
-        var sumExp = engine.ReduceSum(engine.TensorExp(engine.TensorSubtract(logits, max)), new[] { 1 }, false);
-        var zeros = Tensor<T>.CreateDefault(new[] { rows }, numOps.Zero);
-        var ones = Tensor<T>.CreateDefault(new[] { rows }, numOps.One);
-        var positive = engine.TensorGreaterThan(sumExp, numOps.Zero);
+        // The partition function is summed in double: a Half running sum stops growing once its spacing exceeds
+        // the addends (at 2048 for terms near 1), so a large vocabulary would report too high a probability.
+        var sumExp = engine.ReduceSum(Wide(engine.TensorExp(engine.TensorSubtract(logits, max))), new[] { 1 }, false);
+        var zeros = Tensor<double>.CreateDefault(new[] { rows }, 0.0);
+        var ones = Tensor<double>.CreateDefault(new[] { rows }, 1.0);
+        var positive = engine.TensorGreaterThan(sumExp, 0.0);
         var probabilities = engine.TensorWhere(positive, engine.TensorDivide(ones, engine.TensorWhere(positive, sumExp, ones)), zeros);
-        return (tokens, probabilities);
+        return (tokens, probabilities.Cast<T>());
     }
 
     /// <summary>
@@ -126,34 +143,44 @@ internal static class DocumentTensorOps
     /// none), and its probability is <c>s_v / sum(s)</c>. Rows whose sum is not positive give token 0 with
     /// probability 0. The draws come from one seeded engine call.
     /// </summary>
+    /// <remarks>
+    /// The cumulative scores are accumulated in double (a Half running sum stalls at 2048 and loses every
+    /// later term), and the chosen index is found and gathered as an int: it is the engine's first arg-max of
+    /// the "cumulative share reached the draw" mask, never a count or an index ramp held in T, which Half
+    /// cannot represent past 2048.
+    /// </remarks>
     internal static (int[] Tokens, Tensor<T> Probabilities) SampleWithProbabilities<T>(
         IEngine engine, Tensor<T> logits, T temperature, int seed)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         int rows = logits.Shape[0];
         int vocab = logits.Shape[1];
         var shape = new[] { rows, vocab };
         var column = new[] { rows, 1 };
         var scaled = engine.TensorDivideScalar(logits, temperature);
         var scores = engine.TensorExp(engine.TensorSubtract(scaled,
-            engine.TensorBroadcastTo(engine.ReduceMax(scaled, new[] { 1 }, true), shape)));
+            engine.TensorBroadcastTo(engine.ReduceMax(scaled, new[] { 1 }, true), shape))).Cast<double>();
         var cumulative = engine.TensorCumSum(scores, 1);
         var sum = engine.TensorSlice(cumulative, new[] { 0, vocab - 1 }, column);
-        var positive = engine.TensorGreaterThan(sum, numOps.Zero);
-        var ones = Tensor<T>.CreateDefault(column, numOps.One);
-        var zeros = Tensor<T>.CreateDefault(column, numOps.Zero);
-        var safeSum = engine.TensorWhere(positive, sum, ones);
+        var positive = engine.TensorGreaterThan(sum, 0.0);
+        var safeSum = engine.TensorWhere(positive, sum, Tensor<double>.CreateDefault(column, 1.0));
         var normalized = engine.TensorDivide(cumulative, engine.TensorBroadcastTo(safeSum, shape));
-        var draw = engine.TensorUniform<T>(column, 0.0, 1.0, seed);
-        var count = engine.ReduceSum(engine.TensorLessThan(normalized, engine.TensorBroadcastTo(draw, shape)), new[] { 1 }, true);
-        var inRange = engine.TensorLessThan(count, numOps.FromDouble(vocab));
-        var selected = engine.TensorWhere(inRange, count, Tensor<T>.CreateDefault(column, numOps.FromDouble(vocab - 1)));
-        var index = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, vocab, 1), new[] { 1, vocab }), shape);
-        var picked = engine.TensorEquals(index, engine.TensorBroadcastTo(selected, shape));
-        var score = engine.ReduceSum(engine.TensorWhere(picked, scores, Tensor<T>.CreateDefault(shape, numOps.Zero)), new[] { 1 }, true);
-        var probability = engine.TensorWhere(positive, engine.TensorWhere(inRange, engine.TensorDivide(score, safeSum), zeros), zeros);
-        var tokens = engine.TensorWhere(positive, selected, zeros);
-        return (engine.Reshape(tokens, new[] { rows }).Cast<int>().ToArray(), engine.Reshape(probability, new[] { rows }));
+        var draw = engine.TensorUniform<double>(column, 0.0, 1.0, seed);
+        var reached = engine.TensorGreaterEqual(normalized, engine.TensorBroadcastTo(draw, shape));
+        var (first, any) = RowMax(engine, reached, vocab);
+        double[] anyReached = any.ToArray();
+        double[] total = sum.ToArray();
+
+        // Rows with no positive mass give token 0 (probability 0); rows where rounding left the draw unreached
+        // give the last token (probability 0); every other row gives its first reaching token.
+        int[] tokens = Enumerable.Range(0, rows)
+            .Select(r => !(total[r] > 0.0) ? 0 : anyReached[r] > 0.0 ? first[r] : vocab - 1).ToArray();
+        int[] flat = tokens.Select((token, r) => (r * vocab) + token).ToArray();
+        var picked = engine.TensorIndexSelect(engine.Reshape(scores, new[] { rows * vocab }), new Tensor<int>(flat, new[] { rows }), 0);
+        var valid = new Tensor<double>(Enumerable.Range(0, rows)
+            .Select(r => total[r] > 0.0 && anyReached[r] > 0.0 ? 1.0 : 0.0).ToArray(), new[] { rows });
+        var probability = engine.TensorWhere(valid,
+            engine.TensorDivide(picked, engine.Reshape(safeSum, new[] { rows })), Tensor<double>.CreateDefault(new[] { rows }, 0.0));
+        return (tokens, probability.Cast<T>());
     }
 
     /// <summary>
@@ -170,8 +197,9 @@ internal static class DocumentTensorOps
         int hits = engine.TensorCountNonzero(positive);
         if (hits == 0)
             return numOps.Zero;
-        var total = engine.TensorSum(engine.TensorWhere(positive, head, Tensor<T>.CreateDefault(new[] { count }, numOps.Zero)));
-        return numOps.Divide(total, numOps.FromDouble(hits));
+        // Summed in double: a Half running sum of probabilities stalls at 2048 (a long decode has more steps).
+        double total = engine.TensorSum(Wide(engine.TensorWhere(positive, head, Tensor<T>.CreateDefault(new[] { count }, numOps.Zero))));
+        return numOps.FromDouble(total / hits);
     }
 
     /// <summary>
@@ -211,21 +239,13 @@ internal static class DocumentTensorOps
         int steps = labels.Length;
         if (steps == 0)
             return numOps.Zero;
-        int classes = scores.Shape[1];
-        var shape = new[] { steps, classes };
-        var head = scores.Shape[0] == steps ? scores : engine.TensorSlice(scores, new[] { 0, 0 }, shape);
-        var picked = OneHot<T>(engine, labels, classes);
-        return engine.TensorSum(engine.TensorWhere(picked, head, Tensor<T>.CreateDefault(shape, numOps.Zero)));
-    }
-
-    /// <summary>A <c>[labels, classes]</c> 0/1 matrix with a 1 at <c>(t, labels[t])</c>.</summary>
-    internal static Tensor<T> OneHot<T>(IEngine engine, int[] labels, int classes)
-    {
-        int steps = labels.Length;
-        var shape = new[] { steps, classes };
-        var index = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, classes, 1), new[] { 1, classes }), shape);
-        var label = engine.TensorBroadcastTo(new Tensor<int>((int[])labels.Clone(), new[] { steps, 1 }).Cast<T>(), shape);
-        return engine.TensorEquals(index, label);
+        // Gathered at int positions t * classes + labels[t]: comparing an index ramp in T with the labels would
+        // merge neighbouring ids once a vocabulary passes 2048 in Half.
+        int rows = scores.Shape[0];
+        int classes = scores.Length / rows;
+        var flat = engine.Reshape(scores, new[] { rows * classes });
+        int[] positions = labels.Select((label, t) => (t * classes) + label).ToArray();
+        return engine.TensorSum(engine.TensorIndexSelect(flat, new Tensor<int>(positions, new[] { steps }), 0));
     }
 
     /// <summary>
@@ -267,7 +287,20 @@ internal static class DocumentTensorOps
     internal static T Mean<T>(IEngine engine, T[] values)
         => values.Length == 0
             ? MathHelper.GetNumericOperations<T>().Zero
-            : engine.TensorMean(new Tensor<T>((T[])values.Clone(), new[] { values.Length }));
+            : Mean(engine, new Tensor<T>((T[])values.Clone(), new[] { values.Length }));
+
+    /// <summary>A contiguous double copy of <paramref name="values"/>, for reductions Half cannot carry.</summary>
+    internal static Tensor<double> Wide<T>(Tensor<T> values) => values.Contiguous().Cast<double>();
+
+    /// <summary>
+    /// The mean of every value of <paramref name="values"/> (0 when it is empty), reduced in double and
+    /// returned in T: a Half running sum stalls at 2048 for values near 1 (and overflows at 65504), so a mean
+    /// over a large region would come out far too small.
+    /// </summary>
+    internal static T Mean<T>(IEngine engine, Tensor<T> values)
+        => values.Length == 0
+            ? MathHelper.GetNumericOperations<T>().Zero
+            : MathHelper.GetNumericOperations<T>().FromDouble(engine.TensorMean(Wide(values)));
 
     /// <summary>
     /// For each row of an output viewed as <c>[rows, columns]</c>: the rows whose best class (first strict
@@ -280,49 +313,58 @@ internal static class DocumentTensorOps
         if (output.Rank == 0 || output.Shape[0] == 0 || output.Length == 0 || classes <= 0)
             return (Array.Empty<int>(), Array.Empty<int>(), Array.Empty<T>());
         var (arg, max) = RowMax(engine, output, classes);
-        var keep = engine.TensorMultiply(
-            engine.TensorMultiply(engine.TensorGreaterThan(max, numOps.Zero), AtLeast(engine, max, threshold)),
-            engine.TensorGreaterThan(IntTensor<T>(arg), numOps.Zero));
-        int[] rows = Hits(engine, keep);
+        var keep = engine.TensorMultiply(engine.TensorGreaterThan(max, numOps.Zero), AtLeast(engine, max, threshold));
+        // The class test stays in int (class ids are indices).
+        int[] rows = Hits(engine, keep).Where(r => arg[r] > 0).ToArray();
         return (rows, rows.Select(r => arg[r]).ToArray(), Pick(engine, max, rows));
     }
 
     /// <summary>
     /// Extractive span answering over a <c>[seq, hidden]</c> output whose column 0 holds start logits and
-    /// column <c>min(1, hidden - 1)</c> end logits: the first best start, the first best end in
-    /// <c>[start, start + maxAnswerLength)</c>, the greedy token (first maximum over the first
-    /// <paramref name="vocab"/> columns, kept when above 0) of every position in the span, and the confidence
-    /// <c>clamp((startLogit + endLogit) / 2, 0, 1)</c> (0 when the end window is empty).
+    /// column <c>min(1, hidden - 1)</c> end logits, decoded as BERT (Devlin et al. 2019, Sec. 4.2) and the
+    /// LayoutLM-family DocVQA heads do: the span <c>(s, e)</c> with <c>s &lt;= e &lt; s + maxAnswerLength</c>
+    /// maximizing <c>start[s] + end[e]</c> (first such pair in row-major order), its confidence the product of
+    /// the start and end softmax probabilities <c>p_start(s) * p_end(e)</c> (the question-answering pipeline's
+    /// score), and the greedy token (first maximum over the first <paramref name="vocab"/> columns, kept when
+    /// above 0) of every position in the span. No span (an empty window) gives no tokens and confidence 0.
     /// </summary>
     internal static (List<int> Tokens, T Confidence) SpanAnswer<T>(IEngine engine, Tensor<T> output, int hidden, int vocab, int maxAnswerLength)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         int seqLen = output.Shape[0];
         var tokens = new List<int>();
-        if (seqLen == 0 || output.Length == 0)
+        int window = Math.Min(maxAnswerLength, seqLen);
+        if (seqLen == 0 || output.Length == 0 || window <= 0)
             return (tokens, numOps.Zero);
         int columns = output.Length / seqLen;
         var matrix = engine.Reshape(output, new[] { seqLen, columns });
-        var start = engine.Reshape(engine.TensorSlice(matrix, new[] { 0, 0 }, new[] { seqLen, 1 }), new[] { 1, seqLen });
-        int bestStart = RowArgMax(engine, start)[0];
-        T startScore = engine.TensorMaxValue(start);
-        int endLimit = Math.Min(seqLen, bestStart + maxAnswerLength);
-        if (endLimit <= bestStart)
-            return (tokens, numOps.Zero);
-        int endColumn = Math.Min(1, hidden - 1);
-        var end = engine.Reshape(engine.TensorSlice(matrix, new[] { bestStart, endColumn }, new[] { endLimit - bestStart, 1 }),
-            new[] { 1, endLimit - bestStart });
-        int bestEnd = bestStart + RowArgMax(engine, end)[0];
-        T endScore = engine.TensorMaxValue(end);
+        int endColumn = Math.Min(1, Math.Min(hidden, columns) - 1);
+        var start = engine.Reshape(engine.TensorSlice(matrix, new[] { 0, 0 }, new[] { seqLen, 1 }), new[] { seqLen });
+        var end = engine.Reshape(engine.TensorSlice(matrix, new[] { 0, Math.Max(0, endColumn) }, new[] { seqLen, 1 }), new[] { seqLen });
+
+        // Every (start, end) pair's score; pairs outside the band e - s in [0, window) are excluded. The band is
+        // built from int offsets, so no index is ever compared in T.
+        var pairShape = new[] { seqLen, seqLen };
+        var pairs = engine.TensorAdd(
+            engine.TensorBroadcastTo(engine.Reshape(start, new[] { seqLen, 1 }), pairShape),
+            engine.TensorBroadcastTo(engine.Reshape(end, new[] { 1, seqLen }), pairShape));
+        var band = new Tensor<int>(Enumerable.Range(0, seqLen * seqLen)
+            .Select(i => (i % seqLen) - (i / seqLen))
+            .Select(offset => offset >= 0 && offset < window ? 1 : 0).ToArray(), pairShape).Cast<T>();
+        var candidates = engine.TensorWhere(band, pairs, Tensor<T>.CreateDefault(pairShape, AudioEngineOps.NegativeInfinityOrMin<T>()));
+        int best = RowArgMax(engine, engine.Reshape(candidates, new[] { 1, seqLen * seqLen }))[0];
+        int bestStart = best / seqLen, bestEnd = best % seqLen;
+
         int width = Math.Min(Math.Min(hidden, vocab), columns);
         if (width > 0)
         {
             var span = engine.TensorSlice(matrix, new[] { bestStart, 0 }, new[] { bestEnd - bestStart + 1, width });
             tokens.AddRange(RowArgMax(engine, span).Where(t => t > 0));
         }
-        T mean = numOps.Divide(numOps.Add(startScore, endScore), numOps.FromDouble(2.0));
-        T confidence = numOps.LessThan(mean, numOps.Zero) ? numOps.Zero : numOps.GreaterThan(mean, numOps.One) ? numOps.One : mean;
-        return (tokens, confidence);
+
+        T startProbability = Pick(engine, engine.Softmax(start, 0), new[] { bestStart })[0];
+        T endProbability = Pick(engine, engine.Softmax(end, 0), new[] { bestEnd })[0];
+        return (tokens, numOps.Multiply(startProbability, endProbability));
     }
 
     /// <summary>
@@ -391,18 +433,22 @@ internal static class DocumentTensorOps
     /// </summary>
     internal static Tensor<T> StandardizePerImage<T>(IEngine engine, Tensor<T> batch)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         int images = batch.Shape[0];
         int n = batch.Length / Math.Max(1, images);
         if (images == 0 || n == 0)
             return batch;
 
-        var flat = engine.Reshape(batch, new[] { images, n });
-        var centered = engine.TensorSubtract(flat,
-            engine.TensorBroadcastTo(engine.ReduceMean(flat, new[] { 1 }, keepDims: true), new[] { images, n }));
+        // The two moments are reduced in double and only they are brought back to T: a Half running sum over a
+        // page (thousands of values) stalls at 2048 and overflows at 65504, which would wreck the mean and std.
+        var shape = new[] { images, n };
+        var flat = engine.Reshape(batch, shape);
+        var wide = Wide(flat);
+        var mean = engine.ReduceMean(wide, new[] { 1 }, keepDims: true);
+        var deviation = engine.TensorSubtract(wide, engine.TensorBroadcastTo(mean, shape));
         var std = engine.TensorMax(
-            engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 1 }, keepDims: true)),
-            numOps.FromDouble(1.0 / Math.Sqrt(n)));
-        return engine.Reshape(engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { images, n })), batch.Shape.ToArray());
+            engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(deviation, deviation), new[] { 1 }, keepDims: true)),
+            1.0 / Math.Sqrt(n));
+        var centered = engine.TensorSubtract(flat, engine.TensorBroadcastTo(mean.Cast<T>(), shape));
+        return engine.Reshape(engine.TensorDivide(centered, engine.TensorBroadcastTo(std.Cast<T>(), shape)), batch.Shape.ToArray());
     }
 }

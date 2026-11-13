@@ -520,11 +520,8 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// The DocFormer forward. Text rows are padded with token 0 and a zero box to MaxSequenceLength (the
     /// reference always runs at max_position_embeddings, because the visual stream has exactly that many
     /// tokens). The first <paramref name="keep"/> rows of token logits <c>[keep, numClasses]</c> are returned.
-    /// </summary>
-    /// <summary>
-    /// Runs the model on token ids <c>[S]</c> and their boxes <c>[S, 4]</c> (either may be null: no tokens, or
-    /// zero boxes), padded to <see cref="DocumentNeuralNetworkBase{T}.MaxSequenceLength"/>, and an optional page.
-    /// Token ids are rounded and clamped to the vocabulary.
+    /// Token ids <c>[S]</c> and boxes <c>[S, 4]</c> may each be null (no tokens, or zero boxes); ids are rounded
+    /// and clamped to the vocabulary.
     /// </summary>
     private Tensor<T> RunDocFormer(Tensor<T>? tokens, Tensor<T>? boxes, Tensor<T>? pageImage, int keep, IDictionary<string, Tensor<T>>? activations = null)
     {

@@ -110,12 +110,16 @@ public sealed class PSENetLoss<T> : LossFunctionBase<T>
     // Reference ohem_single (whai362/PSENet): every positive plus the pixels scoring at least the k-th hardest
     // negative, k = min(NegativeRatio x positives, negatives); every pixel when there are no positives or no
     // negatives to rank. Negatives are ranked by the raw logits the reference passes in, not by the sigmoid,
-    // whose saturation at 1.0 would tie the hardest negatives and keep more than k of them.
-    private Tensor<T> OhemMask(Tensor<T> logits, Tensor<T> target, int batch, int plane)
+    // whose saturation at 1.0 would tie the hardest negatives and keep more than k of them. Positives are
+    // counted in int and the k-th value is gathered at an int position: a 0/1 sum in Half stops at 2048 and
+    // an index ramp in T merges positions past 2048, either of which moves the threshold.
+    internal Tensor<T> OhemMask(Tensor<T> logits, Tensor<T> target, int batch, int plane)
     {
         var shape = new[] { batch, plane };
         var positive = Engine.TensorGreaterThan(target, NumOps.FromDouble(0.5));
-        int[] positives = Engine.ReduceSum(positive, new[] { 1 }, false).Cast<int>().ToArray();
+        int[] positives = Enumerable.Range(0, batch)
+            .Select(b => Engine.TensorCountNonzero(Engine.TensorSlice(positive, new[] { b, 0 }, new[] { 1, plane })))
+            .ToArray();
         int[] rank = positives.Select(p => Math.Min(p * NegativeRatio, plane - p)).ToArray();
         var useAll = DocumentTensorOps.IntTensor<T>(positives.Select((p, b) => p == 0 || rank[b] == 0 ? 1 : 0).ToArray());
 
@@ -123,8 +127,10 @@ public sealed class PSENetLoss<T> : LossFunctionBase<T>
         T floor = AiDotNet.Audio.AudioEngineOps.NegativeInfinityOrMin<T>();
         var negatives = Engine.TensorWhere(positive, Tensor<T>.CreateDefault(shape, floor), logits);
         var (sorted, _) = Engine.TensorSort(negatives, 1, true);
-        var kth = DocumentTensorOps.OneHot<T>(Engine, rank.Select(k => Math.Max(k, 1) - 1).ToArray(), plane);
-        var threshold = Engine.ReduceSum(Engine.TensorWhere(kth, sorted, Tensor<T>.CreateDefault(shape, NumOps.Zero)), new[] { 1 }, true);
+        int[] kth = rank.Select((k, b) => (b * plane) + Math.Max(k, 1) - 1).ToArray();
+        var threshold = Engine.Reshape(
+            Engine.TensorIndexSelect(Engine.Reshape(sorted, new[] { batch * plane }), new Tensor<int>(kth, new[] { batch }), 0),
+            new[] { batch, 1 });
         var hard = Engine.TensorGreaterEqual(logits, Engine.TensorBroadcastTo(threshold, shape));
         var keep = Engine.TensorMax(positive, hard);
         var all = Engine.TensorBroadcastTo(Engine.Reshape(useAll, new[] { batch, 1 }), shape);

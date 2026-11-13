@@ -228,7 +228,6 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -503,13 +502,6 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         return activations;
     }
 
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-
-    }
-
     #endregion
 
     #region ILayoutDetector Implementation
@@ -562,6 +554,10 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Extractive: the answer is the best start/end span (BERT-style decoding), which involves no sampling, so
+    /// <paramref name="temperature"/> does not apply. <paramref name="maxAnswerLength"/> bounds the span.
+    /// </remarks>
     public DocumentQAResult<T> AnswerQuestion(Tensor<T> documentImage, string question, int maxAnswerLength, double temperature = 0.0)
     {
         ValidateImageShape(documentImage);

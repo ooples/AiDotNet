@@ -37,7 +37,31 @@ public class DiTOptions : DocumentNeuralNetworkOptions
     /// <summary>
     /// Gets or sets the published DiT variant this configuration describes (Li et al. 2022, Table 1).
     /// </summary>
+    /// <remarks>
+    /// The label reported by the model; <see cref="UseModelSize"/> sets it together with the variant's
+    /// hidden size, depth and head count so the label and the architecture agree.
+    /// </remarks>
     public DiTModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Configures a published DiT variant (Li et al. 2022, Sec. 3): <see cref="DiTModelSize.Base"/> is ViT-B
+    /// (hidden size 768, 12 layers, 12 heads) and <see cref="DiTModelSize.Large"/> is ViT-L (1024, 24, 16).
+    /// Sets <see cref="ModelSize"/>, <see cref="DocumentNeuralNetworkOptions.HiddenDim"/>,
+    /// <see cref="DocumentNeuralNetworkOptions.NumLayers"/> and <see cref="DocumentNeuralNetworkOptions.NumHeads"/>.
+    /// </summary>
+    /// <param name="size">The variant.</param>
+    /// <returns>These options, for chaining.</returns>
+    public DiTOptions UseModelSize(DiTModelSize size)
+    {
+        (HiddenDim, NumLayers, NumHeads) = size switch
+        {
+            DiTModelSize.Base => (768, 12, 12),
+            DiTModelSize.Large => (1024, 24, 16),
+            _ => throw new ArgumentOutOfRangeException(nameof(size), size, "Unknown DiT model size.")
+        };
+        ModelSize = size;
+        return this;
+    }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

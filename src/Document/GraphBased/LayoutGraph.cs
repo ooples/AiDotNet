@@ -186,7 +186,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         SetBaseTrainOptimizer(_optimizer);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -214,12 +213,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
             numGraphLayers: _graphLayers,
             numClasses: _numClasses,
             maxNodes: _maxNodes));
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
     }
 
     #endregion
@@ -340,7 +333,8 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         var radius = engine.TensorBroadcastTo(engine.TensorSlice(sorted, new[] { 0, k }, new[] { n, 1 }), new[] { n, n });
         var near = engine.TensorGreaterEqual(radius, distance);
         var adjacency = engine.TensorMax(near, engine.TensorTranspose(near));
-        var inverseRoot = engine.TensorRsqrt(engine.ReduceSum(adjacency, new[] { 1 }, keepDims: true));
+        // Degrees are 0/1 sums: counted in double (a Half sum stops at 2048), then brought back to T.
+        var inverseRoot = engine.TensorRsqrt(engine.ReduceSum(DocumentTensorOps.Wide(adjacency), new[] { 1 }, keepDims: true)).Cast<T>();
         return engine.TensorMultiply(
             engine.TensorMultiply(adjacency, engine.TensorBroadcastTo(inverseRoot, new[] { n, n })),
             engine.TensorBroadcastTo(engine.Reshape(inverseRoot, new[] { 1, n }), new[] { n, n }));

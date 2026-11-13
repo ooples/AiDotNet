@@ -222,7 +222,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         MaxSequenceLength = _options.MaxSequenceLength;
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -255,14 +254,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
             maxSequenceLength: MaxSequenceLength));
     }
 
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-        int numPatches = (ImageSize / 14) * (ImageSize / 14);
-
-
-    }
-
     #endregion
 
     #region IDocumentQA Implementation
@@ -282,13 +273,12 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         var preprocessed = PreprocessDocument(documentImage);
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
-        var answer = DecodeOutput(output, maxAnswerLength);
+        var (answer, confidence) = DecodeOutput(output, maxAnswerLength, temperature);
 
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(0.88),
-            ConfidenceValue = 0.88,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -310,18 +300,26 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         return results;
     }
 
-    private string DecodeOutput(Tensor<T> output, int maxLength)
+    /// <summary>
+    /// Decodes the answer rows: greedy at temperature 0, sampled otherwise. The confidence is the mean softmax
+    /// probability of the tokens kept in the answer (0 when none is).
+    /// </summary>
+    private (string Text, T Confidence) DecodeOutput(Tensor<T> output, int maxLength, double temperature)
     {
         var tokens = new List<int>();
-        foreach (int maxIdx in DocumentTensorOps.GreedyRowTokens(Engine, output, maxLength))
+        var probabilities = new List<T>();
+        var (steps, stepProbabilities) = DocumentTensorOps.DecodeRows(Engine, output, maxLength, temperature, RandomHelper.Shared.Next());
+        for (int step = 0; step < steps.Length; step++)
         {
+            int maxIdx = steps[step];
             // Special tokens: 0=PAD, 1=BOS, 2=EOS
             if (maxIdx == 2) break; // EOS token
             if (maxIdx <= 2) continue; // Skip special tokens
             tokens.Add(maxIdx);
+            probabilities.Add(stepProbabilities[step]);
         }
 
-        return DecodeTokensToText(tokens);
+        return (DecodeTokensToText(tokens), DocumentTensorOps.Mean(Engine, probabilities.ToArray()));
     }
 
     /// <summary>

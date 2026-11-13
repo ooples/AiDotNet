@@ -324,8 +324,8 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         // The head emits per-class logits [batch, numClasses, height, width]; the class probabilities are their
         // softmax over the class axis, and a region's confidence is its mean winning-class probability.
         var (probabilities, height, width) = FirstImageProbabilities(output);
-        var mask = ExtractSegmentationMask(output);
-        int[] classes = mask.Cast<int>().ToArray();
+        int[] classes = Engine.TensorArgMax(probabilities, 0).ToArray();
+        var mask = Engine.Reshape(DocumentTensorOps.IntTensor<T>(classes), new[] { height, width });
         var winning = Engine.ReduceMax(probabilities, new[] { 0 }, keepDims: false);
 
         // 4-connected components of each foreground class.

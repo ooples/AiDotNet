@@ -333,18 +333,24 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int[] kernels = Engine.TensorMultiply(Engine.TensorGreaterThan(probabilities, NumOps.FromDouble(0.5)), inside)
             .Cast<int>().ToArray();
 
-        // Step 1: 4-connected components of the smallest kernel seed the text instances.
+        // Step 1: 4-connected components of the smallest kernel seed the text instances. As in the reference
+        // pse, a component smaller than MinKernelArea is noise: it is dropped (its pixels stay unlabelled, free
+        // for the expansion to claim) instead of seeding an instance of its own.
+        const int Dropped = -1;
         var labels = new int[plane];
         var queue = new Queue<int>();
+        var component = new List<int>();
         int count = 0;
         for (int p = 0; p < plane; p++)
         {
             if (kernels[p] == 0 || labels[p] != 0) continue;
             labels[p] = ++count;
             queue.Enqueue(p);
+            component.Clear();
             while (queue.Count > 0)
             {
                 int q = queue.Dequeue();
+                component.Add(q);
                 foreach (int n in Neighbours(q, outH, outW))
                 {
                     if (kernels[n] != 0 && labels[n] == 0)
@@ -354,7 +360,15 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
                     }
                 }
             }
+
+            if (component.Count < MinKernelArea)
+            {
+                foreach (int q in component) labels[q] = Dropped;
+                count--;
+            }
         }
+        for (int p = 0; p < plane; p++)
+            if (labels[p] == Dropped) labels[p] = 0;
 
         // Step 2: progressive scale expansion through the larger kernels, seeded in raster order.
         var frontier = new Queue<int>(Enumerable.Range(0, plane).Where(p => labels[p] != 0));
@@ -383,28 +397,30 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         for (int p = 0; p < plane; p++)
             if (labels[p] != 0) pixels[labels[p]].Add((p / outW, p % outW));
 
-        var labelMap = DocumentTensorOps.IntTensor<T>(labels);
+        // Each instance's score is the mean complete-map probability of its pixels, gathered at their int
+        // positions (labels are never compared in T, which holds integers exactly only up to 2048 in Half) and
+        // averaged in double (a Half running sum stalls at 2048 pixels).
         var textScores = Engine.Reshape(text, new[] { plane });
-        var none = Tensor<T>.CreateDefault(new[] { plane }, NumOps.Zero);
-        var labelValues = DocumentTensorOps.ToT<T>(Enumerable.Range(0, count + 1).ToArray());
-        var areas = DocumentTensorOps.ToT<T>(pixels.Select(list => Math.Max(1, list.Count)).ToArray());
-        T minimumScore = NumOps.FromDouble(threshold);
+        var sized = Enumerable.Range(1, count).Where(label => pixels[label].Count >= MinRegionArea).ToArray();
+        if (sized.Length == 0)
+            return regions;
+        T[] means = sized.Select(label => DocumentTensorOps.Mean(Engine,
+            DocumentTensorOps.Pick(Engine, textScores, pixels[label].Select(c => (c.y * outW) + c.x).ToArray()))).ToArray();
+        // One engine comparison for every instance (NaN never reaches the threshold).
+        int[] passed = DocumentTensorOps.Hits(Engine, DocumentTensorOps.AtLeast(Engine,
+            new Tensor<T>(means, new[] { means.Length }), NumOps.FromDouble(threshold)));
         int regionId = 0;
-        for (int label = 1; label <= count; label++)
+        foreach (int k in passed)
         {
-            var instance = pixels[label];
-            if (instance.Count < MinRegionArea) continue;
-
-            var sum = Engine.TensorSum(Engine.TensorWhere(Engine.TensorEquals(labelMap, labelValues[label]), textScores, none));
-            var mean = Engine.TensorDivideScalar(Tensor<T>.CreateDefault(new[] { 1 }, sum), areas[label]);
-            if (Engine.TensorCountNonzero(DocumentTensorOps.AtLeast(Engine, mean, minimumScore)) == 0) continue;
+            var instance = pixels[sized[k]];
+            T mean = means[k];
 
             var polygon = ExtractConvexHull(instance);
             T[] box = DocumentTensorOps.ToT<T>(new[] { instance.Min(p => p.x), instance.Min(p => p.y), instance.Max(p => p.x), instance.Max(p => p.y) });
             T[] corners = polygon.SelectMany(c => new[] { c.x, c.y }).Select(NumOps.FromDouble).ToArray();
             regions.Add(new TextRegion<T>
             {
-                Confidence = mean.ToArray()[0],
+                Confidence = mean,
                 BoundingBox = new Vector<T>(box),
                 PolygonPoints = Enumerable.Range(0, polygon.Count).Select(i => new Vector<T>(new[] { corners[2 * i], corners[(2 * i) + 1] })).ToList(),
                 Index = regionId++
@@ -416,6 +432,12 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
 
     /// <summary>Instances with fewer pixels than this are dropped as noise.</summary>
     private const int MinRegionArea = 10;
+
+    /// <summary>
+    /// Smallest-kernel components with fewer pixels than this do not seed an instance (the reference pse's
+    /// <c>min_kernel_area</c>, 5 at scale 1).
+    /// </summary>
+    private const int MinKernelArea = 5;
 
     /// <summary>The in-bounds 4-connected neighbours of row-major pixel <paramref name="p"/>, in the reference order.</summary>
     private static IEnumerable<int> Neighbours(int p, int height, int width)
