@@ -150,7 +150,10 @@ jobs:
           {"scripts":{"build":"echo already built"}}
           PKGJSON
           cd vercel-deploy
-          vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+          # One compressed archive, not a file-by-file upload: the API reference wiki (~10.7K pages) and its
+          # Pagefind index put ~24.7K files in dist, and Vercel rejects an upload of more than 15,000 files
+          # ("`files` should NOT have more than 15000 items"). Every production deploy failed on that since 2026-06.
+          vercel deploy --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
