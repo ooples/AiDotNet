@@ -510,11 +510,21 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// <summary>
     /// Divides every row of a [numRelations, numNodes, numNodes] adjacency by its sum; empty rows stay zero.
     /// </summary>
+    /// <remarks>A narrow T (Half, BFloat16) is summed and divided in float: a Half sum of 0/1 edges stops
+    /// growing at 2048 neighbours, and float counts exactly to 2^24 while also taking weighted edges.</remarks>
     private Tensor<T> DivideByRowSums(Tensor<T> adjacency)
     {
+        return typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? RowNormalized(adjacency.Cast<float>()).Cast<T>()
+            : RowNormalized(adjacency);
+    }
+
+    private Tensor<TValue> RowNormalized<TValue>(Tensor<TValue> adjacency)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
         var rowSums = Engine.ReduceSum(adjacency, new[] { 2 }, true);
         var divisors = Engine.TensorWhere(
-            Engine.TensorEquals(rowSums, NumOps.Zero), Engine.TensorFullLike(rowSums, NumOps.One), rowSums);
+            Engine.TensorEquals(rowSums, ops.Zero), Engine.TensorFullLike(rowSums, ops.One), rowSums);
         return Engine.TensorDivide(adjacency, Engine.TensorBroadcastTo(divisors, adjacency._shape));
     }
 

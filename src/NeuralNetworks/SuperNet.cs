@@ -1460,40 +1460,42 @@ namespace AiDotNet.NeuralNetworks
             var first = Engine.TensorConcatenate(firstColumns.ToArray(), 0);
             var second = Engine.TensorConcatenate(secondColumns.ToArray(), 0);
             int count = first.Length;
-            T sum1 = Engine.TensorSum(first);
-            T sum2 = Engine.TensorSum(second);
-            T sumProduct = Engine.TensorSum(Engine.TensorMultiply(first, second));
-            T sumSquares1 = Engine.TensorSumOfSquares(first);
-            T sumSquares2 = Engine.TensorSumOfSquares(second);
+
+            // The sums of a narrow T (Half, BFloat16) are taken in float and the Pearson formula below in
+            // double: n * sum(x^2) and sum(x)^2 overflow Half past 65504.
+            var (sum1, sum2, sumProduct, sumSquares1, sumSquares2) =
+                typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+                    ? CorrelationSums(first.Cast<float>(), second.Cast<float>())
+                    : CorrelationSums(first, second);
 
             // Calculate correlation coefficient
-            T n = NumOps.FromDouble(count);
-            T numerator = NumOps.Subtract(
-                NumOps.Multiply(n, sumProduct),
-                NumOps.Multiply(sum1, sum2)
-            );
+            double n = count;
+            double numerator = n * sumProduct - sum1 * sum2;
+            double denom1 = n * sumSquares1 - sum1 * sum1;
+            double denom2 = n * sumSquares2 - sum2 * sum2;
+            double denominator = denom1 * denom2;
 
-            T denom1 = NumOps.Subtract(
-                NumOps.Multiply(n, sumSquares1),
-                NumOps.Multiply(sum1, sum1)
-            );
-
-            T denom2 = NumOps.Subtract(
-                NumOps.Multiply(n, sumSquares2),
-                NumOps.Multiply(sum2, sum2)
-            );
-
-            T denominator = NumOps.Multiply(denom1, denom2);
-
-            // Avoid division by zero
-            if (NumOps.Equals(denominator, NumOps.Zero))
+            if (denominator == 0)
             {
                 return NumOps.Zero;
             }
 
-            T correlation = NumOps.Divide(numerator, NumOps.Sqrt(denominator));
+            T correlation = NumOps.FromDouble(numerator / Math.Sqrt(denominator));
 
             return await Task.FromResult(correlation);
+        }
+
+        /// <summary>sum(x), sum(y), sum(xy), sum(x^2) and sum(y^2) as doubles.</summary>
+        private (double SumX, double SumY, double SumXY, double SumXX, double SumYY) CorrelationSums<TValue>(
+            Tensor<TValue> x, Tensor<TValue> y)
+        {
+            var ops = MathHelper.GetNumericOperations<TValue>();
+            return (
+                ops.ToDouble(Engine.TensorSum(x)),
+                ops.ToDouble(Engine.TensorSum(y)),
+                ops.ToDouble(Engine.TensorSum(Engine.TensorMultiply(x, y))),
+                ops.ToDouble(Engine.TensorSumOfSquares(x)),
+                ops.ToDouble(Engine.TensorSumOfSquares(y)));
         }
 
         /// <summary>
