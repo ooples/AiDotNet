@@ -29,7 +29,7 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public AudioGenOptions()
     {
         ModelSize = AudioGenModelSize.Medium;
-        SampleRate = 32000;
+        SampleRate = 16000;
         DurationSeconds = 5.0;
         MaxDurationSeconds = 30.0;
         Temperature = 1.0;
@@ -42,8 +42,11 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
         NumLmLayers = 0;
         NumHeads = 0;
         NumCodebooks = 4;
-        CodebookSize = 1024;
+        CodebookSize = 2048;
         MaxTextLength = 256;
+        EncodecDimension = 128;
+        EncodecFilters = 64;
+        EncodecLstmLayers = 2;
     }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
@@ -72,6 +75,10 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
         NumCodebooks = other.NumCodebooks;
         CodebookSize = other.CodebookSize;
         MaxTextLength = other.MaxTextLength;
+        EncodecWeightsPath = other.EncodecWeightsPath;
+        EncodecDimension = other.EncodecDimension;
+        EncodecFilters = other.EncodecFilters;
+        EncodecLstmLayers = other.EncodecLstmLayers;
     }
 
     /// <summary>
@@ -80,9 +87,15 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public AudioGenModelSize ModelSize { get; set; } = AudioGenModelSize.Medium;
 
     /// <summary>
-    /// Gets or sets the output sample rate.
+    /// Gets or sets the output sample rate in Hz.
     /// </summary>
-    public int SampleRate { get; set; } = 32000;
+    /// <remarks>
+    /// Defaults to 16000, the rate of AudioGen (Kreuk et al. 2022) and of its released compression
+    /// model: EnCodec tokens at 50 per second with upsampling ratios 8 x 5 x 4 x 2, a hop of 320
+    /// samples. Earlier versions defaulted to 32000 (MusicGen's rate); set it explicitly to keep that.
+    /// Other rates still work: the decoder hop is the rate divided by 50.
+    /// </remarks>
+    public int SampleRate { get; set; } = 16000;
 
     /// <summary>
     /// Gets or sets the duration of generated audio in seconds.
@@ -153,14 +166,65 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public int NumCodebooks { get; set; }
 
     /// <summary>
-    /// Gets or sets the codebook size.
+    /// Gets or sets the number of entries in each EnCodec codebook.
     /// </summary>
+    /// <remarks>
+    /// Defaults to 2048, AudioGen's 4 codebooks of 2048 entries (Kreuk et al. 2022; the released
+    /// compression model's <c>quantizer.bins</c>). Earlier versions defaulted to 1024; set it
+    /// explicitly to keep that.
+    /// </remarks>
     public int CodebookSize { get; set; }
 
     /// <summary>
     /// Gets or sets the max text length.
     /// </summary>
     public int MaxTextLength { get; set; }
+
+    /// <summary>
+    /// Gets or sets the path of a pretrained EnCodec checkpoint (safetensors, audiocraft state-dict
+    /// names) whose decoder and codebooks the native model decodes with; null keeps the seeded
+    /// initialization. AudioGen decodes with a pretrained, frozen EnCodec (Kreuk et al. 2022, §3.1).
+    /// </summary>
+    /// <remarks>
+    /// The released checkpoint (facebook/audiogen-medium, <c>compression_state_dict.bin</c>) is a
+    /// PyTorch pickle whose tensors sit under <c>best_state</c>. Convert it to safetensors first and
+    /// strip the <c>best_state.</c> prefix from every name, for example
+    /// <c>safetensors.torch.save_file(torch.load(path)["best_state"], "encodec.safetensors")</c>.
+    /// It matches <see cref="SampleRate"/> = 16000, <see cref="NumCodebooks"/> = 4 and
+    /// <see cref="CodebookSize"/> = 2048; other settings change the tensor shapes and the load is
+    /// rejected.
+    /// </remarks>
+    public string? EncodecWeightsPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the EnCodec latent dimension D, the width of each codebook entry.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 128 (Défossez et al. 2022, §4.1; audiogen-medium <c>seanet.dimension</c>). A
+    /// pretrained checkpoint loaded through <see cref="EncodecWeightsPath"/> requires 128.
+    /// </remarks>
+    public int EncodecDimension { get; set; }
+
+    /// <summary>
+    /// Gets or sets the SEANet base channel count C; the decoder's widest layer is C times
+    /// 2 to the number of upsampling stages.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 64, AudioGen's own 16 kHz compression model (audiogen-medium
+    /// <c>seanet.n_filters</c>); the EnCodec paper's general models use 32. A pretrained checkpoint
+    /// requires 64. Lower it to shrink the frozen decoder, for example in small test fixtures.
+    /// </remarks>
+    public int EncodecFilters { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of LSTM layers in the SEANet decoder.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to 2 (Défossez et al. 2022, §3.1; audiogen-medium <c>seanet.lstm</c>). At least one
+    /// layer is required: audiocraft omits the LSTM module entirely at 0, which renumbers every later
+    /// checkpoint module. A pretrained checkpoint requires 2.
+    /// </remarks>
+    public int EncodecLstmLayers { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
@@ -171,5 +235,11 @@ public class AudioGenOptions : AudioNeuralNetworkOptions
     public void Validate()
     {
         ValidateCore();
+        if (EncodecDimension <= 0)
+            throw new ArgumentException("EncodecDimension must be positive.", nameof(EncodecDimension));
+        if (EncodecFilters <= 0)
+            throw new ArgumentException("EncodecFilters must be positive.", nameof(EncodecFilters));
+        if (EncodecLstmLayers <= 0)
+            throw new ArgumentException("EncodecLstmLayers must be positive.", nameof(EncodecLstmLayers));
     }
 }
