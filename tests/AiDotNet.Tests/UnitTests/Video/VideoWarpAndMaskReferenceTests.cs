@@ -315,15 +315,41 @@ public class VideoWarpAndMaskReferenceTests
     [Fact(Timeout = 120000)]
     public async Task RvmAsppGateReadsTheLastEncoderStage()
     {
-        // LR-ASPP's gate is conv1x1(avgpool(f4)) over the last encoder stage (numFeatures * 8 channels), not the
-        // BatchNorm before it in the layer list. Without a declared depth the gate's input depth was left to a
-        // sequential shape walk that bound it to the ASPP width.
+        // LR-ASPP's gate is conv1x1(avgpool(f4)) over the last encoder stage (the 1x1 conv to the 960-channel
+        // features, scaled), not the BatchNorm before it in the layer list. Without a declared depth the gate's input
+        // depth was left to a sequential shape walk that bound it to the ASPP width.
         await Task.Yield();
         const int features = 4;
         var layers = AiDotNet.Helpers.LayerHelper<double>.CreateDefaultRVMLayers(3, 32, 32, features).ToList();
         Assert.Equal(RvmRecurrentNetwork<double>.LayerCount, layers.Count);
-        var gate = Assert.IsType<AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<double>>(layers[6]);
-        Assert.Equal(features * 8, gate.InputDepth);
+        int encoderLayers = RvmRecurrentNetwork<double>.EncoderStageLayers.Sum();
+        var lastEncoderConv = Assert.IsType<AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<double>>(
+            layers[encoderLayers - 3]);
+        var gate = Assert.IsType<AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<double>>(layers[encoderLayers + 2]);
+        Assert.Equal(lastEncoderConv.OutputDepth, gate.InputDepth);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task RvmEncoderIsMobileNetV3LargeStages()
+    {
+        // RVM's backbone is MobileNetV3-Large: a hard-swish stem, then 15 inverted residual blocks (squeeze-excitation
+        // in the 40-, 112- and 160-channel ones), then the 1x1 conv to 960 channels. At the default width the four
+        // stages end in 16, 24, 40 and 960 channels, and the stride-2 160-channel block runs at stride 1 so the last
+        // stage stays at 1/16 as the reference's dilated block does.
+        await Task.Yield();
+        var layers = AiDotNet.Helpers.LayerHelper<double>.CreateDefaultRVMLayers().ToList();
+        Assert.Equal(RvmRecurrentNetwork<double>.LayerCount, layers.Count);
+        var blocks = layers.OfType<AiDotNet.NeuralNetworks.Layers.InvertedResidualBlock<double>>().ToList();
+        Assert.Equal(15, blocks.Count);
+        Assert.Equal(new[] { 16, 24, 24, 40, 40, 40, 80, 80, 80, 80, 112, 112, 160, 160, 160 },
+            blocks.Select(b => b.OutChannels).ToArray());
+        Assert.Equal(new[] { 1, 2, 1, 2, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1 }, blocks.Select(b => b.Stride).ToArray());
+
+        var stem = Assert.IsType<AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<double>>(layers[0]);
+        Assert.Equal(16, stem.OutputDepth);
+        int encoderLayers = RvmRecurrentNetwork<double>.EncoderStageLayers.Sum();
+        var head = Assert.IsType<AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<double>>(layers[encoderLayers - 3]);
+        Assert.Equal(960, head.OutputDepth);
     }
 
     private sealed class FixedDraw : Random
