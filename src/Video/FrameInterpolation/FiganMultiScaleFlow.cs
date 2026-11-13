@@ -86,35 +86,44 @@ public sealed class FiganMultiScaleFlow<T>
         var current = frame;
         for (int l = 0; l < level; l++)
         {
-            int h = current.Shape[0], w = current.Shape[1], c = current.Shape[2];
-            int nh = Math.Max(1, h / 2), nw = Math.Max(1, w / 2);
-            var next = new Tensor<T>(new[] { nh, nw, c });
-
-            for (int y = 0; y < nh; y++)
-            {
-                for (int x = 0; x < nw; x++)
-                {
-                    for (int ch = 0; ch < c; ch++)
-                    {
-                        double sum = 0.0;
-                        int count = 0;
-                        for (int dy = 0; dy < 2; dy++)
-                        {
-                            for (int dx = 0; dx < 2; dx++)
-                            {
-                                int sy = (y * 2) + dy, sx = (x * 2) + dx;
-                                if (sy >= h || sx >= w) continue;
-                                sum += Ops.ToDouble(current[((sy * w) + sx) * c + ch]);
-                                count++;
-                            }
-                        }
-                        next[((y * nw) + x) * c + ch] = Ops.FromDouble(sum / Math.Max(1, count));
-                    }
-                }
-            }
-            current = next;
+            // 2x2 average: each axis halves by averaging adjacent pairs (a single row or column is kept as is)
+            current = HalveAxis(HalveAxis(current, 0), 1);
         }
+
         return current;
+    }
+
+    /// <summary>
+    /// Averages adjacent pairs along <paramref name="axis"/> of an [H, W, C] tensor, giving max(1, n / 2) entries;
+    /// an extent of 1 is returned unchanged.
+    /// </summary>
+    private static Tensor<T> HalveAxis(Tensor<T> tensor, int axis)
+    {
+        int extent = tensor.Shape[axis];
+        if (extent < 2)
+        {
+            return tensor;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        int half = extent / 2;
+        var shape = tensor.Shape.ToArray();
+        var paired = new int[shape.Length + 1];
+        for (int d = 0, k = 0; d < shape.Length; d++)
+        {
+            if (d == axis)
+            {
+                paired[k++] = half;
+                paired[k++] = 2;
+            }
+            else
+            {
+                paired[k++] = shape[d];
+            }
+        }
+
+        var grouped = engine.Reshape(engine.TensorNarrow(tensor, axis, 0, half * 2), paired);
+        return engine.ReduceMean(grouped, [axis + 1], false);
     }
 
     /// <summary>
@@ -136,24 +145,19 @@ public sealed class FiganMultiScaleFlow<T>
         int h = flow.Shape[0], w = flow.Shape[1];
         double scaleY = (double)targetHeight / h;
         double scaleX = (double)targetWidth / w;
-        var result = new Tensor<T>(new[] { targetHeight, targetWidth, FlowChannels });
+        var engine = AiDotNetEngine.Current;
 
-        for (int y = 0; y < targetHeight; y++)
-        {
-            int sy = Math.Min(h - 1, (int)(y / scaleY));
-            for (int x = 0; x < targetWidth; x++)
-            {
-                int sx = Math.Min(w - 1, (int)(x / scaleX));
-                int src = ((sy * w) + sx) * FlowChannels;
-                int dst = ((y * targetWidth) + x) * FlowChannels;
+        // Nearest source pixel min(n - 1, floor(i / scale))
+        var rows = new int[targetHeight];
+        for (int y = 0; y < targetHeight; y++) rows[y] = Math.Min(h - 1, (int)(y / scaleY));
+        var cols = new int[targetWidth];
+        for (int x = 0; x < targetWidth; x++) cols[x] = Math.Min(w - 1, (int)(x / scaleX));
+        var resized = engine.TensorIndexSelect(
+            engine.TensorIndexSelect(flow, new Tensor<int>(rows, [targetHeight]), 0), new Tensor<int>(cols, [targetWidth]), 1);
 
-                // Displacements scale with resolution; the occlusion weight does not.
-                result[dst] = Ops.FromDouble(Ops.ToDouble(flow[src]) * scaleX);
-                result[dst + 1] = Ops.FromDouble(Ops.ToDouble(flow[src + 1]) * scaleY);
-                result[dst + 2] = flow[src + 2];
-            }
-        }
-        return result;
+        // Displacements scale with resolution; the occlusion weight does not.
+        var scale = new Tensor<T>(new[] { Ops.FromDouble(scaleX), Ops.FromDouble(scaleY), Ops.One }, [1, 1, FlowChannels]);
+        return engine.TensorMultiply(resized, engine.TensorBroadcastTo(scale, [targetHeight, targetWidth, FlowChannels]));
     }
 
     /// <summary>
@@ -182,38 +186,25 @@ public sealed class FiganMultiScaleFlow<T>
                 $"Flow is [{flow.Shape[0]}, {flow.Shape[1]}] but the frame is [{h}, {w}]; they must " +
                 "match, so upsample the flow before warping.", nameof(flow));
 
-        var result = new Tensor<T>(new[] { h, w, c });
-
-        for (int y = 0; y < h; y++)
+        // Bilinear sampling at (x + direction * dx, y + direction * dy) with the position clamped to the border:
+        // grid_sample(align_corners=True, padding_mode="border") on the [1, C, H, W] view
+        var engine = AiDotNetEngine.Current;
+        var sign = Ops.FromDouble(direction);
+        var (gridX, gridY) = engine.TensorMeshgrid(engine.TensorArange<T>(0, w, 1), engine.TensorArange<T>(0, h, 1));
+        Tensor<T> Coordinate(Tensor<T> grid, int channel, int extent)
         {
-            for (int x = 0; x < w; x++)
-            {
-                int fi = ((y * w) + x) * FlowChannels;
-                double sx = x + (direction * Ops.ToDouble(flow[fi]));
-                double sy = y + (direction * Ops.ToDouble(flow[fi + 1]));
-
-                // Clamp to the border.
-                sx = Math.Min(Math.Max(sx, 0.0), w - 1.0);
-                sy = Math.Min(Math.Max(sy, 0.0), h - 1.0);
-
-                int x0 = (int)Math.Floor(sx), y0 = (int)Math.Floor(sy);
-                int x1 = Math.Min(x0 + 1, w - 1), y1 = Math.Min(y0 + 1, h - 1);
-                double ax = sx - x0, ay = sy - y0;
-
-                for (int ch = 0; ch < c; ch++)
-                {
-                    double v00 = Ops.ToDouble(frame[((y0 * w) + x0) * c + ch]);
-                    double v01 = Ops.ToDouble(frame[((y0 * w) + x1) * c + ch]);
-                    double v10 = Ops.ToDouble(frame[((y1 * w) + x0) * c + ch]);
-                    double v11 = Ops.ToDouble(frame[((y1 * w) + x1) * c + ch]);
-
-                    double top = (v00 * (1 - ax)) + (v01 * ax);
-                    double bottom = (v10 * (1 - ax)) + (v11 * ax);
-                    result[((y * w) + x) * c + ch] = Ops.FromDouble((top * (1 - ay)) + (bottom * ay));
-                }
-            }
+            var displaced = engine.TensorAdd(grid, engine.TensorMultiplyScalar(
+                engine.Reshape(engine.TensorNarrow(flow, 2, channel, 1), [h, w]), sign));
+            return extent > 1
+                ? engine.TensorAddScalar(engine.TensorMultiplyScalar(displaced, Ops.FromDouble(2.0 / (extent - 1))), Ops.FromDouble(-1.0))
+                : engine.TensorMultiplyScalar(displaced, Ops.Zero);
         }
-        return result;
+
+        var samplingGrid = engine.Reshape(
+            engine.TensorStack([Coordinate(gridX, 0, w), Coordinate(gridY, 1, h)], 2), [1, h, w, 2]);
+        var image = engine.Reshape(engine.TensorPermute(frame, [2, 0, 1]), [1, c, h, w]);
+        var sampled = engine.GridSample(image, samplingGrid, GridSampleMode.Bilinear, GridSamplePadding.Border, true);
+        return engine.TensorPermute(engine.Reshape(sampled, [c, h, w]), [1, 2, 0]);
     }
 
     /// <summary>
@@ -232,25 +223,11 @@ public sealed class FiganMultiScaleFlow<T>
         var warped0 = Warp(frame0, flow, direction: -1);
         var warped1 = Warp(frame1, flow, direction: +1);
 
+        // weight * warped0 + (1 - weight) * warped1 with weight = sigmoid(occlusion channel)
         int h = frame0.Shape[0], w = frame0.Shape[1], c = frame0.Shape[2];
-        var result = new Tensor<T>(new[] { h, w, c });
-
-        for (int y = 0; y < h; y++)
-        {
-            for (int x = 0; x < w; x++)
-            {
-                double raw = Ops.ToDouble(flow[(((y * w) + x) * FlowChannels) + 2]);
-                double weight = 1.0 / (1.0 + Math.Exp(-raw));
-
-                for (int ch = 0; ch < c; ch++)
-                {
-                    int i = ((y * w) + x) * c + ch;
-                    result[i] = Ops.FromDouble(
-                        (weight * Ops.ToDouble(warped0[i])) + ((1.0 - weight) * Ops.ToDouble(warped1[i])));
-                }
-            }
-        }
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var weight = engine.TensorBroadcastTo(engine.TensorSigmoid(engine.TensorNarrow(flow, 2, 2, 1)), [h, w, c]);
+        return engine.TensorAdd(warped1, engine.TensorMultiply(weight, engine.TensorSubtract(warped0, warped1)));
     }
 
     /// <summary>
@@ -268,13 +245,8 @@ public sealed class FiganMultiScaleFlow<T>
                 $"Residual length {residual.Length} does not match the flow's {upsampledFlow.Length}.",
                 nameof(residual));
 
-        var result = new Tensor<T>(upsampledFlow.Shape.ToArray());
-        for (int i = 0; i < result.Length; i++)
-        {
-            // tanh of the SUM — bounding the accumulated estimate, not just the correction.
-            result[i] = Ops.FromDouble(Math.Tanh(
-                Ops.ToDouble(upsampledFlow[i]) + Ops.ToDouble(residual[i])));
-        }
-        return result;
+        // tanh of the SUM — bounding the accumulated estimate, not just the correction.
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorTanh(engine.TensorAdd(upsampledFlow, engine.Reshape(residual, upsampledFlow.Shape.ToArray())));
     }
 }
