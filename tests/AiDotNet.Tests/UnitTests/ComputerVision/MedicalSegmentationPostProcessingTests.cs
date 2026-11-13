@@ -121,6 +121,21 @@ public class MedicalSegmentationPostProcessingTests
     }
 
     [Fact]
+    public void SegMamba_ResolvedFullResolutionLayersTakeTheVolumeDepth()
+    {
+        // A 3-deep, 32 x 32 volume. The last decoder convolution and the class projection run at the input volume's
+        // full resolution, so they are resolved for depth 3; the height (32) was read as the depth before.
+        var model = new SegMamba<double>(Arch(), options: new SegMambaOptions { NumClasses = 3 });
+        model.GetParameterLayout();
+
+        var finalDecoderConv = model.Layers[model.Layers.Count - 3].GetInputShape();
+        var classProjection = model.Layers[model.Layers.Count - 1].GetInputShape();
+
+        Assert.Equal(new[] { 3, 32, 32 }, finalDecoderConv.Skip(1).ToArray());
+        Assert.Equal(new[] { 3, 32, 32 }, classProjection.Skip(1).ToArray());
+    }
+
+    [Fact]
     public void Summarize_Half_AreaAndMeanStayExactBeyondTheHalfRange()
     {
         // 300 x 300 = 90000 pixels of class 1 (more than Half's largest finite value, 65504) plus 4 of class 0.

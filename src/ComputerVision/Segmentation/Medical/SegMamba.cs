@@ -598,7 +598,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         }
 
         // The final upsample returns to the input volume without another skip concat.
-        depth = Architecture.InputHeight;
+        depth = Architecture.InputDepth;
         height = Architecture.InputHeight;
         width = Architecture.InputWidth;
         _decConvs[convIdx].ResolveFromShape([currentChannels, depth, height, width]);
