@@ -254,8 +254,9 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // Kept for GetFeatureImportance, which attributes the most recent batch
-        _importanceBatch = input;
+        // Kept for GetFeatureImportance, which attributes the most recent batch. It outlives this call, so it is a
+        // copy: the input can be an engine result in a tensor arena that a later call recycles.
+        _importanceBatch = TabularMetrics.KeptCopy(input);
 
         // CPU path: forward pass through each layer sequentially
         return Accelerate(input, () =>

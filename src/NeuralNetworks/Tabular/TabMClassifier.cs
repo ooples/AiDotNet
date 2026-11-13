@@ -202,14 +202,16 @@ public class TabMClassifier<T> : TabMBase<T>
         var engine = Engine;
         int n = predictions.Length;
 
-        // One-hot rows ignore labels outside [0, numClasses), exactly as the per-class equality tests did.
-        var predicted = engine.TensorOneHot<T>(new Tensor<int>(predictions, new[] { n }), _numClasses);
-        var actual = engine.TensorOneHot<T>(
+        // One-hot rows ignore labels outside [0, numClasses), exactly as the per-class equality tests did. The
+        // counts are summed in int, as the scalar tp/fp/fn counters were: a 0/1 sum in T stops counting at 2048 in
+        // Half. Only the finished counts become T for the ratios.
+        var predicted = engine.TensorOneHot<int>(new Tensor<int>(predictions, new[] { n }), _numClasses);
+        var actual = engine.TensorOneHot<int>(
             Tensor<int>.FromVector(Vector<int>.Wrap(targets).GetSubVector(0, n)), _numClasses);
 
-        var truePositives = engine.ReduceSum(engine.TensorMultiply(predicted, actual), new[] { 0 }, false);
-        var predictedCounts = engine.ReduceSum(predicted, new[] { 0 }, false);
-        var actualCounts = engine.ReduceSum(actual, new[] { 0 }, false);
+        var truePositives = engine.ReduceSum(engine.TensorMultiply(predicted, actual), new[] { 0 }, false).Cast<T>();
+        var predictedCounts = engine.ReduceSum(predicted, new[] { 0 }, false).Cast<T>();
+        var actualCounts = engine.ReduceSum(actual, new[] { 0 }, false).Cast<T>();
 
         // tp is 0 whenever its count is 0, so dividing by max(count, 1) yields the 0 fallback exactly.
         var precision = engine.TensorDivide(truePositives, engine.TensorMax(predictedCounts, NumOps.One));

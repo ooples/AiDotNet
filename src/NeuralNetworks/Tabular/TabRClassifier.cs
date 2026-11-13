@@ -225,7 +225,10 @@ public class TabRClassifier<T> : TabRBase<T>
         }
 
         int batchSize = features.Shape[0];
-        int k = Options.NumNeighbors;
+
+        // The neighbours actually retrieved: fewer than NumNeighbors when the index (less the excluded sample) is
+        // smaller
+        int k = attentionWeights.Shape[1];
 
         // Sort each sample's neighbors by attention weight (descending). The order is computed as a stable
         // sort, which is what List.Sort's insertion-sort path produced for the usual k <= 16 neighbors.

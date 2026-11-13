@@ -87,9 +87,16 @@ internal static class TabularTraining
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int batchSize = oneHot.Shape[0];
-        var logProbabilities = engine.TensorLog(TensorTapeOps.TapeAddScalar(engine, probabilities, epsilon));
+        // Entries with a zero label contribute 0, so their log argument is taken as 1: a probability that
+        // underflowed to 0 (with an epsilon that rounds to 0 in Half) would otherwise give 0 * log(0) = NaN in
+        // the loss and its gradient.
+        var shaped = probabilities.Reshape(oneHot._shape);
+        var logArgument = engine.TensorWhere(
+            engine.TensorNotEquals(oneHot, ops.Zero),
+            TensorTapeOps.TapeAddScalar(engine, shaped, epsilon),
+            engine.TensorOnesLike(shaped));
         var total = engine.ReduceSum(
-            engine.TensorMultiply(oneHot, logProbabilities.Reshape(oneHot._shape)), new[] { 0, 1 }, false);
+            engine.TensorMultiply(oneHot, engine.TensorLog(logArgument)), new[] { 0, 1 }, false);
         return TensorTapeOps.TapeMultiplyScalar(engine, total, ops.FromDouble(-1.0 / batchSize));
     }
 

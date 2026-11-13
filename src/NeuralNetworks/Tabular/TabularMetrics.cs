@@ -153,6 +153,20 @@ internal static class TabularMetrics
     }
 
     /// <summary>
+    /// A garbage-collected copy of an engine result that a field keeps past the current call. Engine results can
+    /// live in a tensor arena that a later call recycles, so a kept reference would read overwritten values.
+    /// </summary>
+    public static Tensor<T> KeptCopy<T>(Tensor<T> source)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+
+        var shape = new int[source.Rank];
+        for (int i = 0; i < shape.Length; i++)
+            shape[i] = source.Shape[i];
+        return new Tensor<T>(source.ToArray(), shape);
+    }
+
+    /// <summary>
     /// Joins parameter or gradient vectors end to end with bulk copies.
     /// </summary>
     public static Vector<T> ConcatenateVectors<T>(IReadOnlyList<Vector<T>> parts)

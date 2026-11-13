@@ -339,12 +339,13 @@ public abstract class NODEBase<T> : IParameterSource<T>
         var spread = engine.TensorMultiply(rank, engine.TensorSubtract(meanSquare, engine.TensorMultiply(mean, mean)));
         var delta = engine.TensorDivide(engine.ScalarMinusTensor(one, spread), rank);
         var candidates = engine.TensorSubtract(mean, engine.TensorSqrt(engine.ReLU(delta)));
+        // Counted in int: a 0/1 sum in T stops counting at 2048 in Half and would pick the wrong threshold
         var outside = engine.TensorLessThan(engine.TensorSubtract(sorted, candidates), NumOps.Zero);
-        var supportSize = engine.ScalarMinusTensor(
-            NumOps.FromDouble(n), engine.ReduceSum(outside, new[] { 1 }, true));
+        var supportCount = engine.ScalarMinusTensor(n, engine.ReduceSum(outside.Cast<int>(), new[] { 1 }, true));
+        var supportSize = supportCount.Cast<T>();
 
         // Membership in original order: x >= the smallest supported value
-        var lastIndex = TensorTapeOps.TapeAddScalar(engine, supportSize, NumOps.Negate(one)).Contiguous().Cast<int>();
+        var lastIndex = engine.TensorAddScalar(supportCount, -1);
         var smallestSupported = engine.TensorTakeAlongDim(sorted, lastIndex, 1);
         var support = engine.ScalarMinusTensor(
             one, engine.TensorLessThan(engine.TensorSubtract(x, smallestSupported), NumOps.Zero));

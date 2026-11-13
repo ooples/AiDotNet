@@ -347,8 +347,8 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         _indexFeatures = features;
         _indexLabels = null;
 
-        // Encode all training samples
-        _indexEmbeddings = EncodeFeatures(features);
+        // Encode all training samples; the index outlives this call, so it holds its own copy of the engine result
+        _indexEmbeddings = TabularMetrics.KeptCopy(EncodeFeatures(features));
     }
 
     /// <summary>
@@ -370,7 +370,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         }
 
         BuildIndex(features);
-        _indexLabels = labelEncodings.Reshape(samples, _labelDimension);
+        _indexLabels = TabularMetrics.KeptCopy(labelEncodings).Reshape(samples, _labelDimension);
     }
 
     /// <summary>
@@ -475,7 +475,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         var scores = TensorTapeOps.TapeMultiplyScalar(
             Engine, squaredDistance, NumOps.FromDouble(-1.0 / Options.RetrievalTemperature));
         var attentionWeights = Engine.Softmax(scores, -1);
-        _attentionWeightsCache = attentionWeights;
+        _attentionWeightsCache = TabularMetrics.KeptCopy(attentionWeights);
 
         // V_i = T(k - k_i) + W_Y(y_i), with T = Linear(ReLU(Linear(.)))
         var differenceRows = difference.Reshape(batchSize * k, embDim);
@@ -511,7 +511,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         // Encode the targets and, with the same encoder, every candidate; keys k = W_K(x~)
         var queryEmbedding = EncodeFeatures(features).Reshape(batchSize, embDim);
         var candidateEmbedding = EncodeFeatures(_indexFeatures).Reshape(_numIndexedSamples, embDim);
-        _indexEmbeddings = candidateEmbedding;
+        _indexEmbeddings = TabularMetrics.KeptCopy(candidateEmbedding);
         var queryKeys = _keyProjection.Forward(queryEmbedding);
         var candidateKeys = _keyProjection.Forward(candidateEmbedding);
 
@@ -525,7 +525,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         if (_indexLabels != null)
         {
             neighborLabels = Engine.TensorIndexSelect(_indexLabels, nearest.Reshape(batchSize * k), 0);
-            _neighborLabelsCache = neighborLabels.Reshape(batchSize, k, _labelDimension);
+            _neighborLabelsCache = TabularMetrics.KeptCopy(neighborLabels).Reshape(batchSize, k, _labelDimension);
         }
 
         // x = x~ + sum_i w_i V_i, then the predictor

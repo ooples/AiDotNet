@@ -398,7 +398,10 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         }
 
         _contextFeatures = features;
-        _contextLabels = _labelDimension > 0 ? labels.Reshape(numSamples, _labelDimension) : labels;
+        // The labels are read on every later prediction, so the context holds its own copy: a caller's labels can
+        // be an engine result (the classifier's one-hot) living in a tensor arena that a later call recycles
+        var keptLabels = TabularMetrics.KeptCopy(labels);
+        _contextLabels = _labelDimension > 0 ? keptLabels.Reshape(numSamples, _labelDimension) : keptLabels;
     }
 
     /// <summary>
@@ -900,14 +903,15 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             var scores = TensorTapeOps.TapeMultiplyScalar(
                 eng, eng.TensorBatchMatMul(qh, eng.TensorPermute(kh, new[] { 0, 2, 1 })), scale);
 
-            // Mask every key column past the context (additive -1e9, broadcast over heads and rows)
+            // Mask every key column past the context by selecting the lowest finite score there (broadcast over heads
+            // and rows). The column test is done on int positions, and a select rather than an additive -1e9: in Half
+            // 1e9 is infinity, and 0 * infinity on the context columns would make every score NaN.
             if (contextSize > 0 && contextSize < seqLen)
             {
-                var isContextKey = eng.TensorLessThan(
-                    eng.TensorArange<TBlock>(0, seqLen).Reshape(1, 1, seqLen), NumOps.FromDouble(contextSize));
-                var blocked = TensorTapeOps.TapeMultiplyScalar(
-                    eng, TensorTapeOps.TapeAddScalar(eng, isContextKey, NumOps.FromDouble(-1.0)), NumOps.FromDouble(1e9));
-                scores = eng.TensorAdd(scores, blocked);
+                var isContextKey = eng.TensorBroadcastTo(
+                    eng.TensorLessThan(eng.TensorArange<int>(0, seqLen), contextSize).Cast<TBlock>().Reshape(1, 1, seqLen),
+                    scores._shape);
+                scores = eng.TensorWhere(isContextKey, scores, eng.TensorFullLike(scores, NumOps.MinValue));
             }
 
             var weights = eng.Softmax(scores, -1);

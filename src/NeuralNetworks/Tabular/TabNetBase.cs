@@ -396,9 +396,15 @@ public abstract class TabNetBase<T>
         int batchSize = _stepAttentionMasks[1].Shape[0];
         var scale = NumOps.FromDouble(-Options.SparsityCoefficient / (steps * (double)batchSize));
 
-        // Masks after the uniform first one, stacked so the entropy is one reduction
+        // Masks after the uniform first one, stacked so the entropy is one reduction. Sparsemax masks hold exact
+        // zeros, whose term is 0: their log argument is taken as 1, because in Half epsilon rounds to 0 and
+        // 0 * log(0) (and its gradient) would be NaN.
         var masks = Engine.TensorConcatenate(_stepAttentionMasks.GetRange(1, steps).ToArray(), 0);
-        var weightedLog = Engine.TensorMultiply(masks, Engine.TensorLog(TensorTapeOps.TapeAddScalar(Engine, masks, epsilon)));
+        var logArgument = Engine.TensorWhere(
+            Engine.TensorGreaterThan(masks, NumOps.Zero),
+            TensorTapeOps.TapeAddScalar(Engine, masks, epsilon),
+            Engine.TensorOnesLike(masks));
+        var weightedLog = Engine.TensorMultiply(masks, Engine.TensorLog(logArgument));
         var total = Engine.ReduceSum(weightedLog, new[] { 0, 1 }, false);
         return TensorTapeOps.TapeMultiplyScalar(Engine, total, scale);
     }
@@ -671,11 +677,12 @@ public abstract class TabNetBase<T>
     }
 
     /// <summary>
-    /// The live tensors a tape training step updates: the shared fully connected layers, every feature and attentive transformer and the output layer.
+    /// The live tensors a tape training step updates: the initial ghost batch norm, the shared fully connected layers, every feature and attentive transformer and the output layer.
     /// </summary>
     protected IEnumerable<Tensor<T>> GetTrainableTensors()
     {
         var layers = new List<ILayer<T>>();
+        layers.Add(_initialBN);
         layers.AddRange(_sharedFCLayers);
         layers.AddRange(_featureTransformers);
         layers.AddRange(_attentiveTransformers);
