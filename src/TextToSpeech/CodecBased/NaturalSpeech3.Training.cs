@@ -160,8 +160,9 @@ public partial class NaturalSpeech3<T>
 
     // ---------------------------------------------------------------- the codec (App. B.1)
 
-    // A training clip: the waveform, its frame-level phone labels, normalized F0 and voicing, and the speaker.
-    private sealed record CodecUtterance(Tensor<T> Audio, int[] Phones, double[] F0, bool[] Voiced, int? Speaker, Tensor<T>? ProsodyFeature);
+    // A training clip: the waveform, its frame-level phone labels, normalized F0 [frames] and voicing [frames] (1 voiced,
+    // 0 not), and the speaker.
+    private sealed record CodecUtterance(Tensor<T> Audio, int[] Phones, Tensor<T> F0, Tensor<T> Voiced, int? Speaker, Tensor<T>? ProsodyFeature);
 
     private CodecUtterance PrepareCodec(TtsTrainingSample<T> sample)
     {
@@ -180,16 +181,45 @@ public partial class NaturalSpeech3<T>
         for (; frame < frames; frame++) phones[frame] = phonemes[^1];
         var audio = Engine.TensorSlice(Engine.Reshape(recording, new[] { recording.Length }), new[] { 0 }, new[] { frames * o.HopSize });
         var pitch = sample.Pitch is { } given ? given : new WorldPitchDetector<T>(o.SampleRate).EstimateF0(audio, 1000.0 * o.HopSize / o.SampleRate).F0;
-        // The codec utterance's prosody targets are a double[] reference port; the contour crosses into it once.
-        var contour = pitch.Cast<double>().ToArray();
-        var f0 = Enumerable.Range(0, frames).Select(f => f < contour.Length ? contour[f] : 0.0).ToArray();
-        var voiced = f0.Select(v => v > 0).ToArray();
-        // The z-score of F0 over the voiced frames (§3.2.2's normalized F0).
-        var values = f0.Where(v => v > 0).ToArray();
-        double mean = values.Length > 0 ? values.Average() : 0, std = values.Length > 1 ? Math.Sqrt(values.Sum(v => (v - mean) * (v - mean)) / values.Length) : 1;
-        var normalized = f0.Select(v => v > 0 ? (v - mean) / Math.Max(std, 1e-8) : 0.0).ToArray();
-        var prosody = o.MelProsody ? Codec.ProsodyFeature(Doubles(audio)) : null;
+        var (normalized, voiced) = ProsodyTargets(pitch, frames);
+        var prosody = o.MelProsody ? Codec.ProsodyFeature(audio) : null;
         return new CodecUtterance(audio, phones, normalized, voiced, sample.SpeakerId, prosody);
+    }
+
+    /// <summary>
+    /// The F0 targets of <paramref name="frames"/> codec frames (the contour cut, or zero-padded, to them): the voicing
+    /// (F0 &gt; 0) and the z-score of F0 over the voiced frames with the population deviation (§3.2.2's normalized F0;
+    /// deviation 1 below two voiced frames, at least 1e-8), 0 on unvoiced frames.
+    /// </summary>
+    /// <remarks>The sums are taken over powers-of-two pre-scaled values (exact in double) so a half-precision sum of
+    /// F0 (hundreds of Hz per frame) or of its squared deviations cannot overflow.</remarks>
+    private (Tensor<T> Normalized, Tensor<T> Voiced) ProsodyTargets(Tensor<T> pitch, int frames)
+    {
+        var engine = Engine;
+        var contour = engine.Reshape(pitch, new[] { pitch.Length });
+        var f0 = contour.Length >= frames ? engine.TensorSlice(contour, new[] { 0 }, new[] { frames })
+            : engine.PadNd(contour, new[] { 0, frames - contour.Length }, AiDotNet.Tensors.Engines.PadMode.Constant, Ops.Zero);
+        var zero = new Tensor<T>(new[] { frames });
+        var voiced = engine.TensorGreaterThan(f0, Ops.Zero);
+        int count = engine.TensorCountNonzero(voiced);
+        if (count == 0) return (zero, voiced);
+        int log2Count = (int)Math.Ceiling(Math.Log(count, 2.0));
+        double sumScale = Math.Pow(2.0, log2Count);
+        var voicedF0 = engine.TensorWhere(voiced, f0, zero);
+        double mean = Ops.ToDouble(engine.ReduceSum(engine.TensorMultiplyScalar(voicedF0, Ops.FromDouble(1.0 / sumScale)), null).ToArray()[0]) / count * sumScale;
+        var centered = engine.TensorWhere(voiced, engine.TensorSubtractScalar(f0, Ops.FromDouble(mean)), zero);
+        double std = 1;
+        if (count > 1)
+        {
+            double squareScale = Math.Pow(2.0, 10 + (log2Count + 1) / 2);
+            double squares = Ops.ToDouble(engine.TensorSumOfSquares(engine.TensorMultiplyScalar(centered, Ops.FromDouble(1.0 / squareScale))));
+            std = Math.Sqrt(squares * squareScale * squareScale / count);
+        }
+        var normalized = engine.TensorWhere(voiced, engine.TensorDivideScalar(centered, Deviation(Math.Max(std, 1e-8))), zero);
+        return (normalized, voiced);
+
+        // A deviation T cannot hold (1e-8 in half precision) bounds deviations that T rounds to 0 anyway: divide by 1.
+        static T Deviation(double value) => Ops.ToDouble(Ops.FromDouble(value)) > 0 ? Ops.FromDouble(value) : Ops.One;
     }
 
     private sealed record CodecPass(Tensor<T> Audio, Tensor<T> Auxiliary);
@@ -238,16 +268,18 @@ public partial class NaturalSpeech3<T>
     private Tensor<T> F0Loss(List<Tensor<T>> heads, CodecUtterance u)
     {
         int frames = u.F0.Length;
-        var voicedRows = Enumerable.Range(0, frames).Where(i => u.Voiced[i]).ToArray();
+        var voicedIndex = Engine.TensorNonzero(u.Voiced);
+        int voicedCount = voicedIndex.Shape[0];
         var terms = new List<Tensor<T>>();
-        if (voicedRows.Length > 0)
+        if (voicedCount > 0)
         {
-            var predicted = Engine.TensorIndexSelect(Engine.Reshape(heads[0], new[] { frames, 1 }), new Tensor<int>(new[] { voicedRows.Length }, new Vector<int>(voicedRows)), 0);
-            var target = new Tensor<T>(new[] { voicedRows.Length, 1 }, new Vector<T>(voicedRows.Select(i => Ops.FromDouble(u.F0[i])).ToArray()));
+            var rows = Engine.Reshape(voicedIndex, new[] { voicedCount });
+            var predicted = Engine.TensorIndexSelect(Engine.Reshape(heads[0], new[] { frames, 1 }), rows, 0);
+            var target = Engine.TensorIndexSelect(Engine.Reshape(u.F0, new[] { frames, 1 }), rows, 0);
             terms.Add(Mean(Engine.TensorAbs(Engine.TensorSubtract(predicted, target))));
         }
         var logits = Engine.Reshape(heads[1], new[] { frames });
-        var labels = new Tensor<T>(new[] { frames }, new Vector<T>(u.Voiced.Select(v => v ? Ops.One : Ops.Zero).ToArray()));
+        var labels = u.Voiced;
         // BCE with logits: softplus(x) − y·x.
         terms.Add(Mean(Engine.TensorSubtract(Engine.Softplus(logits), Engine.TensorMultiply(labels, logits))));
         return Sum(terms);

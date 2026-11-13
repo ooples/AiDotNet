@@ -81,8 +81,9 @@ public class S3TokenizerReferenceTests
     {
         await Task.Yield();
         var f = Reference();
-        var log = S3Tokenizer<double>.LogMel(Doubles(f["audio"]!));
-        int frames = log.GetLength(1);
+        var audio = Doubles(f["audio"]!);
+        var log = S3Tokenizer<double>.LogMel(new Tensor<double>(new[] { audio.Length }, new Vector<double>(audio)));
+        int frames = log.Shape[1];
         AssertClose(Doubles(f["log_mel"]!), i => log[i / frames, i % frames], log.Length, "log-mel");
     }
 

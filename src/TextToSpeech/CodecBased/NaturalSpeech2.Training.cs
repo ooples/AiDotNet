@@ -84,7 +84,7 @@ public partial class NaturalSpeech2<T>
     private List<ILayer<T>> TrainedLayers() => _priorLayers.Concat(_promptLayers).Concat(_denoiserLayers).Cast<ILayer<T>>().ToList();
 
     // The utterance with its prompt cut out: the target's phonemes, durations, codes and pitch, and the prompt's codes.
-    private sealed record Utterance(int[] Phonemes, int[] Durations, int[,] Codes, double[] Pitch, int[,] PromptCodes);
+    private sealed record Utterance(int[] Phonemes, int[] Durations, int[,] Codes, Tensor<T> Pitch, int[,] PromptCodes);
 
     private int[] PhonemesOf(TtsTrainingSample<T> sample) =>
         sample.Text is { } text ? TextToPhonemes(text) : PhonemeIds(sample.Tokens, nameof(sample));
@@ -99,8 +99,7 @@ public partial class NaturalSpeech2<T>
         if (durations.Any(d => d < 0)) throw new ArgumentException("Durations are not negative.", nameof(sample));
         var codes = sample.CodecTokens is { } tokens ? CodesOf(tokens, nameof(sample))
             : Encode(sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on the recording or its codec tokens.", nameof(sample)));
-        // The utterance's pitch path (Interpolated, the core's bucket embedding) is a double[] reference port.
-        var pitch = sample.Pitch is { } given ? given.Cast<double>().ToArray()
+        var pitch = sample.Pitch is { } given ? Engine.Reshape(given, new[] { given.Length })
             : sample.Audio is { } audio ? ExtractPitch(audio)
             : throw new ArgumentException($"{GetType().Name} needs the pitch per frame, or the recording to extract it from.", nameof(sample));
 
@@ -108,7 +107,9 @@ public partial class NaturalSpeech2<T>
         // excess taken from the last durations (Amphion takes it from the last one alone).
         int frames = Math.Min(codes.GetLength(1), durations.Sum());
         codes = Take(codes, 0, frames);
-        pitch = Enumerable.Range(0, frames).Select(f => pitch.Length == 0 ? 0.0 : pitch[Math.Min(f, pitch.Length - 1)]).ToArray();
+        // The pitch cut, or held at its last frame, to the codes' frames.
+        pitch = pitch.Length == 0 ? new Tensor<T>(new[] { frames })
+            : Engine.TensorIndexSelect(pitch, Engine.TensorClamp(Engine.TensorArange<int>(0, frames, 1), 0, pitch.Length - 1), 0);
         for (int excess = durations.Sum() - frames, j = durations.Length - 1; excess > 0 && j >= 0; j--)
         {
             int cut = Math.Min(excess, durations[j]);
@@ -132,7 +133,8 @@ public partial class NaturalSpeech2<T>
         int end = start + clip, startFrame = durations.Take(start).Sum(), endFrame = durations.Take(end).Sum();
         var promptCodes = Take(codes, startFrame, endFrame - startFrame);
         var targetCodes = Concatenate(Take(codes, 0, startFrame), Take(codes, endFrame, frames - endFrame));
-        var targetPitch = pitch.Take(startFrame).Concat(pitch.Skip(endFrame)).ToArray();
+        var targetFrames = Enumerable.Range(0, startFrame).Concat(Enumerable.Range(endFrame, frames - endFrame)).ToArray();
+        var targetPitch = Engine.TensorIndexSelect(pitch, new Tensor<int>(targetFrames, new[] { targetFrames.Length }), 0);
         var targetDurations = durations.Take(start).Concat(durations.Skip(end)).ToArray();
         var targetPhonemes = phonemes.Take(start).Concat(phonemes.Skip(end)).ToArray();
         return new Utterance(targetPhonemes, targetDurations, targetCodes, targetPitch, promptCodes);
@@ -174,34 +176,23 @@ public partial class NaturalSpeech2<T>
     }
 
     /// <summary>The F0 per codec frame by WORLD's DIO and StoneMask (PyWorld, §4.1).</summary>
-    private double[] ExtractPitch(Tensor<T> audio)
+    private Tensor<T> ExtractPitch(Tensor<T> audio)
     {
         var detector = new WorldPitchDetector<T>(_options.SampleRate);
         var (f0, _) = detector.EstimateF0(Engine.Reshape(audio, new[] { audio.Length }), 1000.0 * _options.HopSize / _options.SampleRate);
-        return f0.Cast<double>().ToArray();
+        return Engine.Reshape(f0, new[] { f0.Length });
     }
 
     /// <summary>
     /// Unvoiced frames (F0 0) filled by linear interpolation between voiced ones, held at the ends: the pitch target is a
     /// log-F0 and the bucket embedding reads every frame (Amphion's recipe does not show how it handles them).
     /// </summary>
-    private static double[] Interpolated(double[] pitch)
+    private Tensor<T> Interpolated(Tensor<T> pitch)
     {
-        var voiced = Enumerable.Range(0, pitch.Length).Where(f => pitch[f] > 0).ToArray();
-        if (voiced.Length == 0) throw new ArgumentException("The pitch has no voiced frame.");
-        var filled = (double[])pitch.Clone();
-        for (int f = 0; f < filled.Length; f++)
-        {
-            if (filled[f] > 0) continue;
-            int next = Array.FindIndex(voiced, v => v > f);
-            if (next <= 0) filled[f] = pitch[voiced[next < 0 ? voiced.Length - 1 : 0]];
-            else
-            {
-                int a = voiced[next - 1], b = voiced[next];
-                filled[f] = pitch[a] + (pitch[b] - pitch[a]) * (f - a) / (b - a);
-            }
-        }
-        return filled;
+        // F0 is never negative: a voiced frame is a positive one.
+        var voicedOnly = Engine.TensorWhere(Engine.TensorGreaterThan(pitch, Ops.Zero), pitch, new Tensor<T>(pitch.Shape.ToArray()));
+        if (Engine.TensorCountNonzero(voicedOnly) == 0) throw new ArgumentException("The pitch has no voiced frame.");
+        return PitchWaveletTransform.FillUnvoiced(voicedOnly);
     }
 
     // ---------------------------------------------------------------- the losses (§3.2)
@@ -216,9 +207,9 @@ public partial class NaturalSpeech2<T>
         var (condition, logPitch) = core.Condition(hidden, u.Durations, u.Pitch, prompt, training, random);
 
         // log_dur_loss and log_pitch_loss: L1 against log(1 + d) and log F0.
-        var durationTarget = Vector(u.Durations.Select(d => Math.Log(1 + d)));
+        var durationTarget = Engine.TensorLog(Engine.TensorAddScalar(new Tensor<int>(u.Durations, new[] { u.Durations.Length }).Cast<T>(), Ops.One));
         var loss = MeanAbs(Engine.TensorSubtract(logDurations, durationTarget));
-        loss = Engine.TensorAdd(loss, MeanAbs(Engine.TensorSubtract(logPitch, Vector(u.Pitch.Select(p => Math.Log(p))))));
+        loss = Engine.TensorAdd(loss, MeanAbs(Engine.TensorSubtract(logPitch, Engine.TensorLog(u.Pitch))));
 
         var x0 = Latent(u.Codes);
         double t = Math.Min(Math.Max(random.NextDouble(), o.TimeEpsilon), 1 - o.TimeEpsilon);
@@ -252,12 +243,6 @@ public partial class NaturalSpeech2<T>
         if (o.CeLossWeight > 0)
             loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(RvqCrossEntropy(x0Prediction, u.Codes), Ops.FromDouble(o.CeLossWeight)));
         return loss;
-    }
-
-    private Tensor<T> Vector(IEnumerable<double> values)
-    {
-        var array = values.ToArray();
-        return new Tensor<T>(new[] { array.Length }, new Vector<T>(array.Select(v => Ops.FromDouble(v)).ToArray()));
     }
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.TensorMultiplyScalar(Engine.ReduceSum(x, null), Ops.FromDouble(1.0 / x.Length));
@@ -299,13 +284,13 @@ public partial class NaturalSpeech2<T>
             if (_options.CeResidual == NaturalSpeech2CeResidual.GroundTruth) used = Enumerable.Range(0, frames).Select(f => codes[q, f]).ToArray();
             else
             {
-                var arg = Engine.TensorArgMax(Detached(logits), 1);
-                used = Enumerable.Range(0, frames).Select(f => arg[f]).ToArray();
+                used = Engine.TensorArgMax(Detached(logits), 1).ToArray();
             }
             var subtract = Engine.TensorIndexSelect(codebook, new Tensor<int>(new[] { frames }, new Vector<int>(used)), 0);
             residual = Engine.TensorSubtract(residual, subtract);
         }
-        return Engine.TensorMultiplyScalar(total!, Ops.FromDouble(1.0 / quantizers));
+        if (total is null) throw new ArgumentException("The codes have no quantizer.", nameof(codes));
+        return Engine.TensorMultiplyScalar(total, Ops.FromDouble(1.0 / quantizers));
     }
 
     private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());

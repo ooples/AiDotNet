@@ -93,7 +93,8 @@ internal sealed class StepAudioCore<T>
         {
             Dither = o.LinguisticDither,
         };
-        Centroids = TorchParameters.Gaussian<T>(random, o.LinguisticCodes * o.ParaformerWidth, 1.0).ToArray().Select(v => Ops.ToDouble(v)).ToArray();
+        int centroidCount = o.LinguisticCodes * o.ParaformerWidth;
+        Centroids = new Tensor<T>(new[] { centroidCount }, TorchParameters.Gaussian<T>(random, centroidCount, 1.0)).Cast<double>().ToArray();
         Semantic = new S3Tokenizer<T>(engine, layers.Tokenizer, new S3TokenizerConfiguration(State: o.SemanticWidth, Heads: o.SemanticHeads,
             Layers: o.SemanticLayers, CodebookSize: o.SemanticCodes), random);
         Speaker = new CamPlusPlusEncoder<T>(engine, layers.Tokenizer, new CamPlusPlusConfiguration(EmbeddingSize: o.SpeakerEmbeddingDimension,
@@ -135,17 +136,12 @@ internal sealed class StepAudioCore<T>
 
     // ---------------------------------------------------------------- audio to tokens
 
-    private static double[] Samples(Tensor<T> audio)
+    // The recording [samples] at another rate.
+    private Tensor<T> Resample(Tensor<T> audio, int from, int to)
     {
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = Ops.ToDouble(audio.GetFlat(i));
-        return samples;
+        var flat = _engine.Reshape(audio, new[] { audio.Length });
+        return from == to ? flat : _engine.Reshape(AudioHelper<T>.ResampleBandLimited(_engine, flat, from, to), new[] { -1 });
     }
-
-    private Tensor<T> Wave(double[] samples) => new(new[] { samples.Length }, new Vector<T>(samples.Select(v => Ops.FromDouble(v)).ToArray()));
-
-    private double[] Resample(Tensor<T> audio, int from, int to) =>
-        from == to ? Samples(audio) : Samples(AudioHelper<T>.ResampleBandLimited(_engine, _engine.Reshape(audio, new[] { audio.Length }), from, to));
 
     /// <summary>
     /// The dual-codebook tokens of a recording (tokenizer.py's <c>wav2token</c> as <c>__call__</c> runs it: resampled to
@@ -155,9 +151,8 @@ internal sealed class StepAudioCore<T>
     public (int[] Ids, int[] Linguistic, int[] Semantic) AudioTokens(Tensor<T> audio, int sampleRate)
     {
         var x = Resample(audio, sampleRate, TokenizerRate);
-        double peak = x.Length == 0 ? 0 : x.Max(Math.Abs);
-        double gain = 0.999 / Math.Max(peak, 0.01);
-        for (int i = 0; i < x.Length; i++) x[i] *= gain;
+        double peak = x.Length == 0 ? 0 : Ops.ToDouble(_engine.TensorMaxValue(_engine.TensorAbs(x)));
+        x = _engine.TensorMultiplyScalar(x, Ops.FromDouble(0.999 / Math.Max(peak, 0.01)));
         int[] linguistic, semantic;
         using (new NoGradScope<T>())
         {
@@ -169,43 +164,34 @@ internal sealed class StepAudioCore<T>
 
     /// <summary>The linguistic codes of 16 kHz audio: the streaming Paraformer encoder's frames, each the nearest
     /// centroid's index (Euclidean, <c>torch.cdist</c>).</summary>
-    public int[] LinguisticCodes(double[] audio)
+    /// <remarks>The squared distances are formed as ‖f‖² − 2 f·c + ‖c‖² with one matrix product — the expansion
+    /// <c>torch.cdist</c> itself uses past 25 rows — and the first nearest centroid is taken.</remarks>
+    public int[] LinguisticCodes(Tensor<T> audio)
     {
-        var frames = Linguistic.Encode(audio);
+        // The Paraformer's Kaldi front end is a double[] reference port; the recording enters it once.
+        var frames = Linguistic.Encode(audio.Cast<double>().ToArray());
         int count = frames.Shape[0], width = frames.Shape[1], codes = Centroids.Length / width;
-        var result = new int[count];
-        for (int t = 0; t < count; t++)
-        {
-            double best = double.PositiveInfinity;
-            for (int k = 0; k < codes; k++)
-            {
-                double d = 0;
-                for (int j = 0; j < width; j++)
-                {
-                    double diff = Ops.ToDouble(frames[t, j]) - Centroids[k * width + j];
-                    d += diff * diff;
-                }
-                if (d < best) { best = d; result[t] = k; }
-            }
-        }
-        return result;
+        var centroids = new Tensor<double>(Centroids, new[] { codes, width }).Cast<T>();
+        var frameNorms = _engine.ReduceSum(_engine.TensorMultiply(frames, frames), new[] { 1 }, true);              // [count, 1]
+        var centroidNorms = _engine.Reshape(_engine.ReduceSum(_engine.TensorMultiply(centroids, centroids), new[] { 1 }, false), new[] { 1, codes });
+        var cross = _engine.TensorMatMul(frames, _engine.TensorTranspose(centroids));                              // [count, codes]
+        var distance = _engine.TensorAdd(_engine.TensorSubtract(_engine.TensorBroadcastTo(frameNorms, new[] { count, codes }),
+            _engine.TensorMultiplyScalar(cross, Ops.FromDouble(2.0))), _engine.TensorBroadcastTo(centroidNorms, new[] { count, codes }));
+        return _engine.TensorArgMin(distance, 1).ToArray();
     }
 
     /// <summary>The semantic codes of 16 kHz audio (tokenizer.py's <c>get_vq06_code</c>): S3 v1 over 30 s chunks of the
     /// 128-band Whisper log-mel, chunks under 480 samples skipped.</summary>
-    public int[] SemanticCodes(double[] audio)
+    public int[] SemanticCodes(Tensor<T> audio)
     {
+        var flat = _engine.Reshape(audio, new[] { audio.Length });
         var codes = new List<int>();
-        for (int start = 0; start < audio.Length; start += ChunkSamples)
+        for (int start = 0; start < flat.Length; start += ChunkSamples)
         {
-            int count = Math.Min(ChunkSamples, audio.Length - start);
+            int count = Math.Min(ChunkSamples, flat.Length - start);
             if (count < 480) continue;
-            var mel = S3Tokenizer<T>.LogMel(new ArraySegment<double>(audio, start, count), Semantic.Configuration.Mels);
-            int mels = mel.GetLength(0), frames = mel.GetLength(1);
-            var tensor = new Tensor<T>(new[] { mels, frames });
-            for (int m = 0; m < mels; m++)
-                for (int f = 0; f < frames; f++) tensor[m, f] = Ops.FromDouble(mel[m, f]);
-            codes.AddRange(Semantic.Tokenize(tensor));
+            var chunk = _engine.TensorSlice(flat, new[] { start }, new[] { count });
+            codes.AddRange(Semantic.Tokenize(S3Tokenizer<T>.LogMel(chunk, Semantic.Configuration.Mels)));
         }
         return codes.ToArray();
     }
@@ -221,10 +207,10 @@ internal sealed class StepAudioCore<T>
     {
         using var _ = new NoGradScope<T>();
         var (ids, _, _) = AudioTokens(recording, sampleRate);
-        var at22 = Wave(Resample(recording, sampleRate, Options.SampleRate));
+        var at22 = Resample(recording, sampleRate, Options.SampleRate);
         _mel ??= new DifferentiableMel<T>(_engine, Options.SampleRate, 1024, 256, 1024, Options.MelChannelCount, 0, 8000);
         var mel = _mel.Forward(at22);                                                                    // [frames, mels]
-        var at16 = Wave(Resample(recording, sampleRate, TokenizerRate));
+        var at16 = Resample(recording, sampleRate, TokenizerRate);
         _speakerFbank ??= new KaldiFbank<T>(_engine, TokenizerRate, 80, WindowType.Povey);
         var features = _speakerFbank.Forward(at16);
         features = _engine.TensorSubtract(features, _engine.TensorBroadcastTo(_engine.ReduceMean(features, new[] { 0 }, true), features.Shape.ToArray()));
@@ -297,8 +283,9 @@ internal sealed class StepAudioCore<T>
             var grid = new int[1, pending.Length];
             for (int i = 0; i < pending.Length; i++) grid[0, i] = pending[i];
             var (_, logits) = model.Forward(model.Embed(grid), null, null, cache, lastLogitsOnly: true);
-            var row = new double[vocabulary];
-            for (int v = 0; v < vocabulary; v++) row[v] = Ops.ToDouble(logits!.GetFlat(v));
+            // The sampler (top-p, the repetition-aware processor) draws on the host from the caller's Random.
+            var last = logits ?? throw new InvalidOperationException("The model returned no logits.");
+            var row = _engine.TensorSlice(_engine.Reshape(last, new[] { last.Length }), new[] { 0 }, new[] { vocabulary }).Cast<double>().ToArray();
             int next = Sample(row, sequence, temperature, topP, random, repetitionAware);
             if (next == StepAudioTokens.Eos) break;
             output.Add(next);

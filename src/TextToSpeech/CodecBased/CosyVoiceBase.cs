@@ -310,12 +310,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         if (released is not null) return released;
         using var _ = new NoGradScope<T>();
         var audio = ResampleAudio(recording, sampleRate, PromptSampleRate);
-        // S3Tokenizer's Whisper front end is a double[] reference port; the recording crosses into it and back once.
-        var logMel = S3Tokenizer<T>.LogMel(audio.Cast<double>().ToArray());
-        int bands = logMel.GetLength(0), frames = logMel.GetLength(1);
-        var rows = new double[bands * frames];
-        Buffer.BlockCopy(logMel, 0, rows, 0, rows.Length * sizeof(double));
-        return SpeechTokenizer.Tokenize(new Tensor<double>(rows, new[] { bands, frames }).Cast<T>());
+        return SpeechTokenizer.Tokenize(S3Tokenizer<T>.LogMel(audio));
     }
 
     /// <summary>

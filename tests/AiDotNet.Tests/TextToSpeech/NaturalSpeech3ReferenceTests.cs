@@ -114,7 +114,7 @@ public class NaturalSpeech3ReferenceTests
         var v2 = r.GetProperty("v2");
         var enc2 = codec2.Encoder.Forward(new Tensor<double>(new[] { 1, 1, a.Length }, new Vector<double>(a)));
         Close(Doubles(v2.GetProperty("enc")), enc2, 1e-8, "v2 enc");
-        var prosody = codec2.ProsodyFeature(a);
+        var prosody = codec2.ProsodyFeature(new Tensor<double>(a, new[] { a.Length }));
         Close(Doubles(v2.GetProperty("prosody")), prosody, 1e-7, "v2 prosody");
         var factors2 = codec2.Factorize(enc2, prosody, false, null);
         var codes2 = Codes(v2.GetProperty("codes"));
