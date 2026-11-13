@@ -150,7 +150,9 @@ public sealed class StockformerAttention<T>
     private static Tensor<T> BuildCausalBias(int positions)
     {
         // -1e9 strictly above the diagonal (a position never attends to a later one), zero elsewhere.
-        var blocked = Engine.TensorFullLike(new Tensor<T>(new[] { positions, positions }), Ops.FromDouble(-1e9));
+        // The zero template only carries the shape, so release it once the filled tensor exists.
+        using var shapeTemplate = new Tensor<T>(new[] { positions, positions });
+        var blocked = Engine.TensorFullLike(shapeTemplate, Ops.FromDouble(-1e9));
         return Engine.TensorTriu(blocked, 1);
     }
 }
