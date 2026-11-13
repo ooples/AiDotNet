@@ -106,4 +106,107 @@ public class PreprocessingHelperCountTests
         var scores = new Tensor<double>(new[] { double.NaN, 0.9, 0.2, 0.7 }, new[] { 4 });
         Assert.Equal(new[] { 1, 3 }, PreprocessingTensorOps.TopKAtLeastSorted(scores, 0.5, 3));
     }
+
+    // x = (-1)^i over 3000 rows and y = x on the first 1000 rows, 0 after: x'y = 1000, x'x = 3000 and y'y = 1000, so
+    // r = 1000 / sqrt(3000 * 1000) = 1 / sqrt(3). Max-scaling keeps Half from overflowing but not from stalling: x'x
+    // accumulated in Half stops at 2048 (2048 + 1 rounds back to 2048), which gave 1000 / sqrt(2048 * 1000) = 0.699.
+    [Fact(Timeout = 60000)]
+    public async Task CenteredCorrelations_Half_SumsMoreThan2048Squares()
+    {
+        await Task.CompletedTask;
+        const int n = 3000;
+        var xc = new Tensor<Half>(Enumerable.Range(0, n).Select(i => (Half)(i % 2 == 0 ? 1 : -1)).ToArray(), new[] { n, 1 });
+        var yc = new Tensor<Half>(
+            Enumerable.Range(0, n).Select(i => (Half)(i >= 1000 ? 0 : i % 2 == 0 ? 1 : -1)).ToArray(), new[] { n, 1 });
+
+        var r = PreprocessingTensorOps.CenteredCorrelations(xc, yc);
+
+        Assert.Equal(1.0 / Math.Sqrt(3.0), (double)r[0], 1e-3);
+    }
+
+    // x = 300 (-1)^i over ten rows, y = x: r = 1. sum x y = 900000 is past Half's 65504, so a correlation formed in
+    // Half from the unscaled cross product was inf / inf = NaN even with the roots taken before the product.
+    [Fact(Timeout = 60000)]
+    public async Task TargetCorrelations_Half_CrossProductPast65504IsOne()
+    {
+        await Task.CompletedTask;
+        var values = Enumerable.Range(0, 10).Select(i => (Half)(i % 2 == 0 ? 300 : -300)).ToArray();
+        var x = new Tensor<Half>(values, new[] { 10, 1 });
+        var y = new Tensor<Half>(values, new[] { 10 });
+
+        Assert.Equal(1.0, (double)PreprocessingTensorOps.TargetCorrelations(x, y)[0], 1e-3);
+        Assert.Equal(1.0, (double)PreprocessingTensorOps.CorrelationsWithDenominatorGuard(x, y)[0], 1e-3);
+    }
+
+    // The tensor library's Linalg.Solve runs only in float and double, so a Half system threw NotSupportedException.
+    // diag(2, 4) x = (2, 8) has x = (1, 2).
+    [Fact(Timeout = 60000)]
+    public async Task Solve_Half_WidensTheSystemToFloat()
+    {
+        await Task.CompletedTask;
+        var a = new Tensor<Half>(new[] { (Half)2, (Half)0, (Half)0, (Half)4 }, new[] { 2, 2 });
+        var b = new Tensor<Half>(new[] { (Half)2, (Half)8 }, new[] { 2, 1 });
+
+        var x = PreprocessingTensorOps.Solve(a, b);
+
+        Assert.Equal(1.0, (double)x[0, 0], 1e-3);
+        Assert.Equal(2.0, (double)x[1, 0], 1e-3);
+    }
+
+    // Linalg.Eigh runs only in float and double, so a Half eigendecomposition threw NotSupportedException. The
+    // eigenvalues of [[2, 1], [1, 2]] are 1 and 3 (ascending), with eigenvectors (1, -1) / sqrt(2) and (1, 1) / sqrt(2).
+    [Fact(Timeout = 60000)]
+    public async Task SymmetricEigh_Half_WidensTheDecompositionToFloat()
+    {
+        await Task.CompletedTask;
+        var symmetric = new Tensor<Half>(new[] { (Half)2, (Half)1, (Half)1, (Half)2 }, new[] { 2, 2 });
+
+        var (values, vectors) = PreprocessingTensorOps.SymmetricEigh(symmetric);
+
+        Assert.Equal(1.0, (double)values[0], 1e-3);
+        Assert.Equal(3.0, (double)values[1], 1e-3);
+        Assert.Equal(1.0 / Math.Sqrt(2.0), Math.Abs((double)vectors[0, 1]), 1e-3);
+        Assert.Equal((double)vectors[0, 1], (double)vectors[1, 1], 1e-3);
+        Assert.Equal(-(double)vectors[0, 0], (double)vectors[1, 0], 1e-3);
+    }
+
+    // Linalg.Inv runs only in float and double, so a Half inverse threw NotSupportedException.
+    [Fact(Timeout = 60000)]
+    public async Task Inverse_Half_WidensTheInversionToFloat()
+    {
+        await Task.CompletedTask;
+        var matrix = new Tensor<Half>(new[] { (Half)2, (Half)1, (Half)0, (Half)4 }, new[] { 2, 2 });
+
+        var inverse = PreprocessingTensorOps.Inverse(matrix);
+
+        // [[2, 1], [0, 4]]^-1 = [[1/2, -1/8], [0, 1/4]].
+        Assert.Equal(0.5, (double)inverse[0, 0], 1e-3);
+        Assert.Equal(-0.125, (double)inverse[0, 1], 1e-3);
+        Assert.Equal(0.0, (double)inverse[1, 0], 1e-3);
+        Assert.Equal(0.25, (double)inverse[1, 1], 1e-3);
+    }
+
+    // Linalg.Svd runs only in float and double, so a Half SVD threw NotSupportedException.
+    [Fact(Timeout = 60000)]
+    public async Task Svd_Half_WidensTheDecompositionToFloat()
+    {
+        await Task.CompletedTask;
+        var matrix = new Tensor<Half>(new[] { (Half)3, (Half)0, (Half)4, (Half)5 }, new[] { 2, 2 });
+
+        var (u, s, vh) = PreprocessingTensorOps.Svd(matrix, false);
+
+        // A'A = [[25, 20], [20, 25]] has eigenvalues 45 and 5, so the singular values are sqrt(45) and sqrt(5).
+        Assert.Equal(Math.Sqrt(45.0), (double)s[0], 1e-2);
+        Assert.Equal(Math.Sqrt(5.0), (double)s[1], 1e-2);
+        double[] expected = { 3, 0, 4, 5 };
+        for (int i = 0; i < 2; i++)
+        {
+            for (int j = 0; j < 2; j++)
+            {
+                double rebuilt = (double)u[i, 0] * (double)s[0] * (double)vh[0, j]
+                    + (double)u[i, 1] * (double)s[1] * (double)vh[1, j];
+                Assert.Equal(expected[i * 2 + j], rebuilt, 2e-2);
+            }
+        }
+    }
 }

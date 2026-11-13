@@ -281,7 +281,7 @@ internal static class FeatureSelectionTensorOps
             Filled(new[] { n, 1, 1 }, regularization));
         var system = engine.TensorAdd(gram, engine.TensorMultiply(engine.TensorBroadcastTo(ridge, new[] { n, k, k }), eye));
 
-        var weights = LinalgDispatch<T>.Solve(system, Filled(new[] { n, k, 1 }, ops.One)); // [n, k, 1]
+        var weights = PreprocessingTensorOps.Solve(system, Filled(new[] { n, k, 1 }, ops.One)); // [n, k, 1]
         var sum = engine.ReduceSum(weights, new[] { 1 }, true); // [n, 1, 1]
         var normalizable = engine.TensorGreaterThan(engine.TensorAbs(sum), Tolerance<T>(1e-10));
         var divisor = engine.TensorWhere(normalizable, sum, engine.TensorSquare(scale));
@@ -305,7 +305,7 @@ internal static class FeatureSelectionTensorOps
             return new Tensor<T>(new[] { p, 0 });
         }
 
-        var (ascendingValues, ascendingVectors) = LinalgDispatch<T>.Eigh(symmetric);
+        var (ascendingValues, ascendingVectors) = PreprocessingTensorOps.SymmetricEigh(symmetric);
         var order = new int[count];
         for (int c = 0; c < count; c++)
             order[c] = p - 1 - c;
@@ -315,13 +315,28 @@ internal static class FeatureSelectionTensorOps
     }
 
     /// <summary>The sample covariance matrix (divisor n - 1) of the columns of an [n, p] tensor.</summary>
+    /// <remarks>
+    /// Every centred column is divided by its largest magnitude s and by sqrt(n - 1) before the product, and the
+    /// result is multiplied back by s_j and then by s_k. Forming x^T x first overflows Half (65504) as soon as
+    /// sum_i x_ij^2 does (twenty deviations of 100 already sum to 200000), although the covariance itself, 10526,
+    /// is representable.
+    /// </remarks>
     public static Tensor<T> SampleCovariance<T>(Tensor<T> x)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
         var centered = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
-        return engine.TensorDivideScalar(
-            engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(x.Shape[0] - 1));
+        var scale = ColumnScale(centered);
+        var unit = engine.TensorDivideScalar(
+            engine.TensorDivide(centered, engine.TensorBroadcastTo(engine.Reshape(scale, new[] { 1, p }), new[] { n, p })),
+            ops.FromDouble(Math.Sqrt(n - 1)));
+        var product = engine.TensorMatMul(engine.TensorTranspose(unit), unit);
+        var byColumn = engine.TensorMultiply(
+            product, engine.TensorBroadcastTo(engine.Reshape(scale, new[] { 1, p }), new[] { p, p }));
+        return engine.TensorMultiply(
+            byColumn, engine.TensorBroadcastTo(engine.Reshape(scale, new[] { p, 1 }), new[] { p, p }));
     }
 
     /// <summary>

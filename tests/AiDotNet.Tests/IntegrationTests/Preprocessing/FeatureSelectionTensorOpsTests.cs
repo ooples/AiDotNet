@@ -259,4 +259,45 @@ public class FeatureSelectionTensorOpsTests
         Assert.Equal(0.0, (double)standardized[0, 0]);
         Assert.Equal((double)(Half)2e-5, (double)standardized[1, 0]);
     }
+
+    // Column 0 is 100 (-1)^i and column 1 is -50 (-1)^i over twenty rows: the sample covariances are
+    // 20 * 100^2 / 19 = 10526.3, -5263.2 and 2631.6, all finite in Half. Forming x^T x first gave
+    // 20 * 100^2 = 200000, past 65504, so the covariance matrix came out infinite.
+    [Fact(Timeout = 60000)]
+    public async Task SampleCovariance_Half_DividesBeforeTheProduct()
+    {
+        await Task.CompletedTask;
+        const int n = 20;
+        var values = new Half[n * 2];
+        for (int i = 0; i < n; i++)
+        {
+            double sign = i % 2 == 0 ? 1 : -1;
+            values[2 * i] = (Half)(100 * sign);
+            values[2 * i + 1] = (Half)(-50 * sign);
+        }
+
+        var covariance = FeatureSelectionTensorOps.SampleCovariance(new Tensor<Half>(values, new[] { n, 2 }));
+
+        double[,] expected = { { 200000.0 / 19, -100000.0 / 19 }, { -100000.0 / 19, 50000.0 / 19 } };
+        for (int a = 0; a < 2; a++)
+        {
+            for (int b = 0; b < 2; b++)
+                Assert.Equal(expected[a, b], (double)covariance[a, b], 0.01 * Math.Abs(expected[a, b]));
+        }
+    }
+
+    // Linalg.Eigh runs only in float and double, so the Half eigendecomposition threw NotSupportedException. The
+    // top eigenpair of diag(1, 3) is 3 with eigenvector (0, +-1).
+    [Fact(Timeout = 60000)]
+    public async Task TopEigenpairs_Half_WidensTheEigendecompositionToFloat()
+    {
+        await Task.CompletedTask;
+        var symmetric = new Tensor<Half>(new[] { (Half)1, (Half)0, (Half)0, (Half)3 }, new[] { 2, 2 });
+
+        var vectors = FeatureSelectionTensorOps.TopEigenpairs(symmetric, 1, out var values);
+
+        Assert.Equal(3.0, (double)values[0], 1e-3);
+        Assert.Equal(0.0, (double)vectors[0, 0], 1e-3);
+        Assert.Equal(1.0, Math.Abs((double)vectors[1, 0]), 1e-3);
+    }
 }
