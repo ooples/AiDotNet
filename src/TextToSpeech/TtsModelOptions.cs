@@ -131,6 +131,8 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the maximum input text length.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's ESPnet ScaledPositionalEncoding extends to any length, so its text has no length bound.", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech truncates text to this length in its phoneme front end; the tensor surface takes token ids already cut, and its sinusoid positions extend to any length (ming024 FastSpeech2 get_sinusoid_encoding_table past max_seq_len).", ModelType = typeof(Classic.FastSpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech 2 truncates text to this length in its phoneme front end; the tensor surface takes token ids already cut, and its sinusoid positions extend to any length (ming024 FastSpeech2 get_sinusoid_encoding_table past max_seq_len).", ModelType = typeof(Classic.FastSpeech2<>))]
     public int MaxTextLength { get; set; } = 512;
 
     /// <summary>Gets or sets the maximum output audio length in mel frames.</summary>
@@ -139,6 +141,8 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi generates codec audio rather than mel frames (Defossez et al. 2024 sections 3.3-3.4); native construction requires MaxMelLength=0.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR produces text from waveform codes, not mel frames; native construction requires MaxMelLength=0 (Defossez et al. 2024 section 3.3 and Appendix C).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("EmotiVoice's mel length is the duration predictor's, with positions for any length (ESPnet ScaledPositionalEncoding).", ModelType = typeof(StyleEmotion.EmotiVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech's mel length is the duration predictor's; the decoder's sinusoid positions extend to any length (ming024 FastSpeech2 rebuilds the table past max_seq_len at inference).", ModelType = typeof(Classic.FastSpeech<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("FastSpeech 2's mel length is the variance adaptor's; the decoder's sinusoid positions extend to any length (ming024 FastSpeech2 rebuilds the table past max_seq_len at inference).", ModelType = typeof(Classic.FastSpeech2<>))]
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
