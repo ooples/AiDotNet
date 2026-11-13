@@ -164,9 +164,6 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
             NumOps.FromDouble(1e-4));
     }
 
-        return NumOps.Divide(sum, NumOps.FromDouble(squared.Length));
-    }
-
     /// <inheritdoc/>
     public override TInput CalculatePerturbation(TInput original, TInput adversarial)
     {
