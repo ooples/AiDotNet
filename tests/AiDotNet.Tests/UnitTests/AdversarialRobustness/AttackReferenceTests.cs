@@ -600,4 +600,235 @@ public class AttackReferenceTests
         Assert.Equal(0.0, stats.AdversarialAccuracy, 12);
         Assert.Equal(0.0, stats.AttackSuccessRate, 12);
     }
+
+    // ------------------------------------------------------------------------------------------------
+    // AdversarialRobustnessOptions attack settings drive the result's robustness methods.
+    // ------------------------------------------------------------------------------------------------
+
+    private static LinearLogitModel SteepModel() => new LinearLogitModel(
+        new double[,] { { 1.0, -2.0, 0.5, 3.0 }, { -1.0, 0.25, 2.0, -0.5 } },
+        new double[] { 0.1, -0.2 });
+
+    private static AiModelResult<double, Vector<double>, Vector<double>> ResultWith(
+        IFullModel<double, Vector<double>, Vector<double>> model,
+        AdversarialRobustnessOptions<double> options)
+    {
+        var result = new AiModelResult<double, Vector<double>, Vector<double>> { Model = model };
+        result.SetAdversarialRobustnessOptions(options);
+        return result;
+    }
+
+    private static double[] Delta(Vector<double> adversarial, double[] x)
+        => Enumerable.Range(0, x.Length).Select(i => adversarial[i] - x[i]).ToArray();
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackEpsilon_BoundsTheGeneratedPerturbation()
+    {
+        // 10 steps of 0.05 along a consistent gradient sign saturate the L-inf ball, so every coordinate moves
+        // exactly AttackEpsilon (0.2). The setting was ignored and the result always used epsilon 0.03.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.2,
+            AttackStepSize = 0.05,
+            AttackIterations = 10,
+            UseRandomStartForAttacks = false
+        });
+
+        var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2));
+
+        Assert.All(Delta(adversarial, x), d => Assert.Equal(0.2, Math.Abs(d), 9));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackStepSize_SetsThePgdStep()
+    {
+        // Two steps of 0.02 inside a 0.5 ball move every coordinate by 0.04.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.5,
+            AttackStepSize = 0.02,
+            AttackIterations = 2,
+            UseRandomStartForAttacks = false
+        });
+
+        var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2));
+
+        Assert.All(Delta(adversarial, x), d => Assert.Equal(0.04, Math.Abs(d), 9));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackIterations_SetsTheNumberOfPgdSteps()
+    {
+        // Three steps of 0.05 inside a 0.5 ball move every coordinate by 0.15.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.5,
+            AttackStepSize = 0.05,
+            AttackIterations = 3,
+            UseRandomStartForAttacks = false
+        });
+
+        var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2));
+
+        Assert.All(Delta(adversarial, x), d => Assert.Equal(0.15, Math.Abs(d), 9));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackNormType_L2SelectsTheL2StepAndBall()
+    {
+        // L2: one normalized-gradient step of length 1 projected onto the 0.1 ball gives ||delta||_2 = 0.1 along
+        // the gradient, so the coordinates move by different amounts. An L-inf step moves all of them equally.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.1,
+            AttackStepSize = 1.0,
+            AttackIterations = 1,
+            AttackNormType = AdversarialNormType.L2,
+            UseRandomStartForAttacks = false
+        });
+
+        var delta = Delta(result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2)), x);
+
+        Assert.Equal(0.1, Math.Sqrt(delta.Sum(d => d * d)), 9);
+        Assert.True(delta.Max(Math.Abs) - delta.Min(Math.Abs) > 0.01);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredTargetedAttack_PushesTowardTheConfiguredTargetClass()
+    {
+        // logits = x. Targeted PGD descends the MSE toward the target one-hot; with a 0.2 budget the target class
+        // wins whichever class is configured. Untargeted, the true class 0 loses to class 1.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+            new double[] { 0.0, 0.0, 0.0 });
+        var x = new[] { 0.5, 0.45, 0.4 };
+
+        foreach (int target in new[] { 1, 2 })
+        {
+            var result = ResultWith(model, new AdversarialRobustnessOptions<double>
+            {
+                AttackEpsilon = 0.2,
+                AttackStepSize = 0.05,
+                AttackIterations = 10,
+                UseTargetedAttacks = true,
+                TargetClass = target,
+                UseRandomStartForAttacks = false
+            });
+
+            var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 3));
+
+            Assert.Equal(target, ArgMax(model.Logits(adversarial.ToArray())));
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredTargetedEvaluation_CountsOnlyHitsOnTheTargetAsSuccesses()
+    {
+        // Targeted at class 2: the attack lands on class 2, so the success rate is 1 and nothing stays robust.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+            new double[] { 0.0, 0.0, 0.0 });
+        var result = ResultWith(model, new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.2,
+            AttackStepSize = 0.05,
+            AttackIterations = 10,
+            UseTargetedAttacks = true,
+            TargetClass = 2,
+            UseRandomStartForAttacks = false
+        });
+
+        var stats = result.EvaluateRobustness(new[] { new Vector<double>(new[] { 0.5, 0.45, 0.4 }) }, new[] { OneHot(0, 3) });
+
+        Assert.Equal(1.0, stats.CleanAccuracy, 12);
+        Assert.Equal(0.0, stats.AdversarialAccuracy, 12);
+        Assert.Equal(1.0, stats.AttackSuccessRate, 12);
+        Assert.Equal(0.2, stats.EvaluationEpsilon, 12);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredRandomStart_Disabled_LeavesAZeroGradientInputUnchanged()
+    {
+        // With a constant model every gradient is zero, so only the random start can move the input.
+        var model = new LinearLogitModel(new double[2, 4], new double[] { 0.0, 0.0 });
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var withoutStart = ResultWith(model, new AdversarialRobustnessOptions<double> { UseRandomStartForAttacks = false });
+        var withStart = ResultWith(model, new AdversarialRobustnessOptions<double> { UseRandomStartForAttacks = true });
+
+        Assert.All(Delta(withoutStart.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2)), x), d => Assert.Equal(0.0, d, 12));
+        Assert.Contains(Delta(withStart.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2)), x), d => Math.Abs(d) > 1e-6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredRobustnessTesting_RunsEachConfiguredAttackMethod()
+    {
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            EnableRobustnessTesting = true,
+            AttackMethods = new[] { AdversarialAttackMethod.Fgsm, AdversarialAttackMethod.Pgd },
+            AttackIterations = 2,
+            UseRandomStartForAttacks = false
+        });
+        var inputs = new[] { new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 }) };
+        var labels = new[] { OneHot(0, 2) };
+
+        var stats = result.EvaluateConfiguredRobustness(inputs, labels);
+
+        Assert.Equal(new[] { AdversarialAttackMethod.Fgsm, AdversarialAttackMethod.Pgd }, stats.Keys.OrderBy(k => k));
+        Assert.StartsWith("FGSMAttack", stats[AdversarialAttackMethod.Fgsm].AttackType);
+        Assert.StartsWith("PGDAttack", stats[AdversarialAttackMethod.Pgd].AttackType);
+        Assert.All(stats.Values, s => Assert.True(s.IsEvaluated));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredRobustnessTesting_DisabledOrUnconfiguredRefusesToRun()
+    {
+        var inputs = new[] { new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 }) };
+        var labels = new[] { OneHot(0, 2) };
+        var disabled = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { EnableRobustnessTesting = false });
+        var unconfigured = new AiModelResult<double, Vector<double>, Vector<double>> { Model = SteepModel() };
+
+        Assert.Throws<InvalidOperationException>(() => disabled.EvaluateConfiguredRobustness(inputs, labels));
+        Assert.Throws<InvalidOperationException>(() => unconfigured.EvaluateConfiguredRobustness(inputs, labels));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackSettings_InvalidValuesAreRejected()
+    {
+        var x = new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 });
+        var label = OneHot(0, 2);
+        var inputs = new[] { x };
+        var labels = new[] { label };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackEpsilon = 0.0 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackStepSize = -0.1 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackIterations = 0 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackNormType = (AdversarialNormType)7 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { UseTargetedAttacks = true, TargetClass = -1 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { UseTargetedAttacks = true, TargetClass = 5 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>()).GenerateAdversarialExample(x, label, -1.0));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+            {
+                EnableRobustnessTesting = true,
+                AttackMethods = Array.Empty<AdversarialAttackMethod>()
+            }).EvaluateConfiguredRobustness(inputs, labels));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+            {
+                EnableRobustnessTesting = true,
+                AttackMethods = new[] { AdversarialAttackMethod.Pgd, AdversarialAttackMethod.Pgd }
+            }).EvaluateConfiguredRobustness(inputs, labels));
+    }
 }
