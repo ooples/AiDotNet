@@ -298,19 +298,16 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         var mel = DecodeTokensToMel(tokens);
         int frames = mel.Shape[0], bins = _options.DvaeFftSize / 2 + 1;
         var basis = PowerMelTransform(_options.DvaeFftSize, _options.DvaeHopSize, _options.DvaeWindowSize).MelFilterbank;
-        var magnitude = new Tensor<T>(new[] { frames, bins });
-        for (int frame = 0; frame < frames; frame++)
-            for (int bin = 0; bin < bins; bin++)
-            {
-                double weighted = 0, denominator = 0;
-                for (int band = 0; band < _options.MelChannels; band++)
-                {
-                    double weight = NumOps.ToDouble(basis[bin, band]);
-                    weighted += weight * Math.Exp(NumOps.ToDouble(mel[frame, band]) * _melStats[band]);
-                    denominator += weight;
-                }
-                magnitude[frame, bin] = NumOps.FromDouble(Math.Sqrt(Math.Max(1e-10, weighted / Math.Max(1e-12, denominator))));
-            }
+        // |S| = sqrt(max(1e-10, sum_m w[bin, m] exp(mel[frame, m] * stats[m]) / max(1e-12, sum_m w[bin, m]))), in double
+        int bands = _options.MelChannels;
+        var weights = Engine.TensorNarrow(Engine.TensorNarrow(basis.Cast<double>(), 0, 0, bins), 1, 0, bands);   // [bins, bands]
+        var logMel = Engine.TensorNarrow(Engine.TensorNarrow(mel.Cast<double>(), 0, 0, frames), 1, 0, bands);
+        var stats = Engine.TensorBroadcastTo(
+            new Tensor<double>((double[])_melStats.Clone(), new[] { 1, bands }), new[] { frames, bands });
+        var weighted = Engine.TensorMatMul(Engine.TensorExp(Engine.TensorMultiply(logMel, stats)), Engine.TensorTranspose(weights));
+        var denominator = Engine.TensorClampMin(Engine.ReduceSum(weights, new[] { 1 }, false), 1e-12);
+        var ratio = Engine.TensorDivide(weighted, Engine.TensorBroadcastTo(Engine.Reshape(denominator, new[] { 1, bins }), new[] { frames, bins }));
+        var magnitude = Engine.TensorSqrt(Engine.TensorClampMin(ratio, 1e-10)).Cast<T>();
         var griffinLim = new AiDotNet.Diffusion.Audio.GriffinLim<T>(_options.DvaeFftSize, _options.DvaeHopSize,
             new XttsHannWindow(_options.DvaeWindowSize), iterations: 16, momentum: 0, seed: _options.SamplingSeed);
         var wave22050 = griffinLim.Reconstruct(magnitude);
@@ -519,11 +516,12 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
         public XttsHannWindow(int length) => _length = length;
         public Vector<T> Create(int windowSize)
         {
-            var window = new Vector<T>(windowSize);
+            // A periodic Hann window of the configured length, centred and zero-padded to windowSize
+            var window = new double[windowSize];
             int length = Math.Min(_length, windowSize), offset = (windowSize - length) / 2;
             for (int i = 0; i < length; i++)
-                window[offset + i] = XttsOps<T>.NumOps.FromDouble(0.5 - 0.5 * Math.Cos(2 * Math.PI * i / length));
-            return window;
+                window[offset + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / length);
+            return new Tensor<double>(window, new[] { windowSize }).Cast<T>().ToVector();
         }
         public WindowFunctionType GetWindowFunctionType() => WindowFunctionType.Hanning;
     }

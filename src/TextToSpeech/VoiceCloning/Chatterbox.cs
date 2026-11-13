@@ -98,8 +98,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     internal Tensor<T> Watermarked(Tensor<T> waveform)
     {
         if (!_options.Watermark || waveform.Length == 0) return waveform;
-        var marked = Watermarker.Apply(waveform.ToArray().Select(v => NumOps.ToDouble(v)).ToArray(), _options.SampleRate);
-        return new Tensor<T>(new[] { marked.Length }, new Vector<T>(marked.Select(NumOps.FromDouble).ToArray()));
+        return FromDoubles(Watermarker.Apply(waveform.Cast<double>().ToArray(), _options.SampleRate));
     }
 
     protected override CosyVoiceFamilyOptions Settings => _options;
@@ -203,17 +202,17 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         if (!HasPaperLayers || waveform.Length == 0) return waveform;
 
         int trim = _options.SampleRate / 50;
-        var envelope = new Tensor<T>(new[] { waveform.Length });
+        // The release's trim_fade: silence for trim samples, a raised-cosine fade-in over the next trim, then unity
+        var envelope = new double[waveform.Length];
         for (int i = 0; i < envelope.Length; i++)
         {
-            double value = i < trim
+            envelope[i] = i < trim
                 ? 0.0
                 : i < 2 * trim
                     ? (Math.Cos(Math.PI - Math.PI * (i - trim) / Math.Max(1, trim - 1)) + 1.0) / 2.0
                     : 1.0;
-            envelope[i] = NumOps.FromDouble(value);
         }
-        return Watermarked(Engine.TensorMultiply(waveform, envelope));
+        return Watermarked(Engine.TensorMultiply(waveform, Engine.Reshape(FromDoubles(envelope), waveform._shape)));
     }
 
     private protected override S3TokenizerConfiguration SpeechTokenizerConfiguration =>
@@ -540,7 +539,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     // when its loudness cannot be measured (silence), as the release's try/except does.
     private Tensor<T> NormalizeLoudness(Tensor<T> audio, double target)
     {
-        var values = audio.ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+        var values = audio.Cast<double>().ToArray();
         double loudness = AiDotNet.Audio.Effects.LoudnessMeter.IntegratedLoudness(values, _options.SampleRate);
         double gain = Math.Pow(10.0, (target - loudness) / 20.0);
         if (double.IsNaN(gain) || double.IsInfinity(gain) || gain <= 0) return audio;
@@ -555,13 +554,10 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
 
     private Tensor<T> LibrosaResample(Tensor<T> audio, int from, int to)
     {
-        var values = new double[audio.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(audio[i]);
-        var resampled = SoxrResampler.LibrosaResample(values, from, to);
-        var tensor = new Tensor<T>(new[] { resampled.Length });
-        for (int i = 0; i < resampled.Length; i++) tensor[i] = NumOps.FromDouble(resampled[i]);
-        return tensor;
+        return FromDoubles(SoxrResampler.LibrosaResample(audio.Cast<double>().ToArray(), from, to));
     }
+
+    private static Tensor<T> FromDoubles(double[] values) => new Tensor<double>(values, new[] { values.Length }).Cast<T>();
 
     private void Validate()
     {
