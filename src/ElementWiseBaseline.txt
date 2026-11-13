@@ -10120,7 +10120,6 @@
 1	ADNELEM002|AiDotNet.Augmentation.Tabular.SmoteAugmenter<T>.GenerateSyntheticSamples(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Augmentation.AugmentationContext<T>)
 1	ADNELEM002|AiDotNet.Augmentation.Tabular.SvmSmoteAugmenter<T>.GenerateSyntheticSamples(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Matrix<T>?, AiDotNet.Augmentation.AugmentationContext<T>)
 5	ADNELEM002|AiDotNet.Augmentation.Tabular.SvmSmoteAugmenter<T>.IdentifySupportVectors(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Matrix<T>?, AiDotNet.Augmentation.AugmentationContext<T>)
-8	ADNELEM002|AiDotNet.Augmentation.Video.VideoColorJitter<T>.ApplyColorJitterToFrame(AiDotNet.Augmentation.Image.ImageTensor<T>, double, double, double)
 19	ADNELEM002|AiDotNet.Autodiff.NeuralNetworkDerivatives<T>.ComputeDerivativesFiniteDifference(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>, T[], int, double)
 20	ADNELEM002|AiDotNet.Autodiff.NeuralNetworkDerivatives<T>.ComputeDerivativesSPSA(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>, T[], int, double, int)
 5	ADNELEM002|AiDotNet.Autodiff.NeuralNetworkDerivatives<T>.ProcessActivationLayer(AiDotNet.Interfaces.IActivationFunction<T>?, AiDotNet.Interfaces.IVectorActivationFunction<T>?, AiDotNet.Tensors.Interfaces.INumericOperations<T>, T[], T[][], T[][*,*], out T[], out T[][], out T[][*,*])
