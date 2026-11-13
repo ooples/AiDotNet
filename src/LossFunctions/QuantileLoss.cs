@@ -62,28 +62,15 @@ public class QuantileLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Subtract(actual[i], predicted[i]);
-            T loss;
+        var diff = Engine.TensorSubtract(actual.AsTensor(), predicted.AsTensor());
 
-            if (NumOps.GreaterThan(diff, NumOps.Zero))
-            {
-                // If actual > predicted (underestimation), penalty is quantile * diff
-                loss = NumOps.Multiply(_quantile, diff);
-            }
-            else
-            {
-                // If actual <= predicted (overestimation), penalty is (1-quantile) * |diff|
-                loss = NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, _quantile),
-                    NumOps.Negate(diff)
-                );
-            }
+        // If actual > predicted (underestimation), penalty is quantile * diff
+        var under = Engine.TensorMultiplyScalar(diff, _quantile);
 
-            sum = NumOps.Add(sum, loss);
-        }
+        // If actual <= predicted (overestimation), penalty is (1-quantile) * |diff|
+        var over = Engine.TensorMultiplyScalar(Engine.TensorNegate(diff), NumOps.Subtract(NumOps.One, _quantile));
+
+        T sum = Engine.TensorSum(Engine.TensorWhere(Engine.TensorGreaterThan(diff, NumOps.Zero), under, over));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }

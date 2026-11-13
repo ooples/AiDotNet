@@ -55,6 +55,8 @@ namespace AiDotNet.SpeechRecognition.NeMo;
 [PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.98, WeightDecay = 1e-3,
                 Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 8000, MinLearningRate = 1e-6,
                 Source = "nvidia/nemotron-speech-streaming-en-0.6b model_config.yaml: adamw, betas [0.9, 0.98], weight_decay 0.001, lr 3.0 under NoamAnnealing with d_model 1024, warmup_steps 8000 and min_lr 1e-6. No learning rate is declared because Noam's peak is the factor times a function of the width; the model builds the schedule with that factor itself.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     private const string TokenizerResource = "AiDotNet.Tokenization.nemotron-speech-1024.model.gz";

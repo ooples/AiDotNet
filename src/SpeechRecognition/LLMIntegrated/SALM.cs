@@ -61,6 +61,8 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
                 Source = "Chen et al. 2023, Sec. 4: the Adam optimizer with a learning rate of 1e-4 and "
                         + "a weight decay of 1e-3, cosine annealing with 2000 warm-up steps, and "
                         + "gradients clipped to 5.0.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class SALM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

@@ -12,6 +12,28 @@ internal static class AugmentationRandom<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// The smallest positive value of <typeparamref name="T"/> used to floor the Box-Muller u1 draw.
+    /// <c>double.Epsilon</c> converts to zero for narrower types (float, Half, decimal), which would let
+    /// a zero draw reach log(0), so the first candidate that survives conversion is used.
+    /// </summary>
+    private static readonly T MinPositive = SmallestPositive();
+
+    private static T SmallestPositive()
+    {
+        // double subnormal min, float subnormal min, Half subnormal min (2^-24), decimal min scale.
+        T value = NumOps.FromDouble(double.Epsilon);
+        if (IsPositive(value)) return value;
+        value = NumOps.FromDouble(float.Epsilon);
+        if (IsPositive(value)) return value;
+        value = NumOps.FromDouble(5.9604644775390625e-8);
+        if (IsPositive(value)) return value;
+        value = NumOps.FromDouble(1e-28);
+        return IsPositive(value) ? value : NumOps.One;
+    }
+
+    private static bool IsPositive(T value) => NumOps.GreaterThan(value, NumOps.Zero);
+
+    /// <summary>
     /// One <see cref="Random.NextDouble"/> per element in row-major order.
     /// </summary>
     internal static Tensor<T> Unit(AugmentationContext<T> context, int[] shape)
@@ -44,8 +66,8 @@ internal static class AugmentationRandom<T>
 
         var pairs = Unit(context, [count, 2]);
 
-        // u1 is floored at the smallest positive value to avoid log(0)
-        var u1 = engine.TensorClamp(engine.TensorSliceAxis(pairs, 1, 0), NumOps.FromDouble(double.Epsilon), NumOps.One);
+        // u1 is floored at the smallest positive value of T to avoid log(0)
+        var u1 = engine.TensorClamp(engine.TensorSliceAxis(pairs, 1, 0), MinPositive, NumOps.One);
         var u2 = engine.TensorSliceAxis(pairs, 1, 1);
         var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
         var angle = engine.TensorSin(engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI)));

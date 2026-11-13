@@ -155,13 +155,7 @@ public partial class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscribe
 
         // First NumMidiNotes values are note activations
         int noteCount = _options.NumMidiNotes;
-        var frames = new Tensor<T>([noteCount]);
-        for (int i = 0; i < noteCount && i < output.Length; i++)
-        {
-            double v = NumOps.ToDouble(output[i]);
-            frames[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-v))); // sigmoid
-        }
-        return frames;
+        return AudioEngineOps.SigmoidSegment(Engine, output, 0, noteCount); // sigmoid
     }
 
     /// <inheritdoc />
@@ -173,13 +167,7 @@ public partial class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscribe
 
         // Second NumMidiNotes values are onset activations
         int noteCount = _options.NumMidiNotes;
-        var onsets = new Tensor<T>([noteCount]);
-        for (int i = 0; i < noteCount && (i + noteCount) < output.Length; i++)
-        {
-            double v = NumOps.ToDouble(output[i + noteCount]);
-            onsets[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-v))); // sigmoid
-        }
-        return onsets;
+        return AudioEngineOps.SigmoidSegment(Engine, output, noteCount, noteCount); // sigmoid
     }
 
     /// <inheritdoc />
@@ -192,25 +180,20 @@ public partial class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscribe
         double frameTimeSec = (double)_options.HopLength / _options.SampleRate;
         int noteCount = Math.Min(_options.NumMidiNotes, Math.Min(frameActivations.Length, onsetActivations.Length));
 
-        for (int note = 0; note < noteCount; note++)
+        T[] frameValues = AudioEngineOps.Head(Engine, frameActivations, noteCount);
+        foreach (int note in AudioEngineOps.IndicesBothAtLeast(Engine, frameActivations, frameThreshold, onsetActivations, onsetThreshold, noteCount))
         {
-            double noteProb = NumOps.ToDouble(frameActivations[note]);
-            double onsetProb = NumOps.ToDouble(onsetActivations[note]);
+            int midiNote = note + _options.MidiOffset;
+            double startTime = 0;
+            double endTime = startTime + Math.Max(_options.MinNoteDurationSec, frameTimeSec);
 
-            if (noteProb >= frameThreshold && onsetProb >= onsetThreshold)
+            notes.Add(new TranscribedNote<T>
             {
-                int midiNote = note + _options.MidiOffset;
-                double startTime = 0;
-                double endTime = startTime + Math.Max(_options.MinNoteDurationSec, frameTimeSec);
-
-                notes.Add(new TranscribedNote<T>
-                {
-                    StartTime = startTime,
-                    EndTime = endTime,
-                    MidiNote = midiNote,
-                    Confidence = NumOps.FromDouble(noteProb)
-                });
-            }
+                StartTime = startTime,
+                EndTime = endTime,
+                MidiNote = midiNote,
+                Confidence = frameValues[note]
+            });
         }
         return notes;
     }
