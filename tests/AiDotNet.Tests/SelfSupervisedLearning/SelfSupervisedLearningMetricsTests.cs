@@ -53,4 +53,18 @@ public class SelfSupervisedLearningMetricsTests
 
         Assert.Equal(2.0, metrics.ComputeEffectiveRank(representations), Tolerance);
     }
+
+    /// <summary>
+    /// A probability that underflows to zero must be skipped, as master's p &gt; 1e-10 loop did:
+    /// 0 log 0 is NaN, and multiplying it by a 0 mask keeps the NaN. Entropy of (0, 0.5, 0.5) is ln 2.
+    /// </summary>
+    [Fact]
+    public void EntropyAboveFloor_ZeroProbability_IsSkipped()
+    {
+        var p = new Tensor<double>(new[] { 0.0, 0.5, 0.5 }, new[] { 3 });
+
+        double entropy = SelfSupervisedLearningMetrics<double>.EntropyAboveFloor(p);
+
+        Assert.Equal(Math.Log(2.0), entropy, Tolerance);
+    }
 }

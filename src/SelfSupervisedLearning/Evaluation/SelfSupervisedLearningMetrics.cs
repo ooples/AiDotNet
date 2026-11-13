@@ -121,13 +121,24 @@ public class SelfSupervisedLearningMetrics<T>
         var magnitudes = Engine.TensorAddScalar(Engine.TensorAbs(eigenvalues), NumOps.FromDouble(1e-8));
         var p = Engine.TensorDivideScalar(magnitudes, Engine.TensorSum(magnitudes));
 
-        // Entropy over p > 1e-10
-        var keep = Engine.TensorGreaterThan(p, NumOps.FromDouble(1e-10));
-        var terms = Engine.TensorMultiply(keep, Engine.TensorMultiply(p, Engine.TensorLog(p)));
-        T entropy = NumOps.Negate(Engine.TensorSum(terms));
+        T entropy = EntropyAboveFloor(p);
 
         // Effective rank = exp(entropy)
         return NumOps.Exp(entropy);
+    }
+
+    /// <summary>
+    /// Shannon entropy <c>-sum p log p</c> over the probabilities above 1e-10, as master's loop skipped the
+    /// rest. The skipped terms are selected to zero rather than multiplied by a 0/1 mask: a probability
+    /// that underflows to 0 has <c>p log p = 0 * -inf = NaN</c>, and <c>0 * NaN</c> is still NaN.
+    /// </summary>
+    internal static T EntropyAboveFloor(Tensor<T> p)
+    {
+        var terms = Engine.TensorWhere(
+            Engine.TensorGreaterThan(p, NumOps.FromDouble(1e-10)),
+            Engine.TensorMultiply(p, Engine.TensorLog(p)),
+            Engine.TensorZerosLike(p));
+        return NumOps.Negate(Engine.TensorSum(terms));
     }
 
     /// <summary>
