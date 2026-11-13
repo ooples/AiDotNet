@@ -482,9 +482,6 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
 
             Tensor<T> core = _ttCores[k];
 
-            // Get the input to this core from forward intermediates (the first core gets zero input)
-            bool hasCoreInput = k > 0 && _forwardIntermediates != null && k <= _forwardIntermediates.Count;
-
             // Only core slices c < min(coreShape, gradient columns) receive gradient; with
             // g = gradMatrix[:, 0 : usableCore * rightRank] and x = coreInput[:, 0 : min(leftRank, cols)]:
             // ∂L/∂core_k[l, c, r] = sum_b x[b, l] * g[b, c * rightRank + r]
@@ -492,9 +489,10 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
             int width = usableCore * rightRank;
             Tensor<T> g = width > 0 ? Engine.TensorNarrow(gradMatrix, 1, 0, width) : new Tensor<T>([batchSize, 0]);
 
-            if (hasCoreInput && width > 0 && _forwardIntermediates != null)
+            // The input to this core comes from the forward intermediates (the first core gets zero input).
+            if (width > 0 && k > 0 && _forwardIntermediates is { } inputs && k <= inputs.Count)
             {
-                Tensor<T> coreInput = _forwardIntermediates[k - 1]; // [batchSize, cols] from TensorFromMatrix
+                Tensor<T> coreInput = inputs[k - 1]; // [batchSize, cols] from TensorFromMatrix
 
                 int usedRank = Math.Min(leftRank, coreInput.Shape[1]);
                 if (usedRank > 0)

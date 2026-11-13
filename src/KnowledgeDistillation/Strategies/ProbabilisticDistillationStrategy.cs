@@ -229,8 +229,9 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
     {
         int n = set1.Length, m = set2.Length;
         bool sameSet = ReferenceEquals(set1, set2);
+        // No pair to average over: an empty set, or a single sample compared only with itself.
+        if (n == 0 || (sameSet ? n < 2 : m == 0)) return 0;
         double pairs = sameSet ? n * (double)(n - 1) : n * (double)m;
-        if (pairs == 0) return 0;
         var a = DistillationHelper<T>.StackRows(set1).Cast<double>();
         var b = sameSet ? a : DistillationHelper<T>.StackRows(set2).Cast<double>();
         double sum = 0;

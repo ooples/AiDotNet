@@ -396,7 +396,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
         var mean = Engine.ReduceMean(activations, [0], keepDims: true);
 
         // Gradient scale: (2/N) * selectivityDiff * (2/B) = (4 / (N*B)) * selectivityDiff
-        var gradScale = Engine.TensorMultiplyScalar(selectivityDiff, NumOps.FromDouble(4.0 / (numNeurons * batchSize)));
+        var gradScale = Engine.TensorMultiplyScalar(selectivityDiff, NumOps.FromDouble(4.0 / ((double)numNeurons * batchSize)));
 
         // grad[j, i] = gradScale[i] * (a[j, i] - mean[i])
         return Engine.TensorMultiply(
