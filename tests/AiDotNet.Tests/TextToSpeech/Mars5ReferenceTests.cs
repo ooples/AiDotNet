@@ -191,6 +191,32 @@ public class Mars5ReferenceTests
         }
     }
 
+    private static Tensor<double> Vec(double[] values) => new Tensor<double>(new[] { values.Length }, new Vector<double>((double[])values.Clone()));
+
+    // Ties: 64 equal logits (and 64 equal shifted surprisals) must be cut in ascending index order, as the stable
+    // LINQ sorts of the double sampler did; the engine argsort alone is not stable.
+    [Fact(Timeout = 120000)]
+    public async Task Samplers_CutTiesInIndexOrder()
+    {
+        await Task.Yield();
+        var logits = new double[96];
+        for (int i = 0; i < 64; i++) logits[i] = 1.0;
+        for (int i = 64; i < logits.Length; i++) logits[i] = -2.0 - i * 0.01;
+        var topP = Mars5Sampler<double>.TopKTopP(Vec(logits), 0, 0.3).ToArray();
+        // softmax mass of each tied token is about 1/64.6, so the first ceil(0.3 * 64.6) = 20 in index order survive.
+        double tied = Math.Exp(1.0), total = 64 * tied + logits.Skip(64).Sum(v => Math.Exp(v));
+        int kept = 0;
+        double cumulative = 0;
+        while (cumulative <= 0.3) { cumulative += tied / total; kept++; }
+        for (int i = 0; i < 64; i++)
+            Assert.True(i < kept ? topP[i] == 1.0 : double.IsNegativeInfinity(topP[i]), $"top-p tie {i}: {topP[i]} (kept {kept})");
+        var typical = Mars5Sampler<double>.TypicalP(Vec(logits), 0.25).ToArray();
+        int survivors = typical.Count(v => !double.IsNegativeInfinity(v));
+        Assert.True(survivors >= 1);
+        for (int i = 0; i < 64; i++)
+            Assert.Equal(typical[0], typical[i]);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task SamplersAndTrim_MatchTheRelease()
     {
@@ -198,17 +224,13 @@ public class Mars5ReferenceTests
         var s = Reference.Value.GetProperty("samplers");
         var logits = Doubles(s.GetProperty("logits"));
         var previous = Ints(s.GetProperty("previous"));
-        var a = (double[])logits.Clone();
-        Mars5Sampler.FrequencyPenalty(a, previous, 3, 0.4, 6);
+        var a = Mars5Sampler<double>.FrequencyPenalty(Vec(logits), previous, 3, 0.4, 6).ToArray();
         Close(Doubles(s.GetProperty("penalized")), i => a[i], a.Length, 1e-12, "penalized");
-        var b = (double[])a.Clone();
-        Mars5Sampler.EosPenalty(b, 4, 10, 0.5, 1.0, 12);
+        var b = Mars5Sampler<double>.EosPenalty(Vec(a), 4, 10, 0.5, 1.0, 12).ToArray();
         Close(Doubles(s.GetProperty("eos")), i => b[i], b.Length, 1e-12, "eos");
-        var c = b.Select(v => v / 0.7).ToArray();
-        Mars5Sampler.TopKTopP(c, 20, 0.6);
+        var c = Mars5Sampler<double>.TopKTopP(Vec(b.Select(v => v / 0.7).ToArray()), 20, 0.6).ToArray();
         Close(Doubles(s.GetProperty("topkp")), i => c[i], c.Length, 1e-12, "top-k/top-p");
-        var d = (double[])b.Clone();
-        Mars5Sampler.TypicalP(d, 0.5);
+        var d = Mars5Sampler<double>.TypicalP(Vec(b), 0.5).ToArray();
         Close(Doubles(s.GetProperty("typical")), i => d[i], d.Length, 1e-12, "typical");
         var t = Reference.Value.GetProperty("trim");
         var (_, start, end) = Mars5Trim.Trim(Doubles(t.GetProperty("audio")), 27);
