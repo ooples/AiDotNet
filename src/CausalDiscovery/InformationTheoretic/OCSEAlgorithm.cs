@@ -75,11 +75,11 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         if (effectiveN < d + 3)
             throw new ArgumentException($"oCSE requires at least {d + 4} time points for {d} variables, got {n}.");
 
-        // Compute transitions: delta_Y[t] = Y[t+1] - Y[t]
-        var transitions = new Matrix<T>(effectiveN, d);
-        for (int t = 0; t < effectiveN; t++)
-            for (int j = 0; j < d; j++)
-                transitions[t, j] = NumOps.Subtract(data[t + 1, j], data[t, j]);
+        // Compute transitions: delta_Y[t] = Y[t+1] - Y[t]; the regressors are the rows t < effectiveN
+        var x = Tensor<T>.FromMatrix(data);
+        var head = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { effectiveN, d });
+        var transitions = Engine.TensorSubtract(Engine.TensorSlice(x, new[] { 1, 0 }, new[] { effectiveN, d }), head);
+        T constantTolerance = NumOps.FromDouble(1e-10);
 
         var result = new Matrix<T>(d, d);
 
@@ -87,23 +87,13 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         for (int target = 0; target < d; target++)
         {
             // Build transition vector for target
-            var deltaY = new Vector<T>(effectiveN);
-            for (int t = 0; t < effectiveN; t++)
-                deltaY[t] = transitions[t, target];
+            var deltaY = Engine.TensorSliceAxis(transitions, 1, target);
 
             // Check if transitions are near-constant (deterministic trend).
             // If so, skip this target since constant transitions carry no MI.
-            double deltaVar = 0;
-            double deltaMean = 0;
-            for (int t = 0; t < effectiveN; t++)
-                deltaMean += NumOps.ToDouble(deltaY[t]);
-            deltaMean /= effectiveN;
-            for (int t = 0; t < effectiveN; t++)
-            {
-                double diff = NumOps.ToDouble(deltaY[t]) - deltaMean;
-                deltaVar += diff * diff;
-            }
-            if (deltaVar / effectiveN < 1e-10)
+            var deltaVar = Engine.ReduceMean(Engine.TensorSquare(
+                Engine.TensorSubtractScalar(deltaY, Engine.TensorMean(deltaY))), new[] { 0 }, true);
+            if (CausalTensorHelpers.AnyBelow(deltaVar, constantTolerance))
             {
                 // Transitions are near-constant — no temporal variation to explain.
                 // Skip this target: constant transitions carry zero mutual information,
@@ -125,7 +115,7 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
 
                 foreach (int candidate in candidateSet)
                 {
-                    double ce = ComputeCausationEntropy(data, deltaY, candidate, selectedParents, effectiveN, d);
+                    double ce = ComputeCausationEntropy(head, deltaY, candidate, selectedParents);
                     if (ce > bestCE)
                     {
                         bestCE = ce;
@@ -145,7 +135,7 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
             {
                 // Compute final causation entropy as edge weight
                 var otherParents = selectedParents.Where(p => p != parent).ToList();
-                double ce = ComputeCausationEntropy(data, deltaY, parent, otherParents, effectiveN, d);
+                double ce = ComputeCausationEntropy(head, deltaY, parent, otherParents);
                 if (ce > _threshold)
                     result[parent, target] = NumOps.FromDouble(ce);
             }
@@ -154,136 +144,74 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         return result;
     }
 
-    private double ComputeCausationEntropy(Matrix<T> data, Vector<T> deltaY,
-        int candidate, List<int> condSet, int effectiveN, int d)
+    private double ComputeCausationEntropy(Tensor<T> head, Tensor<T> deltaY, int candidate, List<int> condSet)
     {
         // CE(X→Y|S) = MI(deltaY; X | S)
         // Gaussian approximation: MI(A;B|C) = 0.5 * log(det(Sigma_AC) * det(Sigma_BC) / (det(Sigma_C) * det(Sigma_ABC)))
         // Simplified via partial correlation: MI ≈ -0.5 * log(1 - partialCorr^2)
 
+        var xVec = Engine.TensorSliceAxis(head, 1, candidate);
         if (condSet.Count == 0)
         {
             // Simple MI between deltaY and X (no conditioning)
-            return ComputeGaussianMIVectors(deltaY, data, candidate, effectiveN);
+            return ComputeGaussianMIVectors(deltaY, xVec);
         }
 
         // Partial correlation approach: regress both deltaY and X on S, then correlate residuals
-        var residDelta = RegressOut(deltaY, data, condSet, effectiveN);
-        var xVec = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-            xVec[t] = data[t, candidate];
-        var residX = RegressOut(xVec, data, condSet, effectiveN);
-
-        // Correlation between residuals
-        T covRR = Engine.DotProduct(residDelta, residX);
-        T varD = Engine.DotProduct(residDelta, residDelta);
-        T varX = Engine.DotProduct(residX, residX);
-
-        double dVarD = Math.Max(NumOps.ToDouble(varD), 1e-15);
-        double dVarX = Math.Max(NumOps.ToDouble(varX), 1e-15);
-        double corr = NumOps.ToDouble(covRR) / Math.Sqrt(dVarD * dVarX);
-        corr = Math.Max(-0.9999, Math.Min(0.9999, corr));
-
-        return -0.5 * Math.Log(1 - corr * corr);
+        var residDelta = RegressOut(deltaY, head, condSet);
+        var residX = RegressOut(xVec, head, condSet);
+        return ClampedCorrelationMI(residDelta, residX);
     }
 
-    private double ComputeGaussianMIVectors(Vector<T> deltaY, Matrix<T> data, int col, int n)
+    private double ComputeGaussianMIVectors(Tensor<T> deltaY, Tensor<T> x)
     {
         // Center both vectors
-        T nT = NumOps.FromDouble(n);
-        T sumD = NumOps.Zero, sumX = NumOps.Zero;
-        for (int t = 0; t < n; t++)
-        {
-            sumD = NumOps.Add(sumD, deltaY[t]);
-            sumX = NumOps.Add(sumX, data[t, col]);
-        }
-        T meanD = NumOps.Divide(sumD, nT);
-        T meanX = NumOps.Divide(sumX, nT);
-
-        var centD = new Vector<T>(n);
-        var centX = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            centD[t] = NumOps.Subtract(deltaY[t], meanD);
-            centX[t] = NumOps.Subtract(data[t, col], meanX);
-        }
-
-        T covDX = Engine.DotProduct(centD, centX);
-        T varD = Engine.DotProduct(centD, centD);
-        T varX = Engine.DotProduct(centX, centX);
-
-        double dVarD = Math.Max(NumOps.ToDouble(varD), 1e-15);
-        double dVarX = Math.Max(NumOps.ToDouble(varX), 1e-15);
-        double corr = NumOps.ToDouble(covDX) / Math.Sqrt(dVarD * dVarX);
-        corr = Math.Max(-0.9999, Math.Min(0.9999, corr));
-
-        return -0.5 * Math.Log(1 - corr * corr);
+        var centD = Engine.TensorSubtractScalar(deltaY, Engine.TensorMean(deltaY));
+        var centX = Engine.TensorSubtractScalar(x, Engine.TensorMean(x));
+        return ClampedCorrelationMI(centD, centX);
     }
 
-    private Vector<T> RegressOut(Vector<T> y, Matrix<T> data, List<int> condSet, int n)
+    /// <summary>
+    /// -0.5 log(1 - r^2) with r = sum(a b) / (sqrt(max(sum(a^2), 1e-15)) sqrt(max(sum(b^2), 1e-15))) clamped
+    /// to [-0.9999, 0.9999]; the square roots are taken before the product so finite sums cannot overflow T.
+    /// </summary>
+    private double ClampedCorrelationMI(Tensor<T> a, Tensor<T> b)
+    {
+        T cov = Engine.TensorSum(Engine.TensorMultiply(a, b));
+        T floor = NumOps.FromDouble(1e-15);
+        T varA = Engine.TensorSum(Engine.TensorSquare(a));
+        T varB = Engine.TensorSum(Engine.TensorSquare(b));
+        if (NumOps.LessThan(varA, floor)) varA = floor;
+        if (NumOps.LessThan(varB, floor)) varB = floor;
+        T corr = NumOps.Divide(cov, NumOps.Multiply(NumOps.Sqrt(varA), NumOps.Sqrt(varB)));
+        T bound = NumOps.FromDouble(0.9999);
+        if (NumOps.GreaterThan(corr, bound)) corr = bound;
+        if (NumOps.LessThan(corr, NumOps.Negate(bound))) corr = NumOps.Negate(bound);
+
+        return NumOps.ToDouble(NumOps.Multiply(NumOps.FromDouble(-0.5),
+            NumOps.Log(NumOps.Subtract(NumOps.One, NumOps.Multiply(corr, corr)))));
+    }
+
+    private Tensor<T> RegressOut(Tensor<T> y, Tensor<T> head, List<int> condSet)
     {
         int p = condSet.Count;
         if (p == 0) return y;
+        int n = y.Length;
 
-        T nT = NumOps.FromDouble(n);
+        // Center y and the conditioning columns
+        var centY = Engine.TensorSubtractScalar(y, Engine.TensorMean(y)).Reshape(new[] { n, 1 });
+        var cols = CenterColumns(SelectColumns(head, condSet.ToArray()));
 
-        // Center y
-        T yMean = NumOps.Zero;
-        for (int t = 0; t < n; t++)
-            yMean = NumOps.Add(yMean, y[t]);
-        yMean = NumOps.Divide(yMean, nT);
+        // Build normal equations on centered data, ridge for stability
+        var colsT = Engine.TensorTranspose(cols);
+        var XtX = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(colsT, cols));
+        XtX = Engine.TensorAdd(XtX, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-10)));
+        var Xty = Engine.TensorMatMul(colsT, centY).Reshape(new[] { p }).ToVector();
 
-        var centY = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-            centY[t] = NumOps.Subtract(y[t], yMean);
-
-        // Extract and center conditioning columns
-        var cols = new Vector<T>[p];
-        var colMeans = new T[p];
-        for (int c = 0; c < p; c++)
-        {
-            T mean = NumOps.Zero;
-            for (int t = 0; t < n; t++)
-                mean = NumOps.Add(mean, data[t, condSet[c]]);
-            colMeans[c] = NumOps.Divide(mean, nT);
-
-            cols[c] = new Vector<T>(n);
-            for (int t = 0; t < n; t++)
-                cols[c][t] = NumOps.Subtract(data[t, condSet[c]], colMeans[c]);
-        }
-
-        // Build normal equations on centered data
-        var XtX = new Matrix<T>(p, p);
-        var Xty = new Vector<T>(p);
-
-        for (int a = 0; a < p; a++)
-        {
-            Xty[a] = Engine.DotProduct(cols[a], centY);
-            for (int b = a; b < p; b++)
-            {
-                T dot = Engine.DotProduct(cols[a], cols[b]);
-                XtX[a, b] = dot;
-                XtX[b, a] = dot;
-            }
-        }
-
-        // Ridge for stability
-        T ridge = NumOps.FromDouble(1e-10);
-        for (int a = 0; a < p; a++)
-            XtX[a, a] = NumOps.Add(XtX[a, a], ridge);
-
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX.ToMatrix(), Xty, MatrixDecompositionType.Lu);
 
         // Compute residuals from centered regression
-        var residuals = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            T pred = NumOps.Zero;
-            for (int c = 0; c < p; c++)
-                pred = NumOps.Add(pred, NumOps.Multiply(cols[c][t], beta[c]));
-            residuals[t] = NumOps.Subtract(centY[t], pred);
-        }
-
-        return residuals;
+        var prediction = Engine.TensorMatMul(cols, beta.AsTensor().Reshape(new[] { p, 1 }));
+        return Engine.TensorSubtract(centY, prediction).Reshape(new[] { n });
     }
 }

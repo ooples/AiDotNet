@@ -127,13 +127,11 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
         var standardized = StandardizeData(data);
 
         // Working copy of data — columns get regressed out as we identify exogenous variables
-        var residualData = new double[n, d];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                residualData[i, j] = NumOps.ToDouble(standardized[i, j]);
+        var residualData = Tensor<T>.FromMatrix(standardized);
 
-        var W = new Matrix<T>(d, d);
+        var W = new Tensor<T>(new[] { d, d });
         var remaining = new List<int>(Enumerable.Range(0, d));
+        T coefficientThreshold = NumOps.FromDouble(_threshold);
 
         // Iteratively identify exogenous variables
         int maxRounds = d;
@@ -172,7 +170,7 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
 
             foreach (int candidate in remaining)
             {
-                var (effectEvidence, totalEvidence) = DirectionEvidence(residualData, n, candidate, remaining);
+                var (effectEvidence, totalEvidence) = DirectionEvidence(residualData, candidate, remaining);
 
                 if (effectEvidence < bestScore)
                 {
@@ -219,40 +217,55 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
 
             // Record causal coefficients from the identified exogenous variable to remaining ones
             remaining.Remove(bestVar);
+            if (remaining.Count == 0)
+                break;
 
-            foreach (int target in remaining)
-            {
-                double coeff = RegressCoefficient(residualData, n, bestVar, target);
-                if (Math.Abs(coeff) > _threshold)
-                {
-                    W[bestVar, target] = NumOps.FromDouble(coeff);
-                }
-            }
+            var coefficients = RegressCoefficients(residualData, bestVar);
+            var targetMask = ColumnMask(d, remaining);
+            var recorded = Engine.TensorMultiply(targetMask,
+                Engine.TensorGreaterThan(Engine.TensorAbs(coefficients), coefficientThreshold));
+            W = Engine.TensorSetSlice(W,
+                Engine.TensorWhere(recorded, coefficients, Engine.TensorZerosLike(coefficients)).Reshape(new[] { 1, d }),
+                new[] { bestVar, 0 });
 
             // Regress out the identified variable from all remaining variables
-            foreach (int target in remaining)
-            {
-                double coeff = RegressCoefficient(residualData, n, bestVar, target);
-                for (int i = 0; i < n; i++)
-                {
-                    residualData[i, target] -= coeff * residualData[i, bestVar];
-                }
-            }
+            var source = Engine.TensorSliceAxis(residualData, 1, bestVar).Reshape(new[] { n, 1 });
+            var update = Engine.TensorMatMul(source, coefficients.Reshape(new[] { 1, d }));
+            residualData = Engine.TensorWhere(Engine.TensorBroadcastTo(targetMask.Reshape(new[] { 1, d }), new[] { n, d }),
+                Engine.TensorSubtract(residualData, update), residualData);
         }
 
-        return ThresholdMatrix(W, _threshold);
+        return ThresholdMatrix(W.ToMatrix(), _threshold);
+    }
+
+    /// <summary>
+    /// A [d] tensor that is one at <paramref name="columns"/> and zero elsewhere.
+    /// </summary>
+    private static Tensor<T> ColumnMask(int d, IReadOnlyList<int> columns)
+    {
+        var engine = AiDotNetEngine.Current;
+        var mask = new Tensor<T>(new[] { d });
+        if (columns.Count == 0)
+            return mask;
+
+        var index = new Tensor<int>(columns.ToArray(), new[] { columns.Count });
+        return engine.TensorScatter(mask, index, engine.TensorOnesLike(new Tensor<T>(new[] { columns.Count })), 0);
     }
 
     /// <summary>
     /// Hyvärinen's (1998) maximum-entropy approximation of the differential entropy of a
-    /// STANDARDIZED (zero-mean, unit-variance) variable. Lower entropy ⇒ more non-Gaussian.
+    /// STANDARDIZED (zero-mean, unit-variance) variable, for every column of <paramref name="u"/> [n x m].
+    /// Lower entropy ⇒ more non-Gaussian.
     /// This is the entropy term DirectLiNGAM (Shimizu et al. 2011) — which RCD (Maeda &amp;
     /// Shimizu 2020) builds on — uses to score causal direction, because the non-Gaussianity of
     /// a residual is what identifies direction; a histogram MI cannot resolve this on
     /// near-collinear data.
     /// </summary>
-    private static double DifferentialEntropy(double[] u, int n)
+    private static Tensor<T> DifferentialEntropy(Tensor<T> u)
     {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
         // Constants from Hyvärinen (1998) "New approximations of differential entropy…":
         // the two non-quadratic contrast functions G1(u)=log cosh(u), G2(u)=u·exp(-u²/2),
         // with gamma = E[G1(standard normal)].
@@ -261,17 +274,15 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
         const double gamma = 0.37457;
         double gaussEntropy = (1.0 + Math.Log(2.0 * Math.PI)) / 2.0;
 
-        double m1 = 0, m2 = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double x = u[i];
-            m1 += Math.Log(Math.Cosh(x));
-            m2 += x * Math.Exp(-0.5 * x * x);
-        }
-        m1 /= n;
-        m2 /= n;
+        var m1 = engine.ReduceMean(engine.TensorLog(engine.TensorCosh(u)), new[] { 0 }, false);
+        var m2 = engine.ReduceMean(engine.TensorMultiply(u,
+            engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(u), numOps.FromDouble(-0.5)))),
+            new[] { 0 }, false);
 
-        return gaussEntropy - k1 * (m1 - gamma) * (m1 - gamma) - k2 * m2 * m2;
+        var m1Excess = engine.TensorSquare(engine.TensorSubtractScalar(m1, numOps.FromDouble(gamma)));
+        var penalty = engine.TensorAdd(engine.TensorMultiplyScalar(m1Excess, numOps.FromDouble(k1)),
+            engine.TensorMultiplyScalar(engine.TensorSquare(m2), numOps.FromDouble(k2)));
+        return engine.TensorSubtract(engine.TensorFullLike(penalty, numOps.FromDouble(gaussEntropy)), penalty);
     }
 
     /// <summary>
@@ -290,19 +301,18 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     /// in two places to stay correct.
     /// </remarks>
     private static (double EffectEvidence, double TotalEvidence) DirectionEvidence(
-        double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
+        Tensor<T> residualData, int candidate, IReadOnlyList<int> remaining)
     {
-        double effectEvidence = 0;   // sum of min(0, DiffMI)^2 -- squared WRONG-WAY (effect) evidence
-        double totalEvidence = 0;    // sum of DiffMI^2         -- total squared direction-evidence
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var others = remaining.Where(other => other != candidate).ToArray();
+        if (others.Length == 0)
+            return (0, 0);
 
-        foreach (int other in remaining)
-        {
-            if (other == candidate) continue;
-            double diffMI = DiffMutualInfo(residualData, n, candidate, other);
-            double neg = Math.Min(0.0, diffMI);
-            effectEvidence += neg * neg;
-            totalEvidence += diffMI * diffMI;
-        }
+        var diffMI = DiffMutualInfo(residualData, candidate, others);
+        var wrongWay = engine.TensorMin(diffMI, numOps.Zero);
+        double effectEvidence = numOps.ToDouble(engine.TensorSum(engine.TensorSquare(wrongWay)));   // sum of min(0, DiffMI)^2
+        double totalEvidence = numOps.ToDouble(engine.TensorSum(engine.TensorSquare(diffMI)));      // sum of DiffMI^2
 
         return (effectEvidence, totalEvidence);
     }
@@ -319,9 +329,9 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     /// stop, not as an exogenous cause. Exposed <c>internal</c> so the RCD calibration tests can
     /// assert the clean-vs-confounded separation directly without depending on a full discovery run.
     /// </summary>
-    internal static double ConfoundingRatio(double[,] residualData, int n, int candidate, IReadOnlyList<int> remaining)
+    internal static double ConfoundingRatio(Matrix<T> residualData, int candidate, IReadOnlyList<int> remaining)
     {
-        var (effectEvidence, totalEvidence) = DirectionEvidence(residualData, n, candidate, remaining);
+        var (effectEvidence, totalEvidence) = DirectionEvidence(Tensor<T>.FromMatrix(residualData), candidate, remaining);
 
         // Degenerate direction evidence (perfectly collinear/deterministic residuals, so near-zero or
         // non-finite total evidence): the direction is UNIDENTIFIABLE, which is NOT the same as a clean
@@ -331,71 +341,76 @@ public class RCDAlgorithm<T> : FunctionalBase<T>
     }
 
     /// <summary>
-    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pair (i, j):
+    /// DirectLiNGAM's entropy-based mutual-information difference for the ordered pairs (i, j), one per
+    /// column j in <paramref name="others"/>:
     /// a positive value means <c>i → j</c> (variable i is the cause), a negative value means
     /// <c>j → i</c>. Both variables are standardized; the regression residuals in each direction
     /// are r_{i|j} = x_i − ρ·x_j and r_{j|i} = x_j − ρ·x_i (ρ = correlation), and the measure is
     /// [H(x_j) + H(r_{i|j})] − [H(x_i) + H(r_{j|i})] using
-    /// <see cref="DifferentialEntropy(double[], int)"/>.
+    /// <see cref="DifferentialEntropy(Tensor{T})"/>. A pair where either standard deviation is below
+    /// 1e-12 scores 0.
     /// </summary>
-    private static double DiffMutualInfo(double[,] data, int n, int i, int j)
+    private static Tensor<T> DiffMutualInfo(Tensor<T> data, int i, int[] others)
     {
-        double meanI = 0, meanJ = 0;
-        for (int k = 0; k < n; k++) { meanI += data[k, i]; meanJ += data[k, j]; }
-        meanI /= n; meanJ /= n;
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = data.Shape[0];
+        int m = others.Length;
+        var tiny = numOps.FromDouble(1e-12);
 
-        double varI = 0, varJ = 0, cov = 0;
-        for (int k = 0; k < n; k++)
-        {
-            double di = data[k, i] - meanI, dj = data[k, j] - meanJ;
-            varI += di * di; varJ += dj * dj; cov += di * dj;
-        }
-        double stdI = Math.Sqrt(varI / n), stdJ = Math.Sqrt(varJ / n);
-        if (stdI < 1e-12 || stdJ < 1e-12) return 0;
-        double rho = (cov / n) / (stdI * stdJ);
-        if (rho > 1) rho = 1; else if (rho < -1) rho = -1;
-        double residStd = Math.Sqrt(Math.Max(1e-12, 1.0 - rho * rho));
+        var di = engine.TensorSubtractScalar(engine.TensorSliceAxis(data, 1, i), engine.TensorMean(engine.TensorSliceAxis(data, 1, i)))
+            .Reshape(new[] { n, 1 });
+        var columns = engine.TensorIndexSelect(data, new Tensor<int>(others, new[] { m }), 1);
+        var dj = engine.TensorSubtract(columns,
+            engine.TensorBroadcastTo(engine.ReduceMean(columns, new[] { 0 }, true), new[] { n, m }));
 
-        var xi = new double[n];
-        var xj = new double[n];
-        var rIgivenJ = new double[n];
-        var rJgivenI = new double[n];
-        for (int k = 0; k < n; k++)
-        {
-            double xis = (data[k, i] - meanI) / stdI;
-            double xjs = (data[k, j] - meanJ) / stdJ;
-            xi[k] = xis;
-            xj[k] = xjs;
-            rIgivenJ[k] = (xis - rho * xjs) / residStd;
-            rJgivenI[k] = (xjs - rho * xis) / residStd;
-        }
+        T stdI = numOps.Sqrt(engine.TensorMean(engine.TensorSquare(di)));
+        var stdJ = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(dj), new[] { 0 }, true)); // [1, m]
+        var cov = engine.ReduceMean(engine.TensorMultiply(engine.TensorBroadcastTo(di, new[] { n, m }), dj), new[] { 0 }, true);
 
-        return (DifferentialEntropy(xj, n) + DifferentialEntropy(rIgivenJ, n))
-             - (DifferentialEntropy(xi, n) + DifferentialEntropy(rJgivenI, n));
+        // A pair is scored only when neither standard deviation is below 1e-12 (NaN is scored).
+        var degenerate = engine.TensorLessThan(stdJ, tiny);
+        if (numOps.LessThan(stdI, tiny))
+            degenerate = engine.TensorOnesLike(stdJ);
+        var safeStdJ = engine.TensorWhere(degenerate, engine.TensorOnesLike(stdJ), stdJ);
+        T safeStdI = numOps.LessThan(stdI, tiny) ? numOps.One : stdI;
+
+        var rho = engine.TensorDivideScalar(engine.TensorDivide(cov, safeStdJ), safeStdI);
+        rho = engine.TensorWhere(engine.TensorGreaterThan(rho, numOps.One), engine.TensorOnesLike(rho), rho);
+        rho = engine.TensorWhere(engine.TensorLessThan(rho, numOps.Negate(numOps.One)),
+            engine.TensorFullLike(rho, numOps.Negate(numOps.One)), rho);
+        var oneMinusRhoSq = engine.TensorSubtract(engine.TensorOnesLike(rho), engine.TensorSquare(rho));
+        var residStd = engine.TensorSqrt(engine.TensorWhere(engine.TensorLessThan(oneMinusRhoSq, tiny),
+            engine.TensorFullLike(oneMinusRhoSq, tiny), oneMinusRhoSq));
+
+        var shape = new[] { n, m };
+        var xis = engine.TensorBroadcastTo(engine.TensorDivideScalar(di, safeStdI), shape);
+        var xjs = engine.TensorDivide(dj, engine.TensorBroadcastTo(safeStdJ, shape));
+        var rhoB = engine.TensorBroadcastTo(rho, shape);
+        var residStdB = engine.TensorBroadcastTo(residStd, shape);
+        var rIgivenJ = engine.TensorDivide(engine.TensorSubtract(xis, engine.TensorMultiply(rhoB, xjs)), residStdB);
+        var rJgivenI = engine.TensorDivide(engine.TensorSubtract(xjs, engine.TensorMultiply(rhoB, xis)), residStdB);
+
+        var hXi = DifferentialEntropy(engine.TensorDivideScalar(di, safeStdI));
+        var diff = engine.TensorSubtract(
+            engine.TensorAdd(DifferentialEntropy(xjs), DifferentialEntropy(rIgivenJ)),
+            engine.TensorAdd(engine.TensorBroadcastTo(hXi, new[] { m }), DifferentialEntropy(rJgivenI)));
+        return engine.TensorWhere(degenerate.Reshape(new[] { m }), engine.TensorZerosLike(diff), diff);
     }
 
     /// <summary>
-    /// Computes the OLS regression coefficient of source predicting target.
+    /// The OLS regression coefficient of <paramref name="source"/> predicting every column ([d]);
+    /// 0 when the source's centered sum of squares is not above 1e-10.
     /// </summary>
-    private static double RegressCoefficient(double[,] data, int n, int source, int target)
+    private Tensor<T> RegressCoefficients(Tensor<T> data, int source)
     {
-        double meanS = 0, meanT = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanS += data[i, source];
-            meanT += data[i, target];
-        }
-        meanS /= n;
-        meanT /= n;
-
-        double cov = 0, varS = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double ds = data[i, source] - meanS;
-            cov += ds * (data[i, target] - meanT);
-            varS += ds * ds;
-        }
-
-        return varS > 1e-10 ? cov / varS : 0;
+        int n = data.Shape[0];
+        var centered = CenterColumns(data);
+        var ds = Engine.TensorSliceAxis(centered, 1, source).Reshape(new[] { n, 1 });
+        T varS = Engine.TensorSum(Engine.TensorSquare(ds));
+        var cov = Engine.TensorMatMul(Engine.TensorTranspose(ds), centered).Reshape(new[] { data.Shape[1] });
+        return NumOps.GreaterThan(varS, NumOps.FromDouble(1e-10))
+            ? Engine.TensorDivideScalar(cov, varS)
+            : Engine.TensorZerosLike(cov);
     }
 }

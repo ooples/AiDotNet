@@ -248,8 +248,7 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
             }
 
             // Create a 2D tensor [1, sequence_length] since NLP models expect batch dimension
-            var tokenVector = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
-            var inputTensor = new Tensor<T>(new[] { 1, tokenIds.Length }, tokenVector);
+            var inputTensor = new Tensor<int>(new[] { 1, tokenIds.Length }, new Vector<int>(tokenIds)).Cast<T>();
             var prediction = AnalyzeSentiment(inputTensor);
 
             if (prediction.Length == 0)
@@ -266,20 +265,17 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
 
             int classCount = Math.Max(1, NumSentimentClasses);
             int count = Math.Min(classCount, prediction.Length);
-            int bestIdx = 0;
-            T bestVal = prediction.Data.Span[0];
+            // First maximum among the leading class scores (strict >, as before).
+            var classScores = Engine.TensorSlice(
+                Engine.Reshape(prediction, new[] { prediction.Length }), new[] { 0 }, new[] { count });
+            int bestIdx = Engine.TensorArgMax(classScores, 0).Data.Span[0];
+            T bestVal = prediction.Data.Span[bestIdx];
             var probabilities = new Dictionary<string, T>();
 
+            var scores = prediction.Data.Span;
             for (int c = 0; c < count; c++)
             {
-                var value = prediction.Data.Span[c];
-                if (NumOps.GreaterThan(value, bestVal))
-                {
-                    bestVal = value;
-                    bestIdx = c;
-                }
-
-                probabilities[GetSentimentLabel(c, classCount)] = value;
+                probabilities[GetSentimentLabel(c, classCount)] = scores[c];
             }
 
             results[i] = new SentimentResult<T>

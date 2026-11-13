@@ -227,49 +227,46 @@ public partial class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBa
     private Vector<T> CalculateStandardTrend()
     {
         int n = TimeSeries.Length;
-        var trend = new Vector<T>(n);
-        var differenced = new Vector<T>(n - 1);
+        if (n <= 1)
+        {
+            // No first differences: the whole series is trend.
+            return TimeSeries.Clone();
+        }
 
         // Calculate first differences
-        for (int i = 1; i < n; i++)
-        {
-            differenced[i - 1] = NumOps.Subtract(TimeSeries[i], TimeSeries[i - 1]);
-        }
+        Vector<T> differenced = Engine.Subtract(TimeSeries.GetSubVector(1, n - 1), TimeSeries.GetSubVector(0, n - 1));
 
         // Calculate mean of differenced series
         T meanDiff = StatisticsHelper<T>.CalculateMean(differenced);
 
-        // Calculate autocovariance of differenced series
-        var autocovariance = new Vector<T>(n);
-        for (int k = 0; k < n - 1; k++)
+        int m = n - 1;
+
+        // Autocovariance of the differenced series for every lag k in [0, m): the zero-padded
+        // self-correlation of the centred series puts lag k at output position m - 1 - k.
+        var centered = Engine.TensorSubtractScalar(Tensor<T>.FromVector(differenced), meanDiff);
+        var signal = centered.Reshape(new[] { 1, 1, m });
+        var correlation = Engine.Conv1D(signal, signal, 1, m - 1).Reshape(new[] { 2 * m - 1 });
+        var lagSums = Engine.TensorFlip(Engine.TensorSlice(correlation, new[] { 0 }, new[] { m }), new[] { 0 });
+        var pairCounts = Engine.ScalarMinusTensor(NumOps.FromDouble(m), Engine.TensorArange<T>(0, m, 1));
+        var autocovariance = DivideElementwise(lagSums, pairCounts);
+
+        // Long-run variance = gamma_0 + 2 * sum_{k >= 1} gamma_k
+        T gamma0 = Engine.TensorSum(Engine.TensorSlice(autocovariance, new[] { 0 }, new[] { 1 }));
+        if (NumOps.Equals(gamma0, NumOps.Zero))
         {
-            T sum = NumOps.Zero;
-            for (int i = k; i < n - 1; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(
-                    NumOps.Subtract(differenced[i], meanDiff),
-                    NumOps.Subtract(differenced[i - k], meanDiff)
-                ));
-            }
-            autocovariance[k] = NumOps.Divide(sum, NumOps.FromDouble(n - 1 - k));
+            // Constant first differences (a linear or constant series, or any two-point series):
+            // there is no transitory variance to separate, so the series is all trend.
+            return TimeSeries.Clone();
         }
 
-        // Calculate long-run variance
-        T longRunVariance = autocovariance[0];
-        for (int k = 1; k < n - 1; k++)
-        {
-            longRunVariance = NumOps.Add(longRunVariance, NumOps.Multiply(NumOps.FromDouble(2), autocovariance[k]));
-        }
+        T longRunVariance = NumOps.Subtract(
+            NumOps.Multiply(NumOps.FromDouble(2), Engine.TensorSum(autocovariance)), gamma0);
 
-        // Calculate trend
-        trend[0] = TimeSeries[0];
-        for (int i = 1; i < n; i++)
-        {
-            T adjustment = NumOps.Multiply(NumOps.FromDouble(i), NumOps.Divide(longRunVariance, autocovariance[0]));
-            trend[i] = NumOps.Add(TimeSeries[i], NumOps.Multiply(adjustment, meanDiff));
-        }
-
-        return trend;
+        // trend[i] = x[i] + i * (longRunVariance / gamma_0) * meanDiff
+        var steps = Engine.TensorArange<T>(0, n, 1);
+        var adjustment = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiplyScalar(steps, NumOps.Divide(longRunVariance, gamma0)), meanDiff);
+        return Engine.TensorAdd(Tensor<T>.FromVector(TimeSeries), adjustment).ToVector();
     }
 
     /// <summary>
@@ -321,39 +318,33 @@ public partial class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBa
                          _arimaOptions.Q + _arimaOptions.SeasonalQ * _arimaOptions.SeasonalPeriod + 1));
         }
 
-        // Create input matrix for prediction
-        Matrix<T> input = new Matrix<T>(1, inputDimension);
+        if (n == 0)
+        {
+            return trend;
+        }
+
+        // Series with inputDimension - 1 leading zeros: the input row for time i is the reversed
+        // window padded[i .. i + inputDimension - 1] = (x[i], x[i - 1], ..., 0 for negative lags).
+        var padded = Engine.TensorConstantPad(Tensor<T>.FromVector(TimeSeries), new[] { inputDimension - 1, 0 }, NumOps.Zero);
+        var trendValues = new Tensor<T>[n];
 
         // Calculate the long-run forecast for each time point
         for (int i = 0; i < n; i++)
         {
-            // Set the input values based on the available data
-            for (int j = 0; j < inputDimension; j++)
-            {
-                if (i - j >= 0)
-                {
-                    input[0, j] = TimeSeries[i - j];
-                }
-                else
-                {
-                    input[0, j] = NumOps.Zero;
-                }
-            }
+            var window = Engine.TensorSlice(padded, new[] { i }, new[] { inputDimension });
+            Matrix<T> input = Engine.TensorFlip(window, new[] { 0 }).Reshape(new[] { 1, inputDimension }).ToMatrix();
 
             // Predict future values
-            Vector<T> forecast = model.Predict(input);
+            var forecast = Tensor<T>.FromVector(model.Predict(input));
 
-            // Calculate the long-run forecast (Beveridge-Nelson trend)
-            T longRunForecast = forecast[0];
-            for (int k = 1; k < forecast.Length; k++)
-            {
-                longRunForecast = NumOps.Add(longRunForecast, NumOps.Subtract(forecast[k], forecast[k - 1]));
-            }
-
-            trend[i] = longRunForecast;
+            // Long-run forecast (Beveridge-Nelson trend): f[0] + sum_k (f[k] - f[k - 1])
+            var first = Engine.TensorSlice(forecast, new[] { 0 }, new[] { 1 });
+            trendValues[i] = forecast.Length > 1
+                ? Engine.TensorAddScalar(first, Engine.TensorSum(Engine.TensorDiff(forecast)))
+                : first;
         }
 
-        return trend;
+        return Engine.TensorConcatenate(trendValues, 0).ToVector();
     }
 
     /// <summary>

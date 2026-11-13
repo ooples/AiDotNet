@@ -137,7 +137,6 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
     public AudioEventResult<T> Detect(Tensor<T> audio, T threshold)
     {
         ThrowIfDisposed();
-        double thresholdValue = NumOps.ToDouble(threshold);
         var windows = SplitIntoWindows(audio);
         var allEvents = new List<AudioEvent<T>>();
         foreach (var (windowData, startSample) in windows)
@@ -146,16 +145,15 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
             double totalDur = (double)audio.Length / _options.SampleRate;
             double startTime = (double)startSample / _options.SampleRate;
             double endTime = Math.Min(startTime + _options.DetectionWindowSize, totalDur);
-            for (int i = 0; i < probs.Length && i < ClassLabels.Count; i++)
-            {
-                double p = NumOps.ToDouble(probs[i]);
-                if (p >= thresholdValue)
-                    allEvents.Add(new AudioEvent<T>
-                    {
-                        EventType = ClassLabels[i], Confidence = probs[i],
-                        StartTime = startTime, EndTime = endTime, PeakTime = (startTime + endTime) / 2.0
-                    });
-            }
+            int[] above = AudioEventDetectionOps.IndicesAtOrAbove(Engine, probs, ClassLabels.Count, threshold);
+            if (above.Length == 0) continue;
+            T[] values = AudioEventDetectionOps.HeadScores(Engine, probs, ClassLabels.Count);
+            foreach (int i in above)
+                allEvents.Add(new AudioEvent<T>
+                {
+                    EventType = ClassLabels[i], Confidence = values[i],
+                    StartTime = startTime, EndTime = endTime, PeakTime = (startTime + endTime) / 2.0
+                });
         }
         var merged = MergeEvents(allEvents);
         double totalDuration = (double)audio.Length / _options.SampleRate;
@@ -195,14 +193,10 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
     {
         ThrowIfDisposed();
         var windows = SplitIntoWindows(audio);
-        var probabilities = new Tensor<T>([windows.Count, ClassLabels.Count]);
+        var rows = new List<Tensor<T>>(windows.Count);
         for (int w = 0; w < windows.Count; w++)
-        {
-            var probs = ClassifyWindow(windows[w].Data);
-            for (int i = 0; i < probs.Length && i < ClassLabels.Count; i++)
-                probabilities[w, i] = probs[i];
-        }
-        return probabilities;
+            rows.Add(AudioEventDetectionOps.ScoreRow(Engine, ClassifyWindow(windows[w].Data), ClassLabels.Count));
+        return AudioEventDetectionOps.StackScoreRows(Engine, rows, ClassLabels.Count);
     }
 
     /// <inheritdoc />
@@ -294,66 +288,25 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
         int windowSamples = (int)(_options.DetectionWindowSize * _options.SampleRate);
         int hopSamples = (int)(windowSamples * (1.0 - _options.WindowOverlap));
         if (hopSamples <= 0) hopSamples = windowSamples;
+        var flat = AudioEventDetectionOps.Flatten(Engine, audio);
         for (int start = 0; start < audio.Length; start += hopSamples)
         {
             int end = Math.Min(start + windowSamples, audio.Length);
-            var window = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < end - start; i++) window[i] = audio[start + i];
+            var window = end > start
+                ? AudioEventDetectionOps.ZeroPadTo(Engine, Engine.TensorSlice(flat, [start], [end - start]), windowSamples)
+                : new Tensor<T>([windowSamples]);
             windows.Add((window, start));
         }
         return windows;
     }
 
+    // Overlapping detections merge (no extra gap); a later detection replaces the kept confidence only
+    // when strictly higher, so the earliest maximum wins ties.
     private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events)
-    {
-        if (events.Count == 0) return events;
-        var grouped = events.GroupBy(e => e.EventType);
-        var merged = new List<AudioEvent<T>>();
-        foreach (var group in grouped)
-        {
-            var sorted = group.OrderBy(e => e.StartTime).ToList();
-            var current = sorted[0];
-            for (int i = 1; i < sorted.Count; i++)
-            {
-                if (sorted[i].StartTime <= current.EndTime)
-                {
-                    double currentConf = NumOps.ToDouble(current.Confidence);
-                    double nextConf = NumOps.ToDouble(sorted[i].Confidence);
-                    current = new AudioEvent<T>
-                    {
-                        EventType = current.EventType,
-                        StartTime = current.StartTime,
-                        EndTime = Math.Max(current.EndTime, sorted[i].EndTime),
-                        Confidence = nextConf > currentConf ? sorted[i].Confidence : current.Confidence,
-                        PeakTime = nextConf > currentConf ? sorted[i].PeakTime : current.PeakTime
-                    };
-                }
-                else { merged.Add(current); current = sorted[i]; }
-            }
-            merged.Add(current);
-        }
-        return merged.OrderBy(e => e.StartTime).ToList();
-    }
+        => AudioEventDetectionOps.MergeEvents(Engine, events, 0.0, latestWinsTies: false);
 
     private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events)
-    {
-        var stats = new Dictionary<string, EventStatistics<T>>();
-        foreach (var group in events.GroupBy(e => e.EventType))
-        {
-            var list = group.ToList();
-            T maxConf = NumOps.MinValue;
-            foreach (var e in list)
-                if (NumOps.GreaterThan(e.Confidence, maxConf)) maxConf = e.Confidence;
-            stats[group.Key] = new EventStatistics<T>
-            {
-                Count = list.Count,
-                TotalDuration = list.Sum(e => e.Duration),
-                AverageConfidence = NumOps.FromDouble(list.Average(e => NumOps.ToDouble(e.Confidence))),
-                MaxConfidence = maxConf
-            };
-        }
-        return stats;
-    }
+        => AudioEventDetectionOps.ComputeEventStatistics(Engine, events);
 
     #endregion
 
@@ -384,21 +337,23 @@ public partial class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEvent
         public void FeedAudio(Tensor<T> audioChunk)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(AudioLDMClassifierStreamingSession));
-            for (int i = 0; i < audioChunk.Length; i++) _buffer.Add(audioChunk[i]);
-            double thresholdValue = _model.NumOps.ToDouble(_threshold);
+            _buffer.AddRange(audioChunk.ToArray());
             while (_buffer.Count >= _windowSamples)
             {
-                var frame = new Tensor<T>([_windowSamples]);
-                for (int i = 0; i < _windowSamples; i++) frame[i] = _buffer[i];
+                var frame = new Tensor<T>(_buffer.GetRange(0, _windowSamples).ToArray(), [_windowSamples]);
                 _buffer.RemoveRange(0, _windowSamples / 2);
-                var probs = _model.ClassifyWindow(frame);
+                var probTensor = _model.ClassifyWindow(frame);
+                int classCount = Math.Min(probTensor.Length, _model.ClassLabels.Count);
+                T[] probs = AudioEventDetectionOps.HeadScores(_model.Engine, probTensor, classCount);
+                var passes = new bool[classCount];
+                foreach (int i in AudioEventDetectionOps.IndicesAtOrAbove(_model.Engine, probs, classCount, _threshold))
+                    passes[i] = true;
                 double startTime = _processedTime;
                 double endTime = startTime + _model._options.DetectionWindowSize;
-                for (int i = 0; i < probs.Length && i < _model.ClassLabels.Count; i++)
+                for (int i = 0; i < classCount; i++)
                 {
-                    double p = _model.NumOps.ToDouble(probs[i]);
                     _currentState[_model.ClassLabels[i]] = probs[i];
-                    if (p >= thresholdValue)
+                    if (passes[i])
                     {
                         var ev = new AudioEvent<T>
                         {

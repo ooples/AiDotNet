@@ -36,7 +36,7 @@ public class GridKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Grid coordinates along each dimension.
     /// </summary>
-    private readonly double[][] _gridCoordinates;
+    private readonly Vector<T>[] _gridCoordinates;
 
     /// <summary>
     /// Precomputed 1D kernel matrices for each dimension.
@@ -46,7 +46,7 @@ public class GridKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Eigenvalues of each 1D kernel matrix.
     /// </summary>
-    private double[][]? _eigenvalues;
+    private Vector<T>[]? _eigenvalues;
 
     /// <summary>
     /// Eigenvectors of each 1D kernel matrix.
@@ -79,15 +79,15 @@ public class GridKernel<T> : IKernelFunction<T>
     ///         new GaussianKernel&lt;double&gt;(1.0),  // x-dimension
     ///         new GaussianKernel&lt;double&gt;(2.0)   // y-dimension (different lengthscale)
     ///     },
-    ///     new double[][]
+    ///     new[]
     ///     {
-    ///         Enumerable.Range(0, 10).Select(i => (double)i).ToArray(),  // x: 0,1,...,9
-    ///         Enumerable.Range(0, 20).Select(i => (double)i).ToArray()   // y: 0,1,...,19
+    ///         new Vector&lt;double&gt;(Enumerable.Range(0, 10).Select(i => (double)i)),  // x: 0,1,...,9
+    ///         new Vector&lt;double&gt;(Enumerable.Range(0, 20).Select(i => (double)i))   // y: 0,1,...,19
     ///     }
     /// );
     /// </para>
     /// </remarks>
-    public GridKernel(IKernelFunction<T>[] dimensionKernels, double[][] gridCoordinates)
+    public GridKernel(IKernelFunction<T>[] dimensionKernels, Vector<T>[] gridCoordinates)
     {
         if (dimensionKernels is null)
             throw new ArgumentNullException(nameof(dimensionKernels));
@@ -110,7 +110,7 @@ public class GridKernel<T> : IKernelFunction<T>
         }
 
         _dimensionKernels = (IKernelFunction<T>[])dimensionKernels.Clone();
-        _gridCoordinates = gridCoordinates.Select(c => (double[])c.Clone()).ToArray();
+        _gridCoordinates = gridCoordinates.Select(c => c.Clone()).ToArray();
         _numOps = MathHelper.GetNumericOperations<T>();
         _precomputed = false;
     }
@@ -144,29 +144,15 @@ public class GridKernel<T> : IKernelFunction<T>
     {
         int d = NumDimensions;
         _dimensionKernelMatrices = new Matrix<T>[d];
-        _eigenvalues = new double[d][];
+        _eigenvalues = new Vector<T>[d];
         _eigenvectors = new Matrix<T>[d];
 
         for (int dim = 0; dim < d; dim++)
         {
-            int n = _gridCoordinates[dim].Length;
-            var K = new Matrix<T>(n, n);
-
-            // Build 1D kernel matrix
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i; j < n; j++)
-                {
-                    var xi = new Vector<T>(1);
-                    var xj = new Vector<T>(1);
-                    xi[0] = _numOps.FromDouble(_gridCoordinates[dim][i]);
-                    xj[0] = _numOps.FromDouble(_gridCoordinates[dim][j]);
-
-                    T kval = _dimensionKernels[dim].Calculate(xi, xj);
-                    K[i, j] = kval;
-                    K[j, i] = kval;
-                }
-            }
+            // Build 1D kernel matrix over the dimension's grid coordinates
+            var coordinates = _gridCoordinates[dim];
+            var points = Enumerable.Range(0, coordinates.Length).Select(i => coordinates.GetSubVector(i, 1)).ToArray();
+            var K = KernelVectorOps<T>.SymmetricGram(_dimensionKernels[dim], points);
 
             _dimensionKernelMatrices[dim] = K;
 
@@ -198,20 +184,11 @@ public class GridKernel<T> : IKernelFunction<T>
         if (x1.Length != NumDimensions)
             throw new ArgumentException($"Expected {NumDimensions}-dimensional vectors.");
 
-        double product = 1.0;
+        // Product of the one-dimensional kernels k_d(x1[d], x2[d]).
+        var dimensionValues = new Vector<T>(Enumerable.Range(0, NumDimensions)
+            .Select(dim => _dimensionKernels[dim].Calculate(x1.GetSubVector(dim, 1), x2.GetSubVector(dim, 1))));
 
-        for (int dim = 0; dim < NumDimensions; dim++)
-        {
-            var xi = new Vector<T>(1);
-            var xj = new Vector<T>(1);
-            xi[0] = x1[dim];
-            xj[0] = x2[dim];
-
-            double kval = _numOps.ToDouble(_dimensionKernels[dim].Calculate(xi, xj));
-            product *= kval;
-        }
-
-        return _numOps.FromDouble(product);
+        return AiDotNetEngine.Current.Product(dimensionValues);
     }
 
     /// <summary>
@@ -246,68 +223,7 @@ public class GridKernel<T> : IKernelFunction<T>
         // = vec(K_D * mat(v) * K_{D-1}' * ... * K_1')
         // We apply each K_i in sequence using reshaping
 
-        var result = new double[totalPoints];
-        for (int i = 0; i < totalPoints; i++)
-            result[i] = _numOps.ToDouble(v[i]);
-
-        int[] sizes = GridSizes;
-
-        for (int dim = NumDimensions - 1; dim >= 0; dim--)
-        {
-            int n = sizes[dim];
-
-            // Compute the product of sizes after this dimension
-            int rightSize = 1;
-            for (int d = dim + 1; d < NumDimensions; d++)
-                rightSize *= sizes[d];
-
-            // Compute the product of sizes before this dimension
-            int leftSize = totalPoints / (n * rightSize);
-
-            // Apply K_dim to the appropriate mode
-            var newResult = new double[totalPoints];
-
-            for (int left = 0; left < leftSize; left++)
-            {
-                for (int right = 0; right < rightSize; right++)
-                {
-                    // Extract the fiber along dimension 'dim'
-                    var fiber = new double[n];
-                    for (int i = 0; i < n; i++)
-                    {
-                        int idx = left * (n * rightSize) + i * rightSize + right;
-                        fiber[i] = result[idx];
-                    }
-
-                    // Multiply by K_dim
-                    var newFiber = new double[n];
-                    for (int i = 0; i < n; i++)
-                    {
-                        double sum = 0;
-                        for (int j = 0; j < n; j++)
-                        {
-                            sum += _numOps.ToDouble(_dimensionKernelMatrices[dim][i, j]) * fiber[j];
-                        }
-                        newFiber[i] = sum;
-                    }
-
-                    // Write back
-                    for (int i = 0; i < n; i++)
-                    {
-                        int idx = left * (n * rightSize) + i * rightSize + right;
-                        newResult[idx] = newFiber[i];
-                    }
-                }
-            }
-
-            result = newResult;
-        }
-
-        var output = new Vector<T>(totalPoints);
-        for (int i = 0; i < totalPoints; i++)
-            output[i] = _numOps.FromDouble(result[i]);
-
-        return output;
+        return KernelVectorOps<T>.KroneckerMultiply(_dimensionKernelMatrices, v);
     }
 
     /// <summary>
@@ -326,36 +242,24 @@ public class GridKernel<T> : IKernelFunction<T>
     /// - Understanding spectral properties
     /// </para>
     /// </remarks>
-    public double[] GetEigenvalues()
+    public Vector<T> GetEigenvalues()
     {
         if (!_precomputed || _eigenvalues is null)
         {
             throw new InvalidOperationException("Call Precompute() first.");
         }
 
-        // All products of eigenvalues
-        int total = TotalGridPoints;
-        var allEigenvalues = new double[total];
-        int[] sizes = GridSizes;
-
-        for (int idx = 0; idx < total; idx++)
+        // All products of eigenvalues: the Kronecker product of the per-dimension spectra,
+        // flattened with the last dimension fastest, then sorted in descending order.
+        var engine = AiDotNetEngine.Current;
+        var allEigenvalues = _eigenvalues[0].AsTensor();
+        for (int dim = 1; dim < NumDimensions; dim++)
         {
-            double product = 1.0;
-            int remaining = idx;
-
-            for (int dim = NumDimensions - 1; dim >= 0; dim--)
-            {
-                int dimIdx = remaining % sizes[dim];
-                remaining /= sizes[dim];
-                product *= _eigenvalues[dim][dimIdx];
-            }
-
-            allEigenvalues[idx] = product;
+            var outer = engine.TensorOuter(allEigenvalues, _eigenvalues[dim].AsTensor());
+            allEigenvalues = engine.Reshape(outer, new[] { allEigenvalues.Length * _eigenvalues[dim].Length });
         }
 
-        Array.Sort(allEigenvalues);
-        Array.Reverse(allEigenvalues);
-        return allEigenvalues;
+        return engine.TensorSort(allEigenvalues, -1, descending: true).Values.ToVector();
     }
 
     /// <summary>
@@ -370,28 +274,29 @@ public class GridKernel<T> : IKernelFunction<T>
     /// For Kronecker structure: log|K| = sum over dimensions of (product of other sizes) × sum(log(λ_dim))
     /// </para>
     /// </remarks>
-    public double LogDeterminant()
+    public T LogDeterminant()
     {
         if (!_precomputed || _eigenvalues is null)
         {
             throw new InvalidOperationException("Call Precompute() first.");
         }
 
-        int[] sizes = GridSizes;
-        double logDet = 0;
+        // log|K_1 ⊗ ... ⊗ K_D| = sum_d (N / n_d) × sum(log(max(eig_d, 1e-10)))
+        var eigenvalues = _eigenvalues;
+        var dimensionTerms = new Vector<T>(Enumerable.Range(0, NumDimensions)
+            .Select(dim => ScaledLogEigenvalueSum(eigenvalues[dim], TotalGridPoints / eigenvalues[dim].Length)));
 
-        for (int dim = 0; dim < NumDimensions; dim++)
-        {
-            // Product of all other sizes
-            int otherProduct = TotalGridPoints / sizes[dim];
+        return AiDotNetEngine.Current.Sum(dimensionTerms);
+    }
 
-            // Sum of log eigenvalues for this dimension
-            double sumLogEig = _eigenvalues[dim].Sum(e => Math.Log(Math.Max(e, 1e-10)));
-
-            logDet += otherProduct * sumLogEig;
-        }
-
-        return logDet;
+    /// <summary>
+    /// otherProduct × sum(log(max(eigenvalues, 1e-10))) for one dimension.
+    /// </summary>
+    private T ScaledLogEigenvalueSum(Vector<T> eigenvalues, int otherProduct)
+    {
+        var engine = AiDotNetEngine.Current;
+        var clamped = engine.TensorClampMin(eigenvalues.AsTensor(), _numOps.FromDouble(1e-10));
+        return _numOps.Multiply(_numOps.FromDouble(otherProduct), engine.TensorSum(engine.TensorLog(clamped)));
     }
 
     /// <summary>
@@ -405,7 +310,7 @@ public class GridKernel<T> : IKernelFunction<T>
     /// <b>For Beginners:</b> Convenience factory for the common case of RBF kernels.
     /// </para>
     /// </remarks>
-    public static GridKernel<T> WithRBF(double[][] gridCoordinates, double[]? lengthscales = null)
+    public static GridKernel<T> WithRBF(Vector<T>[] gridCoordinates, double[]? lengthscales = null)
     {
         int d = gridCoordinates.Length;
         lengthscales ??= Enumerable.Repeat(1.0, d).ToArray();
@@ -427,80 +332,14 @@ public class GridKernel<T> : IKernelFunction<T>
     /// <summary>
     /// Simple eigendecomposition for symmetric matrices.
     /// </summary>
-    private (double[] eigenvalues, Matrix<T> eigenvectors) EigenDecomposition(Matrix<T> A)
+    private (Vector<T> eigenvalues, Matrix<T> eigenvectors) EigenDecomposition(Matrix<T> A)
     {
-        int n = A.Rows;
-        var eigenvalues = new double[n];
-        var eigenvectors = new Matrix<T>(n, n);
+        // Symmetric eigendecomposition (Saatçi 2011, Kronecker GP inference). Eigh returns ascending
+        // eigenvalues; flip to the descending order (eigenvector columns flipped to match).
+        var engine = AiDotNetEngine.Current;
+        var (values, vectors) = LinalgDispatch<T>.Eigh(Tensor<T>.FromMatrix(A));
 
-        // Use power iteration with deflation (simple but works for small matrices)
-        var workMatrix = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                workMatrix[i, j] = _numOps.ToDouble(A[i, j]);
-
-        var rand = RandomHelper.CreateSecureRandom();
-
-        for (int k = 0; k < n; k++)
-        {
-            // Power iteration
-            var v = new double[n];
-            for (int i = 0; i < n; i++)
-                v[i] = rand.NextDouble();
-
-            double eigenvalue = 0;
-            for (int iter = 0; iter < 100; iter++)
-            {
-                // w = A * v
-                var w = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    double sum = 0;
-                    for (int j = 0; j < n; j++)
-                        sum += workMatrix[i, j] * v[j];
-                    w[i] = sum;
-                }
-
-                // Eigenvalue estimate
-                double dot = 0, normV = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    dot += v[i] * w[i];
-                    normV += v[i] * v[i];
-                }
-
-                // Guard against zero norm (matrix became zero after deflation)
-                const double minNorm = 1e-15;
-                if (normV < minNorm)
-                {
-                    eigenvalue = 0;
-                    break;
-                }
-                eigenvalue = dot / normV;
-
-                // Normalize w
-                double normW = Math.Sqrt(w.Sum(x => x * x));
-                if (normW < minNorm)
-                {
-                    // w is effectively zero, eigenvalue is zero
-                    eigenvalue = 0;
-                    break;
-                }
-                for (int i = 0; i < n; i++)
-                    v[i] = w[i] / normW;
-            }
-
-            eigenvalues[k] = eigenvalue;
-            for (int i = 0; i < n; i++)
-                eigenvectors[i, k] = _numOps.FromDouble(v[i]);
-
-            // Deflate
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < n; j++)
-                    workMatrix[i, j] -= eigenvalue * v[i] * v[j];
-        }
-
-        return (eigenvalues, eigenvectors);
+        return (engine.TensorFlip(values, new[] { 0 }).ToVector(), engine.TensorFlip(vectors, new[] { 1 }).ToMatrix());
     }
 
     #endregion

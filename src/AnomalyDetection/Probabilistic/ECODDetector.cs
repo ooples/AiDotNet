@@ -73,19 +73,15 @@ public partial class ECODDetector<T> : AnomalyDetectorBase<T>
         // Store sorted values for each feature to compute empirical CDF
         _sortedFeatureValues = new Vector<T>[_nFeatures];
 
+        var (sortedColumns, _) = Engine.TensorSort(AnomalyTensorOps.ToTensor(X), 0, false);
         for (int j = 0; j < _nFeatures; j++)
         {
-            var featureValues = new T[X.Rows];
-            for (int i = 0; i < X.Rows; i++)
-            {
-                featureValues[i] = X[i, j];
-            }
-            Array.Sort(featureValues, (a, b) => NumOps.Compare(a, b));
-            _sortedFeatureValues[j] = new Vector<T>(featureValues);
+            _sortedFeatureValues[j] = Engine.TensorSliceAxis(sortedColumns, 1, j).ToVector();
         }
 
         // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
+        // PyOD scores the training data against the training sample alone
+        var trainingScores = ScoreAnomaliesInternal(X, false);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
@@ -95,62 +91,29 @@ public partial class ECODDetector<T> : AnomalyDetectorBase<T>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
-        return ScoreAnomaliesInternal(X);
+        // PyOD decision_function: the empirical distributions are taken over X_train and X together
+        return ScoreAnomaliesInternal(X, true);
     }
 
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X, bool includeQuery)
     {
         ValidateInput(X);
 
-        var scores = new Vector<T>(X.Rows);
-
-        T eps = NumOps.FromDouble(1e-10);
-        var sortedVals = _sortedFeatureValues ?? throw new InvalidOperationException("_sortedFeatureValues has not been initialized.");
-
-        for (int i = 0; i < X.Rows; i++)
+        var sortedValues = _sortedFeatureValues ?? throw new InvalidOperationException("Model not properly fitted.");
+        if (X.Columns != _nFeatures)
         {
-            T combinedScore = NumOps.Zero;
-
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                T value = X[i, j];
-
-                // Compute empirical CDF: F(x) = proportion of values <= x
-                T leftCdf = ComputeECDF(value, sortedVals[j]);
-                T rightCdf = NumOps.Subtract(NumOps.One, leftCdf);
-
-                // Use the minimum of left and right tail probabilities
-                T tailProb = NumOps.LessThan(leftCdf, rightCdf) ? leftCdf : rightCdf;
-
-                // Avoid log(0) by clamping
-                if (NumOps.LessThan(tailProb, eps)) tailProb = eps;
-
-                // Negative log probability (higher = more anomalous)
-                combinedScore = NumOps.Subtract(combinedScore, NumOps.Log(tailProb));
-            }
-
-            scores[i] = combinedScore;
+            throw new ArgumentException(
+                $"Input has {X.Columns} features, but model was fitted with {_nFeatures} features.",
+                nameof(X));
         }
 
-        return scores;
-    }
-
-    private T ComputeECDF(T value, Vector<T> sortedValues)
-    {
-        // Linear search for count of values <= value (sorted array)
-        int left = 0;
-        int right = sortedValues.Length - 1;
-
-        while (left <= right)
-        {
-            int mid = (left + right) / 2;
-            if (!NumOps.GreaterThan(sortedValues[mid], value))
-                left = mid + 1;
-            else
-                right = mid - 1;
-        }
-
-        // CDF = (number of values <= x) / n
-        return NumOps.FromDouble((double)left / sortedValues.Length);
+        // Tail terms U_left = -log F_left, U_right = -log F_right, and the skewness-selected tail
+        // U_skew = U_left where the feature is left-skewed, U_right where right-skewed (both when unskewed)
+        var engine = Engine;
+        var (left, right, skewLeft, skewRight) = AnomalyTensorOps.EcdfTails(sortedValues, AnomalyTensorOps.ToTensor(X), includeQuery);
+        var skew = engine.TensorAdd(AnomalyTensorOps.MultiplyRow(left, skewLeft), AnomalyTensorOps.MultiplyRow(right, skewRight));
+        // O = max(U_left, U_right, U_skew) per feature, summed over the features (PyOD ECOD)
+        var outlyingness = engine.TensorMax(engine.TensorMax(left, right), skew);
+        return engine.ReduceSum(outlyingness, new[] { 1 }, false).ToVector();
     }
 }

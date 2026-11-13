@@ -1,6 +1,7 @@
 name: Layer factory architecture contracts
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/workflows/layer-factory-architecture.yml'
       - 'src/Helpers/LayerHelper*.cs'
@@ -11,6 +12,7 @@ permissions:
   contents: read
 jobs:
   audit:
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

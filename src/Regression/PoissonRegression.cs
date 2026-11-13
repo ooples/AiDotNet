@@ -127,30 +127,26 @@ public partial class PoissonRegression<T> : RegressionBase<T>
         // Poisson requires positive targets. Shift if needed and store the shift
         // so we can adjust predictions back.
         _yShift = NumOps.Zero;
-        double minY = double.MaxValue;
-        for (int i = 0; i < y.Length; i++)
+        T minY = Engine.TensorMinValue(y.AsTensor());
+        if (NumOps.LessThanOrEquals(minY, NumOps.Zero))
         {
-            double yi = NumOps.ToDouble(y[i]);
-            if (yi < minY) minY = yi;
-        }
-        if (minY <= 0)
-        {
-            _yShift = NumOps.FromDouble(Math.Abs(minY) + 1.0);
-            var yShifted = new Vector<T>(y.Length);
-            for (int i = 0; i < y.Length; i++)
-                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + NumOps.ToDouble(_yShift));
-            y = yShifted;
+            _yShift = NumOps.Add(NumOps.Abs(minY), NumOps.One);
+            y = RegressionEngineOps2.AddScalar(y, _yShift);
         }
 
         int numFeatures = x.Columns;
         Coefficients = new Vector<T>(numFeatures);
         // Initialize intercept to log(mean(y)) for better convergence
-        double meanY = 0;
-        for (int i = 0; i < y.Length; i++) meanY += NumOps.ToDouble(y[i]);
-        meanY /= y.Length;
-        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, MinSafeValue)));
+        T meanY = Engine.Mean(y);
+        T minSafe = NumOps.FromDouble(MinSafeValue);
+        Intercept = NumOps.Log(NumOps.GreaterThan(meanY, minSafe) ? meanY : minSafe);
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
+
+        // Ridge regularization added to the diagonal for numerical stability (loop invariant)
+        var minRegularization = MinSafeValue;
+        var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
+        var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -165,13 +161,7 @@ public partial class PoissonRegression<T> : RegressionBase<T>
 
             // Add ridge regularization to ensure numerical stability
             // This adds a small value to the diagonal to prevent singularity
-            var minRegularization = MinSafeValue;
-            var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
-            var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
-            for (int i = 0; i < xTwx.Rows; i++)
-            {
-                xTwx[i, i] = NumOps.Add(xTwx[i, i], effectiveStrength);
-            }
+            xTwx = RegressionEngineOps2.AddDiagonal(xTwx, effectiveStrength);
 
             Vector<T> newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, _options.DecompositionType);
 
@@ -189,16 +179,7 @@ public partial class PoissonRegression<T> : RegressionBase<T>
             // nan. when we hit that, stop iterating with the last known-good
             // coefficients rather than overwriting them — this mirrors how
             // statsmodels' glm halts on a "linear algebra error".
-            bool hasBadEntry = false;
-            for (int i = 0; i < newCoefficients.Length; i++)
-            {
-                double v = NumOps.ToDouble(newCoefficients[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v))
-                {
-                    hasBadEntry = true;
-                    break;
-                }
-            }
+            bool hasBadEntry = !RegressionEngineOps2.AllFinite(newCoefficients);
             if (hasBadEntry)
                 break;
 
@@ -207,7 +188,7 @@ public partial class PoissonRegression<T> : RegressionBase<T>
                 break;
             }
 
-            Coefficients = new Vector<T>([.. newCoefficients.Take(numFeatures)]);
+            Coefficients = newCoefficients.GetSubVector(0, numFeatures);
             Intercept = newCoefficients[numFeatures];
         }
     }
@@ -234,12 +215,8 @@ public partial class PoissonRegression<T> : RegressionBase<T>
     {
         var linearPredictor = x.Multiply(coefficients);
         // Clamp linear predictor to prevent exp() overflow
-        return linearPredictor.Transform(v =>
-        {
-            double d = NumOps.ToDouble(v);
-            d = Math.Max(-20.0, Math.Min(20.0, d)); // exp(20) ≈ 5e8, safe range
-            return NumOps.FromDouble(Math.Exp(d));
-        });
+        // exp(20) ≈ 5e8, safe range
+        return Engine.Exp(Engine.Clamp(linearPredictor, NumOps.FromDouble(-20.0), NumOps.FromDouble(20.0)));
     }
 
     /// <summary>
@@ -284,17 +261,12 @@ public partial class PoissonRegression<T> : RegressionBase<T>
     private static Vector<T> ComputeWorkingResponse(Matrix<T> x, Vector<T> y, Vector<T> mu, Vector<T> coefficients)
     {
         var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         Vector<T> eta = x.Multiply(coefficients);
         // Guard against near-zero mu to prevent division by zero (NaN poisoning)
-        var safeRatio = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            double muVal = ops.ToDouble(mu[i]);
-            double yVal = ops.ToDouble(y[i]);
-            double safeMu = Math.Max(muVal, MinSafeValue);
-            safeRatio[i] = ops.FromDouble((yVal - safeMu) / safeMu);
-        }
-        return eta.Add(safeRatio);
+        var safeMu = RegressionEngineOps2.ClampMin(mu, ops.FromDouble(MinSafeValue));
+        var safeRatio = engine.Divide(engine.Subtract(y, safeMu), safeMu);
+        return engine.Add(eta, safeRatio);
     }
 
     /// <summary>
@@ -341,21 +313,14 @@ public partial class PoissonRegression<T> : RegressionBase<T>
     public override Vector<T> Predict(Matrix<T> x)
     {
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
-        Vector<T> coefficientsWithIntercept = new(Coefficients.Length + 1);
-
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            coefficientsWithIntercept[i] = Coefficients[i];
-        }
-        coefficientsWithIntercept[Coefficients.Length] = Intercept;
+        Vector<T> coefficientsWithIntercept = RegressionEngineOps2.Append(Coefficients, Intercept);
 
         var predictions = PredictMean(xWithIntercept, coefficientsWithIntercept);
 
         // Undo the y-shift applied during training
         if (NumOps.GreaterThan(_yShift, NumOps.Zero))
         {
-            for (int i = 0; i < predictions.Length; i++)
-                predictions[i] = NumOps.Subtract(predictions[i], _yShift);
+            predictions = RegressionEngineOps2.AddScalar(predictions, NumOps.Negate(_yShift));
         }
 
         return predictions;
