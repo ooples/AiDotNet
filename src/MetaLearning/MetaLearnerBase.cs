@@ -203,7 +203,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             throw new ArgumentException(
                 $"{GetType().Name} has no inner-loop gradient step for an inner optimizer to take; leave InnerOptimizer null.",
                 nameof(innerOptimizer));
-        if (metaOptimizer is not null && ReferenceEquals(metaOptimizer, innerOptimizer))
+        if (metaOptimizer is not null && (object)metaOptimizer == (object?)innerOptimizer)
             throw new ArgumentException(
                 "MetaOptimizer and InnerOptimizer must be separate instances: every adaptation resets the inner " +
                 "optimizer's state, which would erase the outer optimizer's moments.",
