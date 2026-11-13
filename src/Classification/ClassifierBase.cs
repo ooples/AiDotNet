@@ -531,7 +531,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <remarks>
     /// Counted in int: a sum of one-hot rows in T stops growing at 2048 for Half.
     /// </remarks>
-    private protected Tensor<int> CountClasses(Vector<T> y)
+    internal Tensor<int> CountClasses(Vector<T> y)
     {
         if (y.Length == 0 || NumClasses == 0)
         {
@@ -540,6 +540,70 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
 
         var shifted = Engine.TensorAddScalar(GetClassIndexTensor(y), 1);
         return Engine.TensorBinCount(shifted, NumClasses + 1).Slice(0, 1, NumClasses + 1);
+    }
+
+    /// <summary>
+    /// <paramref name="votes"/> plus one vote per entry of <paramref name="predictions"/> for its class
+    /// (labels that are not known classes get no vote). The votes stay in int: a sum of one-hot rows
+    /// in T stops growing at 2048 for Half.
+    /// </summary>
+    /// <param name="votes">The running [predictions.Length, NumClasses] vote counts.</param>
+    /// <param name="predictions">The predicted label of every row.</param>
+    /// <returns>The updated vote counts.</returns>
+    internal Tensor<int> AddClassVotes(Tensor<int> votes, Vector<T> predictions)
+    {
+        if (predictions.Length == 0 || NumClasses == 0)
+        {
+            return votes;
+        }
+
+        var shifted = Engine.TensorAddScalar(GetClassIndexTensor(predictions), 1);
+        return Engine.TensorAdd(votes, Engine.TensorOneHot<int>(shifted, NumClasses + 1).Slice(1, 1, NumClasses + 1));
+    }
+
+    /// <summary>
+    /// p-norms (sum |x|^p)^(1/p) along <paramref name="axis"/>, computed as s * (sum (|x| / s)^p)^(1/p)
+    /// with s = max |x| along that axis, so that the powers cannot overflow (a Half square overflows
+    /// once |x| exceeds 255); all-zero slices get norm 0.
+    /// </summary>
+    /// <param name="values">The values.</param>
+    /// <param name="axis">The axis to reduce.</param>
+    /// <param name="p">The norm order (2 for Euclidean).</param>
+    /// <returns>The norms, with <paramref name="axis"/> removed.</returns>
+    internal static Tensor<T> ScaledNorms(Tensor<T> values, int axis, double p)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var magnitudes = engine.TensorAbs(values);
+        var scale = engine.ReduceMax(magnitudes, new[] { axis }, true);
+        var ones = new Tensor<T>(scale.Shape.ToArray());
+        engine.TensorFill(ones, numOps.One);
+        var safeScale = engine.TensorWhere(engine.TensorGreaterThan(scale, numOps.Zero), scale, ones);
+        var unit = engine.TensorDivide(magnitudes, engine.TensorBroadcastTo(safeScale, values.Shape.ToArray()));
+        var powered = p == 2.0 ? engine.TensorMultiply(unit, unit) : engine.TensorPower(unit, numOps.FromDouble(p));
+        var sums = engine.ReduceSum(powered, new[] { axis }, false);
+        var norms = p == 2.0 ? engine.TensorSqrt(sums) : engine.TensorPower(sums, numOps.FromDouble(1.0 / p));
+        return engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// The [y.Length, NumClasses] class membership with every entry divided by its class count (computed
+    /// in double), so that weights^T * X gives the class means (zero for empty classes) without forming
+    /// per-class sums, which overflow Half past 65504.
+    /// </summary>
+    /// <param name="y">The label vector.</param>
+    /// <returns>The membership weights.</returns>
+    private protected Tensor<T> ClassMeanWeights(Vector<T> y)
+    {
+        var engine = Engine;
+        if (y.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<T>(new[] { y.Length, NumClasses });
+        }
+
+        var inverseCounts = engine.TensorReciprocal(engine.TensorClampMin(CountClasses(y), 1).Cast<double>()).Cast<T>();
+        return engine.TensorMultiply(ClassMembership(y),
+            engine.TensorBroadcastTo(inverseCounts.Reshape(1, NumClasses), new[] { y.Length, NumClasses }));
     }
 
     /// <summary>

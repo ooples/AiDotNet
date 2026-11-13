@@ -704,9 +704,10 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
             return new Vector<T>(0);
         }
 
-        // Sum of (pred - actual) / (pred * (1 - pred) + 1e-15) over all samples and labels
+        // Mean of (pred - actual) / (pred * (1 - pred) + 1e-15) over all samples and labels, divided
+        // before summing (the sum and the rows x labels x parameters count overflow Half past 65504)
         var engine = Engine;
-        T totalGradient = NumOps.Zero;
+        T meanGradient = NumOps.Zero;
         if (input.Rows > 0 && NumLabels > 0)
         {
             var pred = LeadingBlock(Tensor<T>.FromMatrix(predictions), input.Rows, NumLabels);
@@ -714,13 +715,12 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
             var variance = engine.TensorMultiply(pred, engine.ScalarMinusTensor(NumOps.One, pred));
             var deriv = engine.TensorDivide(engine.TensorSubtract(pred, actual),
                 engine.TensorAddScalar(variance, Tolerance(1e-15)));
-            totalGradient = engine.TensorSum(deriv);
+            meanGradient = engine.TensorSum(engine.TensorMultiplyScalar(deriv, NumOps.FromDouble(1.0 / ((double)input.Rows * NumLabels))));
         }
 
         // Average gradient, spread evenly over every parameter
-        T scale = NumOps.FromDouble((double)input.Rows * NumLabels * parameters.Length);
         var gradients = new Vector<T>(parameters.Length);
-        engine.TensorFill(gradients.AsTensor(), NumOps.Divide(totalGradient, scale));
+        engine.TensorFill(gradients.AsTensor(), NumOps.FromDouble(NumOps.ToDouble(meanGradient) / parameters.Length));
         return gradients;
     }
 

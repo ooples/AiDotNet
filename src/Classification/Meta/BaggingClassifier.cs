@@ -226,11 +226,12 @@ public partial class BaggingClassifier<T> : MetaClassifierBase<T>
         }
 
         // Count votes from each estimator, using the same feature indices used during training
-        var votes = new Tensor<T>(new[] { input.Rows, NumClasses });
+        // (in int: a sum of T one-hot rows stops growing at 2048 for Half)
+        var votes = new Tensor<int>(new[] { input.Rows, NumClasses });
         for (int e = 0; e < _estimators.Length; e++)
         {
             var pred = _estimators[e].Predict(SelectColumns(input, _featureIndicesPerEstimator[e]));
-            votes = Engine.TensorAdd(votes, ClassMembership(pred));
+            votes = AddClassVotes(votes, pred);
         }
 
         // Class with most votes (first class wins ties)

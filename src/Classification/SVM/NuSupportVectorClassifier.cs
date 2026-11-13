@@ -231,6 +231,13 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
     }
 
     /// <summary>
+    /// Multipliers above this are support vectors. Not raised to Half's smallest normal value: every
+    /// alpha is at most 1 / n and each class's alphas sum to nu / 2, so a raised threshold would drop
+    /// whole classes (or every sample) from the support set when nu or 1 / n is small.
+    /// </summary>
+    private T SupportVectorThreshold => NumOps.FromDouble(1e-10);
+
+    /// <summary>
     /// Builds a starting point satisfying both nu-SVC equality constraints.
     /// </summary>
     /// <remarks>
@@ -284,7 +291,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var active = IndicesAbove(_alphas, Tolerance(1e-10));
+        var active = IndicesAbove(_alphas, SupportVectorThreshold);
         var coefficients = Engine.Multiply(SelectElements(_alphas, active), SelectElements(_yTrain, active));
         var train = active.Length == 0 ? new Matrix<T>(0, _xTrain.Columns) : _xTrain.GetRows(active);
         return KernelDecisions(input, train, coefficients, NumOps.Negate(_rho)).GetColumn(0);
@@ -300,7 +307,7 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
             throw new InvalidOperationException("Training data has not been initialized.");
         }
 
-        var svIndices = IndicesAbove(_alphas, Tolerance(1e-10));
+        var svIndices = IndicesAbove(_alphas, SupportVectorThreshold);
         if (svIndices.Length > 0)
         {
             var supportVectors = _xTrain.GetRows(svIndices);

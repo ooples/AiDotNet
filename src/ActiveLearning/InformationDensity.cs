@@ -215,15 +215,14 @@ public class InformationDensity<T> : IActiveLearningStrategy<T>
         var engine = AiDotNetEngine.Current;
         int n = rows.Shape[0];
         var shape = new[] { count, n };
-        var dotProduct = ActiveLearningEngineOps.DotBlock(rows, start, count);
-
         var blockNorms = engine.TensorSlice(norms, new[] { start }, new[] { count }).Reshape(new[] { count, 1 });
         var normProduct = engine.TensorMultiply(
             engine.TensorBroadcastTo(blockNorms, shape),
             engine.TensorBroadcastTo(norms.Reshape(new[] { 1, n }), shape));
 
         // Normalize from [-1, 1] to [0, 1]; pairs with a (near) zero norm get similarity 0
-        var cosineSim = engine.TensorDivide(dotProduct, normProduct);
+        // (dot products of unit rows: a.b and |a| |b| overflow in Half)
+        var cosineSim = ActiveLearningEngineOps.CosineBlock(rows, norms, start, count);
         var normalized = engine.TensorDivideScalar(engine.TensorAddScalar(cosineSim, _numOps.One), _numOps.FromDouble(2.0));
         var degenerate = engine.TensorLessThan(normProduct, ActiveLearningEngineOps.Tolerance<T>(1e-10));
         return engine.TensorWhere(degenerate, new Tensor<T>(shape), normalized);
@@ -235,8 +234,10 @@ public class InformationDensity<T> : IActiveLearningStrategy<T>
     private Tensor<T> ComputeRBFSimilarity(Tensor<T> rows, int start, int count)
     {
         var engine = AiDotNetEngine.Current;
-        var dist = ActiveLearningEngineOps.DistanceBlock(rows, start, count);
-        return engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorMultiply(dist, dist), _numOps.FromDouble(-_rbfGamma)));
+        // exp(-sign(gamma) (sqrt(|gamma|) d)^2): scaling before squaring keeps d^2 from overflowing in Half
+        var scaled = engine.TensorMultiplyScalar(ActiveLearningEngineOps.DistanceBlock(rows, start, count), _numOps.FromDouble(Math.Sqrt(Math.Abs(_rbfGamma))));
+        var exponent = engine.TensorMultiplyScalar(engine.TensorMultiply(scaled, scaled), _numOps.FromDouble(_rbfGamma < 0 ? 1.0 : -1.0));
+        return engine.TensorExp(exponent);
     }
 
     /// <summary>

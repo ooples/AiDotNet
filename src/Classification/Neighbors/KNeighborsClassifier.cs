@@ -242,14 +242,15 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
 
         var diff = engine.TensorSubtract(queries.Reshape(rows, 1, d), train.Reshape(1, n, d));
         int[] featureAxis = { 2 };
+
+        // Minkowski and Euclidean norms are scaled by the largest |difference| so that the powers
+        // cannot overflow (a Half square overflows once a difference exceeds 255)
         return Options.Metric switch
         {
             DistanceMetric.Manhattan => engine.ReduceSum(engine.TensorAbs(diff), featureAxis, false),
-            DistanceMetric.Minkowski => engine.TensorPower(
-                engine.ReduceSum(engine.TensorPower(engine.TensorAbs(diff), NumOps.FromDouble(Options.P)), featureAxis, false),
-                NumOps.FromDouble(1.0 / Options.P)),
+            DistanceMetric.Minkowski => ScaledNorms(diff, 2, Options.P),
             DistanceMetric.Chebyshev => engine.TensorClampMin(engine.ReduceMax(engine.TensorAbs(diff), featureAxis, false), NumOps.Zero),
-            _ => engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), featureAxis, false))
+            _ => ScaledNorms(diff, 2, 2.0)
         };
     }
 
@@ -262,11 +263,16 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         int rows = queries.Shape[0];
         int n = train.Shape[0];
 
-        var dot = engine.TensorMatMul(queries, engine.TensorTranspose(train));
-        var queryNorms = engine.ReduceSum(engine.TensorMultiply(queries, queries), new[] { 1 }, true);
-        var trainNorms = engine.ReduceSum(engine.TensorMultiply(train, train), new[] { 1 }, false).Reshape(1, n);
-        var denominator = engine.TensorSqrt(engine.TensorMultiply(queryNorms, trainNorms));
-        var similarity = engine.TensorClamp(engine.TensorDivide(dot, denominator), NumOps.FromDouble(-1.0), NumOps.One);
+        // Similarity as the dot product of unit rows: a.b and |a|^2 |b|^2 overflow in Half. The norm
+        // product may still overflow to infinity, which only matters for the near-zero test below.
+        var queryNorms = ScaledNorms(queries, 1, 2.0).Reshape(rows, 1);
+        var trainNorms = ScaledNorms(train, 1, 2.0).Reshape(1, n);
+        var unitQueries = engine.TensorDivide(queries, engine.TensorBroadcastTo(NonZero(queryNorms), queries.Shape.ToArray()));
+        var unitTrain = engine.TensorDivide(train, engine.TensorBroadcastTo(NonZero(trainNorms.Reshape(n, 1)), train.Shape.ToArray()));
+        var dot = engine.TensorMatMul(unitQueries, engine.TensorTranspose(unitTrain));
+        var denominator = engine.TensorMultiply(
+            engine.TensorBroadcastTo(queryNorms, new[] { rows, n }), engine.TensorBroadcastTo(trainNorms, new[] { rows, n }));
+        var similarity = engine.TensorClamp(dot, NumOps.FromDouble(-1.0), NumOps.One);
         var valid = engine.TensorGreaterThan(denominator, Tolerance(1e-10));
         var zeros = new Tensor<T>(new[] { rows, n });
         return engine.ScalarMinusTensor(NumOps.One, engine.TensorWhere(valid, similarity, zeros));
@@ -285,11 +291,26 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
             return ones;
         }
 
-        // Very close to a training point (distance < 1e-10) gets a large weight, otherwise 1 / distance
+        // As scikit-learn's weights='distance': in a row with neighbors at (near) zero distance those
+        // neighbors get weight 1 and the others 0. Other rows get 1 / distance, multiplied by the row's
+        // smallest distance (the probabilities are ratios, so this cancels): the weights stay in (0, 1]
+        // instead of overflowing Half (a fixed 1e10 weight was infinity there).
+        var shape = distances.Shape.ToArray();
         var close = engine.TensorLessThan(distances, Tolerance(1e-10));
-        var large = new Tensor<T>(distances.Shape.ToArray());
-        engine.TensorFill(large, NumOps.FromDouble(1e10));
-        return engine.TensorWhere(close, large, engine.TensorDivide(ones, distances));
+        var rowHasClose = engine.TensorGreaterThan(engine.ReduceMax(close, new[] { 1 }, true), NumOps.Zero);
+        var nearest = engine.TensorBroadcastTo(engine.TensorAmin(distances, new[] { 1 }, keepDims: true), shape);
+        var inverse = engine.TensorDivide(nearest, distances);
+        return engine.TensorWhere(engine.TensorBroadcastTo(rowHasClose, shape), close, inverse);
+    }
+
+    /// <summary>
+    /// <paramref name="values"/> with every entry that is not positive replaced by 1.
+    /// </summary>
+    private Tensor<T> NonZero(Tensor<T> values)
+    {
+        var ones = new Tensor<T>(values.Shape.ToArray());
+        Engine.TensorFill(ones, NumOps.One);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(values, NumOps.Zero), values, ones);
     }
 
     /// <inheritdoc/>

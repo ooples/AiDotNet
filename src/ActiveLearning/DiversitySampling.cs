@@ -272,15 +272,17 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
         var avgDist = ComputeAverageNearestNeighborDistance(rows, norms, k: 5);
         var minBandwidth = ActiveLearningEngineOps.Tolerance<T>(1e-10);
         var bandwidth = _numOps.GreaterThan(avgDist, minBandwidth) ? avgDist : minBandwidth;
-        var denominator = _numOps.Multiply(_numOps.Multiply(_numOps.FromDouble(2), bandwidth), bandwidth);
 
+        var minusHalf = _numOps.FromDouble(-0.5);
         var blockRows = ActiveLearningEngineOps.PairwiseBlockRows(numSamples, rows.Shape[1]);
         var densities = new List<Tensor<T>>();
         for (int start = 0; start < numSamples; start += blockRows)
         {
             int count = Math.Min(blockRows, numSamples - start);
             var dist = ComputeDistanceBlock(rows, norms, start, count);
-            var kernel = engine.TensorExp(engine.TensorDivideScalar(engine.TensorNegate(engine.TensorMultiply(dist, dist)), denominator));
+            // exp(-(d / h)^2 / 2): dividing before squaring keeps d^2 and 2 h^2 from overflowing in Half
+            var scaled = engine.TensorDivideScalar(dist, bandwidth);
+            var kernel = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorMultiply(scaled, scaled), minusHalf));
             var others = engine.TensorMaskedFill(kernel, ActiveLearningEngineOps.SelfMask(start, count, numSamples), _numOps.Zero);
             densities.Add(engine.ReduceSum(others, new[] { 1 }, keepDims: false));
         }
@@ -464,11 +466,10 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
         var engine = AiDotNetEngine.Current;
         int numSamples = rows.Shape[0];
         var shape = new[] { count, numSamples };
-        var dotProduct = ActiveLearningEngineOps.DotBlock(rows, start, count);
-
         var norm1 = engine.TensorBroadcastTo(engine.TensorSlice(norms, new[] { start }, new[] { count }).Reshape(new[] { count, 1 }), shape);
         var norm2 = engine.TensorBroadcastTo(norms.Reshape(new[] { 1, numSamples }), shape);
-        var cosineSim = engine.TensorDivide(dotProduct, engine.TensorMultiply(norm1, norm2));
+        // Dot products of unit rows: a.b and |a| |b| overflow in Half
+        var cosineSim = ActiveLearningEngineOps.CosineBlock(rows, norms, start, count);
         var distance = engine.ScalarMinusTensor(_numOps.One, cosineSim);
 
         var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
@@ -504,9 +505,7 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     /// <returns>A [1, featureSize] tensor.</returns>
     private Tensor<T> ComputeCentroid(Tensor<T> rows, int numSamples)
     {
-        var engine = AiDotNetEngine.Current;
-        var sum = engine.ReduceSum(rows, new[] { 0 }, keepDims: true);
-        return engine.TensorDivideScalar(sum, _numOps.FromDouble(numSamples));
+        return ActiveLearningEngineOps.MeanRow(rows);
     }
 
     /// <summary>
@@ -516,20 +515,11 @@ public class DiversitySampling<T> : IActiveLearningStrategy<T>
     {
         var engine = AiDotNetEngine.Current;
         int numSamples = rows.Shape[0];
-        int featureSize = rows.Shape[1];
-        Tensor<T> distSq;
-        if (featureSize == 0)
-        {
-            distSq = new Tensor<T>(new[] { numSamples });
-        }
-        else
-        {
-            var diff = engine.TensorSubtract(rows, engine.TensorBroadcastTo(centroid, new[] { numSamples, featureSize }));
-            distSq = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
-        }
 
-        // argmin over samples with distSq < MaxValue == argmax of -distSq above -MaxValue
-        var negated = engine.TensorNegate(distSq).Reshape(new[] { 1, numSamples });
+        // Distances rather than squared distances: same order, and they do not overflow in Half.
+        // argmin over samples with dist < MaxValue == argmax of -dist above -MaxValue
+        var dist = ActiveLearningEngineOps.DistancesToPoint(rows, centroid);
+        var negated = engine.TensorNegate(dist).Reshape(new[] { 1, numSamples });
         var nearest = ActiveLearningEngineOps.ArgMaxAbove(negated, new bool[numSamples], _numOps.Negate(_numOps.MaxValue));
         return nearest < 0 ? 0 : nearest;
     }

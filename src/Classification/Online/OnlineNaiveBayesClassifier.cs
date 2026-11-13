@@ -251,8 +251,9 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
             T negHalf = NumOps.FromDouble(-0.5);
             var logNorm = engine.TensorMultiplyScalar(
                 engine.TensorLog(engine.TensorMultiplyScalar(variance, NumOps.FromDouble(2 * Math.PI))), negHalf);
-            var quadratic = engine.TensorMultiplyScalar(
-                engine.TensorDivide(engine.TensorMultiply(diff, diff), variance), negHalf);
+            // ((x - mean) / sd)^2: dividing before squaring keeps (x - mean)^2 from overflowing Half
+            var z = engine.TensorDivide(diff, engine.TensorSqrt(variance));
+            var quadratic = engine.TensorMultiplyScalar(engine.TensorMultiply(z, z), negHalf);
             logP = engine.TensorAdd(logNorm, quadratic);
         }
         else

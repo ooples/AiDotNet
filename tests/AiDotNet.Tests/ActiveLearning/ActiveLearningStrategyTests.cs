@@ -797,4 +797,164 @@ public class ActiveLearningStrategyTests
     }
 
     #endregion
+
+    #region Half Overflow Regressions
+
+    private static Tensor<Half> HalfRows(int rows, int columns, params float[] values)
+    {
+        var data = new Vector<Half>(values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            data[i] = (Half)values[i];
+        }
+
+        return new Tensor<Half>(new[] { rows, columns }, data);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ActiveLearningEngineOps_Half_DistancesAndNorms_DoNotOverflow()
+    {
+        // Arrange - |(300, 400)| = 500, but 300^2 = 90000 is past Half's maximum 65504, so the
+        // sum-of-squares distances and norms were infinite.
+        var rows = HalfRows(2, 2, 300f, 400f, 0f, 0f);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        // Act
+        var norms = ActiveLearningEngineOps.RowNorms(rows);
+        var block = ActiveLearningEngineOps.DistanceBlock(rows, 0, 1);
+        var toRow = ActiveLearningEngineOps.DistancesToRow(rows, 1);
+
+        // Assert
+        Assert.Equal(500.0, ops.ToDouble(norms[0]), 6);
+        Assert.Equal(0.0, ops.ToDouble(norms[1]), 6);
+        Assert.Equal(500.0, ops.ToDouble(block[0, 1]), 6);
+        Assert.Equal(500.0, ops.ToDouble(toRow[0]), 6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ActiveLearningEngineOps_Half_CosineOfLargeRows_IsFinite()
+    {
+        // Arrange - the dot product 300 * 600 and the norm product overflow Half; their ratio was
+        // inf / inf = NaN. Same direction gives 1, orthogonal rows give 0.
+        var rows = HalfRows(3, 2, 300f, 0f, 600f, 0f, 0f, 500f);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        // Act
+        var cosine = ActiveLearningEngineOps.CosineBlock(rows, ActiveLearningEngineOps.RowNorms(rows), 0, 1);
+
+        // Assert
+        Assert.Equal(1.0, ops.ToDouble(cosine[0, 0]), 6);
+        Assert.Equal(1.0, ops.ToDouble(cosine[0, 1]), 6);
+        Assert.Equal(0.0, ops.ToDouble(cosine[0, 2]), 6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CoreSetSelection_Half_LargeValues_ScoresDistanceToCenter()
+    {
+        // Arrange - the center (40000 + 39040) / 2 = 39520 was a sum of 79040 (infinite in Half)
+        // divided by 2, and every squared distance 480^2 overflowed as well.
+        var strategy = new CoreSetSelection<Half>();
+        var model = new MockFullModel<Half>(2);
+        var pool = HalfRows(2, 1, 40000f, 39040f);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        // Act
+        var scores = strategy.ComputeInformativenessScores(model, pool);
+
+        // Assert
+        Assert.Equal(480.0, ops.ToDouble(scores[0]), 6);
+        Assert.Equal(480.0, ops.ToDouble(scores[1]), 6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task InformationDensity_Half_RbfWithSmallGamma_KeepsNonzeroDensity()
+    {
+        // Arrange - exp(-gamma * d^2) with gamma = 1e-5 and d = 300 is exp(-0.9), about 0.41, but
+        // d^2 = 90000 overflowed Half, which made the similarity exp(-inf) = 0 and every score 0.
+        var strategy = new InformationDensity<Half>(beta: 1.0,
+            similarityMeasure: InformationDensity<Half>.SimilarityMeasure.RBF, rbfGamma: 1e-5);
+        var model = new MockFullModel<Half>(2);
+        var pool = HalfRows(2, 1, 0f, 300f);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        // Act
+        var scores = strategy.ComputeInformativenessScores(model, pool);
+
+        // Assert - uncertainty (entropy of non-degenerate logits) times a density of about 0.41
+        Assert.True(ops.ToDouble(scores[0]) > 0.0, $"score 0 = {ops.ToDouble(scores[0])}");
+        Assert.True(ops.ToDouble(scores[1]) > 0.0, $"score 1 = {ops.ToDouble(scores[1])}");
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RankedBatchStrategy_Half_LargeValues_NormalizedDistanceIsFinite()
+    {
+        // Arrange - |300 - 290| / (2 * 300) = 1/60. The bound (2 * 300)^2 = 360000 overflowed Half,
+        // so the diversity was 10 / inf = 0 and every candidate counted as a duplicate.
+        var strategy = new AiDotNet.ActiveLearning.Batch.RankedBatchStrategy<Half, Vector<Half>, Vector<Half>>();
+        var a = new Vector<Half>(new[] { (Half)300f });
+        var b = new Vector<Half>(new[] { (Half)290f });
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        // Act
+        double diversity = ops.ToDouble(strategy.ComputeDiversity(a, b));
+
+        // Assert
+        Assert.Equal(1.0 / 60.0, diversity, 3);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task PredictionStabilityCriterion_Half_LargePredictions_CorrelationIsOne()
+    {
+        // Arrange - identical predictions correlate perfectly (stability 1). The centered sums of
+        // squares (300^2 + 300^2) overflowed Half, so the correlation was inf / inf = NaN.
+        var criterion = new AiDotNet.ActiveLearning.StoppingCriteria.PredictionStabilityCriterion<Half>(
+            0.9, 1, AiDotNet.ActiveLearning.StoppingCriteria.StabilityMeasure.Correlation);
+        var predictions = new Vector<Half>(new[] { (Half)0f, (Half)300f, (Half)600f });
+        var context = new AiDotNet.ActiveLearning.Interfaces.ActiveLearningContext<Half>
+        {
+            PreviousPredictions = predictions,
+            CurrentPredictions = predictions
+        };
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        // Act
+        criterion.ShouldStop(context);
+
+        // Assert
+        Assert.Equal(1.0, ops.ToDouble(criterion.CurrentStability), 2);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task QueryByCommittee_Half_MoreThan2048Votes_VoteFractionsStayExact()
+    {
+        // Arrange - 2250 of 3000 members vote for class 0. Summing one-hot votes in Half stops at
+        // 2048, which gave 2048 / 3000 instead of 0.75.
+        var predictions = new List<Tensor<Half>>();
+        for (int m = 0; m < 3000; m++)
+        {
+            predictions.Add(m < 2250 ? HalfRows(1, 2, 1f, 0f) : HalfRows(1, 2, 0f, 1f));
+        }
+
+        var votedClasses = new int[3000];
+        for (int m = 2250; m < 3000; m++)
+        {
+            votedClasses[m] = 1;
+        }
+
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+
+        // Act
+        var fractions = QueryByCommittee<Half>.VoteFractions(predictions, 1, 2, 3000);
+        var shares = AiDotNet.ActiveLearning.Strategies.Committee.QueryByCommitteeStrategy<Half, Vector<Half>, Vector<Half>>
+            .VoteShares(votedClasses, 2, 3000);
+
+        // Assert
+        Assert.Equal(0.75, ops.ToDouble(fractions[0, 0]), 6);
+        Assert.Equal(0.25, ops.ToDouble(fractions[0, 1]), 6);
+        Assert.Equal(0.75, ops.ToDouble(shares[0]), 6);
+        Assert.Equal(0.25, ops.ToDouble(shares[1]), 6);
+    }
+
+    #endregion
 }
+

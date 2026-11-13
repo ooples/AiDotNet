@@ -187,20 +187,19 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
         var prefixB = b.Length == length ? b : b.GetSubVector(0, length);
 
         var diff = engine.Subtract(prefixA, prefixB);
-        T sumSquared = engine.DotProduct(diff, diff);
 
         // Estimate max distance based on value magnitudes
         var maxVal = engine.Max(engine.Abs(prefixA), engine.Abs(prefixB));
         var maxDiff = engine.Multiply(maxVal, NumOps.FromDouble(2));
-        T maxPossible = engine.DotProduct(maxDiff, maxDiff);
 
-        if (NumOps.Compare(maxPossible, NumOps.Zero) <= 0)
+        // Both norms at once, scaled so that the squares cannot overflow (Half overflows past 255)
+        var norms = ActiveLearningEngineOps.ScaledNorms(ActiveLearningEngineOps.StackVectors(new[] { diff, maxDiff }), 1);
+        var distance = norms.GetFlat(0);
+        var maxDistance = norms.GetFlat(1);
+        if (NumOps.Compare(maxDistance, NumOps.Zero) <= 0)
         {
             return NumOps.One;
         }
-
-        var distance = NumOps.Sqrt(sumSquared);
-        var maxDistance = NumOps.Sqrt(maxPossible);
 
         // Normalize to [0, 1]
         return NumOps.Divide(distance, NumOps.Add(maxDistance, ActiveLearningEngineOps.Tolerance<T>(1e-10)));

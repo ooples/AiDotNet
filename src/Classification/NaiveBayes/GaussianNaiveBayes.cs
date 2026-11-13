@@ -126,19 +126,27 @@ public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
 
         // Per-class sample counts (in int: a sum of one-hot rows in T stops at 2048 for Half) and feature sums
         // via the one-hot membership matrix
-        var membership = ClassMembership(y);
-        var membershipT = engine.TensorTranspose(membership);
+        // Each membership entry is divided by its class count (in double) before the sums, which then
+        // cannot overflow Half
         var features = Tensor<T>.FromMatrix(x);
-        var counts = CountsToValues(engine.TensorClampMin(CountClasses(y), 1)).Reshape(NumClasses, 1);
+        var weightsT = engine.TensorTranspose(ClassMeanWeights(y));
 
         // Mean of each feature (zero for classes with no samples)
-        var means = engine.TensorDivide(engine.TensorMatMul(membershipT, features), counts);
+        var means = engine.TensorMatMul(weightsT, features);
 
-        // Variance of each feature around its class mean (using n, not n-1, for sklearn compatibility)
+        // Variance of each feature around its class mean (using n, not n-1, for sklearn compatibility).
+        // The deviations are divided by their largest magnitude per feature before squaring (a Half
+        // square overflows past 255) and the scale is multiplied back twice afterwards.
         var sampleMeans = engine.TensorGather(means, GetClassIndexTensor(y), 0);
         var centered = engine.TensorSubtract(features, sampleMeans);
-        var variances = engine.TensorDivide(
-            engine.TensorMatMul(membershipT, engine.TensorMultiply(centered, centered)), counts);
+        var scale = engine.ReduceMax(engine.TensorAbs(centered), new[] { 0 }, true);
+        var ones = new Tensor<T>(scale.Shape.ToArray());
+        engine.TensorFill(ones, NumOps.One);
+        var safeScale = engine.TensorWhere(engine.TensorGreaterThan(scale, NumOps.Zero), scale, ones);
+        var unit = engine.TensorDivide(centered, engine.TensorBroadcastTo(safeScale, centered.Shape.ToArray()));
+        var wideScale = engine.TensorBroadcastTo(safeScale, new[] { NumClasses, safeScale.Shape[1] });
+        var variances = engine.TensorMultiply(engine.TensorMultiply(
+            engine.TensorMatMul(weightsT, engine.TensorMultiply(unit, unit)), wideScale), wideScale);
 
         // Apply minimum variance to prevent division by zero (classes with no samples get exactly the minimum)
         _means = means.ToMatrix();
@@ -184,6 +192,7 @@ public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
         var means = Tensor<T>.FromMatrix(_means).Reshape(1, NumClasses, NumFeatures);
         var variances = Tensor<T>.FromMatrix(_variances).Reshape(1, NumClasses, NumFeatures);
         var logNormalizer = engine.TensorAddScalar(engine.TensorLog(variances), _log2Pi);
+        var standardDeviations = engine.TensorSqrt(variances);
         var features = Tensor<T>.FromMatrix(input);
         if (input.Columns != NumFeatures)
         {
@@ -198,7 +207,9 @@ public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
             int rows = Math.Min(batch, n - start);
             var block = features.Slice(0, start, start + rows).Reshape(rows, 1, NumFeatures);
             var diff = engine.TensorSubtract(block, means);
-            var terms = engine.TensorAdd(engine.TensorDivide(engine.TensorMultiply(diff, diff), variances), logNormalizer);
+            // ((x - mean) / sd)^2: dividing before squaring keeps (x - mean)^2 from overflowing Half
+            var z = engine.TensorDivide(diff, standardDeviations);
+            var terms = engine.TensorAdd(engine.TensorMultiply(z, z), logNormalizer);
             blocks.Add(engine.TensorMultiplyScalar(engine.ReduceSum(terms, new[] { 2 }, false), negHalf));
         }
 

@@ -112,35 +112,35 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         int n = features.Rows;
         int k = _options.KNeighbors;
         int width = k + 1;
-        T s = NumOps.FromDouble(_options.Smoothing);
+        double s = _options.Smoothing;
 
         // Neighbor label counts per sample (k nearest neighbors, excluding self) and the sample's own labels
         var neighborCounts = CountNeighborLabels(NearestNeighbors(features, k, excludeSelf: true));
-        var hasLabel = PositiveLabels(labels);
+        var hasLabel = ZeroOneToInt(PositiveLabels(labels));
 
-        // C[l, j] = count of samples with (or without) label l having j neighbors with label l
-        var countPos = new Tensor<T>(new[] { NumLabels * width });
-        var countNeg = new Tensor<T>(new[] { NumLabels * width });
-        var totalPos = new Tensor<T>(new[] { NumLabels });
+        // C[l, j] = count of samples with (or without) label l having j neighbors with label l, counted
+        // in int (sums of T ones stop at 2048 for Half): codes of samples without the label are shifted
+        // past the first table so that one bin count fills both tables
+        int table = NumLabels * width;
+        var countPos = new Tensor<int>(new[] { table });
+        var countNeg = new Tensor<int>(new[] { table });
+        var totalPos = new Tensor<int>(new[] { NumLabels });
         if (n > 0 && NumLabels > 0)
         {
             var codes = CountCodes(neighborCounts, width).Reshape(n * NumLabels);
-            var positive = hasLabel.Reshape(n * NumLabels);
-            var negative = engine.ScalarMinusTensor(NumOps.One, positive);
-            countPos = engine.TensorScatterAdd(countPos, codes, positive, 0);
-            countNeg = engine.TensorScatterAdd(countNeg, codes, negative, 0);
+            var negativeOffset = engine.TensorMultiplyScalar(engine.ScalarMinusTensor(1, hasLabel.Reshape(n * NumLabels)), table);
+            var counts = engine.TensorBinCount(engine.TensorAdd(codes, negativeOffset), 2 * table);
+            countPos = counts.Slice(0, 0, table);
+            countNeg = counts.Slice(0, table, 2 * table);
             totalPos = engine.ReduceSum(hasLabel, new[] { 0 }, false);
         }
 
-        var totalNeg = engine.ScalarMinusTensor(NumOps.FromDouble(n), totalPos);
+        var totalNeg = engine.ScalarMinusTensor(n, totalPos);
 
-        // Compute prior and conditional probabilities with smoothing
-        T two = NumOps.FromDouble(2);
-        T conditionalSmoothing = NumOps.Multiply(s, NumOps.FromDouble(width));
-        _priorProbs = engine.TensorDivideScalar(engine.TensorAddScalar(totalPos, s),
-            NumOps.Add(NumOps.FromDouble(n), NumOps.Multiply(s, two))).ToVector();
-        _condProbsPos = SmoothedConditional(countPos, totalPos, s, conditionalSmoothing, width);
-        _condProbsNeg = SmoothedConditional(countNeg, totalNeg, s, conditionalSmoothing, width);
+        // Prior and conditional probabilities with smoothing, divided in double so counts above 2048 stay exact
+        _priorProbs = engine.TensorDivideScalar(engine.TensorAddScalar(totalPos.Cast<double>(), s), n + 2 * s).Cast<T>().ToVector();
+        _condProbsPos = SmoothedConditional(countPos, totalPos, s, width);
+        _condProbsNeg = SmoothedConditional(countNeg, totalNeg, s, width);
     }
 
     /// <inheritdoc />
@@ -176,12 +176,12 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     /// <summary>
     /// (count + s) / (total + s * width) for a flattened [labels * width] count table and per-label totals.
     /// </summary>
-    private Tensor<T> SmoothedConditional(Tensor<T> counts, Tensor<T> totals, T s, T conditionalSmoothing, int width)
+    private Tensor<T> SmoothedConditional(Tensor<int> counts, Tensor<int> totals, double s, int width)
     {
         var engine = Engine;
-        var numerator = engine.TensorAddScalar(counts.Reshape(NumLabels, width), s);
-        var denominator = engine.TensorAddScalar(totals, conditionalSmoothing).Reshape(NumLabels, 1);
-        return engine.TensorDivide(numerator, denominator);
+        var numerator = engine.TensorAddScalar(counts.Cast<double>().Reshape(NumLabels, width), s);
+        var denominator = engine.TensorAddScalar(totals.Cast<double>(), s * width).Reshape(NumLabels, 1);
+        return engine.TensorDivide(numerator, engine.TensorBroadcastTo(denominator, new[] { NumLabels, width })).Cast<T>();
     }
 
     /// <summary>
@@ -268,19 +268,20 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
             int rows = Math.Min(batch, queries - start);
             var block = queryTensor.Slice(0, start, start + rows).Reshape(rows, 1, d);
 
-            // Exact distances: sqrt(sum_c (q_c - t_c)^2), sorted stably per row
+            // Exact distances sqrt(sum_c (q_c - t_c)^2), scaled so the squares cannot overflow in Half
             var diff = engine.TensorSubtract(block, train);
-            var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 2 }, false));
-            var order = engine.TensorSort(distances, 1).Indices.ToArray();
+            var distances = ClassifierBase<T>.ScaledNorms(diff, 2, 2.0);
 
             for (int r = 0; r < rows; r++)
             {
+                // Stable per-row order (the engine sort is not stable): ties go to the lower index
                 int self = start + r;
+                var order = AiDotNet.ActiveLearning.ActiveLearningEngineOps.StableOrder(distances.Slice(0, r, r + 1), false);
                 var picked = new int[take];
                 int count = 0;
                 for (int j = 0; j < scan && count < take; j++)
                 {
-                    int candidate = order[r * m + j];
+                    int candidate = order[j];
                     if (!excludeSelf || candidate != self)
                     {
                         picked[count++] = candidate;

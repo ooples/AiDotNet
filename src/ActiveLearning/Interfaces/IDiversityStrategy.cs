@@ -193,7 +193,8 @@ public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStra
             return NumOps.Zero;
         }
 
+        // Scaled norm: diff . diff overflows in Half once a component difference exceeds 255
         var diff = Engine.Subtract(a.GetSubVector(0, minLen), b.GetSubVector(0, minLen));
-        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
+        return AiDotNet.ActiveLearning.ActiveLearningEngineOps.ScaledNorms(Tensor<T>.FromVector(diff).Reshape(new[] { 1, minLen }), 1).GetFlat(0);
     }
 }

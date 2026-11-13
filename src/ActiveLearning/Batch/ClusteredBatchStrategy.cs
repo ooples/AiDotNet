@@ -278,7 +278,8 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
 
         int n = features.Count;
         var engine = AiDotNetEngine.Current;
-        var samples = ActiveLearningEngineOps.StackVectors(features);
+        // Assignments are invariant to a global rescale, which keeps the squared distances finite in Half
+        var samples = ActiveLearningEngineOps.UnitScale(ActiveLearningEngineOps.StackVectors(features));
 
         // Initialize centroids using k-means++
         var centroids = InitializeCentroids(samples, k);
@@ -287,7 +288,7 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             // Assign samples to nearest centroid (first one on ties)
-            var nearest = engine.TensorArgMin(ActiveLearningEngineOps.SquaredDistances(samples, centroids), 1).ToArray();
+            var nearest = engine.TensorArgMin(ActiveLearningEngineOps.Distances(samples, centroids), 1).ToArray();
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
@@ -350,7 +351,7 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
             else
             {
                 // First sample whose cumulative distance reaches the threshold
-                var threshold = engine.TensorMultiply(totalDistance, engine.TensorRandomUniform<T>(new[] { 1 }));
+                var threshold = engine.TensorMultiply(totalDistance, new Tensor<double>(new[] { random.NextDouble() }, new[] { 1 }).Cast<T>());
                 int selectedIdx = engine.TensorSearchSorted(cumulative, threshold).GetFlat(0);
                 if (selectedIdx >= n)
                 {
@@ -375,18 +376,15 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
         int dim = samples.Shape[1];
         var clusterIndex = new Tensor<int>(assignments, new[] { n });
 
-        // Accumulate sums and counts
-        var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { k, dim }), 0, clusterIndex, samples);
-        var ones = new Tensor<T>(new[] { n, 1 });
-        ones.Fill(NumOps.One);
-        var counts = engine.TensorIndexAdd(new Tensor<T>(new[] { k, 1 }), 0, clusterIndex, ones);
+        // Counts in int (a sum of T ones stops at 2048 for Half); each sample is divided by its
+        // cluster's count before the sums so that they cannot overflow
+        // 1 / count in double (exact counts past 2048), converted once; empty clusters get no samples
+        var counts = engine.TensorBinCount(clusterIndex, k).Slice(0, 0, k).Cast<double>();
+        var inverse = engine.TensorReciprocal(engine.TensorClampMin(counts, 1.0)).Cast<T>();
 
-        // Compute new centroids
-        var shape = new[] { k, dim };
-        var countsWide = engine.TensorBroadcastTo(counts, shape);
-        var means = engine.TensorDivide(sums, countsWide);
-        var nonEmpty = engine.TensorGreaterThan(countsWide, NumOps.Zero);
-        return engine.TensorWhere(nonEmpty, means, new Tensor<T>(shape));
+        var weights = engine.TensorGather(inverse, clusterIndex, 0).Reshape(new[] { n, 1 });
+        var weighted = engine.TensorMultiply(samples, engine.TensorBroadcastTo(weights, new[] { n, dim }));
+        return engine.TensorIndexAdd(new Tensor<T>(new[] { k, dim }), 0, clusterIndex, weighted);
     }
 
 

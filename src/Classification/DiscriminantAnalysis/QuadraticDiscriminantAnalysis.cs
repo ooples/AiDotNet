@@ -194,12 +194,9 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
             return new Matrix<T>(NumClasses, NumFeatures);
         }
 
-        // Sum features per class (membership^T * X), then divide by the class count (empty classes stay zero)
+        // Weighted sums of the features per class with weights 1 / class count (empty classes stay zero)
         var engine = Engine;
-        var membership = ClassMembership(y);
-        var sums = engine.TensorMatMul(engine.TensorTranspose(membership), Tensor<T>.FromMatrix(x));
-        var counts = CountsToValues(engine.TensorClampMin(CountClasses(y), 1)).Reshape(NumClasses, 1);
-        return engine.TensorDivide(sums, counts).ToMatrix();
+        return engine.TensorMatMul(engine.TensorTranspose(ClassMeanWeights(y)), Tensor<T>.FromMatrix(x)).ToMatrix();
     }
 
     /// <summary>
@@ -239,10 +236,10 @@ public partial class QuadraticDiscriminantAnalysis<T> : ProbabilisticClassifierB
         var mean = Tensor<T>.FromMatrix(_classMeans.GetSubMatrix(classIndex, 0, 1, NumFeatures));
         var centered = engine.TensorMultiply(engine.TensorSubtract(Tensor<T>.FromMatrix(x), mean), inClass);
 
-        // Sum of outer products divided by (n - 1) for unbiased estimate
-        T denominator = NumOps.FromDouble(Math.Max(1, count - 1));
-        return engine.TensorDivideScalar(
-            engine.TensorMatMul(engine.TensorTranspose(centered), centered), denominator).ToMatrix();
+        // Sum of outer products divided by (n - 1) for unbiased estimate; the deviations are scaled by
+        // 1 / sqrt(n - 1) before the products, so the sums only overflow Half when the covariance does
+        var scaled = engine.TensorMultiplyScalar(centered, NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(1, count - 1))));
+        return engine.TensorMatMul(engine.TensorTranspose(scaled), scaled).ToMatrix();
     }
 
     /// <summary>

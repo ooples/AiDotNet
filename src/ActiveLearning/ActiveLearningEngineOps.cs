@@ -19,6 +19,15 @@ internal static class ActiveLearningEngineOps
     }
 
     /// <summary>
+    /// counts / total as T, with the division done in double so that counts above 2048 (not exact in
+    /// Half) keep their ratio.
+    /// </summary>
+    internal static Tensor<T> CountFractions<T>(Tensor<int> counts, int total)
+    {
+        return AiDotNetEngine.Current.TensorDivideScalar(counts.Cast<double>(), (double)Math.Max(1, total)).Cast<T>();
+    }
+
+    /// <summary>
     /// Returns the first <paramref name="rows"/> x <paramref name="cols"/> elements of
     /// <paramref name="data"/> (row-major) as a [rows, cols] tensor.
     /// </summary>
@@ -144,7 +153,83 @@ internal static class ActiveLearningEngineOps
         }
 
         var diff = engine.TensorSubtract(rows, engine.TensorBroadcastTo(point, new[] { rows.Shape[0], rows.Shape[1] }));
-        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false));
+        return ScaledNorms(diff, 1);
+    }
+
+    /// <summary>
+    /// Euclidean norms along <paramref name="axis"/>, computed as s * sqrt(sum((x / s)^2)) with
+    /// s = max |x| along that axis, so that the squares cannot overflow (Half overflows once a
+    /// component exceeds 255) or underflow; all-zero slices get norm 0.
+    /// </summary>
+    internal static Tensor<T> ScaledNorms<T>(Tensor<T> values, int axis)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = values.Shape.ToArray();
+        var scale = engine.ReduceMax(engine.TensorAbs(values), new[] { axis }, keepDims: true);
+        var ones = new Tensor<T>(scale.Shape.ToArray());
+        ones.Fill(numOps.One);
+        var safeScale = engine.TensorWhere(engine.TensorGreaterThan(scale, numOps.Zero), scale, ones);
+        var unit = engine.TensorDivide(values, engine.TensorBroadcastTo(safeScale, shape));
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(unit, unit), new[] { axis }, keepDims: false));
+        return engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// The rows of a [n, d] tensor divided by their Euclidean norms (rows with norm 0 stay 0), so
+    /// that cosine similarities are dot products of unit rows instead of dot / (|a| |b|), whose
+    /// numerator and denominator overflow in Half.
+    /// </summary>
+    internal static Tensor<T> UnitRows<T>(Tensor<T> rows, Tensor<T> norms)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = rows.Shape[0];
+        var column = norms.Reshape(new[] { n, 1 });
+        var ones = new Tensor<T>(new[] { n, 1 });
+        ones.Fill(numOps.One);
+        var safe = engine.TensorWhere(engine.TensorGreaterThan(column, numOps.Zero), column, ones);
+        return engine.TensorDivide(rows, engine.TensorBroadcastTo(safe, rows.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// Cosine similarities between rows [start, start + count) of a [n, d] tensor and all of its
+    /// rows, as dot products of unit rows (see <see cref="UnitRows{T}"/>).
+    /// </summary>
+    /// <returns>A [count, n] tensor.</returns>
+    internal static Tensor<T> CosineBlock<T>(Tensor<T> rows, Tensor<T> norms, int start, int count)
+    {
+        return DotBlock(UnitRows(rows, norms), start, count);
+    }
+
+    /// <summary>
+    /// Mean of the rows of a [n, d] tensor as a [1, d] tensor, dividing before summing so that the
+    /// sum cannot overflow (a Half sum overflows past 65504).
+    /// </summary>
+    internal static Tensor<T> MeanRow<T>(Tensor<T> rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Shape[0];
+        var scaled = engine.TensorDivideScalar(rows, MathHelper.GetNumericOperations<T>().FromDouble(Math.Max(1, n)));
+        return engine.ReduceSum(scaled, new[] { 0 }, keepDims: true);
+    }
+
+    /// <summary>
+    /// A [n, d] tensor divided by its largest absolute entry (unchanged when all entries are 0).
+    /// k-means++ seeding and nearest-centroid assignment are invariant to this global rescale, and
+    /// it keeps their squared distances finite in Half.
+    /// </summary>
+    internal static Tensor<T> UnitScale<T>(Tensor<T> rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (rows.Length == 0)
+        {
+            return rows;
+        }
+
+        T max = engine.TensorMaxValue(engine.TensorAbs(rows));
+        return numOps.GreaterThan(max, numOps.Zero) ? engine.TensorDivideScalar(rows, max) : rows;
     }
 
     /// <summary>
@@ -186,15 +271,16 @@ internal static class ActiveLearningEngineOps
         var block = engine.TensorSlice(rows, new[] { start, 0 }, new[] { count, d }).Reshape(new[] { count, 1, d });
         var all = rows.Reshape(new[] { 1, n, d });
         var diff = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(all, shape));
-        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 2 }, keepDims: false));
+        return ScaledNorms(diff, 2);
     }
 
     /// <summary>
-    /// Exact squared Euclidean distances sum((a_i - b_j)^2) between every row of a [m, d] tensor and
-    /// every row of a [k, d] tensor, computed blockwise over the rows of <paramref name="a"/>.
+    /// Euclidean distances between every row of a [m, d] tensor and every row of a [k, d] tensor,
+    /// computed exactly (no Gram-matrix shortcut, overflow-safe via <see cref="ScaledNorms{T}"/>)
+    /// blockwise over the rows of <paramref name="a"/>.
     /// </summary>
     /// <returns>A [m, k] tensor.</returns>
-    internal static Tensor<T> SquaredDistances<T>(Tensor<T> a, Tensor<T> b)
+    internal static Tensor<T> Distances<T>(Tensor<T> a, Tensor<T> b)
     {
         var engine = AiDotNetEngine.Current;
         int m = a.Shape[0];
@@ -214,10 +300,22 @@ internal static class ActiveLearningEngineOps
             var shape = new[] { count, k, d };
             var block = engine.TensorSlice(a, new[] { start, 0 }, new[] { count, d }).Reshape(new[] { count, 1, d });
             var diff = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(all, shape));
-            blocks.Add(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 2 }, keepDims: false));
+            blocks.Add(ScaledNorms(diff, 2));
         }
 
         return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// Squared Euclidean distances: the square of <see cref="Distances{T}"/>. Squares of distances
+    /// above about 255 are infinite in Half; callers that need finite values rescale first
+    /// (see <see cref="UnitScale{T}"/>).
+    /// </summary>
+    /// <returns>A [m, k] tensor.</returns>
+    internal static Tensor<T> SquaredDistances<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var distances = Distances(a, b);
+        return AiDotNetEngine.Current.TensorMultiply(distances, distances);
     }
 
     /// <summary>
@@ -263,7 +361,7 @@ internal static class ActiveLearningEngineOps
             return new Tensor<T>(new[] { rows.Shape[0] });
         }
 
-        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: false));
+        return ScaledNorms(rows, 1);
     }
 
     /// <summary>

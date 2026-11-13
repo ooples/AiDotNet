@@ -193,12 +193,9 @@ public partial class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase
             return new Matrix<T>(NumClasses, NumFeatures);
         }
 
-        // Sum features per class (membership^T * X), then divide by the class count (empty classes stay zero)
+        // Weighted sums of the features per class with weights 1 / class count (empty classes stay zero)
         var engine = Engine;
-        var membership = ClassMembership(y);
-        var sums = engine.TensorMatMul(engine.TensorTranspose(membership), Tensor<T>.FromMatrix(x));
-        var counts = CountsToValues(engine.TensorClampMin(CountClasses(y), 1)).Reshape(NumClasses, 1);
-        return engine.TensorDivide(sums, counts).ToMatrix();
+        return engine.TensorMatMul(engine.TensorTranspose(ClassMeanWeights(y)), Tensor<T>.FromMatrix(x)).ToMatrix();
     }
 
     /// <summary>
@@ -239,9 +236,10 @@ public partial class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase
         // Sum of (x - mean)(x - mean)^T divided by (n - k) where k is number of classes
         // When totalCount <= NumClasses, covariance may be rank-deficient
         bool insufficientSamples = totalCount <= NumClasses;
-        T denominator = NumOps.FromDouble(Math.Max(1, totalCount - NumClasses));
-        var covariance = engine.TensorDivideScalar(
-            engine.TensorMatMul(engine.TensorTranspose(centered), centered), denominator);
+        // (the deviations are scaled by 1 / sqrt(denominator) before the products, so the sums only
+        // overflow Half when the covariance itself does)
+        var scaled = engine.TensorMultiplyScalar(centered, NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(1, totalCount - NumClasses))));
+        var covariance = engine.TensorMatMul(engine.TensorTranspose(scaled), scaled);
 
         // Add automatic regularization when samples are insufficient to ensure positive definiteness
         if (insufficientSamples)

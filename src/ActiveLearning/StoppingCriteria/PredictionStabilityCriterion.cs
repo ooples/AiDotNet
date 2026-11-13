@@ -185,25 +185,21 @@ public class PredictionStabilityCriterion<T> : IStoppingCriterion<T>
         var prev = Prefix(previous, n);
         var curr = Prefix(current, n);
 
-        // Compute means
-        T meanPrev = NumOps.Divide(engine.Sum(prev), NumOps.FromDouble(n));
-        T meanCurr = NumOps.Divide(engine.Sum(curr), NumOps.FromDouble(n));
-
-        // Compute correlation
-        var diffPrev = engine.TensorSubtractScalar(Tensor<T>.FromVector(prev), meanPrev).ToVector();
-        var diffCurr = engine.TensorSubtractScalar(Tensor<T>.FromVector(curr), meanCurr).ToVector();
-        T numerator = engine.DotProduct(diffPrev, diffCurr);
-        T denomPrev = engine.DotProduct(diffPrev, diffPrev);
-        T denomCurr = engine.DotProduct(diffCurr, diffCurr);
-
-        T denominator = NumOps.Multiply(NumOps.Sqrt(denomPrev), NumOps.Sqrt(denomCurr));
+        // Means (divided before summing) and centered rows; the correlation is the dot product of the
+        // unit-norm centered rows, since sums of squares and products overflow in Half
+        var both = ActiveLearningEngineOps.StackVectors(new[] { prev, curr });
+        var centered = engine.TensorSubtract(both, engine.TensorBroadcastTo(
+            engine.ReduceSum(engine.TensorDivideScalar(both, NumOps.FromDouble(n)), new[] { 1 }, keepDims: true), new[] { 2, n }));
+        var norms = ActiveLearningEngineOps.ScaledNorms(centered, 1);
+        T denominator = NumOps.Multiply(norms.GetFlat(0), norms.GetFlat(1));
 
         if (NumOps.Compare(denominator, ActiveLearningEngineOps.Tolerance<T>(1e-10)) < 0)
         {
             return NumOps.One; // No variance means perfect stability
         }
 
-        T correlation = NumOps.Divide(numerator, denominator);
+        var units = ActiveLearningEngineOps.UnitRows(centered, norms);
+        T correlation = engine.TensorSum(engine.TensorMultiply(units.Slice(0, 0, 1), units.Slice(0, 1, 2)));
 
         // Map correlation (-1 to 1) to stability (0 to 1)
         return NumOps.Divide(NumOps.Add(correlation, NumOps.One), NumOps.FromDouble(2.0));

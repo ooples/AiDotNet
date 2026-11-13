@@ -159,7 +159,8 @@ public class GradientBatchStrategy<T, TInput, TOutput> : IGradientBatchStrategy<
         selected.Add(firstIdx);
 
         var engine = AiDotNetEngine.Current;
-        var rows = Tensor<T>.FromMatrix(embeddings);
+        // k-means++ is invariant to a global rescale, which keeps the squared distances finite in Half
+        var rows = ActiveLearningEngineOps.UnitScale(Tensor<T>.FromMatrix(embeddings));
         int dim = embeddings.Columns;
         var isSelected = new bool[n];
         isSelected[firstIdx] = true;

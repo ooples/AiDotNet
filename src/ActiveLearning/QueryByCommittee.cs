@@ -174,16 +174,8 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
     {
         var engine = AiDotNetEngine.Current;
 
-        // Count votes for each class (each member votes for its first highest logit)
-        var votes = new Tensor<T>(new[] { numSamples, numClasses });
-        foreach (var preds in allPredictions)
-        {
-            var maxClass = engine.TensorArgMax(ActiveLearningEngineOps.AsRows(preds, numSamples, numClasses), 1);
-            votes = engine.TensorAdd(votes, engine.TensorOneHot<T>(maxClass, numClasses));
-        }
-
         // Compute entropy of vote distribution over classes with p > epsilon
-        var p = engine.TensorDivideScalar(votes, _numOps.FromDouble(_committee.Count));
+        var p = VoteFractions(allPredictions, numSamples, numClasses, _committee.Count);
         var terms = engine.TensorMultiply(p, engine.TensorLog(p));
         var counted = engine.TensorGreaterThan(p, ActiveLearningEngineOps.Tolerance<T>(1e-10));
         var kept = engine.TensorWhere(counted, terms, new Tensor<T>(new[] { numSamples, numClasses }));
@@ -193,6 +185,25 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
     /// <summary>
     /// Computes average KL divergence between each member and the consensus.
     /// </summary>
+    /// <summary>
+    /// Fraction of the <paramref name="committeeSize"/> members voting for each class of each sample
+    /// (each member votes for its first highest logit). Votes are counted in int (a sum of T one-hot
+    /// rows stops at 2048 for Half) and divided in double.
+    /// </summary>
+    /// <returns>A [numSamples, numClasses] tensor.</returns>
+    internal static Tensor<T> VoteFractions(List<Tensor<T>> allPredictions, int numSamples, int numClasses, int committeeSize)
+    {
+        var engine = AiDotNetEngine.Current;
+        var votes = new Tensor<int>(new[] { numSamples, numClasses });
+        foreach (var preds in allPredictions)
+        {
+            var maxClass = engine.TensorArgMax(ActiveLearningEngineOps.AsRows(preds, numSamples, numClasses), 1);
+            votes = engine.TensorAdd(votes, engine.TensorOneHot<int>(maxClass, numClasses));
+        }
+
+        return ActiveLearningEngineOps.CountFractions<T>(votes, committeeSize);
+    }
+
     private Tensor<T> ComputeAverageKL(List<Tensor<T>> allPredictions, int numSamples, int numClasses)
     {
         var engine = AiDotNetEngine.Current;

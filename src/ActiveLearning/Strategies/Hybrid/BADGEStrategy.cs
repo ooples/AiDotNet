@@ -217,7 +217,8 @@ public class BADGEStrategy<T, TInput, TOutput> : IQueryStrategy<T, TInput, TOutp
         }
 
         var engine = AiDotNetEngine.Current;
-        var rows = ActiveLearningEngineOps.StackVectors(embeddings);
+        // k-means++ is invariant to a global rescale, which keeps the squared distances finite in Half
+        var rows = ActiveLearningEngineOps.UnitScale(ActiveLearningEngineOps.StackVectors(embeddings));
         int n = rows.Shape[0];
         int dim = rows.Shape[1];
         var selected = new List<int>();

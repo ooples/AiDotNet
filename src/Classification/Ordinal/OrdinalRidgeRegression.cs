@@ -214,17 +214,23 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
         var targets = y.AsTensor();
         if (_fitIntercept && n > 0)
         {
-            featureMeans = engine.ReduceMean(features, new[] { 0 }, false);
-            targetMean = engine.TensorMean(targets);
+            // Divided before summing: the sums overflow Half past 65504
+            T inverseN = NumOps.FromDouble(1.0 / n);
+            featureMeans = engine.ReduceSum(engine.TensorMultiplyScalar(features, inverseN), new[] { 0 }, false);
+            targetMean = engine.TensorSum(engine.TensorMultiplyScalar(targets, inverseN));
             features = engine.TensorSubtract(features, featureMeans.Reshape(1, p));
             targets = engine.TensorSubtractScalar(targets, targetMean);
         }
 
-        // Build X^T X + lambda*I and X^T y, then solve the ridge normal equations
-        var xT = engine.TensorTranspose(features);
-        var xtx = engine.TensorAdd(engine.TensorMatMul(xT, features),
-            engine.TensorMultiplyScalar(engine.TensorEye<T>(p), NumOps.FromDouble(_alpha)));
-        var xty = engine.TensorMatMul(xT, targets.Reshape(n, 1));
+        // Build X^T X + lambda*I and X^T y, then solve the ridge normal equations. Both sides are divided
+        // by n (X and y scaled by 1/sqrt(n), lambda by 1/n), which leaves the solution unchanged and keeps
+        // the sums of products from overflowing Half
+        T rootScale = NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(1, n)));
+        var scaledFeatures = engine.TensorMultiplyScalar(features, rootScale);
+        var xT = engine.TensorTranspose(scaledFeatures);
+        var xtx = engine.TensorAdd(engine.TensorMatMul(xT, scaledFeatures),
+            engine.TensorMultiplyScalar(engine.TensorEye<T>(p), NumOps.FromDouble(_alpha / Math.Max(1, n))));
+        var xty = engine.TensorMatMul(xT, engine.TensorMultiplyScalar(targets, rootScale).Reshape(n, 1));
         _coefficients = p == 0 ? new Vector<T>(0) : SolveSymmetric(xtx, xty);
 
         // Compute intercept
@@ -235,10 +241,14 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
         // Learn thresholds using immediate-threshold method
         // Compute class means in prediction space
         var predictions = LinearPredictions(x, _coefficients, _bias);
-        var membership = engine.TensorOneHot<T>(GetOrdinalClassIndices(y), K);
-        var classSums = engine.TensorMatMul(engine.TensorTranspose(membership), predictions.Reshape(n, 1)).Reshape(K);
-        var classCounts = engine.TensorClampMin(engine.ReduceSum(membership, new[] { 0 }, false), NumOps.One);
-        var classMeans = engine.TensorDivide(classSums, classCounts);
+        // (counts in int, since a sum of T ones stops at 2048 for Half; every prediction is divided by its
+        // class count before the sums, which then cannot overflow)
+        var classIndices = GetOrdinalClassIndices(y);
+        var classCounts = engine.TensorClampMin(n == 0 ? new Tensor<int>(new[] { K }) : engine.TensorBinCount(classIndices, K), 1);
+        var inverseCounts = engine.TensorReciprocal(classCounts.Cast<double>()).Cast<T>();
+        var membership = engine.TensorMultiply(engine.TensorOneHot<T>(classIndices, K),
+            engine.TensorBroadcastTo(inverseCounts.Reshape(1, K), new[] { n, K }));
+        var classMeans = engine.TensorMatMul(engine.TensorTranspose(membership), predictions.Reshape(n, 1)).Reshape(K);
 
         // Set thresholds at midpoints between class means
         _thresholds = K <= 1

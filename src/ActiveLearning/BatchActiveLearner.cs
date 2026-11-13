@@ -157,9 +157,9 @@ public sealed class BatchActiveLearner<T>
         var engine = AiDotNetEngine.Current;
         int n = rows.Shape[0];
         var shape = new[] { 1, n };
-        var dot = ActiveLearningEngineOps.DotBlock(rows, k, 1);
-        var normK = engine.TensorBroadcastTo(engine.TensorSlice(rowNorm, new[] { 0, k }, new[] { 1, 1 }), shape);
-        var cos = engine.TensorDivide(dot, engine.TensorMultiply(rowNorm, normK));
+
+        // Dot products of unit rows: a.b and |a| |b| overflow in Half
+        var cos = ActiveLearningEngineOps.CosineBlock(rows, rowNorm, k, 1);
 
         var hasNormK = engine.TensorBroadcastTo(engine.TensorSlice(hasNorm, new[] { 0, k }, new[] { 1, 1 }), shape);
         var valid = engine.TensorMultiply(hasNorm, hasNormK);

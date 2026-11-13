@@ -184,12 +184,11 @@ public class CoreSetSelection<T> : IActiveLearningStrategy<T>
     /// </summary>
     private int FindFarthestFromOrigin(Tensor<T> rows)
     {
-        var engine = AiDotNetEngine.Current;
         var numSamples = rows.Shape[0];
-        var squaredNorms = rows.Shape[1] == 0
-            ? new Tensor<T>(new[] { numSamples })
-            : engine.ReduceSum(engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: false);
-        var maxIdx = ActiveLearningEngineOps.ArgMaxAbove(squaredNorms.Reshape(new[] { 1, numSamples }), new bool[numSamples], _numOps.MinValue);
+
+        // Norms rather than squared norms: same order, and they do not overflow in Half
+        var norms = ActiveLearningEngineOps.RowNorms(rows);
+        var maxIdx = ActiveLearningEngineOps.ArgMaxAbove(norms.Reshape(new[] { 1, numSamples }), new bool[numSamples], _numOps.MinValue);
         return maxIdx < 0 ? 0 : maxIdx;
     }
 
@@ -233,11 +232,10 @@ public class CoreSetSelection<T> : IActiveLearningStrategy<T>
     {
         var engine = AiDotNetEngine.Current;
         int numSamples = rows.Shape[0];
-        var dotProduct = ActiveLearningEngineOps.DotBlock(rows, index, 1).Reshape(new[] { numSamples });
         var indexNorm = engine.TensorSlice(norms, new[] { index }, new[] { 1 });
         var normProduct = engine.TensorMultiply(norms, engine.TensorBroadcastTo(indexNorm, new[] { numSamples }));
 
-        var cosineDistance = engine.ScalarMinusTensor(_numOps.One, engine.TensorDivide(dotProduct, normProduct));
+        var cosineDistance = engine.ScalarMinusTensor(_numOps.One, ActiveLearningEngineOps.CosineBlock(rows, norms, index, 1).Reshape(new[] { numSamples }));
         var ones = new Tensor<T>(new[] { numSamples });
         ones.Fill(_numOps.One);
         var degenerate = engine.TensorLessThan(normProduct, ActiveLearningEngineOps.Tolerance<T>(1e-10));
@@ -250,9 +248,7 @@ public class CoreSetSelection<T> : IActiveLearningStrategy<T>
     /// <returns>A [1, featureSize] tensor.</returns>
     private Tensor<T> ComputeDataCenter(Tensor<T> rows, int numSamples)
     {
-        var engine = AiDotNetEngine.Current;
-        var sum = engine.ReduceSum(rows, new[] { 0 }, keepDims: true);
-        return engine.TensorDivideScalar(sum, _numOps.FromDouble(numSamples));
+        return ActiveLearningEngineOps.MeanRow(rows);
     }
 
     /// <summary>

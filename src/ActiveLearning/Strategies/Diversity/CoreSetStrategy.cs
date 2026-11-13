@@ -482,13 +482,18 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         {
             case DistanceMetric.Cosine:
             {
-                // 1 - clamp(a.b / sqrt(|a|^2 |b|^2), -1, 1); similarity 0 when the denominator is ~0
+                // 1 - clamp(a.b / (|a| |b|), -1, 1); similarity 0 when the denominator is ~0. The
+                // similarity is the dot product of unit rows: a.b and |a|^2 overflow in Half.
                 var shape = new[] { m, k };
-                var dot = d == 0 ? new Tensor<T>(shape) : engine.TensorMatMul(a, engine.TensorTranspose(b));
-                var normA = engine.TensorBroadcastTo(SquaredNorms(a).Reshape(new[] { m, 1 }), shape);
-                var normB = engine.TensorBroadcastTo(SquaredNorms(b).Reshape(new[] { 1, k }), shape);
-                var denominator = engine.TensorSqrt(engine.TensorMultiply(normA, normB));
-                var similarity = engine.TensorMax(engine.TensorMin(engine.TensorDivide(dot, denominator), NumOps.One), NumOps.Negate(NumOps.One));
+                var rowNormsA = ActiveLearningEngineOps.RowNorms(a);
+                var rowNormsB = ActiveLearningEngineOps.RowNorms(b);
+                var dot = d == 0
+                    ? new Tensor<T>(shape)
+                    : engine.TensorMatMul(ActiveLearningEngineOps.UnitRows(a, rowNormsA), engine.TensorTranspose(ActiveLearningEngineOps.UnitRows(b, rowNormsB)));
+                var normA = engine.TensorBroadcastTo(rowNormsA.Reshape(new[] { m, 1 }), shape);
+                var normB = engine.TensorBroadcastTo(rowNormsB.Reshape(new[] { 1, k }), shape);
+                var denominator = engine.TensorMultiply(normA, normB);
+                var similarity = engine.TensorMax(engine.TensorMin(dot, NumOps.One), NumOps.Negate(NumOps.One));
                 var valid = engine.TensorGreaterThan(denominator, CosineEpsilon);
                 similarity = engine.TensorWhere(valid, similarity, new Tensor<T>(shape));
                 return engine.ScalarMinusTensor(NumOps.One, similarity);
@@ -508,16 +513,8 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
             }
 
             default:
-                return engine.TensorSqrt(ActiveLearningEngineOps.SquaredDistances(a, b));
+                return ActiveLearningEngineOps.Distances(a, b);
         }
-    }
-
-    private static Tensor<T> SquaredNorms(Tensor<T> rows)
-    {
-        var engine = AiDotNetEngine.Current;
-        return rows.Shape[1] == 0
-            ? new Tensor<T>(new[] { rows.Shape[0] })
-            : engine.ReduceSum(engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: false);
     }
 
     private T ComputeDistance(Vector<T> a, Vector<T> b)

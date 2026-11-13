@@ -142,11 +142,11 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     /// </summary>
     protected T ComputeRBFKernelArrays(T[] x, T[] y)
     {
-        // exp(-gamma * ||x - y||^2)
-        var diff = Engine.Subtract(Vector<T>.Wrap(x), Vector<T>.Wrap(y));
-        T squaredNorm = Engine.DotProduct(diff, diff);
+        // exp(-||sqrt(gamma) (x - y)||^2): scaling before squaring means the sum of squares only
+        // overflows (Half: past 65504) where the kernel is 0 anyway
         T gamma = GetGamma();
-        return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, squaredNorm)));
+        var diff = Engine.Multiply(Engine.Subtract(Vector<T>.Wrap(x), Vector<T>.Wrap(y)), NumOps.Sqrt(gamma));
+        return NumOps.Exp(NumOps.Negate(Engine.DotProduct(diff, diff)));
     }
 
     /// <summary>
@@ -177,7 +177,13 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
                     engine.TensorAddScalar(engine.TensorMultiplyScalar(LinearKernelMatrix(left, right), gamma), coef0),
                     NumOps.FromDouble(Options.Degree));
             case KernelType.RBF:
-                return engine.TensorExp(engine.TensorMultiplyScalar(PairwiseReduction(left, right, squared: true), NumOps.Negate(gamma)));
+            {
+                // exp(-||sqrt(gamma) a - sqrt(gamma) b||^2): scaling before squaring means the sums of
+                // squares only overflow (Half: past 65504) where the kernel is 0 anyway
+                T rootGamma = NumOps.Sqrt(gamma);
+                var squared = PairwiseReduction(engine.TensorMultiplyScalar(left, rootGamma), engine.TensorMultiplyScalar(right, rootGamma), squared: true);
+                return engine.TensorExp(engine.TensorNegate(squared));
+            }
             case KernelType.Sigmoid:
             {
                 // tanh(x) = (exp(2x) - 1) / (exp(2x) + 1)

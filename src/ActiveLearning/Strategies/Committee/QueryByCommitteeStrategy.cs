@@ -231,16 +231,21 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
             return NumOps.Zero;
         }
 
-        // Count votes for each class
-        var engine = AiDotNetEngine.Current;
-        var ones = new Tensor<T>(new[] { votedClasses.Count });
-        ones.Fill(NumOps.One);
-        var votes = engine.TensorIndexAdd(
-            new Tensor<T>(new[] { _numClasses }), 0, new Tensor<int>(votedClasses.ToArray(), new[] { votedClasses.Count }), ones);
-
         // Compute entropy of vote distribution
-        var voteShares = engine.TensorDivideScalar(votes, NumOps.FromDouble(_committee.Count));
-        return ComputeEntropy(voteShares);
+        return ComputeEntropy(VoteShares(votedClasses.ToArray(), _numClasses, _committee.Count));
+    }
+
+    /// <summary>
+    /// Fraction of the <paramref name="committeeSize"/> members that voted for each class. Votes are
+    /// counted in int (a sum of T ones stops at 2048 for Half) and divided in double.
+    /// </summary>
+    /// <returns>A [numClasses] tensor.</returns>
+    internal static Tensor<T> VoteShares(int[] votedClasses, int numClasses, int committeeSize)
+    {
+        var counts = votedClasses.Length == 0
+            ? new Tensor<int>(new[] { numClasses })
+            : AiDotNetEngine.Current.TensorBinCount(new Tensor<int>(votedClasses, new[] { votedClasses.Length }), numClasses);
+        return ActiveLearningEngineOps.CountFractions<T>(counts, committeeSize);
     }
 
     private T ComputeKLDivergence(TInput input)
@@ -297,9 +302,8 @@ public class QueryByCommitteeStrategy<T, TInput, TOutput> : ICommitteeStrategy<T
     /// </summary>
     private static Tensor<T> ComputeConsensusDistribution(Tensor<T> probabilities)
     {
-        var engine = AiDotNetEngine.Current;
-        var sum = engine.ReduceSum(probabilities, new[] { 0 }, keepDims: false);
-        return engine.TensorDivideScalar(sum, NumOps.FromDouble(probabilities.Shape[0]));
+        // Divided before summing so that the sum cannot overflow in Half
+        return ActiveLearningEngineOps.MeanRow(probabilities).Reshape(new[] { probabilities.Shape[1] });
     }
 
     /// <summary>
