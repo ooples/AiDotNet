@@ -161,17 +161,65 @@ internal static class DistillationHelper<T>
     /// and 0 where the norm product is at most 1e-10.
     /// </summary>
     public static Tensor<T> CosineSimilarityMatrix(Tensor<T> a, Tensor<T> b)
+        => CosineSimilarityMatrixWide(a, b).Cast<T>();
+
+    /// <summary>
+    /// <see cref="CosineSimilarityMatrix"/> kept in double, for callers that exponentiate the result.
+    /// </summary>
+    public static Tensor<double> CosineSimilarityMatrixWide(Tensor<T> a, Tensor<T> b)
     {
         var wideA = a.Cast<double>();
         var wideB = b.Cast<double>();
         var dot = Engine.TensorMatMul(wideA, Engine.TensorTranspose(wideB));
         var normsA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(wideA, wideA), [1], keepDims: true));
         var normsB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(wideB, wideB), [1], keepDims: true));
-        var denom = Engine.TensorMatMul(normsA, Engine.TensorTranspose(normsB));
+        return GuardedCosine(dot, Engine.TensorMatMul(normsA, Engine.TensorTranspose(normsB)));
+    }
+
+    /// <summary>
+    /// Cosine similarity of each row of <paramref name="a"/> with the same row of <paramref name="b"/>
+    /// ([n, d] and [n, d] -> [n]), in double, with the same clamping and degenerate-norm rule as
+    /// <see cref="CosineSimilarityMatrix"/>.
+    /// </summary>
+    public static Tensor<double> RowwiseCosineSimilarityWide(Tensor<T> a, Tensor<T> b)
+    {
+        var wideA = a.Cast<double>();
+        var wideB = b.Cast<double>();
+        var dot = Engine.ReduceSum(Engine.TensorMultiply(wideA, wideB), [1], keepDims: false);
+        var normsA = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(wideA, wideA), [1], keepDims: false));
+        var normsB = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(wideB, wideB), [1], keepDims: false));
+        return GuardedCosine(dot, Engine.TensorMultiply(normsA, normsB));
+    }
+
+    // Norms are multiplied after their square roots so large finite rows cannot overflow the product.
+    private static Tensor<double> GuardedCosine(Tensor<double> dot, Tensor<double> denom)
+    {
         var positive = Engine.TensorGreaterThan(denom, 1e-10);
         var safeDenom = Engine.TensorWhere(positive, denom, Tensor<double>.CreateDefault(denom.Shape.ToArray(), 1.0));
         var cosine = Engine.TensorClamp(Engine.TensorDivide(dot, safeDenom), -1.0, 1.0);
-        return Engine.TensorWhere(positive, cosine, new Tensor<double>(dot.Shape.ToArray())).Cast<T>();
+        return Engine.TensorWhere(positive, cosine, new Tensor<double>(dot.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// Computes log(Σ_j exp(x_ij) + epsilon) for each row of an [n, m] logit tensor without overflow:
+    /// each row is shifted by its maximum, and epsilon is folded in with a stable log-add-exp.
+    /// Entries equal to negative infinity contribute nothing; every row needs one finite entry.
+    /// </summary>
+    public static Tensor<double> RowLogSumExp(Tensor<double> logits, double epsilon)
+    {
+        int n = logits.Shape[0], m = logits.Shape[1];
+        var rowMax = Engine.ReduceMax(logits, [1], keepDims: true);
+        var shifted = Engine.TensorExp(Engine.TensorSubtract(logits, Engine.TensorBroadcastTo(rowMax, [n, m])));
+        var logSum = Engine.Reshape(
+            Engine.TensorAdd(Engine.TensorLog(Engine.ReduceSum(shifted, [1], keepDims: true)), rowMax), [n]);
+        if (epsilon <= 0.0) return logSum;
+
+        // log(e^a + e^b) = max(a, b) + log(1 + e^-|a - b|), with b = log(epsilon)
+        var logEpsilon = Tensor<double>.CreateDefault([n], Math.Log(epsilon));
+        var gap = Engine.TensorNegate(Engine.TensorAbs(Engine.TensorSubtract(logSum, logEpsilon)));
+        return Engine.TensorAdd(
+            Engine.TensorMax(logSum, logEpsilon),
+            Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorExp(gap), 1.0)));
     }
 
     /// <summary>
@@ -180,6 +228,41 @@ internal static class DistillationHelper<T>
     public static Tensor<T> StackRows(Vector<T>[] rows)
     {
         return Engine.TensorStack(rows.Select(row => Tensor<T>.FromVector(row)).ToArray(), 0);
+    }
+
+    /// <summary>
+    /// The rows of <paramref name="matrix"/> as separate vectors.
+    /// </summary>
+    public static Vector<T>[] RowsOf(Matrix<T> matrix)
+    {
+        return Enumerable.Range(0, matrix.Rows).Select(r => matrix.GetRow(r)).ToArray();
+    }
+
+    /// <summary>
+    /// [n, n] 1/0 mask of the pairs i &lt; j (<paramref name="upperOnly"/>) or of all pairs i != j.
+    /// </summary>
+    public static Tensor<T> PairMask(int n, bool upperOnly)
+    {
+        var rows = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, n, 1), [n, 1]), [n, n]);
+        var cols = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, n, 1), [1, n]), [n, n]);
+        return upperOnly ? Engine.TensorLessThan(rows, cols) : Engine.TensorNotEquals(rows, cols);
+    }
+
+    /// <summary>
+    /// [n, n] mask that is 1 off the diagonal (pairs i != j) and 0 on it.
+    /// </summary>
+    public static Tensor<T> OffDiagonalMask(int n) => PairMask(n, upperOnly: false);
+
+    /// <summary>
+    /// Maps a gradient w.r.t. softmax(z / T) probabilities to a gradient w.r.t. the logits z:
+    /// ∂L/∂z_k = p_k * (∂L/∂p_k - Σ_m (∂L/∂p_m) p_m) / T, row by row.
+    /// </summary>
+    public static Tensor<T> SoftmaxJacobianProduct(Tensor<T> probabilities, Tensor<T> probabilityGradient, double temperature)
+    {
+        var weightedSum = Engine.ReduceSum(Engine.TensorMultiply(probabilityGradient, probabilities), [1], keepDims: true);
+        var centered = Engine.TensorSubtract(
+            probabilityGradient, Engine.TensorBroadcastTo(weightedSum, probabilities.Shape.ToArray()));
+        return Engine.TensorDivideScalar(Engine.TensorMultiply(probabilities, centered), NumOps.FromDouble(temperature));
     }
 
     /// <summary>

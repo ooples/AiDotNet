@@ -185,8 +185,8 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         int batchSize = studentBatchOutput.Rows;
 
         // Collect all batch outputs for relational loss computation
-        var studentOutputs = Rows(studentBatchOutput);
-        var teacherOutputs = Rows(teacherBatchOutput);
+        var studentOutputs = DistillationHelper<T>.RowsOf(studentBatchOutput);
+        var teacherOutputs = DistillationHelper<T>.RowsOf(teacherBatchOutput);
 
         // Compute relational loss once for entire batch
         T relationalLoss = ComputeRelationalLoss(studentOutputs, teacherOutputs);
@@ -222,20 +222,12 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         // Add each sample's own relational gradient (NOT averaged — each sample
         // gets its own gradient based on its specific pairwise relationships)
         var perSampleRelGradients = ComputePerSampleRelationalGradients(
-            Rows(studentBatchOutput), Rows(teacherBatchOutput));
+            DistillationHelper<T>.RowsOf(studentBatchOutput), DistillationHelper<T>.RowsOf(teacherBatchOutput));
         var gradientBatch = Engine.MatrixAdd(standardGradient, perSampleRelGradients.ToMatrix());
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
         return Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
-    }
-
-    /// <summary>
-    /// Splits a batch matrix into its row vectors.
-    /// </summary>
-    private static Vector<T>[] Rows(Matrix<T> batch)
-    {
-        return Enumerable.Range(0, batch.Rows).Select(r => batch.GetRow(r)).ToArray();
     }
 
     /// <summary>
@@ -594,14 +586,6 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
     }
 
     // Pair differences are assembled only inside bounded row/feature blocks.
-
-    /// <summary>
-    /// [n, n] mask that is 1 off the diagonal (pairs i != j) and 0 on it.
-    /// </summary>
-    private Tensor<T> OffDiagonalMask(int n)
-    {
-        return Engine.TensorEquals(Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n)), NumOps.Zero);
-    }
 
     /// <summary>
     /// Broadcasts a length-m vector tensor to an [m, width] tensor whose row r repeats element r.

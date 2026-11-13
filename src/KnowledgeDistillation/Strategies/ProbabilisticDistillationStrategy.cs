@@ -79,8 +79,8 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         T totalLoss = Engine.Sum(DistillationHelper<T>.StandardSampleLosses(
             studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha));
 
-        var studentSoftBatch = RowsOf(DistillationHelper<T>.SoftmaxRows(studentBatchOutput, Temperature));
-        var teacherSoftBatch = RowsOf(DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, Temperature));
+        var studentSoftBatch = DistillationHelper<T>.RowsOf(DistillationHelper<T>.SoftmaxRows(studentBatchOutput, Temperature));
+        var teacherSoftBatch = DistillationHelper<T>.RowsOf(DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, Temperature));
 
         var standardLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
         var distributionLoss = ComputeDistributionalLoss(studentSoftBatch, teacherSoftBatch);
@@ -112,8 +112,8 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             // The distributional loss is a function of the whole batch of softened student distributions; its
             // gradient w.r.t. those probabilities goes through the softmax(z / T) Jacobian to reach the logits:
             //   ∂L/∂z_k = p_k * (∂L/∂p_k - Σ_m (∂L/∂p_m) p_m) / T
-            var probGradient = ComputeDistributionalGradient(RowsOf(studentSoft), RowsOf(teacherSoft));
-            var logitGradient = SoftmaxJacobianProduct(Tensor<T>.FromMatrix(studentSoft), Tensor<T>.FromMatrix(probGradient));
+            var probGradient = ComputeDistributionalGradient(DistillationHelper<T>.RowsOf(studentSoft), DistillationHelper<T>.RowsOf(teacherSoft));
+            var logitGradient = DistillationHelper<T>.SoftmaxJacobianProduct(Tensor<T>.FromMatrix(studentSoft), Tensor<T>.FromMatrix(probGradient), Temperature);
 
             gradientBatch = Engine.MatrixAdd(
                 Engine.MatrixMultiplyScalar(gradientBatch, NumOps.FromDouble(1.0 - _distributionWeight)),
@@ -271,35 +271,6 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             Engine.TensorMultiply(p, Engine.TensorLog(p)),
             new Tensor<T>(p.Shape.ToArray()));
         return Engine.Negate(DistillationHelper<T>.RowSums(terms));
-    }
-
-    /// <summary>
-    /// [n, n] mask with 0 on the diagonal and 1 elsewhere.
-    /// </summary>
-    private Tensor<T> OffDiagonalMask(int n)
-    {
-        return Engine.TensorSubtract(
-            Tensor<T>.CreateDefault([n, n], NumOps.One), Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(n)));
-    }
-
-    /// <summary>
-    /// Maps a gradient w.r.t. softmax(z / T) probabilities to a gradient w.r.t. the logits z:
-    /// ∂L/∂z_k = p_k * (∂L/∂p_k - Σ_m (∂L/∂p_m) p_m) / T, row by row.
-    /// </summary>
-    private Tensor<T> SoftmaxJacobianProduct(Tensor<T> probabilities, Tensor<T> probabilityGradient)
-    {
-        var weightedSum = Engine.ReduceSum(Engine.TensorMultiply(probabilityGradient, probabilities), [1], keepDims: true);
-        var centered = Engine.TensorSubtract(
-            probabilityGradient, Engine.TensorBroadcastTo(weightedSum, probabilities.Shape.ToArray()));
-        return Engine.TensorDivideScalar(Engine.TensorMultiply(probabilities, centered), NumOps.FromDouble(Temperature));
-    }
-
-    /// <summary>
-    /// The rows of <paramref name="matrix"/> as separate vectors.
-    /// </summary>
-    private static Vector<T>[] RowsOf(Matrix<T> matrix)
-    {
-        return Enumerable.Range(0, matrix.Rows).Select(r => matrix.GetRow(r)).ToArray();
     }
 
     private Matrix<T> ComputeDistributionalGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
