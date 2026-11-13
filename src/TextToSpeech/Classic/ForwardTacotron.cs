@@ -323,7 +323,6 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         var index = new[] { new Tensor<int>(owner, new[] { frames }) };
         T zero = NumOps.Zero;
         double segmentScale = Math.Pow(2.0, Math.Ceiling(Math.Log(Math.Max(1, durations.DefaultIfEmpty(1).Max()), 2.0)));
-        double channelScale = Math.Pow(2.0, Math.Ceiling(Math.Log(Math.Max(1, channels), 2.0)));
 
         // Mean voiced F0 within [PitchMinHz, PitchMaxHz], 0 where none.
         var f0 = Engine.Reshape(Engine.TensorSlice(Engine.Reshape(framePitch, new[] { framePitch.Length }), new[] { 0 }, new[] { frames }), new[] { frames });
@@ -341,9 +340,10 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 
         // Mean over the phoneme's frames of ||exp(mel)||.
         var frameMel = Engine.TensorSlice(mel, new[] { 0, 0 }, new[] { frames, channels });
-        var scaledExp = Engine.TensorMultiplyScalar(Engine.TensorExp(frameMel), NumOps.FromDouble(1.0 / channelScale));
-        var norm = Engine.TensorMultiplyScalar(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(scaledExp), new[] { 1 }, false)),
-            NumOps.FromDouble(channelScale));
+        // The squares and their sum in double, the norm narrowed once: in half precision exp(mel)² either overflows or,
+        // scaled down to avoid that, underflows (80 channels at mel −5 gave 0 instead of 0.060).
+        var wideExp = Engine.TensorExp(TensorCopyHelper.CastLogical<T, double>(frameMel));
+        var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(wideExp), new[] { 1 }, false)).Cast<T>();
         var energySum = Engine.TensorIndexPut(new Tensor<T>(new[] { tokens }), index,
             Engine.TensorMultiplyScalar(norm, NumOps.FromDouble(1.0 / segmentScale)), true);
         var counts = new Tensor<int>(durations, new[] { tokens });

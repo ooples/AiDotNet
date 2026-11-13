@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Audio.Pitch;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
@@ -203,9 +204,9 @@ public partial class EmotiVoice<T>
     internal static Tensor<T> ContinuousPitch(Tensor<T> pitch) => PitchWaveletTransform.FillUnvoiced(pitch);
 
     /// <summary>feats.Energy: the L2 norm of each frame of librosa's centred STFT magnitude.</summary>
-    /// <remarks>The spectrum is scaled by 2<sup>−⌈log₂ fftSize⌉</sup> before it is squared and the norm scaled back
-    /// (exact in binary floating point), so a half-precision power sum cannot overflow; the 1e-10 floor is scaled with
-    /// it.</remarks>
+    /// <remarks>The power, its sum and the 1e-10 floor are formed in double and only the norm is narrowed to T: in
+    /// half precision the squares of a scaled spectrum underflow to zero for quiet frames, and so does the floor.
+    /// </remarks>
     internal Tensor<T> FrameEnergy(Tensor<T> audio)
     {
         var o = _options;
@@ -213,12 +214,12 @@ public partial class EmotiVoice<T>
         using var _ = new NoGradScope<T>();
         var (re, im) = _energyStft.Forward(Engine.Reshape(audio, new[] { audio.Length }));
         int frames = re.Shape[2];
-        double scale = Math.Pow(2.0, Math.Ceiling(Math.Log(o.FftSize, 2.0)));
-        T down = NumOps.FromDouble(1.0 / scale);
-        var power = Engine.TensorAdd(Engine.TensorSquare(Engine.TensorMultiplyScalar(re, down)), Engine.TensorSquare(Engine.TensorMultiplyScalar(im, down)));
+        var wideRe = TensorCopyHelper.CastLogical<T, double>(re);
+        var wideIm = TensorCopyHelper.CastLogical<T, double>(im);
+        var power = Engine.TensorAdd(Engine.TensorSquare(wideRe), Engine.TensorSquare(wideIm));
         var sum = Engine.ReduceSum(power, new[] { 1 }, false);
-        var norm = Engine.TensorSqrt(Engine.TensorMax(sum, NumOps.FromDouble(1e-10 / (scale * scale))));
-        return Engine.Reshape(Engine.TensorMultiplyScalar(norm, NumOps.FromDouble(scale)), new[] { frames });
+        var norm = Engine.TensorSqrt(Engine.TensorMax(sum, 1e-10));
+        return Engine.Reshape(norm.Cast<T>(), new[] { frames });
     }
 
     // The collated targets: truncated or zero-padded to the mel frames.

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Audio.Features;
 using EnginePadMode = AiDotNet.Tensors.Engines.PadMode;
 
@@ -99,19 +100,17 @@ public sealed class TacotronSpectrogram
     }
 
     /// <summary>
-    /// FastSpeech 2's frame energy: the L2 norm of each STFT magnitude frame, <c>[frames]</c>. The magnitude is scaled
-    /// by a power of two before it is squared (exact in binary floating point), so a 16-bit T cannot overflow.
+    /// FastSpeech 2's frame energy: the L2 norm of each STFT magnitude frame, <c>[frames]</c>. The squares and their
+    /// sum are formed in double and only the norm is narrowed to T: in a 16-bit T the squares either overflow or, once
+    /// scaled down to avoid that, underflow to zero for quiet bins (513 bins at 0.1 gave 0 instead of 2.265).
     /// </summary>
     /// <typeparam name="T">The numeric type of the magnitude.</typeparam>
     public Tensor<T> Energy<T>(Tensor<T> magnitude)
     {
         if (magnitude is null) throw new ArgumentNullException(nameof(magnitude));
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        double scale = Math.Pow(2.0, Math.Ceiling(Math.Log(FftSize, 2.0)));
-        var scaled = engine.TensorMultiplyScalar(magnitude, ops.FromDouble(1.0 / scale));
-        var sumOfSquares = engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, false);
-        return engine.TensorMultiplyScalar(engine.TensorSqrt(sumOfSquares), ops.FromDouble(scale));
+        var wide = TensorCopyHelper.CastLogical<T, double>(magnitude);
+        return engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(wide), new[] { 1 }, false)).Cast<T>();
     }
 
     /// <summary>The mel filterbank, <c>[melChannels, fftSize/2 + 1]</c> (librosa <c>filters.mel</c>, Slaney).</summary>

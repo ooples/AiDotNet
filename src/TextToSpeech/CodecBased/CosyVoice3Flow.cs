@@ -80,17 +80,16 @@ internal sealed class CosyVoice3Flow<T>
     {
         if (xvector.Length != Options.SpeakerEmbeddingDim)
             throw new ArgumentException($"The speaker embedding needs {Options.SpeakerEmbeddingDim} values.", nameof(xvector));
-        // F.normalize: x / max(||x||, 1e-12). The norm is taken of x divided by its peak, so the squares cannot
-        // overflow a 16-bit T; an all-zero vector stays zero.
+        // F.normalize: x / max(||x||, 1e-12), computed as (x/p) / ||x/p|| with p the peak |x|. The norm itself is never
+        // formed (192 entries of 5000 have a norm beyond half precision), and ||x/p|| >= 1 so the floor cannot apply
+        // once p > 0; an all-zero vector stays zero.
         var row = _engine.Reshape(xvector, new[] { 1, xvector.Length });
         T peak = _engine.TensorMaxValue(_engine.TensorAbs(row));
         var normalized = row;
         if (NumOps.GreaterThan(peak, NumOps.Zero))
         {
             var scaled = _engine.TensorDivideScalar(row, peak);
-            T norm = NumOps.Multiply(peak, NumOps.Sqrt(_engine.TensorSum(_engine.TensorMultiply(scaled, scaled))));
-            T floor = NumOps.FromDouble(1e-12);
-            normalized = _engine.TensorDivideScalar(row, NumOps.GreaterThan(norm, floor) ? norm : floor);
+            normalized = _engine.TensorDivideScalar(scaled, NumOps.Sqrt(_engine.TensorSum(_engine.TensorMultiply(scaled, scaled))));
         }
         return _engine.Reshape(SpeakerProjection.Forward(normalized), new[] { Options.DiTInputDim });
     }

@@ -2435,9 +2435,6 @@ AiDotNet.Audio.Foundations.W2vBert<T>.ExtractWeightedFeatures(AiDotNet.Tensors.L
 override AiDotNet.Audio.Foundations.Wav2Vec2<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
 AiDotNet.Audio.Foundations.W2vBert<T>.FitSemanticTokenizer(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! recordings) -> void
 static AiDotNet.Audio.Pitch.PitchWaveletTransform.ContinuousLogF0(double[]! f0) -> (double[]! Unvoiced, double[]! ContinuousLogF0)
-static AiDotNet.Audio.Pitch.PitchWaveletTransform.ContinuousLogF0<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! f0) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Unvoiced, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! ContinuousLogF0)
-static AiDotNet.Audio.Pitch.PitchWaveletTransform.Forward<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-static AiDotNet.Audio.Pitch.PitchWaveletTransform.ToF0<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! spectrogram, T logF0Mean, T logF0Std) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 static AiDotNet.Audio.Pitch.PitchWaveletTransform.Forward(double[]! signal) -> double[,]!
 AiDotNet.Audio.Foundations.HuBERT<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 AiDotNet.Audio.Foundations.W2vBert<T>.SemanticTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording) -> int[]!

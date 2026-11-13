@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Audio.Pitch;
 using AiDotNet.Interfaces;
@@ -203,23 +204,17 @@ public partial class NaturalSpeech3<T>
         var voiced = engine.TensorGreaterThan(f0, Ops.Zero);
         int count = engine.TensorCountNonzero(voiced);
         if (count == 0) return (zero, voiced);
-        int log2Count = (int)Math.Ceiling(Math.Log(count, 2.0));
-        double sumScale = Math.Pow(2.0, log2Count);
-        var voicedF0 = engine.TensorWhere(voiced, f0, zero);
-        double mean = Ops.ToDouble(engine.ReduceSum(engine.TensorMultiplyScalar(voicedF0, Ops.FromDouble(1.0 / sumScale)), null).ToArray()[0]) / count * sumScale;
-        var centered = engine.TensorWhere(voiced, engine.TensorSubtractScalar(f0, Ops.FromDouble(mean)), zero);
-        double std = 1;
-        if (count > 1)
-        {
-            double squareScale = Math.Pow(2.0, 10 + (log2Count + 1) / 2);
-            double squares = Ops.ToDouble(engine.TensorSumOfSquares(engine.TensorMultiplyScalar(centered, Ops.FromDouble(1.0 / squareScale))));
-            std = Math.Sqrt(squares * squareScale * squareScale / count);
-        }
-        var normalized = engine.TensorWhere(voiced, engine.TensorDivideScalar(centered, Deviation(Math.Max(std, 1e-8))), zero);
+        // The mean, the deviation and the normalization run in double and only the normalized contour is narrowed
+        // to T: in half precision a scaled sum of squares underflows (1,024 frames split between 100 and 100.25 Hz
+        // lose their 0.125 deviation and were divided by 1).
+        var mask = voiced.Cast<double>();
+        var wideZero = new Tensor<double>(new[] { frames });
+        var wideF0 = engine.TensorWhere(mask, TensorCopyHelper.CastLogical<T, double>(f0), wideZero);
+        double mean = engine.TensorSum(wideF0) / count;
+        var centered = engine.TensorWhere(mask, engine.TensorSubtractScalar(wideF0, mean), wideZero);
+        double std = count > 1 ? Math.Sqrt(engine.TensorSumOfSquares(centered) / count) : 1;
+        var normalized = engine.TensorDivideScalar(centered, Math.Max(std, 1e-8)).Cast<T>();
         return (normalized, voiced);
-
-        // A deviation T cannot hold (1e-8 in half precision) bounds deviations that T rounds to 0 anyway: divide by 1.
-        static T Deviation(double value) => Ops.ToDouble(Ops.FromDouble(value)) > 0 ? Ops.FromDouble(value) : Ops.One;
     }
 
     private sealed record CodecPass(Tensor<T> Audio, Tensor<T> Auxiliary);

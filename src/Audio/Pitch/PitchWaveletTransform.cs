@@ -134,7 +134,8 @@ public static class PitchWaveletTransform
         double mean = sum.Average();
         double variance = sum.Select(v => (v - mean) * (v - mean)).Average();
         double std = Math.Sqrt(variance);
-        for (int t = 0; t < n; t++) sum[t] = (sum[t] - mean) / std;
+        // Zero deviation (a constant contour or one frame) standardizes to 0 rather than 0/0 = NaN.
+        for (int t = 0; t < n; t++) sum[t] = std > 0 ? (sum[t] - mean) / std : 0.0;
         return sum;
     }
 
@@ -158,7 +159,7 @@ public static class PitchWaveletTransform
     /// <typeparam name="T">The numeric type of the contour.</typeparam>
     /// <remarks>The interpolation product (r − l)(j − i<sub>l</sub>) is scaled by a power of two before it is formed
     /// and back after the division: exact in binary floating point, and a half-precision product cannot overflow.</remarks>
-    public static (Tensor<T> Unvoiced, Tensor<T> ContinuousLogF0) ContinuousLogF0<T>(Tensor<T> f0)
+    internal static (Tensor<T> Unvoiced, Tensor<T> ContinuousLogF0) ContinuousLogF0<T>(Tensor<T> f0)
     {
         if (f0 is null) throw new ArgumentNullException(nameof(f0));
         var engine = AiDotNetEngine.Current;
@@ -194,13 +195,14 @@ public static class PitchWaveletTransform
         var left = engine.TensorIndexSelect(voiced, lower, 0);
         var right = engine.TensorIndexSelect(voiced, upper, 0);
         var voicedValues = engine.TensorIndexSelect(flat, voiced, 0);
-        var leftValue = engine.TensorIndexSelect(voicedValues, lower, 0);
-        var rightValue = engine.TensorIndexSelect(voicedValues, upper, 0);
-        double scale = Math.Pow(2.0, Math.Ceiling(Math.Log(n, 2.0)));
-        var difference = engine.TensorMultiplyScalar(engine.TensorSubtract(rightValue, leftValue), ops.FromDouble(1.0 / scale));
-        var step = engine.TensorDivide(engine.TensorMultiply(difference, engine.TensorSubtract(position, left).Cast<T>()),
-            engine.TensorSubtract(right, left).Cast<T>());
-        var interpolated = engine.TensorAdd(leftValue, engine.TensorMultiplyScalar(step, ops.FromDouble(scale)));
+        // The interpolation runs in double and is narrowed once: frame offsets beyond 65504 do not fit a half-precision
+        // T, and neither does the power-of-two scale that kept their product in range.
+        var leftValue = TensorCopyHelper.CastLogical<T, double>(engine.TensorIndexSelect(voicedValues, lower, 0));
+        var rightValue = TensorCopyHelper.CastLogical<T, double>(engine.TensorIndexSelect(voicedValues, upper, 0));
+        var step = engine.TensorDivide(
+            engine.TensorMultiply(engine.TensorSubtract(rightValue, leftValue), engine.TensorSubtract(position, left).Cast<double>()),
+            engine.TensorSubtract(right, left).Cast<double>());
+        var interpolated = engine.TensorAdd(leftValue, step).Cast<T>();
         // Voiced positions (every frame outside the voiced span reads one) keep their value exactly.
         return engine.TensorWhere(engine.TensorNotEquals(atPosition, ops.Zero), atPosition, interpolated);
     }
@@ -211,7 +213,7 @@ public static class PitchWaveletTransform
     /// <c>[scale, n]</c> product, and one batched inverse FFT.
     /// </summary>
     /// <typeparam name="T">The numeric type of the signal.</typeparam>
-    public static Tensor<T> Forward<T>(Tensor<T> signal)
+    internal static Tensor<T> Forward<T>(Tensor<T> signal)
     {
         if (signal is null) throw new ArgumentNullException(nameof(signal));
         var engine = AiDotNetEngine.Current;
@@ -235,7 +237,7 @@ public static class PitchWaveletTransform
     /// sum, standardized over time, then <c>exp(z σ + μ)</c>, <c>[time]</c>.
     /// </summary>
     /// <typeparam name="T">The numeric type of the spectrogram.</typeparam>
-    public static Tensor<T> ToF0<T>(Tensor<T> spectrogram, T logF0Mean, T logF0Std)
+    internal static Tensor<T> ToF0<T>(Tensor<T> spectrogram, T logF0Mean, T logF0Std)
     {
         if (spectrogram is null) throw new ArgumentNullException(nameof(spectrogram));
         if (spectrogram.Rank != 2) throw new ArgumentException("Expected a [time, scale] spectrogram.", nameof(spectrogram));
@@ -246,8 +248,13 @@ public static class PitchWaveletTransform
         for (int i = 0; i < scales; i++) weights[i] = Math.Pow(i + 1 + 2.5, -2.5);
         var sum = engine.Reshape(engine.TensorMatMul(spectrogram, new Tensor<double>(weights, new[] { scales, 1 }).Cast<T>()), new[] { n });
         var centred = engine.TensorSubtractScalar(sum, engine.TensorMean(sum));
-        var std = MathHelper.GetNumericOperations<T>().Sqrt(engine.TensorMean(engine.TensorMultiply(centred, centred)));
-        var standardized = engine.TensorDivideScalar(centred, std);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var std = ops.Sqrt(engine.TensorMean(engine.TensorMultiply(centred, centred)));
+        // A constant contour (or a single frame) has zero deviation: its standardized value is 0, so every frame maps
+        // to exp(logF0Mean) instead of 0/0 = NaN.
+        var standardized = ops.GreaterThan(std, ops.Zero)
+            ? engine.TensorDivideScalar(centred, std)
+            : engine.TensorZerosLike(centred);
         return engine.TensorExp(engine.TensorAddScalar(engine.TensorMultiplyScalar(standardized, logF0Std), logF0Mean));
     }
 

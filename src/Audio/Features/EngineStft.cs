@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using EnginePadMode = AiDotNet.Tensors.Engines.PadMode;
 
 namespace AiDotNet.Audio.Features;
@@ -57,12 +58,13 @@ internal static class EngineStft<T>
         engine.FFT(framed.Contiguous(), new Tensor<T>(new[] { frames, fftSize }), out var outRe, out var outIm);
         var re = engine.TensorSlice(outRe, new[] { 0, 0 }, new[] { frames, bins });
         var im = engine.TensorSlice(outIm, new[] { 0, 0 }, new[] { frames, bins });
-        T peak = engine.TensorMaxValue(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)));
-        T scale = Ops.GreaterThan(peak, Ops.Zero) ? peak : Ops.One;
-        var squares = engine.TensorAdd(engine.TensorSquare(engine.TensorDivideScalar(re, scale)),
-            engine.TensorSquare(engine.TensorDivideScalar(im, scale)));
+        // |X| = sqrt(re² + im² + ε) in double, narrowed to T once: a 16-bit T overflows the squares and cannot hold
+        // ε = 1e-10 at all, although it holds the resulting magnitude (1e-5 for silence).
+        var wideRe = TensorCopyHelper.CastLogical<T, double>(re);
+        var wideIm = TensorCopyHelper.CastLogical<T, double>(im);
+        var squares = engine.TensorAdd(engine.TensorSquare(wideRe), engine.TensorSquare(wideIm));
         if (epsilon != 0.0)
-            squares = engine.TensorAddScalar(squares, Ops.Divide(Ops.Divide(Ops.FromDouble(epsilon), scale), scale));
-        return engine.TensorMultiplyScalar(engine.TensorSqrt(squares), scale);
+            squares = engine.TensorAddScalar(squares, epsilon);
+        return engine.TensorSqrt(squares).Cast<T>();
     }
 }

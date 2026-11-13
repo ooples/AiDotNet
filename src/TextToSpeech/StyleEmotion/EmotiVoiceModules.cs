@@ -283,8 +283,11 @@ internal sealed class EmotiVoiceAlignment<T>
             Tensor<T> ShiftDown(Tensor<T> column) => n == 1 ? none
                 : engine.TensorConcatenate(new[] { none, engine.TensorSlice(column, new[] { 0 }, new[] { n - 1 }) }, 0);
             var columns = new Tensor<T>[frames];
-            // Q[:, 0] = [log p[0, 0], −∞, …].
-            var q = engine.TensorAdd(Row(0), ShiftDown(Tensor<T>.CreateDefault(new[] { n }, NumOps.Zero)));
+            // Q[:, 0] = [log p[0, 0], −∞, …]: only phoneme 0 is reachable at frame 0. (ShiftDown of zeros gave the
+            // inverse, [−∞, 0, …], which barred phoneme 0 and let every later phoneme start the path.)
+            var start = Tensor<T>.CreateDefault(new[] { n }, negativeInfinity);
+            start[0] = NumOps.Zero;
+            var q = engine.TensorAdd(Row(0), start);
             columns[0] = q;
             for (int j = 1; j < frames; j++)
             {

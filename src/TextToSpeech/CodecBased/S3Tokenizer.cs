@@ -191,9 +191,12 @@ internal sealed class S3Tokenizer<T>
         var power = engine.TensorAdd(engine.TensorMultiply(re, re), engine.TensorMultiply(im, im));                 // [frames, bins]
         var filters = EngineStft<T>.Table(MelFilterbanks.Slaney(SampleRate, FftSize, mels, 0, SampleRate / 2.0));     // [mels, bins]
         var mel = engine.TensorMatMul(filters, engine.TensorTranspose(power));                                        // [mels, frames]
-        double floor = 1e-10 / Math.Pow(2, 2 * Shift);
-        var log = engine.TensorAddScalar(engine.TensorLog10(engine.TensorMax(mel, NumOps.FromDouble(floor))),
-            NumOps.FromDouble(2 * Shift * Math.Log10(2.0)));
+        // log10(max(mel·4^Shift, 1e-10)) = max(log10(mel) + 2·Shift·log10 2, −10): the floor is applied in the log
+        // domain, where it is representable in any T (1e-10 / 2^(2·Shift) underflows to zero in half precision, and
+        // silence then gave log10(0) = −∞ everywhere, which the max-relative floor cannot recover).
+        var log = engine.TensorMax(
+            engine.TensorAddScalar(engine.TensorLog10(mel), NumOps.FromDouble(2 * Shift * Math.Log10(2.0))),
+            NumOps.FromDouble(-10.0));
         T lowest = NumOps.Subtract(engine.TensorMaxValue(log), NumOps.FromDouble(8.0));
         return engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorMax(log, lowest), NumOps.FromDouble(4.0)), NumOps.FromDouble(0.25));
     }
