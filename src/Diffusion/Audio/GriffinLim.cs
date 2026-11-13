@@ -342,15 +342,8 @@ public partial class GriffinLim<T>
             double convergence = 0;
             if (previousSignal != null)
             {
-                double sumSquaredDiff = 0;
-                double sumSquaredSignal = 0;
-                for (int i = 0; i < signal.Data.Length; i++)
-                {
-                    double diff = NumOps.ToDouble(signal.Data.Span[i]) - NumOps.ToDouble(previousSignal.Data.Span[i]);
-                    sumSquaredDiff += diff * diff;
-                    sumSquaredSignal += NumOps.ToDouble(signal.Data.Span[i]) * NumOps.ToDouble(signal.Data.Span[i]);
-                }
-                convergence = sumSquaredSignal > 0 ? sumSquaredDiff / sumSquaredSignal : 0;
+                // sum (signal - previous)^2 / sum signal^2, 0 for a silent signal (Half is reduced in double)
+                convergence = NumOps.ToDouble(DiffusionVectorOps.RelativeSquaredError(signal, previousSignal));
             }
 
             progressCallback?.Invoke(iter, convergence);
@@ -375,26 +368,17 @@ public partial class GriffinLim<T>
     /// <param name="targetMagnitude">Target magnitude spectrogram.</param>
     /// <param name="signal">Reconstructed signal.</param>
     /// <returns>Spectral convergence error (lower is better).</returns>
-    public double ComputeSpectralConvergence(Tensor<T> targetMagnitude, Tensor<T> signal)
+    public T ComputeSpectralConvergence(Tensor<T> targetMagnitude, Tensor<T> signal)
     {
         var reconstructedMag = _stft.Magnitude(signal);
 
-        double sumSquaredDiff = 0;
-        double sumSquaredTarget = 0;
-
-        int length = Math.Min(targetMagnitude.Data.Length, reconstructedMag.Data.Length);
-
-        for (int i = 0; i < length; i++)
-        {
-            double target = NumOps.ToDouble(targetMagnitude.Data.Span[i]);
-            double recon = NumOps.ToDouble(reconstructedMag.Data.Span[i]);
-            double diff = target - recon;
-
-            sumSquaredDiff += diff * diff;
-            sumSquaredTarget += target * target;
-        }
-
-        return sumSquaredTarget > 0 ? Math.Sqrt(sumSquaredDiff / sumSquaredTarget) : 0;
+        // sqrt(sum (target - recon)^2 / sum target^2) over the common prefix; 0 when the target has no energy.
+        // Half is reduced in double: STFT magnitudes above 255 overflow its squares.
+        var engine = Engine;
+        int length = Math.Min(targetMagnitude.Length, reconstructedMag.Length);
+        var target = engine.TensorNarrow(engine.Reshape(targetMagnitude, new[] { targetMagnitude.Length }), 0, 0, length);
+        var recon = engine.TensorNarrow(engine.Reshape(reconstructedMag, new[] { reconstructedMag.Length }), 0, 0, length);
+        return NumOps.Sqrt(DiffusionVectorOps.RelativeSquaredError(target, recon));
     }
 
     /// <summary>
@@ -475,25 +459,26 @@ public partial class GriffinLim<T>
     /// </remarks>
     private Tensor<T> ApplyMomentum(Tensor<T> newPhase, Tensor<T> previousPhase, Tensor<T> currentPhase)
     {
-        var result = new Tensor<T>(newPhase._shape);
-        T momentumT = NumOps.FromDouble(_momentum);
+        var engine = Engine;
 
-        for (int i = 0; i < newPhase.Data.Length; i++)
-        {
-            // Compute phase velocity (difference between current and previous)
-            var velocity = NumOps.Subtract(currentPhase.Data.Span[i], previousPhase.Data.Span[i]);
+        // Apply momentum: new_phase + momentum * (current - previous)
+        var velocity = engine.TensorSubtract(currentPhase, previousPhase);
+        var phase = engine.TensorAdd(newPhase, engine.TensorMultiplyScalar(velocity, NumOps.FromDouble(_momentum)));
 
-            // Apply momentum: new_phase + momentum * velocity
-            var momentumContrib = NumOps.Multiply(momentumT, velocity);
-            result.Data.Span[i] = NumOps.Add(newPhase.Data.Span[i], momentumContrib);
-
-            // Wrap to [-pi, pi]
-            double phaseVal = NumOps.ToDouble(result.Data.Span[i]);
-            while (phaseVal > Math.PI) phaseVal -= 2 * Math.PI;
-            while (phaseVal < -Math.PI) phaseVal += 2 * Math.PI;
-            result.Data.Span[i] = NumOps.FromDouble(phaseVal);
-        }
-
-        return result;
+        // Wrap to [-pi, pi]: values above pi drop by the fewest whole turns that bring them to at most pi,
+        // values below -pi rise by the fewest whole turns that bring them to at least -pi (NaN is kept)
+        var pi = NumOps.FromDouble(Math.PI);
+        var twoPi = NumOps.FromDouble(2 * Math.PI);
+        Tensor<T> Ceiling(Tensor<T> x) => engine.TensorNegate(engine.TensorFloor(engine.TensorNegate(x)));
+        var turnsDown = Ceiling(engine.TensorDivideScalar(engine.TensorAddScalar(phase, NumOps.Negate(pi)), twoPi));
+        var wrapped = engine.TensorWhere(
+            engine.TensorGreaterThan(phase, pi),
+            engine.TensorSubtract(phase, engine.TensorMultiplyScalar(turnsDown, twoPi)),
+            phase);
+        var turnsUp = Ceiling(engine.TensorDivideScalar(engine.ScalarMinusTensor(NumOps.Negate(pi), wrapped), twoPi));
+        return engine.TensorWhere(
+            engine.TensorLessThan(wrapped, NumOps.Negate(pi)),
+            engine.TensorAdd(wrapped, engine.TensorMultiplyScalar(turnsUp, twoPi)),
+            wrapped);
     }
 }

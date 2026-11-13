@@ -75,18 +75,9 @@ public class ScoreDistillationSampling<T>
     /// <returns>SDS gradient: w(t) * (epsilon_pred - epsilon_added).</returns>
     public Vector<T> ComputeGradient(Vector<T> predictedNoise, Vector<T> addedNoise, double timestepWeight)
     {
-        var gradient = new Vector<T>(predictedNoise.Length);
+        // w(t) * scale * (eps_pred - eps), the added noise zero-padded to the prediction length
         var weight = NumOps.FromDouble(timestepWeight * _gradientScale);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var diff = NumOps.Subtract(
-                predictedNoise[i],
-                i < addedNoise.Length ? addedNoise[i] : NumOps.Zero);
-            gradient[i] = NumOps.Multiply(weight, diff);
-        }
-
-        return gradient;
+        return DiffusionVectorOps.ScaledDifference(predictedNoise, addedNoise, predictedNoise.Length, weight);
     }
 
     /// <summary>

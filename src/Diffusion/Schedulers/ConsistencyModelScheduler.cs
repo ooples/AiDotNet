@@ -92,18 +92,26 @@ public sealed class ConsistencyModelScheduler<T> : NoiseSchedulerBase<T>
             return;
         }
 
-        // Geometrically-spaced sigmas from sigma_max to sigma_min
-        double logSigmaMax = Math.Log(_sigmaMax);
-        double logSigmaMin = Math.Log(_sigmaMin);
+        _sigmas = GeometricSigmas(inferenceSteps, _sigmaMax, _sigmaMin);
+    }
 
-        for (int i = 0; i < inferenceSteps; i++)
-        {
-            double t = (double)i / (inferenceSteps - 1);
-            double logSigma = logSigmaMax + t * (logSigmaMin - logSigmaMax);
-            _sigmas[i] = NumOps.FromDouble(Math.Exp(logSigma));
-        }
-
-        _sigmas[inferenceSteps] = NumOps.FromDouble(_sigmaMin);
+    /// <summary>
+    /// Geometrically-spaced sigmas exp(log sigma_max + (i / (n - 1)) (log sigma_min - log sigma_max)), i = 0..n-1,
+    /// then a final sigma_min (n &gt;= 2).
+    /// </summary>
+    /// <remarks>
+    /// Built in double and rounded to T once, like the loop it replaced: a Half linspace of the logs followed by a
+    /// Half exp compounds several roundings into the sigmas.
+    /// </remarks>
+    internal static Vector<T> GeometricSigmas(int inferenceSteps, double sigmaMax, double sigmaMin)
+    {
+        var engine = AiDotNetEngine.Current;
+        double logSigmaMax = Math.Log(sigmaMax);
+        double logSigmaMin = Math.Log(sigmaMin);
+        var t = engine.TensorDivideScalar(engine.TensorArange<double>(0, inferenceSteps, 1), (double)(inferenceSteps - 1));
+        var logSigmas = engine.TensorAddScalar(engine.TensorMultiplyScalar(t, logSigmaMin - logSigmaMax), logSigmaMax);
+        var sigmas = engine.TensorConcatenate(new[] { engine.TensorExp(logSigmas), new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { sigmaMin })) }, 0);
+        return sigmas.Cast<T>().ToVector();
     }
 
     /// <summary>

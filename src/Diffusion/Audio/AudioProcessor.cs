@@ -252,22 +252,23 @@ public class AudioProcessor<T>
     /// <returns>Normalized spectrogram in [0, 1].</returns>
     public Tensor<T> NormalizeSpectrogram(Tensor<T> dbSpectrogram)
     {
-        var normalized = new Tensor<T>(dbSpectrogram._shape);
-        double range = _maxDb - _minDb;
+        // Clamp to [minDb, maxDb], then normalize to [0, 1]: (db - minDb) / (maxDb - minDb)
+        var engine = AiDotNetEngine.Current;
+        var minDb = NumOps.FromDouble(_minDb);
+        var db = ClampKeepingNaN(dbSpectrogram, minDb, NumOps.FromDouble(_maxDb));
+        return engine.TensorDivideScalar(engine.TensorAddScalar(db, NumOps.Negate(minDb)), NumOps.FromDouble(_maxDb - _minDb));
+    }
 
-        for (int i = 0; i < dbSpectrogram.Data.Length; i++)
-        {
-            double db = NumOps.ToDouble(dbSpectrogram.Data.Span[i]);
-
-            // Clamp to [minDb, maxDb]
-            db = Math.Max(_minDb, Math.Min(_maxDb, db));
-
-            // Normalize to [0, 1]
-            double norm = (db - _minDb) / range;
-            normalized.Data.Span[i] = NumOps.FromDouble(norm);
-        }
-
-        return normalized;
+    /// <summary>
+    /// Clamps every element to [<paramref name="low"/>, <paramref name="high"/>]; NaN compares false and is kept.
+    /// </summary>
+    private static Tensor<T> ClampKeepingNaN(Tensor<T> values, T low, T high)
+    {
+        var engine = AiDotNetEngine.Current;
+        var upper = engine.TensorWhere(
+            engine.TensorGreaterThan(values, high), Tensor<T>.CreateDefault(values._shape, high), values);
+        return engine.TensorWhere(
+            engine.TensorLessThan(upper, low), Tensor<T>.CreateDefault(values._shape, low), upper);
     }
 
     /// <summary>
@@ -277,22 +278,11 @@ public class AudioProcessor<T>
     /// <returns>Spectrogram in dB.</returns>
     public Tensor<T> DenormalizeSpectrogram(Tensor<T> normalizedSpectrogram)
     {
-        var denormalized = new Tensor<T>(normalizedSpectrogram._shape);
-        double range = _maxDb - _minDb;
-
-        for (int i = 0; i < normalizedSpectrogram.Data.Length; i++)
-        {
-            double norm = NumOps.ToDouble(normalizedSpectrogram.Data.Span[i]);
-
-            // Clamp to [0, 1]
-            norm = Math.Max(0, Math.Min(1, norm));
-
-            // Denormalize to dB
-            double db = norm * range + _minDb;
-            denormalized.Data.Span[i] = NumOps.FromDouble(db);
-        }
-
-        return denormalized;
+        // Clamp to [0, 1], then denormalize to dB: norm * (maxDb - minDb) + minDb
+        var engine = AiDotNetEngine.Current;
+        var norm = ClampKeepingNaN(normalizedSpectrogram, NumOps.Zero, NumOps.One);
+        return engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(norm, NumOps.FromDouble(_maxDb - _minDb)), NumOps.FromDouble(_minDb));
     }
 
     /// <summary>
@@ -300,17 +290,11 @@ public class AudioProcessor<T>
     /// </summary>
     private Tensor<T> PowerToDb(Tensor<T> power)
     {
-        var db = new Tensor<T>(power._shape);
-        const double epsilon = 1e-10;
-
-        for (int i = 0; i < power.Data.Length; i++)
-        {
-            double powerVal = NumOps.ToDouble(power.Data.Span[i]);
-            double dbVal = 10.0 * Math.Log10(powerVal + epsilon);
-            db.Data.Span[i] = NumOps.FromDouble(dbVal);
-        }
-
-        return db;
+        // dB = 10 * log10(power + epsilon)
+        var engine = AiDotNetEngine.Current;
+        // Preserve the original wide arithmetic: Half cannot represent the positive silence floor.
+        var shifted = engine.TensorAddScalar(power.Cast<double>(), 1e-10);
+        return engine.TensorMultiplyScalar(engine.TensorLog10(shifted), 10.0).Cast<T>();
     }
 
     /// <summary>
@@ -318,16 +302,9 @@ public class AudioProcessor<T>
     /// </summary>
     private Tensor<T> DbToPower(Tensor<T> db)
     {
-        var power = new Tensor<T>(db._shape);
-
-        for (int i = 0; i < db.Data.Length; i++)
-        {
-            double dbVal = NumOps.ToDouble(db.Data.Span[i]);
-            double powerVal = Math.Pow(10.0, dbVal / 10.0);
-            power.Data.Span[i] = NumOps.FromDouble(powerVal);
-        }
-
-        return power;
+        // power = 10^(dB / 10) = exp(dB * ln(10) / 10)
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorExp(engine.TensorMultiplyScalar(db, NumOps.FromDouble(Math.Log(10.0) / 10.0)));
     }
 
     /// <summary>
@@ -429,31 +406,16 @@ public class AudioProcessor<T>
     /// <returns>Normalized audio tensor.</returns>
     public Tensor<T> NormalizeAudio(Tensor<T> audio, double targetPeak = 0.95)
     {
-        // Find current peak
-        double maxAbs = 0;
-        for (int i = 0; i < audio.Data.Length; i++)
-        {
-            double absVal = Math.Abs(NumOps.ToDouble(audio.Data.Span[i]));
-            if (absVal > maxAbs)
-            {
-                maxAbs = absVal;
-            }
-        }
-
-        if (maxAbs < 1e-8)
+        // Find current peak (NaN samples are ignored)
+        var engine = AiDotNetEngine.Current;
+        var wide = audio.Cast<double>();
+        var absolute = engine.TensorNanToNum(engine.TensorAbs(wide), 0.0, double.PositiveInfinity, double.NegativeInfinity);
+        double peak = audio.Length == 0 ? 0 : engine.TensorMaxValue(absolute);
+        if (peak < 1e-8)
             return audio;
 
-        // Scale to target peak
-        var result = new Tensor<T>(audio._shape);
-        double scale = targetPeak / maxAbs;
-
-        for (int i = 0; i < audio.Data.Length; i++)
-        {
-            double scaled = NumOps.ToDouble(audio.Data.Span[i]) * scale;
-            result.Data.Span[i] = NumOps.FromDouble(scaled);
-        }
-
-        return result;
+        // Compute the scale in double so low-precision silence and tiny peaks stay finite.
+        return engine.TensorMultiplyScalar(wide, targetPeak / peak).Cast<T>();
     }
 
     /// <summary>
@@ -485,39 +447,43 @@ public class AudioProcessor<T>
     {
         int srcHeight = spectrogram.Shape[0];
         int srcWidth = spectrogram.Shape[1];
+        var engine = AiDotNetEngine.Current;
+        var source = engine.Reshape(
+            engine.TensorNarrow(engine.Reshape(spectrogram, new[] { spectrogram.Length }), 0, 0, srcHeight * srcWidth),
+            new[] { srcHeight, srcWidth });
 
-        var resized = new Tensor<T>(new[] { targetHeight, targetWidth });
-
-        for (int y = 0; y < targetHeight; y++)
+        // Align-corners sample positions (a single target row/column samples position 0)
+        void Axis(int target, int src, out Tensor<int> lower, out Tensor<int> upper, out Tensor<T> fraction)
         {
-            // Guard against division by zero when targetHeight is 1
-            double srcY = targetHeight == 1 ? 0 : (double)y * (srcHeight - 1) / (targetHeight - 1);
-            int y0 = (int)Math.Floor(srcY);
-            int y1 = Math.Min(y0 + 1, srcHeight - 1);
-            double yFrac = srcY - y0;
-
-            for (int x = 0; x < targetWidth; x++)
+            var lo = new int[target];
+            var hi = new int[target];
+            var frac = new double[target];
+            for (int i = 0; i < target; i++)
             {
-                // Guard against division by zero when targetWidth is 1
-                double srcX = targetWidth == 1 ? 0 : (double)x * (srcWidth - 1) / (targetWidth - 1);
-                int x0 = (int)Math.Floor(srcX);
-                int x1 = Math.Min(x0 + 1, srcWidth - 1);
-                double xFrac = srcX - x0;
-
-                // Bilinear interpolation
-                double v00 = NumOps.ToDouble(spectrogram.Data.Span[y0 * srcWidth + x0]);
-                double v01 = NumOps.ToDouble(spectrogram.Data.Span[y0 * srcWidth + x1]);
-                double v10 = NumOps.ToDouble(spectrogram.Data.Span[y1 * srcWidth + x0]);
-                double v11 = NumOps.ToDouble(spectrogram.Data.Span[y1 * srcWidth + x1]);
-
-                double v0 = v00 * (1 - xFrac) + v01 * xFrac;
-                double v1 = v10 * (1 - xFrac) + v11 * xFrac;
-                double value = v0 * (1 - yFrac) + v1 * yFrac;
-
-                resized.Data.Span[y * targetWidth + x] = NumOps.FromDouble(value);
+                double pos = target == 1 ? 0 : (double)i * (src - 1) / (target - 1);
+                lo[i] = (int)Math.Floor(pos);
+                hi[i] = Math.Min(lo[i] + 1, src - 1);
+                frac[i] = pos - lo[i];
             }
+
+            lower = new Tensor<int>(new[] { target }, new Vector<int>(lo));
+            upper = new Tensor<int>(new[] { target }, new Vector<int>(hi));
+            fraction = new Tensor<double>(new[] { target }, new Vector<double>(frac)).Cast<T>();
         }
 
-        return resized;
+        Axis(targetHeight, srcHeight, out var y0, out var y1, out var yFrac);
+        Axis(targetWidth, srcWidth, out var x0, out var x1, out var xFrac);
+        var shape = new[] { targetHeight, targetWidth };
+        var xw = engine.TensorBroadcastTo(engine.Reshape(xFrac, new[] { 1, targetWidth }), shape);
+        var yw = engine.TensorBroadcastTo(engine.Reshape(yFrac, new[] { targetHeight, 1 }), shape);
+
+        // Bilinear interpolation: v0 = v00 (1 - xf) + v01 xf, v1 = v10 (1 - xf) + v11 xf, value = v0 (1 - yf) + v1 yf
+        Tensor<T> Blend(Tensor<T> a, Tensor<T> b, Tensor<T> w) =>
+            engine.TensorAdd(engine.TensorMultiply(a, engine.ScalarMinusTensor(NumOps.One, w)), engine.TensorMultiply(b, w));
+        var rows0 = engine.TensorIndexSelect(source, y0, 0);
+        var rows1 = engine.TensorIndexSelect(source, y1, 0);
+        var v0 = Blend(engine.TensorIndexSelect(rows0, x0, 1), engine.TensorIndexSelect(rows0, x1, 1), xw);
+        var v1 = Blend(engine.TensorIndexSelect(rows1, x0, 1), engine.TensorIndexSelect(rows1, x1, 1), xw);
+        return Blend(v0, v1, yw);
     }
 }

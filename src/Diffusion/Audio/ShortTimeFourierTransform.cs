@@ -169,11 +169,7 @@ public partial class ShortTimeFourierTransform<T>
         var windowVector = window.Create(_windowLength);
 
         // Convert Vector<T> to T[]
-        _window = new T[_windowLength];
-        for (int i = 0; i < _windowLength; i++)
-        {
-            _window[i] = windowVector[i];
-        }
+        _window = windowVector.AsSpan().Slice(0, _windowLength).ToArray();
 
         // Pad window to nFft if shorter
         if (_windowLength < nFft)
@@ -215,15 +211,19 @@ public partial class ShortTimeFourierTransform<T>
     }
 
     /// <summary>
+    /// The window as a tensor; rebuilt from the window array when the cached tensor is unset.
+    /// </summary>
+    private Tensor<T> WindowTensorOrDefault() => _windowTensor ?? new Tensor<T>(_window, new[] { _window.Length });
+
+    /// <summary>
     /// Computes STFT for a single signal.
     /// </summary>
     private Tensor<Complex<T>> ForwardSingle(T[] signal)
     {
+        // Center the signal by padding
         T[] paddedSignal;
-
         if (_center)
         {
-            // Pad signal by nFft/2 on each side
             int padLength = _nFft / 2;
             paddedSignal = PadSignal(signal, padLength, padLength, _padMode);
         }
@@ -238,31 +238,37 @@ public partial class ShortTimeFourierTransform<T>
 
         var output = new Tensor<Complex<T>>(new[] { numFrames, numFreqs });
 
-        // Process each frame
+        // Gather every frame's samples (positions past the end of the signal read zero) and window them
+        int framedLength = (numFrames - 1) * _hopLength + _nFft;
+        if (framedLength > paddedSignal.Length)
+        {
+            var extended = new T[framedLength];
+            Array.Copy(paddedSignal, extended, paddedSignal.Length);
+            paddedSignal = extended;
+        }
+
+        var positions = new int[numFrames * _nFft];
         for (int frame = 0; frame < numFrames; frame++)
         {
-            int startSample = frame * _hopLength;
-
-            // Extract frame and apply window
-            var windowedFrame = new Vector<T>(_nFft);
             for (int i = 0; i < _nFft; i++)
             {
-                int sampleIdx = startSample + i;
-                if (sampleIdx < paddedSignal.Length)
-                {
-                    windowedFrame[i] = NumOps.Multiply(paddedSignal[sampleIdx], _window[i]);
-                }
+                positions[frame * _nFft + i] = frame * _hopLength + i;
             }
+        }
 
-            // Compute FFT
-            var spectrum = _fft.Forward(windowedFrame);
+        var engine = Engine;
+        var frameShape = new[] { numFrames, _nFft };
+        var samples = engine.Reshape(
+            engine.TensorIndexSelect(new Tensor<T>(paddedSignal, new[] { paddedSignal.Length }), new Tensor<int>(new[] { positions.Length }, new Vector<int>(positions)), 0),
+            frameShape);
+        var windowed = engine.TensorMultiply(
+            samples, engine.TensorBroadcastTo(engine.Reshape(WindowTensorOrDefault(), new[] { 1, _nFft }), frameShape)).ToVector();
 
-            // Store only positive frequencies (DC to Nyquist)
-            for (int f = 0; f < numFreqs; f++)
-            {
-                int outputIdx = frame * numFreqs + f;
-                output.Data.Span[outputIdx] = spectrum[f];
-            }
+        for (int frame = 0; frame < numFrames; frame++)
+        {
+            // Compute FFT of the windowed frame and keep the positive frequencies
+            var spectrum = _fft.Forward(windowed.GetSubVector(frame * _nFft, _nFft));
+            spectrum.AsSpan().Slice(0, numFreqs).CopyTo(output.Data.Span.Slice(frame * numFreqs, numFreqs));
         }
 
         return output;
@@ -341,73 +347,67 @@ public partial class ShortTimeFourierTransform<T>
         int numFrames = spectrogram.Shape[0];
         int numFreqs = spectrogram.Shape[1];
 
-        // Compute output length
+        // Calculate output length
         int outputLength = _nFft + (numFrames - 1) * _hopLength;
         if (_center)
         {
             outputLength -= _nFft; // Remove center padding
         }
+
         outputLength = targetLength ?? outputLength;
+        int bufferLength = outputLength + _nFft; // Extra padding for overlap-add
 
-        // Allocate output and window sum for normalization
-        var output = new T[outputLength + _nFft]; // Extra padding for overlap-add
-        var windowSum = new T[outputLength + _nFft];
-
-        // Process each frame
+        // Inverse FFT of every frame, the negative frequencies rebuilt by Hermitian symmetry
+        var timeFrames = new T[numFrames * _nFft];
+        var spectrogramSpan = spectrogram.Data.Span;
         for (int frame = 0; frame < numFrames; frame++)
         {
-            // Extract spectrum for this frame
-            var spectrum = new Vector<Complex<T>>(_nFft);
-
-            // Copy positive frequencies
-            for (int f = 0; f < numFreqs; f++)
-            {
-                spectrum[f] = spectrogram.Data.Span[frame * numFreqs + f];
-            }
-
-            // Reconstruct negative frequencies (conjugate symmetry)
+            var spectrum = new Complex<T>[_nFft];
+            spectrogramSpan.Slice(frame * numFreqs, numFreqs).CopyTo(spectrum);
             for (int f = 1; f < _nFft / 2; f++)
             {
                 spectrum[_nFft - f] = spectrum[f].Conjugate();
             }
 
-            // Inverse FFT
-            var timeDomain = _fft.Inverse(spectrum);
+            var timeDomain = _fft.Inverse(new Vector<Complex<T>>(spectrum));
+            timeDomain.AsSpan().Slice(0, _nFft).CopyTo(timeFrames.AsSpan(frame * _nFft, _nFft));
+        }
 
-            // Apply window and overlap-add
-            int startSample = frame * _hopLength;
-            if (_center)
-            {
-                startSample -= _nFft / 2;
-            }
-
+        // Overlap-add positions of every frame sample that lands inside the buffer
+        int centerShift = _center ? _nFft / 2 : 0;
+        var targets = new List<int>(numFrames * _nFft);
+        var sources = new List<int>(numFrames * _nFft);
+        for (int frame = 0; frame < numFrames; frame++)
+        {
+            int startSample = frame * _hopLength - centerShift;
             for (int i = 0; i < _nFft; i++)
             {
                 int idx = startSample + i;
-                if (idx >= 0 && idx < output.Length)
+                if (idx >= 0 && idx < bufferLength)
                 {
-                    // Window the reconstructed frame
-                    var windowed = NumOps.Multiply(timeDomain[i], _window[i]);
-                    output[idx] = NumOps.Add(output[idx], windowed);
-
-                    // Accumulate window squared for normalization
-                    var windowSquared = NumOps.Multiply(_window[i], _window[i]);
-                    windowSum[idx] = NumOps.Add(windowSum[idx], windowSquared);
+                    targets.Add(idx);
+                    sources.Add(frame * _nFft + i);
                 }
             }
         }
 
-        // Normalize by window sum (COLA normalization)
-        var result = new T[outputLength];
-        T epsilon = NumOps.FromDouble(1e-8);
+        var engine = Engine;
+        var frameShape = new[] { numFrames, _nFft };
+        var window = engine.TensorBroadcastTo(engine.Reshape(WindowTensorOrDefault(), new[] { 1, _nFft }), frameShape);
+        var windowedFrames = engine.Reshape(
+            engine.TensorMultiply(new Tensor<T>(timeFrames, frameShape), window), new[] { numFrames * _nFft });
+        var squaredWindow = engine.Reshape(engine.TensorSquare(window), new[] { numFrames * _nFft });
 
-        for (int i = 0; i < outputLength; i++)
-        {
-            var denom = NumOps.Add(windowSum[i], epsilon);
-            result[i] = NumOps.Divide(output[i], denom);
-        }
+        var targetIndex = new Tensor<int>(new[] { targets.Count }, new Vector<int>(targets.ToArray()));
+        var sourceIndex = new Tensor<int>(new[] { sources.Count }, new Vector<int>(sources.ToArray()));
+        var output = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { bufferLength }), 0, targetIndex, engine.TensorIndexSelect(windowedFrames, sourceIndex, 0));
+        var windowSum = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { bufferLength }), 0, targetIndex, engine.TensorIndexSelect(squaredWindow, sourceIndex, 0));
 
-        return new Tensor<T>(result, new[] { outputLength });
+        // Normalize by window sum
+        var denom = engine.TensorAddScalar(engine.TensorNarrow(windowSum, 0, 0, outputLength), NumOps.FromDouble(1e-8));
+        return engine.TensorDivide(engine.TensorNarrow(output, 0, 0, outputLength), denom).Contiguous();
     }
 
     /// <summary>
@@ -508,15 +508,7 @@ public partial class ShortTimeFourierTransform<T>
     /// </remarks>
     public Tensor<T> Power(Tensor<T> signal)
     {
-        var magnitude = Magnitude(signal);
-        var power = new Tensor<T>(magnitude._shape);
-
-        for (int i = 0; i < magnitude.Data.Length; i++)
-        {
-            power.Data.Span[i] = NumOps.Multiply(magnitude.Data.Span[i], magnitude.Data.Span[i]);
-        }
-
-        return power;
+        return Engine.TensorSquare(Magnitude(signal));
     }
 
     /// <summary>

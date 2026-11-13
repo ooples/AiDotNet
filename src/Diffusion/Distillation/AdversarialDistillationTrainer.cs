@@ -62,22 +62,15 @@ public class AdversarialDistillationTrainer<T>
     /// <returns>Combined adversarial + diffusion loss.</returns>
     public T ComputeADDLoss(Vector<T> studentOutput, Vector<T> teacherOutput, T discriminatorScore)
     {
-        // Diffusion loss: L2 between student and teacher outputs
-        var diffLoss = NumOps.Zero;
-        for (int i = 0; i < studentOutput.Length && i < teacherOutput.Length; i++)
-        {
-            var diff = NumOps.Subtract(studentOutput[i], teacherOutput[i]);
-            diffLoss = NumOps.Add(diffLoss, NumOps.Multiply(diff, diff));
-        }
+        // Diffusion loss: MSE between student and teacher (over the common prefix, divided by the student length)
+        var diffLoss = DiffusionVectorOps.SquaredDistance(studentOutput, teacherOutput);
         diffLoss = NumOps.Divide(diffLoss, NumOps.FromDouble(studentOutput.Length));
 
-        // Adversarial loss: -log(D(student_output))
+        // Adversarial loss: -log(D(x) + eps)
         var advLoss = NumOps.Negate(NumOps.Log(NumOps.Add(discriminatorScore, NumOps.FromDouble(1e-8))));
 
-        // Combined loss
         var weightedDiff = NumOps.Multiply(NumOps.FromDouble(_diffusionWeight), diffLoss);
         var weightedAdv = NumOps.Multiply(NumOps.FromDouble(_adversarialWeight), advLoss);
-
         return NumOps.Add(weightedDiff, weightedAdv);
     }
 

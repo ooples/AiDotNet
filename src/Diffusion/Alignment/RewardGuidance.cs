@@ -75,18 +75,11 @@ public class RewardGuidance<T>
         // Clip gradient norm
         var clippedGradient = ClipGradientNorm(rewardGradient);
 
-        // Guided prediction: eps - scale * grad_reward
-        var result = new Vector<T>(noisePrediction.Length);
+        // Guided prediction: eps - scale * grad_reward (gradient zero-padded to the prediction length)
+        var engine = AiDotNetEngine.Current;
         var scale = NumOps.FromDouble(_guidanceScale);
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            var grad = i < clippedGradient.Length ? clippedGradient[i] : NumOps.Zero;
-            var guidanceTerm = NumOps.Multiply(scale, grad);
-            result[i] = NumOps.Subtract(noisePrediction[i], guidanceTerm);
-        }
-
-        return result;
+        var guidanceTerm = engine.Multiply(DiffusionVectorOps.Fit(clippedGradient, noisePrediction.Length), scale);
+        return engine.Subtract(noisePrediction, guidanceTerm);
     }
 
     /// <summary>
@@ -96,29 +89,18 @@ public class RewardGuidance<T>
     /// <returns>The clipped gradient vector.</returns>
     private Vector<T> ClipGradientNorm(Vector<T> gradient)
     {
-        // Compute L2 norm
-        double normSq = 0;
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var val = NumOps.ToDouble(gradient[i]);
-            normSq += val * val;
-        }
-        var norm = Math.Sqrt(normSq);
+        // Compute L2 norm (Half is reduced in double: its squares overflow for ordinary reward gradients)
+        var engine = AiDotNetEngine.Current;
+        var norm = DiffusionVectorOps.Norm(gradient);
 
-        if (norm <= _gradientClipNorm)
+        if (NumOps.LessThanOrEquals(norm, NumOps.FromDouble(_gradientClipNorm)))
         {
             return gradient;
         }
 
         // Scale down
-        var clipScale = NumOps.FromDouble(_gradientClipNorm / norm);
-        var clipped = new Vector<T>(gradient.Length);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            clipped[i] = NumOps.Multiply(clipScale, gradient[i]);
-        }
-
-        return clipped;
+        var clipScale = NumOps.Divide(NumOps.FromDouble(_gradientClipNorm), norm);
+        return engine.Multiply(gradient, clipScale);
     }
 
     /// <summary>

@@ -31,8 +31,6 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly (int top, int left, int bottom, int right)[] _boxes;
 
     /// <inheritdoc />
@@ -89,19 +87,11 @@ public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>A binary mask where bounding box regions are 1.</returns>
     public Tensor<T> Generate(int height, int width, (int top, int left, int bottom, int right)[] boxes)
     {
+        var engine = AiDotNetEngine.Current;
         var mask = new Tensor<T>(new[] { height, width });
 
         foreach (var (top, left, bottom, right) in boxes)
-        {
-            int yStart = Math.Max(0, top);
-            int yEnd = Math.Min(height, bottom);
-            int xStart = Math.Max(0, left);
-            int xEnd = Math.Min(width, right);
-
-            for (int y = yStart; y < yEnd; y++)
-                for (int x = xStart; x < xEnd; x++)
-                    mask[y, x] = NumOps.One;
-        }
+            mask = engine.TensorMax(mask, MaskVectorOps.Rectangle<T>(height, width, top, left, bottom, right));
 
         return mask;
     }

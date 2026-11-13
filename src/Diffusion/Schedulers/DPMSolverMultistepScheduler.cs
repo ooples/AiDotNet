@@ -116,29 +116,15 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     private void ComputeScheduleValues()
     {
+        // diffusers DPMSolverMultistepScheduler (dpmsolver++): alpha_t = sqrt(alpha_cumprod),
+        // sigma_t = sqrt(1 - alpha_cumprod), lambda_t = log(alpha_t) - log(sigma_t).
         var timesteps = Timesteps;
-        int len = timesteps.Length;
+        var index = new Tensor<int>(new[] { timesteps.Length }, new Vector<int>(timesteps));
+        var alphaCumprod = Engine.TensorIndexSelect(AlphasCumulativeProduct.AsTensor(), index, 0).ToVector();
 
-        _lambdas = new Vector<T>(len);
-        _alphaTs = new Vector<T>(len);
-        _sigmaTs = new Vector<T>(len);
-
-        for (int i = 0; i < len; i++)
-        {
-            T alphaCumprod = AlphasCumulativeProduct[timesteps[i]];
-            T sqrtAlpha = NumOps.Sqrt(alphaCumprod);
-            T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaCumprod);
-            T sigma = NumOps.Sqrt(NumOps.Divide(oneMinusAlpha, alphaCumprod));
-
-            _alphaTs[i] = sqrtAlpha;
-            _sigmaTs[i] = sigma;
-
-            // lambda = log(alpha_t / sigma_t) = log(SNR) / 2
-            T ratio = NumOps.Divide(sqrtAlpha, sigma);
-            // Use log approximation: log(x) ≈ (x-1) - (x-1)^2/2 + ... for stability
-            T ratioDouble = ratio;
-            _lambdas[i] = NumOps.FromDouble(Math.Log(Math.Max(NumOps.ToDouble(ratioDouble), 1e-10)));
-        }
+        _alphaTs = Engine.Sqrt(alphaCumprod);
+        _sigmaTs = Engine.Sqrt(Engine.Subtract(DiffusionVectorOps.Ones<T>(timesteps.Length), alphaCumprod));
+        _lambdas = Engine.Subtract(Engine.Log(_alphaTs), Engine.Log(_sigmaTs));
     }
 
     /// <summary>
@@ -186,9 +172,12 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
             _modelOutputHistory.RemoveAt(0);
         }
 
-        // Determine effective order (can't use higher order than available history)
+        // Determine effective order (can't use higher order than available history). Like diffusers'
+        // lower_order_final, short schedules (< 15 steps) take at most a second-order step second to last.
         int effectiveOrder = Math.Min(_stepCounter + 1, _solverOrder);
         effectiveOrder = Math.Min(effectiveOrder, _modelOutputHistory.Count);
+        if (stepIndex == Timesteps.Length - 2 && Timesteps.Length < 15)
+            effectiveOrder = Math.Min(effectiveOrder, 2);
 
         // Ensure we have a valid next step index
         int nextStepIndex = Math.Min(stepIndex + 1, Timesteps.Length - 1);
@@ -249,118 +238,105 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     private Vector<T> FirstOrderUpdate(Vector<T> sample, int stepIndex, int nextStepIndex)
     {
-        var lambdas = _lambdas
-            ?? throw new InvalidOperationException("Lambda values have not been initialized. Call SetTimesteps() first.");
-        var alphaTs = _alphaTs
-            ?? throw new InvalidOperationException("Alpha values have not been initialized. Call SetTimesteps() first.");
-        var sigmaTs = _sigmaTs
-            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+        var (lambdas, alphaTs, sigmaTs) = GetSchedule();
 
-        T lambda_s = lambdas[stepIndex];
-        T lambda_t = lambdas[nextStepIndex];
         T alpha_t = alphaTs[nextStepIndex];
         T sigma_t = sigmaTs[nextStepIndex];
         T sigma_s = sigmaTs[stepIndex];
+        T h = NumOps.Subtract(lambdas[nextStepIndex], lambdas[stepIndex]);
 
-        // h = lambda_t - lambda_s
-        T h = NumOps.Subtract(lambda_t, lambda_s);
+        // DPM-Solver++ first order: x_t = (sigma_t / sigma_s) x_s - alpha_t (exp(-h) - 1) D_0
+        T phi = NumOps.Multiply(alpha_t, NumOps.Subtract(NumOps.Exp(NumOps.Negate(h)), NumOps.One));
 
-        // DPM-Solver++ first-order: x_t = (sigma_t/sigma_s) * x_s + alpha_t * (exp(-h) - 1) * D_0
-        T sigmaRatio = NumOps.Divide(sigma_t, sigma_s);
-        T expNegH = NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(h)));
-        T coeff = NumOps.Multiply(alpha_t, NumOps.Subtract(expNegH, NumOps.One));
-
-        var scaledSample = Engine.Multiply(sample, sigmaRatio);
-        var dataTerm = Engine.Multiply(_modelOutputHistory[^1], coeff);
-        return Engine.Add(scaledSample, dataTerm);
+        var scaledSample = Engine.Multiply(sample, NumOps.Divide(sigma_t, sigma_s));
+        return Engine.Subtract(scaledSample, Engine.Multiply(_modelOutputHistory[^1], phi));
     }
 
     /// <summary>
-    /// Second-order DPM-Solver++ update using one previous model output.
+    /// Second-order multistep DPM-Solver++ update (diffusers' midpoint solver type).
     /// </summary>
     private Vector<T> SecondOrderUpdate(Vector<T> sample, int stepIndex, int nextStepIndex)
     {
-        if (_modelOutputHistory.Count < 2)
+        if (_modelOutputHistory.Count < 2 || stepIndex < 1)
             return FirstOrderUpdate(sample, stepIndex, nextStepIndex);
 
-        var lambdas = _lambdas
-            ?? throw new InvalidOperationException("Lambda values have not been initialized. Call SetTimesteps() first.");
-        var alphaTs = _alphaTs
-            ?? throw new InvalidOperationException("Alpha values have not been initialized. Call SetTimesteps() first.");
-        var sigmaTs = _sigmaTs
-            ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
+        var (lambdas, alphaTs, sigmaTs) = GetSchedule();
 
-        T lambda_s = lambdas[stepIndex];
-        T lambda_t = lambdas[nextStepIndex];
         T alpha_t = alphaTs[nextStepIndex];
         T sigma_t = sigmaTs[nextStepIndex];
-        T sigma_s = sigmaTs[stepIndex];
+        T sigma_s0 = sigmaTs[stepIndex];
+        T h = NumOps.Subtract(lambdas[nextStepIndex], lambdas[stepIndex]);
+        T h0 = NumOps.Subtract(lambdas[stepIndex], lambdas[stepIndex - 1]);
+        T r0 = NumOps.Divide(h0, h);
 
-        T h = NumOps.Subtract(lambda_t, lambda_s);
+        var m0 = _modelOutputHistory[^1];
+        var m1 = _modelOutputHistory[^2];
 
-        T sigmaRatio = NumOps.Divide(sigma_t, sigma_s);
-        T expNegH = NumOps.FromDouble(Math.Exp(-NumOps.ToDouble(h)));
-        T coeff1 = NumOps.Multiply(alpha_t, NumOps.Subtract(expNegH, NumOps.One));
+        // D0 = m0, D1 = (m0 - m1) / r0
+        // x_t = (sigma_t / sigma_s0) x - alpha_t (exp(-h) - 1) D0 - 0.5 alpha_t (exp(-h) - 1) D1
+        var d1 = Engine.Divide(Engine.Subtract(m0, m1), r0);
+        T phi = NumOps.Multiply(alpha_t, NumOps.Subtract(NumOps.Exp(NumOps.Negate(h)), NumOps.One));
 
-        // Second-order correction: (exp(-h) - 1 + h) / (2h)
-        T correction = NumOps.FromDouble((Math.Exp(-NumOps.ToDouble(h)) - 1.0 + NumOps.ToDouble(h)) / (2.0 * NumOps.ToDouble(h)));
-        T coeff2 = NumOps.Multiply(alpha_t, correction);
-
-        // D_0 = latest data prediction, D_1 = difference from previous
-        var d0 = _modelOutputHistory[^1];
-        var d1 = Engine.Subtract(_modelOutputHistory[^1], _modelOutputHistory[^2]);
-
-        var scaledSample = Engine.Multiply(sample, sigmaRatio);
-        var term1 = Engine.Multiply(d0, coeff1);
-        var term2 = Engine.Multiply(d1, coeff2);
-        var result = Engine.Add(scaledSample, term1);
-        return Engine.Add(result, term2);
+        var result = Engine.Multiply(sample, NumOps.Divide(sigma_t, sigma_s0));
+        result = Engine.Subtract(result, Engine.Multiply(m0, phi));
+        return Engine.Subtract(result, Engine.Multiply(d1, NumOps.Multiply(NumOps.FromDouble(0.5), phi)));
     }
 
     /// <summary>
-    /// Third-order DPM-Solver++ update using two previous model outputs.
+    /// Third-order multistep DPM-Solver++ update.
     /// </summary>
     private Vector<T> ThirdOrderUpdate(Vector<T> sample, int stepIndex, int nextStepIndex)
     {
-        if (_modelOutputHistory.Count < 3)
+        if (_modelOutputHistory.Count < 3 || stepIndex < 2)
             return SecondOrderUpdate(sample, stepIndex, nextStepIndex);
 
+        var (lambdas, alphaTs, sigmaTs) = GetSchedule();
+
+        T alpha_t = alphaTs[nextStepIndex];
+        T sigma_t = sigmaTs[nextStepIndex];
+        T sigma_s0 = sigmaTs[stepIndex];
+        T h = NumOps.Subtract(lambdas[nextStepIndex], lambdas[stepIndex]);
+        T h0 = NumOps.Subtract(lambdas[stepIndex], lambdas[stepIndex - 1]);
+        T h1 = NumOps.Subtract(lambdas[stepIndex - 1], lambdas[stepIndex - 2]);
+        T r0 = NumOps.Divide(h0, h);
+        T r1 = NumOps.Divide(h1, h);
+        T r0PlusR1 = NumOps.Add(r0, r1);
+
+        var m0 = _modelOutputHistory[^1];
+        var m1 = _modelOutputHistory[^2];
+        var m2 = _modelOutputHistory[^3];
+
+        // D1_0 = (m0 - m1) / r0, D1_1 = (m1 - m2) / r1
+        // D1 = D1_0 + r0 / (r0 + r1) (D1_0 - D1_1), D2 = (D1_0 - D1_1) / (r0 + r1)
+        var d10 = Engine.Divide(Engine.Subtract(m0, m1), r0);
+        var d11 = Engine.Divide(Engine.Subtract(m1, m2), r1);
+        var d1Diff = Engine.Subtract(d10, d11);
+        var d1 = Engine.Add(d10, Engine.Multiply(d1Diff, NumOps.Divide(r0, r0PlusR1)));
+        var d2 = Engine.Divide(d1Diff, r0PlusR1);
+
+        // x_t = (sigma_t / sigma_s0) x - alpha_t (exp(-h) - 1) D0
+        //       + alpha_t ((exp(-h) - 1) / h + 1) D1 - alpha_t ((exp(-h) - 1 + h) / h^2 - 0.5) D2
+        T expM1 = NumOps.Subtract(NumOps.Exp(NumOps.Negate(h)), NumOps.One);
+        T coeff0 = NumOps.Multiply(alpha_t, expM1);
+        T coeff1 = NumOps.Multiply(alpha_t, NumOps.Add(NumOps.Divide(expM1, h), NumOps.One));
+        T coeff2 = NumOps.Multiply(alpha_t,
+            NumOps.Subtract(NumOps.Divide(NumOps.Add(expM1, h), NumOps.Multiply(h, h)), NumOps.FromDouble(0.5)));
+
+        var result = Engine.Multiply(sample, NumOps.Divide(sigma_t, sigma_s0));
+        result = Engine.Subtract(result, Engine.Multiply(m0, coeff0));
+        result = Engine.Add(result, Engine.Multiply(d1, coeff1));
+        return Engine.Subtract(result, Engine.Multiply(d2, coeff2));
+    }
+
+    private (Vector<T> Lambdas, Vector<T> AlphaTs, Vector<T> SigmaTs) GetSchedule()
+    {
         var lambdas = _lambdas
             ?? throw new InvalidOperationException("Lambda values have not been initialized. Call SetTimesteps() first.");
         var alphaTs = _alphaTs
             ?? throw new InvalidOperationException("Alpha values have not been initialized. Call SetTimesteps() first.");
         var sigmaTs = _sigmaTs
             ?? throw new InvalidOperationException("Sigma values have not been initialized. Call SetTimesteps() first.");
-
-        T lambda_s = lambdas[stepIndex];
-        T lambda_t = lambdas[nextStepIndex];
-        T alpha_t = alphaTs[nextStepIndex];
-        T sigma_t = sigmaTs[nextStepIndex];
-        T sigma_s = sigmaTs[stepIndex];
-
-        T h = NumOps.Subtract(lambda_t, lambda_s);
-        double hVal = NumOps.ToDouble(h);
-
-        T sigmaRatio = NumOps.Divide(sigma_t, sigma_s);
-        T expNegH = NumOps.FromDouble(Math.Exp(-hVal));
-
-        // Coefficients for 3rd order
-        T coeff1 = NumOps.Multiply(alpha_t, NumOps.Subtract(expNegH, NumOps.One));
-        T coeff2 = NumOps.FromDouble(NumOps.ToDouble(alpha_t) * (Math.Exp(-hVal) - 1.0 + hVal) / (2.0 * hVal));
-        T coeff3 = NumOps.FromDouble(NumOps.ToDouble(alpha_t) * (Math.Exp(-hVal) - 1.0 + hVal - 0.5 * hVal * hVal) / (6.0 * hVal * hVal));
-
-        var d0 = _modelOutputHistory[^1];
-        var d1 = Engine.Subtract(_modelOutputHistory[^1], _modelOutputHistory[^2]);
-        var d2Prev = Engine.Subtract(_modelOutputHistory[^2], _modelOutputHistory[^3]);
-        var d2 = Engine.Subtract(d1, d2Prev);
-
-        var scaledSample = Engine.Multiply(sample, sigmaRatio);
-        var term1 = Engine.Multiply(d0, coeff1);
-        var term2 = Engine.Multiply(d1, coeff2);
-        var term3 = Engine.Multiply(d2, coeff3);
-        var result = Engine.Add(scaledSample, term1);
-        result = Engine.Add(result, term2);
-        return Engine.Add(result, term3);
+        return (lambdas, alphaTs, sigmaTs);
     }
 
     /// <summary>
@@ -393,15 +369,7 @@ public sealed class DPMSolverMultistepScheduler<T> : NoiseSchedulerBase<T>
     /// <summary>
     /// Creates a copy of a vector.
     /// </summary>
-    private static Vector<T> CopyVector(Vector<T> source)
-    {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            copy[i] = source[i];
-        }
-        return copy;
-    }
+    private static Vector<T> CopyVector(Vector<T> source) => source.Clone();
 
     /// <inheritdoc />
     public override Dictionary<string, object> GetState()

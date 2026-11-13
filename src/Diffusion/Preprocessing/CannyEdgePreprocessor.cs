@@ -49,47 +49,21 @@ public class CannyEdgePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 1, height, width });
+        if (!PreprocessorFilters.HasInterior(shape[2], shape[3]))
+            return new Tensor<T>(new[] { shape[0], 1, shape[2], shape[3] });
 
-        for (int b = 0; b < batch; b++)
-        {
-            // Convert to grayscale
-            var gray = new double[height, width];
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double r = NumOps.ToDouble(data[b, 0, h, w]);
-                    double g = shape[1] > 1 ? NumOps.ToDouble(data[b, 1, h, w]) : r;
-                    double bv = shape[1] > 2 ? NumOps.ToDouble(data[b, 2, h, w]) : r;
-                    gray[h, w] = 0.299 * r + 0.587 * g + 0.114 * bv;
-                }
-            }
+        // Sobel gradient magnitude of the BT.601 grayscale image over the interior; the border stays 0
+        var gray = PreprocessorFilters.Grayscale(data);
+        var magnitude = PreprocessorFilters.Magnitude(PreprocessorFilters.Interior3x3(gray, PreprocessorFilters.Sobel));
 
-            // Compute gradient magnitude using Sobel
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    double gx = -gray[h - 1, w - 1] + gray[h - 1, w + 1]
-                              - 2 * gray[h, w - 1] + 2 * gray[h, w + 1]
-                              - gray[h + 1, w - 1] + gray[h + 1, w + 1];
-                    double gy = -gray[h - 1, w - 1] - 2 * gray[h - 1, w] - gray[h - 1, w + 1]
-                              + gray[h + 1, w - 1] + 2 * gray[h + 1, w] + gray[h + 1, w + 1];
-                    double mag = Math.Sqrt(gx * gx + gy * gy);
-
-                    T edgeVal = mag > _highThreshold ? NumOps.One
-                              : mag > _lowThreshold ? NumOps.FromDouble(0.5)
-                              : NumOps.Zero;
-                    result[b, 0, h, w] = edgeVal;
-                }
-            }
-        }
-
-        return result;
+        // 1 above the high threshold, 0.5 above the low threshold, 0 otherwise
+        var zeros = new Tensor<T>(magnitude._shape);
+        var weak = engine.TensorWhere(PreprocessorFilters.Above(magnitude, _lowThreshold),
+            Tensor<T>.CreateDefault(magnitude._shape, NumOps.FromDouble(0.5)), zeros);
+        var edges = engine.TensorWhere(PreprocessorFilters.Above(magnitude, _highThreshold),
+            Tensor<T>.CreateDefault(magnitude._shape, NumOps.One), weak);
+        return PreprocessorFilters.PadBorder(edges);
     }
 }

@@ -73,16 +73,7 @@ public class DenoisedScoreDistillation<T>
     /// <returns>DSD gradient.</returns>
     public Vector<T> ComputeGradient(Vector<T> denoisedReference, Vector<T> renderedView, double weight = 1.0)
     {
-        var gradient = new Vector<T>(renderedView.Length);
-        var w = NumOps.FromDouble(weight);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var target = i < denoisedReference.Length ? denoisedReference[i] : NumOps.Zero;
-            var diff = NumOps.Subtract(target, renderedView[i]);
-            gradient[i] = NumOps.Multiply(w, diff);
-        }
-
-        return gradient;
+        // weight * (denoised - rendered), the reference zero-padded to the rendered length
+        return DiffusionVectorOps.ScaledDifference(denoisedReference, renderedView, renderedView.Length, NumOps.FromDouble(weight));
     }
 }

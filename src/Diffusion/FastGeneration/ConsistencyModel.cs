@@ -337,24 +337,43 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     #endregion
 
     /// <summary>
+    /// Multistep consistency sampling re-noise: x = denoised + sqrt(sigma_next^2 - sigma_min^2) z
+    /// (Song et al. 2023, Algorithm 1; diffusers CMStochasticIterativeScheduler.step).
+    /// </summary>
+    /// <param name="denoised">The consistency-function output at the current sigma.</param>
+    /// <param name="noise">Standard normal noise z with the same shape.</param>
+    /// <param name="nextSigma">The sigma level to re-noise to.</param>
+    /// <param name="sigmaMin">The boundary sigma, whose sample is already clean.</param>
+    internal static Tensor<T> RenoiseToSigma(Tensor<T> denoised, Tensor<T> noise, T nextSigma, double sigmaMin)
+    {
+        var engine = AiDotNetEngine.Current;
+        var noiseScale = NumOps.Sqrt(NumOps.Subtract(NumOps.Multiply(nextSigma, nextSigma),
+            NumOps.FromDouble(sigmaMin * sigmaMin)));
+        return engine.TensorAdd(denoised, engine.TensorMultiplyScalar(noise, noiseScale));
+    }
+
+    /// <summary>
     /// Computes the sigma schedule for the ODE.
     /// </summary>
-    private T[] ComputeSigmaSchedule()
+    private T[] ComputeSigmaSchedule() => ComputeSigmaSchedule(_numTrainSteps, _sigmaMin, _sigmaMax, _rho);
+
+    /// <summary>
+    /// Karras sigma schedule sigma_i = (sigma_min^(1/rho) + (i / N) (sigma_max^(1/rho) - sigma_min^(1/rho)))^rho,
+    /// i = 0..N, ascending.
+    /// </summary>
+    /// <remarks>
+    /// Built in double and rounded to T once, like the loop it replaced: in Half, rounding t, the interpolation and
+    /// then raising to rho = 7 compounds to roughly 0.7% relative error instead of one rounding (about 0.05%).
+    /// </remarks>
+    internal static T[] ComputeSigmaSchedule(int numTrainSteps, double sigmaMin, double sigmaMax, double rho)
     {
-        var sigmas = new T[_numTrainSteps + 1];
-        var oneOverRho = 1.0 / _rho;
-
-        for (int i = 0; i <= _numTrainSteps; i++)
-        {
-            var t = (double)i / _numTrainSteps;
-            // sigma(t) = (sigma_min^(1/rho) + t * (sigma_max^(1/rho) - sigma_min^(1/rho)))^rho
-            var sigmaMinPow = Math.Pow(_sigmaMin, oneOverRho);
-            var sigmaMaxPow = Math.Pow(_sigmaMax, oneOverRho);
-            var sigma = Math.Pow(sigmaMinPow + t * (sigmaMaxPow - sigmaMinPow), _rho);
-            sigmas[i] = NumOps.FromDouble(sigma);
-        }
-
-        return sigmas;
+        var engine = AiDotNetEngine.Current;
+        var oneOverRho = 1.0 / rho;
+        var sigmaMinPow = Math.Pow(sigmaMin, oneOverRho);
+        var sigmaMaxPow = Math.Pow(sigmaMax, oneOverRho);
+        var t = engine.TensorDivideScalar(engine.TensorArange<double>(0, numTrainSteps + 1, 1), (double)numTrainSteps);
+        var interpolated = engine.TensorAddScalar(engine.TensorMultiplyScalar(t, sigmaMaxPow - sigmaMinPow), sigmaMinPow);
+        return engine.TensorPower(interpolated, rho).Cast<T>().ToArray();
     }
 
     #region Generation Methods
@@ -500,17 +519,10 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
                 var nextIdx = stepIndices[i + 1];
                 var nextSigma = _sigmas[nextIdx];
 
-                // Add noise scaled by next sigma
+                // Add noise to reach the next sigma level: x = denoised + sqrt(sigma_next^2 - sigma_min^2) z
+                // (Song et al. 2023, Algorithm 1; the sample at sigma_min is already the clean boundary)
                 var noise = SampleNoiseTensor(latentShape, rng);
-                latents = new Tensor<T>(latentShape);
-                var denoisedSpan = denoised.AsSpan();
-                var noiseSpan = noise.AsSpan();
-                var latentsSpan = latents.AsWritableSpan();
-
-                for (int j = 0; j < latentsSpan.Length; j++)
-                {
-                    latentsSpan[j] = NumOps.Add(denoisedSpan[j], NumOps.Multiply(nextSigma, noiseSpan[j]));
-                }
+                latents = RenoiseToSigma(denoised, noise, nextSigma, _sigmaMin);
             }
             else
             {
@@ -591,23 +603,34 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Converts sigma to timestep for the noise predictor.
     /// </summary>
-    private int SigmaToTimestep(double sigma)
+    private int SigmaToTimestep(double sigma) => SigmaToTimestep(_sigmas, sigma);
+
+    /// <summary>
+    /// Converts sigma to a timestep on an ascending schedule sigma_0 (sigma_min) .. sigma_N (sigma_max).
+    /// </summary>
+    /// <param name="sigmas">The ascending sigma schedule of N + 1 levels.</param>
+    /// <param name="sigma">The noise level to locate.</param>
+    /// <returns>0 below the schedule, N at or above its top, otherwise i + (sigma - sigma_i) / (sigma_(i+1) - sigma_i)
+    /// truncated, for the bracket sigma_i &lt;= sigma &lt; sigma_(i+1).</returns>
+    internal static int SigmaToTimestep(T[] sigmas, double sigma)
     {
-        // Find closest sigma in schedule
-        for (int i = 0; i < _sigmas.Length - 1; i++)
-        {
-            var sigmaI = NumOps.ToDouble(_sigmas[i]);
-            var sigmaI1 = NumOps.ToDouble(_sigmas[i + 1]);
+        // Find the bracket by counting the levels at or below sigma. The count is an index: count it in int
+        // (a 0/1 sum in Half stops being exact past 2048 levels).
+        var engine = AiDotNetEngine.Current;
+        var schedule = new Tensor<T>(new[] { sigmas.Length }, new Vector<T>(sigmas));
+        var sigmaT = NumOps.FromDouble(sigma);
+        int atOrBelow = engine.TensorCountNonzero(engine.TensorLessEqual(schedule, Tensor<T>.CreateDefault(schedule._shape, sigmaT)));
 
-            if (sigma >= sigmaI1 && sigma <= sigmaI)
-            {
-                // Linear interpolation to get timestep
-                var t = (sigma - sigmaI1) / (sigmaI - sigmaI1 + 1e-8);
-                return (int)(i + t);
-            }
-        }
+        if (atOrBelow == 0)
+            return 0;
+        if (atOrBelow >= sigmas.Length)
+            return sigmas.Length - 1;
 
-        return sigma >= NumOps.ToDouble(_sigmas[0]) ? 0 : _numTrainSteps;
+        int i = atOrBelow - 1;
+        var sigmaI = NumOps.ToDouble(sigmas[i]);
+        var sigmaI1 = NumOps.ToDouble(sigmas[i + 1]);
+        var t = (sigma - sigmaI) / (sigmaI1 - sigmaI + 1e-8);
+        return (int)(i + t);
     }
 
     /// <summary>

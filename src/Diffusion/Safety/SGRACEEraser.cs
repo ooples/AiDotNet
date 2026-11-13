@@ -74,41 +74,32 @@ public class SGRACEEraser<T>
     /// <returns>Updated parameters with the style concept erased.</returns>
     public Vector<T> ComputeErasureUpdate(Vector<T> currentParameters, Vector<T> baseParameters)
     {
-        var result = new Vector<T>(currentParameters.Length);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = currentParameters[i];
-        }
+        var engine = AiDotNetEngine.Current;
+        var result = currentParameters.Clone();
+        var rate = NumOps.FromDouble(_erasureRate);
 
         foreach (var styleVec in _styleVectors)
         {
             // Task vector negation: theta_erased = theta - alpha * tau_style
-            // where tau_style = theta_finetuned - theta_base
-            var rate = NumOps.FromDouble(_erasureRate);
-
-            for (int i = 0; i < result.Length && i < styleVec.Length; i++)
-            {
-                var update = NumOps.Multiply(rate, styleVec[i]);
-                result[i] = NumOps.Subtract(result[i], update);
-            }
+            // where tau_style = theta_finetuned - theta_base (zero-padded / truncated to the parameters)
+            result = engine.Subtract(result, engine.Multiply(DiffusionVectorOps.Fit(styleVec, result.Length), rate));
         }
 
-        // Apply preservation: don't deviate too far from base
+        // Apply preservation: don't deviate too far from base. Over the common prefix, an element whose deviation
+        // from the base exceeds the threshold is clamped to base +/- threshold.
         if (_preservationThreshold > 0)
         {
             var threshold = NumOps.FromDouble(_preservationThreshold);
-            for (int i = 0; i < result.Length && i < baseParameters.Length; i++)
-            {
-                var diff = NumOps.Subtract(result[i], baseParameters[i]);
-                var absDiff = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(diff)));
-                if (NumOps.GreaterThan(absDiff, threshold))
-                {
-                    // Clamp deviation
-                    var sign = !NumOps.LessThan(diff, NumOps.Zero) ? 1.0 : -1.0;
-                    result[i] = NumOps.Add(baseParameters[i],
-                        NumOps.FromDouble(sign * NumOps.ToDouble(threshold)));
-                }
-            }
+            int len = Math.Min(result.Length, baseParameters.Length);
+            var resultPrefix = DiffusionVectorOps.Fit(result, len).AsTensor();
+            var basePrefix = DiffusionVectorOps.Fit(baseParameters, len).AsTensor();
+            var diff = engine.TensorSubtract(resultPrefix, basePrefix);
+            var exceeds = engine.TensorGreaterThan(engine.TensorAbs(diff), threshold);
+            var clamped = engine.TensorAdd(basePrefix, engine.TensorClamp(diff, NumOps.Negate(threshold), threshold));
+            var preserved = engine.TensorWhere(exceeds, clamped, resultPrefix).ToVector();
+            result = len < result.Length
+                ? Vector<T>.Concatenate(preserved, result.GetSubVector(len, result.Length - len))
+                : preserved;
         }
 
         return result;
@@ -121,28 +112,34 @@ public class SGRACEEraser<T>
     /// <param name="baseParameters">Base model parameters.</param>
     /// <param name="styleIndex">Index of the style vector to check.</param>
     /// <returns>Style presence score (0 = absent, 1 = fully present).</returns>
-    public double MeasureStylePresence(Vector<T> currentParameters, Vector<T> baseParameters, int styleIndex)
+    public T MeasureStylePresence(Vector<T> currentParameters, Vector<T> baseParameters, int styleIndex)
     {
         if (styleIndex < 0 || styleIndex >= _styleVectors.Count)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
+        // |cos(delta, style)| over the common prefix, delta = current - base; 0 when either norm vanishes
+        var engine = AiDotNetEngine.Current;
         var styleVec = _styleVectors[styleIndex];
-        double dotProduct = 0, normDelta = 0, normStyle = 0;
         var len = Math.Min(Math.Min(currentParameters.Length, baseParameters.Length), styleVec.Length);
-
-        for (int i = 0; i < len; i++)
+#if NET5_0_OR_GREATER
+        // Half dot products accumulate in Half and overflow for ordinary parameter vectors: reduce in double, as the
+        // converted loop did, and return the cosine as Half.
+        if (typeof(T) == typeof(Half))
         {
-            var delta = NumOps.ToDouble(NumOps.Subtract(currentParameters[i], baseParameters[i]));
-            var style = NumOps.ToDouble(styleVec[i]);
-            dotProduct += delta * style;
-            normDelta += delta * delta;
-            normStyle += style * style;
+            var wide = new SGRACEEraser<double>();
+            wide.AddStyleVector(DiffusionVectorOps.Fit(styleVec, len).AsTensor().Cast<double>().ToVector());
+            return NumOps.FromDouble(wide.MeasureStylePresence(
+                DiffusionVectorOps.Fit(currentParameters, len).AsTensor().Cast<double>().ToVector(),
+                DiffusionVectorOps.Fit(baseParameters, len).AsTensor().Cast<double>().ToVector(), 0));
         }
-
-        var denom = Math.Sqrt(normDelta) * Math.Sqrt(normStyle);
-        return denom > 1e-10 ? Math.Abs(dotProduct) / denom : 0.0;
+#endif
+        var delta = engine.Subtract(DiffusionVectorOps.Fit(currentParameters, len), DiffusionVectorOps.Fit(baseParameters, len));
+        var style = DiffusionVectorOps.Fit(styleVec, len);
+        var dotProduct = engine.DotProduct(delta, style);
+        var denom = NumOps.Multiply(NumOps.Sqrt(engine.DotProduct(delta, delta)), NumOps.Sqrt(engine.DotProduct(style, style)));
+        return NumOps.GreaterThan(denom, NumOps.FromDouble(1e-10)) ? NumOps.Divide(NumOps.Abs(dotProduct), denom) : NumOps.Zero;
     }
 
     /// <summary>

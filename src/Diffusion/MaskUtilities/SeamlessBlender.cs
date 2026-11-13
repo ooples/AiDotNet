@@ -61,20 +61,10 @@ public class SeamlessBlender<T>
     public Vector<T> BlendOverlap(Vector<T> leftPatch, Vector<T> rightPatch)
     {
         int len = Math.Min(leftPatch.Length, rightPatch.Length);
-        var result = new Vector<T>(len);
-
-        for (int i = 0; i < len; i++)
-        {
-            double position = len > 1 ? (double)i / (len - 1) : 0.5;
-            double rightWeight = ComputeBlendWeight(position);
-            double leftWeight = 1.0 - rightWeight;
-
-            result[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(leftWeight), leftPatch[i]),
-                NumOps.Multiply(NumOps.FromDouble(rightWeight), rightPatch[i]));
-        }
-
-        return result;
+        return MaskVectorOps.Lerp(
+            MaskVectorOps.Fit(leftPatch, len, NumOps.Zero),
+            MaskVectorOps.Fit(rightPatch, len, NumOps.Zero),
+            ComputeBlendWeights(len));
     }
 
     /// <summary>
@@ -83,24 +73,34 @@ public class SeamlessBlender<T>
     /// <returns>Array of blend weights from 0.0 to 1.0.</returns>
     public T[] GenerateBlendWeights()
     {
-        var weights = new T[_overlapSize];
-        for (int i = 0; i < _overlapSize; i++)
-        {
-            double position = _overlapSize > 1 ? (double)i / (_overlapSize - 1) : 0.5;
-            weights[i] = NumOps.FromDouble(ComputeBlendWeight(position));
-        }
-        return weights;
+        return ComputeBlendWeights(_overlapSize).ToArray();
     }
 
-    private double ComputeBlendWeight(double position)
+    /// <summary>
+    /// Right-patch weights at positions i / (length - 1) (0.5 for a single element) for the blend profile.
+    /// </summary>
+    private Vector<T> ComputeBlendWeights(int length)
     {
-        return _blendProfile switch
+        if (length <= 0)
+            return new Vector<T>(0);
+
+        var engine = AiDotNetEngine.Current;
+        var position = length > 1
+            ? engine.TensorLinspace(NumOps.Zero, NumOps.One, length)
+            : new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(0.5) }));
+
+        var weights = _blendProfile switch
         {
-            BlendProfile.Linear => position,
-            BlendProfile.Cosine => 0.5 * (1.0 - Math.Cos(Math.PI * position)),
-            BlendProfile.Gaussian => 1.0 - Math.Exp(-4.0 * position * position),
+            // 0.5 * (1 - cos(pi * p))
+            BlendProfile.Cosine => engine.TensorMultiplyScalar(
+                engine.ScalarMinusTensor(NumOps.One, engine.TensorCos(engine.TensorMultiplyScalar(position, NumOps.FromDouble(Math.PI)))),
+                NumOps.FromDouble(0.5)),
+            // 1 - exp(-4 p^2)
+            BlendProfile.Gaussian => engine.ScalarMinusTensor(NumOps.One,
+                engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(position), NumOps.FromDouble(-4.0)))),
             _ => position
         };
+        return weights.ToVector();
     }
 }
 

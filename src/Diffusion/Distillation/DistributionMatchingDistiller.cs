@@ -77,15 +77,8 @@ public class DistributionMatchingDistiller<T>
     /// <returns>MSE regression loss.</returns>
     public T ComputeRegressionLoss(Vector<T> generatorOutput, Vector<T> teacherDenoised)
     {
-        var loss = NumOps.Zero;
         int len = Math.Min(generatorOutput.Length, teacherDenoised.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(generatorOutput[i], teacherDenoised[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-        }
-
+        var loss = DiffusionVectorOps.SquaredDistance(generatorOutput, teacherDenoised);
         return NumOps.Multiply(NumOps.FromDouble(_regressionWeight),
             NumOps.Divide(loss, NumOps.FromDouble(len)));
     }
@@ -98,15 +91,8 @@ public class DistributionMatchingDistiller<T>
     /// <returns>Distribution matching loss.</returns>
     public T ComputeDistributionLoss(Vector<T> fakeScore, Vector<T> realScore)
     {
-        var loss = NumOps.Zero;
         int len = Math.Min(fakeScore.Length, realScore.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(fakeScore[i], realScore[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-        }
-
+        var loss = DiffusionVectorOps.SquaredDistance(fakeScore, realScore);
         return NumOps.Multiply(NumOps.FromDouble(_distributionWeight),
             NumOps.Divide(loss, NumOps.FromDouble(len)));
     }

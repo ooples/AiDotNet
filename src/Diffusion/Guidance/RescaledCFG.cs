@@ -48,6 +48,12 @@ public class RescaledCFG<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
+        // Half cannot represent the degeneracy epsilon and can overflow variance reductions.
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+            return new RescaledCFG<double>(_rescaleWeight)
+                .Apply(unconditional.Cast<double>(), conditional.Cast<double>(), scale, timestep).Cast<T>();
+#endif
         var engine = AiDotNetEngine.Current;
 
         // Step 1: Standard CFG: guided = uncond + scale * (cond - uncond)
@@ -56,36 +62,23 @@ public class RescaledCFG<T> : IGuidanceMethod<T>
         var scaled = engine.TensorMultiplyScalar<T>(diff, scaleT);
         var guided = engine.TensorAdd<T>(unconditional, scaled);
 
-        // Step 2: Compute standard deviations
-        double condStd = ComputeStd(conditional.AsSpan());
-        double guidedStd = ComputeStd(guided.AsSpan());
-
-        if (guidedStd < 1e-8) return guided;
+        // Step 2: Standard deviations per sample (every axis but the batch axis), as in the paper and diffusers'
+        // rescale_noise_cfg
+        var axes = DiffusionVectorOps.SampleAxes(guided.Shape.Length);
+        var condStd = DiffusionVectorOps.Std(conditional, axes);
+        var guidedStd = DiffusionVectorOps.Std(guided, axes);
 
         // Step 3: Rescale to match conditional std
         // result = (1 - weight) * guided + weight * (rescaleFactor * guided)
-        // Simplifies to: guided * ((1 - weight) + weight * rescaleFactor)
-        double rescaleFactor = condStd / guidedStd;
-        double blendedScale = (1.0 - _rescaleWeight) + _rescaleWeight * rescaleFactor;
-        var blendedScaleT = NumOps.FromDouble(blendedScale);
-        return engine.TensorMultiplyScalar<T>(guided, blendedScaleT);
-    }
-
-    private static double ComputeStd(ReadOnlySpan<T> data)
-    {
-        if (data.Length == 0) return 0;
-
-        double sum = 0;
-        double sumSq = 0;
-        for (int i = 0; i < data.Length; i++)
-        {
-            double val = NumOps.ToDouble(data[i]);
-            sum += val;
-            sumSq += val * val;
-        }
-
-        double mean = sum / data.Length;
-        double variance = sumSq / data.Length - mean * mean;
-        return Math.Sqrt(Math.Max(0, variance));
+        // Simplifies to: guided * ((1 - weight) + weight * rescaleFactor); a sample whose guided std is below
+        // 1e-8 is left unscaled.
+        var ones = Tensor<T>.CreateDefault(guidedStd._shape, NumOps.One);
+        var degenerate = engine.TensorLessThan(guidedStd, NumOps.FromDouble(1e-8));
+        var safeStd = engine.TensorWhere(degenerate, ones, guidedStd);
+        var rescaleFactor = engine.TensorDivide(condStd, safeStd);
+        var blendedScale = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(rescaleFactor, NumOps.FromDouble(_rescaleWeight)), NumOps.FromDouble(1.0 - _rescaleWeight));
+        blendedScale = engine.TensorWhere(degenerate, ones, blendedScale);
+        return engine.TensorMultiply<T>(guided, engine.TensorBroadcastTo(blendedScale, guided._shape));
     }
 }

@@ -46,27 +46,21 @@ public class ELLAAdapter<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
-        var result = new Tensor<T>(unconditional._shape);
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
-        var resultSpan = result.AsWritableSpan();
+        var engine = AiDotNetEngine.Current;
+        int[] shape = unconditional._shape;
 
         // ELLA-enhanced CFG: apply standard CFG with adapter-weighted blending
         // The adapter weight modulates how much the enhanced embeddings influence guidance
         var effectiveScale = NumOps.FromDouble(scale * _adapterWeight);
         var baseScale = NumOps.FromDouble(scale * (1.0 - _adapterWeight));
 
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var diff = NumOps.Subtract(condSpan[i], uncondSpan[i]);
+        var diff = engine.TensorSubtract(conditional, unconditional);
 
-            // Weighted combination: stronger guidance on high-difference elements (semantically important)
-            var absDiff = NumOps.ToDouble(NumOps.Abs(diff));
-            var adaptiveWeight = absDiff > 0.1 ? effectiveScale : baseScale;
+        // Weighted combination: stronger guidance on high-difference elements (|diff| > 0.1, semantically important)
+        var important = engine.TensorGreaterThan(engine.TensorAbs(diff), NumOps.FromDouble(0.1));
+        var adaptiveWeight = engine.TensorWhere(important,
+            Tensor<T>.CreateDefault(shape, effectiveScale), Tensor<T>.CreateDefault(shape, baseScale));
 
-            resultSpan[i] = NumOps.Add(uncondSpan[i], NumOps.Multiply(adaptiveWeight, diff));
-        }
-
-        return result;
+        return engine.TensorAdd(unconditional, engine.TensorMultiply(adaptiveWeight, diff));
     }
 }
