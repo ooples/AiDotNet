@@ -355,17 +355,25 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Computes the sigma schedule for the ODE.
     /// </summary>
-    private T[] ComputeSigmaSchedule()
+    private T[] ComputeSigmaSchedule() => ComputeSigmaSchedule(_numTrainSteps, _sigmaMin, _sigmaMax, _rho);
+
+    /// <summary>
+    /// Karras sigma schedule sigma_i = (sigma_min^(1/rho) + (i / N) (sigma_max^(1/rho) - sigma_min^(1/rho)))^rho,
+    /// i = 0..N, ascending.
+    /// </summary>
+    /// <remarks>
+    /// Built in double and rounded to T once, like the loop it replaced: in Half, rounding t, the interpolation and
+    /// then raising to rho = 7 compounds to roughly 0.7% relative error instead of one rounding (about 0.05%).
+    /// </remarks>
+    internal static T[] ComputeSigmaSchedule(int numTrainSteps, double sigmaMin, double sigmaMax, double rho)
     {
-        // sigma(t) = (sigma_min^(1/rho) + t * (sigma_max^(1/rho) - sigma_min^(1/rho)))^rho, t = i / N, i = 0..N
         var engine = AiDotNetEngine.Current;
-        var oneOverRho = 1.0 / _rho;
-        var sigmaMinPow = Math.Pow(_sigmaMin, oneOverRho);
-        var sigmaMaxPow = Math.Pow(_sigmaMax, oneOverRho);
-        var t = engine.TensorLinspace(NumOps.Zero, NumOps.One, _numTrainSteps + 1);
-        var interpolated = engine.TensorAddScalar(
-            engine.TensorMultiplyScalar(t, NumOps.FromDouble(sigmaMaxPow - sigmaMinPow)), NumOps.FromDouble(sigmaMinPow));
-        return engine.TensorPower(interpolated, NumOps.FromDouble(_rho)).ToArray();
+        var oneOverRho = 1.0 / rho;
+        var sigmaMinPow = Math.Pow(sigmaMin, oneOverRho);
+        var sigmaMaxPow = Math.Pow(sigmaMax, oneOverRho);
+        var t = engine.TensorDivideScalar(engine.TensorArange<double>(0, numTrainSteps + 1, 1), (double)numTrainSteps);
+        var interpolated = engine.TensorAddScalar(engine.TensorMultiplyScalar(t, sigmaMaxPow - sigmaMinPow), sigmaMinPow);
+        return engine.TensorPower(interpolated, rho).Cast<T>().ToArray();
     }
 
     #region Generation Methods

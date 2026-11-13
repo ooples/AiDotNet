@@ -375,6 +375,39 @@ public class DiffusersGuidanceReferenceTests
     }
 
     [Fact]
+    public void HalfConsistencySigmaSchedule_IsTheDoubleScheduleRoundedOnce()
+    {
+        // Karras schedule (sigma_min 0.002, sigma_max 80, rho 7, N = 40). One rounding to Half is within 2^-11
+        // relative; building t, the interpolation and the 7th power in Half compounded to about 0.7%.
+        const int steps = 40;
+        double a = Math.Pow(0.002, 1.0 / 7), b = Math.Pow(80.0, 1.0 / 7);
+        var actual = AiDotNet.Diffusion.FastGeneration.ConsistencyModel<Half>.ComputeSigmaSchedule(steps, 0.002, 80.0, 7.0);
+        Assert.Equal(steps + 1, actual.Length);
+        for (int i = 0; i <= steps; i++)
+        {
+            double expected = Math.Pow(a + (double)i / steps * (b - a), 7);
+            Assert.InRange(Math.Abs((double)actual[i] - expected) / expected, 0, 5e-4);
+        }
+    }
+
+    [Fact]
+    public void HalfConsistencySchedulerSigmas_AreTheDoubleSigmasRoundedOnce()
+    {
+        // Geometric sigmas from 80 down to 0.002 over 10 steps plus a final 0.002. A Half linspace of the logs
+        // followed by a Half exp drifted about 0.16% from the double schedule; one rounding stays within 2^-11.
+        const int steps = 10;
+        var actual = AiDotNet.Diffusion.Schedulers.ConsistencyModelScheduler<Half>.GeometricSigmas(steps, 80.0, 0.002).ToArray();
+        Assert.Equal(steps + 1, actual.Length);
+        for (int i = 0; i <= steps; i++)
+        {
+            double expected = i == steps
+                ? 0.002
+                : Math.Exp(Math.Log(80.0) + (double)i / (steps - 1) * (Math.Log(0.002) - Math.Log(80.0)));
+            Assert.InRange(Math.Abs((double)actual[i] - expected) / expected, 0, 5e-4);
+        }
+    }
+
+    [Fact]
     public void HalfStylePresence_LargeParameterVectorsStayFinite()
     {
         // delta = style = 4 over 4096 parameters: the dot products (65536) overflow Half; the cosine is exactly 1.
