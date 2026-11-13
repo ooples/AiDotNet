@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
@@ -46,6 +47,39 @@ public class TETNPPaperTests
         for (int i = 0; i < 3; i++)
             for (int d = 0; d < 4; d++)
                 Assert.Equal(a[i][d], b[i][d], 10);
+    }
+
+    [Fact]
+    public void AuxiliaryObjective_ReachesTheRelativePositionWeights()
+    {
+        // SPSA trains the relative-position weights (and the encoder) on this objective. It is the training loss: the
+        // query loss of the model modulated by the attended context. It used to score the query at the unmodulated
+        // parameters, so with the regularizer off (the default) it was the same for any weights and SPSA moved nothing.
+        var model = new LinearVectorModel(2);
+        model.SetParameters(new Vector<double>(new[] { 0.8, -0.6, 0.3 }));
+        var algorithm = new TETNPAlgorithm<double, Matrix<double>, Vector<double>>(
+            new TETNPOptions<double, Matrix<double>, Vector<double>>(model)
+            {
+                RepresentationDim = 4, NumHeads = 2, NumFrequencyBands = 3, Seed = 8,
+            });
+        var task = new AiDotNet.Data.Structures.MetaLearningTask<double, Matrix<double>, Vector<double>>
+        {
+            SupportSetX = new Matrix<double>(new[,] { { 0.1, 0.5 }, { 1.2, -0.4 }, { -0.7, 0.3 } }),
+            SupportSetY = new Vector<double>(new[] { 4.0, -3.0, 5.0 }),
+            QuerySetX = new Matrix<double>(new[,] { { 0.4, 0.2 }, { -1.0, 0.9 } }),
+            QuerySetY = new Vector<double>(new[] { 2.0, -1.5 }),
+            NumWays = 1, NumShots = 3, NumQueryPerClass = 2,
+        };
+        var batch = new AiDotNet.Data.Structures.TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task });
+
+        var weights = algorithm.RelativePositionParametersForTesting;
+        double before = algorithm.ComputeAuxLoss(batch);
+        var changed = new Vector<double>(weights.Length);
+        for (int i = 0; i < changed.Length; i++) changed[i] = (i % 2 == 0 ? 25.0 : -25.0) * (1 + i);
+        algorithm.RelativePositionParametersForTesting = changed;
+        double after = algorithm.ComputeAuxLoss(batch);
+
+        Assert.True(Math.Abs(after - before) > 1e-12, $"aux loss did not move: {before} vs {after}");
     }
 
     [Fact]

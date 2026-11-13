@@ -48,6 +48,48 @@ public class SEALHalfPrecisionTests
     }
 
     [Fact]
+    public void RunningMeanRates_StayFiniteForAGradientWhoseSquareOverflows()
+    {
+        // v = 0.9 v + 0.1 g^2 from v = 0, lr = 0.01 / sqrt(v). 300^2 = 90000 overflows Half, so the old state became
+        // inf and the rate 0; the root state keeps sqrt(v) = sqrt(0.1) * 300 = 94.9 representable.
+        var algorithm = new SEALAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new SEALOptions<Half, Tensor<Half>, Tensor<Half>>(new MockFullModel<Half>())
+            {
+                InnerLearningRate = 0.01,
+                AdaptiveLearningRateMode = SEALAdaptiveLearningRateMode.RunningMean,
+                AdaptiveLearningRateDecay = 0.9,
+            });
+        Vector<Half>? running = null;
+
+        var first = algorithm.ComputeAdaptiveLearningRates(Gradients(), ref running);
+        AssertClose(0.01 / Math.Sqrt(0.1), (double)(float)first[1]);
+        AssertClose(0.01 / (Math.Sqrt(0.1) * 300.0), (double)(float)first[2]);
+
+        // Second step with the same gradients: v = 0.9 * 0.1 g^2 + 0.1 g^2 = 0.19 g^2.
+        var second = algorithm.ComputeAdaptiveLearningRates(Gradients(), ref running);
+        AssertClose(0.01 / Math.Sqrt(0.19), (double)(float)second[1]);
+        AssertClose(0.01 / (Math.Sqrt(0.19) * 300.0), (double)(float)second[2]);
+
+        float zeroGradientRate = (float)second[0];
+        Assert.False(float.IsInfinity(zeroGradientRate) || float.IsNaN(zeroGradientRate));
+    }
+
+    private static void AssertClose(double expected, double actual)
+        => Assert.InRange(actual, expected * 0.995, expected * 1.005);
+
+    [Fact]
+    public void Entropy_IsTheMeanEntropyOfEachExamplesClassDistribution()
+    {
+        // Rows (0, 0) and (0, -100): H = ln 2 and ~0, mean ln 2 / 2. The softmax used to run over the flattened
+        // batch, scoring all four logits as one distribution (H = ln 3 for these values).
+        var algorithm = new SEALAlgorithm<double, Tensor<double>, Tensor<double>>(
+            new SEALOptions<double, Tensor<double>, Tensor<double>>(new MockFullModel<double>()));
+        var predictions = new Tensor<double>(new[] { 0.0, 0.0, 0.0, -100.0 }, new[] { 2, 2 });
+
+        Assert.Equal(Math.Log(2.0) / 2.0, algorithm.ComputeEntropyRegularization(predictions), 6);
+    }
+
+    [Fact]
     public void Entropy_CountsAnUnderflowedProbabilityAsZero()
     {
         // softmax(0, -100) = (1, e^-100): the second probability is 0 in Half and 0 log 0 was NaN; H is 0.

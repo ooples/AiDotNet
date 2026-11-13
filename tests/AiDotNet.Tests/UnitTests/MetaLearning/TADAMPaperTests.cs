@@ -102,6 +102,36 @@ public class TADAMPaperTests
     }
 
     [Fact]
+    public void WithoutMetricScaling_TrainingAndAdaptationBothUseOneOverTheInitialTemperature()
+    {
+        // alpha stays at 1 / InitialTemperature = 0.5. Adapt already scored with it, but the training loss dropped alpha
+        // (temperature 1), so the model was trained on different logits from the ones it was evaluated on.
+        var algorithm = new TADAMAlgorithm<double, Matrix<double>, Tensor<double>>(
+            new TADAMOptions<double, Matrix<double>, Tensor<double>>(new TensorEmbeddingModel(2, 2))
+            {
+                NumClasses = 2,
+                EmbeddingDimension = 2,
+                TaskEmbeddingDimension = 3,
+                NormalizeEmbeddings = false,
+                UseTaskConditioning = false,
+                UseMetricScaling = false,
+                InitialTemperature = 2.0,
+                GradientClipThreshold = null,
+                Seed = 11,
+            });
+        var expected = Reference(0.5);
+        var labels = Task().QuerySetY;
+
+        double loss = 0.0;
+        for (int q = 0; q < 3; q++) loss -= Math.Log(expected[q, (int)labels[q]]);
+        Assert.Equal(loss / 3.0, algorithm.EpisodeLossForTesting(Task()), 8);
+
+        var probabilities = algorithm.Adapt(Task()).Predict(Task().QuerySetX);
+        for (int q = 0; q < 3; q++)
+            for (int k = 0; k < 2; k++) Assert.Equal(expected[q, k], probabilities[new[] { q, k }], 10);
+    }
+
+    [Fact]
     public void UntrainedTaskEncoder_ConditionsNothing()
     {
         // gamma0 starts at 0, so the conditioned metric is exactly the unconditioned one.

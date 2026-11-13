@@ -161,13 +161,16 @@ public partial class ImplicitPosteriorGenerator<T>
 
     private int FillScaled(Random rng, int offset, int count, int fanIn)
     {
-        // U(-scale, scale): one NextDouble per weight, in order; the loop only stores the draws.
-        var draws = new Vector<T>(count);
+        // U(-scale, scale): one NextDouble per weight, in order; the loop only stores the draws. (2u - 1) scale runs
+        // in double and each weight is rounded to T once: in Half, rounding u first and then subtracting scale
+        // cancels the leading bits of the draw.
+        var draws = new double[count];
         for (int i = 0; i < count; i++)
-            draws[i] = NumOps.FromDouble(rng.NextDouble());
+            draws[i] = rng.NextDouble();
         double scale = Math.Sqrt(1.0 / Math.Max(1, fanIn));
-        var weights = Engine.Subtract(
-            Engine.Multiply(draws, NumOps.FromDouble(2.0 * scale)), Engine.Fill(count, NumOps.FromDouble(scale)));
+        var weights = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { count }), 2.0), -1.0),
+            scale).Cast<T>().ToVector();
         Place(offset, weights);
         return offset + count;
     }
@@ -275,8 +278,7 @@ public partial class ImplicitPosteriorGenerator<T>
     {
         // The latent arrives as double draws (U[0,1] from a Random, or a caller's test latent); it is converted
         // once, then the three tanh layers run as engine matmuls: h = tanh(x W + b), W stored [fanIn, fanOut].
-        var latent = new Vector<T>(_latent);
-        for (int i = 0; i < _latent; i++) latent[i] = NumOps.FromDouble(z[i]);
+        var latent = new Tensor<double>(z, new[] { _latent }).Cast<T>().ToVector();
 
         int o = 0;
         var h1 = Layer(Tensor<T>.FromVector(latent, new[] { 1, _latent }), o, _latent, _hidden1);

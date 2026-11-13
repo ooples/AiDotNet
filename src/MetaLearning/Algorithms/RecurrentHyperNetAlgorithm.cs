@@ -87,13 +87,15 @@ public partial class RecurrentHyperNetAlgorithm<T, TInput, TOutput> : MetaLearne
         int concatDim = hidDim + inDim;
         // 3 gates (z, r, h̃), each concatDim × hidDim
         int totalWeights = 3 * concatDim * hidDim;
-        // U(-0.5, 0.5) / sqrt(concatDim): one NextDouble per weight, in order; the loop only stores the draws.
-        var draws = new Vector<T>(totalWeights);
+        // U(-0.5, 0.5) / sqrt(concatDim): one NextDouble per weight, in order; the loop only stores the draws. The
+        // affine map runs in double and each weight is rounded to T once: in Half, rounding u before subtracting
+        // 0.5 cancels its leading bits and left the small weights with a few bits of the draw.
+        var draws = new double[totalWeights];
         for (int i = 0; i < totalWeights; i++)
-            draws[i] = NumOps.FromDouble(RandomGenerator.NextDouble());
-        _gruWeights = Engine.Multiply(
-            Engine.Subtract(draws, Engine.Fill(totalWeights, NumOps.FromDouble(0.5))),
-            NumOps.FromDouble(1.0 / Math.Sqrt(concatDim)));
+            draws[i] = RandomGenerator.NextDouble();
+        _gruWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(new Tensor<double>(draws, new[] { totalWeights }), -0.5),
+            1.0 / Math.Sqrt(concatDim)).Cast<T>().ToVector();
     }
 
     /// <inheritdoc/>

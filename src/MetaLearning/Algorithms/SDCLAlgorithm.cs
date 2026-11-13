@@ -107,8 +107,7 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Get teacher's soft targets on support and query sets
             paramModel.SetParameters(_teacherParams);
             var teacherSupport = MetaModel.Predict(task.SupportInput);
-            var teacherQueryPred = ConvertToVector(MetaModel.Predict(task.QueryInput))
-                ?? throw new InvalidOperationException("Teacher model returned non-vectorizable prediction for query input.");
+            var teacherQueryPred = MetaModel.Predict(task.QueryInput);
 
             // Inner loop: adapt student with task loss + distillation loss
             var studentParams = AdaptStudent(initParams, task, teacherSupport);
@@ -183,12 +182,32 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         => ComputeGradients(MetaModel, supportInput, teacherSupport, _distillationLoss);
 
     /// <summary>queryLoss + w * tau^2 KL(teacher || student) on the query predictions.</summary>
-    private T WithDistillation(T queryLoss, Vector<T> teacherQueryPred, TOutput studentQueryOutput)
+    private T WithDistillation(T queryLoss, TOutput teacherQueryOutput, TOutput studentQueryOutput)
+        => NumOps.Add(queryLoss, NumOps.Multiply(
+            NumOps.FromDouble(_algoOptions.DistillationWeight), DistillationLoss(teacherQueryOutput, studentQueryOutput)));
+
+    /// <summary>
+    /// tau^2 KL(teacher || student) on two model outputs in their own shape: the same loss, with the same per-row
+    /// softmax and batch mean, whose gradient the inner loop backpropagates. It used to flatten both outputs into one
+    /// vector, so a [batch, classes] output was scored as one softmax over every entry of the batch.
+    /// </summary>
+    internal T DistillationLoss(TOutput teacherOutput, TOutput studentOutput)
     {
-        var studentQueryPred = ConvertToVector(studentQueryOutput) ?? new Vector<T>(1);
-        return NumOps.Add(queryLoss, NumOps.Multiply(
-            NumOps.FromDouble(_algoOptions.DistillationWeight), ComputeKLDivergence(teacherQueryPred, studentQueryPred)));
+        var teacher = AsTensor(teacherOutput)
+            ?? throw new InvalidOperationException("Teacher model returned a prediction that is not a Tensor, Matrix or Vector.");
+        var student = AsTensor(studentOutput)
+            ?? throw new InvalidOperationException("Student model returned a prediction that is not a Tensor, Matrix or Vector.");
+        if (teacher.Length == 0 || student.Length == 0) return NumOps.Zero;
+        return _distillationLoss.ComputeTapeLoss(student, teacher).GetFlat(0);
     }
+
+    private static Tensor<T>? AsTensor(TOutput output) => (object?)output switch
+    {
+        Tensor<T> t => t,
+        Matrix<T> m => Tensor<T>.FromMatrix(m),
+        Vector<T> v => Tensor<T>.FromVector(v),
+        _ => null,
+    };
 
     /// <summary>
     /// tau^2 KL(softmax(teacher / tau) || softmax(student / tau)) over the first min(lengths) outputs.
@@ -201,8 +220,10 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     }
 
     /// <summary>
-    /// Hinton-style distillation loss tau^2 KL(p_T || p_S), p = softmax(logits / tau); "actual" is the teacher's
-    /// logits, "predicted" the student's. Terms with p_T &lt;= 1e-10 contribute nothing, and p_S is offset by 1e-10.
+    /// Hinton-style distillation loss tau^2 KL(p_T || p_S), p = softmax(logits / tau) over the last axis; "actual" is
+    /// the teacher's logits, "predicted" the student's. Terms with p_T &lt;= 1e-10 contribute nothing, and p_S is offset
+    /// by 1e-10. The per-row KL is averaged over the leading (batch) axes, PyTorch's <c>reduction='batchmean'</c>, so
+    /// the term keeps its scale relative to the mean task loss whatever the batch size.
     /// </summary>
     private sealed class TemperatureDistillationLoss : LossFunctionBase<T>
     {
@@ -230,8 +251,10 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var terms = Engine.TensorWhere(
                 mask, Engine.TensorMultiply(Engine.TensorExp(logTeacher), logRatio), Engine.TensorZerosLike(logRatio));
             var allAxes = Enumerable.Range(0, terms.Rank).ToArray();
+            int rows = terms.Shape[axis] == 0 ? 1 : terms.Length / terms.Shape[axis];
             return Engine.TensorMultiplyScalar(
-                Engine.ReduceSum(terms, allAxes, keepDims: false), NumOps.FromDouble(_temperature * _temperature));
+                Engine.ReduceSum(terms, allAxes, keepDims: false),
+                NumOps.FromDouble(_temperature * _temperature / Math.Max(rows, 1)));
         }
     }
 }

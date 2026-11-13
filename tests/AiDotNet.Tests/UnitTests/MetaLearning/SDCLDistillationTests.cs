@@ -43,6 +43,43 @@ public class SDCLDistillationTests
     }
 
     [Fact]
+    public void DistillationLoss_OfABatch_IsTheMeanOfThePerRowLosses()
+    {
+        // Two examples of three classes: tau^2 KL(softmax(t_n / tau) || softmax(s_n / tau)) per row, averaged over the
+        // rows (batchmean). The query term used to flatten the [2, 3] outputs into ONE softmax over all six entries,
+        // and the inner-loop loss summed the rows instead of averaging them.
+        const double tau = 2.0;
+        var algorithm = new SDCLAlgorithm<double, Tensor<double>, Tensor<double>>(
+            new SDCLOptions<double, Tensor<double>, Tensor<double>>(new MockFullModel<double>()) { DistillationTemperature = tau });
+        double[] t0 = { 1.0, -0.5, 2.0 }, s0 = { 0.2, 0.3, 1.1 };
+        double[] t1 = { 0.0, 0.0, 0.0 }, s1 = { 3.0, -1.0, 0.0 };
+
+        double RowLoss(double[] t, double[] s)
+        {
+            double[] Softmax(double[] v)
+            {
+                var e = new double[v.Length];
+                double sum = 0;
+                for (int i = 0; i < v.Length; i++) { e[i] = Math.Exp(v[i] / tau); sum += e[i]; }
+                for (int i = 0; i < v.Length; i++) e[i] /= sum;
+                return e;
+            }
+
+            var p = Softmax(t);
+            var q = Softmax(s);
+            double kl = 0;
+            for (int i = 0; i < p.Length; i++) kl += p[i] * Math.Log(p[i] / (q[i] + 1e-10));
+            return tau * tau * kl;
+        }
+
+        var teacher = new Tensor<double>(new[] { 1.0, -0.5, 2.0, 0.0, 0.0, 0.0 }, new[] { 2, 3 });
+        var student = new Tensor<double>(new[] { 0.2, 0.3, 1.1, 3.0, -1.0, 0.0 }, new[] { 2, 3 });
+
+        double expected = (RowLoss(t0, s0) + RowLoss(t1, s1)) / 2.0;
+        Assert.Equal(expected, algorithm.DistillationLoss(teacher, student), 9);
+    }
+
+    [Fact]
     public void DistillationLoss_IgnoresAnUnderflowedTeacherClassInHalf()
     {
         // Teacher logits / tau = (0, -50): p_T = (1, e^-50), and e^-50 < 1e-10, so that class is masked out and

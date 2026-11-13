@@ -26,7 +26,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <code>
 /// pool  = all inputs of the batch's tasks, labels discarded;  Z = embed(pool)
 /// for each task slot:
-///   partition = k-means(Z, k) from a random initialization        (a random partition P_p)
+///   partition = k-means(Z * a, k), a_d ~ U(0, 1) per dimension    (a randomly scaled partition P_p, Eq. 1)
 ///   pick N clusters with at least K + Q members; draw K + Q members of each
 ///   pseudo-task: support = K per cluster, query = Q per cluster, label = cluster rank 0..N-1
 ///   theta' = MAML inner loop on the pseudo support; meta-gradient from the pseudo query
@@ -149,7 +149,7 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
         int k = _algoOptions.NumClusters > 0 ? _algoOptions.NumClusters : Math.Max(2, n / perCluster);
         k = Math.Min(k, n);
 
-        var assignment = KMeans(embeddings, k);
+        var assignment = KMeans(embeddings, k, DrawDimensionScale(embeddings.Shape[1]));
         var members = new List<int>[k];
         for (int c = 0; c < k; c++) members[c] = new List<int>();
         for (int i = 0; i < n; i++) members[assignment[i]].Add(i);
@@ -185,8 +185,27 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
     }
 
     /// <summary>
-    /// Lloyd's k-means from k distinct random examples; returns each example's cluster. Distances drop the
-    /// per-example ||x||^2, which does not change the arg-min.
+    /// The random scaling of one CACTUs partition (Sec. 2.3, Eq. 1): every embedding dimension is multiplied by its
+    /// own a_d ~ U(0, 1), so each k-means run sees a different diagonal metric and the partitions differ (the
+    /// authors' code: np.multiply(encodings, np.random.uniform(0, 1, dim))). One NextDouble per dimension, in order.
+    /// </summary>
+    internal Tensor<T> DrawDimensionScale(int dim)
+    {
+        var weights = new double[dim];
+        for (int d = 0; d < dim; d++) weights[d] = RandomGenerator.NextDouble();
+        return new Tensor<double>(weights, new[] { 1, dim }).Cast<T>();
+    }
+
+    /// <summary>
+    /// Lloyd's k-means from k distinct random examples under the plain Euclidean metric; returns each example's
+    /// cluster.
+    /// </summary>
+    internal int[] KMeans(Tensor<T> embeddings, int k) => KMeans(embeddings, k, null);
+
+    /// <summary>
+    /// Lloyd's k-means from k distinct random examples on the embeddings with every dimension multiplied by
+    /// <paramref name="dimensionScale"/> ([1, dim]) when one is given; returns each example's cluster. Distances drop
+    /// the per-example ||x||^2, which does not change the arg-min.
     /// </summary>
     /// <remarks>
     /// The embeddings are first scaled by 1 / (max|x| sqrt(dim)), so every ||x|| &lt;= 1: a positive scale changes
@@ -194,10 +213,12 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
     /// overflows Half). Cluster sizes are counted as ints and each mean is the one-hot rows weighted by 1 / size,
     /// so neither a Half count (which stalls at 2048) nor an unnormalized column sum can saturate.
     /// </remarks>
-    internal int[] KMeans(Tensor<T> embeddings, int k)
+    internal int[] KMeans(Tensor<T> embeddings, int k, Tensor<T>? dimensionScale)
     {
         int n = embeddings.Shape[0];
         int dim = embeddings.Shape[1];
+        if (dimensionScale is not null)
+            embeddings = Engine.TensorMultiply(embeddings, Engine.TensorBroadcastTo(dimensionScale, new[] { n, dim }));
         T peak = Engine.TensorMaxValue(Engine.TensorAbs(embeddings));
         if (NumOps.GreaterThan(peak, NumOps.Zero))
             embeddings = Engine.TensorMultiplyScalar(

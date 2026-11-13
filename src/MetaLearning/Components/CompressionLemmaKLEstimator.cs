@@ -88,12 +88,15 @@ public class CompressionLemmaKLEstimator<T>
         var random = rng ?? RandomHelper.CreateSeededRandom(29);
 
         // U(-scale, scale) * 1e-3: one NextDouble per first-layer weight, in order; the loop only stores the draws.
-        var draws = new Vector<T>(_w1);
+        // (2u - 1) scale runs in double and each weight is rounded to T once: in Half, rounding u first and then
+        // subtracting scale cancels the leading bits of the draw.
+        var draws = new double[_w1];
         for (int i = 0; i < _w1; i++)
-            draws[i] = NumOps.FromDouble(random.NextDouble());
+            draws[i] = random.NextDouble();
         double scale = Math.Sqrt(1.0 / Math.Max(1, _inputDim)) * 1e-3;
-        var firstLayer = Engine.Subtract(
-            Engine.Multiply(draws, NumOps.FromDouble(2.0 * scale)), Engine.Fill(_w1, NumOps.FromDouble(scale)));
+        var firstLayer = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { _w1 }), 2.0), -1.0),
+            scale).Cast<T>().ToVector();
         _omega = Vector<T>.Concatenate(new[] { firstLayer, new Vector<T>(_b1 + _w2 + _b2) });
     }
 

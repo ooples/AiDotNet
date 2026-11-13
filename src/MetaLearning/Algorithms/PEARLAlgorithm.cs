@@ -94,17 +94,23 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         // Encoder: compressed context → hidden → (μ, log_σ²)
         // N(0, 0.01^2) draws: one SampleNormal per weight, in order; the loops only store the draws.
         int encoderSize = _compressedDim * _algoOptions.EncoderHiddenDim + _algoOptions.EncoderHiddenDim * 2 * _latentDim;
-        var encoderDraws = new Vector<T>(encoderSize);
+        // The 0.01 scale is applied in double and each weight rounded to T once (in Half g and 0.01 were both
+        // rounded before the product).
+        var encoderDraws = new double[encoderSize];
         for (int i = 0; i < encoderSize; i++)
-            encoderDraws[i] = NumOps.FromDouble(SampleNormal());
-        _encoderParams = Engine.Multiply(encoderDraws, NumOps.FromDouble(0.01));
+            encoderDraws[i] = SampleNormal();
+        _encoderParams = ScaledDraws(encoderDraws, 0.01);
 
         // Projection: z → parameter delta
-        var projectionDraws = new Vector<T>(_latentDim * _compressedDim);
+        var projectionDraws = new double[_latentDim * _compressedDim];
         for (int i = 0; i < projectionDraws.Length; i++)
-            projectionDraws[i] = NumOps.FromDouble(SampleNormal());
-        _projectionParams = Engine.Multiply(projectionDraws, NumOps.FromDouble(0.01));
+            projectionDraws[i] = SampleNormal();
+        _projectionParams = ScaledDraws(projectionDraws, 0.01);
     }
+
+    /// <summary><paramref name="scale"/> times each double draw, rounded to T once.</summary>
+    private Vector<T> ScaledDraws(double[] draws, double scale)
+        => Engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { draws.Length }), scale).Cast<T>().ToVector();
 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)

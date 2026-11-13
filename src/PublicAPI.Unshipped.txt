@@ -22625,6 +22625,8 @@ AiDotNet.MetaLearning.Options.iTAMLOptions<T, TInput, TOutput>.EtaDecay.set -> v
 *REMOVED*AiDotNet.MetaLearning.Options.UnsupervisedMetaLearnOptions<T, TInput, TOutput>.ConsistencyWeight.set -> void
 AiDotNet.MetaLearning.Options.UnsupervisedMetaLearnOptions<T, TInput, TOutput>.KMeansIterations.get -> int
 AiDotNet.MetaLearning.Options.UnsupervisedMetaLearnOptions<T, TInput, TOutput>.KMeansIterations.set -> void
+*REMOVED*override AiDotNet.MetaLearning.Algorithms.iTAMLAlgorithm<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.MetaLearning.Algorithms.UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void

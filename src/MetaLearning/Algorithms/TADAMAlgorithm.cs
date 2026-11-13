@@ -202,7 +202,11 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             embeddings = Embed(stackedInput);
         }
 
-        var alpha = _tadamOptions.UseMetricScaling ? Tensor<T>.FromVector(_metricScale) : null;
+        // alpha always scales the logits; it is a trained leaf only with metric scaling. Without it alpha stays at
+        // 1 / InitialTemperature, the value Adapt hands the model, so training and inference score the same logits
+        // (training used to drop alpha entirely, i.e. temperature 1, while inference divided by InitialTemperature).
+        var alpha = Tensor<T>.FromVector(_metricScale);
+        var trainAlpha = _tadamOptions.UseMetricScaling;
         var encoder = TaskEncoderLeaves();
 
         // The extractor's gradient: the whole episode - TEN, prototypes, metric - rebuilt from the embeddings on the tape.
@@ -225,7 +229,7 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         // The metric's and the task encoder's gradients: the same objective, differentiated with respect to them.
         var leaves = new List<Tensor<T>>();
-        if (alpha is not null) leaves.Add(alpha);
+        if (trainAlpha) leaves.Add(alpha);
         if (encoder is not null) leaves.AddRange(encoder.All);
 
         var alphaGradient = new Vector<T>(_metricScale.Length);
@@ -243,7 +247,7 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 leaves,
                 gradients =>
                 {
-                    alphaGradient = GradientOf(gradients, alpha, alphaGradient.Length);
+                    if (trainAlpha) alphaGradient = GradientOf(gradients, alpha, alphaGradient.Length);
                     if (encoder is not null)
                     {
                         encoderGradient = Vector<T>.Concatenate(
@@ -260,7 +264,7 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         ParamModel.SetParameters(ApplyOuterGradients(ParamModel.GetParameters(), bodyGradient, _options.OuterLearningRate));
         T rate = NumOps.FromDouble(_options.OuterLearningRate);
-        if (alpha is not null)
+        if (trainAlpha)
             _metricScale = Engine.Subtract(_metricScale, Engine.Multiply(alphaGradient, rate));
         if (encoder is not null)
             _taskEncoder = Engine.Subtract(_taskEncoder, Engine.Multiply(encoderGradient, rate));
@@ -424,7 +428,7 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         using var noGrad = new NoGradScope<T>();
         var episode = PrototypeEpisode<T>.Build(ReadLabels(task.SupportOutput), ReadLabels(task.QueryOutput));
         var embeddings = Embed(ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput));
-        var alpha = _tadamOptions.UseMetricScaling ? Tensor<T>.FromVector(_metricScale) : null;
+        var alpha = Tensor<T>.FromVector(_metricScale);
         return EpisodeObjective(embeddings, episode, alpha, TaskEncoderLeaves()).GetFlat(0);
     }
 

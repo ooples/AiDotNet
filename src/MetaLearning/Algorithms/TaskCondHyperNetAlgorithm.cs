@@ -89,13 +89,14 @@ public partial class TaskCondHyperNetAlgorithm<T, TInput, TOutput> : MetaLearner
         // W_h: embDim * hidDim + b_h: hidDim + per-chunk W_c: numChunks * hidDim * chunkSize
         int totalWeights = embDim * hidDim + hidDim + _numChunks * hidDim * chunkSize;
         // U(-0.5, 0.5) / sqrt(hidDim). The draws stay one NextDouble per weight, in order, so seeded runs
-        // reproduce; the loop only stores them and the arithmetic is one engine op.
-        var draws = new Vector<T>(totalWeights);
+        // reproduce; the loop only stores them. The affine map runs in double and each weight is rounded to T
+        // once: in Half, rounding u before subtracting 0.5 cancels its leading bits.
+        var draws = new double[totalWeights];
         for (int i = 0; i < totalWeights; i++)
-            draws[i] = NumOps.FromDouble(RandomGenerator.NextDouble());
-        _hyperNetWeights = Engine.Multiply(
-            Engine.Subtract(draws, Engine.Fill(totalWeights, NumOps.FromDouble(0.5))),
-            NumOps.FromDouble(1.0 / Math.Sqrt(hidDim)));
+            draws[i] = RandomGenerator.NextDouble();
+        _hyperNetWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(new Tensor<double>(draws, new[] { totalWeights }), -0.5),
+            1.0 / Math.Sqrt(hidDim)).Cast<T>().ToVector();
     }
 
     /// <inheritdoc/>

@@ -41,6 +41,40 @@ public class CACTUsPaperTests
     }
 
     [Fact]
+    public void KMeans_ClustersUnderThePartitionsRandomDimensionScaling()
+    {
+        // Sec. 2.3: each partition runs k-means on the embeddings with every dimension multiplied by its own random
+        // weight, so different partitions see different metrics. The x coordinate splits rows {0-3} from {4-7}, the y
+        // coordinate splits the even rows from the odd ones; the scaling decides which split k-means finds. Without
+        // it every partition clustered the same unscaled embeddings.
+        var points = new Matrix<double>(new[,]
+        {
+            { 0.0, 0.0 }, { 0.1, 10.0 }, { 0.2, 0.1 }, { 0.3, 10.1 },
+            { 10.0, 0.2 }, { 10.1, 10.2 }, { 10.2, 0.3 }, { 10.3, 10.3 },
+        });
+        var embeddings = Tensor<double>.FromMatrix(points);
+
+        var byX = Algorithm().KMeans(embeddings, 2, new Tensor<double>(new[] { 1.0, 0.0 }, new[] { 1, 2 }));
+        Assert.All(byX.Take(4), a => Assert.Equal(byX[0], a));
+        Assert.All(byX.Skip(4), a => Assert.Equal(byX[4], a));
+        Assert.NotEqual(byX[0], byX[4]);
+
+        var byY = Algorithm().KMeans(embeddings, 2, new Tensor<double>(new[] { 0.0, 1.0 }, new[] { 1, 2 }));
+        for (int i = 0; i < 8; i++) Assert.Equal(byY[i % 2], byY[i]);
+        Assert.NotEqual(byY[0], byY[1]);
+    }
+
+    [Fact]
+    public void DimensionScale_IsOneUniformWeightPerDimension()
+    {
+        var scale = Algorithm().DrawDimensionScale(5);
+
+        Assert.Equal(new[] { 1, 5 }, scale.Shape);
+        var expected = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
+        for (int d = 0; d < 5; d++) Assert.Equal(expected.NextDouble(), scale[new[] { 0, d }]);
+    }
+
+    [Fact]
     public void PseudoTask_LabelsByCluster_AndIgnoresTheGivenLabels()
     {
         var pool = new Matrix<double>(Points);

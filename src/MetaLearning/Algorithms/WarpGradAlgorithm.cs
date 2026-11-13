@@ -208,19 +208,24 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
             // Initialize near identity: U(1 - s, 1 + s). One NextDouble per warp parameter, in order; the
             // loop only stores the draws.
-            var draws = new Vector<T>(layerDim);
+            var draws = new double[layerDim];
             for (int j = 0; j < layerDim; j++)
-                draws[j] = NumOps.FromDouble(RandomGenerator.NextDouble());
+                draws[j] = RandomGenerator.NextDouble();
 
             _warpLayerParams.Add(AroundIdentity(draws));
         }
     }
 
-    /// <summary>Maps U(0, 1) draws u to 1 + (u - 0.5) * 2 * WarpInitScale.</summary>
-    private Vector<T> AroundIdentity(Vector<T> draws)
+    /// <summary>
+    /// Maps U(0, 1) draws u to 1 + (u - 0.5) * 2 * WarpInitScale, in double, rounding each warp parameter to T once
+    /// (rounding u to Half first lost bits of the draw before it was scaled).
+    /// </summary>
+    private Vector<T> AroundIdentity(double[] draws)
     {
         double s = _warpOptions.WarpInitScale;
-        return Engine.Add(Engine.Multiply(draws, NumOps.FromDouble(2.0 * s)), Engine.Fill(draws.Length, NumOps.FromDouble(1.0 - s)));
+        var u = new Tensor<double>(draws, new[] { draws.Length });
+        return Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorAddScalar(u, -0.5), 2.0 * s), 1.0)
+            .Cast<T>().ToVector();
     }
 
     /// <summary>

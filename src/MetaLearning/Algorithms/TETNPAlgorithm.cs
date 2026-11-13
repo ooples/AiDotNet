@@ -195,7 +195,7 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
     }
 
     /// <summary>The position of each support example: the mean of its input features. Null if counts disagree.</summary>
-    private static Tensor<T>? InputPositions(TInput supportInput, int n)
+    private Tensor<T>? InputPositions(TInput supportInput, int n)
     {
         Tensor<T> x;
         try
@@ -240,28 +240,42 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
         => NumOps.Add(queryLoss, NumOps.Multiply(
             NumOps.FromDouble(_algoOptions.EquivarianceRegWeight), ComputeEquivarianceReg(contextReps, refinedReps)));
 
-    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> tb)
+    /// <summary>
+    /// The SPSA objective for the encoder and the relative-position weights: the training loss of
+    /// <see cref="MetaTrain"/>, i.e. the query loss of the model MODULATED by the attended context, plus the optional
+    /// regularizer. It used to score the query at the unmodulated parameters, which neither weight set reaches, so
+    /// with the regularizer off (the default) SPSA saw a constant objective and never moved them.
+    /// </summary>
+    internal double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> tb)
     {
         var ip = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var losses = new List<T>();
-        foreach (var t in tb.Tasks)
+        try
+        {
+            foreach (var t in tb.Tasks)
+            {
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
+                var contextReps = BuildContextRepresentations(
+                    ConvertToVector(MetaModel.Predict(t.SupportInput)), ConvertToVector(t.SupportOutput));
+                var refinedReps = ApplyRelativeSelfAttention(contextReps, t.SupportInput);
+                ModulateParameters(ip, ComputeModScale(AggregateRepresentations(refinedReps)));
+
+                var queryLoss = ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput);
+                losses.Add(WithRegularizer(queryLoss, contextReps, refinedReps));
+            }
+        }
+        finally
         {
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput);
-
-            // Include the optional regularizer so SPSA optimizes the same objective as training.
-            var sf = ConvertToVector(MetaModel.Predict(t.SupportInput));
-            var sl = ConvertToVector(t.SupportOutput);
-            if (sf != null && sl != null && sf.Length > 0 && sl.Length > 0)
-            {
-                var contextReps = BuildContextRepresentations(sf, sl);
-                var refinedReps = ApplyRelativeSelfAttention(contextReps, t.SupportInput);
-                queryLoss = WithRegularizer(queryLoss, contextReps, refinedReps);
-            }
-
-            losses.Add(queryLoss);
         }
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
+
         return NumOps.ToDouble(ComputeMean(losses));
+    }
+
+    /// <summary>Gets or sets a copy of the relative-position scoring weights (for tests).</summary>
+    internal Vector<T> RelativePositionParametersForTesting
+    {
+        get => _relPosParams.Clone();
+        set => _relPosParams = value.Clone();
     }
 }
