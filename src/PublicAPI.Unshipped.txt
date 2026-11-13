@@ -22957,3 +22957,4 @@ AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.PresentPreviousLabe
 override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.RegisterComponents() -> void
 override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.Save(string! filePath) -> void
 override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.Load(string! filePath) -> void
+override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void

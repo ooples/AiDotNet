@@ -271,149 +271,118 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
     }
 
-    // Identifies an NTM checkpoint written by Save, and its layout version.
-    private const int CheckpointMagic = unchecked((int)0x4E544D31); // "NTM1"
-    private const int CheckpointVersion = 1;
-
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
-    /// Saves what the NTM trains and what it needs to predict after a load: the controller type and the
-    /// configuration that shapes it, the controller's resolved input width and its parameters, and the
-    /// meta-iteration count. It used to save only the supplied meta-model, which the NTM never trains, and so
-    /// dropped the controller entirely (and threw when the meta-model could not serialize itself).
+    /// The NTM's parameter vector is its controller's, so the shared checkpoint (<see cref="ModelBase{T, TInput,
+    /// TOutput}.Serialize"/>) carries what it trains. Declared here is what that vector needs around it: the
+    /// numeric type, controller type and shape options, checked before anything is restored so a checkpoint is
+    /// refused by a differently shaped algorithm; the controller's resolved input width, which sizes a freshly
+    /// built controller before the parameters are poured in (a fresh LSTM or MLP controller only knows its
+    /// estimate, so the vector lengths used to disagree); and, once the parameters are in, a fresh episode.
     /// </para>
     /// <para>
     /// Memory and recurrent state are not saved: every episode, Adapt included, starts from the initial memory
-    /// and a reset controller. Optimizer state is not saved either and is reset by <see cref="Load"/>.
+    /// and a reset controller.
     /// </para>
     /// </remarks>
-    public override void Save(string filePath)
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
     {
-        Guard.NotNull(filePath);
-        var parameters = _controller.GetParameters();
-
-        using var stream = System.IO.File.Create(filePath);
-        using var writer = new System.IO.BinaryWriter(stream);
-        writer.Write(CheckpointMagic);
-        writer.Write(CheckpointVersion);
-        writer.Write(typeof(T).FullName ?? typeof(T).Name);
-        writer.Write(_controller.GetType().FullName ?? _controller.GetType().Name);
-        WriteShape(writer);
-        writer.Write((_controller as INTMControllerLayout)?.ResolvedInputWidth ?? -1);
-        writer.Write(_currentIteration);
-        writer.Write(parameters.Length);
-
-        // Stored as double, which holds every Half, float and double value exactly.
-        foreach (double value in Tensor<T>.FromVector(parameters).Cast<double>().ToArray())
-        {
-            writer.Write(value);
-        }
+        base.RegisterState(state);
+        state.DeclareString("NTM.Configuration", CheckpointConfiguration, ValidateConfiguration);
+        state.DeclareInt32(
+            "NTM.ControllerInputWidth",
+            () => (_controller as INTMControllerLayout)?.ResolvedInputWidth ?? -1,
+            RestoreInputWidth);
+        state.DeclareAfterParameterRestore("NTM.ResetEpisode", ResetMemoryState);
     }
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Restores a checkpoint written by <see cref="Save"/> into an algorithm built with the same controller type
-    /// and shape options; anything else is rejected rather than loaded into the wrong layout. The controller is
-    /// resolved to the saved input width before its parameters are written, so a freshly built algorithm loads
-    /// a trained one. Optimizer state is reset, since it is not saved.
+    /// Writes the model checkpoint (<see cref="ModelBase{T, TInput, TOutput}.Serialize"/>), whose parameters are
+    /// the controller's. It used to save only the supplied meta-model, which the NTM never trains, and so dropped
+    /// the controller entirely (and threw when the meta-model could not serialize itself). Optimizer state is not
+    /// saved and is reset by <see cref="Load"/>.
     /// </remarks>
-    /// <exception cref="System.IO.InvalidDataException">The file is not an NTM checkpoint, or it was saved from
-    /// a different numeric type, controller or configuration.</exception>
+    public override void Save(string filePath)
+    {
+        Guard.NotNull(filePath);
+        System.IO.File.WriteAllBytes(filePath, Serialize());
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Restores a checkpoint written by <see cref="Save"/> or <see cref="ModelBase{T, TInput, TOutput}.Serialize"/>
+    /// into an algorithm with the same numeric type, controller type and shape options; anything else is
+    /// rejected. The optimizer's state is reset, since it is not saved.
+    /// </remarks>
+    /// <exception cref="System.IO.InvalidDataException">The file is not a checkpoint of this algorithm, or it was
+    /// saved with a different numeric type, controller or configuration.</exception>
     public override void Load(string filePath)
     {
         Guard.NotNull(filePath);
-
-        using var stream = System.IO.File.OpenRead(filePath);
-        using var reader = new System.IO.BinaryReader(stream);
-        if (reader.ReadInt32() != CheckpointMagic)
-        {
-            throw new System.IO.InvalidDataException("The file is not an NTM checkpoint.");
-        }
-
-        int version = reader.ReadInt32();
-        if (version != CheckpointVersion)
-        {
-            throw new System.IO.InvalidDataException($"NTM checkpoint version {version} is not supported.");
-        }
-
-        Expect(reader.ReadString(), typeof(T).FullName ?? typeof(T).Name, "numeric type");
-        Expect(reader.ReadString(), _controller.GetType().FullName ?? _controller.GetType().Name, "controller");
-        var shape = ShapeValues();
-        for (int i = 0; i < shape.Length; i++)
-        {
-            int saved = reader.ReadInt32();
-            if (saved != shape[i].Value)
-            {
-                throw new System.IO.InvalidDataException(
-                    $"The checkpoint was saved with {shape[i].Name} = {saved}, but this algorithm has {shape[i].Value}.");
-            }
-        }
-
-        int inputWidth = reader.ReadInt32();
-        int iteration = reader.ReadInt32();
-        int count = reader.ReadInt32();
-        if (count < 0)
-        {
-            throw new System.IO.InvalidDataException("The checkpoint's parameter count is negative.");
-        }
-
-        var values = new double[count];
-        for (int i = 0; i < count; i++)
-        {
-            values[i] = reader.ReadDouble();
-        }
-
-        var parameters = new Tensor<double>(values, new[] { count }).Cast<T>().ToVector();
-
-        if (inputWidth >= 0 && _controller is INTMControllerLayout layout)
-        {
-            layout.ResolveInputWidth(inputWidth);
-        }
-
-        int expected = _controller.GetParameters().Length;
-        if (count != expected)
-        {
-            throw new System.IO.InvalidDataException(
-                $"The checkpoint holds {count} controller parameters, but this controller has {expected}.");
-        }
-
-        SetControllerParameters(parameters);
-        _currentIteration = iteration;
-        ResetMemoryState();
+        Deserialize(System.IO.File.ReadAllBytes(filePath));
 
         // The optimizer's moments belong to the parameters it was stepping; SetMetaModel resets them.
         SetMetaModel(MetaModel);
     }
 
-    /// <summary>The options that fix the controller's and memory's shapes, in checkpoint order.</summary>
-    private (string Name, int Value)[] ShapeValues() => new[]
+    /// <summary>
+    /// The numeric type, controller type, memory shape and controller tensor shapes a checkpoint must match.
+    /// </summary>
+    /// <remarks>
+    /// Read from the built components rather than the options: the options' scalar settings are restored from
+    /// the checkpoint before this is checked, so they would always agree with it. The first controller tensor's
+    /// input width is left out, since a fresh controller has not resolved it yet; the stored width is restored
+    /// separately.
+    /// </remarks>
+    private string CheckpointConfiguration()
     {
-        (nameof(NTMOptions<T, TInput, TOutput>.ControllerType), (int)_ntmOptions.ControllerType),
-        (nameof(NTMOptions<T, TInput, TOutput>.MemorySize), _ntmOptions.MemorySize),
-        (nameof(NTMOptions<T, TInput, TOutput>.MemoryWidth), _ntmOptions.MemoryWidth),
-        (nameof(NTMOptions<T, TInput, TOutput>.NumReadHeads), _ntmOptions.NumReadHeads),
-        (nameof(NTMOptions<T, TInput, TOutput>.ControllerHiddenSize), _ntmOptions.ControllerHiddenSize),
-        (nameof(NTMOptions<T, TInput, TOutput>.NumClasses), _ntmOptions.NumClasses),
-        (nameof(NTMOptions<T, TInput, TOutput>.ShiftRange), _ntmOptions.ShiftRange),
-        (nameof(NTMOptions<T, TInput, TOutput>.PresentPreviousLabel), _ntmOptions.PresentPreviousLabel ? 1 : 0),
-    };
-
-    private void WriteShape(System.IO.BinaryWriter writer)
-    {
-        foreach (var (_, value) in ShapeValues())
+        var parts = new List<string>
         {
-            writer.Write(value);
+            typeof(T).FullName ?? typeof(T).Name,
+            _controller.GetType().FullName ?? _controller.GetType().Name,
+            $"memory={_memory.Size}x{_memory.Width}",
+            $"readHeads={_readHeads.Count}",
+        };
+        bool resolvesInput = _controller is INTMControllerLayout;
+        var tensors = _controller.GetParameterTensors();
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            var shape = tensors[i].Shape.ToArray();
+            parts.Add(i == 0 && resolvesInput && shape.Length == 2
+                ? $"{shape[0]}x?"
+                : string.Join("x", shape));
         }
+
+        return string.Join(";", parts);
     }
 
-    private static void Expect(string saved, string live, string what)
+    private void ValidateConfiguration(string? saved)
     {
+        string live = CheckpointConfiguration();
         if (!string.Equals(saved, live, StringComparison.Ordinal))
         {
             throw new System.IO.InvalidDataException(
-                $"The checkpoint was saved with {what} '{saved}', but this algorithm uses '{live}'.");
+                $"The checkpoint was saved with configuration '{saved ?? "(none)"}', but this algorithm has '{live}'.");
         }
+    }
+
+    private void RestoreInputWidth(int width)
+    {
+        if (width < 0 || _controller is not INTMControllerLayout layout)
+        {
+            return;
+        }
+
+        // A controller that has already resolved a different width holds weights for other inputs.
+        if (layout.ResolvedInputWidth is int resolved && resolved != width)
+        {
+            throw new System.IO.InvalidDataException(
+                $"The checkpoint's controller takes {width} inputs, but this controller takes {resolved}.");
+        }
+
+        layout.ResolveInputWidth(width);
     }
 
     /// <summary>The controller the algorithm trains, shared with every adapted model.</summary>

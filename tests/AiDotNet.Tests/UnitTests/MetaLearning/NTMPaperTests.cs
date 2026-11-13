@@ -609,6 +609,52 @@ public class NTMPaperTests
         }
     }
 
+    /// <summary>
+    /// The byte-array path keeps the controller too: a trained controller serialized and deserialized into a
+    /// freshly built algorithm has the same parameters and adapts and predicts identically. The base wrote the
+    /// flat parameter vector, which a fresh LSTM algorithm could not take back because its controller had not
+    /// resolved its input width.
+    /// </summary>
+    [Theory]
+    [InlineData(NTMControllerType.LSTM)]
+    [InlineData(NTMControllerType.MLP)]
+    public void SerializeAndDeserialize_RestoreTheTrainedController(NTMControllerType type)
+    {
+        var task = Task();
+        var trained = Algorithm(type, 0.01);
+        trained.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { OtherTask() }));
+
+        var loaded = Algorithm(type, 0.01);
+        loaded.Deserialize(trained.Serialize());
+
+        var expected = trained.Controller.GetParameters();
+        var actual = loaded.Controller.GetParameters();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i]);
+
+        AssertSamePredictions(
+            trained.Adapt(task).Predict(task.QuerySetX),
+            loaded.Adapt(task).Predict(task.QuerySetX));
+    }
+
+    /// <summary>Serialized bytes are only restored into an algorithm of the same controller shape.</summary>
+    [Fact]
+    public void Deserialize_RejectsADifferentlyShapedController()
+    {
+        var trained = Algorithm(NTMControllerType.LSTM, 0.01);
+        trained.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { Task() }));
+
+        var other = new NTMAlgorithm<double, Matrix<double>, Tensor<double>>(
+            new NTMOptions<double, Matrix<double>, Tensor<double>>(new TensorEmbeddingModel(2, 2))
+            {
+                MemorySize = 4, MemoryWidth = 3, NumReadHeads = 1, NumClasses = 2, ControllerHiddenSize = 6,
+                ControllerType = NTMControllerType.LSTM, InitializeMemory = false, RandomSeed = 11,
+            });
+
+        Assert.Throws<System.IO.InvalidDataException>(() => other.Deserialize(trained.Serialize()));
+    }
+
     /// <summary>A controller that records every input and addresses by content only.</summary>
     private sealed class RecordingController : INTMController<double>
     {
