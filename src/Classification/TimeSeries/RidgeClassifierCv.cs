@@ -57,8 +57,11 @@ internal static class RidgeClassifierCv<T>
         var mean = engine.ReduceMean(x, new[] { 0 }, true);
         var centeredRaw = engine.TensorSubtract(x, engine.TensorBroadcastTo(mean, featureShape));
         var rawScale = engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(centeredRaw, centeredRaw), new[] { 0 }, true));
+        // At or below the threshold, not strictly below: in a type that cannot represent ZeroScale (Half rounds it to
+        // zero) an exactly constant feature must still get scale one instead of dividing by zero.
+        var ones = engine.TensorOnesLike(rawScale);
         var scale = engine.TensorWhere(
-            engine.TensorLessThan(rawScale, NumOps.FromDouble(ZeroScale)), engine.TensorOnesLike(rawScale), rawScale);
+            engine.TensorLessEqual(rawScale, engine.TensorMultiplyScalar(ones, NumOps.FromDouble(ZeroScale))), ones, rawScale);
         var centered = engine.TensorDivide(centeredRaw, engine.TensorBroadcastTo(scale, featureShape));
         var scaledMean = engine.TensorDivide(mean, scale);
         var yMean = engine.ReduceMean(y, new[] { 0 }, true);
@@ -164,8 +167,9 @@ internal static class RidgeClassifierCv<T>
         var labels = classLabels.AsTensor();
         if (outputs == 1)
         {
-            // A non-negative decision value is the positive (last) class.
-            var positive = engine.TensorGreaterEqual(engine.Reshape(scores, new[] { n }), new Tensor<T>(new[] { n }));
+            // A positive decision value is the last class; zero is the first (scikit-learn's LinearClassifierMixin:
+            // scores > 0).
+            var positive = engine.TensorGreaterThan(engine.Reshape(scores, new[] { n }), new Tensor<T>(new[] { n }));
             var last = engine.TensorBroadcastTo(engine.TensorSlice(labels, new[] { classes - 1 }, new[] { 1 }), new[] { n });
             var first = engine.TensorBroadcastTo(engine.TensorSlice(labels, new[] { 0 }, new[] { 1 }), new[] { n });
             return engine.TensorWhere(positive, last, first).ToVector();

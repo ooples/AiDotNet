@@ -34,6 +34,7 @@ public class MiniRocketOptions<T> : TimeSeriesClassifierOptions<T>
     /// <summary>
     /// Gets or sets the most dilations each kernel is applied at.
     /// </summary>
+    /// <value>The most distinct dilations each kernel is applied at. Defaults to 32.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> MiniRocket spreads each kernel's features over exponentially spaced
     /// dilations (how far apart the kernel's taps are), up to this many distinct dilations; the features per

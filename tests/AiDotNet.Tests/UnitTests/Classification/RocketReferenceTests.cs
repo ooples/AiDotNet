@@ -46,6 +46,39 @@ public class RocketReferenceTests
 
     [Fact]
     [Trait("category", "unit")]
+    public void Ridge_head_breaks_a_zero_score_toward_the_first_class()
+    {
+        // Constant features and balanced labels fit zero coefficients and a zero intercept; scikit-learn's
+        // LinearClassifierMixin predicts classes_[scores > 0], so every row is the first class.
+        var x = new Matrix<double>(new[,] { { 1.0, 2.0 }, { 1.0, 2.0 }, { 1.0, 2.0 }, { 1.0, 2.0 } });
+        var y = new Vector<double>(new[] { 0.0, 1, 0, 1 });
+        var classes = new Vector<double>(new[] { 0.0, 1.0 });
+
+        var parameters = RidgeClassifierCv<double>.Fit(x, y, classes, RidgeClassifierCv<double>.DefaultAlphas);
+
+        Assert.Equal(new[] { 0.0, 0, 0, 0 }, RidgeClassifierCv<double>.Predict(x, parameters, classes, 2).ToArray());
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Ridge_head_gives_a_constant_half_feature_unit_scale()
+    {
+        // Half rounds the zero-scale threshold (10 * double epsilon) to zero, so a strict "below the threshold" test
+        // left a constant feature with scale zero and every fitted value NaN.
+        var x = new Matrix<Half>(new[,]
+        {
+            { (Half)1, (Half)0.5 }, { (Half)1, (Half)1.5 }, { (Half)1, (Half)0.25 }, { (Half)1, (Half)2 }
+        });
+        var y = new Vector<Half>(new[] { (Half)0, (Half)1, (Half)0, (Half)1 });
+        var classes = new Vector<Half>(new[] { (Half)0, (Half)1 });
+
+        var parameters = RidgeClassifierCv<Half>.Fit(x, y, classes, RidgeClassifierCv<Half>.DefaultAlphas);
+
+        Assert.All(parameters.ToArray(), value => Assert.False(double.IsNaN((double)value) || double.IsInfinity((double)value), $"fitted value {value} is not finite"));
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
     public void Ridge_head_matches_scikit_learn_multiclass()
     {
         // Three classes, n < p: the Gram route; one +1/-1 column per class.
@@ -144,6 +177,36 @@ public class RocketReferenceTests
         Assert.Equal(dilations, plan.Dilations);
         Assert.Equal(perDilation, plan.FeaturesPerDilation);
         Assert.Equal(84 * perDilation.Sum(), classifier.NumFeatures);
+    }
+
+    // The fitted biases come from the training convolutions, so a restored or copied model must carry them: before
+    // they were declared state, a sequence-trained model lost them and PredictSequences threw "must be fitted".
+    [Fact]
+    public void MiniRocket_sequence_trained_model_round_trips()
+    {
+        const int samples = 8, length = 24;
+        var sequences = new Tensor<double>(new[] { samples, length });
+        var labels = new Vector<double>(samples);
+        for (int s = 0; s < samples; s++)
+        {
+            labels[s] = s % 2;
+            for (int t = 0; t < length; t++)
+            {
+                sequences[s, t] = Math.Sin(0.4 * t * (1 + s % 2)) + 0.1 * s;
+            }
+        }
+
+        var options = new MiniRocketOptions<double> { Seed = 5, NumFeatures = 168 };
+        var classifier = new MiniRocketClassifier<double>(options);
+        classifier.TrainOnSequences(sequences, labels);
+        var expected = classifier.PredictSequences(sequences);
+
+        var restored = new MiniRocketClassifier<double>(options);
+        restored.Deserialize(classifier.Serialize());
+        var copy = (MiniRocketClassifier<double>)classifier.DeepCopy();
+
+        Assert.Equal(expected.ToArray(), restored.PredictSequences(sequences).ToArray());
+        Assert.Equal(expected.ToArray(), copy.PredictSequences(sequences).ToArray());
     }
 
     // sktime's apply_kernel: zero padding, output = bias + sum(w_j * x[i + j * d]); (max, proportion > 0).

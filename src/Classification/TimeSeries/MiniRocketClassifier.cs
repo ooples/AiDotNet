@@ -87,8 +87,10 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
     private readonly Random _random;
     private int[]? _dilations;
     private int[]? _featuresPerDilation;
-    // One [kernels, featuresPerDilation] bias table per dilation, fitted from training convolutions.
-    private Tensor<T>[]? _biases;
+    // One [kernels, featuresPerDilation] bias table per dilation, fitted from training convolutions. A list, not an
+    // array: the generated state registry carries List<Tensor<T>>, so a restored model keeps its fitted biases.
+    [FittedParameter]
+    private List<Tensor<T>>? _biases;
     [FittedParameter]
     private Vector<T>? _weights;
     private bool _isFitted;
@@ -316,7 +318,7 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         var series = UnivariateSeries(sequences);
         double goldenRatio = (Math.Sqrt(5.0) + 1.0) / 2.0;
 
-        _biases = new Tensor<T>[_dilations.Length];
+        var biases = new List<Tensor<T>>(_dilations.Length);
         int quantileIndex = 0;
         for (int d = 0; d < _dilations.Length; d++)
         {
@@ -341,8 +343,10 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
             var fraction = new Tensor<double>(positions.Select((p, i) => p - lower[i]).ToArray(), new[] { numKernels, count }).Cast<T>();
             var low = engine.TensorTakeAlongDim(sorted, new Tensor<int>(lower, new[] { numKernels, count }), 1);
             var high = engine.TensorTakeAlongDim(sorted, new Tensor<int>(upper, new[] { numKernels, count }), 1);
-            _biases[d] = engine.TensorAdd(low, engine.TensorMultiply(engine.TensorSubtract(high, low), fraction));
+            biases.Add(engine.TensorAdd(low, engine.TensorMultiply(engine.TensorSubtract(high, low), fraction)));
         }
+
+        _biases = biases;
     }
 
     /// <summary>

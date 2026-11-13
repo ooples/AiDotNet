@@ -351,6 +351,9 @@ public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassif
         }
     }
 
+    // Elements of convolution output one transform call materializes at a time (128 MB of double).
+    private const long ConvolutionElementBudget = 1L << 24;
+
     /// <summary>
     /// Transforms sequences into feature vectors using ROCKET kernels.
     /// </summary>
@@ -390,13 +393,23 @@ public partial class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassif
                 var kernelWeights = new Tensor<double>(
                     members.SelectMany(k => _kernels[k].Weights).ToArray(), new[] { count, 1, length }).Cast<T>();
                 var biases = new Tensor<double>(members.Select(k => _kernels[k].Bias).ToArray(), new[] { 1, count, 1 }).Cast<T>();
-                var outputShape = new[] { rows, count, outputLength };
-                var output = engine.TensorAdd(
-                    engine.Conv1D(series, kernelWeights, 1, padding, dilation),
-                    engine.TensorBroadcastTo(biases, outputShape));
-                var max = engine.ReduceMax(output, new[] { 2 }, true);
-                var ppv = engine.ReduceMean(engine.TensorGreaterThan(output, NumOps.Zero), new[] { 2 }, true);
-                pair = engine.TensorConcatenate(new[] { max, ppv }, 2);
+                // The convolution output is [rows, count, outputLength] and is reduced straight away, so run it over a
+                // bounded number of rows at a time: one call over every row of a large input materialized gigabytes.
+                int batchRows = (int)Math.Max(1, Math.Min(rows, ConvolutionElementBudget / ((long)count * outputLength)));
+                var batches = new List<Tensor<T>>((rows + batchRows - 1) / batchRows);
+                for (int start = 0; start < rows; start += batchRows)
+                {
+                    int batch = Math.Min(batchRows, rows - start);
+                    var rowSeries = batch == rows ? series : engine.TensorSlice(series, new[] { start, 0, 0 }, new[] { batch, 1, seqLen });
+                    var output = engine.TensorAdd(
+                        engine.Conv1D(rowSeries, kernelWeights, 1, padding, dilation),
+                        engine.TensorBroadcastTo(biases, new[] { batch, count, outputLength }));
+                    var max = engine.ReduceMax(output, new[] { 2 }, true);
+                    var ppv = engine.ReduceMean(engine.TensorGreaterThan(output, NumOps.Zero), new[] { 2 }, true);
+                    batches.Add(engine.TensorConcatenate(new[] { max, ppv }, 2));
+                }
+
+                pair = batches.Count == 1 ? batches[0] : engine.TensorConcatenate(batches.ToArray(), 0);
             }
 
             for (int i = 0; i < count; i++)
