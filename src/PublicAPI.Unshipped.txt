@@ -22921,3 +22921,139 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Enums.TrainingObjectiveKind.LagrangianDynamics = 11 -> AiDotNet.Enums.TrainingObjectiveKind
+AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE<T>.ComputeScaleCoupling(int coarseIndex, int fineIndex, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! coarseOutputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! fineOutputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! coarseDerivatives, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! fineDerivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE<T>.ComputeScaleResidual(int scaleIndex, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.Interfaces.InverseProblemResult<T>.ParameterCorrelations.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.FirstDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.HigherDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.SecondDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.ThirdDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient<T>.FirstDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient<T>.SecondDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient<T>.ThirdDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.NeuralOperators.DeepOperatorNetwork<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! inputFunction, AiDotNet.Tensors.LinearAlgebra.Vector<T>! queryLocation) -> T
+AiDotNet.PhysicsInformed.NeuralOperators.DeepOperatorNetwork<T>.EvaluateMultiple(AiDotNet.Tensors.LinearAlgebra.Vector<T>! inputFunction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! queryLocations) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.NeuralOperators.DeepOperatorNetwork<T>.Train(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputFunctions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! queryLocations, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetValues, int epochs = 100, double learningRate = 0.001, bool verbose = true) -> AiDotNet.PhysicsInformed.TrainingHistory<T>!
+AiDotNet.PhysicsInformed.Options.DeepRitzMethodOptions.BoundaryPenalty.get -> double
+AiDotNet.PhysicsInformed.Options.DeepRitzMethodOptions.BoundaryPenalty.set -> void
+AiDotNet.PhysicsInformed.PDEs.MultiScaleReactionDiffusion<T>.ComputeScaleCoupling(int coarseIndex, int fineIndex, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! coarseOutputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! fineOutputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! coarseDerivatives, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! fineDerivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PDEs.MultiScaleReactionDiffusion<T>.ComputeScaleResidual(int scaleIndex, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.D1(AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives, int k, int i) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.D2(AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives, int k, int i, int j) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.D3(AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives, int k, int i, int j, int l) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.EvaluatePointResidual(AiDotNet.Tensors.LinearAlgebra.Vector<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Vector<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> T
+AiDotNet.PhysicsInformed.PDEs.PoissonEquation<T>.PoissonEquation(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? sourceFunction = null, int spatialDimension = 2) -> void
+AiDotNet.PhysicsInformed.PINNs.DeepRitzEnergy<T>
+AiDotNet.PhysicsInformed.PINNs.DeepRitzMethod<T>.DeepRitzMethod(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! energyFunctional, AiDotNet.PhysicsInformed.Options.DeepRitzMethodOptions? options = null) -> void
+AiDotNet.PhysicsInformed.PINNs.DeepRitzMethod<T>.GetSolution(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.PINNs.DomainDecompositionPINN<T>.GetGlobalSolution(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.PINNs.DomainDecompositionPINN<T>.SetTrainingData(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs) -> void
+AiDotNet.PhysicsInformed.PINNs.InterfaceDefinition<T>.SharedBoundary.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.GetFidelityCorrection(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.GetHighFidelitySolution(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.GetLowFidelitySolution(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.CollocationPoints.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.EvaluatePDEResidual(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> T
+AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.GetSolution(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.PdeDerivativeOrder.get -> int
+AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.PhysicsLoss.get -> AiDotNet.PhysicsInformed.PhysicsInformedLoss<T>!
+AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.PointDerivatives(AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! batched) -> AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>!
+AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.SetCollocationPoints(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! points) -> void
+AiDotNet.PhysicsInformed.PINNs.VariationalPINN<T>.GetSolution(AiDotNet.Tensors.LinearAlgebra.Vector<T>! point) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.PINNs.VariationalPINN<T>.VariationalPINN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! weakFormResidual, AiDotNet.PhysicsInformed.Options.VariationalPINNOptions? options = null) -> void
+AiDotNet.PhysicsInformed.PINNs.VariationalWeakForm<T>
+AiDotNet.PhysicsInformed.PhysicsInformedLoss<T>.ComputeTapePdeLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PhysicsLossGradient<T>.FirstDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PhysicsLossGradient<T>.FirstDerivatives.set -> void
+AiDotNet.PhysicsInformed.PhysicsLossGradient<T>.SecondDerivatives.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.PhysicsLossGradient<T>.SecondDerivatives.set -> void
+AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T>.ComputeHamiltonian(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state) -> T
+AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T>.ComputeTimeDerivative(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T>.Simulate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! initialState, T dt, int numSteps) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.ScientificML.LagrangianNeuralNetwork<T>.ComputeAcceleration(AiDotNet.Tensors.LinearAlgebra.Vector<T>! q, AiDotNet.Tensors.LinearAlgebra.Vector<T>! qDot) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.PhysicsInformed.ScientificML.LagrangianNeuralNetwork<T>.ComputeLagrangian(AiDotNet.Tensors.LinearAlgebra.Vector<T>! q, AiDotNet.Tensors.LinearAlgebra.Vector<T>! qDot) -> T
+AiDotNet.PhysicsInformed.ScientificML.LagrangianNeuralNetwork<T>.TrainingObjectiveKind.get -> AiDotNet.Enums.TrainingObjectiveKind
+override AiDotNet.PhysicsInformed.PDEs.AdvectionDiffusionEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.AllenCahnEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.BlackScholesEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.BurgersEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.BurgersEquation<T>.DerivativeOrder.get -> int
+override AiDotNet.PhysicsInformed.PDEs.HeatEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.KortewegDeVriesEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.KortewegDeVriesEquation<T>.DerivativeOrder.get -> int
+override AiDotNet.PhysicsInformed.PDEs.LinearElasticityEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.MaxwellEquations<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.MaxwellEquations<T>.DerivativeOrder.get -> int
+override AiDotNet.PhysicsInformed.PDEs.MultiScaleReactionDiffusion<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.NavierStokesEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.PoissonEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.SchrodingerEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PDEs.WaveEquation<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PINNs.DeepRitzMethod<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.PhysicsInformed.PINNs.DeepRitzMethod<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.PhysicsInformed.PINNs.DomainDecompositionPINN<T>.ComputeTrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! dataInputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! dataTargets, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! collocationPoints) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.ComputeTrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! dataInputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! dataTargets, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! collocationPoints) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.PhysicsInformed.PINNs.VariationalPINN<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.PhysicsInformed.PINNs.VariationalPINN<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.PhysicsInformed.ScientificML.LagrangianNeuralNetwork<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.PhysicsInformed.ScientificML.LagrangianNeuralNetwork<T>.SupportsFusedCompiledTraining.get -> bool
+static AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.Coordinate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, int i) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.Output(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, int k) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.TapeEngine.get -> AiDotNet.Tensors.Engines.IEngine!
+static AiDotNet.PhysicsInformed.PINNs.DeepRitzEnergy<T>.Poisson(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! source) -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+static AiDotNet.PhysicsInformed.PINNs.DeepRitzEnergy<T>.Poisson(T source) -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+static AiDotNet.PhysicsInformed.PINNs.VariationalWeakForm<T>.Poisson(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! source) -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+static AiDotNet.PhysicsInformed.PINNs.VariationalWeakForm<T>.Poisson(T source) -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+virtual AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.DerivativeOrder.get -> int
+virtual AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.ComputeTrainingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! dataInputs, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! dataTargets, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! collocationPoints) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Autodiff.NeuralNetworkDerivatives<T>
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE<T>.ComputeScaleCoupling(int coarseIndex, int fineIndex, T[]! inputs, T[]! coarseOutputs, T[]! fineOutputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! coarseDerivatives, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! fineDerivatives) -> T
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.IMultiScalePDE<T>.ComputeScaleResidual(int scaleIndex, T[]! inputs, T[]! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> T
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.InverseProblemResult<T>.ParameterCorrelations.get -> T[,]?
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.FirstDerivatives.get -> T[,]?
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.HigherDerivatives.get -> T[,,,]?
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.SecondDerivatives.get -> T[,,]?
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>.ThirdDerivatives.get -> T[,,,]?
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient<T>.FirstDerivatives.get -> T[,]!
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient<T>.SecondDerivatives.get -> T[,,]!
+*REMOVED*AiDotNet.PhysicsInformed.Interfaces.PDEResidualGradient<T>.ThirdDerivatives.get -> T[,,,]!
+*REMOVED*AiDotNet.PhysicsInformed.NeuralOperators.DeepOperatorNetwork<T>.Evaluate(T[]! inputFunction, T[]! queryLocation) -> T
+*REMOVED*AiDotNet.PhysicsInformed.NeuralOperators.DeepOperatorNetwork<T>.EvaluateMultiple(T[]! inputFunction, T[,]! queryLocations) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.NeuralOperators.DeepOperatorNetwork<T>.Train(T[,]! inputFunctions, T[,,]! queryLocations, T[,]! targetValues, int epochs = 100, double learningRate = 0.001, bool verbose = true) -> AiDotNet.PhysicsInformed.TrainingHistory<T>!
+*REMOVED*AiDotNet.PhysicsInformed.NeuralOperators.GraphNeuralOperator<T>.Forward(T[,]! nodeFeatures, T[,]! adjacencyMatrix) -> T[,]!
+*REMOVED*AiDotNet.PhysicsInformed.Options.HamiltonianNeuralNetworkOptions.DerivativeStep.get -> double
+*REMOVED*AiDotNet.PhysicsInformed.Options.HamiltonianNeuralNetworkOptions.DerivativeStep.set -> void
+*REMOVED*AiDotNet.PhysicsInformed.PDEs.MultiScaleReactionDiffusion<T>.ComputeScaleCoupling(int coarseIndex, int fineIndex, T[]! inputs, T[]! coarseOutputs, T[]! fineOutputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! coarseDerivatives, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! fineDerivatives) -> T
+*REMOVED*AiDotNet.PhysicsInformed.PDEs.MultiScaleReactionDiffusion<T>.ComputeScaleResidual(int scaleIndex, T[]! inputs, T[]! outputs, AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>! derivatives) -> T
+*REMOVED*AiDotNet.PhysicsInformed.PDEs.PoissonEquation<T>.PoissonEquation(System.Func<T[]!, T>? sourceFunction = null, int spatialDimension = 2) -> void
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.DeepRitzMethod<T>.DeepRitzMethod(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Func<T[]!, T[]!, T[,]!, T>! energyFunctional, System.Func<T[]!, bool>? boundaryCheck = null, System.Func<T[]!, T[]!>? boundaryValue = null, AiDotNet.PhysicsInformed.Options.DeepRitzMethodOptions? options = null) -> void
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.DeepRitzMethod<T>.GetSolution(T[]! point) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.DomainDecompositionPINN<T>.GetGlobalSolution(T[]! point) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.InterfaceDefinition<T>.SharedBoundary.get -> T[,]?
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.GetFidelityCorrection(T[]! point) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.GetHighFidelitySolution(T[]! point) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.GetLowFidelitySolution(T[]! point) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.EvaluatePDEResidual(T[]! point) -> T
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.GetSolution(T[]! point) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.SetCollocationPoints(T[,]! points) -> void
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.VariationalPINN<T>.GetSolution(T[]! point) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.PINNs.VariationalPINN<T>.VariationalPINN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Func<T[]!, T[]!, T[,]!, T[]!, T[,]!, T>! weakFormResidual, AiDotNet.PhysicsInformed.Options.VariationalPINNOptions? options = null) -> void
+*REMOVED*AiDotNet.PhysicsInformed.PhysicsInformedLoss<T>.SetCollocationCoordinates(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! coordinates) -> void
+*REMOVED*AiDotNet.PhysicsInformed.PhysicsLossGradient<T>.FirstDerivatives.get -> T[,]!
+*REMOVED*AiDotNet.PhysicsInformed.PhysicsLossGradient<T>.SecondDerivatives.get -> T[,,]!
+*REMOVED*AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T>.ComputeHamiltonian(T[]! state) -> T
+*REMOVED*AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T>.ComputeTimeDerivative(T[]! state) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T>.Simulate(T[]! initialState, T dt, int numSteps) -> T[,]!
+*REMOVED*AiDotNet.PhysicsInformed.ScientificML.LagrangianNeuralNetwork<T>.ComputeAcceleration(T[]! q, T[]! qDot) -> T[]!
+*REMOVED*AiDotNet.PhysicsInformed.ScientificML.LagrangianNeuralNetwork<T>.ComputeLagrangian(T[]! q, T[]! qDot) -> T
+*REMOVED*static AiDotNet.Autodiff.NeuralNetworkDerivatives<T>.ComputeDerivatives(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! network, T[]! inputs, int outputDim) -> AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>!
+*REMOVED*static AiDotNet.Autodiff.NeuralNetworkDerivatives<T>.ComputeHessian(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! network, T[]! inputs, int outputIndex = 0) -> T[,]!
+*REMOVED*virtual AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! coordinates, AiDotNet.Tensors.Engines.IEngine! engine) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.PhysicsInformed.ScientificML.UniversalDifferentialEquation<T>.Simulate(T[]! initialState, T tStart, T tEnd, int numSteps, AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod method = AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod.Euler) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.PhysicsInformed.ScientificML.UniversalDifferentialEquation<T>.Simulate(T[]! initialState, T tStart, T tEnd, int numSteps, AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod method = AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod.Euler) -> T[,]!
