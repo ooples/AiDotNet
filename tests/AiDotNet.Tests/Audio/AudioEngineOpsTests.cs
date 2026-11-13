@@ -82,6 +82,44 @@ namespace AiDotNet.Tests.Audio
             Assert.Throws<ArgumentOutOfRangeException>(() => tracker.Track(new Tensor<double>([0])));
         }
 
+        /// <summary>
+        /// A silent onset envelope has no peaks to align with, so confidence is 0 (the double result).
+        /// The 1e-10 floor rounds to 0 in Half; compared in Half the guard let 0 / 0 through as NaN.
+        /// </summary>
+        [Fact]
+        public void BeatTracker_HalfSilentEnvelope_ConfidenceIsZero()
+        {
+            var tracker = new BeatTracker<Half>();
+            var method = typeof(BeatTracker<Half>).GetMethod("ComputeConfidence",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?? throw new InvalidOperationException("ComputeConfidence");
+            var confidence = (Half)(method.Invoke(tracker, new object[]
+            {
+                new Tensor<Half>([64]), new System.Collections.Generic.List<double> { 0.0, 0.5 }
+            }) ?? throw new InvalidOperationException("null confidence"));
+            Assert.Equal((Half)0, confidence);
+        }
+
+        /// <summary>
+        /// The tempo penalty for distances d = maxWindow .. 1 is
+        /// exp(-0.5 ((d - p) / p)^2 / flexibility^2). Past 2048 a Half arange no longer holds every
+        /// distance, so the weights must equal the double formula rounded once to Half.
+        /// </summary>
+        [Fact]
+        public void BeatTracker_HalfTempoPenalty_MatchesDoubleBeyond2048Frames()
+        {
+            const int maxWindow = 4001;
+            const double period = 2000, flexibility = 0.2;
+            var penalty = BeatTracker<Half>.TempoPenaltyByDistance(AiDotNetEngine.Current, maxWindow, period, flexibility);
+            Assert.Equal(maxWindow, penalty.Length);
+            for (int i = 0; i < maxWindow; i++)
+            {
+                double d = maxWindow - i;
+                double deviation = Math.Abs(d - period) / period;
+                Assert.Equal((Half)Math.Exp(-0.5 * deviation * deviation / (flexibility * flexibility)), penalty[i]);
+            }
+        }
+
         [Fact]
         public void ClapHalfResampling_PreservesImpulseBeyondExactIntegerRange()
         {
