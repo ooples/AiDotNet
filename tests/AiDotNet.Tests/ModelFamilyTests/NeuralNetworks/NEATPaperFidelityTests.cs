@@ -188,4 +188,26 @@ public class NEATPaperFidelityTests
         Assert.Equal(15, o.SpeciesStagnationLimit);
         Assert.Equal(4.9, o.SigmoidSlope);
     }
+
+    /// <summary>
+    /// NaN and the infinities pass a one-sided comparison, so each compatibility and mutation setting is checked
+    /// for finiteness: any of them non-finite makes every compatibility distance or perturbation non-finite.
+    /// </summary>
+    [Theory]
+    [InlineData(nameof(NEATOptions.CompatibilityThreshold), double.PositiveInfinity)]
+    [InlineData(nameof(NEATOptions.WeightCap), double.PositiveInfinity)]
+    [InlineData(nameof(NEATOptions.WeightPerturbPower), double.NaN)]
+    [InlineData(nameof(NEATOptions.WeightPerturbPower), double.PositiveInfinity)]
+    [InlineData(nameof(NEATOptions.ExcessCoefficient), double.NaN)]
+    [InlineData(nameof(NEATOptions.DisjointCoefficient), double.PositiveInfinity)]
+    [InlineData(nameof(NEATOptions.WeightDifferenceCoefficient), double.NegativeInfinity)]
+    [InlineData(nameof(NEATOptions.SigmoidSlope), double.NaN)]
+    public void Validate_RejectsNonFiniteSettings(string property, double value)
+    {
+        var options = new NEATOptions();
+        var setter = typeof(NEATOptions).GetProperty(property)
+            ?? throw new InvalidOperationException($"NEATOptions has no property {property}.");
+        setter.SetValue(options, value);
+        Assert.Throws<ArgumentException>(() => options.Validate());
+    }
 }

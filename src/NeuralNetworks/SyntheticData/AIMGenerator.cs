@@ -122,8 +122,25 @@ public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
         int rounds = _options.Rounds ?? 16 * _numCols;
         double alpha = _options.MeasurementBudgetFraction;
         var (sigma, epsilon) = InitialScales(Rho, rounds, alpha);
+        // The one-way measurements cost d / (2 sigma^2) = d * alpha * rho / T, which exceeds the whole budget when
+        // T < alpha * d; reject that before any marginal is measured.
+        double oneWaySpend = _numCols * 0.5 / (sigma * sigma);
+        if (oneWaySpend > Rho * (1 + 1e-12))
+        {
+            throw new InvalidOperationException(
+                $"AIMOptions.Rounds = {rounds} is too small for {_numCols} columns: the one-way measurements alone "
+                + $"would spend rho = {oneWaySpend} of the {Rho} budget. Use at least {Math.Ceiling(alpha * _numCols)} rounds.");
+        }
 
         var candidates = CompileWorkload(_cardinality, _options.MaxMarginalOrder, _options.MaxCells);
+        // The one-way marginals are always measured, so they are always valid candidates: with no workload
+        // marginal under MaxCells (two 200-category columns at order 2) the selection would otherwise be empty.
+        var present = new HashSet<string>(candidates.Select(c => Key(c.Clique)), StringComparer.Ordinal);
+        for (int j = 0; j < _numCols; j++)
+        {
+            var single = new[] { j };
+            if (present.Add(Key(single))) candidates.Add((single, 0.0));
+        }
 
         // Every one-way marginal is measured up front (Algorithm 1, line 4).
         for (int j = 0; j < _numCols; j++)
@@ -131,7 +148,7 @@ public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
             Measure(new[] { j }, Truth(new[] { j }), sigma);
         }
 
-        RhoUsed = _numCols * 0.5 / (sigma * sigma);
+        RhoUsed = oneWaySpend;
         Estimate();
 
         bool terminate = false;
@@ -210,6 +227,12 @@ public class AIMGenerator<T> : SyntheticTabularGeneratorBase<T>
                 "MeasurementBudgetFraction must be in (0, 1).");
         if (_options.Rounds is int r && r < 1)
             throw new ArgumentOutOfRangeException(nameof(_options.Rounds), "Rounds must be at least 1.");
+        if (_options.NumBins < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.NumBins), "NumBins must be at least 1.");
+        if (_options.MaxCells < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.MaxCells), "MaxCells must be at least 1.");
+        if (double.IsNaN(_options.MaxModelSizeMb) || double.IsInfinity(_options.MaxModelSizeMb) || _options.MaxModelSizeMb <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.MaxModelSizeMb), "MaxModelSizeMb must be positive and finite.");
     }
 
     #region Privacy accounting

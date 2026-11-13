@@ -44,6 +44,30 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
 {
+    /// <summary>Initializes a new instance with the default settings.</summary>
+    public BayesianNetworkSynthOptions()
+    {
+    }
+
+    /// <summary>Initializes a new instance by copying every setting of another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is <c>null</c>.</exception>
+    /// <remarks>The domain bounds are copied into new vectors, so the copy does not share them.</remarks>
+    public BayesianNetworkSynthOptions(BayesianNetworkSynthOptions<T> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        MaxParents = other.MaxParents;
+        UsefulnessThreshold = other.UsefulnessThreshold;
+        DomainLowerBounds = other.DomainLowerBounds is { } lower ? new Vector<T>(lower.ToArray()) : null;
+        DomainUpperBounds = other.DomainUpperBounds is { } upper ? new Vector<T>(upper.ToArray()) : null;
+        NumBins = other.NumBins;
+        MaxIterations = other.MaxIterations;
+        LaplaceSmoothing = other.LaplaceSmoothing;
+        EnableDifferentialPrivacy = other.EnableDifferentialPrivacy;
+        _privacyBudget = other._privacyBudget;
+        _structureBudgetFraction = other._structureBudgetFraction;
+    }
+
     /// <summary>
     /// Gets or sets the maximum number of parents per node in the DAG (the upper bound on PrivBayes' degree k).
     /// </summary>
@@ -60,6 +84,10 @@ public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
     /// </summary>
     /// <value>Defaults to 4, the value the paper recommends and uses in its experiments.</value>
     /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This decides how many parent columns each column may depend on. A higher threshold
+    /// keeps the network simpler (fewer parents), so each probability table has fewer cells and gets less noise.
+    /// </para>
     /// k is the largest value up to <see cref="MaxParents"/> with
     /// <c>n * eps2 / (2 * (d - k) * m^(k+1)) &gt;= theta</c>, where eps2 is the phase-2 budget and m the
     /// largest attribute domain. A larger theta favours fewer parents with less noise per cell. Zero or a
@@ -72,6 +100,11 @@ public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
     /// </summary>
     /// <value>Defaults to <c>null</c>, which takes the observed column minimum.</value>
     /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These are the smallest values each numeric column can take, known without looking at
+    /// the private data (for example 0 for an age). Together with <see cref="DomainUpperBounds"/> they set the bin
+    /// edges, so the bins reveal nothing about the data itself.
+    /// </para>
     /// PrivBayes assumes attribute domains are public. Without bounds the observed minimum and maximum of
     /// each numeric column define the bins, and those values are released without noise, outside the
     /// differential-privacy guarantee. Supply both bounds (one entry per column) for the full guarantee;
@@ -93,7 +126,14 @@ public class BayesianNetworkSynthOptions<T> : RiskModelOptions<T>
     /// Gets or sets the public upper bound of each column's domain, used for the equal-width bins.
     /// </summary>
     /// <value>Defaults to <c>null</c>, which takes the observed column maximum.</value>
-    /// <remarks>See <see cref="DomainLowerBounds"/>.</remarks>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> These are the largest values each numeric column can take, known without looking at
+    /// the private data (for example 120 for an age). Supply them together with <see cref="DomainLowerBounds"/>,
+    /// one entry per column; an upper bound below its lower bound is rejected.
+    /// </para>
+    /// See <see cref="DomainLowerBounds"/> for how the bounds are used.
+    /// </remarks>
     public Vector<T>? DomainUpperBounds { get; set; }
 
     /// <summary>
