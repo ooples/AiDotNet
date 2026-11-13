@@ -589,6 +589,32 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <summary>
+    /// The align-corners identity sampling grid <c>[height, width, 2]</c>: channel 0 is
+    /// <c>x = w * 2 / (width - 1) - 1</c> and channel 1 is <c>y = h * 2 / (height - 1) - 1</c> (0 on a size-1
+    /// axis). The coordinates are formed in double and rounded to <typeparamref name="T"/> once; in a narrow T
+    /// the product and the "- 1" would each round, and near the centre that cancellation costs several ulps.
+    /// </summary>
+    internal static Tensor<T> IdentityGrid(int height, int width)
+    {
+        var engine = AiDotNetEngine.Current;
+        double widthNormValue = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double heightNormValue = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var xs = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<double>(0, width, 1), widthNormValue),
+            width > 1 ? -1.0 : 0.0);
+        var ys = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<double>(0, height, 1), heightNormValue),
+            height > 1 ? -1.0 : 0.0);
+        return engine.TensorConcatenate(
+            new[]
+            {
+                engine.TensorBroadcastTo(engine.Reshape(xs, new[] { 1, width, 1 }), new[] { height, width, 1 }),
+                engine.TensorBroadcastTo(engine.Reshape(ys, new[] { height, 1, 1 }), new[] { height, width, 1 })
+            },
+            2).Cast<T>();
+    }
+
     private (Tensor<T> warped, Tensor<T> grid) WarpImageWithGrid(Tensor<T> image, Tensor<T> flow, bool hasBatch)
     {
         int batch = hasBatch ? image.Shape[0] : 1;
@@ -601,23 +627,10 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
         // scalar writes detached the entire warp from both the input and flow.
         double widthNormValue = width > 1 ? 2.0 / (width - 1) : 0.0;
         double heightNormValue = height > 1 ? 2.0 / (height - 1) : 0.0;
-        // Channel 0 is x = w * widthNorm - 1 and channel 1 is y = h * heightNorm - 1 (0 on a size-1 axis).
         Tensor<T> identityGrid;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var xs = Engine.TensorAddScalar(
-                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, width, 1), NumOps.FromDouble(widthNormValue)),
-                NumOps.FromDouble(width > 1 ? -1.0 : 0.0));
-            var ys = Engine.TensorAddScalar(
-                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, height, 1), NumOps.FromDouble(heightNormValue)),
-                NumOps.FromDouble(height > 1 ? -1.0 : 0.0));
-            identityGrid = Engine.TensorConcatenate(
-                new[]
-                {
-                    Engine.TensorBroadcastTo(Engine.Reshape(xs, new[] { 1, width, 1 }), new[] { height, width, 1 }),
-                    Engine.TensorBroadcastTo(Engine.Reshape(ys, new[] { height, 1, 1 }), new[] { height, width, 1 })
-                },
-                2);
+            identityGrid = IdentityGrid(height, width);
         }
         var identity = Engine.TensorBroadcastTo(
             Engine.Reshape(identityGrid, new[] { 1, height, width, 2 }),
