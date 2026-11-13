@@ -118,6 +118,24 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        /// <remarks>The residual c_t + v . grad c - D laplacian c - S.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            int t = _is2D ? 2 : 1;
+            var advection = e.TensorMultiplyScalar(D1(derivatives, 0, 0), _velocityX);
+            var laplacian = D2(derivatives, 0, 0, 0);
+            if (_is2D)
+            {
+                advection = e.TensorAdd(advection, e.TensorMultiplyScalar(D1(derivatives, 0, 1), _velocityY));
+                laplacian = e.TensorAdd(laplacian, D2(derivatives, 0, 1, 1));
+            }
+
+            var residual = e.TensorSubtract(e.TensorAdd(D1(derivatives, 0, t), advection), e.TensorMultiplyScalar(laplacian, _diffusionCoeff));
+            return e.TensorSubtractScalar(residual, _sourceterm);
+        }
+
+        /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateSecondDerivatives(derivatives);

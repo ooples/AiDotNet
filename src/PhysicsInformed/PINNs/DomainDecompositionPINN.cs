@@ -315,8 +315,8 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
         var forward = Engine.TensorEquals(upper1, lower2).ToArray();
         var backward = Engine.TensorEquals(upper2, lower1).ToArray();
         T zero = NumOps.Zero;
-        int forwardAxis = Array.FindIndex(forward, flag => !flag.Equals(zero));
-        int backwardAxis = Array.FindIndex(backward, flag => !flag.Equals(zero));
+        int forwardAxis = Array.FindIndex(forward, flag => !NumOps.Equals(flag, zero));
+        int backwardAxis = Array.FindIndex(backward, flag => !NumOps.Equals(flag, zero));
 
         // The original scan checked both directions axis by axis and took the first axis that matched either.
         if (forwardAxis >= 0 && (backwardAxis < 0 || forwardAxis <= backwardAxis))

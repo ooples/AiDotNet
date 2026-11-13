@@ -39,6 +39,17 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        /// <remarks>The residual u_t + (u^3 - u) - epsilon^2 u_xx.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            var u = Output(outputs, 0);
+            var reaction = e.TensorSubtract(e.TensorMultiply(e.TensorMultiply(u, u), u), u);
+            var diffusion = e.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), NumOps.Multiply(_epsilon, _epsilon));
+            return e.TensorSubtract(e.TensorAdd(D1(derivatives, 0, 1), reaction), diffusion);
+        }
+
+        /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateSecondDerivatives(derivatives);

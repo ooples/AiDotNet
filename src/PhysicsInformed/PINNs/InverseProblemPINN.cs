@@ -113,11 +113,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private Vector<T>? _parameterGradients;
 
         // Current PDE with parameters applied
-        private IPDESpecification<T>? _currentPDE;
+        private PDEs.PDESpecificationBase<T> _currentPDE;
 
-        // Collocation points
-        private T[,]? _collocationPoints;
+        // Collocation points [N, inputDim] in the unit cube, and the observations as tensors.
+        private readonly Tensor<T> _collocationPoints;
         private readonly int _numCollocationPoints;
+        private readonly Tensor<T> _observationInputs;
+        private readonly Tensor<T> _observationTargets;
+        private readonly Random _batchSampler;
 
         // Parameter history for monitoring convergence
         private readonly List<T[]> _parameterHistory;
@@ -184,9 +187,24 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _parameters = new Vector<T>(_inverseProblem.InitialParameterGuesses.ToArray());
             _parameterHistory = new List<T[]>();
 
+            var observations = _inverseProblem.Observations;
+            if (observations.Count == 0)
+            {
+                throw new ArgumentException("The inverse problem has no observations.", nameof(inverseProblem));
+            }
+
+            int inputDim = observations[0].location.Length;
+            int outputDim = observations[0].value.Length;
+            _observationInputs = new Tensor<T>(observations.SelectMany(o => o.location).ToArray(), new[] { observations.Count, inputDim });
+            _observationTargets = new Tensor<T>(observations.SelectMany(o => o.value).ToArray(), new[] { observations.Count, outputDim });
+
+            var random = RandomHelper.CreateSeededRandom(42);
+            _collocationPoints = Engine.TensorRandomUniformRange<T>(
+                new[] { _numCollocationPoints, inputDim }, NumOps.Zero, NumOps.One, random.Next());
+            _batchSampler = RandomHelper.CreateSeededRandom(random.Next());
+
             InitializeLayers();
-            GenerateCollocationPoints();
-            UpdatePDE();
+            _currentPDE = BuildPDE(_parameters);
         }
 
         /// <inheritdoc/>
@@ -204,31 +222,19 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Generates collocation points for PDE enforcement.
-        /// </summary>
-        private void GenerateCollocationPoints()
-        {
-            // Get input dimension from the first observation location
-            int inputDim = _inverseProblem.Observations[0].location.Length;
-            _collocationPoints = new T[_numCollocationPoints, inputDim];
-
-            var random = RandomHelper.CreateSeededRandom(42);
-
-            for (int i = 0; i < _numCollocationPoints; i++)
-            {
-                for (int d = 0; d < inputDim; d++)
-                {
-                    _collocationPoints[i, d] = NumOps.FromDouble(random.NextDouble());
-                }
-            }
-        }
-
-        /// <summary>
         /// Updates the PDE with current parameter values.
         /// </summary>
         private void UpdatePDE()
         {
-            _currentPDE = _inverseProblem.CreateParameterizedPDE(_parameters);
+            _currentPDE = BuildPDE(_parameters);
+        }
+
+        private PDEs.PDESpecificationBase<T> BuildPDE(Vector<T> parameters)
+        {
+            var pde = _inverseProblem.CreateParameterizedPDE(parameters.ToArray());
+            return pde as PDEs.PDESpecificationBase<T>
+                ?? throw new NotSupportedException(
+                    $"PDE '{pde.Name}' does not derive from PDESpecificationBase, so it has no tape residual to train on.");
         }
 
         /// <summary>
@@ -238,6 +244,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <param name="learningRate">Learning rate for the neural network.</param>
         /// <param name="verbose">Whether to print progress.</param>
         /// <returns>Results including identified parameters and uncertainties.</returns>
+        /// <remarks>
+        /// Raissi et al. (2019), Sec. 4, train the network and the unknown coefficients together on
+        /// MSE_u + MSE_f. Each epoch takes one gradient step for the network on that loss at a batch of
+        /// collocation points, with the input derivatives from the gradient tape, then one step for the
+        /// coefficients on MSE_f plus the regularization at the same points. The network step used to run the
+        /// optimizer with no backward pass, so the network never trained, and the coefficient gradient was a
+        /// finite difference of a loss resampled from a shared random source on every call.
+        /// </remarks>
         public InverseProblemResult<T> Solve(int epochs = 1000, double learningRate = 0.001, bool verbose = true)
         {
             var result = new InverseProblemResult<T>
@@ -262,22 +276,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 T previousLoss = NumOps.MaxValue;
                 int noImprovementCount = 0;
                 const int patience = 50;
-                const double tolerance = 1e-8;
 
                 for (int epoch = 0; epoch < epochs; epoch++)
                 {
-                    var (dataLoss, physicsLoss, regularizationLoss) = TrainEpoch();
-                    T totalLoss = NumOps.Add(dataLoss, NumOps.Add(physicsLoss, regularizationLoss));
+                    var (dataLoss, physicsLoss, totalLoss) = TrainEpoch();
 
-                    // Record parameter history
                     if (_options.LogParameterHistory)
                     {
                         _parameterHistory.Add(_parameters.ToArray());
                     }
 
-                    // Check convergence
-                    T lossDiff = NumOps.Abs(NumOps.Subtract(totalLoss, previousLoss));
-                    if (NumOps.ToDouble(lossDiff) < tolerance)
+                    if (IsStalled(totalLoss, previousLoss))
                     {
                         noImprovementCount++;
                         if (noImprovementCount >= patience)
@@ -301,18 +310,16 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     {
                         Console.WriteLine($"Epoch {epoch}/{epochs}:");
                         Console.WriteLine($"  Data Loss: {dataLoss}, Physics Loss: {physicsLoss}");
-                        Console.Write("  Parameters: ");
-                        for (int i = 0; i < _parameters.Length; i++)
-                        {
-                            Console.Write($"{_inverseProblem.ParameterNames[i]}={_parameters[i]:G4} ");
-                        }
-                        Console.WriteLine();
+                        Console.WriteLine("  Parameters: " + string.Join(" ",
+                            _inverseProblem.ParameterNames.Zip(_parameters.ToArray(), (name, value) => $"{name}={value:G4}")));
                     }
                 }
 
+                var points = SampleBatch();
+                var outputs = PinnAutodiff<T>.Evaluate(Forward, points, PdeOrder, out var derivatives);
                 result.Parameters = _parameters.ToArray();
-                result.DataLoss = ComputeDataLoss();
-                result.PhysicsLoss = ComputePhysicsLoss();
+                result.DataLoss = Scalar(DataLoss());
+                result.PhysicsLoss = Scalar(PhysicsLoss(_currentPDE, points, outputs, derivatives));
                 result.TotalLoss = NumOps.Add(result.DataLoss, result.PhysicsLoss);
 
                 if (_options.LogParameterHistory)
@@ -320,11 +327,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     result.ParameterHistory = _parameterHistory.ToList();
                 }
 
-                // Estimate uncertainties if requested
                 if (_options.EstimateUncertainty)
                 {
-                    result.ParameterUncertainties = EstimateParameterUncertainties();
-                    result.ParameterCorrelations = EstimateParameterCorrelations();
+                    var hessian = ParameterHessian(points, outputs, derivatives);
+                    result.ParameterUncertainties = EstimateParameterUncertainties(hessian);
+                    result.ParameterCorrelations = EstimateParameterCorrelations(hessian);
                 }
             }
             finally
@@ -336,396 +343,251 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Performs one training epoch.
+        /// Whether the loss moved by less than 1e-8 since the previous epoch.
         /// </summary>
-        private (T dataLoss, T physicsLoss, T regularizationLoss) TrainEpoch()
+        private bool IsStalled(T totalLoss, T previousLoss)
         {
-            // Compute losses
-            T dataLoss = ComputeDataLoss();
-            T physicsLoss = ComputePhysicsLoss();
-            T regularizationLoss = ComputeRegularizationLoss();
-
-            // Backpropagate and update network parameters
-            BackpropagateAndUpdate(dataLoss, physicsLoss, regularizationLoss);
-
-            // Update unknown parameters
-            UpdateUnknownParameters();
-
-            // Update PDE with new parameters
-            UpdatePDE();
-
-            return (dataLoss, physicsLoss, regularizationLoss);
+            return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(totalLoss, previousLoss)), NumOps.FromDouble(1e-8));
         }
 
-        /// <summary>
-        /// Computes the data loss (fit to observations).
-        /// </summary>
-        private T ComputeDataLoss()
-        {
-            T loss = NumOps.Zero;
-            var observations = _inverseProblem.Observations;
-            int count = observations.Count;
+        private int PdeOrder => Math.Max(1, _currentPDE.DerivativeOrder);
 
-            if (count == 0)
-            {
-                return loss;
-            }
+        private static T Scalar(Tensor<T> value) => value.AsSpan()[0];
 
-            foreach (var (location, observedValue) in observations)
-            {
-                // Create input tensor for this observation location
-                var inputTensor = new Tensor<T>(new int[] { 1, location.Length });
-                for (int d = 0; d < location.Length; d++)
-                {
-                    inputTensor[0, d] = location[d];
-                }
-
-                // Predict at this location
-                var prediction = Predict(inputTensor);
-
-                // Compute squared error
-                for (int o = 0; o < observedValue.Length; o++)
-                {
-                    T error = NumOps.Subtract(prediction[0, o], observedValue[o]);
-                    loss = NumOps.Add(loss, NumOps.Multiply(error, error));
-                }
-            }
-
-            T dataWeight = _options.DataWeight ?? NumOps.One;
-            return NumOps.Multiply(dataWeight, NumOps.Divide(loss, NumOps.FromDouble(count)));
-        }
-
-        /// <summary>
-        /// Computes the physics loss (PDE residual).
-        /// </summary>
-        private T ComputePhysicsLoss()
-        {
-            if (_currentPDE == null || _collocationPoints == null)
-            {
-                return NumOps.Zero;
-            }
-
-            T loss = NumOps.Zero;
-            int numPoints = _collocationPoints.GetLength(0);
-            int inputDim = _collocationPoints.GetLength(1);
-
-            // Sample a batch of collocation points
-            int batchSize = Math.Min(256, numPoints);
-            var random = RandomHelper.Shared;
-
-            for (int i = 0; i < batchSize; i++)
-            {
-                int idx = random.Next(numPoints);
-
-                // Create input tensor
-                var inputTensor = new Tensor<T>(new int[] { 1, inputDim });
-                for (int d = 0; d < inputDim; d++)
-                {
-                    inputTensor[0, d] = _collocationPoints[idx, d];
-                }
-
-                // Get prediction and compute derivatives
-                var prediction = Predict(inputTensor);
-                var derivatives = ComputeDerivatives(inputTensor);
-
-                // Extract arrays for PDE residual computation
-                var inputArray = new T[inputDim];
-                for (int d = 0; d < inputDim; d++)
-                {
-                    inputArray[d] = _collocationPoints[idx, d];
-                }
-
-                var outputArray = new T[_currentPDE.OutputDimension];
-                for (int o = 0; o < _currentPDE.OutputDimension; o++)
-                {
-                    outputArray[o] = prediction[0, o];
-                }
-
-                // Compute PDE residual
-                T residual = _currentPDE.ComputeResidual(new Vector<T>(inputArray), new Vector<T>(outputArray), derivatives);
-                loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));
-            }
-
-            return NumOps.Divide(loss, NumOps.FromDouble(batchSize));
-        }
-
-        /// <summary>
-        /// Computes derivatives using finite differences.
-        /// </summary>
-        private PDEDerivatives<T> ComputeDerivatives(Tensor<T> input)
-        {
-            if (_currentPDE == null)
-            {
-                throw new InvalidOperationException("PDE not initialized.");
-            }
-
-            int inputDim = input.Shape[1];
-            int outputDim = _currentPDE.OutputDimension;
-            T epsilon = NumOps.FromDouble(1e-5);
-
-            var derivatives = new PDEDerivatives<T>
-            {
-                FirstDerivatives = new T[outputDim, inputDim],
-                SecondDerivatives = new T[outputDim, inputDim, inputDim]
-            };
-
-            var baseOutput = Predict(input);
-
-            for (int d = 0; d < inputDim; d++)
-            {
-                var plusInput = new Tensor<T>(input._shape);
-                var minusInput = new Tensor<T>(input._shape);
-
-                for (int i = 0; i < inputDim; i++)
-                {
-                    plusInput[0, i] = input[0, i];
-                    minusInput[0, i] = input[0, i];
-                }
-
-                plusInput[0, d] = NumOps.Add(input[0, d], epsilon);
-                minusInput[0, d] = NumOps.Subtract(input[0, d], epsilon);
-
-                var plusOutput = Predict(plusInput);
-                var minusOutput = Predict(minusInput);
-
-                T twoEpsilon = NumOps.Multiply(NumOps.FromDouble(2.0), epsilon);
-
-                for (int o = 0; o < outputDim; o++)
-                {
-                    derivatives.FirstDerivatives[o, d] = NumOps.Divide(
-                        NumOps.Subtract(plusOutput[0, o], minusOutput[0, o]),
-                        twoEpsilon);
-
-                    T epsilonSq = NumOps.Multiply(epsilon, epsilon);
-                    derivatives.SecondDerivatives[o, d, d] = NumOps.Divide(
-                        NumOps.Subtract(
-                            NumOps.Add(plusOutput[0, o], minusOutput[0, o]),
-                            NumOps.Multiply(NumOps.FromDouble(2.0), baseOutput[0, o])),
-                        epsilonSq);
-                }
-            }
-
-            return derivatives;
-        }
-
-        /// <summary>
-        /// Computes the regularization loss for parameters.
-        /// </summary>
-        private T ComputeRegularizationLoss()
-        {
-            T lambda = _options.RegularizationStrength ?? NumOps.FromDouble(0.01);
-            T loss = NumOps.Zero;
-
-            switch (_options.Regularization)
-            {
-                case InverseProblemRegularization.None:
-                    return NumOps.Zero;
-
-                case InverseProblemRegularization.L2Tikhonov:
-                    // L2: sum of squared parameters
-                    foreach (var p in _parameters)
-                    {
-                        loss = NumOps.Add(loss, NumOps.Multiply(p, p));
-                    }
-                    break;
-
-                case InverseProblemRegularization.L1Lasso:
-                    // L1: sum of absolute parameters
-                    foreach (var p in _parameters)
-                    {
-                        loss = NumOps.Add(loss, NumOps.Abs(p));
-                    }
-                    break;
-
-                case InverseProblemRegularization.ElasticNet:
-                    // Combination of L1 and L2
-                    T l1Sum = NumOps.Zero;
-                    T l2Sum = NumOps.Zero;
-                    foreach (var p in _parameters)
-                    {
-                        l1Sum = NumOps.Add(l1Sum, NumOps.Abs(p));
-                        l2Sum = NumOps.Add(l2Sum, NumOps.Multiply(p, p));
-                    }
-                    loss = NumOps.Add(l1Sum, l2Sum);
-                    break;
-
-                case InverseProblemRegularization.Bayesian:
-                    // Negative log-prior (assuming Gaussian)
-                    if (_options.PriorMeans != null && _options.PriorStandardDeviations != null)
-                    {
-                        for (int i = 0; i < _parameters.Length; i++)
-                        {
-                            T diff = NumOps.Subtract(_parameters[i], _options.PriorMeans[i]);
-                            T stdSq = NumOps.Multiply(_options.PriorStandardDeviations[i],
-                                                       _options.PriorStandardDeviations[i]);
-                            loss = NumOps.Add(loss, NumOps.Divide(
-                                NumOps.Multiply(diff, diff),
-                                NumOps.Multiply(NumOps.FromDouble(2.0), stdSq)));
-                        }
-                    }
-                    break;
-
-                default:
-                    return NumOps.Zero;
-            }
-
-            return NumOps.Multiply(lambda, loss);
-        }
-
-        /// <summary>
-        /// Backpropagates losses and updates network parameters.
-        /// </summary>
-        private void BackpropagateAndUpdate(T dataLoss, T physicsLoss, T regularizationLoss)
-        {
-            // Total loss gradient flows through the network
-            // For simplicity, we use the combined loss for backpropagation
-            T totalLoss = NumOps.Add(dataLoss, NumOps.Add(physicsLoss, regularizationLoss));
-
-            // Compute network gradients via backpropagation
-            // Note: In practice, you'd compute gradients through the loss functions
-            // Here we use the optimizer to update parameters based on gradients
-
-            _optimizer.UpdateParameters(Layers);
-        }
-
-        /// <summary>
-        /// Updates the unknown parameters using gradient descent.
-        /// </summary>
-        private void UpdateUnknownParameters()
-        {
-            // Compute parameter gradients using finite differences
-            _parameterGradients = new Vector<T>(ComputeParameterGradients());
-
-            T paramLR = NumOps.FromDouble(_options.ParameterLearningRate);
-
-            // Vectorized SGD step: params = params - lr * gradients
-            _parameters = (Vector<T>)Engine.Subtract(_parameters, Engine.Multiply(_parameterGradients, paramLR));
-
-            // Apply bounds clamping if specified
-            var lowerBounds = _inverseProblem.ParameterLowerBounds;
-            var upperBounds = _inverseProblem.ParameterUpperBounds;
-            for (int i = 0; i < _parameters.Length; i++)
-            {
-                if (lowerBounds != null && NumOps.LessThan(_parameters[i], lowerBounds[i]))
-                    _parameters[i] = lowerBounds[i];
-                if (upperBounds != null && NumOps.GreaterThan(_parameters[i], upperBounds[i]))
-                    _parameters[i] = upperBounds[i];
-            }
-        }
-
-        /// <summary>
-        /// Computes gradients of the loss with respect to parameters using finite differences.
-        /// </summary>
-        private T[] ComputeParameterGradients()
-        {
-            var gradients = new T[_parameters.Length];
-            T epsilon = NumOps.FromDouble(1e-5);
-
-            T baseLoss = NumOps.Add(ComputeDataLoss(), ComputePhysicsLoss());
-
-            for (int i = 0; i < _parameters.Length; i++)
-            {
-                T originalValue = _parameters[i];
-
-                // Forward difference
-                _parameters[i] = NumOps.Add(originalValue, epsilon);
-                UpdatePDE();
-                T plusLoss = NumOps.Add(ComputeDataLoss(), ComputePhysicsLoss());
-
-                // Backward difference
-                _parameters[i] = NumOps.Subtract(originalValue, epsilon);
-                UpdatePDE();
-                T minusLoss = NumOps.Add(ComputeDataLoss(), ComputePhysicsLoss());
-
-                // Central difference gradient
-                gradients[i] = NumOps.Divide(
-                    NumOps.Subtract(plusLoss, minusLoss),
-                    NumOps.Multiply(NumOps.FromDouble(2.0), epsilon));
-
-                // Restore original value
-                _parameters[i] = originalValue;
-            }
-
-            UpdatePDE();
-            return gradients;
-        }
-
-        /// <summary>
-        /// Estimates parameter uncertainties using Fisher information.
-        /// </summary>
-        private T[]? EstimateParameterUncertainties()
-        {
-            // Simplified uncertainty estimation using diagonal of Hessian
-            var uncertainties = new T[_parameters.Length];
-            T epsilon = NumOps.FromDouble(1e-5);
-
-            for (int i = 0; i < _parameters.Length; i++)
-            {
-                T originalValue = _parameters[i];
-
-                // Compute second derivative (curvature)
-                _parameters[i] = NumOps.Add(originalValue, epsilon);
-                UpdatePDE();
-                T plusLoss = NumOps.Add(ComputeDataLoss(), ComputePhysicsLoss());
-
-                _parameters[i] = NumOps.Subtract(originalValue, epsilon);
-                UpdatePDE();
-                T minusLoss = NumOps.Add(ComputeDataLoss(), ComputePhysicsLoss());
-
-                _parameters[i] = originalValue;
-                UpdatePDE();
-                T centerLoss = NumOps.Add(ComputeDataLoss(), ComputePhysicsLoss());
-
-                T epsilonSq = NumOps.Multiply(epsilon, epsilon);
-                T curvature = NumOps.Divide(
-                    NumOps.Subtract(NumOps.Add(plusLoss, minusLoss),
-                                    NumOps.Multiply(NumOps.FromDouble(2.0), centerLoss)),
-                    epsilonSq);
-
-                // Uncertainty is inverse square root of curvature
-                T absCurvature = NumOps.Abs(curvature);
-                if (NumOps.GreaterThan(absCurvature, NumOps.FromDouble(1e-10)))
-                {
-                    uncertainties[i] = NumOps.Sqrt(NumOps.Divide(NumOps.One, absCurvature));
-                }
-                else
-                {
-                    uncertainties[i] = NumOps.MaxValue;
-                }
-            }
-
-            return uncertainties;
-        }
-
-        /// <summary>
-        /// Estimates correlation matrix between parameters.
-        /// </summary>
-        private T[,]? EstimateParameterCorrelations()
-        {
-            // Simplified: return identity matrix
-            int n = _parameters.Length;
-            var correlations = new T[n, n];
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    correlations[i, j] = (i == j) ? NumOps.One : NumOps.Zero;
-                }
-            }
-
-            return correlations;
-        }
-
-        /// <inheritdoc/>
-        protected override Tensor<T> PredictCore(Tensor<T> input)
+        private Tensor<T> Forward(Tensor<T> input)
         {
             Tensor<T> output = input;
             foreach (var layer in Layers)
             {
                 output = layer.Forward(output);
             }
+
             return output;
+        }
+
+        /// <summary>
+        /// A batch of min(256, N) collocation points drawn from the seeded sampler.
+        /// </summary>
+        private Tensor<T> SampleBatch()
+        {
+            int numPoints = _collocationPoints.Shape[0];
+            int batchSize = Math.Min(256, numPoints);
+            int start = numPoints == batchSize ? 0 : _batchSampler.Next(numPoints - batchSize + 1);
+            return Engine.TensorSlice(_collocationPoints, new[] { start, 0 }, new[] { batchSize, _collocationPoints.Shape[1] });
+        }
+
+        /// <summary>
+        /// Performs one training epoch: a network step on MSE_u + MSE_f, then a coefficient step.
+        /// </summary>
+        /// <returns>The data loss, the physics loss and the total loss including the regularization.</returns>
+        private (T dataLoss, T physicsLoss, T totalLoss) TrainEpoch()
+        {
+            var points = SampleBatch();
+            var pde = _currentPDE;
+            TrainCustomTapeStep(points, points, x => x, (x, _) =>
+            {
+                var outputs = PinnAutodiff<T>.Evaluate(Forward, x, PdeOrder, out var derivatives);
+                return Engine.TensorAdd(DataLoss(), PhysicsLoss(pde, x, outputs, derivatives));
+            }, _optimizer);
+
+            var detachedOutputs = PinnAutodiff<T>.Evaluate(Forward, points, PdeOrder, out var detached);
+            T dataLoss = Scalar(DataLoss());
+            T physicsLoss = Scalar(PhysicsLoss(pde, points, detachedOutputs, detached));
+            T regularizationLoss = Scalar(RegularizationLoss(Tensor<T>.FromVector(_parameters)));
+
+            UpdateUnknownParameters(points, detachedOutputs, detached);
+            UpdatePDE();
+
+            return (dataLoss, physicsLoss, NumOps.Add(dataLoss, NumOps.Add(physicsLoss, regularizationLoss)));
+        }
+
+        /// <summary>
+        /// The weighted data loss DataWeight * mean |u(x_obs) - u_obs|^2.
+        /// </summary>
+        private Tensor<T> DataLoss()
+        {
+            var diff = Engine.TensorSubtract(Forward(_observationInputs), _observationTargets);
+            var mse = Engine.ReduceMean(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
+            return Engine.TensorMultiplyScalar(mse, _options.DataWeight ?? NumOps.One);
+        }
+
+        /// <summary>
+        /// The physics loss mean R^2 of <paramref name="pde"/> at the collocation batch.
+        /// </summary>
+        private Tensor<T> PhysicsLoss(PDEs.PDESpecificationBase<T> pde, Tensor<T> points, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var residual = pde.ComputeTapeResidual(points, outputs, derivatives);
+            return Engine.ReduceMean(Engine.TensorMultiply(residual, residual), Enumerable.Range(0, residual.Rank).ToArray(), keepDims: false);
+        }
+
+        /// <summary>
+        /// The regularization loss lambda * R(p) of the coefficient vector <paramref name="parameters"/>.
+        /// </summary>
+        private Tensor<T> RegularizationLoss(Tensor<T> parameters)
+        {
+            T lambda = _options.RegularizationStrength ?? NumOps.FromDouble(0.01);
+            Tensor<T> penalty;
+            switch (_options.Regularization)
+            {
+                case InverseProblemRegularization.L2Tikhonov:
+                    penalty = Engine.TensorMultiply(parameters, parameters);
+                    break;
+                case InverseProblemRegularization.L1Lasso:
+                    penalty = Engine.TensorAbs(parameters);
+                    break;
+                case InverseProblemRegularization.ElasticNet:
+                    penalty = Engine.TensorAdd(Engine.TensorAbs(parameters), Engine.TensorMultiply(parameters, parameters));
+                    break;
+                case InverseProblemRegularization.Bayesian when _options.PriorMeans != null && _options.PriorStandardDeviations != null:
+                    // Gaussian negative log-prior 1/2 ((p - mu) / sigma)^2, scaled before squaring.
+                    var means = new Tensor<T>(_options.PriorMeans, new[] { _options.PriorMeans.Length });
+                    var deviations = new Tensor<T>(_options.PriorStandardDeviations, new[] { _options.PriorStandardDeviations.Length });
+                    var z = Engine.TensorDivide(Engine.TensorSubtract(parameters, means), deviations);
+                    penalty = Engine.TensorMultiplyScalar(Engine.TensorMultiply(z, z), NumOps.FromDouble(0.5));
+                    break;
+                default:
+                    return new Tensor<T>(new[] { 1 });
+            }
+
+            return Engine.TensorMultiplyScalar(Engine.ReduceSum(penalty, new[] { 0 }, keepDims: true), lambda);
+        }
+
+        /// <summary>
+        /// The coefficient objective MSE_f(p) + lambda R(p) at fixed network outputs: the network does not depend
+        /// on p, so only the PDE built from p changes.
+        /// </summary>
+        private T CoefficientLoss(Tensor<T> parameters, Tensor<T> points, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var pde = BuildPDE(new Vector<T>(parameters.ToArray()));
+            return Scalar(Engine.TensorAdd(PhysicsLoss(pde, points, outputs, derivatives), RegularizationLoss(parameters)));
+        }
+
+        /// <summary>
+        /// Step sizes h_i = 1e-3 * max(1, |p_i|) for the central differences in the coefficients.
+        /// </summary>
+        private Tensor<T> StepSizes(Tensor<T> parameters)
+        {
+            return Engine.TensorMultiplyScalar(Engine.TensorMax(Engine.TensorAbs(parameters), NumOps.One), NumOps.FromDouble(1e-3));
+        }
+
+        private Tensor<T> Basis(Tensor<T> steps, int index)
+        {
+            int n = steps.Shape[0];
+            var row = Engine.Reshape(Engine.TensorSlice(Engine.TensorEye<T>(n), new[] { index, 0 }, new[] { 1, n }), new[] { n });
+            return Engine.TensorMultiply(row, steps);
+        }
+
+        /// <summary>
+        /// Takes one gradient step on the coefficients, then clamps them to the problem's bounds.
+        /// </summary>
+        private void UpdateUnknownParameters(Tensor<T> points, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var parameters = Tensor<T>.FromVector(_parameters);
+            var steps = StepSizes(parameters);
+            var plus = new List<T>(_parameters.Length);
+            var minus = new List<T>(_parameters.Length);
+            for (int i = 0; i < _parameters.Length; i++)
+            {
+                var offset = Basis(steps, i);
+                plus.Add(CoefficientLoss(Engine.TensorAdd(parameters, offset), points, outputs, derivatives));
+                minus.Add(CoefficientLoss(Engine.TensorSubtract(parameters, offset), points, outputs, derivatives));
+            }
+
+            var difference = Engine.TensorSubtract(Tensor<T>.FromVector(Vector<T>.FromList(plus)), Tensor<T>.FromVector(Vector<T>.FromList(minus)));
+            var gradient = Engine.TensorDivide(difference, Engine.TensorMultiplyScalar(steps, NumOps.FromDouble(2.0)));
+            _parameterGradients = gradient.ToVector();
+
+            var updated = Engine.TensorSubtract(parameters, Engine.TensorMultiplyScalar(gradient, NumOps.FromDouble(_options.ParameterLearningRate)));
+            if (_inverseProblem.ParameterLowerBounds is { } lower)
+            {
+                updated = Engine.TensorMax(updated, new Tensor<T>(lower, new[] { lower.Length }));
+            }
+
+            if (_inverseProblem.ParameterUpperBounds is { } upper)
+            {
+                updated = Engine.TensorMin(updated, new Tensor<T>(upper, new[] { upper.Length }));
+            }
+
+            _parameters = updated.ToVector();
+        }
+
+        /// <summary>
+        /// The central-difference Hessian [n, n] of the coefficient objective at the current coefficients.
+        /// </summary>
+        private Tensor<T> ParameterHessian(Tensor<T> points, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var parameters = Tensor<T>.FromVector(_parameters);
+            var steps = StepSizes(parameters);
+            int n = _parameters.Length;
+            var corners = new List<T>(4 * n * n);
+            for (int i = 0; i < n; i++)
+            {
+                var di = Basis(steps, i);
+                for (int j = 0; j < n; j++)
+                {
+                    var dj = Basis(steps, j);
+                    var up = Engine.TensorAdd(parameters, di);
+                    var down = Engine.TensorSubtract(parameters, di);
+                    corners.Add(CoefficientLoss(Engine.TensorAdd(up, dj), points, outputs, derivatives));
+                    corners.Add(CoefficientLoss(Engine.TensorSubtract(up, dj), points, outputs, derivatives));
+                    corners.Add(CoefficientLoss(Engine.TensorAdd(down, dj), points, outputs, derivatives));
+                    corners.Add(CoefficientLoss(Engine.TensorSubtract(down, dj), points, outputs, derivatives));
+                }
+            }
+
+            // H_ij = (L(++) - L(+-) - L(-+) + L(--)) / (4 h_i h_j).
+            var values = Engine.Reshape(Tensor<T>.FromVector(Vector<T>.FromList(corners)), new[] { n * n, 4 });
+            var signs = new Tensor<T>(new[] { NumOps.One, NumOps.Negate(NumOps.One), NumOps.Negate(NumOps.One), NumOps.One }, new[] { 1, 4 });
+            var numerator = Engine.Reshape(Engine.ReduceSum(Engine.TensorMultiply(values, signs), new[] { 1 }, keepDims: false), new[] { n, n });
+            var column = Engine.Reshape(steps, new[] { n, 1 });
+            var row = Engine.Reshape(steps, new[] { 1, n });
+            var denominator = Engine.TensorMultiplyScalar(Engine.TensorMultiply(column, row), NumOps.FromDouble(4.0));
+            return Engine.TensorDivide(numerator, denominator);
+        }
+
+        /// <summary>
+        /// Laplace-approximation standard deviations 1 / sqrt(|H_ii|); a coefficient with zero curvature is
+        /// unidentified and gets MaxValue.
+        /// </summary>
+        private T[] EstimateParameterUncertainties(Tensor<T> hessian)
+        {
+            var curvature = Engine.TensorAbs(Engine.TensorDiagonal(hessian));
+            var zero = Engine.TensorEquals(curvature, NumOps.Zero);
+            var ones = Tensor<T>.CreateDefault(curvature.Shape.ToArray(), NumOps.One);
+            var deviations = Engine.TensorReciprocal(Engine.TensorSqrt(Engine.TensorWhere(zero, ones, curvature)));
+            var unidentified = Tensor<T>.CreateDefault(curvature.Shape.ToArray(), NumOps.MaxValue);
+            return Engine.TensorWhere(zero, unidentified, deviations).ToArray();
+        }
+
+        /// <summary>
+        /// The coefficient correlations of the Laplace approximation: C = H^-1, corr_ij = C_ij / sqrt(C_ii C_jj).
+        /// </summary>
+        /// <remarks>
+        /// This returned the identity, which claimed every pair of coefficients uncorrelated whatever the data.
+        /// </remarks>
+        private Tensor<T>? EstimateParameterCorrelations(Tensor<T> hessian)
+        {
+            int n = hessian.Shape[0];
+            Tensor<T> covariance;
+            try
+            {
+                covariance = Tensor<T>.FromMatrix(hessian.ToMatrix().Inverse());
+            }
+            catch (InvalidOperationException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"The coefficient Hessian is singular; no correlations: {ex}");
+                return null;
+            }
+
+            var scale = Engine.TensorSqrt(Engine.TensorAbs(Engine.TensorDiagonal(covariance)));
+            var outer = Engine.TensorMultiply(Engine.Reshape(scale, new[] { n, 1 }), Engine.Reshape(scale, new[] { 1, n }));
+            return Engine.TensorDivide(covariance, outer);
+        }
+
+        /// <inheritdoc/>
+        protected override Tensor<T> PredictCore(Tensor<T> input)
+        {
+            return Forward(input);
         }
 
         /// <inheritdoc/>
@@ -750,31 +612,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <inheritdoc/>
         public override Vector<T> GetGradients()
         {
-            var allGradients = new List<T>();
-
-            foreach (var layer in Layers)
-            {
-                var layerGradients = layer.GetParameterGradients();
-                for (int i = 0; i < layerGradients.Length; i++)
-                {
-                    allGradients.Add(layerGradients[i]);
-                }
-            }
-
-            // Add parameter gradients
-            if (_parameterGradients != null)
-            {
-                allGradients.AddRange(_parameterGradients);
-            }
-            else
-            {
-                for (int i = 0; i < _parameters.Length; i++)
-                {
-                    allGradients.Add(NumOps.Zero);
-                }
-            }
-
-            return new Vector<T>(allGradients.ToArray());
+            var parts = Layers.Select(layer => layer.GetParameterGradients()).ToList();
+            parts.Add(_parameterGradients ?? new Vector<T>(_parameters.Length));
+            return Vector<T>.Concatenate(parts.ToArray());
         }
 
         /// <inheritdoc />
@@ -819,9 +659,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private Dictionary<string, object> GetIdentifiedParameterSnapshot()
         {
             var paramDict = new Dictionary<string, object>();
-            for (int i = 0; i < _parameters.Length; i++)
+            var values = _parameters.ToArray();
+            for (int i = 0; i < values.Length; i++)
             {
-                object? value = _parameters[i];
+                object? value = values[i];
                 if (value is null)
                 {
                     throw new InvalidOperationException(

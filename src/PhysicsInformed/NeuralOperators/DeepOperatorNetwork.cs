@@ -299,7 +299,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
         /// <summary>
-        /// Evaluates the operator: G(u)(y) = branch(u) · trunk(y).
+        /// Evaluates the operator: G(u)(y) = branch(u) · trunk(y) + b0.
         /// </summary>
         /// <param name="inputFunction">Values of input function at sensor locations [numSensors].</param>
         /// <param name="queryLocation">Location where to evaluate output [spatialDim].</param>
@@ -322,60 +322,15 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         ///
         /// - output = b₁*t₁ + b₂*t₂ + ... + b₁₂₈*t₁₂₈ (single number)
         ///
-        /// To get output at multiple locations, call this function multiple times
-        /// with different queryLocation values (branch only computed once!).
+        /// 4. Add the learned bias b0 (Lu et al. 2021, Eq. 2)
+        ///
+        /// To get output at many locations, call EvaluateMultiple (branch computed once per batch).
         /// </remarks>
-        public T Evaluate(T[] inputFunction, T[] queryLocation)
+        public T Evaluate(Vector<T> inputFunction, Vector<T> queryLocation)
         {
-            if (inputFunction == null)
-            {
-                throw new ArgumentNullException(nameof(inputFunction));
-            }
-
-            if (queryLocation == null)
-            {
-                throw new ArgumentNullException(nameof(queryLocation));
-            }
-
-            if (inputFunction.Length != _numSensors)
-            {
-                throw new ArgumentException($"Input function must have {_numSensors} sensor values.");
-            }
-
-            int trunkInputSize = _trunkNet.Architecture.CalculatedInputSize;
-            if (trunkInputSize <= 0)
-            {
-                throw new InvalidOperationException("Trunk network input size must be positive.");
-            }
-
-            if (queryLocation.Length != trunkInputSize)
-            {
-                throw new ArgumentException($"Query location must have {trunkInputSize} values.", nameof(queryLocation));
-            }
-
-            // Branch network: input function → coefficients
-            var inputTensor = new Tensor<T>(new int[] { 1, inputFunction.Length });
-            for (int i = 0; i < inputFunction.Length; i++)
-            {
-                inputTensor[0, i] = inputFunction[i];
-            }
-
-            var branchOutput = _branchNet.Predict(inputTensor);
-            // Trunk network: query location → basis functions
-            var queryTensor = new Tensor<T>(new int[] { 1, queryLocation.Length });
-            for (int i = 0; i < queryLocation.Length; i++)
-            {
-                queryTensor[0, i] = queryLocation[i];
-            }
-
-            var trunkOutput = _trunkNet.Predict(queryTensor);
-
-            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(1, _latentDimension);
-            var trunkOutput2D = trunkOutput.Rank == 2 ? trunkOutput : trunkOutput.Reshape(1, _latentDimension);
-            var product = Engine.TensorMultiply(branchOutput2D, trunkOutput2D);
-            var summed = Engine.ReduceSum(product, new[] { 1 }, keepDims: true);
-
-            return summed[0, 0];
+            Guard.NotNull(queryLocation);
+            var query = Engine.Reshape(Tensor<T>.FromVector(queryLocation), new[] { 1, queryLocation.Length });
+            return EvaluateMultiple(inputFunction, query)[0];
         }
 
         /// <summary>
@@ -386,79 +341,56 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <returns>Output values at all query locations [numQueries].</returns>
         /// <remarks>
         /// For Beginners:
-        /// This is more efficient than calling Evaluate() multiple times because:
-        /// - Branch network is evaluated only once (not per query point)
-        /// - Only trunk network is evaluated for each query location
-        ///
-        /// This is a key advantage of DeepONet: once you encode the input function
-        /// via the branch network, you can query the solution at many locations
-        /// very cheaply (just trunk network evaluations).
+        /// Once you encode the input function via the branch network, you can query the solution at many locations
+        /// in one batched pass. The result includes the learned bias b0 of Lu et al. (2021), Eq. 2, exactly as
+        /// Predict does.
         /// </remarks>
-        public T[] EvaluateMultiple(T[] inputFunction, T[,] queryLocations)
+        public Vector<T> EvaluateMultiple(Vector<T> inputFunction, Tensor<T> queryLocations)
         {
-            if (inputFunction == null)
-            {
-                throw new ArgumentNullException(nameof(inputFunction));
-            }
-
-            if (queryLocations == null)
-            {
-                throw new ArgumentNullException(nameof(queryLocations));
-            }
-
+            Guard.NotNull(inputFunction);
+            Guard.NotNull(queryLocations);
             if (inputFunction.Length != _numSensors)
             {
-                throw new ArgumentException($"Input function must have {_numSensors} sensor values.");
+                throw new ArgumentException($"Input function must have {_numSensors} sensor values.", nameof(inputFunction));
             }
 
+            if (queryLocations.Rank != 2)
+            {
+                throw new ArgumentException("Query locations must be [numQueries, spatialDim].", nameof(queryLocations));
+            }
+
+            if (queryLocations.Shape[0] == 0)
+            {
+                return new Vector<T>(0);
+            }
+
+            var sensors = Engine.Reshape(Tensor<T>.FromVector(inputFunction), new[] { 1, _numSensors });
+            var queries = Engine.Reshape(queryLocations, new[] { 1, queryLocations.Shape[0], queryLocations.Shape[1] });
+            return Predict(PackRows(sensors, queries)).ToVector();
+        }
+
+        /// <summary>
+        /// Packs sensors [S, m] and queries [S, Q, d] into the [S * Q, m + d] rows the operator reads, the sensors of
+        /// sample s repeated on each of its Q rows.
+        /// </summary>
+        private Tensor<T> PackRows(Tensor<T> sensors, Tensor<T> queries)
+        {
             int trunkInputSize = _trunkNet.Architecture.CalculatedInputSize;
             if (trunkInputSize <= 0)
             {
                 throw new InvalidOperationException("Trunk network input size must be positive.");
             }
 
-            int numQueries = queryLocations.GetLength(0);
-            if (numQueries == 0)
+            if (queries.Shape[2] != trunkInputSize)
             {
-                return Array.Empty<T>();
+                throw new ArgumentException($"Query locations must have {trunkInputSize} values per query.", nameof(queries));
             }
 
-            if (queryLocations.GetLength(1) != trunkInputSize)
-            {
-                throw new ArgumentException($"Query locations must have {trunkInputSize} values per entry.", nameof(queryLocations));
-            }
-
-            // Branch network (computed once)
-            var inputTensor = new Tensor<T>(new int[] { 1, inputFunction.Length });
-            for (int i = 0; i < inputFunction.Length; i++)
-            {
-                inputTensor[0, i] = inputFunction[i];
-            }
-
-            var branchOutput = _branchNet.Predict(inputTensor);
-            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(1, _latentDimension);
-
-            // Trunk network (batched queries)
-            var queryTensor = new Tensor<T>(new int[] { numQueries, trunkInputSize });
-            for (int q = 0; q < numQueries; q++)
-            {
-                for (int j = 0; j < trunkInputSize; j++)
-                {
-                    queryTensor[q, j] = queryLocations[q, j];
-                }
-            }
-
-            var trunkOutput = _trunkNet.Predict(queryTensor);
-            var branchOutputT = Engine.TensorTranspose(branchOutput2D);
-            var predictions = Engine.TensorMatMul(trunkOutput, branchOutputT);
-
-            var outputs = new T[numQueries];
-            for (int q = 0; q < numQueries; q++)
-            {
-                outputs[q] = predictions[q, 0];
-            }
-
-            return outputs;
+            int samples = sensors.Shape[0];
+            int count = queries.Shape[1];
+            var repeated = Engine.TensorTile(Engine.Reshape(sensors, new[] { samples, 1, _numSensors }), new[] { 1, count, 1 });
+            var rows = Engine.TensorConcatenate(new[] { repeated, queries }, 2);
+            return Engine.Reshape(rows, new[] { samples * count, _numSensors + trunkInputSize });
         }
 
         /// <summary>
@@ -468,72 +400,46 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <param name="queryLocations">Query locations for each sample [numSamples, numQueries, spatialDim].</param>
         /// <param name="targetValues">Target output values [numSamples, numQueries].</param>
         /// <param name="epochs">Number of training epochs.</param>
+        /// <param name="learningRate">The learning rate of the default Adam optimizer.</param>
+        /// <param name="verbose">Whether to print the loss every 10 epochs.</param>
         /// <returns>Training history.</returns>
         /// <remarks>
         /// For Beginners:
-        /// Training DeepONet involves:
-        /// 1. For each training example (input function, query locations, target outputs):
-        ///    a) Evaluate DeepONet at query locations
-        ///    b) Compute loss (MSE between predictions and targets)
-        ///    c) Backpropagate through both branch and trunk networks
-        ///    d) Update all parameters
-        ///
-        /// The beauty is that both networks learn together:
-        /// - Branch learns what features of the input matter
-        /// - Trunk learns what spatial patterns exist
-        /// - They coordinate through the shared latent space
-        ///
-        /// Training Data Format:
-        /// - inputFunctions[i]: Values at sensor locations for sample i
-        /// - queryLocations[i]: Where to evaluate output for sample i
-        /// - targetValues[i]: Ground truth outputs at those locations
-        ///
-        /// You can use different query locations for each training sample!
-        /// This flexibility is a key advantage of DeepONet.
+        /// Each step evaluates the full operator G(u)(y) = sum_k b_k(u) t_k(y) + b0 at one sample's query
+        /// locations, takes the loss against the targets and updates the branch net, the trunk net and the bias b0
+        /// together, as in Lu et al. (2021). You can use different query locations for each training sample.
         /// </remarks>
         public TrainingHistory<T> Train(
-            T[,] inputFunctions,
-            T[,,] queryLocations,
-            T[,] targetValues,
+            Tensor<T> inputFunctions,
+            Tensor<T> queryLocations,
+            Tensor<T> targetValues,
             int epochs = 100,
             double learningRate = 0.001,
             bool verbose = true)
         {
+            Guard.NotNull(inputFunctions);
+            Guard.NotNull(queryLocations);
+            Guard.NotNull(targetValues);
             var history = new TrainingHistory<T>();
             var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
 
-            if (inputFunctions == null)
+            if (inputFunctions.Rank != 2 || inputFunctions.Shape[1] != _numSensors)
             {
-                throw new ArgumentNullException(nameof(inputFunctions));
+                throw new ArgumentException($"Input functions must be [numSamples, {_numSensors}].", nameof(inputFunctions));
             }
 
-            if (queryLocations == null)
+            int numSamples = inputFunctions.Shape[0];
+            if (queryLocations.Rank != 3 || queryLocations.Shape[0] != numSamples)
             {
-                throw new ArgumentNullException(nameof(queryLocations));
+                throw new ArgumentException("Query locations must be [numSamples, numQueries, spatialDim].", nameof(queryLocations));
             }
 
-            if (targetValues == null)
+            int numQueries = queryLocations.Shape[1];
+            if (targetValues.Rank != 2 || targetValues.Shape[0] != numSamples || targetValues.Shape[1] != numQueries)
             {
-                throw new ArgumentNullException(nameof(targetValues));
+                throw new ArgumentException("Target values must be [numSamples, numQueries].", nameof(targetValues));
             }
 
-            if (inputFunctions.GetLength(1) != _numSensors)
-            {
-                throw new ArgumentException($"Input functions must have {_numSensors} sensor values per sample.", nameof(inputFunctions));
-            }
-
-            int numSamples = inputFunctions.GetLength(0);
-            if (queryLocations.GetLength(0) != numSamples)
-            {
-                throw new ArgumentException("Query locations sample count must match input functions.", nameof(queryLocations));
-            }
-
-            if (targetValues.GetLength(0) != numSamples)
-            {
-                throw new ArgumentException("Target values sample count must match input functions.", nameof(targetValues));
-            }
-
-            int numQueries = queryLocations.GetLength(1);
             if (numSamples == 0)
             {
                 return history;
@@ -544,21 +450,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentException("Query locations must include at least one query per sample.", nameof(queryLocations));
             }
 
-            if (targetValues.GetLength(1) != numQueries)
-            {
-                throw new ArgumentException("Target values query count must match query locations.", nameof(targetValues));
-            }
-
-            int trunkInputSize = _trunkNet.Architecture.CalculatedInputSize;
-            if (trunkInputSize <= 0)
-            {
-                throw new InvalidOperationException("Trunk network input size must be positive.");
-            }
-
-            if (queryLocations.GetLength(2) != trunkInputSize)
-            {
-                throw new ArgumentException($"Query locations must have {trunkInputSize} values per query.", nameof(queryLocations));
-            }
+            var rows = PackRows(inputFunctions, queryLocations);
+            var targets = Engine.Reshape(targetValues, new[] { numSamples * numQueries, 1 });
+            int width = rows.Shape[1];
 
             if (_usesDefaultOptimizer)
             {
@@ -572,11 +466,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             SetTrainingMode(true);
             _branchNet.SetTrainingMode(true);
             _trunkNet.SetTrainingMode(true);
-            foreach (var layer in _branchNet.Layers)
-            {
-                layer.SetTrainingMode(true);
-            }
-            foreach (var layer in _trunkNet.Layers)
+            foreach (var layer in Layers)
             {
                 layer.SetTrainingMode(true);
             }
@@ -585,64 +475,19 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             {
                 for (int epoch = 0; epoch < epochs; epoch++)
                 {
-                    T totalLoss = NumOps.Zero;
-
-
+                    var losses = new List<T>(numSamples);
                     for (int i = 0; i < numSamples; i++)
                     {
-                        var branchInput = new Tensor<T>(new int[] { 1, _numSensors });
-                        for (int j = 0; j < _numSensors; j++)
-                        {
-                            branchInput[0, j] = inputFunctions[i, j];
-                        }
-
-                        var trunkInput = new Tensor<T>(new int[] { numQueries, trunkInputSize });
-                        for (int q = 0; q < numQueries; q++)
-                        {
-                            for (int d = 0; d < trunkInputSize; d++)
-                            {
-                                trunkInput[q, d] = queryLocations[i, q, d];
-                            }
-                        }
-
-                        var targets = new Tensor<T>(new int[] { numQueries, 1 });
-                        for (int q = 0; q < numQueries; q++)
-                        {
-                            targets[q, 0] = targetValues[i, q];
-                        }
-
-                        // One step over the FULL DON forward (branch + trunk + combine), so gradients reach both
-                        // sub-networks: the fused compiled plan when it applies, the eager tape otherwise. The
-                        // branch and trunk inputs travel packed in the step's input, so a plan replays each
-                        // sample's own sensors and query points.
-                        var branchShape = branchInput._shape;
-                        var trunkShape = trunkInput._shape;
-                        Tensor<T> Forward(Tensor<T> packed)
-                        {
-                            var branchOutput = _branchNet.ForwardForTraining(
-                                Training.StepInputPacking<T>.Slice(packed, 0, branchShape));
-                            var trunkOutput = _trunkNet.ForwardForTraining(
-                                Training.StepInputPacking<T>.Slice(packed, branchInput.Length, trunkShape));
-                            var branchOutput2D = branchOutput.Rank == 2
-                                ? branchOutput
-                                : Engine.Reshape(branchOutput, new[] { 1, _latentDimension });
-                            var trunkOutput2D = trunkOutput.Rank == 2
-                                ? trunkOutput
-                                : Engine.Reshape(trunkOutput, new[] { numQueries, _latentDimension });
-                            return Engine.TensorMatMul(trunkOutput2D, Engine.TensorTranspose(branchOutput2D));
-                        }
-
-                        T lossVal = TrainCustomTapeStep(
-                            Training.StepInputPacking<T>.Pack(branchInput, trunkInput), targets,
-                            Forward, lossFunction.ComputeTapeLoss, _optimizer,
-                            () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-                        totalLoss = NumOps.Add(totalLoss, lossVal);
+                        // One step over the full operator, bias included: the parameter set is the model's own,
+                        // so b0 trains with the branch and trunk weights.
+                        var sampleRows = Engine.TensorSlice(rows, new[] { i * numQueries, 0 }, new[] { numQueries, width });
+                        var sampleTargets = Engine.TensorSlice(targets, new[] { i * numQueries, 0 }, new[] { numQueries, 1 });
+                        losses.Add(TrainCustomTapeStep(
+                            sampleRows, sampleTargets, ForwardOperator, lossFunction.ComputeTapeLoss, _optimizer));
                     }
 
-                    T avgLoss = numSamples > 0
-                        ? NumOps.Divide(totalLoss, NumOps.FromDouble(numSamples))
-                        : NumOps.Zero;
-
+                    var lossTensor = Tensor<T>.FromVector(Vector<T>.FromList(losses));
+                    T avgLoss = Engine.ReduceMean(lossTensor, new[] { 0 }, keepDims: false).AsSpan()[0];
                     history.AddEpoch(avgLoss);
 
                     if (verbose && epoch % 10 == 0)
@@ -655,11 +500,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             {
                 ClearNetworkGradients(_branchNet);
                 ClearNetworkGradients(_trunkNet);
-                foreach (var layer in _trunkNet.Layers)
-                {
-                    layer.SetTrainingMode(false);
-                }
-                foreach (var layer in _branchNet.Layers)
+                foreach (var layer in Layers)
                 {
                     layer.SetTrainingMode(false);
                 }
@@ -670,47 +511,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             return history;
-        }
-
-        private T ComputeAverageLoss(T[,] inputFunctions, T[,,] queryLocations, T[,] targetValues)
-        {
-            int numSamples = inputFunctions.GetLength(0);
-            int numQueries = queryLocations.GetLength(1);
-            T totalLoss = NumOps.Zero;
-
-            for (int i = 0; i < numSamples; i++)
-            {
-                T[] inputFunc = new T[_numSensors];
-                for (int j = 0; j < _numSensors; j++)
-                {
-                    inputFunc[j] = inputFunctions[i, j];
-                }
-
-                T[,] queries = new T[numQueries, queryLocations.GetLength(2)];
-                for (int q = 0; q < numQueries; q++)
-                {
-                    for (int d = 0; d < queries.GetLength(1); d++)
-                    {
-                        queries[q, d] = queryLocations[i, q, d];
-                    }
-                }
-
-                T[] predictions = EvaluateMultiple(inputFunc, queries);
-
-                T loss = NumOps.Zero;
-                for (int q = 0; q < numQueries; q++)
-                {
-                    T error = NumOps.Subtract(predictions[q], targetValues[i, q]);
-                    loss = NumOps.Add(loss, NumOps.Multiply(error, error));
-                }
-
-                loss = NumOps.Divide(loss, NumOps.FromDouble(numQueries));
-                totalLoss = NumOps.Add(totalLoss, loss);
-            }
-
-            return numSamples > 0
-                ? NumOps.Divide(totalLoss, NumOps.FromDouble(numSamples))
-                : NumOps.Zero;
         }
 
         /// <summary>

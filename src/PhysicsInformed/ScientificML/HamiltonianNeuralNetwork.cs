@@ -163,8 +163,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 Layers.AddRange(Architecture.Layers);
                 ValidateCustomLayers(Layers);
                 // Chain-resolve lazy layers from the architecture's declared
-                // input shape. HamiltonianNeuralNetwork.ComputeHamiltonianGradient
-                // walks the layer stack via NeuralNetworkDerivatives, which
+                // input shape. The tape derivative of H
+                // walks the layer stack, which
                 // reads `weights.Shape[0]` to size its per-layer activation
                 // buffers — on a lazy DenseLayer that read returns 0 and the
                 // derivative computation throws "Layer input size mismatch.
@@ -254,8 +254,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </summary>
         /// <remarks>
         /// The public inference output remains the scalar Hamiltonian. Training instead compares
-        /// (dH/dp, -dH/dq) with observed state derivatives, as Equation 3 requires. Centered input
-        /// differences keep both perturbed forwards on the parameter gradient tape.
+        /// (dH/dp, -dH/dq) with observed state derivatives, as Equation 3 requires. The input gradient
+        /// comes from the gradient tape, so the field stays differentiable in the weights.
         /// </remarks>
         public override Tensor<T> ForwardForTraining(Tensor<T> input)
         {
@@ -267,41 +267,37 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     nameof(input));
             }
 
-            T step = NumOps.FromDouble(_options.DerivativeStep);
-            T inverseTwoStep = NumOps.FromDouble(1.0 / (2.0 * _options.DerivativeStep));
-            int sampleCount = input.Length / _stateDim;
-            var hamiltonianGradients = new Tensor<T>[_stateDim];
+            var rows = Engine.Reshape(input, new[] { input.Length / _stateDim, _stateDim });
+            return Engine.Reshape(SymplecticGradient(rows), input.Shape.ToArray());
+        }
 
-            for (int coordinate = 0; coordinate < _stateDim; coordinate++)
-            {
-                var plus = input.Clone();
-                var minus = input.Clone();
-                for (int sample = 0; sample < sampleCount; sample++)
-                {
-                    int offset = sample * _stateDim + coordinate;
-                    plus[offset] = NumOps.Add(plus[offset], step);
-                    minus[offset] = NumOps.Subtract(minus[offset], step);
-                }
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The training output differentiates H with respect to its inputs inside the step, a nested backward the
+        /// compile-once plan cannot replay; the eager tape re-runs it every step.
+        /// </remarks>
+        protected override bool SupportsFusedCompiledTraining => false;
 
-                Tensor<T> hPlus = Forward(plus);
-                Tensor<T> hMinus = Forward(minus);
-                hamiltonianGradients[coordinate] = Engine.TensorMultiplyScalar(
-                    Engine.TensorSubtract(hPlus, hMinus),
-                    inverseTwoStep);
-            }
-
-            int coordinateCount = _stateDim / 2;
-            var dynamics = new Tensor<T>[_stateDim];
-            for (int coordinate = 0; coordinate < coordinateCount; coordinate++)
-            {
-                dynamics[coordinate] = hamiltonianGradients[coordinateCount + coordinate];
-                dynamics[coordinateCount + coordinate] = Engine.TensorMultiplyScalar(
-                    hamiltonianGradients[coordinate],
-                    NumOps.Negate(NumOps.One));
-            }
-
-            int featureAxis = dynamics[0].Rank - 1;
-            return Engine.TensorConcatenate(dynamics, featureAxis);
+        /// <summary>
+        /// The symplectic gradient (dH/dp, -dH/dq) [N, stateDim] of the learned Hamiltonian at states [N, stateDim].
+        /// </summary>
+        /// <remarks>
+        /// Greydanus et al. (2019), Eq. 2-3, take dH/dq and dH/dp by automatic differentiation of the network. The
+        /// gradient comes from the tape with createGraph, so a loss on this field reaches the weights. It was a
+        /// central difference of two perturbed forwards, which carries an O(h^2) error and a cancellation error
+        /// that grows as the step shrinks.
+        /// </remarks>
+        private Tensor<T> SymplecticGradient(Tensor<T> states)
+        {
+            PinnAutodiff<T>.Evaluate(Forward, states, 1, out var derivatives);
+            var first = derivatives.FirstDerivatives
+                ?? throw new InvalidOperationException("The tape produced no input gradient.");
+            int count = states.Shape[0];
+            int n = _stateDim / 2;
+            var gradient = Engine.Reshape(first, new[] { count, _stateDim });
+            var dHdq = Engine.TensorSlice(gradient, new[] { 0, 0 }, new[] { count, n });
+            var dHdp = Engine.TensorSlice(gradient, new[] { 0, n }, new[] { count, n });
+            return Engine.TensorConcatenate(new[] { dHdp, Engine.TensorNegate(dHdq) }, 1);
         }
 
         /// <summary>
@@ -309,18 +305,10 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </summary>
         /// <param name="state">State vector [q₁, ..., qₙ, p₁, ..., pₙ].</param>
         /// <returns>Hamiltonian value (energy).</returns>
-        public T ComputeHamiltonian(T[] state)
+        public T ComputeHamiltonian(Vector<T> state)
         {
             ValidateState(state, nameof(state));
-
-            var inputTensor = new Tensor<T>(new int[] { 1, state.Length });
-            for (int i = 0; i < state.Length; i++)
-            {
-                inputTensor[0, i] = state[i];
-            }
-
-            var output = Forward(inputTensor);
-            return output[0, 0];
+            return Forward(AsRow(state)).AsSpan()[0];
         }
 
         /// <summary>
@@ -339,27 +327,10 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         ///
         /// This guarantees that energy is conserved!
         /// </remarks>
-        public T[] ComputeTimeDerivative(T[] state)
+        public Vector<T> ComputeTimeDerivative(Vector<T> state)
         {
             ValidateState(state, nameof(state));
-            int n = _stateDim / 2; // Half are positions, half are momenta
-
-            // Compute gradient of H with respect to state
-            T[,] gradient = ComputeHamiltonianGradient(state);
-
-            T[] derivative = new T[_stateDim];
-
-            // Hamilton's equations:
-            // dq/dt = ∂H/∂p
-            // dp/dt = -∂H/∂q
-
-            for (int i = 0; i < n; i++)
-            {
-                derivative[i] = gradient[0, n + i];      // dq_i/dt = ∂H/∂p_i
-                derivative[n + i] = NumOps.Negate(gradient[0, i]);     // dp_i/dt = -∂H/∂q_i
-            }
-
-            return derivative;
+            return SymplecticGradient(AsRow(state)).ToVector();
         }
 
         /// <summary>
@@ -369,7 +340,11 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <param name="dt">Time step.</param>
         /// <param name="numSteps">Number of time steps.</param>
         /// <returns>Trajectory [numSteps + 1, stateDim].</returns>
-        public T[,] Simulate(T[] initialState, T dt, int numSteps)
+        /// <remarks>
+        /// Symplectic Euler: p is advanced with -dH/dq at (q, p), then q with dH/dp at (q, p_new), which keeps the
+        /// flow symplectic.
+        /// </remarks>
+        public Tensor<T> Simulate(Vector<T> initialState, T dt, int numSteps)
         {
             ValidateState(initialState, nameof(initialState));
             if (numSteps <= 0)
@@ -377,46 +352,30 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentOutOfRangeException(nameof(numSteps), "Number of steps must be positive.");
             }
 
-            T[,] trajectory = new T[numSteps + 1, _stateDim];
-
-            // Set initial state
-            for (int i = 0; i < _stateDim; i++)
-            {
-                trajectory[0, i] = initialState[i];
-            }
-
-            // Integrate using symplectic Euler (preserves Hamiltonian structure)
+            int n = _stateDim / 2;
+            var current = AsRow(initialState);
+            var trajectory = new List<Tensor<T>>(numSteps + 1) { current };
             for (int step = 0; step < numSteps; step++)
             {
-                T[] currentState = new T[_stateDim];
-                for (int i = 0; i < _stateDim; i++)
-                {
-                    currentState[i] = trajectory[step, i];
-                }
+                var q = Engine.TensorSlice(current, new[] { 0, 0 }, new[] { 1, n });
+                var p = Engine.TensorSlice(current, new[] { 0, n }, new[] { 1, n });
+                var momentumRate = Engine.TensorSlice(SymplecticGradient(current), new[] { 0, n }, new[] { 1, n });
+                p = Engine.TensorAdd(p, Engine.TensorMultiplyScalar(momentumRate, dt));
 
-                int n = _stateDim / 2;
+                var half = Engine.TensorConcatenate(new[] { q, p }, 1);
+                var positionRate = Engine.TensorSlice(SymplecticGradient(half), new[] { 0, 0 }, new[] { 1, n });
+                q = Engine.TensorAdd(q, Engine.TensorMultiplyScalar(positionRate, dt));
 
-                // Step 1: update momentum using current position
-                T[] derivative = ComputeTimeDerivative(currentState);
-                for (int i = n; i < _stateDim; i++)
-                {
-                    currentState[i] = NumOps.Add(currentState[i], NumOps.Multiply(dt, derivative[i]));
-                }
-
-                // Step 2: update position using updated momentum
-                derivative = ComputeTimeDerivative(currentState);
-                for (int i = 0; i < n; i++)
-                {
-                    currentState[i] = NumOps.Add(currentState[i], NumOps.Multiply(dt, derivative[i]));
-                }
-
-                for (int i = 0; i < _stateDim; i++)
-                {
-                    trajectory[step + 1, i] = currentState[i];
-                }
+                current = Engine.TensorConcatenate(new[] { q, p }, 1);
+                trajectory.Add(current);
             }
 
-            return trajectory;
+            return Engine.TensorConcatenate(trajectory.ToArray(), 0);
+        }
+
+        private Tensor<T> AsRow(Vector<T> state)
+        {
+            return Engine.Reshape(Tensor<T>.FromVector(state), new[] { 1, state.Length });
         }
 
         /// <summary>
@@ -475,7 +434,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </summary>
         public override bool SupportsTraining => true;
 
-        private void ValidateState(T[] state, string paramName)
+        private void ValidateState(Vector<T> state, string paramName)
         {
             if (state == null)
             {
@@ -487,47 +446,5 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentException($"State length must be {_stateDim}.", paramName);
             }
         }
-
-        private T[,] ComputeHamiltonianGradient(T[] state)
-        {
-            try
-            {
-                return NeuralNetworkDerivatives<T>.ComputeDerivatives(this, state, 1).FirstDerivatives
-                    ?? new T[1, state.Length];
-            }
-            catch (InvalidOperationException)
-            {
-                return ComputeGradientFiniteDifference(state);
-            }
-            catch (NotSupportedException)
-            {
-                return ComputeGradientFiniteDifference(state);
-            }
-        }
-
-        private T[,] ComputeGradientFiniteDifference(T[] state)
-        {
-            T epsilon = NumOps.FromDouble(1e-5);
-            T twoEpsilon = NumOps.FromDouble(2e-5);
-            var gradient = new T[1, _stateDim];
-            var perturbed = new T[state.Length];
-            Array.Copy(state, perturbed, state.Length);
-
-            for (int i = 0; i < _stateDim; i++)
-            {
-                T original = perturbed[i];
-                perturbed[i] = NumOps.Add(original, epsilon);
-                T plus = ComputeHamiltonian(perturbed);
-                perturbed[i] = NumOps.Subtract(original, epsilon);
-                T minus = ComputeHamiltonian(perturbed);
-                gradient[0, i] = NumOps.Divide(NumOps.Subtract(plus, minus), twoEpsilon);
-                perturbed[i] = original;
-            }
-
-            return gradient;
-        }
     }
 }
-
-
-

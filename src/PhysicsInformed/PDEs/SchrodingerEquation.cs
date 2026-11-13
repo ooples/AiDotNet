@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -98,6 +99,25 @@ namespace AiDotNet.PhysicsInformed.PDEs
             var zero = MathHelper.GetNumericOperations<T>().Zero;
             return _ => zero;
         }
+
+        /// <inheritdoc/>
+        /// <remarks>The real and imaginary residuals [N, 2]: psi_r,t + 1/2 psi_i,xx - V psi_i and psi_i,t - 1/2 psi_r,xx + V psi_r, so the loss is their mean square rather than the square of the point-wise sum of squares.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            var x = Coordinate(inputs, 0);
+            var potential = new Tensor<T>(x.ToArray().Select(_potentialFunction).ToArray(), x.Shape.ToArray());
+            var psiR = Output(outputs, 0);
+            var psiI = Output(outputs, 1);
+            var real = e.TensorSubtract(
+                e.TensorAdd(D1(derivatives, 0, 1), e.TensorMultiplyScalar(D2(derivatives, 1, 0, 0), _halfCoeff)),
+                e.TensorMultiply(potential, psiI));
+            var imaginary = e.TensorAdd(
+                e.TensorSubtract(D1(derivatives, 1, 1), e.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), _halfCoeff)),
+                e.TensorMultiply(potential, psiR));
+            return e.TensorStack(new[] { real, imaginary }, 1);
+        }
+
 
         /// <inheritdoc/>
         /// <remarks>

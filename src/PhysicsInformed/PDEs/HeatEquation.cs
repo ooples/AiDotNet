@@ -48,6 +48,14 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        /// <remarks>The residual u_t - alpha u_xx.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            return e.TensorSubtract(D1(derivatives, 0, 1), e.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), _thermalDiffusivity));
+        }
+
+        /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateSecondDerivatives(derivatives);

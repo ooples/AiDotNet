@@ -4446,6 +4446,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.HamiltonianDynamics)
             proposedTarget = CreateCanonicalHamiltonianDynamicsTarget(input);
+        else if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.LagrangianDynamics)
+            proposedTarget = CreateCanonicalLagrangianDynamicsTarget(input);
 
         return objectiveProvider.ResolveTrainingTarget(input, proposedTarget);
     }
@@ -4477,6 +4479,36 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 target[offset + coordinate] = input[offset + coordinateCount + coordinate];
                 target[offset + coordinateCount + coordinate] =
                     NumOps.Negate(input[offset + coordinate]);
+            }
+        }
+
+        return target;
+    }
+
+    /// <summary>
+    /// Creates the exact accelerations of L(q,q̇)=0.5*(||q̇||^2-||q||^2), the harmonic oscillator:
+    /// q̈=-q for each state [q, q̇]. This gives LNN fixtures a valid dynamics target [batch, n].
+    /// </summary>
+    private static Tensor<T> CreateCanonicalLagrangianDynamicsTarget(Tensor<T> input)
+    {
+        if (input.Rank < 1 || input.Shape[^1] <= 0 || input.Shape[^1] % 2 != 0)
+        {
+            throw new InvalidOperationException(
+                $"Lagrangian dynamics require a positive even state feature dimension; " +
+                $"got [{string.Join(",", input.Shape)}].");
+        }
+
+        int stateDimension = input.Shape[^1];
+        int coordinateCount = stateDimension / 2;
+        int sampleCount = input.Length / stateDimension;
+        var target = new Tensor<T>(new[] { sampleCount, coordinateCount });
+
+        for (int sample = 0; sample < sampleCount; sample++)
+        {
+            for (int coordinate = 0; coordinate < coordinateCount; coordinate++)
+            {
+                target[sample * coordinateCount + coordinate] =
+                    NumOps.Negate(input[sample * stateDimension + coordinate]);
             }
         }
 
