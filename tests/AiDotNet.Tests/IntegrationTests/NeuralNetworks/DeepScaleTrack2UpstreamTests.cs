@@ -195,6 +195,22 @@ public sealed class DeepScaleTrack2UpstreamTests
         var unchanged = zero.Forward(input);
         Assert.Equal(1.0, unchanged.GetFlat(0), 12);
         Assert.Equal(0.0, unchanged.GetFlat(1), 12);
+
+        // Also verify Compact WY (k > 1) when zero reflectors are interleaved with tiny (1e-10) and normal reflectors:
+        // H_0 = small x-reflection ([1e-10, 0, 0]), H_1 = zero (identity), H_2 = y-reflection ([0, 2.5, 0]), H_3 = zero (identity).
+        var input3 = new Tensor<double>(new[] { 1, 3 });
+        input3.SetFlat(0, 1.0);
+        input3.SetFlat(1, 2.0);
+        input3.SetFlat(2, 3.0);
+
+        var mixedChain = new HouseholderSubspaceLayer<double>(3, 4, transpose: false);
+        for (int i = 0; i < mixedChain.Reflectors.Length; i++) mixedChain.Reflectors.SetFlat(i, 0.0);
+        mixedChain.Reflectors.SetFlat(0 * 3 + 0, 1e-10);
+        mixedChain.Reflectors.SetFlat(2 * 3 + 1, 2.5);
+        var mixedOut = mixedChain.Forward(input3);
+        Assert.Equal(-1.0, mixedOut.GetFlat(0), 12);
+        Assert.Equal(-2.0, mixedOut.GetFlat(1), 12);
+        Assert.Equal(3.0, mixedOut.GetFlat(2), 12);
     }
 
     [Theory]

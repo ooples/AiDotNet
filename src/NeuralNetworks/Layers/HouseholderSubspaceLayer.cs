@@ -97,6 +97,36 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         };
     }
 
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity)> s_compactWyMasks = new();
+
+    private static (Tensor<T> StrictUpperTwo, Tensor<T> Identity) GetOrCreateCompactWyMasks(int k)
+    {
+        return s_compactWyMasks.GetOrAdd(k, static dim =>
+        {
+            using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+            var ops = MathHelper.GetNumericOperations<T>();
+            T zero = ops.Zero;
+            T one = ops.One;
+            T twoVal = ops.FromDouble(2.0);
+            var upperData = new T[dim * dim];
+            var idData = new T[dim * dim];
+            for (int r = 0; r < dim; r++)
+            {
+                for (int c = 0; c < dim; c++)
+                {
+                    int idx = r * dim + c;
+                    upperData[idx] = r < c ? twoVal : zero;
+                    idData[idx] = r == c ? one : zero;
+                }
+            }
+
+            return (new Tensor<T>([dim, dim], new Vector<T>(upperData)), new Tensor<T>([dim, dim], new Vector<T>(idData)));
+        });
+    }
+
     /// <summary>
     /// Applies the matrix-free product of Householder reflections stored in <paramref name="reflectors"/>
     /// (<c>[k, D]</c>) to <paramref name="input"/> (<c>[..., D]</c>) using pure tape-tracked <see cref="IEngine"/> ops.
@@ -130,21 +160,46 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             ? input
             : engine.Reshape(input, [rowCount, d]);
 
-        int start = transpose ? k - 1 : 0;
-        int end = transpose ? -1 : k;
-        int step = transpose ? -1 : 1;
-
-        for (int j = start; j != end; j += step)
+        if (k == 1)
         {
-            Tensor<T> uRow = k == 1
-                ? reflectors
-                : engine.TensorSlice(reflectors, [j, 0], [1, d]);
-            Tensor<T> uCol = engine.TensorTranspose(uRow);
+            Tensor<T> uCol = engine.TensorTranspose(reflectors);
             Tensor<T> proj = engine.TensorMatMul(current, uCol);
-            Tensor<T> normSq = engine.ReduceSum(engine.TensorMultiply(uRow, uRow), null);
+            Tensor<T> normSq = engine.ReduceSum(engine.TensorMultiply(reflectors, reflectors), null);
             Tensor<T> denom = engine.TensorMax(normSq, normFloor);
             Tensor<T> scaledProj = engine.TensorDivide(engine.TensorMultiplyScalar(proj, two), denom);
-            Tensor<T> outer = engine.TensorMatMul(scaledProj, uRow);
+            Tensor<T> outer = engine.TensorMatMul(scaledProj, reflectors);
+            current = engine.TensorSubtract(current, outer);
+        }
+        else
+        {
+            // Exact Compact WY representation (Schreiber & Van Loan 1989):
+            // Normalize rows by sqrt(max(||u_j||_2^2, normFloor)) so H_j = I - 2 * uHat_j * uHat_j^T holds across
+            // normal, subnormal, and identically zero reflectors without overflow. Then H_0 ... H_{k-1} = I - UHat * T * UHat^T
+            // where N = 2 * strict_triu(UHat^T * UHat) is nilpotent (N^k == 0) and T = 2 * sum_{p=0}^{k-1} (-N)^p.
+            var (strictUpperTwo, identityK) = GetOrCreateCompactWyMasks(k);
+            Tensor<T> rowSq = engine.ReduceSum(engine.TensorMultiply(reflectors, reflectors), [1], keepDims: true);
+            Tensor<T> denom = engine.TensorMax(rowSq, normFloor);
+            Tensor<T> invNorm = engine.TensorReciprocal(engine.TensorSqrt(denom));
+            Tensor<T> uHat = engine.TensorMultiply(reflectors, invNorm);
+            Tensor<T> uHatCol = engine.TensorTranspose(uHat);
+            Tensor<T> gram = engine.TensorMatMul(uHat, uHatCol);
+            Tensor<T> nilpotent = engine.TensorMultiply(gram, strictUpperTwo);
+
+            Tensor<T> series = identityK;
+            for (int p = 1; p < k; p++)
+            {
+                series = engine.TensorSubtract(identityK, engine.TensorMatMul(nilpotent, series));
+            }
+
+            Tensor<T> tMat = engine.TensorMultiplyScalar(series, two);
+            if (transpose)
+            {
+                tMat = engine.TensorTranspose(tMat);
+            }
+
+            Tensor<T> proj = engine.TensorMatMul(current, uHatCol);
+            Tensor<T> mixed = engine.TensorMatMul(proj, tMat);
+            Tensor<T> outer = engine.TensorMatMul(mixed, uHat);
             current = engine.TensorSubtract(current, outer);
         }
 

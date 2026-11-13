@@ -758,23 +758,27 @@ internal static class LocalObjectiveGradientComputer<T>
                 {
                     using var suspend = TensorScope.Suspend();
                     using var noGrad = new NoGradScope<T>();
-                    targetMap[kv.Key] = engine.TensorAdd(existing, kv.Value);
+                    engine.TensorAddInPlace(existing, kv.Value);
                 }
             }
         }
 
         Tensor<T> blockInput = input;
+        Tensor<T>? ownedBlockInput = null;
         Tensor<T>? finalOutputObjective = null;
         Tensor<T>? finalPrediction = null;
         int totalLocals = 0;
 
+        try
+        {
         for (int b = 0; b < blocks.Count; b++)
         {
             var block = blocks[b];
             bool isTerminalBlock = b == blocks.Count - 1;
+            Tensor<T>? nextOwnedBlockInput = null;
 
-            using var blockScope = TensorScope.Begin();
             using var blockTape = new GradientTape<T>();
+            using var blockScope = TensorScope.Begin();
 
             var hiddenOut = new Tensor<T>?[layers.Count];
             var current = blockInput;
@@ -1065,9 +1069,10 @@ internal static class LocalObjectiveGradientComputer<T>
             }
             else
             {
-                var nextInput = engine.StopGradient(current);
-                blockScope.Keep(nextInput);
-                blockInput = nextInput;
+                using (TensorScope.Suspend())
+                {
+                    nextOwnedBlockInput = engine.StopGradient(current);
+                }
             }
 
             for (int k = block.StartHiddenK; k <= block.EndHiddenK; k++)
@@ -1101,6 +1106,18 @@ internal static class LocalObjectiveGradientComputer<T>
                 blockTape.Retain(finalPrediction!);
                 blockScope.Keep(finalPrediction!);
             }
+
+            ownedBlockInput?.Dispose();
+            ownedBlockInput = nextOwnedBlockInput;
+            if (nextOwnedBlockInput is not null)
+                blockInput = nextOwnedBlockInput;
+        }
+        }
+        finally
+        {
+            ownedBlockInput?.Dispose();
+            cachedDetachedSampledWeight?.Dispose();
+            cachedDetachedSampledBias?.Dispose();
         }
 
         rule.ApplyAuxiliaryGradients(auxGrads);

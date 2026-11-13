@@ -338,6 +338,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     // device or host, persist until its next step republishes them, so those are referenced instead
     // (TryPublishDeviceGradients, TryReferenceHostGradients).
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
+    private Dictionary<Tensor<T>, Tensor<T>>? _publishedDeviceGradBuffers;
 
     /// <summary>
     /// Gets the input shape for this layer.
@@ -7698,12 +7699,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             return true;
         }
         // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
-        // when it ends; the published gradient is read after that, so the tape must keep it.
+        // when it ends; the published gradient is read after that, so reuse persistent per-parameter snapshot buffers
+        // outside TensorScope/TensorArena to avoid recurring LOH allocations per training step.
+        using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var buffers = _publishedDeviceGradBuffers
+            ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
         foreach (var (parameter, gradient) in sources)
         {
-            var copy = new Tensor<T>(gradient._shape);
-            Engine.TensorCopy(gradient, copy);
+            if (!buffers.TryGetValue(parameter, out var copy) || copy.Length != gradient.Length)
+            {
+                copy?.Dispose();
+                copy = new Tensor<T>((int[])gradient._shape.Clone());
+                buffers[parameter] = copy;
+            }
+            var srcView = copy._shape.AsSpan().SequenceEqual(gradient._shape) ? gradient : Engine.Reshape(gradient, copy._shape);
+            Engine.TensorCopy(srcView, copy);
             tape?.Retain(copy);
             owned[parameter] = copy;
             matched += gradient.Length;
@@ -10119,6 +10132,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
+            }
+
+            if (_publishedDeviceGradBuffers is not null)
+            {
+                foreach (var buf in _publishedDeviceGradBuffers.Values)
+                    buf.Dispose();
+                _publishedDeviceGradBuffers.Clear();
+                _publishedDeviceGradBuffers = null;
             }
         }
     }
