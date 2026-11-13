@@ -484,8 +484,8 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         // Tacotron 2's 8 kHz mel ceiling assumes 22.05 kHz audio; at lower rates the bands stop at Nyquist.
         var spectrogram = new TacotronSpectrogram(SampleRate, TargetFftSize, HopSize, TargetWindowSize, MelChannels,
             maxFrequency: Math.Min(8000.0, SampleRate / 2.0));
-        double[]? audio = sample.Audio is null ? null : ToDoubles(sample.Audio);
-        double[,]? magnitude = audio is null ? null : spectrogram.Magnitude(PreEmphasize(audio));
+        Tensor<T>? audio = sample.Audio is null ? null : Engine.Reshape(sample.Audio, new[] { sample.Audio.Length });
+        Tensor<T>? magnitude = audio is null ? null : spectrogram.Magnitude(PreEmphasize(audio));
 
         Tensor<T> mel;
         if (sample.Mel is not null)
@@ -496,30 +496,20 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         {
             if (magnitude is null)
                 throw new ArgumentException("Supply the recording or its mel spectrogram.", nameof(sample));
-            var logMel = spectrogram.LogMel(magnitude);
-            mel = new Tensor<T>(new[] { logMel.GetLength(0), logMel.GetLength(1) });
-            for (int f = 0; f < logMel.GetLength(0); f++)
-                for (int m = 0; m < logMel.GetLength(1); m++)
-                    mel[f, m] = NumOps.FromDouble(logMel[f, m]);
+            mel = spectrogram.LogMelOfMagnitude(magnitude);
         }
         int frames = mel.Shape[0];
 
-        double[]? pitch = sample.Pitch;
+        Tensor<T>? pitch = sample.Pitch;
         if (pitch is null && audio is not null)
             pitch = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(SampleRate).EstimateF0(audio, spectrogram.FramePeriodMs).F0;
-        double[]? energy = sample.Energy;
+        Tensor<T>? energy = sample.Energy;
         if (energy is null && magnitude is not null)
             energy = spectrogram.Energy(magnitude);
 
         Tensor<T>? linear = sample.LinearSpectrogram;
         if (linear is null && magnitude is not null)
-        {
-            int rows = magnitude.GetLength(0), bins = magnitude.GetLength(1);
-            linear = new Tensor<T>(new[] { rows, bins });
-            for (int f = 0; f < rows; f++)
-                for (int k = 0; k < bins; k++)
-                    linear[f, k] = NumOps.FromDouble(Math.Log(Math.Max(spectrogram.ClipValue, magnitude[f, k])));
-        }
+            linear = Engine.TensorLog(Engine.TensorMax(magnitude, NumOps.FromDouble(spectrogram.ClipValue)));
 
         return new AcousticTargets<T>(mel, frames,
             pitch is null ? null : AlignToFrames(pitch, frames),
@@ -537,35 +527,31 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// <summary>Bins of the linear spectrogram target, <c>fftSize / 2 + 1</c>.</summary>
     public int LinearSpectrogramBins => TargetFftSize / 2 + 1;
 
-    private double[] PreEmphasize(double[] audio)
+    // y[0] = x[0], y[n] = x[n] − k x[n − 1].
+    private Tensor<T> PreEmphasize(Tensor<T> audio)
     {
         double k = PreEmphasis;
-        if (k == 0.0)
+        int length = audio.Length;
+        if (k == 0.0 || length < 2)
             return audio;
-        var y = new double[audio.Length];
-        if (audio.Length > 0) y[0] = audio[0];
-        for (int n = 1; n < audio.Length; n++) y[n] = audio[n] - k * audio[n - 1];
-        return y;
+        var current = Engine.TensorSlice(audio, new[] { 1 }, new[] { length - 1 });
+        var previous = Engine.TensorSlice(audio, new[] { 0 }, new[] { length - 1 });
+        var emphasized = Engine.TensorSubtract(current, Engine.TensorMultiplyScalar(previous, NumOps.FromDouble(k)));
+        return Engine.TensorConcatenate(new[] { Engine.TensorSlice(audio, new[] { 0 }, new[] { 1 }), emphasized }, 0);
     }
 
     /// <summary>FFT and window size used to derive targets from a recording (Tacotron 2: 1024).</summary>
     protected virtual int TargetFftSize => 1024;
 
-    private static double[] AlignToFrames(double[] values, int frames)
+    private Tensor<T> AlignToFrames(Tensor<T> values, int frames)
     {
-        if (values.Length == frames) return values;
+        int count = values.Length;
+        var flat = Engine.Reshape(values, new[] { count });
+        if (count == frames) return flat;
+        if (count == 0) throw new ArgumentException("Per-frame pitch or energy targets are empty.", nameof(values));
         // The pitch tracker and the STFT can disagree by a frame at the end; repeat or drop the last value.
-        var aligned = new double[frames];
-        for (int i = 0; i < frames; i++) aligned[i] = values[Math.Min(i, values.Length - 1)];
-        return aligned;
-    }
-
-    private double[] ToDoubles(Tensor<T> tensor)
-    {
-        var span = tensor.AsSpan();
-        var values = new double[span.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(span[i]);
-        return values;
+        var rows = Engine.TensorMin(Engine.TensorArange<int>(0, frames, 1), count - 1);
+        return Engine.TensorIndexSelect(flat, rows, 0);
     }
 
 
