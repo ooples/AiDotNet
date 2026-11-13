@@ -169,4 +169,44 @@ public class PreprocessingHelperCountTests
         Assert.Equal((double)vectors[0, 1], (double)vectors[1, 1], 1e-3);
         Assert.Equal(-(double)vectors[0, 0], (double)vectors[1, 0], 1e-3);
     }
+
+    // Linalg.Inv runs only in float and double, so a Half inverse threw NotSupportedException.
+    [Fact(Timeout = 60000)]
+    public async Task Inverse_Half_WidensTheInversionToFloat()
+    {
+        await Task.CompletedTask;
+        var matrix = new Tensor<Half>(new[] { (Half)2, (Half)1, (Half)0, (Half)4 }, new[] { 2, 2 });
+
+        var inverse = PreprocessingTensorOps.Inverse(matrix);
+
+        // [[2, 1], [0, 4]]^-1 = [[1/2, -1/8], [0, 1/4]].
+        Assert.Equal(0.5, (double)inverse[0, 0], 1e-3);
+        Assert.Equal(-0.125, (double)inverse[0, 1], 1e-3);
+        Assert.Equal(0.0, (double)inverse[1, 0], 1e-3);
+        Assert.Equal(0.25, (double)inverse[1, 1], 1e-3);
+    }
+
+    // Linalg.Svd runs only in float and double, so a Half SVD threw NotSupportedException.
+    [Fact(Timeout = 60000)]
+    public async Task Svd_Half_WidensTheDecompositionToFloat()
+    {
+        await Task.CompletedTask;
+        var matrix = new Tensor<Half>(new[] { (Half)3, (Half)0, (Half)4, (Half)5 }, new[] { 2, 2 });
+
+        var (u, s, vh) = PreprocessingTensorOps.Svd(matrix, false);
+
+        // A'A = [[25, 20], [20, 25]] has eigenvalues 45 and 5, so the singular values are sqrt(45) and sqrt(5).
+        Assert.Equal(Math.Sqrt(45.0), (double)s[0], 1e-2);
+        Assert.Equal(Math.Sqrt(5.0), (double)s[1], 1e-2);
+        double[] expected = { 3, 0, 4, 5 };
+        for (int i = 0; i < 2; i++)
+        {
+            for (int j = 0; j < 2; j++)
+            {
+                double rebuilt = (double)u[i, 0] * (double)s[0] * (double)vh[0, j]
+                    + (double)u[i, 1] * (double)s[1] * (double)vh[1, j];
+                Assert.Equal(expected[i * 2 + j], rebuilt, 2e-2);
+            }
+        }
+    }
 }

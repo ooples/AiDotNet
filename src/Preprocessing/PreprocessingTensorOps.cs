@@ -62,6 +62,39 @@ internal static class PreprocessingTensorOps
         return (values.Cast<T>(), vectors.Cast<T>());
     }
 
+    /// <summary>
+    /// Matrix inverse (<c>Linalg.Inv</c>, batched like it) for any T, widened like <see cref="Solve{T}"/>: the
+    /// library's Inv runs only in float and double.
+    /// </summary>
+    public static Tensor<T> Inverse<T>(Tensor<T> matrix)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return AiDotNet.Helpers.LinalgDispatch<T>.Inv(matrix);
+
+        return IsNarrowFloat<T>()
+            ? AiDotNet.Helpers.LinalgDispatch<float>.Inv(matrix.Cast<float>()).Cast<T>()
+            : AiDotNet.Helpers.LinalgDispatch<double>.Inv(matrix.Cast<double>()).Cast<T>();
+    }
+
+    /// <summary>
+    /// Singular value decomposition (<c>Linalg.Svd</c>: <c>input = U diag(S) Vh</c>, singular values descending) for
+    /// any T, widened like <see cref="Solve{T}"/>: the library's Svd runs only in float and double.
+    /// </summary>
+    public static (Tensor<T> U, Tensor<T> S, Tensor<T> Vh) Svd<T>(Tensor<T> input, bool fullMatrices = true)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return AiDotNet.Helpers.LinalgDispatch<T>.Svd(input, fullMatrices);
+
+        if (IsNarrowFloat<T>())
+        {
+            var (floatU, floatS, floatVh) = AiDotNet.Helpers.LinalgDispatch<float>.Svd(input.Cast<float>(), fullMatrices);
+            return (floatU.Cast<T>(), floatS.Cast<T>(), floatVh.Cast<T>());
+        }
+
+        var (u, singular, vh) = AiDotNet.Helpers.LinalgDispatch<double>.Svd(input.Cast<double>(), fullMatrices);
+        return (u.Cast<T>(), singular.Cast<T>(), vh.Cast<T>());
+    }
+
     /// <summary>Gathers the given columns of <paramref name="data"/> into a new matrix, in the given order.</summary>
     public static Matrix<T> SelectColumns<T>(Matrix<T> data, int[] columns)
     {
