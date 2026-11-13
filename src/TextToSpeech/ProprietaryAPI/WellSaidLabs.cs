@@ -56,13 +56,12 @@ public class WellSaidLabs<T> : CloudTtsClientBase<T>
     {
         var decoded = Mp3Decoder.Decode(body);
         int channels = decoded.Channels, n = decoded.Samples.Length / channels;
-        var wave = new Tensor<T>(new[] { 1, 1, n });
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            for (int c = 0; c < channels; c++) sum += decoded.Samples[i * channels + c];
-            wave[0, 0, i] = NumOps.FromDouble(sum / channels);
-        }
+        // The decoder's interleaved float frames [n, channels] as T, averaged over the channels.
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var interleaved = engine.TensorSlice(
+            new Tensor<float>(decoded.Samples, new[] { decoded.Samples.Length }).Cast<T>(), new[] { 0 }, new[] { n * channels });
+        var wave = engine.Reshape(
+            engine.ReduceMean(engine.Reshape(interleaved, new[] { n, channels }), new[] { 1 }, keepDims: false), new[] { 1, 1, n });
         if (decoded.SampleRate != Settings.SampleRate)
             wave = AudioHelper<T>.Resample(wave, decoded.SampleRate, Settings.SampleRate);
         return Mono(wave);
