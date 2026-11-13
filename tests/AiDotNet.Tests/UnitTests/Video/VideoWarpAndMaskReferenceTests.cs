@@ -366,7 +366,8 @@ public class VideoWarpAndMaskReferenceTests
         var model = new ProPainter<double>(Arch());
         Assert.Equal(new[] { 0.0, 1.0 }, TapeGradient(model.ApplyReLU, new[] { -1.5, 2.0 }));
 
-        // d/dx [x Phi(x)] at x = 1 is Phi(1) + phi(1) = 1.0833 (nn.GELU); the tanh form gives 1.0830.
-        Assert.Equal(1.0833, TapeGradient(model.ApplyGELU, new[] { 1.0 })[0], 3);
+        // d/dx [x Phi(x)] at x = 1 is Phi(1) + phi(1) = 1.08331547 (nn.GELU); the tanh form gives 1.0830, which six
+        // decimals tell apart (three rounded both to 1.083).
+        Assert.Equal(1.0833154706, TapeGradient(model.ApplyGELU, new[] { 1.0 })[0], 6);
     }
 }

@@ -130,16 +130,14 @@ public class IQVFIDistillation<T>
         if (teacherForward.Length != n || studentBackward.Length != n || teacherBackward.Length != n)
             throw new ArgumentException("All four flow fields must have the same element count.");
 
-        // The mask is derived from a FRAME while the flows are 2-channel fields, so it may be smaller.
-        // Tiling it keeps a single mask governing both flow channels, which is the intent: the gate is
-        // a per-pixel decision about reconstruction quality, not a per-channel one.
-        if (mask.Length == 0 || n % mask.Length != 0)
-            throw new ArgumentException(
-                $"A mask of {mask.Length} elements does not tile flows of {n} elements.", nameof(mask));
+        // Empty fields carry no error; return before any tensor work on empty intermediates.
+        if (n == 0) return 0.0;
 
-        int repeat = n / mask.Length;
+        // The mask is derived from a FRAME while the flows are 2-channel fields, so it may be smaller.
+        // Expanding it keeps a single mask governing both flow channels, which is the intent: the gate is
+        // a per-pixel decision about reconstruction quality, not a per-channel one.
         var engine = AiDotNetEngine.Current;
-        var m = engine.TensorRepeatInterleave(Flat(mask), repeat, 0);
+        var m = ExpandMaskToFlow(mask, studentForward);
         var error = engine.TensorAdd(
             engine.TensorAbs(engine.TensorSubtract(Flat(studentForward), Flat(teacherForward))),
             engine.TensorAbs(engine.TensorSubtract(Flat(studentBackward), Flat(teacherBackward))));
@@ -148,6 +146,73 @@ public class IQVFIDistillation<T>
         var gated = engine.TensorWhere(
             engine.TensorEquals(m, NumOps.Zero), engine.TensorZerosLike(error), engine.TensorMultiply(m, error));
         return NumOps.ToDouble(engine.TensorSum(gated)) / n;
+    }
+
+    /// <summary>
+    /// The mask laid over every element of <paramref name="flow"/>, flattened. Which flow elements share a mask
+    /// pixel depends on where the flow keeps its channel axis, so the expansion follows the shapes: a mask of the
+    /// flow's own size is used as is; one of equal rank broadcasts along its size-1 axes ([B,1,H,W] over channel-first
+    /// [B,2,H,W], [B,H,W,1] over channel-last [B,H,W,2]); a lower-rank mask is aligned with the flow's trailing axes
+    /// (channel-first, [H,W] over [2,H,W]) or, failing that, its leading axes (channel-last, [H,W] over [H,W,2]).
+    /// A flat mask shorter than a flat flow names no layout and is rejected.
+    /// </summary>
+    private static Tensor<T> ExpandMaskToFlow(Tensor<T> mask, Tensor<T> flow)
+    {
+        int n = flow.Length;
+        if (mask.Length == n)
+            return Flat(mask);
+
+        int[] maskShape = mask.Shape.ToArray();
+        int[] flowShape = flow.Shape.ToArray();
+        int[]? aligned = null;
+        if (mask.Length > 0 && maskShape.Length <= flowShape.Length)
+        {
+            int extra = flowShape.Length - maskShape.Length;
+            if (BroadcastsOver(maskShape, flowShape, extra))
+                aligned = Prepend(maskShape, extra);
+            else if (extra > 0 && BroadcastsOver(maskShape, flowShape, 0))
+                aligned = Append(maskShape, extra);
+        }
+
+        if (aligned is null)
+            throw new ArgumentException(
+                $"A mask shaped [{string.Join(", ", maskShape)}] does not broadcast over flows shaped " +
+                $"[{string.Join(", ", flowShape)}].", nameof(mask));
+
+        var repeats = new int[flowShape.Length];
+        for (int axis = 0; axis < repeats.Length; axis++)
+            repeats[axis] = flowShape[axis] / aligned[axis];
+        var engine = AiDotNetEngine.Current;
+        return Flat(engine.TensorTile(engine.Reshape(mask, aligned), repeats));
+    }
+
+    /// <summary>True when every axis of <paramref name="mask"/>, placed at <paramref name="offset"/> in
+    /// <paramref name="flow"/>, equals the flow's axis or is 1.</summary>
+    private static bool BroadcastsOver(int[] mask, int[] flow, int offset)
+    {
+        for (int axis = 0; axis < mask.Length; axis++)
+        {
+            if (mask[axis] != flow[axis + offset] && mask[axis] != 1)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static int[] Prepend(int[] shape, int count)
+    {
+        var result = new int[shape.Length + count];
+        for (int i = 0; i < count; i++) result[i] = 1;
+        Array.Copy(shape, 0, result, count, shape.Length);
+        return result;
+    }
+
+    private static int[] Append(int[] shape, int count)
+    {
+        var result = new int[shape.Length + count];
+        Array.Copy(shape, result, shape.Length);
+        for (int i = shape.Length; i < result.Length; i++) result[i] = 1;
+        return result;
     }
 
     /// <summary>

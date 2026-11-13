@@ -76,10 +76,11 @@ public static class FiganLoss<T>
                 $"Predicted ({predicted.Length}) and target ({target.Length}) must be the same length.",
                 nameof(predicted));
 
-        // ||a - b||_1, averaged so the scale does not depend on image size.
+        // ||a - b||_1, averaged so the scale does not depend on image size. Empty input carries no error and
+        // scores 0, as the per-element loops did (and as IQVFIDistillation.MeanAbsoluteDifference does).
         var engine = AiDotNetEngine.Current;
         double l1 = predicted.Length == 0
-            ? double.NaN
+            ? 0.0
             : Ops.ToDouble(engine.Mean(engine.Abs(engine.Subtract(predicted, target))));
 
         if (predictedFeatures is null || targetFeatures is null) return l1;
@@ -91,7 +92,7 @@ public static class FiganLoss<T>
 
         // lambda_VGG ||gamma(a) - gamma(b)||_2^2 — SQUARED, unlike the L1 pixel term.
         // Differences scaled by their peak before squaring so the mean square cannot overflow T
-        double squared = double.NaN;
+        double squared = 0.0;
         if (predictedFeatures.Length > 0)
         {
             var difference = engine.Subtract(predictedFeatures, targetFeatures);

@@ -47,8 +47,6 @@ namespace AiDotNet.Video.Prediction;
 /// </remarks>
 public static class McnetLoss<T>
 {
-    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
-
     /// <summary>The paper's image-loss weight alpha.</summary>
     public const double ImageWeight = 1.0;
 
@@ -86,18 +84,21 @@ public static class McnetLoss<T>
             return double.NaN;
         }
 
+        // In double: the result is a double, and a float difference such as 3e38 - (-3e38) overflows T to infinity.
         var engine = AiDotNetEngine.Current;
-        var d = engine.TensorAbs(engine.TensorSubtract(predicted.AsTensor(), target.AsTensor()));
+        var d = engine.TensorAbs(engine.TensorSubtract(
+            TensorCopyHelper.CastLogical<T, double>(predicted.AsTensor()),
+            TensorCopyHelper.CastLogical<T, double>(target.AsTensor())));
         return MeanPower(engine, d, p);
     }
 
     /// <summary>
     /// Mean of <c>|v|^exponent</c> over the non-negative values <paramref name="magnitudes"/>, with the values
-    /// divided by their peak before the power so a large exponent cannot overflow <typeparamref name="T"/>.
+    /// divided by their peak before the power so a large exponent cannot overflow.
     /// </summary>
-    private static double MeanPower(IEngine engine, Tensor<T> magnitudes, double exponent)
+    private static double MeanPower(IEngine engine, Tensor<double> magnitudes, double exponent)
     {
-        double peak = Ops.ToDouble(engine.TensorMaxValue(magnitudes));
+        double peak = engine.TensorMaxValue(magnitudes);
         if (double.IsNaN(peak))
         {
             return double.NaN;
@@ -109,9 +110,9 @@ public static class McnetLoss<T>
             return exponent == 0 ? 1.0 : 0.0;
         }
 
-        var unit = engine.TensorMultiplyScalar(magnitudes, Ops.FromDouble(1.0 / peak));
-        var powered = engine.TensorPow(unit, Ops.FromDouble(exponent));
-        return Ops.ToDouble(engine.TensorMean(powered)) * Math.Pow(peak, exponent);
+        var unit = engine.TensorMultiplyScalar(magnitudes, 1.0 / peak);
+        var powered = engine.TensorPow(unit, exponent);
+        return engine.TensorMean(powered) * Math.Pow(peak, exponent);
     }
 
     /// <summary>
@@ -140,20 +141,23 @@ public static class McnetLoss<T>
                 nameof(predicted));
 
         var engine = AiDotNetEngine.Current;
-        var y = engine.Reshape(engine.TensorNarrow(target.AsTensor(), 0, 0, height * width), new[] { height, width });
-        var z = engine.Reshape(engine.TensorNarrow(predicted.AsTensor(), 0, 0, height * width), new[] { height, width });
+        // In double, as in Lp: differences of finite T values can overflow T.
+        var y = engine.Reshape(TensorCopyHelper.CastLogical<T, double>(
+            engine.TensorNarrow(target.AsTensor(), 0, 0, height * width)), new[] { height, width });
+        var z = engine.Reshape(TensorCopyHelper.CastLogical<T, double>(
+            engine.TensorNarrow(predicted.AsTensor(), 0, 0, height * width)), new[] { height, width });
 
         // |(|y_i,j - y_i-1,j|) - (|z_i,j - z_i-1,j|)| along an axis, the vertical then the horizontal term
-        Tensor<T> GradientGap(int axis)
+        Tensor<double> GradientGap(int axis)
         {
             int extent = axis == 0 ? height : width;
-            Tensor<T> Gradient(Tensor<T> image) => engine.TensorAbs(engine.TensorSubtract(
+            Tensor<double> Gradient(Tensor<double> image) => engine.TensorAbs(engine.TensorSubtract(
                 engine.TensorNarrow(image, axis, 1, extent - 1), engine.TensorNarrow(image, axis, 0, extent - 1)));
             return engine.TensorAbs(engine.TensorSubtract(Gradient(y), Gradient(z)));
         }
 
         // Horizontal gradients are the paper's second term; omitting it leaves blur in j unpenalised.
-        var parts = new List<Tensor<T>>(2);
+        var parts = new List<Tensor<double>>(2);
         if (height > 1)
         {
             parts.Add(engine.Reshape(GradientGap(0), new[] { (height - 1) * width }));

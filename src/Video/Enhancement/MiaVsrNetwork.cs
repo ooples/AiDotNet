@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -746,8 +747,8 @@ internal sealed class MiaVsrNetwork<T>
             var region = _engine.TensorNarrow(_engine.TensorNarrow(_engine.TensorNarrow(
                 _engine.TensorNarrow(flow, 0, 0, g.Batch), 1, 0, 2), 2, 0, g.Height), 3, 0, g.Width);
             var finite = _engine.TensorWhere(_engine.TensorIsFinite(region), region, _engine.TensorZerosLike(region));
-            var dx = _engine.TensorNarrow(finite, 1, 0, 1).Cast<double>().ToArray();
-            var dy = _engine.TensorNarrow(finite, 1, 1, 1).Cast<double>().ToArray();
+            var dx = TensorCopyHelper.CastLogical<T, double>(_engine.TensorNarrow(finite, 1, 0, 1)).ToArray();
+            var dy = TensorCopyHelper.CastLogical<T, double>(_engine.TensorNarrow(finite, 1, 1, 1)).ToArray();
             return (dx, dy);
         }
 
@@ -1006,7 +1007,6 @@ internal sealed class MiaVsrNetwork<T>
 
         private static Tensor<T> LogisticNoise(int[] shape, Random random)
         {
-            var numOps = MathHelper.GetNumericOperations<T>();
             int length = 1;
             foreach (int extent in shape) length *= extent;
 
@@ -1017,12 +1017,12 @@ internal sealed class MiaVsrNetwork<T>
                 draws[i] = random.NextDouble();
             }
 
-            // logit(u) with u kept inside (1e-10, 1 - 1e-10)
+            // logit(u) with u kept inside (1e-10, 1 - 1e-10), computed in double and cast once finished: in a float
+            // the upper bound rounds to 1, a draw above 1 - 6e-8 leaves a zero complement, and the noise is infinite.
             var engine = AiDotNetEngine.Current;
-            var u = new Tensor<double>(draws, shape).Cast<T>();
-            u = engine.TensorClamp(u, numOps.FromDouble(1e-10), numOps.FromDouble(1 - 1e-10));
+            var u = engine.TensorClamp(new Tensor<double>(draws, shape), 1e-10, 1 - 1e-10);
             var complement = engine.TensorSubtract(engine.TensorOnesLike(u), u);
-            return engine.TensorSubtract(engine.TensorLog(u), engine.TensorLog(complement));
+            return engine.TensorSubtract(engine.TensorLog(u), engine.TensorLog(complement)).Cast<T>();
         }
 
         private static Tensor<T> Blend(IEngine engine, Tensor<T> fresh, Tensor<T> previous, Tensor<T> keep)

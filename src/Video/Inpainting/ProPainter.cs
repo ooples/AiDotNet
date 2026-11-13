@@ -620,6 +620,9 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         return Engine.TensorAdd(a, b);
     }
 
+    /// <summary>Query positions per attention chunk; bounds each head's transient scores to chunk x S.</summary>
+    private const int AttentionQueryChunk = 1024;
+
     /// <summary>
     /// Applies layer normalization (standardization) to input tensor.
     /// </summary>
@@ -636,14 +639,17 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
         var centered = Engine.TensorSubtract(
             input, Engine.TensorBroadcastTo(Engine.ReduceMean(input, sampleAxes, true), input._shape));
         var peak = Engine.ReduceMax(Engine.TensorAbs(centered), sampleAxes, true);
-        var safePeak = Engine.TensorWhere(
-            Engine.TensorGreaterThan(peak, NumOps.Zero), peak, Engine.TensorOnesLike(peak));
-        var unit = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(safePeak, input._shape));
-        var variance = Engine.TensorMultiply(
-            Engine.ReduceMean(Engine.TensorMultiply(unit, unit), sampleAxes, true),
-            Engine.TensorMultiply(safePeak, safePeak));
-        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-5)));
-        return Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, input._shape));
+        // The whole calculation stays in scaled units, x/s over sqrt(var/s^2 + eps/s^2), with s = max(peak, 1):
+        // squaring the peak itself overflows a float for a peak near 1e20 even where the variance is representable.
+        var scale = Engine.TensorWhere(
+            Engine.TensorGreaterThan(peak, NumOps.One), peak, Engine.TensorOnesLike(peak));
+        var unit = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(scale, input._shape));
+        var inverseScale = Engine.TensorReciprocal(scale);
+        var scaledEpsilon = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(inverseScale, inverseScale), NumOps.FromDouble(1e-5));
+        var std = Engine.TensorSqrt(Engine.TensorAdd(
+            Engine.ReduceMean(Engine.TensorMultiply(unit, unit), sampleAxes, true), scaledEpsilon));
+        return Engine.TensorDivide(unit, Engine.TensorBroadcastTo(std, input._shape));
     }
 
     /// <summary>
@@ -682,11 +688,22 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
             var kh = Engine.TensorNarrow(k, 1, headStart, headChannels);
             var vh = Engine.TensorNarrow(v, 1, headStart, headChannels);
 
-            // scores[i, j] = scale * sum_c q[c, i] k[c, j], softmax over j, out[c, i] = sum_j p[i, j] v[c, j]
-            var scores = Engine.TensorMultiplyScalar(
-                Engine.BatchMatMul(Engine.TensorPermute(qh, [0, 2, 1]), kh), scale);
-            var probabilities = Engine.TensorSoftmax(scores, 2);
-            heads.Add(Engine.BatchMatMul(vh, Engine.TensorPermute(probabilities, [0, 2, 1])));
+            // scores[i, j] = scale * sum_c q[c, i] k[c, j], softmax over j, out[c, i] = sum_j p[i, j] v[c, j].
+            // Queries go in chunks: each row's softmax is independent, so the result is the same, but the scores,
+            // probabilities and their permuted copy are [B, chunk, S] instead of [B, S, S] (S = H/8 x W/8 reaches
+            // ~32,400 at 1080p, where three S x S tensors are ~25 GB per head).
+            var chunks = new List<Tensor<T>>();
+            for (int start = 0; start < seqLen; start += AttentionQueryChunk)
+            {
+                int length = Math.Min(AttentionQueryChunk, seqLen - start);
+                var qc = Engine.TensorNarrow(qh, 2, start, length);
+                var scores = Engine.TensorMultiplyScalar(
+                    Engine.BatchMatMul(Engine.TensorPermute(qc, [0, 2, 1]), kh), scale);
+                var probabilities = Engine.TensorSoftmax(scores, 2);
+                chunks.Add(Engine.BatchMatMul(vh, Engine.TensorPermute(probabilities, [0, 2, 1])));
+            }
+
+            heads.Add(chunks.Count == 1 ? chunks[0] : Engine.TensorConcatenate(chunks.ToArray(), 2));
             covered = headStart + headChannels;
         }
 

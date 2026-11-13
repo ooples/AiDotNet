@@ -216,31 +216,40 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     /// </summary>
     public Tensor<T> CompositeWithBackground(Tensor<T> foreground, Tensor<T> alpha, Tensor<T> background)
     {
-        int h = foreground.Rank == 4 ? foreground.Shape[2] : foreground.Shape[1];
-        int w = foreground.Rank == 4 ? foreground.Shape[3] : foreground.Shape[2];
+        if (foreground is null) throw new ArgumentNullException(nameof(foreground));
+        if (alpha is null) throw new ArgumentNullException(nameof(alpha));
+        if (background is null) throw new ArgumentNullException(nameof(background));
+        if (foreground.Rank != 3 && foreground.Rank != 4)
+            throw new ArgumentException("The foreground must be [C, H, W] or [B, C, H, W].", nameof(foreground));
 
-        // comp = a * fg + (1 - a) * bg = bg + a * (fg - bg) on the first sample's RGB; anything else stays zero
-        Tensor<T> Rgb(Tensor<T> t) => Engine.TensorNarrow(
-            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(t, 0, 0, 1), 1, 0, 3), 2, 0, h), 3, 0, w);
-        var bg = Rgb(background);
-        var a = Engine.TensorBroadcastTo(
-            Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(alpha, 0, 0, 1), 1, 0, 1), 2, 0, h), 3, 0, w),
-            [1, 3, h, w]);
-        var composite = Engine.TensorAdd(bg, Engine.TensorMultiply(a, Engine.TensorSubtract(Rgb(foreground), bg)));
+        // comp = a * fg + (1 - a) * bg = bg + a * (fg - bg), for every sample and every channel. Compositing only the
+        // first sample's RGB returned zeros for the rest of a batch.
+        bool batched = foreground.Rank == 4;
+        var fg = batched ? foreground : Engine.Reshape(foreground, [1, foreground.Shape[0], foreground.Shape[1], foreground.Shape[2]]);
+        int batch = fg.Shape[0], channels = fg.Shape[1], h = fg.Shape[2], w = fg.Shape[3];
+        int[] full = [batch, channels, h, w];
 
-        int channels = foreground.Shape[1];
-        if (channels > 3)
+        var a = Engine.TensorBroadcastTo(Fit(alpha, 1, nameof(alpha)), full);
+        var bg = Engine.TensorBroadcastTo(Fit(background, channels, nameof(background)), full);
+        var composite = Engine.TensorAdd(bg, Engine.TensorMultiply(a, Engine.TensorSubtract(fg, bg)));
+        return batched ? composite : Engine.Reshape(composite, [channels, h, w]);
+
+        // A rank-3 or rank-4 tensor as [batch or 1, channels, h, w]: the leading channels and the top-left h x w,
+        // so a larger background is cropped as before.
+        Tensor<T> Fit(Tensor<T> t, int wanted, string name)
         {
-            composite = Engine.TensorConcatenate(new[] { composite, new Tensor<T>([1, channels - 3, h, w]) }, 1);
-        }
+            if (t.Rank != 3 && t.Rank != 4)
+                throw new ArgumentException($"{name} must be [C, H, W] or [B, C, H, W].", name);
+            var t4 = t.Rank == 4 ? t : Engine.Reshape(t, [1, t.Shape[0], t.Shape[1], t.Shape[2]]);
+            if ((t4.Shape[0] != 1 && t4.Shape[0] != batch) || t4.Shape[1] < wanted || t4.Shape[2] < h || t4.Shape[3] < w)
+            {
+                throw new ArgumentException(
+                    $"{name} shaped [{string.Join(", ", t.Shape.ToArray())}] does not cover {batch} sample(s) of " +
+                    $"{wanted} channel(s) at {h}x{w}.", name);
+            }
 
-        if (foreground.Shape[0] > 1)
-        {
-            composite = Engine.TensorConcatenate(
-                new[] { composite, new Tensor<T>([foreground.Shape[0] - 1, channels, h, w]) }, 0);
+            return Engine.TensorNarrow(Engine.TensorNarrow(Engine.TensorNarrow(t4, 1, 0, wanted), 2, 0, h), 3, 0, w);
         }
-
-        return composite;
     }
 
     /// <summary>
@@ -340,7 +349,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = input.Cast<float>().ToArray();
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -355,7 +364,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
+    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     #endregion
 

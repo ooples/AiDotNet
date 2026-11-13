@@ -9815,7 +9815,22 @@ public static partial class LayerHelper<T>
     /// are: 4 encoder convs; LR-ASPP conv, BatchNorm, gate conv; bottleneck ConvGRU ih, hh; per upsampling block
     /// conv, BatchNorm, ConvGRU ih, hh; output conv, BatchNorm, conv, BatchNorm; projection.
     /// </para>
+    /// <para>
+    /// The list is NOT a forward chain: encoder skips feed the upsampling blocks, the LR-ASPP gate reads the pooled
+    /// last encoder stage rather than the BatchNorm before it, and every ConvGRU also reads its recurrent state.
+    /// <c>RvmRecurrentNetwork</c> wires the layers in that graph.
+    /// </para>
+    /// <para><b>For Beginners:</b> RVM separates a person from the background in every frame of a video and
+    /// produces an alpha matte (how opaque each pixel of the person is) plus the person's colours. It remembers
+    /// what it saw in earlier frames through recurrent (ConvGRU) units, which keeps the matte steady from frame to
+    /// frame. This method builds those layers; the model connects them.</para>
     /// </remarks>
+    /// <param name="inputChannels">Channels of each input frame (3 for RGB).</param>
+    /// <param name="inputHeight">Frame height in pixels. The convolutions are resolution-independent; this
+    /// documents the expected size.</param>
+    /// <param name="inputWidth">Frame width in pixels, as for <paramref name="inputHeight"/>.</param>
+    /// <param name="numFeatures">Width of the first encoder stage; every other width scales with it.</param>
+    /// <returns>The 26 layers in the order listed above.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultRVMLayers(
         int inputChannels = 3,
         int inputHeight = 512,
@@ -9837,7 +9852,10 @@ public static partial class LayerHelper<T>
         int aspp = Even(nf * 4);
         yield return new ConvolutionalLayer<T>(aspp, 1, 1, 0, activationFunction: null, biasMode: BiasMode.Never);
         yield return new BatchNormalizationLayer<T>();
-        yield return new ConvolutionalLayer<T>(aspp, 1, 1, 0, activationFunction: Sigmoid());
+        // The gate reads the pooled last encoder stage (nf * 8 channels), not the BatchNorm output before it in this
+        // list: its depth is declared so no shape walk binds it to the ASPP width, and it is marked as a branch root.
+        yield return LayerGraphContract.FromDerivedInput(
+            ConvolutionalLayer<T>.WithInputDepth(nf * 8, aspp, 1, 1, 0, activationFunction: Sigmoid()), "encoder");
 
         // Bottleneck ConvGRU on half of the LR-ASPP channels
         yield return new ConvolutionalLayer<T>(aspp, 3, 1, 1, activationFunction: Sigmoid());

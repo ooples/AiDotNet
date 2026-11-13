@@ -299,6 +299,20 @@ public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
 
         int pixels = height * width;
 
+        // Check the layout before it is flattened: an element count alone let a [1,2,3,2] flow warp a [1,1,2,3]
+        // feature by reading its values in the wrong spatial order.
+        int flowRank = flow.Rank;
+        if (flowRank < 3 || flowRank > 4
+            || flow.Shape[flowRank - 3] != 2
+            || flow.Shape[flowRank - 2] != height || flow.Shape[flowRank - 1] != width
+            || (flowRank == 4 ? flow.Shape[0] : 1) < batch)
+        {
+            throw new ArgumentException(
+                $"A flow shaped [{string.Join(", ", flow.Shape.ToArray())}] does not warp a feature with {batch} " +
+                $"sample(s) of {height}x{width}; expected [{batch}, 2, {height}, {width}] (or [2, {height}, {width}]).",
+                nameof(flow));
+        }
+
         // The flow is read as its first batch x 2 planes, dx then dy.
         var flowPlanes = Engine.Reshape(
             Engine.TensorNarrow(Engine.Reshape(flow, [flow.Length]), 0, 0, batch * 2 * pixels),
