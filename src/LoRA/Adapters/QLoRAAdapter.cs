@@ -136,9 +136,22 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     /// <remarks>
     /// These scaling factors are used to map 4-bit quantized values back to full precision.
-    /// For double quantization, these are themselves quantized to save memory.
+    /// For double quantization, these are themselves quantized to save memory: the full-precision
+    /// array is released and <see cref="_quantizedScaleCodes"/> holds 8-bit codes instead.
     /// </remarks>
     private T[]? _quantizationScales;
+
+    /// <summary>
+    /// 8-bit codes of the block scales when double quantization is on (null otherwise). A block's scale
+    /// is <c>_scaleCodeOffset + code * _scaleCodeStep</c>.
+    /// </summary>
+    private byte[]? _quantizedScaleCodes;
+
+    /// <summary>Smallest block scale: the offset of the 8-bit scale codes.</summary>
+    private T _scaleCodeOffset = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>Step between consecutive 8-bit scale codes.</summary>
+    private T _scaleCodeStep = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Zero points for asymmetric quantization (one per quantization block).
@@ -288,22 +301,21 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
 
-        // For Dense layers, parameters are stored as [weights..., biases...]
+        // Parameters are stored as [weights..., biases...]. DenseLayer keeps its weights input-major and
+        // FullyConnectedLayer output-major; the quantized copy is always output-major
+        // ([outputSize, inputSize] row-major), the layout DequantizeWeights and the forward pass read.
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
         // Extract weights (skip biases)
-        T[] weights = new T[weightCount];
-        for (int i = 0; i < weightCount; i++)
-        {
-            weights[i] = baseParams[i];
-        }
+        T[] weights = ReadOutputMajorBaseWeights(baseParams, outputSize, inputSize).ToRowVector().ToArray();
 
         // Quantize weights in blocks
         int numBlocks = (weightCount + _quantizationBlockSize - 1) / _quantizationBlockSize;
         _quantizedWeights = new byte[(weightCount + 1) / 2]; // 2 values per byte
         _quantizationScales = new T[numBlocks];
+        _quantizedScaleCodes = null;
         _quantizationZeroPoints = new T[numBlocks];
 
         for (int blockIdx = 0; blockIdx < numBlocks; blockIdx++)
@@ -482,10 +494,33 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         T metaScale = NumOps.Divide(scaleRange, NumOps.FromDouble(255.0)); // Use 8-bit for scales
         T metaZeroPoint = minScale;
 
-        // Quantize scales to 8-bit (we don't go to 4-bit for scales as precision is more critical)
-        // In a production implementation, we'd store these quantized scales
-        // For this implementation, we keep scales in full precision for simplicity
-        // but the logic would be similar to weight quantization
+        // Quantize the scales to 8-bit codes (not 4-bit: scale precision matters more), keep only the
+        // codes and the two meta values, and release the full-precision scales. Equal scales give a
+        // zero step and every code is 0.
+        Tensor<T> codes = NumOps.GreaterThan(metaScale, NumOps.Zero)
+            ? Engine.TensorClamp(
+                Engine.TensorRound(Engine.TensorDivideScalar(Engine.TensorSubtractScalar(scales, metaZeroPoint), metaScale)),
+                NumOps.Zero, NumOps.FromDouble(255.0))
+            : new Tensor<T>([_quantizationScales.Length]);
+        _quantizedScaleCodes = Array.ConvertAll(codes.Cast<int>().ToArray(), code => (byte)code);
+        _scaleCodeOffset = metaZeroPoint;
+        _scaleCodeStep = metaScale;
+        _quantizationScales = null;
+    }
+
+    /// <summary>
+    /// The block scales used for dequantization: the stored scales, or the decoded 8-bit scale codes
+    /// (offset + code * step) when double quantization released them.
+    /// </summary>
+    private T[]? ResolveQuantizationScales()
+    {
+        if (_quantizedScaleCodes is null)
+        {
+            return _quantizationScales;
+        }
+
+        Tensor<T> codes = new Tensor<int>(Array.ConvertAll(_quantizedScaleCodes, code => (int)code), [_quantizedScaleCodes.Length]).Cast<T>();
+        return Engine.TensorAddScalar(Engine.TensorMultiplyScalar(codes, _scaleCodeStep), _scaleCodeOffset).ToArray();
     }
 
     /// <summary>
@@ -505,7 +540,8 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private Matrix<T> DequantizeWeights()
     {
-        if (_quantizedWeights == null || _quantizationScales == null || _quantizationZeroPoints == null)
+        T[]? scales = ResolveQuantizationScales();
+        if (_quantizedWeights == null || scales == null || _quantizationZeroPoints == null)
         {
             throw new InvalidOperationException("Weights have not been quantized");
         }
@@ -519,7 +555,7 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         for (int i = 0; i < weightCount; i++)
         {
             int blockIdx = i / _quantizationBlockSize;
-            T scale = _quantizationScales[blockIdx];
+            T scale = scales[blockIdx];
             T zeroPoint = _quantizationZeroPoints[blockIdx];
 
             // Unpack 4-bit value
@@ -540,7 +576,7 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
             dequantized[i] = DequantizeValue(quantizedValue, scale, zeroPoint);
         }
 
-        // Convert to matrix [outputSize, inputSize] for Dense layer format
+        // Convert to matrix [outputSize, inputSize]: QuantizeBaseLayerWeights stored the weights output-major
         Matrix<T> weightMatrix = new Matrix<T>(outputSize, inputSize);
         for (int i = 0; i < weightCount; i++)
         {
@@ -654,12 +690,12 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> baseOutputMatrix = Engine.TensorMatMul(
             inputMatrix, Tensor<T>.FromMatrix(Engine.MatrixTranspose(_dequantizedWeights)));
 
-        // Add biases (get from base layer parameters), broadcast over the batch
+        // Add biases (get from base layer parameters), broadcast over the batch; a base layer
+        // built without a bias has none to add
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
-        Tensor<T> bias = Engine.Reshape(Tensor<T>.FromVector(baseParams.GetSubVector(weightCount, outputSize)), [1, outputSize]);
-        Tensor<T> baseOutput = Engine.TensorAdd(
-            baseOutputMatrix, Engine.TensorBroadcastTo(bias, [batchSize, outputSize]));
+        Tensor<T>? biasRows = BaseBiasRows(baseParams, weightCount, outputSize, batchSize);
+        Tensor<T> baseOutput = biasRows is null ? baseOutputMatrix : Engine.TensorAdd(baseOutputMatrix, biasRows);
 
         // Forward through LoRA layer
         Tensor<T> loraOutput = _loraLayer.Forward(input);
@@ -720,12 +756,11 @@ public partial class QLoRAAdapter<T> : LoRAAdapterBase<T>
         // Merge weights
         // dequantizedBaseWeights is [outputSize, inputSize]
         // loraWeights from MergeWeights() is [inputSize, outputSize], so its transpose lines up.
-        // Biases are copied unchanged (LoRA doesn't modify biases).
+        // The sum is written back in the base layer's own weight order (DenseLayer input-major,
+        // FullyConnectedLayer output-major); biases are copied unchanged (LoRA doesn't modify biases).
         Vector<T> baseParams = _baseLayer.GetParameters();
-        int weightCount = inputSize * outputSize;
-        Vector<T> mergedWeights = Engine.Add(
-            dequantizedBaseWeights.ToRowVector(), Engine.MatrixTranspose(loraWeights).ToRowVector());
-        Vector<T> mergedParams = Vector<T>.Concatenate(mergedWeights, baseParams.GetSubVector(weightCount, outputSize));
+        Matrix<T> mergedWeights = Engine.MatrixAdd(dequantizedBaseWeights, Engine.MatrixTranspose(loraWeights));
+        Vector<T> mergedParams = ReplaceBaseWeightsWithOutputMajor(baseParams, mergedWeights);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

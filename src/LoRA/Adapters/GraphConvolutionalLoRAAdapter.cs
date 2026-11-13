@@ -220,6 +220,18 @@ public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGra
         int outputSize = OutputFeatures;
         int weightCount = inputSize * outputSize;
 
+        // A GAT layer that concatenates several heads produces numHeads * outputFeatures outputs, so its
+        // LoRA delta spans every head while the leading weight block holds only one head's
+        // [inputFeatures, outputFeatures] matrix. There is no single block to add that delta to.
+        if (_baseLayer is GraphAttentionLayer<T> { ConcatenateHeads: true, NumHeads: > 1 } concatenatedGat)
+        {
+            throw new NotSupportedException(
+                $"Merging a LoRA adapter into a GraphAttentionLayer with concatenateHeads=true and " +
+                $"numHeads={concatenatedGat.NumHeads} is not supported: the adapter's delta covers " +
+                $"{concatenatedGat.NumHeads} concatenated heads ({inputSize}x{concatenatedGat.NumHeads * outputSize}) " +
+                $"but the layer stores a separate [{inputSize}x{outputSize}] weight block per head.");
+        }
+
         // Merge the main weight matrix (first weightCount parameters). Graph layers store their
         // weights as [inputFeatures, outputFeatures] row-major, the same layout as loraWeights,
         // so the row-major flattening lines up. Remaining parameters (biases, etc.) are unchanged.
@@ -245,11 +257,15 @@ public partial class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGra
         }
         else if (_baseLayer is GraphAttentionLayer<T> gatLayer)
         {
+            // Named arguments: the fourth positional parameter is the LeakyReLU slope (alpha), not the
+            // dropout rate, and the head layout must survive the clone.
             merged = new GraphAttentionLayer<T>(
                 gatLayer.InputFeatures,
                 gatLayer.OutputFeatures,
-                gatLayer.NumHeads,
-                gatLayer.DropoutRate);
+                numHeads: gatLayer.NumHeads,
+                alpha: gatLayer.Alpha,
+                dropoutRate: gatLayer.DropoutRate,
+                concatenateHeads: gatLayer.ConcatenateHeads);
         }
         else if (_baseLayer is GraphSAGELayer<T> sageLayer)
         {

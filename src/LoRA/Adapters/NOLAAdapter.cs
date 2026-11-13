@@ -228,9 +228,10 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Reconstructs matrix A from linear combination of random basis matrices.
+    /// Computes a linear combination of seeded random basis matrices, generating the bases in bounded
+    /// blocks and recording one manual backward node for the coefficients.
     /// </summary>
-    /// <returns>Reconstructed matrix A (inputSize × rank).</returns>
+    /// <returns>The combined [rows, cols] matrix.</returns>
     /// <remarks>
     /// <para>
     /// Computes: A = Σ(coefficient_i * basis_i) for all basis matrices.
@@ -293,9 +294,10 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
         return Engine.TensorConcatenate(blocks.ToArray(), 0);
     }
 
-
+    /// <summary>
+    /// Reconstructs matrix A (inputSize × rank) from its basis coefficients.
+    /// </summary>
     private Tensor<T> ReconstructMatrixA()
-
     {
         int inputSize = GetInputShape()[0];
         // Linear combination of basis matrices: A = sum_b coefA[b] * basis_b
@@ -424,15 +426,22 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> matrixA = ReconstructMatrixA();
         Tensor<T> matrixB = ReconstructMatrixB();
 
-        // Compute merged weight matrix: A * B * scaling
-        T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-        Tensor<T> mergedWeight = Engine.TensorMultiplyScalar(Engine.TensorMatMul(matrixA, matrixB), scaling);
+        if (_baseLayer is not DenseLayer<T> && _baseLayer is not FullyConnectedLayer<T>)
+        {
+            throw new InvalidOperationException(
+                $"NOLAAdapter merging only supports DenseLayer or FullyConnectedLayer base layers, not {_baseLayer.GetType().Name}.");
+        }
 
-        // This requires knowledge of the base layer type to properly merge
-        // For now, we'll throw an exception indicating this needs layer-specific implementation
-        throw new NotSupportedException(
-            "MergeToOriginalLayer requires layer-type-specific implementation. " +
-            "Derived classes should override this method to handle their specific base layer type.");
+        // Compute merged weight matrix: A * B * scaling ([inputSize, outputSize], the forward's input * A * B)
+        T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
+        Matrix<T> mergedWeight = Engine.TensorMultiplyScalar(Engine.TensorMatMul(matrixA, matrixB), scaling).ToMatrix();
+
+        // A merge reads the base weights, so bring them up now, then add the delta in the base layer's
+        // own weight order (DenseLayer input-major, FullyConnectedLayer output-major); biases unchanged.
+        MaterializeBaseLayerParameters();
+        int weightCount = mergedWeight.Rows * mergedWeight.Columns;
+        Vector<T> mergedParams = AddInputMajorDeltaToParameters(_baseLayer.GetParameters(), mergedWeight, weightCount);
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>

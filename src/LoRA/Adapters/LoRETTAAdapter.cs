@@ -617,17 +617,13 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Merge weights (add LoRETTA contribution, [outputSize, inputSize] row-major, to the base
-        // weights). Biases are kept unchanged.
-        Vector<T> mergedParams = AddFlatWeightsToParameters(baseParams, ttWeights, weightCount);
+        // Merge weights: the LoRETTA contribution is [outputSize, inputSize]; DenseLayer stores its
+        // weights input-major and FullyConnectedLayer output-major, so the helper transposes it for
+        // DenseLayer. Biases are kept unchanged.
+        Vector<T> mergedParams = AddOutputMajorDeltaToParameters(baseParams, ttWeights, weightCount);
 
-        // Create a new dense layer with merged parameters
-        DenseLayer<T> mergedLayer = new DenseLayer<T>(
-            outputSize,
-            (IActivationFunction<T>?)null);
-        mergedLayer.SetParameters(mergedParams);
-
-        return mergedLayer;
+        // Clone the base layer (keeping its type, activation and bias settings) with the merged parameters
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>

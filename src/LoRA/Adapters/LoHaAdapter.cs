@@ -232,8 +232,7 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> deltaTensor = SumHadamardProducts(inputSize, outputSize);
 
         // Apply ΔW to input: output = input × ΔW — vectorized Engine.TensorMatMul
-        var deltaResultTensor
- = Engine.TensorMatMul(inputTensor, deltaTensor);
+        var deltaResultTensor = Engine.TensorMatMul(inputTensor, deltaTensor);
         // Apply scaling
         deltaResultTensor = Engine.TensorMultiplyScalar(deltaResultTensor, _scaling);
 
@@ -241,11 +240,6 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         return deltaResultTensor.Reshape(batchSize, outputSize);
     }
 
-    /// <summary>
-    /// Computes gradients for LoHa matrices A and B using Hadamard product gradient rules.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from next layer.</param>
-    /// <returns>Input gradient from LoHa path.</returns>
     /// <summary>
     /// Computes Σ_r (A[r] ⊙ B[r]) as an [inputSize, outputSize] tensor, accumulated in rank order.
     /// </summary>
@@ -260,8 +254,12 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         return sum;
     }
 
+    /// <summary>
+    /// Computes gradients for LoHa matrices A and B using Hadamard product gradient rules.
+    /// </summary>
+    /// <param name="outputGradient">Gradient flowing back from next layer.</param>
+    /// <returns>Input gradient from LoHa path.</returns>
     private Tensor<T> ComputeLoHaGradients(Tensor<T> outputGradient)
-
     {
         var lastInput = _lastInput ?? throw new InvalidOperationException("_lastInput has not been initialized.");
         int batchSize = lastInput.Shape[0];
@@ -282,8 +280,7 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute input^T @ grad once — shared across all ranks
-        var inputT
- = inputTensorBW.Transpose(new[] { 1, 0 });
+        var inputT = inputTensorBW.Transpose(new[] { 1, 0 });
         var inputTGrad = Engine.TensorMatMul(inputT, gradTensorBW); // [inputSize, outputSize]
 
         // Accumulate input gradient using deltaWeights computed per-rank

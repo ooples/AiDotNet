@@ -709,6 +709,77 @@ public abstract partial class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>
     }
 
     /// <summary>
+    /// Gets whether the wrapped layer stores its flat weight block output-major ([outputSize, inputSize]),
+    /// as <see cref="FullyConnectedLayer{T}"/> does. <see cref="DenseLayer{T}"/> stores it input-major.
+    /// </summary>
+    private protected bool BaseWeightsAreOutputMajor => _baseLayer is FullyConnectedLayer<T>;
+
+    /// <summary>
+    /// Adds an input-major ([inputSize, outputSize], the <see cref="LoRALayer{T}.MergeWeights"/> layout)
+    /// weight delta to the base layer's flat parameters, transposing it first when the base layer stores
+    /// its weights output-major. Trailing parameters (biases) are kept unchanged.
+    /// </summary>
+    private protected Vector<T> AddInputMajorDeltaToParameters(Vector<T> baseParams, Matrix<T> inputMajorDelta, int weightCount)
+        => AddFlatWeightsToParameters(
+            baseParams, BaseWeightsAreOutputMajor ? Engine.MatrixTranspose(inputMajorDelta) : inputMajorDelta, weightCount);
+
+    /// <summary>
+    /// Adds an output-major ([outputSize, inputSize]) weight delta to the base layer's flat parameters,
+    /// transposing it first when the base layer stores its weights input-major. Biases are kept unchanged.
+    /// </summary>
+    private protected Vector<T> AddOutputMajorDeltaToParameters(Vector<T> baseParams, Matrix<T> outputMajorDelta, int weightCount)
+        => AddFlatWeightsToParameters(
+            baseParams, BaseWeightsAreOutputMajor ? outputMajorDelta : Engine.MatrixTranspose(outputMajorDelta), weightCount);
+
+    /// <summary>
+    /// Reads the leading weight block of the base layer's flat parameters as an output-major
+    /// [outputSize, inputSize] matrix, whatever order the base layer stores it in.
+    /// </summary>
+    private protected Matrix<T> ReadOutputMajorBaseWeights(Vector<T> baseParams, int outputSize, int inputSize)
+    {
+        int weightCount = inputSize * outputSize;
+        if (baseParams.Length < weightCount)
+        {
+            throw new ArgumentException(
+                $"Base parameters have {baseParams.Length} values but the weight block needs {weightCount}.",
+                nameof(baseParams));
+        }
+
+        Tensor<T> flat = Tensor<T>.FromVector(baseParams.GetSubVector(0, weightCount));
+        return BaseWeightsAreOutputMajor
+            ? Engine.Reshape(flat, [outputSize, inputSize]).ToMatrix()
+            : Engine.MatrixTranspose(Engine.Reshape(flat, [inputSize, outputSize]).ToMatrix());
+    }
+
+    /// <summary>
+    /// Replaces the leading weight block of the base layer's flat parameters with an output-major
+    /// [outputSize, inputSize] matrix written in the base layer's own order; biases are kept unchanged.
+    /// </summary>
+    private protected Vector<T> ReplaceBaseWeightsWithOutputMajor(Vector<T> baseParams, Matrix<T> outputMajorWeights)
+    {
+        Vector<T> flatWeights = (BaseWeightsAreOutputMajor ? outputMajorWeights : Engine.MatrixTranspose(outputMajorWeights)).ToRowVector();
+        int trailingCount = baseParams.Length - flatWeights.Length;
+        return trailingCount > 0
+            ? Vector<T>.Concatenate(flatWeights, baseParams.GetSubVector(flatWeights.Length, trailingCount))
+            : flatWeights;
+    }
+
+    /// <summary>
+    /// The base layer's bias broadcast to [batchSize, outputSize], or <c>null</c> when it has no bias
+    /// block (for example a <see cref="DenseLayer{T}"/> built without a bias).
+    /// </summary>
+    private protected Tensor<T>? BaseBiasRows(Vector<T> baseParams, int weightCount, int outputSize, int batchSize)
+    {
+        if (baseParams.Length < weightCount + outputSize)
+        {
+            return null;
+        }
+
+        Tensor<T> bias = Engine.Reshape(Tensor<T>.FromVector(baseParams.GetSubVector(weightCount, outputSize)), [1, outputSize]);
+        return Engine.TensorBroadcastTo(bias, [batchSize, outputSize]);
+    }
+
+    /// <summary>
     /// Merges LoRA weights into the base layer for DenseLayer or FullyConnectedLayer.
     /// </summary>
     /// <returns>A new layer with merged weights.</returns>
