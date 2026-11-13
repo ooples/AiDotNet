@@ -57,21 +57,21 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolGroups(groups);
-        var ranks = EvaluationTensorOps<T>.MidRanks(pooled);
+        var ranks = EvaluationTensorOps<double>.MidRanks(pooled);
 
         // Compute rank sums for each group
-        var rankSums = EvaluationTensorOps<T>.GroupSums(ranks, groupIndex, k);
+        var rankSums = EvaluationTensorOps<double>.GroupSums(ranks, groupIndex, k);
 
         // Compute H statistic
-        double sumRankSquaredOverN = NumOps.ToDouble(engine.TensorSum(engine.TensorDivide(engine.TensorSquare(rankSums), sizes)));
+        double sumRankSquaredOverN = engine.TensorSum(engine.TensorDivide(engine.TensorSquare(rankSums), sizes));
         double H = (12.0 / ((double)N * (N + 1))) * sumRankSquaredOverN - 3.0 * (N + 1);
 
         // Tie correction: sum of t^3 - t over the groups of t equal values (singletons add 0)
         var tieCounts = engine.TensorUniqueWithInfo(pooled, true, false, true).Counts;
         if (tieCounts is not null && tieCounts.Length < N)
         {
-            var t = tieCounts.Cast<T>();
-            double tieSum = NumOps.ToDouble(engine.TensorSum(engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(t), t), t)));
+            var t = tieCounts.Cast<double>();
+            double tieSum = engine.TensorSum(engine.TensorSubtract(engine.TensorMultiply(engine.TensorSquare(t), t), t));
             double tieCorrection = 1 - tieSum / ((double)N * N * N - N);
             if (tieCorrection > 1e-10)
                 H /= tieCorrection;
@@ -110,10 +110,10 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolGroups(groups);
-        var ranks = EvaluationTensorOps<T>.MidRanks(pooled);
+        var ranks = EvaluationTensorOps<double>.MidRanks(pooled);
 
         // Compute mean ranks per group: each observation's rank goes to its own group
-        var meanRanks = engine.TensorDivide(EvaluationTensorOps<T>.GroupSums(ranks, groupIndex, k), sizes);
+        var meanRanks = engine.TensorDivide(EvaluationTensorOps<double>.GroupSums(ranks, groupIndex, k), sizes);
 
         // Pairwise comparisons: z = |R_i - R_j| / sqrt(N (N + 1) / 12 * (1 / n_i + 1 / n_j)), p = 2 * (1 - Phi(z))
         var shape = new[] { k, k };
@@ -126,12 +126,12 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         var inverseSizeSum = engine.TensorAdd(
             engine.TensorBroadcastTo(engine.Reshape(inverseSizes, column), shape),
             engine.TensorBroadcastTo(engine.Reshape(inverseSizes, row), shape));
-        var standardError = engine.TensorSqrt(engine.TensorMultiplyScalar(inverseSizeSum, NumOps.FromDouble((double)N * (N + 1) / 12.0)));
+        var standardError = engine.TensorSqrt(engine.TensorMultiplyScalar(inverseSizeSum, (double)N * (N + 1) / 12.0));
         var z = engine.TensorDivide(rankGap, standardError);
-        var pValues = engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(z)), NumOps.FromDouble(2.0));
+        var pValues = engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(z)), 2.0);
 
         int cell = 0;
-        foreach (T pValue in pValues)
+        foreach (T pValue in pValues.Cast<T>())
         {
             int i = cell / k, j = cell % k;
             if (i < j) results[(i, j)] = pValue;
@@ -141,12 +141,13 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         return results;
     }
 
-    private static T Median(T[] values)
+    private static double Median(T[] values)
     {
         int n = values.Length;
-        if (n == 0) return NumOps.Zero;
-        var (lower, upper) = EvaluationTensorOps<T>.OrderStatistics(new Tensor<T>(values, new[] { n }), (n - 1) / 2, n / 2);
-        return n % 2 == 0 ? NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2.0)) : upper;
+        if (n == 0) return 0;
+        var (lower, upper) = EvaluationTensorOps<double>.OrderStatistics(
+            new Tensor<T>(values, new[] { n }).Cast<double>(), (n - 1) / 2, n / 2);
+        return n % 2 == 0 ? (lower + upper) / 2 : upper;
     }
 
     private double ChiSquareCDF(double x, int df)

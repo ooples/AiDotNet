@@ -84,13 +84,11 @@ public class BootstrapTest<T> : IStatisticalTest<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var sample1 = new Tensor<T>(scores1, new[] { n });
-        var sample2 = new Tensor<T>(scores2, new[] { n });
+        var sample1 = new Tensor<T>(scores1, new[] { n }).Cast<double>();
+        var sample2 = new Tensor<T>(scores2, new[] { n }).Cast<double>();
 
-        // Compute observed difference
-        T observedDiffT = ComputeMeanDifference(sample1, sample2);
-        double observedDiff = NumOps.ToDouble(observedDiffT);
-        T observedMagnitude = NumOps.Abs(observedDiffT);
+        double observedDiff = ComputeMeanDifference(sample1, sample2);
+        double observedMagnitude = Math.Abs(observedDiff);
 
         // For paired data, compute pairwise differences
         var differences = engine.TensorSubtract(sample1, sample2);
@@ -98,7 +96,7 @@ public class BootstrapTest<T> : IStatisticalTest<T>
         // Paired permutation test: under null, signs of differences are random
         // We randomly flip signs to generate null distribution, a block of resamples at a time
         int moreExtreme = 0;
-        var count = NumOps.FromDouble(n);
+        double count = n;
         int blockSize = BlockSize(n);
         for (int start = 0; start < _numBootstraps; start += blockSize)
         {
@@ -111,11 +109,11 @@ public class BootstrapTest<T> : IStatisticalTest<T>
             }
 
             var signed = engine.TensorMultiply(
-                new Tensor<int>(signs, new[] { rows, n }).Cast<T>(),
+                new Tensor<int>(signs, new[] { rows, n }).Cast<double>(),
                 engine.TensorBroadcastTo(engine.Reshape(differences, new[] { 1, n }), new[] { rows, n }));
             var permMeanDiffs = engine.TensorDivideScalar(engine.ReduceSum(signed, new[] { 1 }, false), count);
-            moreExtreme += EvaluationTensorOps<T>.Count(
-                EvaluationTensorOps<T>.GreaterOrEqualMask(engine.TensorAbs(permMeanDiffs), observedMagnitude));
+            moreExtreme += EvaluationTensorOps<double>.Count(
+                EvaluationTensorOps<double>.GreaterOrEqualMask(engine.TensorAbs(permMeanDiffs), observedMagnitude));
         }
 
         double pValue = (double)(moreExtreme + 1) / (_numBootstraps + 1);
@@ -159,10 +157,10 @@ public class BootstrapTest<T> : IStatisticalTest<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var sample1 = new Tensor<T>(scores1, new[] { n });
-        var sample2 = new Tensor<T>(scores2, new[] { n });
-        var nT = NumOps.FromDouble(n);
-        var blocks = new List<Tensor<T>>();
+        var sample1 = new Tensor<T>(scores1, new[] { n }).Cast<double>();
+        var sample2 = new Tensor<T>(scores2, new[] { n }).Cast<double>();
+        double nT = n;
+        var blocks = new List<Tensor<double>>();
         int blockSize = BlockSize(n);
         for (int start = 0; start < _numBootstraps; start += blockSize)
         {
@@ -187,25 +185,25 @@ public class BootstrapTest<T> : IStatisticalTest<T>
         int lowerIdx = Math.Max(0, (int)(alpha / 2 * _numBootstraps));
         int upperIdx = Math.Min(_numBootstraps - 1, (int)((1 - alpha / 2) * _numBootstraps) - 1);
 
-        var (lower, upper) = EvaluationTensorOps<T>.OrderStatistics(diffs, lowerIdx, upperIdx);
-        return (NumOps.ToDouble(lower), NumOps.ToDouble(upper));
+        var (lower, upper) = EvaluationTensorOps<double>.OrderStatistics(diffs, lowerIdx, upperIdx);
+        return (lower, upper);
     }
 
     // Resamples are processed in blocks of at most about one million drawn values to bound memory.
     private static int BlockSize(int n) => Math.Max(1, (1 << 20) / n);
 
-    private static T ComputeMeanDifference(Tensor<T> scores1, Tensor<T> scores2)
+    private static double ComputeMeanDifference(Tensor<double> scores1, Tensor<double> scores2)
     {
         var engine = AiDotNetEngine.Current;
-        return NumOps.Subtract(engine.TensorMean(scores1), engine.TensorMean(scores2));
+        return engine.TensorMean(scores1) - engine.TensorMean(scores2);
     }
 
-    private static double ComputeStd(Tensor<T> scores)
+    private static double ComputeStd(Tensor<double> scores)
     {
         int n = scores.Length;
         if (n < 2) return 0;
         var engine = AiDotNetEngine.Current;
-        T sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(scores, engine.TensorMean(scores)));
-        return Math.Sqrt(NumOps.ToDouble(sumSq) / (n - 1));
+        double sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(scores, engine.TensorMean(scores)));
+        return Math.Sqrt(sumSq / (n - 1));
     }
 }

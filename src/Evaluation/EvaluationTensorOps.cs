@@ -453,14 +453,16 @@ internal static class EvaluationTensorOps<T>
     /// <summary>
     /// Concatenates groups into one rank-1 tensor and returns, for each pooled element, the index of its group.
     /// </summary>
-    internal static (Tensor<T> Pooled, Tensor<int> GroupIndex, Tensor<T> Sizes) PoolGroups(T[][] groups)
+    internal static (Tensor<double> Pooled, Tensor<int> GroupIndex, Tensor<double> Sizes) PoolGroups(T[][] groups)
     {
-        var parts = new Tensor<T>[groups.Length];
+        using var wideNoGrad = new NoGradScope<double>();
+
+        var parts = new Tensor<double>[groups.Length];
         var sizes = new int[groups.Length];
         int total = 0;
         for (int g = 0; g < groups.Length; g++)
         {
-            parts[g] = new Tensor<T>(groups[g], new[] { groups[g].Length });
+            parts[g] = new Tensor<T>(groups[g], new[] { groups[g].Length }).Cast<double>();
             sizes[g] = groups[g].Length;
             total += sizes[g];
         }
@@ -475,7 +477,7 @@ internal static class EvaluationTensorOps<T>
 
         using var noGrad = new NoGradScope<T>();
         return (AiDotNetEngine.Current.TensorConcatenate(parts, 0), new Tensor<int>(groupIndex, new[] { total }),
-            new Tensor<int>(sizes, new[] { groups.Length }).Cast<T>());
+            new Tensor<int>(sizes, new[] { groups.Length }).Cast<double>());
     }
 
     /// <summary>

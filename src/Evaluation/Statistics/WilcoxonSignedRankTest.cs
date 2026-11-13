@@ -42,10 +42,10 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
         // Calculate differences and remove zeros
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var tolerance = NumOps.FromDouble(1e-10);
-        var allDiffs = engine.TensorSubtract(new Tensor<T>(sample1, new[] { n }), new Tensor<T>(sample2, new[] { n }));
+        var tolerance = 1e-10;
+        var allDiffs = engine.TensorSubtract(new Tensor<T>(sample1, new[] { n }).Cast<double>(), new Tensor<T>(sample2, new[] { n }).Cast<double>());
         var nonZero = engine.TensorGreaterThan(engine.TensorAbs(allDiffs), tolerance); // Exclude exact ties
-        int nr = EvaluationTensorOps<T>.Count(nonZero); // Number of non-zero differences
+        int nr = EvaluationTensorOps<double>.Count(nonZero); // Number of non-zero differences
 
         if (nr < 3)
         {
@@ -62,14 +62,13 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
 
         // Rank by absolute value; a run of absolute values whose neighbouring gaps are below 1e-10 shares its
         // average rank
-        var diffs = EvaluationTensorOps<T>.Select(allDiffs, nonZero);
-        var (_, order, ranks) = EvaluationTensorOps<T>.SortedRunRanks(engine.TensorAbs(diffs), 1e-10);
+        var diffs = EvaluationTensorOps<double>.Select(allDiffs, nonZero);
+        var (_, order, ranks) = EvaluationTensorOps<double>.SortedRunRanks(engine.TensorAbs(diffs), 1e-10);
 
         // Calculate W+ (sum of ranks for positive differences) and W- (the rest)
-        var positive = engine.TensorGather(engine.TensorGreaterThan(diffs, NumOps.Zero), order, 0);
-        T wPlusT = engine.TensorSum(engine.TensorMultiply(ranks, positive));
-        double wPlus = NumOps.ToDouble(wPlusT);
-        double wMinus = NumOps.ToDouble(NumOps.Subtract(engine.TensorSum(ranks), wPlusT));
+        var positive = engine.TensorGather(engine.TensorGreaterThan(diffs, 0.0), order, 0);
+        double wPlus = engine.TensorSum(engine.TensorMultiply(ranks, positive));
+        double wMinus = engine.TensorSum(ranks) - wPlus;
 
         // Test statistic is the smaller of W+ and W-
         double w = Math.Min(wPlus, wMinus);

@@ -61,14 +61,14 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
         // Transpose to results[dataset, algorithm]
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n), new[] { 1, 0 });
+        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n).Cast<double>(), new[] { 1, 0 });
 
         // Rank each dataset (higher value = rank 1 for performance metrics), then average over datasets
-        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, 1e-10);
-        var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), NumOps.FromDouble(n));
+        var datasetRanks = EvaluationTensorOps<double>.RowRanksDescending(results, 1e-10);
+        var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), (double)n);
 
         // Friedman statistic (chi-squared approximation)
-        double sumSquaredRanks = NumOps.ToDouble(engine.TensorSumOfSquares(ranks));
+        double sumSquaredRanks = engine.TensorSumOfSquares(ranks);
         double chiSquared = 12.0 * n / ((double)k * (k + 1)) * (sumSquaredRanks - k * Math.Pow((k + 1) / 2.0, 2));
 
         // Iman-Davenport correction (more conservative, recommended)
@@ -82,7 +82,7 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
         // Build description with average ranks
         var rankDescriptions = new List<string>();
         int algorithm = 1;
-        foreach (T rank in ranks)
+        foreach (double rank in ranks)
         {
             rankDescriptions.Add($"Algo{algorithm++}={rank:F2}");
         }

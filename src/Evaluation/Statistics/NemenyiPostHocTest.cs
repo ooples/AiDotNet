@@ -64,23 +64,23 @@ public class NemenyiPostHocTest<T>
         // Calculate average ranks (same as Friedman)
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n), new[] { 1, 0 });
-        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, 1e-10);
-        var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), NumOps.FromDouble(n));
+        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n).Cast<double>(), new[] { 1, 0 });
+        var datasetRanks = EvaluationTensorOps<double>.RowRanksDescending(results, 1e-10);
+        var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), (double)n);
 
         // Perform pairwise comparisons: |rank_i - rank_j| > CD (the diagonal difference is 0, never above CD)
         var shape = new[] { k, k };
         var rankDifferences = engine.TensorAbs(engine.TensorSubtract(
             engine.TensorBroadcastTo(engine.Reshape(ranks, new[] { k, 1 }), shape),
             engine.TensorBroadcastTo(engine.Reshape(ranks, new[] { 1, k }), shape)));
-        var significant = engine.TensorGreaterThan(rankDifferences, NumOps.FromDouble(cd)).Cast<bool>().ToArray();
+        var significant = engine.TensorGreaterThan(rankDifferences, cd).Cast<bool>().ToArray();
         var pairwise = new bool[k, k];
         Buffer.BlockCopy(significant, 0, pairwise, 0, k * k * sizeof(bool));
 
         return new NemenyiResult<T>
         {
             CriticalDifference = cd,
-            AverageRanks = ranks.ToVector(),
+            AverageRanks = ranks.Cast<T>().ToVector(),
             SignificantDifferences = pairwise,
             Alpha = alpha,
             NumAlgorithms = k,

@@ -589,5 +589,115 @@ public class EvaluationNumericalMemoryTests
         Assert.Equal((Half)1, symmetric.PValue);
     }
 
+
+    [Fact]
+    public void HalfRepeatedDatasetRanks_StayFiniteThroughLargeAverages()
+    {
+        const int count = 70000;
+        var samples = new[]
+        {
+            Enumerable.Range(0, count).Select(i => i % 2 == 0 ? (Half)3 : (Half)1).ToArray(),
+            Enumerable.Repeat((Half)2, count).ToArray(),
+            Enumerable.Range(0, count).Select(i => i % 2 == 0 ? (Half)1 : (Half)3).ToArray()
+        };
+        var friedman = new FriedmanTest<Half>().Test(samples);
+        Assert.Equal((Half)0, friedman.Statistic);
+        Assert.Equal((Half)1, friedman.PValue);
+        var nemenyi = new NemenyiPostHocTest<Half>().Test(samples);
+        Assert.Equal(new[] { (Half)2, (Half)2, (Half)2 }, nemenyi.AverageRanks.ToArray());
+        Assert.Empty(nemenyi.GetSignificantPairs());
+    }
+
+    [Fact]
+    public void HalfKruskalAndDunn_KeepLargeGroupSizesAndTiedRanksWide()
+    {
+        var values = Enumerable.Repeat((Half)1, 70000).ToArray();
+        var groups = new[] { values, values };
+        var test = new KruskalWallisTest<Half>();
+        var result = test.Test(groups);
+        Assert.Equal((Half)0, result.Statistic);
+        Assert.Equal((Half)1, result.PValue);
+        Assert.Equal((Half)1, test.DunnPostHoc(groups)[(0, 1)]);
+        var ordered = test.Test(new[]
+        {
+            new[] { (Half)1, (Half)2, (Half)3 },
+            new[] { (Half)4, (Half)5, (Half)6 }
+        });
+        Assert.Equal((Half)(27.0 / 7), ordered.Statistic);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void HalfLevene_PreservesCentersSizesAndVariance(int center)
+    {
+        var test = new LeveneTest<Half>((LeveneTest<Half>.CenterType)center);
+        Half[][] groups =
+        {
+            new[] { (Half)(-60000), (Half)(-30000), (Half)0, (Half)30000, (Half)60000 },
+            new[] { (Half)(-30000), (Half)(-15000), (Half)0, (Half)15000, (Half)30000 }
+        };
+        Assert.Equal((Half)(72.0 / 35), test.Test(groups).Statistic);
+        var constant = Enumerable.Repeat((Half)60000, 70000).ToArray();
+        var identical = test.Test(new[] { constant, constant });
+        Assert.Equal((Half)0, identical.Statistic);
+        Assert.Equal((Half)1, identical.PValue);
+        groups = new[]
+        {
+            new[] { (Half)59968, (Half)60000, (Half)60032, (Half)60064 },
+            new[] { (Half)59904, (Half)60000, (Half)60096, (Half)60192 }
+        };
+        var expected = new LeveneTest<double>((LeveneTest<double>.CenterType)center)
+            .Test(groups.Select(g => g.Select(x => (double)x).ToArray()).ToArray());
+        var actual = test.Test(groups);
+        Assert.Equal((Half)expected.Statistic, actual.Statistic);
+        Assert.Equal((Half)expected.PValue, actual.PValue);
+    }
+
+    [Fact]
+    public void HalfWilcoxon_PreservesWideDifferencesAndRankSums()
+    {
+        var test = new WilcoxonSignedRankTest<Half>();
+        var positive = Enumerable.Repeat((Half)1, 512).ToArray();
+        positive[0] = (Half)(-1);
+        var ranked = test.Test(positive, new Half[positive.Length]);
+        Assert.Equal((Half)256.5, ranked.Statistic);
+        Assert.Equal((Half)(510.0 / 512), ranked.EffectSize);
+        Assert.Equal((Half)0, ranked.PValue);
+        var extremes = test.Test(
+            new[] { (Half)60000, (Half)60000, (Half)60000, (Half)(-60000), (Half)(-60000) },
+            new[] { (Half)(-60000), (Half)(-60000), (Half)(-60000), (Half)60000, (Half)60000 });
+        Assert.Equal((Half)6, extremes.Statistic);
+        Assert.Equal((Half)0.2, extremes.EffectSize);
+    }
+
+    [Fact]
+    public void HalfBootstrap_KeepsLargeCountsAndDoubleConfidenceEndpoints()
+    {
+        const int count = 70000;
+        var first = Enumerable.Repeat((Half)60000, count).ToArray();
+        var second = new Half[count];
+        var test = new BootstrapTest<Half>(16, 42);
+        var result = test.Test(first, second);
+        Assert.Equal((Half)60000, result.Statistic);
+        Assert.Equal((Half)(1.0 / 17), result.PValue);
+        Assert.Equal((Half)0, result.EffectSize);
+        second = Enumerable.Repeat((Half)(-60000), count).ToArray();
+        Assert.Equal((120000.0, 120000.0), test.ComputeCI(first, second));
+    }
+
+    [Fact]
+    public void HalfBootstrap_ZeroObservedDifferenceIncludesAllFinitePermutations()
+    {
+        var test = new BootstrapTest<Half>(64, 17);
+        var result = test.Test(
+            new[] { (Half)(-60000), (Half)(-30000), (Half)0, (Half)30000, (Half)60000 },
+            new[] { (Half)60000, (Half)0, (Half)0, (Half)0, (Half)(-60000) });
+        Assert.Equal((Half)0, result.Statistic);
+        Assert.Equal((Half)1, result.PValue);
+        Assert.Equal((Half)0, result.EffectSize);
+    }
+
 }
 #endif
