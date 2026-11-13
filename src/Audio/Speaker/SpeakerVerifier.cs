@@ -577,6 +577,28 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
     }
 
     /// <summary>
+    /// Each row of the <c>[rows, cols]</c> <paramref name="values"/> divided by its largest absolute entry; a row
+    /// whose largest entry is zero (or not finite) is left as it is.
+    /// </summary>
+    private Tensor<T> ScaleRowsToUnitMax(Tensor<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return values;
+        }
+
+        int rows = values.Shape[0], cols = values.Shape[1];
+        var largest = Engine.ReduceMax(Engine.TensorAbs(values), [1], true);
+        var usable = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(largest, NumOps.Zero),
+            Engine.TensorLessThan(largest, NumOps.FromDouble(double.PositiveInfinity)));
+        var ones = new Tensor<T>([rows, 1]);
+        ones.Fill(NumOps.One);
+        var divisor = Engine.TensorWhere(Engine.TensorEquals(usable, NumOps.One), largest, ones);
+        return Engine.TensorDivide(values, Engine.TensorBroadcastTo(divisor, [rows, cols]));
+    }
+
+    /// <summary>
     /// Identifies the most likely speaker from enrolled set (legacy API).
     /// </summary>
     public IdentificationResult Identify(SpeakerEmbedding<T> testEmbedding)
@@ -601,8 +623,10 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
                 Array.Copy(embedding.ToArray(), 0, stackedData, p * dim, dim);
             }
 
-            var stacked = new Tensor<T>(stackedData, [profiles.Length, dim]);
-            var testTensor = new Tensor<T>((T[])testEmbedding.Vector.Clone(), [dim, 1]);
+            // Cosine is scale invariant, so every profile and the test vector are each divided by their own largest
+            // magnitude first: the squares then stay at most 1 and cannot overflow T (65504 in Half).
+            var stacked = ScaleRowsToUnitMax(new Tensor<T>(stackedData, [profiles.Length, dim]));
+            var testTensor = ScaleRowsToUnitMax(new Tensor<T>((T[])testEmbedding.Vector.Clone(), [1, dim])).Reshape([dim, 1]);
             var dots = Engine.TensorMatMul(stacked, testTensor);
             var profileNorms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(stacked), [1], true));
             T testNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(testTensor)));

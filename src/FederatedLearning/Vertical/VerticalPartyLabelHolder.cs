@@ -159,7 +159,8 @@ public class VerticalPartyLabelHolder<T> : FederatedLearningComponentBase<T>, IV
         var diff = Engine.TensorSubtract(
             VerticalEngineOps.Rows(predictions, 1, totalElements),
             VerticalEngineOps.Rows(batchLabels, 1, totalElements));
-        double lossSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(diff)));
+        // Reduced in double: in T the squares and their sum overflow (Half: above 65504).
+        double lossSum = Engine.TensorSum(Engine.TensorSquare(diff.Cast<double>()));
         var gradient = Engine.TensorMultiplyScalar(diff, NumOps.FromDouble(2.0 / totalElements)).Reshape(predictions._shape);
 
         double loss = lossSum / totalElements;

@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.Audio;
 public class TransducerSearchTests
 {
     private static Tensor<double> Log(params double[] probabilities) =>
-        new Tensor<double>(probabilities.Select(Math.Log).ToArray(), new[] { probabilities.Length });
+        new Tensor<double>(probabilities.Select(p => Math.Log(p)).ToArray(), new[] { probabilities.Length });
 
     [Fact]
     public void Greedy_EmitsSeveralLabelsInOneFrame()

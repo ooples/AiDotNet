@@ -190,9 +190,9 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
 
         foreach (var (layerName, layerParams) in updated)
         {
-            var merged = new Vector<T>(layerParams.Length);
-
-            // Weight each client's contribution by its sample count.
+            // Weight each client's contribution by its sample count. The weights are normalized before they
+            // touch the parameters: sample counts times parameters overflow T (Half: above 65504).
+            var contributors = new List<(T[] Layer, double Weight)>();
             double effectiveTotalWeight = 0;
 
             foreach (var (clientId, model) in clientModels)
@@ -207,8 +207,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
 
                     double w = clientSampleCounts.TryGetValue(clientId, out var sc) ? sc : 1.0;
                     effectiveTotalWeight += w;
-
-                    merged = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(clientLayer), NumOps.FromDouble(w)));
+                    contributors.Add((clientLayer, w));
                 }
             }
 
@@ -219,8 +218,13 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             effectiveTotalWeight += globalWeight;
 
             double invTotal = effectiveTotalWeight > 0 ? 1.0 / effectiveTotalWeight : 0;
-            var withGlobal = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(layerParams), NumOps.FromDouble(globalWeight)));
-            result[layerName] = Engine.Multiply(withGlobal, NumOps.FromDouble(invTotal)).ToArray();
+            var merged = Engine.Multiply(Vector<T>.Wrap(layerParams), NumOps.FromDouble(globalWeight * invTotal));
+            foreach (var (clientLayer, w) in contributors)
+            {
+                merged = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(clientLayer), NumOps.FromDouble(w * invTotal)));
+            }
+
+            result[layerName] = merged.ToArray();
         }
 
         return result;

@@ -157,8 +157,8 @@ public class GradientAscentUnlearner<T> : FederatedLearningComponentBase<T>, IFe
 
         var weights = UnlearningEngineOps.FitLength(contribution, size);
         var diff = Engine.TensorSubtract(UnlearningEngineOps.FitLength(unlearned, size), UnlearningEngineOps.FitLength(original, size));
-        double remainingInfluence = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(diff, weights)));
-        double totalInfluence = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(weights)));
+        double remainingInfluence = UnlearningEngineOps.Dot(diff, weights);
+        double totalInfluence = UnlearningEngineOps.Dot(weights, weights);
 
         if (totalInfluence < 1e-12) return 0.5;
 

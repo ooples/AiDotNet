@@ -92,7 +92,8 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
                 VerticalEngineOps.Rows(predictions, 1, totalElements),
                 VerticalEngineOps.Rows(entityLabels, 1, totalElements)),
             NumOps.FromDouble(2.0));
-        double gradientNormSquared = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(grad)));
+        // Reduced in double: in T the squares and their sum overflow (Half: above 65504).
+        double gradientNormSquared = Engine.TensorSum(Engine.TensorSquare(grad.Cast<double>()));
 
         return Math.Sqrt(gradientNormSquared);
     }
@@ -135,7 +136,8 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
             var diff = Engine.TensorSubtract(
                 VerticalEngineOps.Rows(predictionsBeforeUnlearning, 1, totalElements),
                 VerticalEngineOps.Rows(predictionsAfterUnlearning, 1, totalElements));
-            divergenceSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(diff)));
+            // Reduced in double: in T the squares and their sum overflow (Half: above 65504).
+            divergenceSum = Engine.TensorSum(Engine.TensorSquare(diff.Cast<double>()));
         }
 
         double divergenceScore = totalElements > 0 ? Math.Sqrt(divergenceSum / totalElements) : 0.0;

@@ -160,9 +160,9 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
         var diff = Engine.TensorSubtract(UnlearningEngineOps.FitLength(model1, size), UnlearningEngineOps.FitLength(model2, size));
         var update = UnlearningEngineOps.SumFitted(updates, size);
 
-        double dot = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(diff, update)));
-        double normA = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(diff)));
-        double normB = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(update)));
+        double dot = UnlearningEngineOps.Dot(diff, update);
+        double normA = UnlearningEngineOps.Dot(diff, diff);
+        double normB = UnlearningEngineOps.Dot(update, update);
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
         return denom > CosineEpsilon ? dot / denom : 0;
     }

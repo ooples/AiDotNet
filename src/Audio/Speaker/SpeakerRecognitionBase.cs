@@ -80,18 +80,17 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             throw new ArgumentException("Embeddings must have the same dimension.");
         }
 
-        T dotProduct = Engine.DotProduct(embedding1, embedding2);
-        T norm1 = Engine.DotProduct(embedding1, embedding1);
-        T norm2 = Engine.DotProduct(embedding2, embedding2);
+        // The norms are reduced in double (TensorNorm), so squares above T's range (65504 in Half) do not
+        // overflow, and the dot product is taken between the unit vectors.
+        T norm1 = Engine.TensorNorm(embedding1.AsTensor()).GetFlat(0);
+        T norm2 = Engine.TensorNorm(embedding2.AsTensor()).GetFlat(0);
 
-        T normProduct = NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2));
-
-        if (NumOps.Equals(normProduct, NumOps.Zero))
+        if (NumOps.Equals(norm1, NumOps.Zero) || NumOps.Equals(norm2, NumOps.Zero))
         {
             return NumOps.Zero;
         }
 
-        return NumOps.Divide(dotProduct, normProduct);
+        return Engine.DotProduct(Engine.Divide(embedding1, norm1), Engine.Divide(embedding2, norm2));
     }
 
     /// <summary>
@@ -122,10 +121,9 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
     protected Tensor<T> NormalizeEmbedding(Tensor<T> embedding)
     {
         var data = embedding.ToArray();
-        var dataVec = new Vector<T>(data);
-        T sumSquares = Engine.DotProduct(dataVec, dataVec);
 
-        T norm = NumOps.Sqrt(sumSquares);
+        // L2 norm reduced in double, so the sum of squares cannot overflow T.
+        T norm = Engine.TensorNorm(new Tensor<T>(data, [data.Length])).GetFlat(0);
 
         if (NumOps.Equals(norm, NumOps.Zero))
         {

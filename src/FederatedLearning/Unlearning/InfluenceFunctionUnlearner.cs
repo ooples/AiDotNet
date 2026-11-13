@@ -241,9 +241,9 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
     private static double EstimateMembershipScore(Tensor<T> gradient, Tensor<T> correction)
     {
         // How well the correction aligns with the original gradient
-        double dot = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(gradient, correction)));
-        double normA = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(gradient)));
-        double normB = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(correction)));
+        double dot = UnlearningEngineOps.Dot(gradient, correction);
+        double normA = UnlearningEngineOps.Dot(gradient, gradient);
+        double normB = UnlearningEngineOps.Dot(correction, correction);
         double denomCS = Math.Sqrt(normA) * Math.Sqrt(normB);
         double alignment = denomCS > CosineEpsilon ? dot / denomCS : 0;
 

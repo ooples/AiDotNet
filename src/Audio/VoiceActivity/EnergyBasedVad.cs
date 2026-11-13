@@ -136,12 +136,12 @@ public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>
 
     #region Feature Computation
 
-    private double ComputeEnergy(T[] frame)
+    internal double ComputeEnergy(T[] frame)
     {
-        // Mean square in T; only the final scalar feeds the double-valued threshold logic.
-        var samples = new Vector<T>(frame);
-        T sumSquares = Engine.DotProduct(samples, samples);
-        return NumOps.ToDouble(sumSquares) / frame.Length;
+        // Mean square, reduced in double: in T the squares and their sum overflow (Half: above 65504), and the
+        // energy feeds the double-valued threshold logic.
+        var samples = new Tensor<T>(frame, [frame.Length]);
+        return Engine.TensorSum(Engine.TensorSquare(samples.Cast<double>())) / frame.Length;
     }
 
     private double ComputeZeroCrossingRate(T[] frame)
@@ -168,7 +168,7 @@ public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>
         return (double)crossings / (frame.Length - 1);
     }
 
-    private double ComputeSpectralFlatness(T[] frame)
+    internal double ComputeSpectralFlatness(T[] frame)
     {
         // Simple spectral flatness using FFT magnitudes
         int fftSize = 256;
@@ -181,17 +181,22 @@ public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>
         // Engine FFT, then the magnitude spectrum of the positive frequencies
         Engine.FFT(frameData, new Tensor<T>([fftSize]), out var spectrumReal, out var spectrumImag);
         int bins = fftSize / 2;
-        var real = Engine.TensorSlice(spectrumReal, [0], [bins]);
-        var imag = Engine.TensorSlice(spectrumImag, [0], [bins]);
+        // |X| = N sqrt((re/N)^2 + (im/N)^2): squaring |X| itself overflows T (Half: a full-scale 256-sample
+        // frame has |X| = 256, and 256^2 > 65504), while |X| / N is at most the largest sample magnitude.
+        T size = NumOps.FromDouble(fftSize);
+        var real = Engine.TensorDivideScalar(Engine.TensorSlice(spectrumReal, [0], [bins]), size);
+        var imag = Engine.TensorDivideScalar(Engine.TensorSlice(spectrumImag, [0], [bins]), size);
         var magnitudes = Engine.TensorAddScalar(
-            Engine.TensorSqrt(Engine.ComplexMagnitudeSquared(real, imag)), MagnitudeFloor());
+            Engine.TensorMultiplyScalar(Engine.TensorSqrt(Engine.ComplexMagnitudeSquared(real, imag)), size), MagnitudeFloor());
 
-        // Spectral flatness = geometric mean / arithmetic mean
+        // Spectral flatness = geometric mean / arithmetic mean. The arithmetic mean is taken of the magnitudes
+        // divided by the largest one (each at most 1), so their sum cannot overflow T either.
         T count = NumOps.FromDouble(bins);
-        T geometricMean = NumOps.Exp(NumOps.Divide(Engine.TensorSum(Engine.TensorLog(magnitudes)), count));
-        T arithmeticMean = NumOps.Divide(Engine.TensorSum(magnitudes), count);
+        T largest = Engine.ReduceMax(magnitudes, [0], false).GetFlat(0);
+        double logGeometricMean = NumOps.ToDouble(Engine.TensorSum(Engine.TensorLog(magnitudes))) / bins;
+        double relativeMean = NumOps.ToDouble(NumOps.Divide(Engine.TensorSum(Engine.TensorDivideScalar(magnitudes, largest)), count));
 
-        return NumOps.ToDouble(NumOps.Divide(geometricMean, arithmeticMean));
+        return Math.Exp(logGeometricMean - Math.Log(NumOps.ToDouble(largest))) / relativeMean;
     }
 
     /// <summary>

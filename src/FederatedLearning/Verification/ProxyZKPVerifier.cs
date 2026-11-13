@@ -192,7 +192,8 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
             }
         }
 
-        double totalNorm2 = flat is null ? 0.0 : NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(flat)));
+        // Reduced in double: in T the squares and their sum overflow (Half: above 65504).
+        double totalNorm2 = flat is null ? 0.0 : Engine.TensorSum(Engine.TensorSquare(flat.Cast<double>()));
 
         // Check 3: L2 norm bound.
         double norm = Math.Sqrt(totalNorm2);

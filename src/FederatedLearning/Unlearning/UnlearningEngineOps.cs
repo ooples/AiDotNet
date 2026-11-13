@@ -49,8 +49,67 @@ internal static class UnlearningEngineOps
         }
 
         var engine = AiDotNetEngine.Current;
+        var diff = engine.TensorSubtract(FitLength(a, size).Cast<double>(), FitLength(b, size).Cast<double>());
+        return Math.Sqrt(Dot(diff, diff));
+    }
+
+    /// <summary>
+    /// sum_i a_i b_i, reduced in double. The certificate metrics are doubles, and in T the products and
+    /// long sums overflow or saturate (Half: 65504, and integer spacing 2 above 2048).
+    /// </summary>
+    internal static double Dot<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSum(engine.TensorMultiply(a.Cast<double>(), b.Cast<double>()));
+    }
+
+    /// <summary>sum_i a_i, reduced in double (see <see cref="Dot{T}"/>).</summary>
+    internal static double Sum<T>(Tensor<T> a)
+    {
+        return AiDotNetEngine.Current.TensorSum(a.Cast<double>());
+    }
+
+    /// <summary>
+    /// Per-parameter influence of a client from its update history: |mean| * (1 + std) over the rounds, scaled to
+    /// [0, 1] by the largest score (left as is when that is not positive or any score is NaN). The variance is the
+    /// two-pass mean of squared deviations: E[x^2] - E[x]^2 cancels catastrophically in float and Half when the
+    /// updates are large next to their spread.
+    /// </summary>
+    internal static Tensor<T> InfluenceScores<T>(IReadOnlyList<Tensor<T>> updates, int modelSize)
+    {
+        var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var diff = engine.TensorSubtract(FitLength(a, size), FitLength(b, size));
-        return Math.Sqrt(numOps.ToDouble(engine.TensorSum(engine.TensorSquare(diff))));
+        var influence = new Tensor<T>(new[] { Math.Max(0, modelSize) });
+        if (updates.Count > 0)
+        {
+            T rounds = numOps.FromDouble(updates.Count);
+            var fitted = new List<Tensor<T>>(updates.Count);
+            foreach (var update in updates)
+            {
+                fitted.Add(FitLength(update, modelSize));
+            }
+
+            var mean = engine.TensorDivideScalar(SumFitted(fitted, modelSize), rounds);
+            var squaredDeviation = new Tensor<T>(new[] { Math.Max(0, modelSize) });
+            foreach (var update in fitted)
+            {
+                squaredDeviation = engine.TensorAdd(squaredDeviation, engine.TensorSquare(engine.TensorSubtract(update, mean)));
+            }
+
+            var std = engine.TensorSqrt(engine.TensorDivideScalar(squaredDeviation, rounds));
+            influence = engine.TensorMultiply(engine.TensorAbs(mean), engine.TensorAddScalar(std, numOps.One));
+        }
+
+        // A NaN score leaves the scores unnormalized, as the Math.Max fold did.
+        if (modelSize > 0 && !double.IsNaN(Sum(influence)))
+        {
+            T maxInfluence = engine.ReduceMax(influence, new[] { 0 }, false).GetFlat(0);
+            if (numOps.GreaterThan(maxInfluence, numOps.Zero))
+            {
+                influence = engine.TensorDivideScalar(influence, maxInfluence);
+            }
+        }
+
+        return influence;
     }
 }

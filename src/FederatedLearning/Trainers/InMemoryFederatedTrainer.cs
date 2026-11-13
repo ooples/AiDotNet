@@ -1567,7 +1567,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
 
             int clusters = Math.Max(1, options.ClusterCount);
-            var clusterSums = new Dictionary<int, Vector<T>>();
+            var clusterMembers = new Dictionary<int, List<(Vector<T> Parameters, double Weight)>>();
             var clusterWeights = new Dictionary<int, double>();
 
             foreach (var clientId in selectedClientIds)
@@ -1585,30 +1585,30 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 int clusterId = GetClusterId(clientId, clusters);
                 double w = Math.Max(1.0, dataset.SampleCount);
 
-                if (!clusterSums.TryGetValue(clusterId, out var sum))
+                if (!clusterMembers.TryGetValue(clusterId, out var members))
                 {
-                    sum = new Vector<T>(new T[globalAfterAggregation.Length]);
+                    members = new List<(Vector<T> Parameters, double Weight)>();
+                    clusterMembers[clusterId] = members;
                     clusterWeights[clusterId] = 0.0;
                 }
 
-                // Only the personalized entries of the sum are read back (ReplaceAt below).
-                clusterSums[clusterId] = Engine.Add(sum, Engine.Multiply(clientParams, NumOps.FromDouble(w)));
+                members.Add((clientParams, w));
 
                 clusterWeights[clusterId] += w;
             }
 
-            foreach (var kvp in clusterSums)
+            foreach (var kvp in clusterMembers)
             {
                 int clusterId = kvp.Key;
-                var sum = kvp.Value;
                 double totalW = clusterWeights.TryGetValue(clusterId, out var tw) ? tw : 0.0;
                 if (totalW <= 0.0)
                 {
                     continue;
                 }
 
+                // Only the personalized entries of the mean are read back.
                 perClusterState[clusterId] = ReplaceAt(
-                    globalAfterAggregation, Engine.Divide(sum, NumOps.FromDouble(totalW)), personalizedIndices, skipOutOfRange: false);
+                    globalAfterAggregation, WeightedMean(kvp.Value, totalW), personalizedIndices, skipOutOfRange: false);
             }
         }
 
@@ -1683,7 +1683,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         if (IsClusteredPersonalization(personalizationStrategy) && perClusterState != null)
         {
             int clusters = Math.Max(1, options.ClusterCount);
-            var clusterSums = new Dictionary<int, Vector<T>>();
+            var clusterMembers = new Dictionary<int, List<(Vector<T> Parameters, double Weight)>>();
             var clusterWeights = new Dictionary<int, double>();
 
             foreach (var clientId in selectedClientIds)
@@ -1709,32 +1709,53 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var adapted = InterfaceGuard.Parameterizable((result.BestSolution ?? localModel)).GetParameters();
 
                 double w = Math.Max(1.0, dataset.SampleCount);
-                if (!clusterSums.TryGetValue(clusterId, out var sum))
+                if (!clusterMembers.TryGetValue(clusterId, out var members))
                 {
-                    sum = new Vector<T>(new T[globalAfterParams.Length]);
+                    members = new List<(Vector<T> Parameters, double Weight)>();
+                    clusterMembers[clusterId] = members;
                     clusterWeights[clusterId] = 0.0;
                 }
 
-                // Only the personalized entries of the sum are read back (ReplaceAt below).
-                clusterSums[clusterId] = Engine.Add(sum, Engine.Multiply(adapted, NumOps.FromDouble(w)));
+                members.Add((adapted, w));
 
                 clusterWeights[clusterId] += w;
             }
 
-            foreach (var kvp in clusterSums)
+            foreach (var kvp in clusterMembers)
             {
                 int clusterId = kvp.Key;
-                var sum = kvp.Value;
                 double totalW = clusterWeights.TryGetValue(clusterId, out var tw) ? tw : 0.0;
                 if (totalW <= 0.0)
                 {
                     continue;
                 }
 
+                // Only the personalized entries of the mean are read back.
                 perClusterState[clusterId] = ReplaceAt(
-                    globalAfterParams, Engine.Divide(sum, NumOps.FromDouble(totalW)), personalizedIndices, skipOutOfRange: false);
+                    globalAfterParams, WeightedMean(kvp.Value, totalW), personalizedIndices, skipOutOfRange: false);
             }
         }
+    }
+
+    /// <summary>
+    /// The sample-weighted mean sum_i (w_i / totalWeight) x_i. Each weight is divided by the total before it
+    /// multiplies the parameters: sample counts times parameters overflow T (Half: above 65504).
+    /// </summary>
+    internal static Vector<T> WeightedMean(IReadOnlyList<(Vector<T> Parameters, double Weight)> members, double totalWeight)
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = members.Count, length = members[0].Parameters.Length;
+        var stacked = new T[count * length];
+        var weights = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            members[i].Parameters.AsSpan().CopyTo(stacked.AsSpan(i * length, length));
+            weights[i] = members[i].Weight / totalWeight;
+        }
+
+        var scale = engine.TensorBroadcastTo(new Tensor<double>(weights, new[] { count, 1 }).Cast<T>(), new[] { count, length });
+        var weighted = engine.TensorMultiply(new Tensor<T>(stacked, new[] { count, length }), scale);
+        return engine.ReduceSum(weighted, new[] { 0 }, false).ToVector();
     }
 
     private static int GetClusterId(int clientId, int clusterCount)

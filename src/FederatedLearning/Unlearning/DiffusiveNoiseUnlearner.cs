@@ -119,41 +119,8 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
         var targetUpdates = clientHistories[targetClientId];
         targetRounds = targetUpdates.Count;
 
-        if (targetRounds > 0)
-        {
-            // Compute variance of target client's updates per parameter
-            // Higher variance = parameter was more actively learned = higher influence
-            var sum = new Tensor<T>(new[] { modelSize });
-            var sumSq = new Tensor<T>(new[] { modelSize });
-            foreach (var update in targetUpdates)
-            {
-                var fitted = UnlearningEngineOps.FitLength(update, modelSize);
-                sum = Engine.TensorAdd(sum, fitted);
-                sumSq = Engine.TensorAdd(sumSq, Engine.TensorSquare(fitted));
-            }
-
-            T rounds = NumOps.FromDouble(targetRounds);
-            var mean = Engine.TensorDivideScalar(sum, rounds);
-            var meanSq = Engine.TensorDivideScalar(sumSq, rounds);
-
-            // Variance = E[x^2] - (E[x])^2, floored at 0
-            var variance = Engine.TensorMax(Engine.TensorSubtract(meanSq, Engine.TensorSquare(mean)), NumOps.Zero);
-
-            // Influence = magnitude of mean update * (1 + variance for uncertainty)
-            influence = Engine.TensorMultiply(Engine.TensorAbs(mean), Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.One));
-        }
-
-        // Normalize influence scores to [0, 1]; a NaN score leaves them unnormalized, as the Math.Max fold did.
-        if (modelSize > 0 && !double.IsNaN(NumOps.ToDouble(Engine.TensorSum(influence))))
-        {
-            T maxInfluence = Engine.ReduceMax(influence, new[] { 0 }, false).GetFlat(0);
-            if (NumOps.GreaterThan(maxInfluence, NumOps.Zero))
-            {
-                influence = Engine.TensorDivideScalar(influence, maxInfluence);
-            }
-        }
-
-        return influence;
+        // Higher variance = parameter was more actively learned = higher influence
+        return UnlearningEngineOps.InfluenceScores(targetUpdates, modelSize);
     }
 
     private Tensor<T> InjectStructuredNoise(Tensor<T> model, Tensor<T> influenceScores)
@@ -206,8 +173,8 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
 
         var weights = UnlearningEngineOps.FitLength(influence, size);
         var change = Engine.TensorAbs(Engine.TensorSubtract(UnlearningEngineOps.FitLength(original, size), UnlearningEngineOps.FitLength(unlearned, size)));
-        double influencedChange = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(change, weights)));
-        double totalInfluence = NumOps.ToDouble(Engine.TensorSum(weights));
+        double influencedChange = UnlearningEngineOps.Dot(change, weights);
+        double totalInfluence = UnlearningEngineOps.Sum(weights);
 
         if (totalInfluence < 1e-12) return 0.5;
 
