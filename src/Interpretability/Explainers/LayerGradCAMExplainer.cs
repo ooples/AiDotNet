@@ -277,7 +277,7 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
     private Vector<T> ComputeNumericalLayerGradients(Vector<T> input, int targetClass)
     {
         var engine = AiDotNetEngine.Current;
-        T epsilon = NumOps.FromDouble(1e-5);
+        T epsilon = ExplainerTensorOps<T>.Tolerance(1e-5);
         var basePred = _predictFunction(input);
         T baseScore = basePred[targetClass];
 
@@ -373,7 +373,7 @@ public class LayerGradCAMExplanation<T>
         var map = Tensor<T>.FromMatrix(GradCAMMap);
         T max = map.Length > 0 ? engine.TensorMaxValue(engine.TensorMax(map, NumOps.Zero)) : NumOps.Zero;
 
-        if (NumOps.GreaterThan(max, NumOps.FromDouble(1e-10)))
+        if (NumOps.GreaterThan(max, ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
             return engine.TensorDivideScalar(map, max).ToMatrix();
         }

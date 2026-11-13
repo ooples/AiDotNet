@@ -338,7 +338,7 @@ public class GuidedGradCAMExplanation<T>
             ? engine.TensorMaxValue(engine.TensorMax(GuidedGradCAM.AsTensor(), NumOps.Zero))
             : NumOps.Zero;
 
-        if (NumOps.GreaterThan(max, NumOps.FromDouble(1e-10)))
+        if (NumOps.GreaterThan(max, ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
             return engine.Divide(GuidedGradCAM, max);
         }

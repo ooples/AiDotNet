@@ -306,7 +306,7 @@ public class LayerwiseRelevancePropagationExplainer<T> : ILocalExplainer<T, LRPE
     {
         var engine = AiDotNetEngine.Current;
         var zTensor = z.AsTensor();
-        var usable = engine.TensorGreaterThan(engine.TensorAbs(zTensor), NumOps.FromDouble(1e-10));
+        var usable = engine.TensorGreaterThan(engine.TensorAbs(zTensor), ExplainerTensorOps<T>.Tolerance(1e-10));
         var safeZ = engine.TensorWhere(usable, zTensor, engine.TensorFullLike(zTensor, NumOps.One));
         var ratio = engine.TensorDivide(relevance.AsTensor(), safeZ);
         return engine.TensorWhere(usable, ratio, engine.TensorFullLike(zTensor, NumOps.Zero)).ToVector();

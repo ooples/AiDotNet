@@ -55,6 +55,32 @@ internal static class ExplainerTensorOps<T>
     }
 
     /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to the smallest positive normal Half when T is Half (Half rounds
+    /// 1e-10 to 0, which disables "above epsilon" guards); other types keep <paramref name="epsilon"/>.
+    /// </summary>
+    public static T Tolerance(double epsilon) =>
+        AiDotNet.Preprocessing.DimensionalityReduction.DimensionalityReductionOps.Tolerance<T>(epsilon);
+
+    /// <summary>
+    /// The sums of squares of <paramref name="numerator"/> and <paramref name="denominator"/>, both divided by the
+    /// square of the largest magnitude in either, so their ratio is exact while neither sum overflows (a Half square
+    /// overflows above 256). Returns (0, 0) when both tensors are all zero.
+    /// </summary>
+    public static (T Numerator, T Denominator) ScaledSumsOfSquares(Tensor<T> numerator, Tensor<T> denominator)
+    {
+        var engine = AiDotNetEngine.Current;
+        T scale = MathHelper.Max(
+            engine.TensorMaxValue(engine.TensorAbs(numerator)), engine.TensorMaxValue(engine.TensorAbs(denominator)));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero))
+        {
+            return (NumOps.Zero, NumOps.Zero);
+        }
+
+        return (engine.TensorSumOfSquares(engine.TensorDivideScalar(numerator, scale)),
+            engine.TensorSumOfSquares(engine.TensorDivideScalar(denominator, scale)));
+    }
+
+    /// <summary>
     /// Index of the largest entry (first one on ties).
     /// </summary>
     public static int ArgMax(Vector<T> values)
@@ -62,7 +88,8 @@ internal static class ExplainerTensorOps<T>
         if (values.Length == 0)
             throw new ArgumentException("Cannot take the arg max of an empty vector.", nameof(values));
 
-        return AiDotNetEngine.Current.TensorArgMax(values.AsTensor(), 0).GetFlat(0);
+        // The engine arg max does not promise the first index on ties
+        return AiDotNet.AnomalyDetection.AnomalyTensorOps.FirstArgMax(values.AsTensor());
     }
 
     /// <summary>
@@ -81,7 +108,7 @@ internal static class ExplainerTensorOps<T>
 
         var candidates = engine.TensorWhere(above, tensor, engine.TensorFullLike(tensor, seed));
         var isMax = engine.TensorMultiply(engine.TensorEquals(candidates, engine.TensorMaxValue(candidates)), above);
-        return engine.TensorArgMax(isMax, 0).GetFlat(0);
+        return AiDotNet.AnomalyDetection.AnomalyTensorOps.FirstArgMax(isMax);
     }
 
     /// <summary>
@@ -237,7 +264,8 @@ internal static class ExplainerTensorOps<T>
         var increases = engine.TensorGreaterThan(
             engine.TensorSlice(sorted, new[] { 1 }, new[] { n - 1 }),
             engine.TensorSlice(sorted, new[] { 0 }, new[] { n - 1 }));
-        var denseRanks = engine.TensorCumSum(increases, 0).Cast<int>().ToArray();
+        // Count in int: a 0/1 running sum in Half stops growing at 2048
+        var denseRanks = engine.TensorCumSum(increases.Cast<int>(), 0).ToArray();
         var positions = order.ToArray();
         for (int k = 1; k < n; k++)
         {
@@ -274,10 +302,11 @@ internal static class ExplainerTensorOps<T>
     public static Tensor<T> RangeIndicator(int length, int start, int end)
     {
         var engine = AiDotNetEngine.Current;
-        var indices = engine.TensorArange<T>(0, length, 1);
-        var atOrAfterStart = engine.TensorGreaterThan(indices, NumOps.FromDouble(start - 1));
-        var beforeEnd = engine.TensorLessThan(indices, NumOps.FromDouble(end));
-        return engine.TensorMultiply(atOrAfterStart, beforeEnd);
+        // Compare indices in int: Half cannot represent every index above 2048
+        var indices = engine.TensorArange<int>(0, length, 1);
+        var atOrAfterStart = engine.TensorGreaterThan(indices, start - 1);
+        var beforeEnd = engine.TensorLessThan(indices, end);
+        return engine.TensorMultiply(atOrAfterStart, beforeEnd).Cast<T>();
     }
 
     /// <summary>
@@ -324,9 +353,11 @@ internal static class ExplainerTensorOps<T>
         var upper = lower.Select(index => Math.Min(index + 1, source - 1)).ToArray();
         var lowerIndex = new Tensor<int>(lower, new[] { target });
 
-        var positions = engine.TensorMultiplyScalar(
-            engine.TensorDivideScalar(engine.TensorArange<T>(0, target, 1), NumOps.FromDouble(target)), NumOps.FromDouble(source));
-        var fraction = engine.TensorSubtract(positions, lowerIndex.Cast<T>()).Reshape(new[] { target, 1 });
+        // f = s - floor(s) = ((i * source) mod target) / target, from int index arithmetic (an index tensor in Half
+        // cannot represent positions above 2048, so s - floor(s) taken in T loses the fraction)
+        var remainders = Enumerable.Range(0, target).Select(i => (int)((long)i * source % target)).ToArray();
+        var fraction = engine.TensorDivideScalar(
+            new Tensor<int>(remainders, new[] { target }).Cast<T>(), NumOps.FromDouble(target)).Reshape(new[] { target, 1 });
         var complement = engine.TensorSubtract(engine.TensorFullLike(fraction, NumOps.One), fraction);
 
         var identity = engine.TensorEye<T>(source);

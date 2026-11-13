@@ -86,21 +86,22 @@ public sealed class FaithfulnessAuditor<T>
 
         // Feature order by descending absolute attribution; rank[f] = position of feature f in that order.
         var order = DescendingAbsoluteOrder(attributions, d);
-        var rank = engine.TensorScatter(new Tensor<T>(new[] { d }), new Tensor<int>(order, new[] { d }),
-            engine.TensorArange<T>(0, d, 1), 0);
+        // Ranks and step bounds are indices, so they are compared in int (Half cannot hold every index above 2048).
+        var rank = engine.TensorScatter(new Tensor<int>(new[] { d }), new Tensor<int>(order, new[] { d }),
+            engine.TensorArange<int>(0, d, 1), 0);
 
         int topK = Math.Max(1, (int)Math.Round(_topFraction * d));
         int stepSize = Math.Max(1, d / _maxSteps);
 
         // Row s of the step mask marks the features already perturbed after curve step s: the first
         // min(d, (s + 1) * stepSize) features in attribution order.
-        var stepEnds = engine.TensorMin(engine.TensorArange<T>(stepSize, d + stepSize, stepSize), _numOps.FromDouble(d));
+        var stepEnds = engine.TensorMin(engine.TensorArange<int>(stepSize, d + stepSize, stepSize), d);
         int steps = stepEnds.Length;
         var stepShape = new[] { steps, d };
         var stepMask = engine.TensorLessThan(
             engine.TensorBroadcastTo(rank.Reshape(new[] { 1, d }), stepShape),
-            engine.TensorBroadcastTo(stepEnds.Reshape(new[] { steps, 1 }), stepShape));
-        var topMask = engine.TensorLessThan(rank, _numOps.FromDouble(topK));
+            engine.TensorBroadcastTo(stepEnds.Reshape(new[] { steps, 1 }), stepShape)).Cast<T>();
+        var topMask = engine.TensorLessThan(rank, topK).Cast<T>();
 
         var fullScores = new List<T>(n);
         var deletionAucs = new List<T>(n);

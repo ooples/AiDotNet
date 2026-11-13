@@ -190,9 +190,6 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
             int baselineIdx = rand.Next(numBackground);
             var baseline = _backgroundData.GetRow(baselineIdx);
 
-            // Get baseline prediction
-            _predictFunction(baseline);
-
             // Compute Integrated Gradients from this baseline
             var sampleAttr = ComputeIntegratedGradients(instance, baseline, outputIndex, rand);
 

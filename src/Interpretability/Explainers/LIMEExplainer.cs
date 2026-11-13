@@ -240,12 +240,13 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>, IG
         var engine = AiDotNetEngine.Current;
         var binary = Tensor<T>.FromMatrix(binaryData.GetSubMatrix(0, 0, binaryData.Rows, NumFeatures));
 
-        // Squared Euclidean distance in binary space from the all-ones (original) sample
-        var diff = engine.TensorSubtract(engine.TensorFullLike(binary, NumOps.One), binary);
-        var squaredDistance = engine.ReduceSum(engine.TensorSquare(diff), new[] { 1 }, false);
+        // Squared Euclidean distance in binary space from the all-ones (original) sample: the number of switched-off
+        // features, counted in int (a 0/1 sum in Half stops at 2048)
+        var switchedOff = engine.TensorSubtract(engine.TensorFullLike(binary, NumOps.One), binary).Cast<int>();
+        var squaredDistance = engine.ReduceSum(switchedOff, new[] { 1 }, false).Cast<T>();
 
-        // Exponential kernel: exp(-distance^2 / width^2)
-        T scale = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.FromDouble(_kernelWidth * _kernelWidth)));
+        // LIME's exponential kernel sqrt(exp(-d^2 / width^2)) = exp(-d^2 / (2 width^2)) (lime_base / lime_tabular)
+        T scale = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.FromDouble(2.0 * _kernelWidth * _kernelWidth)));
         return engine.TensorExp(engine.TensorMultiplyScalar(squaredDistance, scale)).ToVector();
     }
 

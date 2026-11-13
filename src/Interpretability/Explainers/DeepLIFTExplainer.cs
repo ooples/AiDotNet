@@ -288,10 +288,12 @@ public partial class DeepLIFTExplainer<T> : ILocalExplainer<T, DeepLIFTExplanati
             // Compute contributions using gradient scaling
             var gradients = ComputeNumericalGradient(input, outputIndex);
             var rawContrib = engine.Multiply(deltaInput, gradients.GetSubVector(0, n));
-            T totalGradContrib = engine.Sum(engine.Abs(rawContrib));
+            T totalGradContrib = engine.Sum(rawContrib);
 
-            // Rescale to match output difference
-            if (NumOps.GreaterThan(NumOps.Abs(totalGradContrib), NumOps.FromDouble(1e-10)))
+            // Rescale so the attributions sum to the output difference (DeepLIFT summation-to-delta). The signed sum
+            // is the divisor: dividing by the sum of magnitudes breaks completeness and flips attributions whenever
+            // the output moves against the net contribution.
+            if (NumOps.GreaterThan(NumOps.Abs(totalGradContrib), ExplainerTensorOps<T>.Tolerance(1e-10)))
             {
                 return engine.Divide(engine.Multiply(rawContrib, outputDiff), totalGradContrib);
             }

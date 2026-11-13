@@ -374,7 +374,7 @@ public class ContrastiveExplainer<T> : ILocalExplainer<T, ContrastiveExplanation
     private Dictionary<int, T> ComputeFeatureContributions(Vector<T> instance, int factClass, int foilClass)
     {
         var engine = AiDotNetEngine.Current;
-        T epsilon = NumOps.FromDouble(1e-4);
+        T epsilon = ExplainerTensorOps<T>.Tolerance(1e-4);
 
         // Compute gradient of (fact_score - foil_score) w.r.t. each feature by central differences
         var plusScores = new List<Vector<T>>(_numFeatures);

@@ -242,13 +242,15 @@ public class GradCAMExplainer<T> : ILocalExplainer<T, GradCAMExplanation<T>>
         var grad = ChannelPlanes(gradients, channels, height * width);
         var feat = ChannelPlanes(featureMaps, channels, height * width);
 
-        // Grad-CAM++ uses pixel-wise weights instead of global average:
-        // alpha = g^2 / (2 g^2 + f g^3 + 1e-8), weight_c = sum over pixels of alpha * ReLU(g)
+        // Grad-CAM++ (Chattopadhay et al. 2018, eq. 19) uses pixel-wise weights instead of the global average:
+        // alpha_ij = g_ij^2 / (2 g_ij^2 + (sum_ab A_ab) g_ij^3 + eps), with the activation summed over the whole
+        // channel, and weight_c = sum over pixels of alpha * ReLU(g)
         var grad2 = engine.TensorSquare(grad);
         var grad3 = engine.TensorMultiply(grad2, grad);
+        var channelSums = engine.TensorBroadcastTo(engine.ReduceSum(feat, new[] { 1 }, true), feat.Shape.ToArray());
         var denominator = engine.TensorAddScalar(
-            engine.TensorAdd(engine.TensorMultiplyScalar(grad2, NumOps.FromDouble(2)), engine.TensorMultiply(feat, grad3)),
-            NumOps.FromDouble(1e-8));
+            engine.TensorAdd(engine.TensorMultiplyScalar(grad2, NumOps.FromDouble(2)), engine.TensorMultiply(channelSums, grad3)),
+            ExplainerTensorOps<T>.Tolerance(1e-8));
         var alpha = engine.TensorDivide(grad2, denominator);
         var weights = engine.ReduceSum(engine.TensorMultiply(alpha, engine.ReLU(grad)), new[] { 1 }, false);
 

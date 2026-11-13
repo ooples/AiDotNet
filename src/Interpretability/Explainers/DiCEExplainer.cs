@@ -373,9 +373,9 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         var b = engine.TensorBroadcastTo(ExplainerTensorOps<T>.Stack(second).Reshape(new[] { 1, columns, _numFeatures }), shape);
         var diff = engine.TensorSubtract(a, b);
 
-        var scale = engine.TensorAddScalar(NormalizationRanges().AsTensor(), NumOps.FromDouble(1e-6));
+        var scale = engine.TensorAddScalar(NormalizationRanges().AsTensor(), ExplainerTensorOps<T>.Tolerance(1e-6));
         var normalized = engine.TensorDivide(diff, engine.TensorBroadcastTo(scale.Reshape(new[] { 1, 1, _numFeatures }), shape));
-        var changed = engine.TensorGreaterThan(engine.TensorAbs(diff), NumOps.FromDouble(1e-6));
+        var changed = engine.TensorGreaterThan(engine.TensorAbs(diff), ExplainerTensorOps<T>.Tolerance(1e-6));
         var sumSq = engine.ReduceSum(engine.TensorMultiply(changed, engine.TensorSquare(normalized)), new[] { 2 }, false);
         return engine.TensorSqrt(sumSq);
     }
@@ -425,7 +425,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         // Fraction of the mutable features changed by more than 1e-6
         var individuals = ExplainerTensorOps<T>.Stack(population);
         var originals = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(original.GetSubVector(0, _numFeatures)), individuals.Shape.ToArray());
-        var changed = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(originals, individuals)), NumOps.FromDouble(1e-6));
+        var changed = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(originals, individuals)), ExplainerTensorOps<T>.Tolerance(1e-6));
         var mutableMask = engine.TensorBroadcastTo(
             new Tensor<int>(mutable.Select(isMutable => isMutable ? 1 : 0).ToArray(), new[] { 1, _numFeatures }).Cast<T>(), individuals.Shape.ToArray());
         var changedCount = engine.ReduceSum(engine.TensorMultiply(changed, mutableMask), new[] { 1 }, false);
@@ -686,7 +686,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         var originalValues = original.GetSubVector(0, _numFeatures);
         var counterfactualValues = counterfactual.GetSubVector(0, _numFeatures);
         var diff = engine.Subtract(originalValues, counterfactualValues);
-        var changedFeatures = engine.TensorGreaterThan(engine.Abs(diff).AsTensor(), NumOps.FromDouble(1e-6))
+        var changedFeatures = engine.TensorGreaterThan(engine.Abs(diff).AsTensor(), ExplainerTensorOps<T>.Tolerance(1e-6))
             .ToVector().NonZeroIndices().ToList();
 
         var changes = changedFeatures

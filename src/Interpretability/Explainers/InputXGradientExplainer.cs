@@ -259,7 +259,7 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
         if (prediction.Length == 0)
             throw new ArgumentException("The prediction has no outputs.", nameof(prediction));
 
-        return AiDotNetEngine.Current.TensorArgMax(prediction.AsTensor(), 0).GetFlat(0);
+        return ExplainerTensorOps<T>.ArgMax(prediction);
     }
 
     /// <summary>

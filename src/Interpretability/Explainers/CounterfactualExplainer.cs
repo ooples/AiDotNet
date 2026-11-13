@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -309,7 +310,7 @@ public class CounterfactualExplainer<T> : ILocalExplainer<T, CounterfactualExpla
         // Features whose value moved by more than 1e-6, with the signed change.
         var engine = AiDotNetEngine.Current;
         var changes = engine.Subtract(counterfactual.GetSubVector(0, _numFeatures), original.GetSubVector(0, _numFeatures));
-        var changed = engine.TensorGreaterThan(engine.Abs(changes).AsTensor(), NumOps.FromDouble(1e-6)).ToVector()
+        var changed = engine.TensorGreaterThan(engine.Abs(changes).AsTensor(), ExplainerTensorOps<T>.Tolerance(1e-6)).ToVector()
             .NonZeroIndices().ToList();
         var featureChanges = changed
             .Zip(changes.GetElements(changed), (index, change) => (index, change))

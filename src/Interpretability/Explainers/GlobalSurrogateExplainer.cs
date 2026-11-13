@@ -355,10 +355,11 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
         var engine = AiDotNetEngine.Current;
         var actualTensor = actual.AsTensor();
         T mean = engine.TensorMean(actualTensor);
-        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actualTensor, predicted.GetSubVector(0, n).AsTensor()));
-        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actualTensor, mean));
+        // Both sums pre-scaled by the largest magnitude: R^2 is unchanged and Half squares cannot overflow
+        var (ssRes, ssTot) = ExplainerTensorOps<T>.ScaledSumsOfSquares(
+            engine.TensorSubtract(actualTensor, predicted.GetSubVector(0, n).AsTensor()), engine.TensorSubtractScalar(actualTensor, mean));
 
-        if (NumOps.LessThan(ssTot, NumOps.FromDouble(1e-10))) return NumOps.Zero;
+        if (NumOps.LessThan(ssTot, ExplainerTensorOps<T>.Tolerance(1e-10))) return NumOps.Zero;
         return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
     }
 

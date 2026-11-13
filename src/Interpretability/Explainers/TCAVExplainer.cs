@@ -227,7 +227,7 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         int layerSize)
     {
         var engine = AiDotNetEngine.Current;
-        T epsilon = NumOps.FromDouble(1e-5);
+        T epsilon = ExplainerTensorOps<T>.Tolerance(1e-5);
 
         // Get baseline
         var inputTensor = Tensor<T>.FromRowMatrix(new Matrix<T>(new[] { input }));
@@ -269,7 +269,7 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         // Accumulate d(output)/d(activation[j]) / numInputDims where activation j (present) changed
         var relevant = engine.TensorMultiply(
             ExplainerTensorOps<T>.Stack(activationCounts),
-            engine.TensorGreaterThan(engine.TensorAbs(dActivation), NumOps.FromDouble(1e-10)));
+            engine.TensorGreaterThan(engine.TensorAbs(dActivation), ExplainerTensorOps<T>.Tolerance(1e-10)));
         var dOutputRows = engine.TensorBroadcastTo(dOutput.Reshape(new[] { numInputDims, 1 }), shape);
         var safeDActivation = engine.TensorWhere(relevant, dActivation, engine.TensorFullLike(dActivation, NumOps.One));
         var ratios = engine.TensorDivideScalar(engine.TensorDivide(dOutputRows, safeDActivation), NumOps.FromDouble(numInputDims));
@@ -333,7 +333,7 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
 
         // Normalize to unit vector
         T norm = NumOps.Sqrt(engine.DotProduct(weights, weights));
-        if (NumOps.GreaterThan(norm, NumOps.FromDouble(1e-10)))
+        if (NumOps.GreaterThan(norm, ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
             weights = engine.Divide(weights, norm);
         }
@@ -345,7 +345,8 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
         {
             var predicted = engine.TensorGreaterThan(engine.MatrixVectorMultiply(X, weights).AsTensor(), half);
             var actual = engine.TensorGreaterThan(y.AsTensor(), half);
-            correct = NumOps.ToInt32(engine.TensorSum(engine.TensorEquals(predicted, actual)));
+            // Counted in int: a 0/1 sum in Half stops at 2048
+            correct = engine.TensorCountNonzero(engine.TensorEquals(predicted, actual));
         }
         double accuracy = (double)correct / numTotal;
 
@@ -494,8 +495,8 @@ public class TCAVExplainer<T> : IGPUAcceleratedExplainer<T>
 
         // Fraction of inputs with a positive directional derivative
         int positiveCount = derivatives.Count > 0
-            ? NumOps.ToInt32(AiDotNetEngine.Current.TensorSum(
-                AiDotNetEngine.Current.TensorGreaterThan(new Vector<T>(derivatives).AsTensor(), NumOps.Zero)))
+            ? AiDotNetEngine.Current.TensorCountNonzero(
+                AiDotNetEngine.Current.TensorGreaterThan(new Vector<T>(derivatives).AsTensor(), NumOps.Zero))
             : 0;
         return (double)positiveCount / testInputs.Rows;
     }

@@ -225,7 +225,7 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
     private Vector<T> ComputeNumericalGuidedGradients(Vector<T> input, int? targetClass)
     {
         var engine = AiDotNetEngine.Current;
-        T epsilon = NumOps.FromDouble(1e-5);
+        T epsilon = ExplainerTensorOps<T>.Tolerance(1e-5);
         var prediction = GetPrediction(input);
         int actualTarget = targetClass ?? GetPredictedClass(prediction);
         T baseScore = prediction[actualTarget];
@@ -355,7 +355,7 @@ public class GuidedBackpropExplanation<T>
             ? engine.TensorMaxValue(engine.TensorMax(GuidedGradients.AsTensor(), NumOps.Zero))
             : NumOps.Zero;
 
-        if (NumOps.LessThan(max, NumOps.FromDouble(1e-10)))
+        if (NumOps.LessThan(max, ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
             return new Vector<T>(GuidedGradients.Length);
         }

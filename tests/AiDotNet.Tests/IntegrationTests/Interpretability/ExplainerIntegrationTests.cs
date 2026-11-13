@@ -2040,5 +2040,255 @@ public class ExplainerIntegrationTests
         Assert.All(explanation.Counterfactuals, cf => Assert.NotEmpty(cf.Changes));
     }
 
+    [Fact]
+    public void DeepLIFT_RescaleApproximation_OnLinearModel_IsExactAndComplete()
+    {
+        // f(x) = x0 - 2 x1 is linear, so DeepLIFT (and every completeness-preserving attribution) gives
+        // w_j (x_j - r_j) = (1, -2) from the zero baseline, summing to f(x) - f(0) = -1. Rescaling by the sum of
+        // |contributions| instead gives (-1/3, 2/3), which neither sums to -1 nor keeps the signs.
+        Func<Vector<double>, Vector<double>> predict = x => new Vector<double>(new[] { x[0] - 2.0 * x[1] });
+        var explainer = new DeepLIFTExplainer<double>(predict, numFeatures: 2, rule: DeepLIFTRule.Rescale);
+
+        var explanation = explainer.Explain(new Vector<double>(new[] { 1.0, 1.0 }), 0);
+
+        Assert.Equal(1.0, explanation.Attributions[0], 1e-6);
+        Assert.Equal(-2.0, explanation.Attributions[1], 1e-6);
+        Assert.Equal(0.0, explanation.CompletenessError, 1e-9);
+    }
+
+    [Fact]
+    public void DeepSHAP_GradientFree_SecondOutput_SumsToPredictionMinusExpectedValue()
+    {
+        // Two outputs; output 1 is explained. The base value must be the mean of output 1 over the references the
+        // attributions were averaged over, and every per-reference split must sum to f(x) - f(r). Mixed-sign
+        // differences x - r make a signed-share split fail that sum.
+        Func<Vector<double>, Vector<double>> predict = x => new Vector<double>(new[]
+        {
+            x[0] + x[1],
+            3.0 * x[0] - x[1] + 0.5 * x[2],
+        });
+        var background = new Matrix<double>(new double[,]
+        {
+            { 2.0, -1.0, 0.5 }, { -1.0, 3.0, 1.0 }, { 0.5, 0.5, -2.0 }, { 4.0, 1.0, 0.0 },
+        });
+        var explainer = new DeepSHAPExplainer<double>(predict, null, background, numSamples: 16, randomState: 7);
+
+        var explanation = explainer.Explain(new Vector<double>(new[] { 1.0, 2.0, -1.0 }), 1);
+
+        Assert.Equal(predict(new Vector<double>(new[] { 1.0, 2.0, -1.0 }))[1], explanation.Prediction, 1e-12);
+        double attributionSum = 0;
+        for (int j = 0; j < explanation.Attributions.Length; j++)
+        {
+            attributionSum += explanation.Attributions[j];
+        }
+
+        Assert.Equal(explanation.Prediction - explanation.ExpectedValue, attributionSum, 1e-9);
+        Assert.Equal(0.0, explanation.GetSumError(), 1e-9);
+    }
+
+    [Fact]
+    public void ExplainerTensorOps_RangeIndicator_Half_MarksIndicesAbove2048()
+    {
+        // Half cannot hold 2049 (it rounds to 2048), so an index tensor in Half never matches [2049, 2050)
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var indicator = AiDotNet.Interpretability.Helpers.ExplainerTensorOps<Half>.RangeIndicator(4100, 2049, 2050).ToArray();
+
+        for (int i = 0; i < indicator.Length; i++)
+        {
+            Assert.Equal(i == 2049 ? 1.0 : 0.0, ops.ToDouble(indicator[i]));
+        }
+    }
+
+    [Fact]
+    public void ExplainerTensorOps_DenseRanks_Half_CountsPast2048()
+    {
+        // 3000 distinct Half values (the integers 1499 down to -1500, all exact in Half): the dense ranks run
+        // 2999 down to 0, which a running count kept in Half cannot reach (it stops at 2048).
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        int n = 3000;
+        var values = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            values[i] = ops.FromDouble(1499 - i);
+        }
+
+        var ranks = AiDotNet.Interpretability.Helpers.ExplainerTensorOps<Half>.DenseRanks(new Tensor<Half>(values, new[] { n }));
+
+        for (int i = 0; i < n; i++)
+        {
+            Assert.Equal(n - 1 - i, ranks[i]);
+        }
+    }
+
+    [Fact]
+    public void Anchor_Precision_Half_CountsMatchesPast2048()
+    {
+        // With no rules every one of the 3001 samples is covered and a constant class-0 model matches them all, so the
+        // precision is exactly 1 and the coverage 1. A 0/1 count kept in Half cannot hold 3001.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var explainer = new AnchorExplainer<Half>(m => new Vector<Half>(m.Rows), numFeatures: 2, nSamples: 3001, randomState: 3);
+        var method = typeof(AnchorExplainer<Half>).GetMethod(
+            "EstimatePrecisionAndCoverage", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        var result = method?.Invoke(explainer, new object[]
+        {
+            new Vector<Half>(new[] { ops.One, ops.One }),
+            new Dictionary<int, (Half min, Half max)>(),
+            0,
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5),
+        });
+        Assert.NotNull(result);
+        if (result is null)
+        {
+            return;
+        }
+
+        var (precision, coverage) = ((Half, Half))result;
+        Assert.Equal(1.0, ops.ToDouble(precision));
+        Assert.Equal(1.0, ops.ToDouble(coverage));
+    }
+
+    [Fact]
+    public void TCAV_TrainCAV_Half_CountsCorrectPredictionsPast2048()
+    {
+        // 1501 concept examples at activation 1 and 1500 random ones at 0 are separated perfectly, so the accuracy is
+        // 3001 / 3001 = 1. A 0/1 count kept in Half cannot hold 3001 (it rounds, and a running sum stops at 2048).
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var concept = new Matrix<Half>(1501, 1);
+        for (int i = 0; i < concept.Rows; i++)
+        {
+            concept[i, 0] = ops.One;
+        }
+
+        var random = new Matrix<Half>(1500, 1);
+        var explainer = new TCAVExplainer<Half>(
+            predictFunction: v => v,
+            layerActivationFunction: v => v,
+            gradientToLayerFunction: (v, _) => v,
+            layerSize: 1);
+
+        var cav = explainer.TrainCAV(concept, random);
+
+        Assert.Equal(1.0, cav.ClassifierAccuracy);
+    }
+
+    [Fact]
+    public void Occlusion_Half_WindowPast2048_OccludesTheRightColumn()
+    {
+        // A 1 x 2050 Half image of ones whose score is pixel (0, 2049). Occluding column 2049 alone (1 x 1 window)
+        // must drop the score by 1 and occluding column 2048 must not. Column indices held in Half collapse 2049
+        // onto 2048, which would move that drop to column 2048.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        int width = 2050;
+        var pixels = new Half[width];
+        for (int i = 0; i < width; i++)
+        {
+            pixels[i] = ops.One;
+        }
+
+        var explainer = new OcclusionExplainer<Half>(
+            t => new Tensor<Half>(new[] { 1, 1 }, new Vector<Half>(new[] { t[0, 2049] })),
+            windowShape: new[] { 1, 1 });
+
+        var map = explainer.Explain(new Tensor<Half>(pixels, new[] { 1, width }), targetClass: 0).SensitivityMap;
+
+        Assert.Equal(1.0, ops.ToDouble(map[0, 2049]));
+        Assert.Equal(0.0, ops.ToDouble(map[0, 2048]));
+        Assert.Equal(0.0, ops.ToDouble(map[0, 0]));
+    }
+
+    [Fact]
+    public void GradCAMPlusPlus_Alpha_UsesChannelActivationSum()
+    {
+        // Grad-CAM++ (Chattopadhay et al. 2018; pytorch-grad-cam GradCAMPlusPlus): alpha_ij = g^2 / (2 g^2 +
+        // (sum_ab A_ab) g^3 + eps), the activation summed over the whole channel. Expected heatmap from that reference
+        // for these 2-channel 2 x 2 maps; a per-pixel A_ij in the denominator gives [[0.806, 0.052], [0, 1]] instead.
+        var features = new Tensor<double>(new[] { 2, 2, 2 },
+            new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 4.0, 1.0, 0.0, 2.0 }));
+        var gradients = new Tensor<double>(new[] { 2, 2, 2 },
+            new Vector<double>(new[] { 0.5, 0.2, 0.1, 0.3, 0.4, -0.1, 0.6, 0.2 }));
+        var explainer = new GradCAMExplainer<double>(
+            predictFunction: _ => new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new[] { 0.3, 0.7 })),
+            featureMapFunction: (_, _) => features,
+            gradientFunction: (_, _, _) => gradients,
+            inputShape: new[] { 2, 2 },
+            featureMapShape: new[] { 2, 2, 2 },
+            useGradCAMPlusPlus: true);
+
+        var heatmap = explainer.ExplainTensor(new Tensor<double>(new[] { 2, 2 }), targetClass: 1).OriginalHeatmap;
+
+        Assert.Equal(0.759720183053723, heatmap[0, 0], 1e-9);
+        Assert.Equal(0.034895068645146, heatmap[0, 1], 1e-9);
+        Assert.Equal(0.0, heatmap[1, 0], 1e-9);
+        Assert.Equal(1.0, heatmap[1, 1], 1e-9);
+    }
+
+    [Fact]
+    public void FaithfulnessAuditor_Half_TopFeaturesPast2048_AreKept()
+    {
+        // 2050 features with equal attributions rank in index order; the top 2049 (ranks 0 .. 2048) are kept for
+        // sufficiency. The score reads feature 2048 only, so keeping it gives sufficiency 0. Ranks compared in Half
+        // drop rank 2048 (Half holds 2049 as 2048), which would replace that feature by the baseline (0) instead.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        int d = 2050;
+        var data = new Matrix<Half>(2, d);
+        for (int j = 0; j < d; j++)
+        {
+            data[0, j] = ops.One;
+            data[1, j] = ops.Negate(ops.One);
+        }
+
+        var attributions = new Vector<Half>(d);
+        for (int j = 0; j < d; j++)
+        {
+            attributions[j] = ops.One;
+        }
+
+        var auditor = new AiDotNet.Interpretability.FaithfulnessAuditor<Half>(maxSteps: 2, topFraction: 2049.0 / 2050.0);
+        var report = auditor.Audit(v => v[2048], data, attributions);
+
+        Assert.Equal(0.0, ops.ToDouble(report.Sufficiency));
+        Assert.Equal(1.0, ops.ToDouble(report.Comprehensiveness));
+    }
+
+    [Fact]
+    public void LIME_SampleWeights_UseLimeKernel()
+    {
+        // lime_base / lime_tabular weigh a perturbed sample by sqrt(exp(-d^2 / w^2)) = exp(-d^2 / (2 w^2)), d the
+        // distance to the original (all-ones) sample in the binary representation. Rows switch off 0, 1 and 2 features.
+        Func<Matrix<double>, Vector<double>> predict = m => m.GetColumn(0);
+        var explainer = new LIMEExplainer<double>(predict, numFeatures: 3, kernelWidth: 0.75, randomState: 1);
+        var binary = new Matrix<double>(new double[,] { { 1, 1, 1 }, { 1, 0, 1 }, { 0, 0, 1 } });
+        var method = typeof(LIMEExplainer<double>).GetMethod(
+            "ComputeWeights", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        Assert.NotNull(method);
+        var weights = method?.Invoke(explainer, new object[] { binary, new Vector<double>(new[] { 1.0, 2.0, 3.0 }) }) as Vector<double>;
+        Assert.NotNull(weights);
+        if (weights is null)
+        {
+            return;
+        }
+
+        double twoWidthSquared = 2 * 0.75 * 0.75;
+        Assert.Equal(1.0, weights[0], 1e-12);
+        Assert.Equal(Math.Exp(-1.0 / twoWidthSquared), weights[1], 1e-12);
+        Assert.Equal(Math.Exp(-2.0 / twoWidthSquared), weights[2], 1e-12);
+    }
+
+    [Fact]
+    public void ExplainerTensorOps_ScaledSumsOfSquares_Half_KeepsRatioWhereRawSquaresOverflow()
+    {
+        // 300^2 = 90000 is above Half.MaxValue (65504): raw sums of squares are infinite, R^2 = 1 - inf/inf is NaN.
+        // Residuals (30, -30, 0) against deviations (300, -300, 0): ssRes / ssTot = 1800 / 180000 = 0.01.
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var residual = new Tensor<Half>(new[] { ops.FromDouble(30), ops.FromDouble(-30), ops.FromDouble(0) }, new[] { 3 });
+        var deviation = new Tensor<Half>(new[] { ops.FromDouble(300), ops.FromDouble(-300), ops.FromDouble(0) }, new[] { 3 });
+
+        Assert.True(double.IsInfinity(ops.ToDouble(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorSumOfSquares(deviation))));
+        var (ssRes, ssTot) = AiDotNet.Interpretability.Helpers.ExplainerTensorOps<Half>.ScaledSumsOfSquares(residual, deviation);
+
+        Assert.Equal(0.01, ops.ToDouble(ssRes) / ops.ToDouble(ssTot), 1e-4);
+    }
+
     #endregion
 }

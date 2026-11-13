@@ -469,7 +469,7 @@ public static class BackgroundSummarizer<T>
             var shape = new[] { rows, k, d };
             var differences = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(centerGrid, shape));
             var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(differences), new[] { 2 }, false));
-            engine.TensorArgMin(distances, 1).ToArray().CopyTo(assignments, start);
+            AiDotNet.AnomalyDetection.AnomalyTensorOps.FirstArgMinRows(distances).ToArray().CopyTo(assignments, start);
         }
 
         return assignments;

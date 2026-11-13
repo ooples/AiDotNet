@@ -251,10 +251,11 @@ public class PermutationFeatureImportance<T> : IGlobalExplainer<T, FeatureImport
         var engine = AiDotNetEngine.Current;
         var actualTensor = actual.AsTensor();
         T meanActual = engine.TensorMean(actualTensor);
-        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actualTensor, predicted.AsTensor()));
-        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actualTensor, meanActual));
+        // Both sums pre-scaled by the largest magnitude: R^2 is unchanged and Half squares cannot overflow
+        var (ssRes, ssTot) = ExplainerTensorOps<T>.ScaledSumsOfSquares(
+            engine.TensorSubtract(actualTensor, predicted.AsTensor()), engine.TensorSubtractScalar(actualTensor, meanActual));
 
-        if (NumOps.LessThan(ssTot, NumOps.FromDouble(1e-10))) return NumOps.Zero;
+        if (NumOps.LessThan(ssTot, ExplainerTensorOps<T>.Tolerance(1e-10))) return NumOps.Zero;
         return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
     }
 

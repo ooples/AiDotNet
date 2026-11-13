@@ -211,7 +211,7 @@ public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplana
     {
         var engine = AiDotNetEngine.Current;
         var diff = engine.Subtract(instance, prototype.GetSubVector(0, instance.Length));
-        var significant = engine.TensorGreaterThan(engine.Abs(diff).AsTensor(), NumOps.FromDouble(1e-6)).ToVector();
+        var significant = engine.TensorGreaterThan(engine.Abs(diff).AsTensor(), ExplainerTensorOps<T>.Tolerance(1e-6)).ToVector();
         var indices = significant.NonZeroIndices().ToList();
         return indices.Zip(diff.GetElements(indices), (index, value) => (index, value))
             .ToDictionary(entry => entry.index, entry => entry.value);
@@ -253,7 +253,7 @@ public partial class PrototypeExplainer<T> : ILocalExplainer<T, PrototypeExplana
                 var dot = engine.MatrixVectorMultiply(_prototypes, instance).AsTensor();
                 var prototypeNorms = engine.ReduceSum(engine.TensorSquare(prototypes), new[] { 1 }, false);
                 var denominator = engine.TensorSqrt(engine.TensorMultiplyScalar(prototypeNorms, engine.DotProduct(instance, instance)));
-                var usable = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
+                var usable = engine.TensorGreaterThan(denominator, ExplainerTensorOps<T>.Tolerance(1e-10));
                 var safeDenominator = engine.TensorWhere(usable, denominator, engine.TensorFullLike(denominator, NumOps.One));
                 var cosine = engine.TensorMax(engine.TensorMin(engine.TensorDivide(dot, safeDenominator), NumOps.One), NumOps.Negate(NumOps.One));
                 var similarity = engine.TensorWhere(usable, cosine, engine.TensorFullLike(cosine, NumOps.Zero));

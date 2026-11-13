@@ -530,7 +530,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         var x = new Vector<T>(vector.Length); // Initial guess
         var r = vector.Clone(); // Residual
         var p = r.Clone(); // Search direction
-        T tolerance = NumOps.FromDouble(1e-10);
+        T tolerance = ExplainerTensorOps<T>.Tolerance(1e-10);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {

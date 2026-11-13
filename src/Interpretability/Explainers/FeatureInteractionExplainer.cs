@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -147,10 +148,10 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
         var pd1Rows = engine.TensorBroadcastTo(pd1.AsTensor().Reshape(new[] { _gridSize, 1 }), shape);
         var pd2Columns = engine.TensorBroadcastTo(pd2.AsTensor().Reshape(new[] { 1, _gridSize }), shape);
         var interaction = engine.TensorSubtract(engine.TensorSubtract(pd2D, pd1Rows), pd2Columns);
-        T numerator = engine.TensorSumOfSquares(interaction);
-        T denominator = engine.TensorSumOfSquares(pd2D);
+        // Both sums pre-scaled by the largest magnitude: the ratio is unchanged and Half squares cannot overflow
+        var (numerator, denominator) = ExplainerTensorOps<T>.ScaledSumsOfSquares(interaction, pd2D);
 
-        if (NumOps.LessThan(denominator, NumOps.FromDouble(1e-10)))
+        if (NumOps.LessThan(denominator, ExplainerTensorOps<T>.Tolerance(1e-10)))
             return NumOps.Zero;
 
         T hSquared = NumOps.Divide(numerator, denominator);

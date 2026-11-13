@@ -87,7 +87,9 @@ public static class InterpretableModelHelper
         Func<Vector<T>, Vector<T>, T> scoreFunc = (actual, predicted) =>
         {
             var residual = AiDotNetEngine.Current.TensorSubtract(actual.AsTensor(), predicted.GetSubVector(0, actual.Length).AsTensor());
-            T mse = numOps.Divide(AiDotNetEngine.Current.TensorSumOfSquares(residual), numOps.FromDouble(actual.Length));
+            // mean of r^2 as the sum of (r / sqrt(n))^2, so the running sum stays at the scale of the mean (Half)
+            var scaledResidual = AiDotNetEngine.Current.TensorDivideScalar(residual, numOps.FromDouble(Math.Sqrt(actual.Length)));
+            T mse = AiDotNetEngine.Current.TensorSumOfSquares(scaledResidual);
             return numOps.Negate(mse); // Negative MSE (higher is better)
         };
 
@@ -148,7 +150,7 @@ public static class InterpretableModelHelper
 
                     // Normalize
                     T total = AiDotNetEngine.Current.Sum(sums);
-                    if (numOps.GreaterThan(total, numOps.FromDouble(1e-10)))
+                    if (numOps.GreaterThan(total, ExplainerTensorOps<T>.Tolerance(1e-10)))
                     {
                         sums = AiDotNetEngine.Current.Divide(sums, total);
                     }

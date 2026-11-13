@@ -266,7 +266,7 @@ public class LayerAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
         T totalWeightedDiff = engine.Sum(engine.Abs(contributions));
 
         // Compute attributions (Rescale rule)
-        if (NumOps.GreaterThan(NumOps.Abs(totalWeightedDiff), NumOps.FromDouble(1e-10)))
+        if (NumOps.GreaterThan(NumOps.Abs(totalWeightedDiff), ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
             return engine.Multiply(engine.Divide(contributions, totalWeightedDiff), outputDiff);
         }

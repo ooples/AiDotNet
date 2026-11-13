@@ -301,10 +301,23 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
         var prediction = _predictFunction(instance);
         T predVal = outputIndex < prediction.Length ? prediction[outputIndex] : NumOps.Zero;
 
+        // The attributions are averaged over the sampled references, so the base value they complete to is the mean
+        // prediction of those same references at the explained output (not output 0 over the first background rows)
+        // (a prediction shorter than outputIndex + 1 counts as 0 there, as for the explained instance)
+        var referencePredictions = new List<Vector<T>>(_numSamples);
+        foreach (int index in sampleIndices)
+        {
+            referencePredictions.Add(ExplainerTensorOps<T>.PadOrTruncate(
+                _predictFunction(_backgroundData.GetRow(index)), outputIndex + 1));
+        }
+
+        T expectedValue = AiDotNetEngine.Current.TensorMean(
+            AiDotNetEngine.Current.TensorSliceAxis(ExplainerTensorOps<T>.Stack(referencePredictions), 1, outputIndex));
+
         return new DeepSHAPExplanation<T>
         {
             Attributions = attributions,
-            ExpectedValue = _expectedValue,
+            ExpectedValue = expectedValue,
             Prediction = predVal,
             Instance = instance,
             FeatureNames = _featureNames ?? Enumerable.Range(0, numFeatures).Select(i => $"Feature {i}").ToArray(),
@@ -413,11 +426,14 @@ public class DeepSHAPExplainer<T> : ILocalExplainer<T, DeepSHAPExplanation<T>>, 
         T predDiff = NumOps.Subtract(inputPred[outputIndex], refPred[outputIndex]);
 
         // Distribute prediction difference proportionally to input differences
-        T totalDiff = engine.Sum(engine.Abs(diff));
+        var magnitude = engine.Abs(diff);
+        T totalDiff = engine.Sum(magnitude);
 
-        if (NumOps.GreaterThan(totalDiff, NumOps.FromDouble(1e-10)))
+        // Share the output difference in proportion to |x_j - r_j|: the shares sum to one, so the attributions sum to
+        // f(x) - f(r) (completeness). Signed shares diff_j / sum|diff| would not sum to one when the diffs differ in sign.
+        if (NumOps.GreaterThan(totalDiff, ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
-            return engine.Multiply(engine.Divide(diff, totalDiff), predDiff);
+            return engine.Multiply(engine.Divide(magnitude, totalDiff), predDiff);
         }
 
         return new Vector<T>(numFeatures);

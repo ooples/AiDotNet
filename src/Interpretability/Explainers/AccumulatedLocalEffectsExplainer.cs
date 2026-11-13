@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -328,7 +329,7 @@ public class AccumulatedLocalEffectsExplainer<T> : IGlobalExplainer<T, ALEResult
         // Ensure unique bounds: a bound not above its predecessor moves 1e-10 past it, i.e.
         // bounds_i = offset_i + cummax(bounds - offset)_i with offset_i = i * 1e-10. (The scan differs from
         // a one-at-a-time nudge only for raw gaps already below 1e-10, by less than 1e-10.)
-        var offsets = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numIntervals + 1, 1), NumOps.FromDouble(1e-10));
+        var offsets = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numIntervals + 1, 1), ExplainerTensorOps<T>.Tolerance(1e-10));
         var lifted = engine.TensorCumMax(engine.TensorSubtract(bounds, offsets), 0);
         return engine.TensorAdd(lifted, offsets).ToVector();
     }

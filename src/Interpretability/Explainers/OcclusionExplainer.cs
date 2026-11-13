@@ -281,11 +281,8 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
     /// </summary>
     private static Tensor<T> RangeIndicator(int length, int start, int end)
     {
-        var engine = AiDotNetEngine.Current;
-        var indices = engine.TensorArange<T>(0, length, 1);
-        var atOrAfterStart = engine.TensorGreaterThan(indices, NumOps.FromDouble(start - 1));
-        var beforeEnd = engine.TensorLessThan(indices, NumOps.FromDouble(end));
-        return engine.TensorMultiply(atOrAfterStart, beforeEnd);
+        // Indices compared in int (Half cannot hold every index above 2048)
+        return ExplainerTensorOps<T>.RangeIndicator(length, start, end);
     }
 
     /// <summary>

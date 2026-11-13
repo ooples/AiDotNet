@@ -281,7 +281,7 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
 
         var coveredRows = coveredMask.ToVector().NonZeroIndices().ToList();
         int covered = coveredRows.Count;
-        T correct = NumOps.Zero;
+        int correct = 0;
         if (covered > 0)
         {
             // Check if predictions match the original class
@@ -289,12 +289,13 @@ public class AnchorExplainer<T> : ILocalExplainer<T, AnchorExplanation<T>>
                 .Select(row => _predictFunction(ExplainerTensorOps<T>.RowMatrix(samples[row])).GetSubVector(0, 1))
                 .ToList();
             var predictedClasses = engine.TensorRound(ExplainerTensorOps<T>.Stack(predictions));
-            correct = engine.TensorSum(engine.TensorEquals(predictedClasses, NumOps.FromDouble(originalClass)));
+            // Counted in int: a 0/1 sum in Half stops at 2048
+            correct = engine.TensorCountNonzero(engine.TensorEquals(predictedClasses, NumOps.FromDouble(originalClass)));
         }
 
-        T coveredCount = NumOps.FromDouble(covered);
-        T precision = covered > 0 ? NumOps.Divide(correct, coveredCount) : NumOps.Zero;
-        T coverage = NumOps.Divide(coveredCount, NumOps.FromDouble(_nSamples));
+        // Ratios of int counts (a count above 2048 is not exact in Half)
+        T precision = covered > 0 ? NumOps.FromDouble((double)correct / covered) : NumOps.Zero;
+        T coverage = NumOps.FromDouble((double)covered / _nSamples);
 
         return (precision, coverage);
     }
