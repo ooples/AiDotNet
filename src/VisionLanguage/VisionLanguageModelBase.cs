@@ -239,28 +239,21 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <returns>Probabilities that sum to 1.</returns>
     protected Tensor<T> Softmax(Tensor<T> logits)
     {
-        double maxVal = double.MinValue;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = NumOps.ToDouble(logits[i]);
-            if (v > maxVal)
-                maxVal = v;
-        }
+        if (logits.Length == 0)
+            return new Tensor<T>(logits._shape);
 
-        var result = new Tensor<T>(logits._shape);
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double v = Math.Exp(NumOps.ToDouble(logits[i]) - maxVal);
-            result[i] = NumOps.FromDouble(v);
-            sum += v;
-        }
+        // Softmax over every element (not one axis). NaN logits are ignored when finding the max,
+        // and when no finite or +inf logit exists the shift is zero, so exp(-inf) stays 0.
+        var negInf = new Tensor<T>(logits._shape);
+        negInf.Fill(NumOps.FromDouble(double.NegativeInfinity));
+        T maxVal = Engine.TensorMaxValue(Engine.TensorWhere(Engine.TensorIsNan(logits), negInf, logits));
+        if (!NumOps.GreaterThan(maxVal, NumOps.FromDouble(double.NegativeInfinity)))
+            maxVal = NumOps.Zero;
 
-        if (sum > 1e-8)
-        {
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.FromDouble(NumOps.ToDouble(result[i]) / sum);
-        }
+        var result = Engine.TensorExp(Engine.TensorSubtractScalar(logits, maxVal));
+        T sum = Engine.TensorSum(result);
+        if (NumOps.GreaterThan(sum, NumOps.FromDouble(1e-8)))
+            result = Engine.TensorDivideScalar(result, sum);
 
         return result;
     }
@@ -272,22 +265,536 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     /// <returns>Unit-normalized embedding.</returns>
     protected Tensor<T> L2Normalize(Tensor<T> embedding)
     {
-        double norm = 0;
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            double v = NumOps.ToDouble(embedding[i]);
-            norm += v * v;
-        }
-
-        norm = Math.Sqrt(norm);
-        if (norm < 1e-8)
+        T norm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorMultiply(embedding, embedding)));
+        if (NumOps.LessThan(norm, NumOps.FromDouble(1e-8)))
             return embedding;
 
-        var result = new Tensor<T>(embedding._shape);
-        for (int i = 0; i < embedding.Length; i++)
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(embedding[i]) / norm);
+        return Engine.TensorDivideScalar(embedding, norm);
+    }
 
-        return result;
+    /// <summary>
+    /// Converts the first <paramref name="length"/> tokenizer ids into a rank-1 tensor of ids.
+    /// </summary>
+    /// <param name="tokenIds">Token ids produced by the tokenizer.</param>
+    /// <param name="length">Number of leading ids to keep.</param>
+    /// <returns>A [length] tensor holding the ids converted to <typeparamref name="T"/>.</returns>
+    private protected static Tensor<T> TokenIdsToTensor(List<int> tokenIds, int length)
+    {
+        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+        if (length <= 0)
+            return new Tensor<T>([length]);
+
+        return new Tensor<int>(new[] { length }, Vector<int>.FromList(tokenIds.GetRange(0, length))).Cast<T>();
+    }
+
+    /// <summary>
+    /// Returns the position of the first maximum of <paramref name="values"/> (flattened), matching a
+    /// scalar scan that starts at negative infinity and replaces the best only on a strictly greater value:
+    /// NaN never wins, ties keep the lowest position, and -1 is returned when no value exceeds -infinity.
+    /// </summary>
+    /// <param name="values">Scores to search.</param>
+    /// <returns>The first position holding the maximum, or -1 when there is none.</returns>
+    private protected int FirstArgMax(Tensor<T> values)
+    {
+        int first = ArgExtremumSearch<T>.FirstIndex(Engine, values, largest: true, out T best);
+        // Only a value strictly above -infinity wins.
+        if (first < 0 || (NumOps.IsInfinity(best) && NumOps.LessThan(best, NumOps.Zero)))
+            return -1;
+        return first;
+    }
+
+    /// <summary>
+    /// Paints a grid of per-cell colours into a square HWC image, one <c>patch x patch</c> block per cell:
+    /// pixel (gy * patch + py, gx * patch + px) = colors[gy, gx, :] * patchWeights[py, px]. Blocks that run
+    /// past the image edge are cropped and pixels no block reaches stay zero.
+    /// </summary>
+    /// <param name="colors">Cell colours, shape [gridHeight, gridWidth, channels].</param>
+    /// <param name="patchWeights">Per-position weights inside a block, shape [patch, patch].</param>
+    /// <param name="outSize">Output image side length.</param>
+    /// <returns>The image flattened as [outSize * outSize * channels] in row-major HWC order.</returns>
+    private protected Tensor<T> PaintPatchGrid(Tensor<T> colors, Tensor<T> patchWeights, int outSize)
+    {
+        int gridH = colors.Shape[0], gridW = colors.Shape[1], channels = colors.Shape[2];
+        int patch = patchWeights.Shape[0];
+        var blocks = Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(colors.Reshape([gridH, 1, gridW, 1, channels]), [gridH, patch, gridW, patch, channels]),
+            Engine.TensorBroadcastTo(patchWeights.Reshape([1, patch, 1, patch, 1]), [gridH, patch, gridW, patch, channels]));
+        int coveredH = gridH * patch, coveredW = gridW * patch;
+        var image = blocks.Reshape([coveredH, coveredW, channels]);
+
+        int keptH = Math.Min(coveredH, outSize), keptW = Math.Min(coveredW, outSize);
+        if (keptH < coveredH || keptW < coveredW)
+            image = Engine.TensorSlice(image, [0, 0, 0], [keptH, keptW, channels]);
+        if (keptW < outSize)
+            image = Engine.TensorConcatenate([image, new Tensor<T>([keptH, outSize - keptW, channels])], 1);
+        if (keptH < outSize)
+            image = Engine.TensorConcatenate([image, new Tensor<T>([outSize - keptH, outSize, channels])], 0);
+
+        return image.Reshape([outSize * outSize * channels]);
+    }
+
+    /// <summary>
+    /// Placeholder VQ palette: maps each token id to RGB ((id * 7 + 13) % 256, (id * 11 + 37) % 256,
+    /// (id * 17 + 61) % 256) / 255.
+    /// </summary>
+    /// <param name="tokenIds">Token ids (non-negative).</param>
+    /// <returns>Colours of shape [tokenIds.Length, 3].</returns>
+    private protected Tensor<T> HashTokenColors(int[] tokenIds) =>
+        HashTokenColors(new Tensor<int>(new[] { tokenIds.Length }, Vector<int>.FromArray(tokenIds)).Cast<T>());
+
+    /// <summary>
+    /// Placeholder VQ palette for integer-valued token ids held as <typeparamref name="T"/>.
+    /// </summary>
+    /// <param name="tokenIds">Integer-valued, non-negative token ids.</param>
+    /// <returns>Colours of shape [tokenIds.Length, 3].</returns>
+    private protected Tensor<T> HashTokenColors(Tensor<T> tokenIds)
+    {
+        int count = tokenIds.Length;
+        var ids = tokenIds.Reshape([count]);
+        var modulus = Tensor<T>.CreateDefault([count], NumOps.FromDouble(256));
+        T inv255 = NumOps.FromDouble(1.0 / 255.0);
+        Tensor<T> Channel(double multiplier, double offset) => Engine.TensorMultiplyScalar(
+            Engine.TensorRemainder(
+                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(ids, NumOps.FromDouble(multiplier)), NumOps.FromDouble(offset)),
+                modulus),
+            inv255).Reshape([count, 1]);
+        return Engine.TensorConcatenate([Channel(7, 13), Channel(11, 37), Channel(17, 61)], 1);
+    }
+
+    /// <summary>
+    /// Patch weights 0.9 + 0.1 * sin(pi * px / patch) * sin(pi * py / patch) for a <c>patch x patch</c> block.
+    /// </summary>
+    /// <param name="patchSize">Block side length.</param>
+    /// <returns>Weights of shape [patchSize, patchSize] indexed [py, px].</returns>
+    private protected Tensor<T> SinePatchWeights(int patchSize)
+    {
+        var wave = Engine.TensorSin(Engine.TensorMultiplyScalar(
+            Engine.TensorArange<T>(0, patchSize, 1), NumOps.FromDouble(Math.PI / patchSize)));
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorOuter(wave, wave), NumOps.FromDouble(0.1)), NumOps.FromDouble(0.9));
+    }
+
+    /// <summary>
+    /// Reads a source cyclically: result[d] = source[d % source.Length] for d &lt; <paramref name="count"/>.
+    /// </summary>
+    /// <param name="source">Values to read (flattened).</param>
+    /// <param name="count">Number of values to produce.</param>
+    /// <returns>A [count] tensor.</returns>
+    /// <exception cref="DivideByZeroException">The source is empty and <paramref name="count"/> is positive.</exception>
+    private protected Tensor<T> CyclicTake(Tensor<T> source, int count)
+    {
+        if (count <= 0)
+            return new Tensor<T>([count]);
+        int n = source.Length;
+        if (n == 0)
+            throw new DivideByZeroException();
+        var flat = source.Reshape([n]);
+        if (count == n)
+            return flat;
+        int repeats = (count + n - 1) / n;
+        var tiled = repeats == 1 ? flat : Engine.TensorTile(flat, [repeats]);
+        return Engine.TensorSlice(tiled, [0], [count]);
+    }
+
+    /// <summary>
+    /// Number of points a point-cloud scan reads: points p &lt; numPoints whose first three values
+    /// p * channels .. p * channels + 2 lie inside the cloud (the scan stops at the first that does not).
+    /// </summary>
+    /// <param name="numPoints">Points the scan visits at most.</param>
+    /// <param name="channels">Values per point.</param>
+    /// <param name="totalValues">Values in the cloud.</param>
+    /// <returns>The number of points read.</returns>
+    /// <exception cref="IndexOutOfRangeException">A negative channel count would address values before the start.</exception>
+    private protected static int ReadablePointCount(int numPoints, int channels, int totalValues)
+    {
+        int readPoints;
+        if (totalValues <= 2)
+            readPoints = 0;
+        else if (channels > 0)
+            readPoints = Math.Min(numPoints, (totalValues - 2 + channels - 1) / channels);
+        else
+            readPoints = Math.Max(0, numPoints);
+        if (channels < 0 && readPoints > 1)
+            throw new IndexOutOfRangeException("A negative point channel count addresses values before the start of the point cloud.");
+        return readPoints;
+    }
+
+    /// <summary>
+    /// The XYZ values (the first three values) of the first <paramref name="readPoints"/> points.
+    /// </summary>
+    /// <param name="pointCloud">The point cloud (read flattened).</param>
+    /// <param name="readPoints">Number of points (see <see cref="ReadablePointCount"/>).</param>
+    /// <param name="channels">Values per point.</param>
+    /// <returns>A [readPoints, 3] tensor.</returns>
+    private protected Tensor<T> PointCoordinates(Tensor<T> pointCloud, int readPoints, int channels)
+    {
+        var engine = Engine;
+        var pointBase = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, readPoints, 1), channels).Reshape([readPoints, 1]);
+        var coordIndex = engine.TensorAdd(
+            engine.TensorBroadcastTo(pointBase, [readPoints, 3]),
+            engine.TensorBroadcastTo(engine.TensorArange<int>(0, 3, 1).Reshape([1, 3]), [readPoints, 3]));
+        return engine.TensorTake(pointCloud.Reshape([pointCloud.Length]), coordIndex);
+    }
+
+    /// <summary>
+    /// Spatial-hash bucket of each point, in int arithmetic:
+    /// |(int)(x * cellScale) * primeX ^ (int)(y * cellScale) * primeY ^ (int)(z * cellScale) * primeZ| % buckets.
+    /// </summary>
+    /// <param name="coords">[points, 3] XYZ coordinates.</param>
+    /// <param name="cellScale">Scale applied before truncating a coordinate to its cell.</param>
+    /// <param name="primeX">Hash multiplier of the X cell.</param>
+    /// <param name="primeY">Hash multiplier of the Y cell.</param>
+    /// <param name="primeZ">Hash multiplier of the Z cell.</param>
+    /// <param name="buckets">Number of buckets.</param>
+    /// <returns>A [points] tensor of bucket ids.</returns>
+    /// <exception cref="OverflowException">A hash is int.MinValue, which has no absolute value.</exception>
+    /// <exception cref="DivideByZeroException">buckets is 0 while there are points.</exception>
+    private protected Tensor<int> HashPointCells(Tensor<T> coords, double cellScale, int primeX, int primeY, int primeZ, int buckets)
+    {
+        var engine = Engine;
+        int points = coords.Shape[0];
+        if (points == 0)
+            return new Tensor<int>([0]);
+        if (buckets == 0)
+            throw new DivideByZeroException("Points cannot be hashed into zero buckets.");
+
+        var cells = engine.TensorTrunc(engine.TensorMultiplyScalar(coords, NumOps.FromDouble(cellScale))).Cast<int>();
+        var hashX = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 0], [points, 1]), primeX);
+        var hashY = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 1], [points, 1]), primeY);
+        var hashZ = engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 2], [points, 1]), primeZ);
+        var mixed = engine.TensorBitwiseXor(engine.TensorBitwiseXor(hashX, hashY), hashZ).Reshape([points]);
+        if (engine.TensorSum(engine.TensorEquals(mixed, int.MinValue)) > 0)
+            throw new OverflowException("Negating the minimum value of a twos complement number is invalid.");
+        return engine.TensorRemainder(engine.TensorAbs(mixed), Tensor<int>.CreateDefault([points], buckets));
+    }
+
+    /// <summary>
+    /// Per-point features: value c &lt; channels of point p (when inside the cloud) is added to feature
+    /// c % featureDim.
+    /// </summary>
+    /// <param name="pointCloud">The point cloud (read flattened).</param>
+    /// <param name="readPoints">Number of points.</param>
+    /// <param name="channels">Values per point.</param>
+    /// <param name="featureDim">Feature width.</param>
+    /// <returns>A [readPoints, featureDim] tensor.</returns>
+    /// <exception cref="DivideByZeroException">featureDim is 0 while some value is read.</exception>
+    private protected Tensor<T> FoldedPointChannels(Tensor<T> pointCloud, int readPoints, int channels, int featureDim)
+    {
+        var engine = Engine;
+        int pointChannels = Math.Max(0, channels);
+        if (pointChannels == 0 || readPoints == 0)
+            return new Tensor<T>([readPoints, featureDim]);
+        if (featureDim == 0)
+            throw new DivideByZeroException("Point values cannot be folded into a zero-width feature vector.");
+
+        int totalValues = pointCloud.Length;
+        int folds = (pointChannels + featureDim - 1) / featureDim;
+        int width = folds * featureDim;
+        var local = engine.TensorBroadcastTo(engine.TensorArange<int>(0, width, 1).Reshape([1, width]), [readPoints, width]);
+        var channelIndex = engine.TensorAdd(
+            engine.TensorBroadcastTo(
+                engine.TensorMultiplyScalar(engine.TensorArange<int>(0, readPoints, 1), channels).Reshape([readPoints, 1]),
+                [readPoints, width]),
+            local);
+        var validChannel = engine.TensorMultiply(
+            engine.TensorLessThan(local, pointChannels), engine.TensorLessThan(channelIndex, totalValues)).Cast<T>();
+        var channelValues = engine.TensorWhere(
+            validChannel,
+            engine.TensorTake(pointCloud.Reshape([totalValues]), engine.TensorMin(channelIndex, totalValues - 1)),
+            new Tensor<T>([readPoints, width]));
+        return engine.ReduceSum(channelValues.Reshape([readPoints, folds, featureDim]), [1], false);
+    }
+
+    /// <summary>
+    /// Gates values with the prompt: values[d] * (0.5 + sigmoid(prompt[d % promptLength] / 100)); the
+    /// values themselves when the prompt is empty.
+    /// </summary>
+    /// <param name="values">Values to gate.</param>
+    /// <param name="promptTokens">Prompt token ids.</param>
+    /// <returns>The gated values, shaped like <paramref name="values"/>.</returns>
+    private protected Tensor<T> PromptGated(Tensor<T> values, Tensor<T> promptTokens)
+    {
+        if (promptTokens.Length == 0)
+            return values;
+        var engine = Engine;
+        var gate = engine.TensorAddScalar(
+            engine.TensorSigmoid(engine.TensorDivideScalar(CyclicTake(promptTokens, values.Length), NumOps.FromDouble(100.0))),
+            NumOps.FromDouble(0.5));
+        return engine.TensorMultiply(values, gate.Reshape(values.Shape.ToArray()));
+    }
+
+    /// <summary>
+    /// PointNet-style max pooling of point-cloud values into per-patch features: patch p reads the
+    /// values at p * patchStride + i for i &lt; patchValues (only those below validLimit) and keeps, per
+    /// feature f, the largest value with i % featureDim == f, floored at 0 (NaN values never win).
+    /// </summary>
+    /// <param name="values">The point-cloud values (read flattened).</param>
+    /// <param name="patches">Number of patches.</param>
+    /// <param name="patchStride">Flat offset between consecutive patch starts.</param>
+    /// <param name="patchValues">Number of values each patch reads.</param>
+    /// <param name="validLimit">Flat indices at or above this limit are skipped (at most the value count).</param>
+    /// <param name="featureDim">Feature width.</param>
+    /// <returns>A [patches, featureDim] tensor.</returns>
+    /// <exception cref="DivideByZeroException">featureDim is 0 while some value is read.</exception>
+    private protected Tensor<T> PatchMaxPool(Tensor<T> values, int patches, int patchStride, int patchValues, int validLimit, int featureDim)
+    {
+        var engine = Engine;
+        if (patches == 0 || patchValues <= 0 || validLimit <= 0)
+            return new Tensor<T>([patches, featureDim]);
+        if (featureDim == 0)
+            throw new DivideByZeroException("Point features cannot be pooled into a zero-width feature vector.");
+
+        int n = values.Length;
+        int folds = (patchValues + featureDim - 1) / featureDim;
+        int width = folds * featureDim;
+        var local = engine.TensorBroadcastTo(engine.TensorArange<int>(0, width, 1).Reshape([1, width]), [patches, width]);
+        var flat = engine.TensorAdd(
+            engine.TensorBroadcastTo(
+                engine.TensorMultiplyScalar(engine.TensorArange<int>(0, patches, 1), patchStride).Reshape([patches, 1]),
+                [patches, width]),
+            local);
+        var valid = engine.TensorMultiply(
+            engine.TensorLessThan(local, patchValues), engine.TensorLessThan(flat, validLimit)).Cast<T>();
+        var gathered = engine.TensorTake(values.Reshape([n]), engine.TensorMin(flat, n - 1));
+        // max(0, v) per value; values that are invalid, not positive or NaN contribute the initial 0.
+        var keep = engine.TensorMultiply(valid, engine.TensorGreaterThan(gathered, NumOps.Zero));
+        var floored = engine.TensorWhere(keep, gathered, new Tensor<T>([patches, width]));
+        return engine.ReduceMax(floored.Reshape([patches, folds, featureDim]), [1], false);
+    }
+
+    /// <summary>
+    /// Stacks the leading <paramref name="width"/> values of the first <paramref name="count"/> feature
+    /// tensors (each read flattened) into a [count, width] matrix.
+    /// </summary>
+    /// <param name="features">Per-item features.</param>
+    /// <param name="count">Number of leading items to stack.</param>
+    /// <param name="width">Number of leading values taken from each item.</param>
+    /// <returns>A [count, width] tensor.</returns>
+    private protected Tensor<T> StackLeading(IReadOnlyList<Tensor<T>> features, int count, int width)
+    {
+        var rows = new Tensor<T>[count];
+        for (int f = 0; f < count; f++)
+        {
+            var item = features[f];
+            rows[f] = Engine.TensorSlice(item.Reshape([item.Length]), [0], [width]).Reshape([1, width]);
+        }
+        return Engine.TensorConcatenate(rows, 0);
+    }
+
+    /// <summary>
+    /// Returns the flattened values truncated or zero-padded to exactly <paramref name="length"/> values.
+    /// </summary>
+    /// <param name="values">Values to fit.</param>
+    /// <param name="length">Required length.</param>
+    /// <returns>A [length] tensor.</returns>
+    private protected Tensor<T> FitLength(Tensor<T> values, int length)
+    {
+        int n = values.Length;
+        var flat = values.Reshape([n]);
+        if (n == length)
+            return flat;
+        if (n > length)
+            return Engine.TensorSlice(flat, [0], [length]);
+        return Engine.TensorConcatenate([flat, new Tensor<T>([length - n])], 0);
+    }
+
+    /// <summary>
+    /// The instruction-gated 2-layer MLP connector used by the video-language models:
+    /// projected[v] = gelu_tanh(0.8 x) * 0.7 + 0.15 x, read cyclically to <paramref name="dim"/>; with a prompt,
+    /// tok[d] = prompt[d % promptLen] / vocabSize gates it as projected * (0.5 + sigmoid(5 tok)) + 0.3 tok.
+    /// </summary>
+    /// <param name="visual">Encoder output (read flattened).</param>
+    /// <param name="promptTokens">Optional prompt token ids.</param>
+    /// <param name="dim">Decoder input width.</param>
+    /// <param name="vocabSize">Vocabulary size used to scale token ids.</param>
+    /// <returns>The [dim] decoder input.</returns>
+    private protected Tensor<T> GatedConnectorInput(Tensor<T> visual, Tensor<T>? promptTokens, int dim, int vocabSize)
+    {
+        var x = visual.Reshape([visual.Length]);
+        var h = Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.8));
+        var cubic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(Engine.TensorMultiply(h, h), h), NumOps.FromDouble(0.044715));
+        var inner = Engine.TensorMultiplyScalar(Engine.TensorAdd(h, cubic), NumOps.FromDouble(Math.Sqrt(2.0 / Math.PI)));
+        var gelu = Engine.TensorMultiply(
+            Engine.TensorMultiplyScalar(h, NumOps.FromDouble(0.5)), Engine.TensorAddScalar(Engine.TensorTanh(inner), NumOps.One));
+        var projected = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(gelu, NumOps.FromDouble(0.7)), Engine.TensorMultiplyScalar(x, NumOps.FromDouble(0.15)));
+
+        var visVal = CyclicTake(projected, dim);
+        if (promptTokens is null || promptTokens.Length == 0 || dim <= 0)
+            return visVal;
+
+        var tokVal = Engine.TensorMultiplyScalar(CyclicTake(promptTokens, dim), NumOps.FromDouble(1.0 / vocabSize));
+        var gate = Engine.TensorSigmoid(Engine.TensorMultiplyScalar(tokVal, NumOps.FromDouble(5.0)));
+        return Engine.TensorAdd(
+            Engine.TensorMultiply(visVal, Engine.TensorAddScalar(gate, NumOps.FromDouble(0.5))),
+            Engine.TensorMultiplyScalar(tokVal, NumOps.FromDouble(0.3)));
+    }
+
+    /// <summary>
+    /// Gathers <c>source[(offset + sum_k coefficients[k] * i_k) % source.Length]</c> over an index grid of
+    /// <paramref name="shape"/> (source read flattened; coefficients and offset are non-negative).
+    /// </summary>
+    /// <param name="source">Values to read.</param>
+    /// <param name="shape">Grid shape.</param>
+    /// <param name="coefficients">Per-axis index multipliers.</param>
+    /// <param name="offset">Constant index offset.</param>
+    /// <returns>A tensor of <paramref name="shape"/>.</returns>
+    /// <exception cref="DivideByZeroException">The source is empty.</exception>
+    private protected Tensor<T> AffineModGather(Tensor<T> source, int[] shape, int[] coefficients, int offset)
+    {
+        int n = source.Length;
+        if (n == 0)
+            throw new DivideByZeroException();
+        var index = Tensor<int>.CreateDefault(shape, offset);
+        for (int axis = 0; axis < shape.Length; axis++)
+        {
+            if (coefficients[axis] == 0)
+                continue;
+            var axisShape = new int[shape.Length];
+            for (int k = 0; k < shape.Length; k++)
+                axisShape[k] = k == axis ? shape[axis] : 1;
+            var step = Engine.TensorMultiplyScalar(Engine.TensorArange<int>(0, shape[axis], 1), coefficients[axis]);
+            index = Engine.TensorAdd(index, Engine.TensorBroadcastTo(step.Reshape(axisShape), shape));
+        }
+        index = Engine.TensorRemainder(index, Tensor<int>.CreateDefault(shape, n));
+        return Engine.TensorTake(source.Reshape([n]), index);
+    }
+
+    /// <summary>
+    /// For each row of a [rows, cols] score matrix, marks the first column holding the row maximum among the
+    /// values strictly greater than <paramref name="floor"/> (a scan that keeps the best only on a strictly
+    /// greater score). NaN never qualifies; a row with no qualifying value is all zero.
+    /// </summary>
+    /// <param name="scores">Scores, shape [rows, cols].</param>
+    /// <param name="floor">Initial best value of the scan.</param>
+    /// <returns>A [rows, cols] 1/0 mask with at most one 1 per row.</returns>
+    private protected Tensor<T> RowFirstArgMaxMask(Tensor<T> scores, T floor)
+    {
+        int rows = scores.Shape[0], cols = scores.Shape[1];
+        var qualifies = Engine.TensorGreaterThan(scores, floor);
+        var negInf = Tensor<T>.CreateDefault([rows, cols], NumOps.FromDouble(double.NegativeInfinity));
+        var comparable = Engine.TensorWhere(qualifies, scores, negInf);
+        var rowMax = Engine.TensorBroadcastTo(Engine.ReduceMax(comparable, [1], true), [rows, cols]);
+        var isBest = Engine.TensorMultiply(Engine.TensorEquals(comparable, rowMax), qualifies);
+        var positions = Engine.TensorBroadcastTo(Engine.TensorArange<T>(0, cols, 1).Reshape([1, cols]), [rows, cols]);
+        var candidate = Engine.TensorWhere(isBest, positions, Tensor<T>.CreateDefault([rows, cols], NumOps.FromDouble(cols)));
+        // Row minimum of the candidate positions, as -max(-x).
+        T minusOne = NumOps.FromDouble(-1.0);
+        var first = Engine.TensorMultiplyScalar(
+            Engine.ReduceMax(Engine.TensorMultiplyScalar(candidate, minusOne), [1], true), minusOne);
+        return Engine.TensorEquals(positions, Engine.TensorBroadcastTo(first, [rows, cols]));
+    }
+
+    /// <summary>
+    /// Sums <paramref name="values"/> along the last axis of a [rows, cols] matrix where <paramref name="mask"/>
+    /// is non-zero (masked-out entries contribute nothing, even when they are NaN or infinite).
+    /// </summary>
+    /// <param name="values">Values, shape [rows, cols].</param>
+    /// <param name="mask">Selection mask, shape [rows, cols].</param>
+    /// <returns>A [rows] tensor.</returns>
+    private protected Tensor<T> MaskedRowSum(Tensor<T> values, Tensor<T> mask)
+    {
+        var zeros = new Tensor<T>(values._shape);
+        return Engine.ReduceSum(Engine.TensorWhere(mask, values, zeros), [1], false);
+    }
+
+    /// <summary>
+    /// Attention-weighted average per row: result[r] = sum_t weights[r, t] * values[t] / max(sum_t weights[r, t], 1e-8).
+    /// </summary>
+    /// <param name="weights">Non-negative weights, shape [rows, n].</param>
+    /// <param name="values">Values, shape [n] (read flattened).</param>
+    /// <returns>A [rows] tensor (zeros when n is 0).</returns>
+    private protected Tensor<T> WeightedAverage(Tensor<T> weights, Tensor<T> values)
+    {
+        int rows = weights.Shape[0], n = weights.Shape[1];
+        if (n == 0)
+            return new Tensor<T>([rows]);
+        var numerator = Engine.TensorMatMul(weights, values.Reshape([n, 1])).Reshape([rows]);
+        var denominator = Engine.TensorMax(Engine.ReduceSum(weights, [1], false), NumOps.FromDouble(1e-8));
+        return Engine.TensorDivide(numerator, denominator);
+    }
+
+    /// <summary>
+    /// Returns element <paramref name="index"/> of a sequence as a [1] tensor, so a per-step coefficient
+    /// computed for all steps up front can scale a tensor through a broadcast multiply.
+    /// </summary>
+    /// <param name="values">Per-step values (read flattened).</param>
+    /// <param name="index">Step index.</param>
+    /// <returns>A [1] tensor.</returns>
+    private protected Tensor<T> Pick(Tensor<T> values, int index) =>
+        Engine.TensorSlice(values.Reshape([values.Length]), [index], [1]);
+
+    /// <summary>
+    /// Selects the <paramref name="k"/> highest-scoring eligible positions as a 1/0 mask: the same set a
+    /// repeated "first strictly greater than -infinity" scan picks one at a time (higher scores first, ties
+    /// broken by the lower position). NaN and -infinity scores are never selected.
+    /// </summary>
+    /// <param name="scores">Scores, shape [n].</param>
+    /// <param name="eligible">Non-zero where a position may be selected, shape [n].</param>
+    /// <param name="k">Maximum number of positions to select.</param>
+    /// <returns>A [n] mask with 1 at selected positions.</returns>
+    private protected Tensor<T> SelectTopKFirstIndex(Tensor<T> scores, Tensor<T> eligible, int k)
+    {
+        int n = scores.Length;
+        var flat = scores.Reshape([n]);
+        T negInfValue = NumOps.FromDouble(double.NegativeInfinity);
+        var negInf = Tensor<T>.CreateDefault([n], negInfValue);
+        var comparable = Engine.TensorWhere(Engine.TensorIsNan(flat), negInf, flat);
+        comparable = Engine.TensorWhere(eligible.Reshape([n]), comparable, negInf);
+        int available = Engine.TensorSum(Engine.TensorGreaterThan(comparable, negInfValue).Cast<int>());
+        int take = Math.Min(k, available);
+        if (take <= 0)
+            return new Tensor<T>([n]);
+
+        // tau = take-th largest score; everything above it is selected, then the lowest positions
+        // holding exactly tau fill the remaining slots.
+        T tau = Engine.TensorKthvalue(comparable, n - take + 1).Item1;
+        var above = Engine.TensorGreaterThan(comparable, tau);
+        int remaining = take - Engine.TensorSum(above.Cast<int>());
+        var atTau = Engine.TensorEquals(comparable, tau);
+        var tieRank = Engine.TensorCumSum(atTau, 0);
+        var tiesTaken = Engine.TensorMultiply(atTau, Engine.TensorLessThan(tieRank, NumOps.FromDouble(remaining + 0.5)));
+        return Engine.TensorAdd(above, tiesTaken);
+    }
+
+    /// <summary>
+    /// Maps logits to token ids as <c>max(0, min(V - 1, (int)((tanh(x) + 1) / 2 * (V - 1))))</c>, with NaN
+    /// mapping to 0 (the C# cast of NaN saturates below zero and is clamped up).
+    /// </summary>
+    /// <param name="logits">Logits.</param>
+    /// <param name="vocabularySize">Number of visual tokens V.</param>
+    /// <returns>Integer-valued token ids held as <typeparamref name="T"/>.</returns>
+    private protected Tensor<T> QuantizeTanhTokens(Tensor<T> logits, int vocabularySize)
+    {
+        T half = NumOps.FromDouble(0.5);
+        var unit = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorTanh(logits), half), half);
+        var scaled = Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(vocabularySize - 1));
+        var zeros = new Tensor<T>(logits._shape);
+        var truncated = Engine.TensorTrunc(Engine.TensorWhere(Engine.TensorIsNan(scaled), zeros, scaled));
+        return Engine.TensorMax(Engine.TensorMin(truncated, NumOps.FromDouble(vocabularySize - 1)), NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Projects the leading <paramref name="taps"/> hidden values onto a bank of sinusoids:
+    /// result[g] = sum_h hidden[h] * wave((g + 1) * (h + 1) * frequency) / divisor, h &lt; taps.
+    /// </summary>
+    /// <param name="hidden">Hidden state (read flattened); must hold at least <paramref name="taps"/> values.</param>
+    /// <param name="outputs">Number of outputs.</param>
+    /// <param name="taps">Number of leading hidden values used.</param>
+    /// <param name="frequency">Angular step of the sinusoid bank.</param>
+    /// <param name="useCosine">True for cosine waves, false for sine waves.</param>
+    /// <param name="divisor">Normaliser applied to every output.</param>
+    /// <returns>Projection of shape [outputs] (zeros when <paramref name="taps"/> is 0).</returns>
+    private protected Tensor<T> WaveProjection(Tensor<T> hidden, int outputs, int taps, double frequency, bool useCosine, double divisor)
+    {
+        if (taps <= 0 || outputs <= 0)
+            return new Tensor<T>([Math.Max(0, outputs)]);
+        var phase = Engine.TensorMultiplyScalar(
+            Engine.TensorOuter(Engine.TensorArange<T>(1, outputs + 1, 1), Engine.TensorArange<T>(1, taps + 1, 1)),
+            NumOps.FromDouble(frequency));
+        var basis = useCosine ? Engine.TensorCos(phase) : Engine.TensorSin(phase);
+        var leading = Engine.TensorSlice(hidden.Reshape([hidden.Length]), [0], [taps]).Reshape([taps, 1]);
+        return Engine.TensorDivideScalar(Engine.TensorMatMul(basis, leading).Reshape([outputs]), NumOps.FromDouble(divisor));
     }
 
     /// <summary>

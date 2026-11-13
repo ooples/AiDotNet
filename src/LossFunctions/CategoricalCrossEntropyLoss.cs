@@ -74,12 +74,10 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
         actual = SmoothActual(actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // -Σ(actual * log(predicted))
-            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(predicted[i], NumericalStabilityHelper.SmallEpsilon)));
-        }
+        // -Σ(actual * log(predicted)), with SafeLog's floor: log(max(predicted, eps))
+        T eps = NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon);
+        var logP = Engine.TensorLog(Engine.TensorClampMin(predicted.AsTensor(), eps));
+        T sum = Engine.TensorSum(Engine.TensorMultiply(actual.AsTensor(), logP));
 
         return NumOps.Negate(sum);
     }
@@ -190,10 +188,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         if (k == 0) return actual;
         T keep = NumOps.FromDouble(1.0 - _labelSmoothing);
         T add = NumOps.FromDouble(_labelSmoothing / k);
-        var smoothed = new Vector<T>(k);
-        for (int i = 0; i < k; i++)
-            smoothed[i] = NumOps.Add(NumOps.Multiply(actual[i], keep), add);
-        return smoothed;
+        return Engine.TensorAddScalar(Engine.TensorMultiplyScalar(actual.AsTensor(), keep), add).ToVector();
     }
 
     /// <summary>
