@@ -2619,6 +2619,7 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.NeuralNetworks.SyntheticData.AutoDiffTabGenerator`1::TimeHorizon", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.AutoDiffTabGenerator`1::TrialEpochs", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.AutoDiffTabGenerator`1::VGMModes", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.NeuralNetworks.SyntheticData.CopulaGANGenerator`1::VGMModes", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::BatchSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::ClipNorm", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.SyntheticData.DPCTGANGenerator`1::ConfidenceLevel", OptionSensitivityOutcome.Insensitive },
