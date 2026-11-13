@@ -104,8 +104,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Instead of storing exact values, features are grouped into
     /// bins. This array stores the boundaries between bins for each feature.</para>
     /// </remarks>
-    [AiDotNet.Attributes.FittedParameter]
-    private Vector<T>[]? _binBoundaries;
+    private double[][]? _binBoundaries;
 
     /// <summary>
     /// The initial prediction (log-odds for binary, class probabilities for multiclass).
@@ -114,8 +113,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Before any trees are added, the model makes a baseline
     /// prediction based on the class distribution in the training data.</para>
     /// </remarks>
-    [AiDotNet.Attributes.FittedParameter]
-    private Vector<T>? _initialPrediction;
+    private double[]? _initialPrediction;
 
     /// <summary>
     /// Number of histogram bins per feature.
@@ -175,29 +173,6 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// Random number generator.
     /// </summary>
     private readonly Random _random;
-
-    /// <summary>
-    /// Gets or sets the number of threads that build each tree: a positive count, or negative to count back from the
-    /// processor count (-1, the default, uses every processor, as scikit-learn's HistGradientBoostingClassifier
-    /// does). The trained model is the same for any value.
-    /// </summary>
-    /// <remarks>
-    /// Histograms, split gains and predictions run as engine tensor operations, which parallelise inside the engine,
-    /// so this value is validated (0 is rejected) but does not change the work split.
-    /// </remarks>
-    public int NJobs { get; set; } = -1;
-
-    /// <summary>
-    /// Rejects an <see cref="NJobs"/> of 0, which names no thread count.
-    /// </summary>
-    private void ValidateJobs()
-    {
-        if (NJobs == 0)
-        {
-            throw new InvalidOperationException(
-                $"{nameof(NJobs)} must be positive, or negative to count back from the processor count; got 0.");
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of HistGradientBoostingClassifier.
@@ -279,46 +254,60 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         int n = x.Rows;
         _trees.Clear();
 
-        ValidateJobs();
-
-        // Step 1: Compute bin boundaries for each feature
-        _binBoundaries = ComputeBinBoundaries(x);
-
-        // Step 2: Bin the features
-        var binnedX = BinFeatures(x, _binBoundaries);
+        // Steps 1-2: Compute each feature's bin boundaries and bin the features
+        // (HistGradientBoostingClassifier.HistBuilder.cs)
+        _binBoundaries = PrepareHistBuilder(x);
+        var targets = new int[n];
+        for (int i = 0; i < n; i++) targets[i] = GetClassIndexFromLabel(y[i]);
 
         // Step 3: Initialize predictions
         _initialPrediction = ComputeInitialPrediction(y);
 
         // For binary classification, we use a single output
         // For multiclass, we use K outputs (one vs rest)
-        var engine = Engine;
         int numOutputs = NumClasses == 2 ? 1 : NumClasses;
-        var predictions = engine.TensorTile(_initialPrediction.AsTensor().Reshape(1, numOutputs), new[] { n, 1 });
-        // One-hot targets (every training label is one of ClassLabels)
-        var targets = n == 0
-            ? new Tensor<T>(new[] { 0, NumClasses })
-            : engine.TensorOneHot<T>(GetClassIndexTensor(y), NumClasses);
-        T learningRate = NumOps.FromDouble(_learningRate);
+        var predictions = new double[n, numOutputs];
 
-        // Step 4: Gradient boosting iterations
-        for (int iter = 0; iter < _nEstimators; iter++)
+        // Initialize predictions
+        for (int i = 0; i < n; i++)
         {
-            // Compute all gradients from the same predictions snapshot
-            var (gradients, hessians) = ComputeGradientsAndHessians(targets, predictions);
-
-            // Build trees for all classes, then update predictions for all classes together
-            var outputs = new Tensor<T>[numOutputs];
             for (int k = 0; k < numOutputs; k++)
             {
-                var tree = BuildHistTree(binnedX,
-                    gradients.Slice(1, k, k + 1).Reshape(n), hessians.Slice(1, k, k + 1).Reshape(n), 0);
-                _trees.Add(tree);
-                outputs[k] = PredictTree(tree, binnedX, n).Reshape(n, 1);
+                predictions[i, k] = _initialPrediction[k];
             }
+        }
 
-            var treeOutputs = numOutputs == 1 ? outputs[0] : engine.TensorConcatenate(outputs, 1);
-            predictions = engine.TensorAdd(predictions, engine.TensorMultiplyScalar(treeOutputs, learningRate));
+        // Step 4: Gradient boosting iterations
+        try
+        {
+            for (int iter = 0; iter < _nEstimators; iter++)
+            {
+                // Compute all gradients from the same predictions snapshot
+                var grads = new double[numOutputs][];
+                var hess = new double[numOutputs][];
+                for (int k = 0; k < numOutputs; k++)
+                {
+                    (grads[k], hess[k]) = ComputeGradientsAndHessians(targets, predictions, k);
+                }
+
+                // Build each class's tree; its leaves record every sample's output for the update.
+                for (int k = 0; k < numOutputs; k++)
+                {
+                    _trees.Add(BuildHistTreeDense(grads[k], hess[k]));
+                    int output = k;
+                    ForEachRowBlock(n, (from, to) =>
+                    {
+                        for (int i = from; i < to; i++)
+                        {
+                            predictions[i, output] += _learningRate * _sampleLeafValue[i];
+                        }
+                    });
+                }
+            }
+        }
+        finally
+        {
+            ReleaseHistBuilder();
         }
     }
 
@@ -349,134 +338,189 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             throw new ArgumentException($"Expected {NumFeatures} features but got {input.Columns}.", nameof(input));
         }
 
-        ValidateJobs();
-        var engine = Engine;
-        int rows = input.Rows;
-        if (rows == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        var binnedX = BinFeatures(input, _binBoundaries);
+        var forest = new FlatForest(_trees, _binBoundaries);
+        var initialPrediction = _initialPrediction;
+        var classLabels = ClassLabels;
         int numOutputs = NumClasses == 2 ? 1 : NumClasses;
-        T learningRate = NumOps.FromDouble(_learningRate);
+        int columns = input.Columns;
+        var predictions = new Vector<T>(input.Rows);
 
-        // Sum tree predictions: tree t contributes to output t % numOutputs
-        var outputs = new Tensor<T>[numOutputs];
-        for (int k = 0; k < numOutputs; k++)
+        // Rows are independent, so fixed blocks of them run in parallel. Within a block each tree walks every row before
+        // the next tree starts, so a tree's nodes stay in cache; each row still sums the trees in tree order.
+        int jobs = ResolveHistJobs();
+        int blocks = (input.Rows + PredictBlockRows - 1) / PredictBlockRows;
+        var labels = new T[input.Rows];
+        Parallel.For(0, blocks, new ParallelOptions { MaxDegreeOfParallelism = jobs }, block =>
         {
-            outputs[k] = FilledVector(rows, _initialPrediction[k]).AsTensor();
-        }
+            int start = block * PredictBlockRows;
+            int count = Math.Min(input.Rows, start + PredictBlockRows) - start;
+            var rows = new double[count * columns];
+            var raw = new double[count * numOutputs];
+            for (int r = 0; r < count; r++)
+            {
+                var source = input.GetRowReadOnlySpan(start + r);
+                for (int j = 0; j < columns; j++) rows[r * columns + j] = NumOps.ToDouble(source[j]);
+                for (int k = 0; k < numOutputs; k++) raw[r * numOutputs + k] = initialPrediction[k];
+            }
 
-        for (int treeIdx = 0; treeIdx < _trees.Count; treeIdx++)
-        {
-            int k = treeIdx % numOutputs;
-            outputs[k] = engine.TensorAdd(outputs[k],
-                engine.TensorMultiplyScalar(PredictTree(_trees[treeIdx], binnedX, rows), learningRate));
-        }
+            for (int tree = 0; tree < forest.Trees; tree++)
+                forest.Accumulate(tree, rows, count, columns, raw, numOutputs, tree % numOutputs, _learningRate);
 
-        Tensor<int> bestClasses;
+            var rawPred = new double[numOutputs];
+            for (int r = 0; r < count; r++)
+            {
+                Array.Copy(raw, r * numOutputs, rawPred, 0, numOutputs);
+                labels[start + r] = ClassOf(rawPred, classLabels);
+            }
+        });
+
+        for (int i = 0; i < labels.Length; i++) predictions[i] = labels[i];
+        return predictions;
+    }
+
+    /// <summary>Rows per block of a parallel prediction: small, as a row costs a walk down every tree.</summary>
+    private const int PredictBlockRows = 128;
+
+    /// <summary>The likeliest class for one row's summed raw outputs.</summary>
+    private T ClassOf(double[] rawPred, Vector<T> classLabels)
+    {
         if (NumClasses == 2)
         {
-            // P(class 1) = sigmoid(raw) >= 0.5
-            var prob = engine.TensorSigmoid(outputs[0]);
-            var isPositive = engine.TensorGreaterEqual(prob, FilledVector(rows, NumOps.FromDouble(0.5)).AsTensor());
-            bestClasses = ZeroOneToInt(isPositive);
+            double prob = 1.0 / (1.0 + Math.Exp(-rawPred[0]));
+            return prob >= 0.5 ? classLabels[1] : classLabels[0];
         }
         else
         {
-            // Softmax and argmax (the first class wins ties)
-            var raw = engine.TensorConcatenate(outputs.Select(o => o.Reshape(rows, 1)).ToArray(), 1);
-            bestClasses = engine.TensorArgMax(engine.TensorSoftmax(raw, 1), 1);
-        }
+            // Softmax and argmax
+            double maxVal = double.MinValue;
+            for (int k = 0; k < NumClasses; k++) maxVal = Math.Max(maxVal, rawPred[k]);
+            double sumExp = 0;
+            for (int k = 0; k < NumClasses; k++)
+            {
+                sumExp += Math.Exp(rawPred[k] - maxVal);
+            }
 
-        return ClassIndicesToLabels(bestClasses);
+            int bestClass = 0;
+            double bestProb = 0;
+            for (int k = 0; k < NumClasses; k++)
+            {
+                double prob = Math.Exp(rawPred[k] - maxVal) / sumExp;
+                if (prob > bestProb)
+                {
+                    bestProb = prob;
+                    bestClass = k;
+                }
+            }
+            return classLabels[bestClass];
+        }
     }
 
     /// <summary>
-    /// Computes histogram bin boundaries for each feature.
+    /// The trees as flat arrays for prediction, each split compared against its bin's upper boundary in feature units.
     /// </summary>
-    /// <param name="x">Feature matrix.</param>
-    /// <returns>Array of bin boundaries for each feature.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> This finds evenly-spaced quantile boundaries for each feature.
-    /// For example, with 256 bins, we find the values that divide the data into 256 equal parts.</para>
+    /// A value falls in bin <c>b</c> when <c>b</c> boundaries lie below it (equal goes to the lower bin), so it is in a
+    /// bin &lt;= <c>t</c> exactly when it is not above boundary <c>t</c>: prediction reads the raw value instead of
+    /// binning every row first. NaN, which binning put in bin 0, is not above any boundary, so it goes left too.
     /// </remarks>
-    private Vector<T>[] ComputeBinBoundaries(Matrix<T> x)
+    private sealed class FlatForest
     {
-        int p = x.Columns;
-        int n = x.Rows;
-        var boundaries = new Vector<T>[p];
-        var engine = Engine;
-
-        for (int j = 0; j < p; j++)
+        /// <summary>
+        /// A split (<see cref="Feature"/> &gt;= 0), whose left child is the next node, or a leaf (-1) holding its value in
+        /// <see cref="Value"/>. One small struct per node in preorder, so a step down a tree reads one cache line.
+        /// </summary>
+        private struct Node
         {
-            if (n == 0)
-            {
-                boundaries[j] = new Vector<T>(0);
-                continue;
-            }
-
-            // Validate: every value must be finite
-            var column = x.GetColumn(j).AsTensor();
-            var invalid = engine.TensorWhere(engine.TensorIsFinite(column),
-                new Tensor<T>(new[] { n }), FilledVector(n, NumOps.One).AsTensor());
-            if (engine.TensorCountNonzero(invalid) > 0)
-            {
-                var badRows = engine.TensorNonzero(invalid);
-                throw new ArgumentException(
-                    $"Missing/NaN/Infinity values are not supported. Found at row {badRows.ToArray()[0]}, feature {j}. Please impute before training.",
-                    nameof(x));
-            }
-
-            var sorted = engine.TensorSort(column, 0, false).Values;
-
-            // Compute quantile boundaries (strictly increasing, so duplicates are dropped)
-            int numBins = Math.Min(_maxBins, n);
-            if (numBins <= 1)
-            {
-                boundaries[j] = new Vector<T>(0);
-                continue;
-            }
-
-            var positions = new int[numBins - 1];
-            for (int b = 1; b < numBins; b++)
-            {
-                positions[b - 1] = Math.Min((int)((double)b / numBins * n), n - 1);
-            }
-
-            var candidates = engine.TensorGather(sorted, new Tensor<int>(positions, new[] { positions.Length }), 0);
-            boundaries[j] = engine.TensorUniqueConsecutive(candidates).ToVector();
+            public double Value;
+            public int Feature;
+            public int Right;
         }
 
-        return boundaries;
-    }
+        private readonly int[] _roots;
+        private readonly Node[] _nodes;
 
-    /// <summary>
-    /// Bins features using precomputed boundaries.
-    /// </summary>
-    /// <param name="x">Feature matrix.</param>
-    /// <param name="boundaries">Bin boundaries for each feature.</param>
-    /// <returns>Binned feature matrix.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Converts continuous feature values to bin indices.
-    /// A value of 5.3 might become bin 42 if that's where 5.3 falls in the boundaries.</para>
-    /// </remarks>
-    private Tensor<int>[] BinFeatures(Matrix<T> x, Vector<T>[] boundaries)
-    {
-        int n = x.Rows;
-        int p = x.Columns;
-        var binned = new Tensor<int>[p];
-        var engine = Engine;
-        for (int j = 0; j < p; j++)
+        public FlatForest(List<HistTree> trees, double[][] boundaries)
         {
-            // Bin = index of the first boundary >= value (an exact boundary match maps to its own index)
-            binned[j] = n == 0 || boundaries[j].Length == 0
-                ? new Tensor<int>(new[] { n })
-                : engine.TensorSearchSorted(boundaries[j].AsTensor(), x.GetColumn(j).AsTensor(), false);
+            int nodes = 0;
+            var stack = new Stack<HistTree>();
+            foreach (var tree in trees)
+            {
+                stack.Push(tree);
+                while (stack.Count > 0)
+                {
+                    var node = stack.Pop();
+                    nodes++;
+                    if (node.LeftChild is not null && node.RightChild is not null)
+                    {
+                        stack.Push(node.LeftChild);
+                        stack.Push(node.RightChild);
+                    }
+                }
+            }
+
+            _roots = new int[trees.Count];
+            _nodes = new Node[nodes];
+            int next = 0;
+            for (int t = 0; t < trees.Count; t++)
+            {
+                _roots[t] = next;
+                next = Lay(trees[t], next, boundaries);
+            }
         }
 
-        return binned;
+        /// <summary>Lays out <paramref name="root"/>'s subtree in preorder from <paramref name="at"/>; returns the next free index.</summary>
+        private int Lay(HistTree root, int at, double[][] boundaries)
+        {
+            // Preorder without recursion: a split's left subtree follows it, and its right child's index is patched in
+            // once the left subtree has been laid out.
+            var pending = new Stack<(HistTree Node, int Parent)>();
+            pending.Push((root, -1));
+            while (pending.Count > 0)
+            {
+                var (node, parent) = pending.Pop();
+                int index = at++;
+                if (parent >= 0) _nodes[parent].Right = index;
+                if (node.LeftChild is not null && node.RightChild is not null)
+                {
+                    var bounds = boundaries[node.FeatureIndex];
+                    _nodes[index].Feature = node.FeatureIndex;
+                    _nodes[index].Value = node.BinThreshold < bounds.Length
+                        ? bounds[node.BinThreshold]
+                        : double.PositiveInfinity;
+                    pending.Push((node.RightChild, index));
+                    pending.Push((node.LeftChild, -1));
+                }
+                else
+                {
+                    _nodes[index].Feature = -1;
+                    _nodes[index].Value = node.LeafValue;
+                }
+            }
+
+            return at;
+        }
+
+        public int Trees => _roots.Length;
+
+        /// <summary>
+        /// Adds <paramref name="learningRate"/> times tree <paramref name="tree"/>'s leaf value for each of
+        /// <paramref name="count"/> rows (row-major in <paramref name="rows"/>) to output <paramref name="output"/> of that
+        /// row in <paramref name="raw"/>.
+        /// </summary>
+        public void Accumulate(int tree, double[] rows, int count, int columns, double[] raw, int outputs, int output,
+            double learningRate)
+        {
+            var nodes = _nodes;
+            int root = _roots[tree];
+            for (int r = 0; r < count; r++)
+            {
+                int offset = r * columns;
+                int node = root;
+                while (nodes[node].Feature >= 0)
+                    node = rows[offset + nodes[node].Feature] > nodes[node].Value ? nodes[node].Right : node + 1;
+                raw[r * outputs + output] += learningRate * nodes[node].Value;
+            }
+        }
     }
 
     /// <summary>
@@ -489,252 +533,110 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// For binary classification, it's the log-odds of the positive class.
     /// For multiclass, it's the log-probability of each class.</para>
     /// </remarks>
-    private Vector<T> ComputeInitialPrediction(Vector<T> y)
+    private double[] ComputeInitialPrediction(Vector<T> y)
     {
         int numOutputs = NumClasses == 2 ? 1 : NumClasses;
-        var engine = Engine;
-        var counts = new Tensor<T>(new[] { NumClasses });
-        if (y.Length > 0)
+        var classCounts = new int[NumClasses];
+
+        for (int i = 0; i < y.Length; i++)
         {
-            // Unknown labels map to -1; shifting by one sends them to bin 0, which is dropped.
-            var shifted = engine.TensorAddScalar(GetClassIndexTensor(y), 1);
-            var binCounts = engine.TensorScatterAdd(new Tensor<T>(new[] { NumClasses + 1 }), shifted,
-                FilledVector(y.Length, NumOps.One).AsTensor(), 0);
-            counts = binCounts.Slice(0, 1, NumClasses + 1);
+            int classIdx = GetClassIndexFromLabel(y[i]);
+            if (classIdx >= 0 && classIdx < NumClasses)
+            {
+                classCounts[classIdx]++;
+            }
         }
 
-        var fractions = engine.TensorDivideScalar(counts, NumOps.FromDouble(y.Length));
+        var initial = new double[numOutputs];
 
         if (NumClasses == 2)
         {
             // Binary: log-odds
-            T p1 = fractions[1];
-            p1 = NumOps.Compare(p1, NumOps.FromDouble(1 - 1e-7)) > 0 ? NumOps.FromDouble(1 - 1e-7) : p1;
-            p1 = NumOps.Compare(p1, NumOps.FromDouble(1e-7)) < 0 ? NumOps.FromDouble(1e-7) : p1;
-            return Vector<T>.Wrap(new[] { NumOps.Log(NumOps.Divide(p1, NumOps.Subtract(NumOps.One, p1))) });
+            double p1 = (double)classCounts[1] / y.Length;
+            p1 = Math.Max(1e-7, Math.Min(1 - 1e-7, p1));
+            initial[0] = Math.Log(p1 / (1 - p1));
+        }
+        else
+        {
+            // Multiclass: log probabilities
+            for (int k = 0; k < NumClasses; k++)
+            {
+                double p = (double)classCounts[k] / y.Length;
+                p = Math.Max(1e-7, p);
+                initial[k] = Math.Log(p);
+            }
         }
 
-        // Multiclass: log probabilities
-        return numOutputs == 0
-            ? new Vector<T>(0)
-            : engine.TensorLog(engine.TensorClampMin(fractions, NumOps.FromDouble(1e-7))).ToVector();
+        return initial;
     }
 
     /// <summary>
     /// Computes gradients and hessians for gradient boosting.
     /// </summary>
-    /// <param name="targets">One-hot targets [n_samples, n_classes].</param>
-    /// <param name="predictions">Current raw predictions [n_samples, n_outputs].</param>
-    /// <returns>Gradients and hessians [n_samples, n_outputs].</returns>
+    /// <param name="targets">Each sample's class index.</param>
+    /// <param name="predictions">Current predictions.</param>
+    /// <param name="classIdx">Class index for multiclass problems.</param>
+    /// <returns>Tuple of gradients and hessians.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Gradients tell us how wrong our predictions are.
     /// Hessians (second derivatives) tell us how confident we should be in our gradient estimates.
     /// Together they help us build trees that efficiently reduce the loss.</para>
     /// </remarks>
-    private (Tensor<T> Gradients, Tensor<T> Hessians) ComputeGradientsAndHessians(Tensor<T> targets, Tensor<T> predictions)
+    private (double[] gradients, double[] hessians) ComputeGradientsAndHessians(
+        int[] targets, double[,] predictions, int classIdx)
     {
-        var engine = Engine;
-        int n = predictions.Shape[0];
-        if (n == 0)
-        {
-            return (predictions, predictions);
-        }
+        int n = targets.Length;
+        var gradients = new double[n];
+        var hessians = new double[n];
 
-        // Binary cross-entropy uses sigmoid(raw) against the class-1 indicator; multiclass uses softmax
-        Tensor<T> probabilities;
-        Tensor<T> target;
         if (NumClasses == 2)
         {
-            probabilities = engine.TensorSigmoid(predictions);
-            target = targets.Slice(1, 1, 2);
+            // Binary cross-entropy gradients
+            ForEachRowBlock(n, (from, to) =>
+            {
+                for (int i = from; i < to; i++)
+                {
+                    double target = targets[i] == 1 ? 1.0 : 0.0;
+                    double pred = 1.0 / (1.0 + Math.Exp(-predictions[i, 0]));
+                    gradients[i] = pred - target;
+                    hessians[i] = pred * (1 - pred);
+                    hessians[i] = Math.Max(hessians[i], 1e-7);
+                }
+            });
         }
         else
         {
-            probabilities = engine.TensorSoftmax(predictions, 1);
-            target = targets;
+            // Multiclass cross-entropy gradients
+            ForEachRowBlock(n, (from, to) =>
+            {
+                for (int i = from; i < to; i++)
+                {
+                    // Softmax
+                    double maxVal = double.MinValue;
+                    for (int k = 0; k < NumClasses; k++)
+                    {
+                        maxVal = Math.Max(maxVal, predictions[i, k]);
+                    }
+
+                    double sumExp = 0;
+                    for (int k = 0; k < NumClasses; k++)
+                    {
+                        sumExp += Math.Exp(predictions[i, k] - maxVal);
+                    }
+
+                    double pred = Math.Exp(predictions[i, classIdx] - maxVal) / sumExp;
+                    double target = targets[i] == classIdx ? 1.0 : 0.0;
+
+                    gradients[i] = pred - target;
+                    hessians[i] = pred * (1 - pred);
+                    hessians[i] = Math.Max(hessians[i], 1e-7);
+                }
+            });
         }
 
-        var gradients = engine.TensorSubtract(probabilities, target);
-        var hessians = engine.TensorClampMin(
-            engine.TensorMultiply(probabilities, engine.ScalarMinusTensor(NumOps.One, probabilities)), NumOps.FromDouble(1e-7));
         return (gradients, hessians);
     }
 
-    /// <summary>
-    /// Builds a histogram-based decision tree.
-    /// </summary>
-    /// <param name="binnedX">Binned feature matrix.</param>
-    /// <param name="gradients">Gradient values.</param>
-    /// <param name="hessians">Hessian values.</param>
-    /// <param name="depth">Current depth.</param>
-    /// <param name="sampleIndices">Indices of samples in this node.</param>
-    /// <returns>Root node of the tree.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This builds a tree by:
-    /// <list type="number">
-    /// <item>Building histograms of gradients and hessians for each feature</item>
-    /// <item>Finding the best split by scanning histogram bins</item>
-    /// <item>Recursively splitting until stopping criteria are met</item>
-    /// </list>
-    /// The key speedup is that we only evaluate O(bins) splits per feature instead of O(samples).
-    /// </para>
-    /// </remarks>
-    private HistTree BuildHistTree(Tensor<int>[] binnedX, Tensor<T> gradients, Tensor<T> hessians,
-        int depth, int[]? sampleIndices = null)
-    {
-        var engine = Engine;
-        int n = gradients.Length;
-        sampleIndices ??= Enumerable.Range(0, n).ToArray();
-        int count = sampleIndices.Length;
-        var indexTensor = new Tensor<int>(sampleIndices, new[] { count });
-        var nodeGradients = count == n ? gradients : engine.TensorGather(gradients, indexTensor, 0);
-        var nodeHessians = count == n ? hessians : engine.TensorGather(hessians, indexTensor, 0);
-
-        // Compute leaf value
-        T lambda = NumOps.FromDouble(_l2Regularization);
-        T sumGrad = count == 0 ? NumOps.Zero : engine.TensorSum(nodeGradients);
-        T sumHess = count == 0 ? NumOps.Zero : engine.TensorSum(nodeHessians);
-        T leafValue = NumOps.Negate(NumOps.Divide(sumGrad, NumOps.Add(sumHess, lambda)));
-
-        // Stopping conditions
-        if (depth >= _maxDepth || count < 2 * _minSamplesLeaf)
-        {
-            return new HistTree { LeafValue = leafValue };
-        }
-
-        // Find best split (strictly positive gain; the first feature, then the first bin, wins ties)
-        int bestFeature = -1;
-        int bestBin = -1;
-        var featureGains = new List<Tensor<T>>();
-        var featureIds = new List<int>();
-        var bestBinPerFeature = new List<int>();
-        T countValue = NumOps.FromDouble(count);
-        T parentVal = NumOps.Divide(NumOps.Multiply(sumGrad, sumGrad), NumOps.Add(sumHess, lambda));
-        T minLeaf = NumOps.FromDouble(_minSamplesLeaf);
-        T half = NumOps.FromDouble(0.5);
-
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            // Histogram for this feature
-            int numBins = _binBoundaries is not null ? _binBoundaries[j].Length + 1 : _maxBins;
-            if (numBins < 2)
-            {
-                continue;
-            }
-
-            var bins = count == n ? binnedX[j] : engine.TensorGather(binnedX[j], indexTensor, 0);
-            var binGradSum = engine.TensorScatterAdd(new Tensor<T>(new[] { numBins }), bins, nodeGradients, 0);
-            var binHessSum = engine.TensorScatterAdd(new Tensor<T>(new[] { numBins }), bins, nodeHessians, 0);
-            var binCount = engine.TensorScatterAdd(new Tensor<T>(new[] { numBins }), bins, FilledVector(count, NumOps.One).AsTensor(), 0);
-
-            // Left statistics for splits after bins 0..numBins-2
-            var leftGrad = engine.TensorCumSum(binGradSum, 0).Slice(0, 0, numBins - 1);
-            var leftHess = engine.TensorCumSum(binHessSum, 0).Slice(0, 0, numBins - 1);
-            var leftCount = engine.TensorCumSum(binCount, 0).Slice(0, 0, numBins - 1);
-            var rightGrad = engine.ScalarMinusTensor(sumGrad, leftGrad);
-            var rightHess = engine.ScalarMinusTensor(sumHess, leftHess);
-            var rightCount = engine.ScalarMinusTensor(countValue, leftCount);
-
-            // gain = 0.5 * (L^2 / (LH + lambda) + R^2 / (RH + lambda) - P^2 / (PH + lambda))
-            var leftVal = engine.TensorDivide(engine.TensorMultiply(leftGrad, leftGrad), engine.TensorAddScalar(leftHess, lambda));
-            var rightVal = engine.TensorDivide(engine.TensorMultiply(rightGrad, rightGrad), engine.TensorAddScalar(rightHess, lambda));
-            var gains = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorAdd(leftVal, rightVal), parentVal), half);
-
-            // Splits leaving fewer than minSamplesLeaf on either side are not allowed
-            var allowed = engine.TensorMultiply(
-                engine.TensorGreaterEqual(leftCount, FilledVector(numBins - 1, minLeaf).AsTensor()),
-                engine.TensorGreaterEqual(rightCount, FilledVector(numBins - 1, minLeaf).AsTensor()));
-            var candidates = engine.TensorWhere(allowed, gains, new Tensor<T>(new[] { numBins - 1 }));
-            int bin = engine.TensorArgMax(candidates, 0).ToArray()[0];
-            featureGains.Add(engine.TensorSlice(candidates, new[] { bin }, new[] { 1 }));
-            featureIds.Add(j);
-            bestBinPerFeature.Add(bin);
-        }
-
-        // First feature with the largest gain wins, provided that gain is strictly positive
-        if (featureGains.Count > 0)
-        {
-            var allGains = engine.TensorConcatenate(featureGains.ToArray(), 0);
-            int bestPosition = engine.TensorArgMax(allGains, 0).ToArray()[0];
-            if (NumOps.GreaterThan(allGains[bestPosition], NumOps.Zero))
-            {
-                bestFeature = featureIds[bestPosition];
-                bestBin = bestBinPerFeature[bestPosition];
-            }
-        }
-
-        // No good split found
-        if (bestFeature < 0)
-        {
-            return new HistTree { LeafValue = leafValue };
-        }
-
-        // Split samples
-        var featureBins = binnedX[bestFeature].ToArray();
-        var leftIndices = sampleIndices.Where(i => featureBins[i] <= bestBin).ToArray();
-        var rightIndices = sampleIndices.Where(i => featureBins[i] > bestBin).ToArray();
-
-        // Build child trees
-        var leftTree = BuildHistTree(binnedX, gradients, hessians, depth + 1, leftIndices);
-        var rightTree = BuildHistTree(binnedX, gradients, hessians, depth + 1, rightIndices);
-
-        return new HistTree
-        {
-            FeatureIndex = bestFeature,
-            BinThreshold = bestBin,
-            LeftChild = leftTree,
-            RightChild = rightTree
-        };
-    }
-
-    /// <summary>
-    /// Gets the prediction from a tree for a single sample.
-    /// </summary>
-    /// <param name="tree">The tree to evaluate.</param>
-    /// <param name="binnedX">Binned features, one bin index tensor per feature.</param>
-    /// <param name="rows">The number of samples.</param>
-    /// <returns>The tree output for every sample.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Traverses the tree from root to leaf by comparing
-    /// the sample's binned feature values to the split thresholds.</para>
-    /// </remarks>
-    private Tensor<T> PredictTree(HistTree tree, Tensor<int>[] binnedX, int rows)
-    {
-        // Route every sample to its leaf, then look the leaf values up
-        var leafValues = new List<T>();
-        var leafOfSample = new int[rows];
-        AssignLeaves(tree, binnedX, Enumerable.Range(0, rows).ToArray(), leafValues, leafOfSample);
-        if (rows == 0)
-        {
-            return new Tensor<T>(new[] { 0 });
-        }
-
-        return Engine.TensorGather(Vector<T>.Wrap(leafValues.ToArray()).AsTensor(),
-            new Tensor<int>(leafOfSample, new[] { rows }), 0);
-    }
-
-    /// <summary>
-    /// Records, for every sample in <paramref name="samples"/>, the index of the leaf it reaches.
-    /// </summary>
-    private static void AssignLeaves(HistTree node, Tensor<int>[] binnedX, int[] samples, List<T> leafValues, int[] leafOfSample)
-    {
-        if (node.LeftChild is null || node.RightChild is null)
-        {
-            int leaf = leafValues.Count;
-            leafValues.Add(node.LeafValue);
-            foreach (int i in samples)
-            {
-                leafOfSample[i] = leaf;
-            }
-
-            return;
-        }
-
-        var featureBins = binnedX[node.FeatureIndex].ToArray();
-        int threshold = node.BinThreshold;
-        AssignLeaves(node.LeftChild, binnedX, samples.Where(i => featureBins[i] <= threshold).ToArray(), leafValues, leafOfSample);
-        AssignLeaves(node.RightChild, binnedX, samples.Where(i => featureBins[i] > threshold).ToArray(), leafValues, leafOfSample);
-    }
 
     /// <summary>
     /// Creates a new instance with the specified parameters.
@@ -762,32 +664,25 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// </remarks>
     public override Dictionary<string, T> GetFeatureImportance()
     {
-        // Collect the feature of every split across all trees
-        var splitFeatures = new List<int>();
+        var importance = new double[NumFeatures];
+
+        // Count feature usage across all trees
         foreach (var tree in _trees)
         {
-            CountFeatureUsage(tree, splitFeatures);
+            CountFeatureUsage(tree, importance);
         }
 
-        // Usage count per feature, normalized to sum to 1
-        var engine = Engine;
-        var importance = new Tensor<T>(new[] { NumFeatures });
-        if (splitFeatures.Count > 0 && NumFeatures > 0)
-        {
-            var counts = engine.TensorScatterAdd(importance,
-                new Tensor<int>(splitFeatures.ToArray(), new[] { splitFeatures.Count }),
-                FilledVector(splitFeatures.Count, NumOps.One).AsTensor(), 0);
-            importance = engine.TensorDivideScalar(counts, engine.TensorSum(counts));
-        }
+        // Normalize
+        double total = importance.Sum();
+        if (total == 0) total = 1;
 
-        var values = importance.ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < NumFeatures; i++)
         {
             string name = FeatureNames is not null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = values[i];
+            result[name] = NumOps.FromDouble(importance[i] / total);
         }
 
         return result;
@@ -797,21 +692,21 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// Counts feature usage in a tree for importance calculation.
     /// </summary>
     /// <param name="node">Tree node to process.</param>
-    /// <param name="splitFeatures">Receives the feature index of every split.</param>
+    /// <param name="importance">Array to accumulate importance scores.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Recursively traverses the tree and counts how often
     /// each feature is used for splits.</para>
     /// </remarks>
-    private void CountFeatureUsage(HistTree node, List<int> splitFeatures)
+    private void CountFeatureUsage(HistTree node, double[] importance)
     {
         if (node.LeftChild is null || node.RightChild is null)
         {
             return;
         }
 
-        splitFeatures.Add(node.FeatureIndex);
-        CountFeatureUsage(node.LeftChild, splitFeatures);
-        CountFeatureUsage(node.RightChild, splitFeatures);
+        importance[node.FeatureIndex] += 1;
+        CountFeatureUsage(node.LeftChild, importance);
+        CountFeatureUsage(node.RightChild, importance);
     }
 
     private static HistTree CloneHistTree(HistTree node)
@@ -835,7 +730,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         {
             { "FeatureIndex", node.FeatureIndex },
             { "BinThreshold", node.BinThreshold },
-            { "LeafValue", (object?)node.LeafValue ?? throw new InvalidOperationException("Tree leaf value is null.") },
+            { "LeafValue", node.LeafValue },
             { "IsLeaf", node.LeftChild is null && node.RightChild is null }
         };
 
@@ -853,7 +748,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         {
             FeatureIndex = data["FeatureIndex"]?.ToObject<int>() ?? 0,
             BinThreshold = data["BinThreshold"]?.ToObject<int>() ?? 0,
-            LeafValue = data["LeafValue"] is JToken leaf ? leaf.ToObject<T>() ?? NumOps.Zero : NumOps.Zero
+            LeafValue = data["LeafValue"]?.ToObject<double>() ?? 0.0
         };
 
         var leftToken = data["Left"];
@@ -899,6 +794,6 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         /// <summary>
         /// Prediction value for leaf nodes.
         /// </summary>
-        public T LeafValue { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
+        public double LeafValue { get; set; }
     }
 }
