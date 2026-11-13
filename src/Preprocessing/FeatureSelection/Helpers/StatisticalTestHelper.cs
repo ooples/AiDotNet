@@ -202,10 +202,18 @@ internal static class StatisticalTestHelper
         if (k < 2)
             return Uninformative<T>(p);
 
+        // chi2 of a feature scaled by c is c times its chi2, so every feature is divided by its largest value first and
+        // its statistic multiplied back at the end: the class sums and the feature total then stay at most n, where the
+        // raw sums of count data overflowed Half past 65504 (total = inf, O - E = inf - inf = NaN)
+        var largest = PreprocessingTensorOps.ColumnMax(x);
+        var scale = engine.TensorWhere(
+            engine.TensorGreaterThan(largest, ops.Zero), largest, FilterStatisticTensorOps.FilledLike(largest, ops.One));
+        var scaled = engine.TensorDivide(x, FilterStatisticTensorOps.RowBroadcast(scale, n));
+
         // observed[c, j] = sum of feature j over class c; expected = P(class c) * total of feature j
-        var observed = engine.TensorMatMul(engine.TensorTranspose(oneHot), x);
+        var observed = engine.TensorMatMul(engine.TensorTranspose(oneHot), scaled);
         var classProbability = engine.TensorDivideScalar(FeatureScoringTensorOps.Counts(oneHot, 0), ops.FromDouble(n));
-        var featureTotal = engine.ReduceSum(x, new[] { 0 }, false);
+        var featureTotal = engine.ReduceSum(scaled, new[] { 0 }, false);
         var expected = engine.TensorOuter(classProbability, featureTotal);
 
         // a feature that is zero everywhere has no expected mass: scored 0 with p = 1
@@ -213,7 +221,7 @@ internal static class StatisticalTestHelper
         var difference = engine.TensorSubtract(observed, expected);
         var terms = engine.TensorMultiply(
             difference, FilterStatisticTensorOps.GuardedDivide(difference, expected, 0.0, ops.Zero));
-        var chi2 = engine.ReduceSum(terms, new[] { 0 }, false);
+        var chi2 = engine.TensorMultiply(engine.ReduceSum(terms, new[] { 0 }, false), scale);
         var pValues = FilterStatisticTensorOps.ChiSquareSurvival(chi2, k - 1);
         var informative = engine.TensorGreaterThan(featureTotal, ops.Zero);
         pValues = engine.TensorWhere(informative, pValues, FilterStatisticTensorOps.FilledLike(pValues, ops.One));
@@ -309,13 +317,21 @@ internal static class StatisticalTestHelper
     }
 
     // The entries of a vector divided by its population standard deviation (sklearn.preprocessing.scale without
-    // centring); a constant vector stays as it is.
+    // centring); a constant vector stays as it is. The deviations are divided by s, their largest magnitude, before
+    // they are squared, and std = s (sqrt(sum of those squares) / sqrt(n)), at most s: the raw sum of squares
+    // overflowed Half once the deviations passed a few hundred (std = inf turned every value into 0).
     private static Tensor<T> ScaleToUnitStd<T>(Tensor<T> values)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         var centered = engine.TensorSubtractScalar(values, engine.TensorMean(values));
-        T std = ops.Sqrt(ops.Divide(engine.TensorSumOfSquares(centered), ops.FromDouble(values.Length)));
+        T largest = engine.TensorMaxValue(engine.TensorAbs(centered));
+        if (!ops.GreaterThan(largest, ops.Zero))
+            return values;
+
+        var unit = engine.TensorDivideScalar(centered, largest);
+        T std = ops.Multiply(largest,
+            ops.Divide(ops.Sqrt(engine.TensorSumOfSquares(unit)), ops.FromDouble(Math.Sqrt(values.Length))));
         return ops.GreaterThan(std, ops.Zero) ? engine.TensorDivideScalar(values, std) : values;
     }
 

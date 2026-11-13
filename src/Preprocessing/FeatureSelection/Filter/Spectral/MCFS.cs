@@ -75,18 +75,22 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
         var x = FilterStatisticTensorOps.AsTensor(data);
 
         // k-NN affinity graph with heat-kernel weights exp(-d^2 / (2 sigma_i^2)), sigma_i the mean distance from
-        // instance i to its k neighbours (1 when that is 0); symmetrised with the larger weight
+        // instance i to its k neighbours (1 when that is 0); symmetrised with the larger weight. The exponent is
+        // (d / sigma_i)^2 / 2, divided before it is squared: d^2 and sigma_i^2 overflow Half once the distances pass
+        // 256 (inf / inf = NaN, and NaN times the 0 of the neighbour mask stayed NaN). The neighbour distances are
+        // picked with a where, not a mask product, and the sigma cut-off is one Half can hold (1e-10 is 0 there).
         var distances = engine.TensorCDist(x, x, 2.0);
         var neighbours = FeatureScoringTensorOps.KnnMask(distances, _nNeighbors);
         var neighbourCount = engine.ReduceSum(neighbours, new[] { 1 }, false);
         var sigma = FilterStatisticTensorOps.GuardedDivide(
-            engine.ReduceSum(engine.TensorMultiply(distances, neighbours), new[] { 1 }, false), neighbourCount, 0.0, NumOps.Zero);
-        sigma = engine.TensorWhere(engine.TensorLessThan(sigma, NumOps.FromDouble(1e-10)), FilterStatisticTensorOps.FilledLike(sigma, NumOps.One), sigma);
-        var bandwidth = engine.TensorMultiplyScalar(engine.TensorSquare(sigma), NumOps.FromDouble(2.0));
-        var directed = engine.TensorMultiply(
-            engine.TensorExp(engine.TensorNegate(engine.TensorDivide(
-                engine.TensorSquare(distances), FilterStatisticTensorOps.ColumnBroadcast(bandwidth, n)))),
-            neighbours);
+            engine.ReduceSum(FeatureScoringTensorOps.KeepOrFill(distances, neighbours, NumOps.Zero), new[] { 1 }, false),
+            neighbourCount, 0.0, NumOps.Zero);
+        sigma = engine.TensorWhere(engine.TensorLessThan(sigma, FeatureScoringTensorOps.Tiny<T>(1e-10)),
+            FilterStatisticTensorOps.FilledLike(sigma, NumOps.One), sigma);
+        var scaledDistance = engine.TensorDivide(distances, FilterStatisticTensorOps.ColumnBroadcast(sigma, n));
+        var kernel = engine.TensorExp(
+            engine.TensorMultiplyScalar(engine.TensorSquare(scaledDistance), NumOps.FromDouble(-0.5)));
+        var directed = FeatureScoringTensorOps.KeepOrFill(kernel, neighbours, NumOps.Zero);
         var affinity = engine.TensorMax(directed, engine.TensorTranspose(directed));
 
         var propagation = Propagation(affinity);
@@ -100,18 +104,27 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeat
             FeatureScoringTensorOps.PowerIteration(propagation, starts, 100, keepPreviousOnZeroNorm: false).ToArray(), 1);
 
         // Per feature and cluster indicator the regression coefficient cov / var, soft-thresholded by alpha / n;
-        // score = the norm of those coefficients over the clusters
-        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        // score = the norm of those coefficients over the clusters. Each feature is divided by its largest deviation
+        // s first, cov(x, u) / var(x) = cov(x / s, u) / var(x / s) / s: the raw sum of squares overflowed Half once
+        // the deviations passed a few hundred (var = inf scored the feature 0). A feature counts when its sum of
+        // squared deviations is above 1e-10, i.e. s sqrt(sum (x / s)^2) is above 1e-5.
+        var deviation = FilterStatisticTensorOps.CenterColumns(x);
+        var spread = engine.ReduceMax(engine.TensorAbs(deviation), new[] { 0 }, false);
+        var safeSpread = engine.TensorWhere(
+            engine.TensorGreaterThan(spread, NumOps.Zero), spread, FilterStatisticTensorOps.FilledLike(spread, NumOps.One));
+        var centered = engine.TensorDivide(deviation, FilterStatisticTensorOps.RowBroadcast(safeSpread, n));
         var centeredIndicators = FilterStatisticTensorOps.CenterColumns(indicators);
         var covariance = engine.TensorMatMul(engine.TensorTranspose(centered), centeredIndicators);
         var variance = engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false);
+        var informativeFeature = engine.TensorGreaterThan(
+            engine.TensorMultiply(spread, engine.TensorSqrt(variance)), NumOps.FromDouble(1e-5));
+        var safeVariance = engine.TensorWhere(
+            engine.TensorGreaterThan(variance, NumOps.Zero), variance, FilterStatisticTensorOps.FilledLike(variance, NumOps.One));
         var coefficient = engine.TensorAbs(engine.TensorDivide(
-            covariance, FilterStatisticTensorOps.ColumnBroadcast(
-                engine.TensorWhere(engine.TensorGreaterThan(variance, NumOps.FromDouble(1e-10)), variance,
-                    FilterStatisticTensorOps.FilledLike(variance, NumOps.One)), _nClusters)));
+            engine.TensorDivide(covariance, FilterStatisticTensorOps.ColumnBroadcast(safeVariance, _nClusters)),
+            FilterStatisticTensorOps.ColumnBroadcast(safeSpread, _nClusters)));
         var sparse = engine.TensorMax(engine.TensorSubtractScalar(coefficient, NumOps.FromDouble(_alpha / n)), NumOps.Zero);
-        var informative = FilterStatisticTensorOps.ColumnBroadcast(
-            engine.TensorGreaterThan(variance, NumOps.FromDouble(1e-10)), _nClusters);
+        var informative = FilterStatisticTensorOps.ColumnBroadcast(informativeFeature, _nClusters);
         var scores = engine.TensorSqrt(engine.ReduceSum(
             engine.TensorSquare(engine.TensorMultiply(sparse, informative)), new[] { 1 }, false));
         _mcfsScores = scores.ToVector();

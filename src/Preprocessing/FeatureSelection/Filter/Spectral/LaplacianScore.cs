@@ -73,10 +73,18 @@ public class LaplacianScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         var degree = engine.ReduceSum(weights, new[] { 1 }, false);
 
         // f~ = f - (f'D1 / 1'D1) 1, score = f~' L f~ / f~' D f~ with L = D - W (He, Cai and Niyogi 2005)
+        // The score does not change when a feature is scaled, so f~ is divided by its largest magnitude before the
+        // quadratic forms (a constant feature stays all zero), and the mean is taken with the degree shares d / 1'D1:
+        // the raw sums d f~^2 and d f overflowed Half once the deviations passed a few hundred (score NaN)
         var degreeRow = engine.Reshape(degree, new[] { 1, n });
-        var mean = engine.TensorDivideScalar(
-            engine.Reshape(engine.TensorMatMul(degreeRow, x), new[] { p }), engine.TensorSum(degree));
-        var centered = engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(mean, n));
+        var shares = FilterStatisticTensorOps.GuardedDivide(
+            degree, FilterStatisticTensorOps.FilledLike(degree, engine.TensorSum(degree)), 0.0, NumOps.Zero);
+        var mean = engine.Reshape(engine.TensorMatMul(engine.Reshape(shares, new[] { 1, n }), x), new[] { p });
+        var deviation = engine.TensorSubtract(x, FilterStatisticTensorOps.RowBroadcast(mean, n));
+        var spread = engine.ReduceMax(engine.TensorAbs(deviation), new[] { 0 }, false);
+        var safeSpread = engine.TensorWhere(
+            engine.TensorGreaterThan(spread, NumOps.Zero), spread, FilterStatisticTensorOps.FilledLike(spread, NumOps.One));
+        var centered = engine.TensorDivide(deviation, FilterStatisticTensorOps.RowBroadcast(safeSpread, n));
         var denominator = engine.Reshape(engine.TensorMatMul(degreeRow, engine.TensorSquare(centered)), new[] { p });
         var smoothness = engine.ReduceSum(
             engine.TensorMultiply(centered, engine.TensorMatMul(weights, centered)), new[] { 0 }, false);

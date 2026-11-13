@@ -15620,7 +15620,6 @@
 5	ADNELEM002|AiDotNet.Preprocessing.FeatureSelection.Filter.Regression.FRegression<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 1	ADNELEM002|AiDotNet.Preprocessing.FeatureSelection.Filter.Relief.MultiSURF<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 6	ADNELEM002|AiDotNet.Preprocessing.FeatureSelection.Filter.SignalToNoiseRatio<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
-2	ADNELEM002|AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral.TraceRatio<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 5	ADNELEM002|AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical.ANOVASelector<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 5	ADNELEM002|AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical.StudentTTest<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 6	ADNELEM002|AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical.TTestSelector<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)

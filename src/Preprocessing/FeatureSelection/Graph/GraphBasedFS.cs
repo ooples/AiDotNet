@@ -96,21 +96,16 @@ public class GraphBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         IsFitted = true;
     }
 
-    // |r| between features where it reaches the edge threshold, 0 elsewhere and on the diagonal. r = z_j1 . z_j2
-    // with z_j = (x_j - mean) / (sqrt(SS_j) + eps), the master formula cov / ((n - 1) s_j1 s_j2) without forming
-    // the covariance or the product of the deviations, which overflow Half; eps does not underflow to 0 in Half,
-    // where a constant column gave 0 / 0.
+    // |r| between features where it reaches the edge threshold, 0 elsewhere and on the diagonal; a constant feature
+    // has no edges. r is the master formula cov / ((n - 1) s_j1 s_j2), evaluated on columns divided by their largest
+    // deviation (UnitDeviationCorrelationMatrix): the raw sums of squared deviations overflowed Half once the
+    // deviations passed a few hundred (norm = inf turned every r into 0 and removed every edge).
     internal static Tensor<T> BuildAdjacencyMatrix(Tensor<T> x, double edgeThreshold)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        int n = x.Shape[0];
         int p = x.Shape[1];
-        var centered = FilterStatisticTensorOps.CenterColumns(x);
-        var norm = engine.TensorAddScalar(
-            engine.TensorSqrt(FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x)), FeatureScoringTensorOps.Tiny<T>(1e-10));
-        var z = engine.TensorDivide(centered, engine.TensorBroadcastTo(engine.Reshape(norm, new[] { 1, p }), new[] { n, p }));
-        var strength = engine.TensorAbs(engine.TensorMatMul(engine.TensorTranspose(z), z));
+        var strength = engine.TensorAbs(FeatureScoringTensorOps.UnitDeviationCorrelationMatrix(x));
         var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(p));
         var edge = engine.TensorMultiply(
             PreprocessingTensorOps.OneMinus(engine.TensorLessThan(strength, ops.FromDouble(edgeThreshold))), offDiagonal);

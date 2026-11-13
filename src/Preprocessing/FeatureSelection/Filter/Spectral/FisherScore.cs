@@ -73,9 +73,12 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new ArgumentException("FisherScore requires at least 2 classes.");
 
         // Fisher score = sum_k n_k (mean_k - mean)^2 / sum_k n_k var_k (between / within class scatter); with no
-        // within-class scatter, class means that differ separate the classes exactly (+infinity), equal ones score 0
+        // within-class scatter, class means that differ separate the classes exactly (+infinity), equal ones score 0.
+        // The ratio does not change when a feature is scaled, so every feature is centred and divided by its largest
+        // deviation first (a constant one becomes all zero): the raw scatters overflowed Half once the deviations
+        // passed a few hundred (within = inf scored a separating feature 0, both inf gave NaN)
         var (betweenClassVar, withinClassVar) = FilterStatisticTensorOps.AnovaSums(
-            FilterStatisticTensorOps.AsTensor(data), classOneHot);
+            FeatureScoringTensorOps.UnitDeviationColumns(FilterStatisticTensorOps.AsTensor(data), out _), classOneHot);
         var scores = FilterStatisticTensorOps.SeparationAwareRatio(betweenClassVar, withinClassVar, ScatterTolerance);
         _fisherScores = scores.ToVector();
 

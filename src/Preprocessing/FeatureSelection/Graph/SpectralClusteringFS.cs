@@ -59,9 +59,12 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int p = data.Columns;
         var x = FilterStatisticTensorOps.AsTensor(data);
 
-        // Similarity between features: exp(-||x_j1 - x_j2||^2 / (2 sigma^2 n))
-        var distances = FeatureScoringTensorOps.SquaredDistances(Engine.TensorTranspose(x));
-        var w = Engine.TensorExp(Engine.TensorMultiplyScalar(distances, NumOps.FromDouble(-1.0 / (2 * _sigma * _sigma * n))));
+        // Similarity between features: exp(-||x_j1 - x_j2||^2 / (2 sigma^2 n)) = exp(-||(x_j1 - x_j2) / c||^2) with
+        // c = sigma sqrt(2 n), the features divided by c before the distances: the raw squared distances overflowed
+        // Half once a distance passed 256 (w = exp(-inf) = 0 however wide sigma was)
+        var distances = FeatureScoringTensorOps.SquaredDistances(Engine.TensorDivideScalar(
+            Engine.TensorTranspose(x), NumOps.FromDouble(_sigma * Math.Sqrt(2.0 * n))));
+        var w = Engine.TensorExp(Engine.TensorNegate(distances));
 
         var laplacian = NormalizedLaplacian(w);
 
@@ -73,8 +76,10 @@ public class SpectralClusteringFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         // K-means on eigenvector embedding
         _clusterAssignments = KMeansClustering(embedding, p, k);
 
-        // Feature scores: sample variance
-        var variance = Engine.TensorDivideScalar(FilterStatisticTensorOps.ColumnSumOfSquaredDeviations(x), NumOps.FromDouble(n - 1));
+        // Feature scores: sample variance, from columns divided by their largest deviation (ColumnVariance): the raw
+        // sum of squared deviations overflowed Half once the deviations passed a few hundred (every such feature
+        // scored inf and the per-cluster pick fell to the lowest index)
+        var variance = FeatureScoringTensorOps.ColumnVariance(x, n - 1);
         _featureScores = variance.ToVector();
 
         // Select the highest-variance feature from each cluster (ties to the lower index)

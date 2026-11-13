@@ -74,60 +74,83 @@ public class TraceRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
 
         _nInputFeatures = data.Columns;
         int p = data.Columns;
-        var engine = Engine;
+        int k = Math.Min(_nFeaturesToSelect, p);
 
-        // Diagonal between-class (Sb) and within-class (Sw) scatter of every feature, classes = distinct targets
+        // Diagonal between-class (Sb) and within-class (Sw) scatter of every feature, classes = distinct targets.
+        // Half and BFloat16 are evaluated in float: the trace ratio mixes the features' scatters, so they cannot be
+        // rescaled one by one, and the raw scatters overflow Half once the deviations pass a few hundred (Sw = inf
+        // scored a separating feature 0)
+        var x = FilterStatisticTensorOps.AsTensor(data);
         var classOneHot = StatisticalTestHelper.ClassOneHot(target, out _);
-        var (sb, sw) = FilterStatisticTensorOps.AnovaSums(FilterStatisticTensorOps.AsTensor(data), classOneHot);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var (scores, selected, lambda) = Solve(x.Cast<float>(), classOneHot.Cast<float>(), k);
+            _featureScores = scores.Cast<T>().ToVector();
+            if (k > 0)
+                _traceRatioValue = NumOps.FromDouble(lambda);
+            _selectedIndices = selected;
+        }
+        else
+        {
+            var (scores, selected, lambda) = Solve(x, classOneHot, k);
+            _featureScores = scores.ToVector();
+            if (k > 0)
+                _traceRatioValue = NumOps.FromDouble(lambda);
+            _selectedIndices = selected;
+        }
+
+        IsFitted = true;
+    }
+
+    // The single-feature scores Sb / Sw (in TN), the selected subset and its trace ratio (Nie et al. 2008); the
+    // ratio and the search over Sb - lambda Sw run in double.
+    private static (Tensor<TN> Scores, int[] Selected, double Lambda) Solve<TN>(Tensor<TN> x, Tensor<TN> classOneHot, int k)
+    {
+        var engine = AiDotNetEngine.Current;
+        var (sb, sw) = FilterStatisticTensorOps.AnovaSums(x, classOneHot);
 
         // Feature scores Sb / Sw; with no within-class scatter a feature whose class means differ separates the
         // classes exactly (+infinity), a constant one scores 0
         var scores = FilterStatisticTensorOps.SeparationAwareRatio(sb, sw, 1e-10);
-        _featureScores = scores.ToVector();
 
         // Nie et al. (2008): start from the k best single-feature ratios, then repeat lambda = sum_S Sb / sum_S Sw and
         // S = the k largest Sb - lambda Sw (ties to the lower index) until S stops changing or lambda stops rising.
         // A greedy forward search (add the feature that raises the ratio most) misses the optimum, e.g. Sb = [3, 2,
         // 1, 6], Sw = [7, 6, 5, 1], k = 3: greedy keeps {0, 2, 3} (10 / 13), the optimum is {0, 1, 3} (11 / 14).
-        int k = Math.Min(_nFeaturesToSelect, p);
         var selected = PreprocessingTensorOps.TopKIndicesSorted(scores, k);
-        T lambda = SubsetRatio(sb, sw, selected);
-        T positiveInfinity = NumOps.FromDouble(double.PositiveInfinity);
+        var sbValues = sb.Cast<double>();
+        var swValues = sw.Cast<double>();
+        double lambda = SubsetRatio(sb, sw, selected);
         for (int iteration = 0; iteration < MaxIterations && k > 0; iteration++)
         {
             // an infinite ratio (no within-class scatter, some between-class scatter) cannot be beaten; NaN stops too
-            if (!NumOps.LessThan(lambda, positiveInfinity))
+            if (!(lambda < double.PositiveInfinity))
                 break;
 
             var next = PreprocessingTensorOps.TopKIndicesSorted(
-                engine.TensorSubtract(sb, engine.TensorMultiplyScalar(sw, lambda)), k);
+                engine.TensorSubtract(sbValues, engine.TensorMultiplyScalar(swValues, lambda)), k);
             if (next.SequenceEqual(selected))
                 break;
 
-            T nextLambda = SubsetRatio(sb, sw, next);
-            if (!NumOps.GreaterThan(nextLambda, lambda))
+            double nextLambda = SubsetRatio(sb, sw, next);
+            if (!(nextLambda > lambda))
                 break;
 
             selected = next;
             lambda = nextLambda;
         }
 
-        if (k > 0)
-            _traceRatioValue = lambda;
-
-        _selectedIndices = selected;
-
-        IsFitted = true;
+        return (scores, selected, lambda);
     }
 
     // The trace ratio sum(Sb) / sum(Sw) of a feature subset: +infinity when the subset has between-class scatter but
     // no within-class scatter, 0 when it has neither.
-    private static T SubsetRatio(Tensor<T> sb, Tensor<T> sw, int[] subset)
+    private static double SubsetRatio<TN>(Tensor<TN> sb, Tensor<TN> sw, int[] subset)
     {
         var engine = AiDotNetEngine.Current;
         var numerator = engine.Reshape(engine.ReduceSum(FeatureScoringTensorOps.Entries(sb, subset), new[] { 0 }, false), new[] { 1 });
         var denominator = engine.Reshape(engine.ReduceSum(FeatureScoringTensorOps.Entries(sw, subset), new[] { 0 }, false), new[] { 1 });
-        return FilterStatisticTensorOps.SeparationAwareRatio(numerator, denominator, 1e-10).ToArray()[0];
+        return FilterStatisticTensorOps.SeparationAwareRatio(numerator, denominator, 1e-10).Cast<double>().ToArray()[0];
     }
 
     /// <inheritdoc />
