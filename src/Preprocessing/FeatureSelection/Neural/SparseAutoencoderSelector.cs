@@ -144,11 +144,16 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     /// </summary>
     internal static T ActivationEpsilon()
     {
+        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        double eps = 1e-10;
-        while (ops.Equals(ops.FromDouble(eps), ops.Zero) || !ops.LessThan(ops.Subtract(ops.One, ops.FromDouble(eps)), ops.One))
-            eps *= 2;
-        return ops.FromDouble(eps);
+        // the candidates 1e-10 * 2^k (k = 0..63) are formed in double and rounded to T once each, as master's
+        // doubling loop did: forming them in T would round 1e-10 to 0 in Half before the doubling
+        var candidates = engine.TensorMultiplyScalar(
+            engine.TensorExp2(engine.TensorArange<double>(0, 64, 1)), 1e-10).Cast<T>();
+        var usable = engine.TensorMultiply(
+            engine.TensorGreaterThan(candidates, ops.Zero),
+            engine.TensorLessThan(PreprocessingTensorOps.OneMinus(candidates), ops.One));
+        return PopulationSearchOps.Value(PopulationSearchOps.At(candidates, PopulationSearchOps.ArgMax(usable)));
     }
 
     internal static (Tensor<T> W1, Tensor<T> W2) SampleGradients(Tensor<T> x, Tensor<T> w1, Tensor<T> w2, Tensor<T> sparsity)

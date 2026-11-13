@@ -81,9 +81,11 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
         // Initialize quantum population (qubits as angles): sin^2(theta) is the probability of observing 1,
         // and every qubit starts in the 50-50 superposition theta = pi / 4
+        T quarterPi = NumOps.FromDouble(Math.PI / 4);
+        T sizePenalty = NumOps.FromDouble(0.01);
         var qubits = new Tensor<T>[_populationSize];
         for (int i = 0; i < _populationSize; i++)
-            qubits[i] = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(Math.PI / 4));
+            qubits[i] = PreprocessingTensorOps.Filled(new[] { p }, quarterPi);
 
         // Best solution tracking
         var bestSolution = new Tensor<T>(new[] { p });
@@ -101,7 +103,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 // Evaluate fitness and update the best
                 var fitness = PopulationSearchOps.SubsetFitness(
                     engine.Reshape(solution, new[] { 1, p }), correlations, _nFeaturesToSelect,
-                    NumOps.FromDouble(0.01), NumOps.MinValue);
+                    sizePenalty, NumOps.MinValue);
                 if (bestFitness is null || PopulationSearchOps.Greater(fitness, bestFitness))
                 {
                     bestFitness = fitness;
