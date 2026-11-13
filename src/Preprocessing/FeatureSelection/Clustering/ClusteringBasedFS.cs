@@ -90,22 +90,30 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         IsFitted = true;
     }
 
-    private Tensor<T> ComputeFeatureCorrelations(Tensor<T> X, int n, int p)
+    private static Tensor<T> ComputeFeatureCorrelations(Tensor<T> X, int n, int p) =>
+        // Half and BFloat16 are correlated in float and the [-1, 1] result cast back once: the centred sums of
+        // squares and cross products pass Half's 65504 (1000 alternating +-10 sum to 100000), giving inf / inf
+        PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? ComputeFeatureCorrelationsCore(X.Cast<float>(), n, p).Cast<T>()
+            : ComputeFeatureCorrelationsCore(X, n, p);
+
+    private static Tensor<TC> ComputeFeatureCorrelationsCore<TC>(Tensor<TC> X, int n, int p)
     {
-        var engine = Engine;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
 
         // Centered data and standard deviations (n - 1 denominator, plus 1e-10)
         var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }));
-        T dof = NumOps.FromDouble(n - 1);
+        TC dof = ops.FromDouble(n - 1);
         var stds = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false), dof)),
-            PreprocessingTensorOps.Tolerance<T>(1e-10));
+            PreprocessingTensorOps.Tolerance<TC>(1e-10));
 
         // Compute correlations; the diagonal is exactly 1
         var cov = engine.TensorMatMul(engine.TensorTranspose(centered), centered);
         var denom = engine.TensorMultiplyScalar(engine.TensorOuter(stds, stds), dof);
         var corr = engine.TensorDivide(cov, denom);
-        return engine.TensorWhere(engine.TensorEye<T>(p), PreprocessingTensorOps.Filled(new[] { p, p }, NumOps.One), corr);
+        return engine.TensorWhere(engine.TensorEye<TC>(p), PreprocessingTensorOps.Filled(new[] { p, p }, ops.One), corr);
     }
 
     private int[] ClusterFeatures(Tensor<T> correlations, int p, int nClusters)

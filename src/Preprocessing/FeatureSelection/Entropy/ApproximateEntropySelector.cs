@@ -115,7 +115,8 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (count <= 0) return new Tensor<double>(new[] { 1 });
 
         // Counted in int (a Half sum of the 0/1 matches stops at 2048); the fractions and logs are taken in double
-        var matches = Engine.ReduceSum(FeatureScoringTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { 1 }, false);
+        // Counted per template row in bounded blocks, not from a [count, count] match matrix
+        var matches = FeatureScoringTensorOps.TemplateMatchCounts(data, m, count, r);
         var logs = Engine.TensorLog(Engine.TensorDivideScalar(matches.Cast<double>(), (double)count));
         return Engine.ReduceMean(logs, new[] { 0 }, true);
     }

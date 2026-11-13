@@ -73,16 +73,18 @@ public class DistanceCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var engine = Engine;
 
         // Distance correlation dCor = sqrt(dCov^2 / sqrt(dVar^2(x) dVar^2(y))) (Szekely, Rizzo and Bakirov 2007),
-        // 0 when the denominator is not above 1e-10
+        // 0 when the denominator is not above 1e-10. The statistics are computed and normalized in double and only
+        // the correlations cast to T: in Half, x = y = [0, 1024, 0, 1024] has dCov^2 = dVar^2 = 262144, which
+        // overflowed to inf / inf = NaN instead of 1.
         var dcov2 = FeatureScoringTensorOps.SquaredDistanceCovariances(
-            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), out var xVariances, out T yVariance);
-        var zeros = new Tensor<T>(new[] { p });
-        // sqrt(a) sqrt(b) rather than sqrt(a b): the product of the two variances overflows Half's 65504 maximum
-        var denominators = engine.TensorMultiplyScalar(engine.TensorSqrt(xVariances), NumOps.Sqrt(yVariance));
-        var usable = engine.TensorGreaterThan(denominators, PreprocessingTensorOps.Tolerance<T>(1e-10));
-        var safe = engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+            Tensor<T>.FromMatrix(data).Cast<double>(), Tensor<T>.FromVector(target).Cast<double>(),
+            out var xVariances, out double yVariance);
+        var zeros = new Tensor<double>(new[] { p });
+        var denominators = engine.TensorMultiplyScalar(engine.TensorSqrt(xVariances), Math.Sqrt(yVariance));
+        var usable = engine.TensorGreaterThan(denominators, 1e-10);
+        var safe = engine.TensorWhere(usable, denominators, PreprocessingTensorOps.Filled(new[] { p }, 1.0));
         var distanceCorrelations = engine.TensorWhere(usable,
-            engine.TensorSqrt(engine.TensorMax(engine.TensorDivide(dcov2, safe), NumOps.Zero)), zeros);
+            engine.TensorSqrt(engine.TensorMax(engine.TensorDivide(dcov2, safe), 0.0)), zeros).Cast<T>();
         _distanceCorrelations = distanceCorrelations.ToVector();
 
         // Select features above threshold or top by distance correlation

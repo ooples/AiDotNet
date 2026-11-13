@@ -77,22 +77,24 @@ public class AdjustedMutualInformation<T> : TransformerBase<T, Matrix<T>, Matrix
         var y = Tensor<T>.FromVector(target);
         var classLabels = PreprocessingTensorOps.SortedUnique(y);
         int k = classLabels.Length;
-        var classOneHot = engine.TensorOneHot<T>(PreprocessingTensorOps.LookupSorted(classLabels, y, out _), k);
-        // Counted in int: a Half sum of the 0/1 one-hot stops at 2048
-        var classCounts = engine.ReduceSum(classOneHot.Cast<int>(), new[] { 0 }, false).Cast<T>();
-        var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
+        // Counted in int (a Half sum of the 0/1 one-hot stops at 2048); the class totals, contingency counts and
+        // every entropy are in double and only the scores cast to T (Half counts past 65504 are infinite)
+        var classOneHot = engine.TensorOneHot<double>(PreprocessingTensorOps.LookupSorted(classLabels, y, out _), k);
+        var classCounts = engine.ReduceSum(classOneHot.Cast<int>(), new[] { 0 }, false).Cast<double>();
+        var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins).Cast<double>();
         var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 
         // MI = H(Y) - H(Y|X), expected MI under permutation, and AMI = (MI - EMI) / (max(H(X), H(Y)) - EMI)
-        T hY = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
+        double hY = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
         var hX = FeatureScoringTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
-        var mi = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(hY)));
+        var mi = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, -hY));
         var emi = FeatureScoringTensorOps.ExpectedMutualInformation(
             engine.Reshape(engine.ReduceSum(joint, new[] { 2 }, false), new[] { p, _nBins }), classCounts, n);
         var denominator = engine.TensorSubtract(engine.TensorMax(hX, hY), emi);
-        var usable = engine.TensorGreaterThan(engine.TensorAbs(denominator), PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var usable = engine.TensorGreaterThan(engine.TensorAbs(denominator), 1e-10);
         var amiScores = engine.TensorWhere(usable, engine.TensorDivide(engine.TensorSubtract(mi, emi),
-            engine.TensorWhere(usable, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
+            engine.TensorWhere(usable, denominator, PreprocessingTensorOps.Filled(new[] { p }, 1.0))),
+            new Tensor<double>(new[] { p })).Cast<T>();
         _amiScores = amiScores.ToVector();
 
         int nToSelect = Math.Min(_nFeaturesToSelect, p);

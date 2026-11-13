@@ -65,7 +65,11 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
-        var hurst = ComputeHurstRS(X, n, p);
+        // Half and BFloat16 run in float and the exponents are cast back once: squared deviations pass Half's 65504
+        // once a value is 256 from its subseries mean, giving an infinite standard deviation and R/S = 0
+        var hurst = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? ComputeHurstRS(X.Cast<float>(), n, p).Cast<T>()
+            : ComputeHurstRS(X, n, p);
         _hurstValues = hurst.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -85,16 +89,17 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
-    private Tensor<T> ComputeHurstRS(Tensor<T> X, int n, int p)
+    private static Tensor<TC> ComputeHurstRS<TC>(Tensor<TC> X, int n, int p)
     {
-        var engine = Engine;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
 
         // Use rescaled range (R/S) method, for every feature at once
         var lagSizes = new List<int>();
-        var rsValues = new List<Tensor<T>>();
-        var validValues = new List<Tensor<T>>();
-        T stdFloor = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        T zero = NumOps.Zero;
+        var rsValues = new List<Tensor<TC>>();
+        var validValues = new List<Tensor<TC>>();
+        TC stdFloor = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        TC zero = ops.Zero;
 
         // Choose lag sizes from 10 to n/2
         for (int lag = 10; lag <= n / 2; lag = (int)(lag * 1.5))
@@ -117,27 +122,27 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
             // Average R/S over the subseries whose standard deviation is above 1e-10
             var usable = engine.TensorGreaterThan(std, stdFloor);
-            var rs = engine.TensorWhere(usable, engine.TensorDivide(range, std), new Tensor<T>(new[] { numSubseries, p }));
+            var rs = engine.TensorWhere(usable, engine.TensorDivide(range, std), new Tensor<TC>(new[] { numSubseries, p }));
             // Counted in int: a Half sum of the 0/1 mask stops at 2048
-            var usableCount = engine.ReduceSum(usable.Cast<int>(), new[] { 0 }, false).Cast<T>();
+            var usableCount = engine.ReduceSum(usable.Cast<int>(), new[] { 0 }, false).Cast<TC>();
             rsValues.Add(engine.TensorDivide(engine.ReduceSum(rs, new[] { 0 }, false), usableCount));
             validValues.Add(engine.TensorGreaterThan(usableCount, zero));
             lagSizes.Add(lag);
         }
 
-        var randomWalk = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(0.5));
+        var randomWalk = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(0.5));
         if (lagSizes.Count == 0)
             return randomWalk;
 
         // Linear regression of log(R/S) vs log(lag): H = slope, over each feature's usable lags
         int count = lagSizes.Count;
         var valid = engine.TensorStack(validValues.ToArray(), 0);
-        var logRS = engine.TensorWhere(valid, engine.TensorLog(engine.TensorStack(rsValues.ToArray(), 0)), new Tensor<T>(new[] { count, p }));
-        var logLag = engine.TensorLog(new Tensor<int>(lagSizes.ToArray(), new[] { count }).Cast<T>());
+        var logRS = engine.TensorWhere(valid, engine.TensorLog(engine.TensorStack(rsValues.ToArray(), 0)), new Tensor<TC>(new[] { count, p }));
+        var logLag = engine.TensorLog(new Tensor<int>(lagSizes.ToArray(), new[] { count }).Cast<TC>());
         var slope = FeatureScoringTensorOps.MaskedSlope(logLag, logRS, valid, 1e-10, out var fitted);
 
         // Clamp to valid range [0, 1]; too few lags or a flat log(lag) gives 0.5 (random walk)
-        return engine.TensorWhere(fitted, engine.TensorClamp(slope, NumOps.Zero, NumOps.One), randomWalk);
+        return engine.TensorWhere(fitted, engine.TensorClamp(slope, ops.Zero, ops.One), randomWalk);
     }
     public new Matrix<T> FitTransform(Matrix<T> data)
     {

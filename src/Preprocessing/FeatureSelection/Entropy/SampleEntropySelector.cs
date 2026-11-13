@@ -119,10 +119,11 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>Number of template pairs i &lt; k (of the first <paramref name="count"/> templates) within r. Returns [1].</summary>
     private Tensor<double> CountMatches(Tensor<T> data, int m, int count, Tensor<T> r)
     {
-        // Every template matches itself, so the pairs are (all matches - count) / 2
-        var matches = Engine.ReduceSum(Engine.Reshape(
-            FeatureScoringTensorOps.TemplateMatches(data, m, count, r).Cast<int>(), new[] { count * count }), new[] { 0 }, true);
-        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(matches.Cast<double>(), (double)count), 2.0);
+        // Every template matches itself, so the pairs are (all matches - count) / 2. The per-row counts come from
+        // bounded blocks (not a [count, count] match matrix) and are totalled in double, past int at 46,341 templates.
+        var matches = Engine.ReduceSum(
+            FeatureScoringTensorOps.TemplateMatchCounts(data, m, count, r).Cast<double>(), new[] { 0 }, true);
+        return Engine.TensorDivideScalar(Engine.TensorSubtractScalar(matches, (double)count), 2.0);
     }
     public new Matrix<T> FitTransform(Matrix<T> data)
     {

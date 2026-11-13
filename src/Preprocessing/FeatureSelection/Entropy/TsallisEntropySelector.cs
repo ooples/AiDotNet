@@ -63,31 +63,34 @@ public class TsallisEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int p = data.Columns;
 
         var engine = Engine;
-        var floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        const double floor = 1e-10;
 
-        // Discretize: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when the column is constant
+        // Discretize: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when the column is constant. The
+        // probabilities, powers and normalization are in double and only the entropies cast to T: in Half,
+        // q = 1.0001 rounds to 1 while q - 1 stays nonzero, which made every entropy 0.
         var counts = FeatureScoringTensorOps.BinCounts(
-            FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins), _nBins);
-        var probabilities = engine.TensorDivideScalar(counts, NumOps.FromDouble(n));
+            FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins), _nBins).Cast<double>();
+        var probabilities = engine.TensorDivideScalar(counts, (double)n);
         var shape = new[] { p, _nBins };
         var present = engine.TensorGreaterThan(probabilities, floor);
-        var safeProbabilities = engine.TensorWhere(present, probabilities, PreprocessingTensorOps.Filled(shape, NumOps.One));
+        var safeProbabilities = engine.TensorWhere(present, probabilities, PreprocessingTensorOps.Filled(shape, 1.0));
 
         // Compute Tsallis entropy: S_q(X) = (1 - sum(p^q)) / (q-1), over bins with p above 1e-10
-        Tensor<T> tsallisEntropies;
+        Tensor<double> wideEntropies;
         if (Math.Abs(_q - 1) < 1e-10)
         {
             // q -> 1 gives Shannon entropy in nats (the limit of (1 - sum(p^q)) / (q - 1))
-            tsallisEntropies = engine.TensorNegate(engine.ReduceSum(engine.TensorWhere(present,
-                engine.TensorMultiply(probabilities, engine.TensorLog(safeProbabilities)), new Tensor<T>(shape)), new[] { 1 }, false));
+            wideEntropies = engine.TensorNegate(engine.ReduceSum(engine.TensorWhere(present,
+                engine.TensorMultiply(probabilities, engine.TensorLog(safeProbabilities)), new Tensor<double>(shape)), new[] { 1 }, false));
         }
         else
         {
             var sumPowQ = engine.ReduceSum(engine.TensorWhere(present,
-                engine.TensorPower(probabilities, NumOps.FromDouble(_q)), new Tensor<T>(shape)), new[] { 1 }, false);
-            tsallisEntropies = engine.TensorDivideScalar(PreprocessingTensorOps.OneMinus(sumPowQ), NumOps.FromDouble(_q - 1));
+                engine.TensorPower(probabilities, _q), new Tensor<double>(shape)), new[] { 1 }, false);
+            wideEntropies = engine.TensorDivideScalar(PreprocessingTensorOps.OneMinus(sumPowQ), _q - 1);
         }
 
+        var tsallisEntropies = wideEntropies.Cast<T>();
         _tsallisEntropies = tsallisEntropies.ToVector();
         // Select features with highest entropy
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

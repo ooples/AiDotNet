@@ -74,11 +74,19 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         var engine = Engine;
         var X = Tensor<T>.FromMatrix(data);
 
-        var perFeature = new Tensor<T>[p];
+        // Half and BFloat16 run in float: a squared coordinate difference past 256 overflows Half, and the inf
+        // distance left the reference point untracked (its exponent became 0)
+        bool narrow = PreprocessingTensorOps.IsNarrowFloat<T>();
+        var perFeature = new Tensor<double>[p];
         for (int j = 0; j < p; j++)
-            perFeature[j] = EstimateLyapunov(PreprocessingTensorOps.ColumnVector(X, j));
+        {
+            var column = PreprocessingTensorOps.ColumnVector(X, j);
+            perFeature[j] = narrow
+                ? EstimateLyapunov(column.Cast<float>(), _embeddingDimension, _delay)
+                : EstimateLyapunov(column, _embeddingDimension, _delay);
+        }
 
-        var lyapunov = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(perFeature, 0);
+        var lyapunov = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(perFeature, 0).Cast<T>();
         _lyapunovValues = lyapunov.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
@@ -87,64 +95,86 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         IsFitted = true;
     }
 
-    private Tensor<T> EstimateLyapunov(Tensor<T> data)
+    // Upper bound on the elements of one block of reference vectors against every vector ([rows, vectors, m]).
+    private const int NeighbourBlockElements = 1 << 22;
+
+    /// <summary>
+    /// The largest Lyapunov exponent of one series (Rosenstein's algorithm, simplified), as a one-element tensor.
+    /// </summary>
+    private static Tensor<double> EstimateLyapunov<TC>(Tensor<TC> data, int embeddingDimension, int delay)
     {
-        var engine = Engine;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
         int n = data.Length;
-        int numVectors = n - (_embeddingDimension - 1) * _delay;
-        var none = new Tensor<T>(new[] { 1 });
+        int numVectors = n - (embeddingDimension - 1) * delay;
+        var none = new Tensor<double>(new[] { 1 });
         if (numVectors < 10) return none;
 
         // Create embedded vectors: row i is (x[i], x[i + delay], ..., x[i + (m - 1) * delay])
-        var lagged = new Tensor<T>[_embeddingDimension];
-        for (int d = 0; d < _embeddingDimension; d++)
-            lagged[d] = engine.TensorSlice(data, new[] { d * _delay }, new[] { numVectors });
+        var lagged = new Tensor<TC>[embeddingDimension];
+        for (int d = 0; d < embeddingDimension; d++)
+            lagged[d] = engine.TensorSlice(data, new[] { d * delay }, new[] { numVectors });
         var vectors = engine.TensorStack(lagged, 1);
 
         // Rosenstein's algorithm (simplified)
         // For each point, find nearest neighbor (not too close in time, at a positive distance)
-        int minTimeSep = _embeddingDimension * _delay;
+        int minTimeSep = embeddingDimension * delay;
         int reference = numVectors - 10;
         if (reference <= 0) return none;
 
-        // |k - i| >= minTimeSep as the union of the bands k - i >= minTimeSep and k - i <= -minTimeSep: built from the
-        // positions, not from time indices held in T (Half cannot hold every index above 2048)
-        var shape = new[] { reference, numVectors };
-        var ones = PreprocessingTensorOps.Filled(shape, NumOps.One);
-        var separated = minTimeSep <= 0
-            ? ones
-            : engine.TensorAdd(engine.TensorTriu(ones, minTimeSep), engine.TensorTril(ones, -minTimeSep));
-        var referenceVectors = engine.TensorSlice(vectors, new[] { 0, 0 }, new[] { reference, _embeddingDimension });
-        var distances = engine.TensorSqrt(FeatureScoringTensorOps.SquaredDistances(referenceVectors, vectors));
-        T maxValue = NumOps.MaxValue;
-        T zero = NumOps.Zero;
-        var allowed = engine.TensorMultiply(separated, engine.TensorGreaterThan(distances, zero));
-        var candidates = engine.TensorWhere(allowed, distances, PreprocessingTensorOps.Filled(shape, maxValue));
-        var minDist = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidates), new[] { 1 }, false));
-        var nearest = FeatureScoringTensorOps.FirstArgMinPerRow(candidates);
+        // Reference vectors are searched in blocks against every vector: all at once is a [reference, vectors]
+        // distance matrix (3.2 GB of doubles for 20,000 rows) plus its masks. Each block keeps one minimum
+        // distance and the first neighbour index at it per reference vector.
+        TC maxValue = ops.MaxValue;
+        TC zero = ops.Zero;
+        int blockRows = Math.Max(1, NeighbourBlockElements / Math.Max(1, numVectors * embeddingDimension));
+        var minDistBlocks = new List<Tensor<TC>>();
+        var nearest = new int[reference];
+        for (int start = 0; start < reference; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, reference - start);
+
+            // |k - i| >= minTimeSep for the global row i = start + r, as the union of the bands
+            // k - r >= minTimeSep + start and k - r <= start - minTimeSep: built from the positions, not from time
+            // indices held in TC (Half cannot hold every index above 2048)
+            var shape = new[] { rows, numVectors };
+            var ones = PreprocessingTensorOps.Filled(shape, ops.One);
+            var separated = minTimeSep <= 0
+                ? ones
+                : engine.TensorAdd(
+                    engine.TensorTriu(ones, minTimeSep + start), engine.TensorTril(ones, start - minTimeSep));
+            var referenceVectors = engine.TensorSlice(vectors, new[] { start, 0 }, new[] { rows, embeddingDimension });
+            var distances = engine.TensorSqrt(FeatureScoringTensorOps.SquaredDistances(referenceVectors, vectors));
+            var allowed = engine.TensorMultiply(separated, engine.TensorGreaterThan(distances, zero));
+            var candidates = engine.TensorWhere(allowed, distances, PreprocessingTensorOps.Filled(shape, maxValue));
+            minDistBlocks.Add(engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidates), new[] { 1 }, false)));
+            Array.Copy(FeatureScoringTensorOps.FirstArgMinPerRow(candidates), 0, nearest, start, rows);
+        }
+
+        var minDist = minDistBlocks.Count == 1 ? minDistBlocks[0] : engine.TensorConcatenate(minDistBlocks.ToArray(), 0);
 
         // Points whose neighbour exists and has 5 successors are tracked
         int lastNeighbour = numVectors - 5;
         var tracked = engine.TensorMultiply(
             engine.TensorLessThan(minDist, maxValue),
-            new Tensor<int>(Array.ConvertAll(nearest, k => k < lastNeighbour ? 1 : 0), new[] { reference }).Cast<T>());
+            new Tensor<int>(Array.ConvertAll(nearest, k => k < lastNeighbour ? 1 : 0), new[] { reference }).Cast<TC>());
         var neighbour = Array.ConvertAll(nearest, k => k < lastNeighbour ? k : 0);
 
         // Track divergence over time steps: log(dist / minDist) / step
-        var zeros = new Tensor<T>(new[] { reference });
-        Tensor<T>? total = null;
+        var zeros = new Tensor<TC>(new[] { reference });
+        Tensor<TC>? total = null;
         Tensor<int>? count = null;
         for (int step = 1; step <= 5; step++)
         {
             int offset = step;
-            var ahead = engine.TensorSlice(vectors, new[] { step, 0 }, new[] { reference, _embeddingDimension });
+            var ahead = engine.TensorSlice(vectors, new[] { step, 0 }, new[] { reference, embeddingDimension });
             var neighbourAhead = engine.TensorIndexSelect(vectors,
                 new Tensor<int>(Array.ConvertAll(neighbour, k => k + offset), new[] { reference }), 0);
             var dist = engine.TensorSqrt(engine.ReduceSum(
                 engine.TensorSquare(engine.TensorSubtract(ahead, neighbourAhead)), new[] { 1 }, false));
             var used = engine.TensorMultiply(tracked, engine.TensorGreaterThan(dist, zero));
             var terms = engine.TensorWhere(used, engine.TensorDivideScalar(
-                engine.TensorLog(engine.TensorDivide(dist, minDist)), PreprocessingTensorOps.CountAsScalar<T>(step)), zeros);
+                engine.TensorLog(engine.TensorDivide(dist, minDist)), PreprocessingTensorOps.CountAsScalar<TC>(step)), zeros);
             total = total is null ? terms : engine.TensorAdd(total, terms);
             count = count is null ? used.Cast<int>() : engine.TensorAdd(count, used.Cast<int>());
         }
@@ -156,8 +186,9 @@ public class LyapunovSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
         var divergenceSum = engine.ReduceSum(total.Cast<double>(), new[] { 0 }, true);
         var divergenceCount = engine.ReduceSum(count, new[] { 0 }, true).Cast<double>();
         return engine.TensorWhere(engine.TensorGreaterThan(divergenceCount, 0.0),
-            engine.TensorDivide(divergenceSum, divergenceCount), new Tensor<double>(new[] { 1 })).Cast<T>();
+            engine.TensorDivide(divergenceSum, divergenceCount), new Tensor<double>(new[] { 1 }));
     }
+
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);

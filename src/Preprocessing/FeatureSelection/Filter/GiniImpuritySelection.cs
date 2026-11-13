@@ -85,23 +85,24 @@ public class GiniImpuritySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var classTotals = engine.TensorBroadcastTo(
             engine.Reshape(engine.ReduceSum(classOneHotCounts, new[] { 0 }, false), new[] { 1, k }), new[] { p, k });
 
-        // Columns whose range is below 1e-10 score 0
-        var minVal = PreprocessingTensorOps.ColumnMin(X);
-        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(X), minVal);
-        var varying = PreprocessingTensorOps.AtLeast(range, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        // Columns whose range is below 1e-10 score 0. The range and thresholds are in double: in Half, range * t
+        // passed 65504 for [0, 4000, 6000, 10000] from t = 7, so the separating thresholds were infinite and skipped.
+        var wideX = X.Cast<double>();
+        var minVal = PreprocessingTensorOps.ColumnMin(wideX);
+        var range = engine.TensorSubtract(PreprocessingTensorOps.ColumnMax(wideX), minVal);
+        var varying = PreprocessingTensorOps.AtLeast(range, 1e-10).Cast<T>();
 
-        // Try evenly spaced thresholds min + range * t / (nThresholds + 1); a split leaving either side empty is skipped
+        // Try evenly spaced thresholds min + range * (t / (nThresholds + 1)); a split leaving either side empty is skipped
         var zeros = new Tensor<T>(new[] { p });
         var bestReduction = zeros;
-        T divisor = NumOps.FromDouble(_nThresholds + 1);
         T negatedParent = NumOps.Negate(parentGini);
         for (int t = 1; t <= _nThresholds; t++)
         {
             var threshold = engine.TensorAdd(minVal,
-                engine.TensorDivideScalar(engine.TensorMultiplyScalar(range, PreprocessingTensorOps.CountAsScalar<T>(t)), divisor));
-            var left = PreprocessingTensorOps.Not(engine.TensorGreaterThan(X,
+                engine.TensorMultiplyScalar(range, (double)t / (_nThresholds + 1)));
+            var left = PreprocessingTensorOps.Not(engine.TensorGreaterThan(wideX,
                 engine.TensorBroadcastTo(engine.Reshape(threshold, new[] { 1, p }), shape)));
-            var leftMask = left.Cast<double>();
+            var leftMask = left;
             var leftCounts = engine.TensorMatMul(engine.TensorTranspose(leftMask), classOneHotCounts);
             var sides = engine.TensorConcatenate(new[]
             {

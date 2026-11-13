@@ -69,15 +69,17 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         int p = data.Columns;
 
         var engine = Engine;
-        T count = NumOps.FromDouble(n);
+        // Counts, probabilities and entropies are taken in double and only the entropy reductions cast to T: a Half
+        // row count past 65504 is infinite, which made every joint probability 0 and H(Y|X) 0 for every feature
+        double count = n;
 
         // Discretize target and features: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when constant
         var yBins = FeatureScoringTensorOps.RangeBinOneHot(
-            engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins, _nBins);
-        var xBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
+            engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins, _nBins).Cast<double>();
+        var xBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins).Cast<double>();
 
         // Compute H(Y)
-        T hY = engine.TensorSum(FeatureScoringTensorOps.EntropyBits(
+        double hY = engine.TensorSum(FeatureScoringTensorOps.EntropyBits(
             FeatureScoringTensorOps.BinCounts(yBins, _nBins), n));
 
         // Compute H(Y|X) = -sum p(x, y) log2 p(y | x) over the non-empty joint cells
@@ -85,16 +87,16 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         var cellShape = new[] { p, _nBins, _nBins };
         var xCounts = engine.TensorBroadcastTo(engine.Reshape(
             FeatureScoringTensorOps.BinCounts(xBins, _nBins), new[] { p, _nBins, 1 }), cellShape);
-        var occupied = engine.TensorGreaterThan(joint, NumOps.Zero);
-        var safeXCounts = engine.TensorWhere(occupied, xCounts, PreprocessingTensorOps.Filled(cellShape, NumOps.One));
+        var occupied = engine.TensorGreaterThan(joint, 0.0);
+        var safeXCounts = engine.TensorWhere(occupied, xCounts, PreprocessingTensorOps.Filled(cellShape, 1.0));
         var conditional = engine.TensorDivide(joint, safeXCounts);
-        var safeConditional = engine.TensorWhere(occupied, conditional, PreprocessingTensorOps.Filled(cellShape, NumOps.One));
+        var safeConditional = engine.TensorWhere(occupied, conditional, PreprocessingTensorOps.Filled(cellShape, 1.0));
         var terms = engine.TensorMultiply(engine.TensorDivideScalar(joint, count), engine.TensorLog(safeConditional));
         var hYGivenX = engine.TensorDivideScalar(engine.TensorNegate(engine.ReduceSum(terms, new[] { 1, 2 }, false)),
-            NumOps.FromDouble(Math.Log(2)));
+            Math.Log(2));
 
         // Information gain: I(Y;X) = H(Y) - H(Y|X)
-        var entropyReductions = engine.TensorAddScalar(engine.TensorNegate(hYGivenX), hY);
+        var entropyReductions = engine.TensorAddScalar(engine.TensorNegate(hYGivenX), hY).Cast<T>();
         _entropyReductions = entropyReductions.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

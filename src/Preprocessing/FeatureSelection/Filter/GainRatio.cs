@@ -75,21 +75,24 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
 
         // Class distribution (rounded target values) and target entropy (nats)
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
-        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length);
-        T targetEntropy = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
+        // Counts, entropies and ratios are in double and only the scores cast to T: Half counts past 65504 are
+        // infinite (two separated classes of 70,000 rows gave a gain ratio of 0 instead of 1)
+        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length).Cast<double>();
+        double targetEntropy = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
 
         // Bin every feature: min(trunc((x - min) / range * bins), bins - 1), one bin for a constant feature
-        var featureBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
+        var featureBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins).Cast<double>();
         var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 
         // Information gain max(0, H(Y) - H(Y|X)) and gain ratio IG / H(X) (0 when H(X) is not above 1e-10)
         var intrinsicInfo = FeatureScoringTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
         var informationGains = engine.TensorMax(
-            engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(targetEntropy))), NumOps.Zero);
-        var usable = engine.TensorGreaterThan(intrinsicInfo, PreprocessingTensorOps.Tolerance<T>(1e-10));
+            engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, -targetEntropy)), 0.0);
+        var usable = engine.TensorGreaterThan(intrinsicInfo, 1e-10);
         var gainRatios = engine.TensorWhere(usable, engine.TensorDivide(informationGains,
-            engine.TensorWhere(usable, intrinsicInfo, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
-        _informationGains = informationGains.ToVector();
+            engine.TensorWhere(usable, intrinsicInfo, PreprocessingTensorOps.Filled(new[] { p }, 1.0))),
+            new Tensor<double>(new[] { p })).Cast<T>();
+        _informationGains = informationGains.Cast<T>().ToVector();
         _gainRatios = gainRatios.ToVector();
 
         // Select top features

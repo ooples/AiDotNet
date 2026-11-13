@@ -91,23 +91,31 @@ public class HierarchicalFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixe
         IsFitted = true;
     }
 
-    private Tensor<T> ComputeFeatureDistances(Tensor<T> X, int n, int p)
+    private static Tensor<T> ComputeFeatureDistances(Tensor<T> X, int n, int p) =>
+        // Half and BFloat16 are correlated in float and the [-1, 1] result cast back once: the centred sums of
+        // squares and cross products pass Half's 65504 (1000 alternating +-10 sum to 100000), giving inf / inf
+        PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? ComputeFeatureDistancesCore(X.Cast<float>(), n, p).Cast<T>()
+            : ComputeFeatureDistancesCore(X, n, p);
+
+    private static Tensor<TC> ComputeFeatureDistancesCore<TC>(Tensor<TC> X, int n, int p)
     {
-        var engine = Engine;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
 
         // Compute means and stds (n - 1 denominator, plus 1e-10)
         var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { n, p }));
-        T dof = NumOps.FromDouble(n - 1);
+        TC dof = ops.FromDouble(n - 1);
         var stds = engine.TensorAddScalar(
             engine.TensorSqrt(engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false), dof)),
-            PreprocessingTensorOps.Tolerance<T>(1e-10));
+            PreprocessingTensorOps.Tolerance<TC>(1e-10));
 
         // Compute distance = 1 - |correlation|, 0 on the diagonal
         var corr = engine.TensorDivide(
             engine.TensorMatMul(engine.TensorTranspose(centered), centered),
             engine.TensorMultiplyScalar(engine.TensorOuter(stds, stds), dof));
         var distances = PreprocessingTensorOps.OneMinus(engine.TensorAbs(corr));
-        return engine.TensorWhere(engine.TensorEye<T>(p), new Tensor<T>(new[] { p, p }), distances);
+        return engine.TensorWhere(engine.TensorEye<TC>(p), new Tensor<TC>(new[] { p, p }), distances);
     }
 
     private int[] AgglomerativeClustering(Tensor<T> distances, int p, int nClusters)

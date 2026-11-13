@@ -151,11 +151,13 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         // Rows index W_k, columns the candidate t_j = |W_j|
         var w = engine.TensorBroadcastTo(engine.Reshape(wStats, new[] { p, 1 }), shape);
         var t = engine.TensorBroadcastTo(engine.Reshape(absW, new[] { 1, p }), shape);
-        // Counted in int (a Half sum of 0/1 indicators stops at 2048) and the ratio taken in double
+        // Counted in int (a Half sum of 0/1 indicators stops at 2048) and the ratio taken in double. The comparisons
+        // are direct (W >= t and -W >= t), so a NaN statistic counts on neither side; negated strict comparisons
+        // counted it on both.
         var numPositive = engine.ReduceSum(
-            PreprocessingTensorOps.Not(engine.TensorLessThan(w, t)).Cast<int>(), new[] { 0 }, false).Cast<double>();
+            engine.TensorGreaterEqual(w, t).Cast<int>(), new[] { 0 }, false).Cast<double>();
         var numNegative = engine.ReduceSum(
-            PreprocessingTensorOps.Not(engine.TensorGreaterThan(w, engine.TensorNegate(t))).Cast<int>(), new[] { 0 }, false).Cast<double>();
+            engine.TensorGreaterEqual(engine.TensorNegate(w), t).Cast<int>(), new[] { 0 }, false).Cast<double>();
         var fdp = engine.TensorDivide(engine.TensorAddScalar(numNegative, 1.0), engine.TensorMax(numPositive, 1.0));
         var valid = engine.TensorMultiply(
             PreprocessingTensorOps.Not(engine.TensorGreaterThan(fdp, _fdr)).Cast<T>(),

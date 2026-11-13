@@ -65,22 +65,33 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             throw new ArgumentException($"Need at least {_kMax + 1} samples for kMax = {_kMax}.");
 
         var X = Tensor<T>.FromMatrix(data);
-        var dimensions = ComputeHiguchiFD(X, n, p);
-        _fractalDimensions = dimensions.ToVector();
-
+        // Half and BFloat16 run in float and the dimensions are cast back once: a curve length (7000 steps of 20
+        // give L(1) = 139980) passes Half's 65504, and log(inf) entered the regression
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(dimensions, numToSelect);
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var wideDimensions = ComputeHiguchiFD(X.Cast<float>(), n, p, _kMax);
+            _fractalDimensions = wideDimensions.Cast<T>().ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(wideDimensions, numToSelect);
+        }
+        else
+        {
+            var dimensions = ComputeHiguchiFD(X, n, p, _kMax);
+            _fractalDimensions = dimensions.ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(dimensions, numToSelect);
+        }
 
         IsFitted = true;
     }
 
-    private Tensor<T> ComputeHiguchiFD(Tensor<T> X, int n, int p)
+    private static Tensor<TC> ComputeHiguchiFD<TC>(Tensor<TC> X, int n, int p, int kMax)
     {
-        var engine = Engine;
-        var curveLengths = new List<Tensor<T>>();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        var curveLengths = new List<Tensor<TC>>();
         var scales = new List<int>();
 
-        for (int k = 1; k <= _kMax; k++)
+        for (int k = 1; k <= kMax; k++)
         {
             Tensor<double>? lmSum = null;
             int lmCount = 0;
@@ -107,12 +118,12 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
             if (lmSum is not null)
             {
-                curveLengths.Add(engine.TensorDivideScalar(lmSum, (double)lmCount).Cast<T>());
+                curveLengths.Add(engine.TensorDivideScalar(lmSum, (double)lmCount).Cast<TC>());
                 scales.Add(k);
             }
         }
 
-        var defaultDimension = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(1.5));
+        var defaultDimension = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(1.5));
         if (scales.Count == 0)
             return defaultDimension;
 
@@ -120,11 +131,11 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int count = scales.Count;
         var shape = new[] { count, p };
         var avgL = engine.TensorStack(curveLengths.ToArray(), 0);
-        var valid = engine.TensorGreaterThan(avgL, NumOps.Zero);
-        var zeros = new Tensor<T>(shape);
+        var valid = engine.TensorGreaterThan(avgL, ops.Zero);
+        var zeros = new Tensor<TC>(shape);
         var logL = engine.TensorWhere(valid, engine.TensorLog(avgL), zeros);
         var logK = engine.TensorBroadcastTo(engine.Reshape(
-            engine.TensorLog(new Tensor<int>(scales.ToArray(), new[] { count }).Cast<T>()), new[] { count, 1 }), shape);
+            engine.TensorLog(new Tensor<int>(scales.ToArray(), new[] { count }).Cast<TC>()), new[] { count, 1 }), shape);
         var maskedLogK = engine.TensorMultiply(logK, valid);
 
         // Linear regression of log L on log k: FD = -slope
@@ -138,10 +149,10 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         // Clamp to valid range [1, 2]; fewer than 2 points or a flat log k gives the default dimension
         var fd = engine.TensorClamp(
-            engine.TensorNegate(engine.TensorDivide(numerator, denominator)), NumOps.One, NumOps.FromDouble(2));
+            engine.TensorNegate(engine.TensorDivide(numerator, denominator)), ops.One, ops.FromDouble(2));
         var fitted = engine.TensorMultiply(
-            PreprocessingTensorOps.AtLeast(engine.Reshape(pointCount, new[] { p }), NumOps.FromDouble(2)),
-            PreprocessingTensorOps.Not(engine.TensorLessThan(denominator, PreprocessingTensorOps.Tolerance<T>(1e-10))));
+            PreprocessingTensorOps.AtLeast(engine.Reshape(pointCount, new[] { p }), ops.FromDouble(2)),
+            PreprocessingTensorOps.Not(engine.TensorLessThan(denominator, PreprocessingTensorOps.Tolerance<TC>(1e-10))));
         return engine.TensorWhere(fitted, fd, defaultDimension);
     }
     public new Matrix<T> FitTransform(Matrix<T> data)

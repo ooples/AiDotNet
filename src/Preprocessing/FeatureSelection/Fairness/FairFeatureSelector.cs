@@ -88,7 +88,8 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var protectedAttr = PreprocessingTensorOps.ColumnVector(X, _protectedAttributeIndex);
 
         // Protected attribute itself gets zero scores
-        var isProtected = PreprocessingTensorOps.RowVector(engine.TensorEye<T>(p), _protectedAttributeIndex);
+        // (a [p] one-hot, not a row of a [p, p] identity: 800 MB of doubles for 10,000 features)
+        var isProtected = PreprocessingTensorOps.PositionOneHot<T>(_protectedAttributeIndex, p);
         var zeros = new Tensor<T>(new[] { p });
 
         // Correlation with target (predictive power), 0 when sqrt(sxx * syy) is not above 1e-10
@@ -181,36 +182,36 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var protectedVals = PreprocessingTensorOps.ColumnVector(X, _protectedAttributeIndex);
         var featureVals = PreprocessingTensorOps.ColumnVector(X, featureIndex);
 
-        // Split by protected attribute (threshold at the median, the n/2-th smallest value)
-        T median = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(
-            engine.Reshape(protectedVals, new[] { n, 1 }), n / 2));
-        var upper = engine.TensorGreaterThan(protectedVals, median);
+        // Split by protected attribute at its median: the midpoint of the two middle values for an even count, held
+        // in double (0.5 for a balanced 0/1 attribute; the upper middle value alone left the upper group empty)
+        var protectedColumn = engine.Reshape(protectedVals.Cast<double>(), new[] { n, 1 });
+        double lowerMiddle = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(protectedColumn, (n - 1) / 2));
+        double upperMiddle = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(protectedColumn, n / 2));
+        double median = lowerMiddle / 2.0 + upperMiddle / 2.0;
+        var upper = engine.TensorGreaterThan(protectedColumn, median);
         var lower = PreprocessingTensorOps.Not(upper);
 
-        // Compute mean feature value for each group. Group sizes are counted in int (a Half sum of the 0/1 mask
-        // stops at 2048), and rows outside a group are selected away rather than multiplied by 0 (0 * inf = NaN).
+        // Compute mean feature value for each group in double: group sizes are counted in int (a Half sum of the 0/1
+        // mask stops at 2048), the feature sums are taken in double (a Half sum of four 30000s is infinite), and
+        // rows outside a group are selected away rather than multiplied by 0 (0 * inf = NaN).
         int count0 = PreprocessingTensorOps.CountNonZero(lower);
         int count1 = PreprocessingTensorOps.CountNonZero(upper);
-        var zeros = new Tensor<T>(new[] { n });
-        T mean0 = count0 > 0
-            ? NumOps.Divide(engine.TensorSum(engine.TensorWhere(lower, featureVals, zeros)), PreprocessingTensorOps.CountAsScalar<T>(count0))
-            : NumOps.Zero;
-        T mean1 = count1 > 0
-            ? NumOps.Divide(engine.TensorSum(engine.TensorWhere(upper, featureVals, zeros)), PreprocessingTensorOps.CountAsScalar<T>(count1))
-            : NumOps.Zero;
+        var wideFeature = engine.Reshape(featureVals.Cast<double>(), new[] { n, 1 });
+        var zeros = new Tensor<double>(new[] { n, 1 });
+        double mean0 = count0 > 0 ? engine.TensorSum(engine.TensorWhere(lower, wideFeature, zeros)) / count0 : 0.0;
+        double mean1 = count1 > 0 ? engine.TensorSum(engine.TensorWhere(upper, wideFeature, zeros)) / count1 : 0.0;
 
         // Disparate impact ratio (closer to 1 is fairer)
-        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        bool zero0 = NumOps.LessThan(NumOps.Abs(mean0), floor);
-        bool zero1 = NumOps.LessThan(NumOps.Abs(mean1), floor);
+        bool zero0 = Math.Abs(mean0) < 1e-10;
+        bool zero1 = Math.Abs(mean1) < 1e-10;
         if (zero1 && zero0)
             return NumOps.One;
         if (zero1)
             return NumOps.Zero;
 
-        T ratio = NumOps.Divide(mean0, mean1);
-        T inverse = NumOps.Divide(mean1, mean0);
-        return NumOps.LessThan(inverse, ratio) ? inverse : ratio;
+        double ratio = mean0 / mean1;
+        double inverse = mean1 / mean0;
+        return NumOps.FromDouble(inverse < ratio ? inverse : ratio);
     }
 
 }

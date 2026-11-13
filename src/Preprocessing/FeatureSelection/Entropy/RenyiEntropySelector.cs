@@ -66,21 +66,23 @@ public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int p = data.Columns;
 
         var engine = Engine;
-        var floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        const double floor = 1e-10;
 
-        // Discretize: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when the column is constant
+        // Discretize: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when the column is constant. The
+        // probabilities, powers and normalization are in double and only the entropies cast to T: in Half,
+        // alpha = 1.0001 rounds to 1 while 1 - alpha stays nonzero, which made every entropy 0.
         var counts = FeatureScoringTensorOps.BinCounts(
-            FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins), _nBins);
-        var probabilities = engine.TensorDivideScalar(counts, NumOps.FromDouble(n));
+            FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins), _nBins).Cast<double>();
+        var probabilities = engine.TensorDivideScalar(counts, (double)n);
 
         // Compute Renyi entropy: H_alpha(X) = 1/(1-alpha) * log2(sum(p^alpha)) over bins with p above 1e-10
         var shape = new[] { p, _nBins };
         var sumPowAlpha = engine.ReduceSum(engine.TensorWhere(engine.TensorGreaterThan(probabilities, floor),
-            engine.TensorPower(probabilities, NumOps.FromDouble(_alpha)), new Tensor<T>(shape)), new[] { 1 }, false);
+            engine.TensorPower(probabilities, _alpha), new Tensor<double>(shape)), new[] { 1 }, false);
         var usable = engine.TensorGreaterThan(sumPowAlpha, floor);
-        var safeSum = engine.TensorWhere(usable, sumPowAlpha, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var safeSum = engine.TensorWhere(usable, sumPowAlpha, PreprocessingTensorOps.Filled(new[] { p }, 1.0));
         var renyiEntropies = engine.TensorWhere(usable,
-            engine.TensorDivideScalar(engine.TensorLog2(safeSum), NumOps.FromDouble(1 - _alpha)), new Tensor<T>(new[] { p }));
+            engine.TensorDivideScalar(engine.TensorLog2(safeSum), 1 - _alpha), new Tensor<double>(new[] { p })).Cast<T>();
         _renyiEntropies = renyiEntropies.ToVector();
         // Select features with highest entropy (most informative)
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

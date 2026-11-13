@@ -72,19 +72,31 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         T offset = NumOps.FromDouble(Math.Log(n - 1) - Digamma(_kNeighbors));
         T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
         T two = NumOps.FromDouble(2);
-        var shape = new[] { n, n };
-        var excludeSelf = engine.TensorMultiplyScalar(engine.TensorEye<T>(n), NumOps.MaxValue);
-
+        // Each point's distances are taken against the whole column in bounded row blocks ([rows, n], not [n, n]:
+        // 800 MB of doubles for 10,000 rows). A point's own distance 0 is the smallest of its row, so the k-th
+        // nearest other point is the k-th entry after it in the sorted row (index k), duplicates included.
+        int blockRows = Math.Max(1, DistanceBlockElements / n);
         var entropies = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
             // k-th nearest neighbour distance of every point (itself excluded), at least 1e-10
             var col = PreprocessingTensorOps.ColumnVector(X, j);
-            var distances = engine.TensorAbs(engine.TensorSubtract(
-                engine.TensorBroadcastTo(engine.Reshape(col, new[] { n, 1 }), shape),
-                engine.TensorBroadcastTo(engine.Reshape(col, new[] { 1, n }), shape)));
-            var sorted = engine.TensorSort(engine.TensorAdd(distances, excludeSelf), 1, false).Item1;
-            var epsilon = engine.TensorMax(engine.TensorSlice(sorted, new[] { 0, _kNeighbors - 1 }, new[] { n, 1 }), floor);
+            var colRow = engine.Reshape(col, new[] { 1, n });
+            var kthDistances = new List<Tensor<T>>();
+            for (int start = 0; start < n; start += blockRows)
+            {
+                int rows = Math.Min(blockRows, n - start);
+                var shape = new[] { rows, n };
+                var block = engine.TensorSlice(col, new[] { start }, new[] { rows });
+                var distances = engine.TensorAbs(engine.TensorSubtract(
+                    engine.TensorBroadcastTo(engine.Reshape(block, new[] { rows, 1 }), shape),
+                    engine.TensorBroadcastTo(colRow, shape)));
+                var sorted = engine.TensorSort(distances, 1, false).Item1;
+                kthDistances.Add(engine.TensorSlice(sorted, new[] { 0, _kNeighbors }, new[] { rows, 1 }));
+            }
+
+            var kth = kthDistances.Count == 1 ? kthDistances[0] : engine.TensorConcatenate(kthDistances.ToArray(), 0);
+            var epsilon = engine.TensorMax(kth, floor);
 
             entropies[j] = engine.TensorAddScalar(
                 engine.ReduceMean(engine.TensorLog(engine.TensorMultiplyScalar(epsilon, two)), new[] { 0 }, false), offset);
@@ -98,6 +110,9 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
 
         IsFitted = true;
     }
+    // Upper bound on the elements of one block of points against the whole column ([rows, n]).
+    private const int DistanceBlockElements = 1 << 22;
+
     private double Digamma(int k)
     {
         // Approximation of digamma function for positive integers

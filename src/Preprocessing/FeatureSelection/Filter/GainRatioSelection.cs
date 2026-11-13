@@ -81,21 +81,24 @@ public class GainRatioSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         // Target entropy (nats) over the rounded class labels
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
-        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length);
-        T targetEntropy = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
+        // Counts, entropies and ratios are in double and only the scores cast to T: Half counts past 65504 are
+        // infinite (two separated classes of 70,000 rows gave a gain ratio of 0 instead of 1)
+        var classOneHot = PreprocessingTensorOps.ClassOneHot<T>(classIndex, classes.Length).Cast<double>();
+        double targetEntropy = FeatureScoringTensorOps.ClassEntropyNats(classOneHot);
 
         // Discretize features: min(trunc((x - min) / range * (bins - 1)), bins - 1), 0 for a constant feature
-        var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
+        var featureBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins).Cast<double>();
         var joint = FeatureScoringTensorOps.JointBinCounts(featureBins, classOneHot, _nBins);
 
         // IG = H(Y) - H(Y|X), split info H(X), gain ratio IG / split info (0 when split info is not above 1e-10)
         var splitInfo = FeatureScoringTensorOps.BinEntropyNats(joint, n, out var conditionalEntropy);
-        var informationGain = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, NumOps.Negate(targetEntropy)));
-        var usable = engine.TensorGreaterThan(splitInfo, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var informationGain = engine.TensorNegate(engine.TensorAddScalar(conditionalEntropy, -targetEntropy));
+        var usable = engine.TensorGreaterThan(splitInfo, 1e-10);
         var gainRatioScores = engine.TensorWhere(usable, engine.TensorDivide(informationGain,
-            engine.TensorWhere(usable, splitInfo, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
-        _informationGain = informationGain.ToVector();
-        _splitInfo = splitInfo.ToVector();
+            engine.TensorWhere(usable, splitInfo, PreprocessingTensorOps.Filled(new[] { p }, 1.0))),
+            new Tensor<double>(new[] { p })).Cast<T>();
+        _informationGain = informationGain.Cast<T>().ToVector();
+        _splitInfo = splitInfo.Cast<T>().ToVector();
         _gainRatioScores = gainRatioScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);

@@ -72,12 +72,15 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         // Group samples by class (rounded target values)
         PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
 
-        // Fisher Score = between-class / within-class sum of squares (0 when within is not above 1e-10)
-        var betweenVar = FeatureScoringTensorOps.ClassScatter(Tensor<T>.FromMatrix(data),
+        // Fisher Score = between-class / within-class sum of squares (0 when within is not above 1e-10). The scatter
+        // and the ratio are in double and only the scores cast to T: in Half, [-1000, 0, 1000, 2000] with labels
+        // [0, 0, 1, 1] has scatters 4,000,000 and 1,000,000, both infinite, so the ratio was NaN instead of 4.
+        var betweenVar = FeatureScoringTensorOps.ClassScatter(Tensor<T>.FromMatrix(data).Cast<double>(),
             new Tensor<int>(classIndex, new[] { n }), classes.Length, out var withinVar);
-        var usable = engine.TensorGreaterThan(withinVar, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var usable = engine.TensorGreaterThan(withinVar, 1e-10);
         var fisherScores = engine.TensorWhere(usable, engine.TensorDivide(betweenVar,
-            engine.TensorWhere(usable, withinVar, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
+            engine.TensorWhere(usable, withinVar, PreprocessingTensorOps.Filled(new[] { p }, 1.0))),
+            new Tensor<double>(new[] { p })).Cast<T>();
         _fisherScores = fisherScores.ToVector();
 
         // Select top features by Fisher Score
