@@ -24325,3 +24325,9 @@ AiDotNet.Preprocessing.FeatureSelection.Privacy.DifferentialPrivacySelector<T>.N
 *REMOVED*AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector<T>.JBStatistics.get -> double[]?
 AiDotNet.Preprocessing.FeatureSelection.Complexity.LempelZivSelector<T>.ComplexityValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
 AiDotNet.Preprocessing.FeatureSelection.Distribution.GaussianitySelector<T>.JBStatistics.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*virtual AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ResolveTargetWeights(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action) -> double[]!
+virtual AiDotNet.Finance.Trading.Environments.PortfolioManagerEnvironment<T>.ResolveTargetWeights(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Models.Options.MiniRocketOptions<T>.NumBiasesPerDilation.get -> int
+*REMOVED*AiDotNet.Models.Options.MiniRocketOptions<T>.NumBiasesPerDilation.set -> void
+AiDotNet.Models.Options.MiniRocketOptions<T>.MaxDilationsPerKernel.get -> int
+AiDotNet.Models.Options.MiniRocketOptions<T>.MaxDilationsPerKernel.set -> void
