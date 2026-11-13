@@ -66,14 +66,14 @@ internal sealed class GromaRegionGrounder<T> : GroundingHeadModule<T>
     /// <summary>
     /// The proposer's training loss (Deformable DETR's class-agnostic set loss): its queries matched one-to-one to the
     /// image's ground-truth regions <c>[G, 4]</c> (normalized cx, cy, w, h) by the Hungarian algorithm, then the focal
-    /// objectness loss, L1 and GIoU.
+    /// objectness loss, L1 and GIoU, on every decoder layer and the encoder proposals.
     /// </summary>
-    internal GroundingSetLossTerms<T> ProposalLoss(Tensor<T> imageTokens, Tensor<T> targetBoxes)
+    internal GroundingDetectorLoss<T> ProposalLoss(Tensor<T> imageTokens, Tensor<T> targetBoxes)
     {
         if (targetBoxes is null) throw new ArgumentNullException(nameof(targetBoxes));
         var prediction = _proposer.Forward(imageTokens, null);
         var labels = Tensor<T>.CreateDefault(new[] { targetBoxes.Shape[0], 1 }, NumOps.One);
-        return new GroundingSetLoss<T>(Engine).Compute(prediction.Boxes, prediction.Logits, targetBoxes, labels);
+        return new GroundingSetLoss<T>(Engine).Compute(prediction, targetBoxes, labels);
     }
 
     /// <summary>

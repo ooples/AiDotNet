@@ -1,4 +1,16 @@
+using System.Globalization;
+
 namespace AiDotNet.VisionLanguage.Grounding;
+
+/// <summary>How a coordinate-token decoder spells a coordinate value <c>k</c> in text.</summary>
+internal enum CoordinateSpelling
+{
+    /// <summary><c>k / Divisor</c> as a decimal fraction with log10(Divisor) places (Shikra: "0.123").</summary>
+    DecimalFraction,
+
+    /// <summary><c>k</c> as a whole number without leading zeros (Ferret: "123").</summary>
+    Integer,
+}
 
 /// <summary>The shape of a <see cref="CoordinateTokenDecoder{T}"/>.</summary>
 /// <param name="Width">The language model's width.</param>
@@ -6,25 +18,39 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <param name="MaxTextLength">Longest text the decoder embeds.</param>
 /// <param name="Bins">How many coordinate values the decoder can write (Shikra: 1001 for 0.000-1.000; Ferret: 1000 for
 /// 0-999).</param>
-/// <param name="Divisor">The value a coordinate token is divided by to give a normalized coordinate (1000 for both).</param>
-internal sealed record CoordinateTokenDecoderConfiguration(int Width, int VocabSize, int MaxTextLength, int Bins, double Divisor);
+/// <param name="Divisor">The value a coordinate value is divided by to give a normalized coordinate (1000 for both).</param>
+/// <param name="Spelling">How a coordinate value is written (Shikra: a decimal fraction; Ferret: a whole number).</param>
+internal sealed record CoordinateTokenDecoderConfiguration(int Width, int VocabSize, int MaxTextLength, int Bins, double Divisor,
+    CoordinateSpelling Spelling);
 
 /// <summary>
-/// Grounding by writing box coordinates as language-model tokens, as Shikra (Chen et al. 2023, §3: "the coordinates
-/// are expressed in natural language as numbers", [x1, y1, x2, y2] normalized with three decimals) and Ferret / Ferret-v2
-/// (You et al. 2023, Zhang et al. 2024: discrete coordinates in [0, 999] written as text) do. The instruction's tokens
-/// follow the image tokens; the language model then generates, greedily, four coordinate tokens per box, each box
-/// followed by a separator or the end of the answer. A box's score is the probability the model gives its four
-/// coordinates.
+/// Grounding by writing box coordinates as text, as Shikra (Chen et al. 2023, section 3: "the coordinates are expressed
+/// in natural language as numbers", <c>[x1,y1,x2,y2]</c> normalized with three decimals) and Ferret / Ferret-v2 (You et
+/// al. 2023, Zhang et al. 2024: discrete coordinates in [0, 999] written as text) do. The instruction's tokens follow
+/// the image tokens; the language model then generates, greedily, each box character by character, digit by digit as
+/// the LLaMA tokenizer splits numbers: <c>[</c>, four coordinates separated by <c>,</c>, <c>]</c>, with boxes separated
+/// by <c>;</c> and the answer closed by the end token. A box's score is the probability the model gives its characters.
 /// </summary>
-/// <remarks>The coordinate values are their own tokens (one per value, the bins), with a separator and an end token:
-/// the reference models spell them with the digit and punctuation tokens of the LLaMA vocabulary, which carry the same
-/// values. Decoding is constrained to well-formed boxes, as structured-output decoding of the references does.</remarks>
+/// <remarks>Decoding is constrained to well-formed boxes whose coordinates are values the model can write, as the
+/// references' structured-output decoding does.</remarks>
 internal sealed class CoordinateTokenDecoder<T> : GroundingHeadModule<T>
 {
+    // The output characters: the digits 0-9, then the punctuation of a box, then the end of the answer.
+    private const int Point = 10;
+    private const int Comma = 11;
+    private const int Open = 12;
+    private const int Close = 13;
+    private const int Semicolon = 14;
+    private const int EndToken = 15;
+    private const int Vocabulary = 16;
+    private const string Characters = "0123456789.,[];";
+
     private readonly DenseLayer<T> _textEmbedding;
     private readonly DenseLayer<T> _coordinateEmbedding;
     private readonly DenseLayer<T> _head;
+    private readonly Dictionary<string, int> _values = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _prefixes = new(StringComparer.Ordinal);
+    private readonly int _longestSpelling;
 
     public CoordinateTokenDecoder(IEngine engine, List<ILayer<T>> stream, CoordinateTokenDecoderConfiguration configuration)
         : base(engine, stream)
@@ -36,19 +62,25 @@ internal sealed class CoordinateTokenDecoder<T> : GroundingHeadModule<T>
         _textEmbedding = Linear(c.Width, bias: false);
         _coordinateEmbedding = Linear(c.Width, bias: false);
         _head = Linear(Vocabulary, bias: false);
+        int places = Math.Max(0, (int)Math.Round(Math.Log10(c.Divisor)));
+        string format = "F" + places.ToString(CultureInfo.InvariantCulture);
+        for (int k = 0; k < c.Bins; k++)
+        {
+            string spelling = c.Spelling == CoordinateSpelling.Integer
+                ? k.ToString(CultureInfo.InvariantCulture)
+                : (k / c.Divisor).ToString(format, CultureInfo.InvariantCulture);
+            if (_values.ContainsKey(spelling)) continue;
+            _values[spelling] = k;
+            for (int length = 1; length <= spelling.Length; length++) _prefixes.Add(spelling.Substring(0, length));
+            _longestSpelling = Math.Max(_longestSpelling, spelling.Length);
+        }
     }
 
     public CoordinateTokenDecoderConfiguration Configuration { get; }
 
-    /// <summary>The token that separates two boxes.</summary>
-    public int Separator => Configuration.Bins;
+    /// <summary>The end-of-answer token.</summary>
+    public int End => EndToken;
 
-    /// <summary>The token that ends the answer.</summary>
-    public int End => Configuration.Bins + 1;
-
-    private int Vocabulary => Configuration.Bins + 2;
-
-    /// <summary>The instruction's tokens embedded at the language model's width <c>[L, Width]</c>.</summary>
     public Tensor<T> EmbedText(IReadOnlyList<int> tokenIds)
     {
         if (tokenIds is null || tokenIds.Count == 0) throw new ArgumentException("The instruction has no tokens.", nameof(tokenIds));
@@ -56,49 +88,91 @@ internal sealed class CoordinateTokenDecoder<T> : GroundingHeadModule<T>
         return Rows(_textEmbedding, OneHot(ids, Configuration.VocabSize));
     }
 
-    /// <summary>The tokens that may follow <paramref name="tokens"/> in a well-formed answer of at most
-    /// <paramref name="maxBoxes"/> boxes, as a <c>[1, Bins + 2]</c> 0/1 row.</summary>
+    /// <summary>The output tokens <c>[1, 16]</c> (as 0/1) that keep <paramref name="tokens"/> a well-formed answer.</summary>
     internal Tensor<T> Allowed(IReadOnlyList<int> tokens, int maxBoxes)
     {
-        int position = tokens.Count % 5, boxes = tokens.Count / 5;
-        if (position == 4) return Span(Vocabulary, Separator, End + 1);
-        if (position > 0) return Span(Vocabulary, 0, Configuration.Bins);
-        // A box may start (unless the answer already holds the most boxes), or the answer may end.
-        return boxes >= maxBoxes ? Span(Vocabulary, End, End + 1) : Engine.TensorAdd(Span(Vocabulary, 0, Configuration.Bins), Span(Vocabulary, End, End + 1));
+        var allowed = new bool[Vocabulary];
+        int boxes = 0, coordinate = -1;
+        string current = string.Empty;
+        foreach (int token in tokens)
+        {
+            if (token == Open) { coordinate = 0; current = string.Empty; }
+            else if (token == Comma) { coordinate++; current = string.Empty; }
+            else if (token == Close) { boxes++; coordinate = -1; }
+            else if (token < Semicolon) current += Characters[token];
+        }
+
+        int last = tokens.Count > 0 ? tokens[tokens.Count - 1] : -1;
+        if (coordinate < 0)
+        {
+            if (last == Semicolon) allowed[Open] = true;
+            else
+            {
+                // At the start or after a box: another box (Open at the start, ';' between boxes) or the end.
+                if (boxes < maxBoxes) allowed[last == Close ? Semicolon : Open] = true;
+                allowed[EndToken] = true;
+            }
+        }
+        else
+        {
+            for (int character = 0; character <= Point; character++)
+                allowed[character] = _prefixes.Contains(current + Characters[character]);
+            if (_values.ContainsKey(current))
+            {
+                if (coordinate < 3) allowed[Comma] = true;
+                else allowed[Close] = true;
+            }
+        }
+
+        var one = NumOps.One;
+        var zero = NumOps.Zero;
+        return new Tensor<T>(new[] { 1, Vocabulary }, Vector<T>.FromArray(allowed.Select(a => a ? one : zero).ToArray()));
     }
 
     /// <summary>
-    /// Grounds an instruction: <paramref name="imageTokens"/> <c>[N, Width]</c> are the image's language-model tokens,
+    /// Grounds a phrase: <paramref name="imageTokens"/> are the image's language-model tokens <c>[N, Width]</c>,
     /// <paramref name="languageModel"/> runs the language model on <c>[n, Width]</c> rows.
     /// </summary>
-    /// <returns>The boxes <c>[b, 4]</c> as normalized (x1, y1, x2, y2) and their scores <c>[b]</c>; empty when the
-    /// model writes no box.</returns>
+    /// <returns>The written boxes <c>[b, 4]</c> as normalized (x1, y1, x2, y2) and their scores <c>[b]</c>.</returns>
     public (Tensor<T> Boxes, Tensor<T> Scores) Ground(Tensor<T> imageTokens, IReadOnlyList<int> tokenIds,
         Func<Tensor<T>, Tensor<T>> languageModel, int maxBoxes)
     {
         if (imageTokens is null) throw new ArgumentNullException(nameof(imageTokens));
         if (languageModel is null) throw new ArgumentNullException(nameof(languageModel));
         var prefix = Engine.TensorConcatenate(new[] { AsRows(Engine, imageTokens), EmbedText(tokenIds) }, 0);
+        int boxLength = 4 * _longestSpelling + 5;
         var (tokens, probabilities) = DecodeGreedy(prefix, languageModel, _head,
             token => Rows(_coordinateEmbedding, OneHot(new[] { token }, Vocabulary)),
-            written => Allowed(written, maxBoxes), End, 5 * Math.Max(0, maxBoxes) + 1);
+            written => Allowed(written, maxBoxes), EndToken, boxLength * Math.Max(0, maxBoxes) + 1);
 
-        // Whole boxes only: four coordinates each, every one a coordinate value.
-        int complete = 0;
-        while (5 * complete + 4 <= tokens.Count && tokens.Skip(5 * complete).Take(4).All(t => t < Configuration.Bins))
-            complete++;
+        // Whole boxes only: '[' four values ']', scored by the probability of every character from '[' to ']'.
+        var coordinates = new List<int>();
+        var scores = new List<Tensor<T>>();
+        int open = -1;
+        var values = new List<int>(4);
+        string current = string.Empty;
+        for (int i = 0; i < tokens.Count; i++)
+        {
+            int token = tokens[i];
+            if (token == Open) { open = i; values.Clear(); current = string.Empty; }
+            else if (open >= 0 && (token == Comma || token == Close))
+            {
+                values.Add(_values.TryGetValue(current, out int value) ? value : 0);
+                current = string.Empty;
+                if (token == Close)
+                {
+                    coordinates.AddRange(values);
+                    scores.Add(probabilities.Skip(open).Take(i - open + 1).Aggregate((a, b) => Engine.TensorMultiply(a, b)));
+                    open = -1;
+                }
+            }
+            else if (open >= 0 && token <= Point) current += Characters[token];
+        }
+        int complete = scores.Count;
         if (complete == 0) return (new Tensor<T>(new[] { 0, 4 }), new Tensor<T>(new[] { 0 }));
 
-        var coordinates = new List<int>(4 * complete);
-        var scores = new List<Tensor<T>>(complete);
-        for (int b = 0; b < complete; b++)
-        {
-            coordinates.AddRange(tokens.Skip(5 * b).Take(4));
-            var p = probabilities.Skip(5 * b).Take(4).ToList();
-            scores.Add(Engine.TensorMultiply(Engine.TensorMultiply(p[0], p[1]), Engine.TensorMultiply(p[2], p[3])));
-        }
-        var values = new Tensor<int>(new[] { complete, 4 }, Vector<int>.FromList(coordinates)).Cast<T>();
-        var boxes = Engine.TensorClamp(Engine.TensorDivideScalar(values, NumOps.FromDouble(Configuration.Divisor)), NumOps.Zero, NumOps.One);
+        var bins = new Tensor<int>(new[] { complete, 4 }, Vector<int>.FromList(coordinates)).Cast<T>();
+        var boxes = Engine.TensorClamp(Engine.TensorDivideScalar(bins, NumOps.FromDouble(Configuration.Divisor)), NumOps.Zero, NumOps.One);
         return (boxes, Engine.TensorConcatenate(scores.ToArray(), 0).Reshape(new[] { complete }));
     }
 }

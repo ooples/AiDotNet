@@ -20,10 +20,12 @@ internal sealed record DeformableAttentionLayers<T>(DenseLayer<T> Value, DenseLa
 
 /// <summary>
 /// The layers of a simple feature pyramid (Li et al. 2022, ViTDet, section 3) over a plain backbone's last feature map:
-/// one 1x1 projection and normalization per level, and a learned embedding per level (Deformable DETR's level embedding).
+/// the 2x2 stride-2 transposed convolution of the x2 level (a per-pixel linear map to 2x2 outputs, then depth-to-space),
+/// the 3x3 stride-2 convolutions of the extra coarser levels (DINO's extra level), and per level DINO's input projection
+/// (a 1x1 convolution and group normalization with 32 groups) and a learned level embedding (Deformable DETR).
 /// </summary>
-internal sealed record FeaturePyramidLayers<T>(DenseLayer<T>[] Projections, LayerNormalizationLayer<T>[] Norms,
-    DenseLayer<T> LevelEmbedding, int Levels);
+internal sealed record FeaturePyramidLayers<T>(DenseLayer<T> Upsample, DenseLayer<T>[] Downsamples, DenseLayer<T>[] Projections,
+    GroupNormalizationLayer<T>[] Norms, DenseLayer<T> LevelEmbedding, int Width, int Levels);
 
 /// <summary>
 /// The multi-scale tokens of a feature pyramid, finest level first, flattened row-major level after level.
@@ -47,6 +49,9 @@ internal sealed record FeatureLevels<T>(Tensor<T> Tokens, Tensor<T> LevelEmbeddi
 internal abstract class GroundingHeadModule<T>
 {
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    // DINO's input projections normalize with GroupNorm(32, d).
+    private const int GroupNormGroups = 32;
 
     protected GroundingHeadModule(IEngine engine, List<ILayer<T>> stream)
     {
@@ -243,20 +248,25 @@ internal abstract class GroundingHeadModule<T>
     protected FeaturePyramidLayers<T> PyramidLayers(int width, int levels)
     {
         if (levels <= 0) throw new ArgumentOutOfRangeException(nameof(levels), "A feature pyramid needs at least one level.");
+        var upsample = Linear(4 * width);
+        var downsamples = new DenseLayer<T>[levels];
         var projections = new DenseLayer<T>[levels];
-        var norms = new LayerNormalizationLayer<T>[levels];
+        var norms = new GroupNormalizationLayer<T>[levels];
+        int groups = HeadsFor(width, GroupNormGroups);
         for (int level = 0; level < levels; level++)
         {
+            downsamples[level] = Linear(width);
             projections[level] = Linear(width);
-            norms[level] = Norm();
+            norms[level] = Add(new GroupNormalizationLayer<T>(groups, width, 1e-5));
         }
-        return new FeaturePyramidLayers<T>(projections, norms, Linear(width, bias: false), levels);
+        return new FeaturePyramidLayers<T>(upsample, downsamples, projections, norms, Linear(width, bias: false), width, levels);
     }
 
     /// <summary>
-    /// Builds the multi-scale feature maps of a plain (single-scale) backbone, ViTDet's simple feature pyramid: the
-    /// backbone map upsampled x2, the map itself, then max-pooled x2 per further level while the map is at least 2x2.
-    /// With the backbone at stride 16 these are DINO's strides 8, 16, 32 and 64.
+    /// Builds the multi-scale feature maps of a plain (single-scale) backbone: ViTDet's simple feature pyramid (the
+    /// backbone map through a 2x2 stride-2 transposed convolution, the map itself, the map max-pooled x2), then DINO's
+    /// extra levels, each a 3x3 stride-2 convolution (padding 1) of the level before. With the backbone at stride 16
+    /// these are DINO's strides 8, 16, 32 and 64. A map too thin to pool takes the stride-2 convolution instead.
     /// </summary>
     /// <param name="pyramid">The pyramid's layers.</param>
     /// <param name="imageTokens">The backbone's tokens in row-major grid order.</param>
@@ -269,10 +279,29 @@ internal abstract class GroundingHeadModule<T>
         var grid = TokenGrid(n);
         var map = Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, d, grid.H, grid.W });
         var maps = new List<Tensor<T>>(pyramid.Levels);
-        if (pyramid.Levels > 1) maps.Add(Engine.Upsample(map, 2, 2));
+        if (pyramid.Levels > 1)
+        {
+            // ConvTranspose2d(kernel 2, stride 2): every pixel writes its own 2x2 block, a linear map to 4 outputs per
+            // channel then depth-to-space.
+            var blocks = Rows(pyramid.Upsample, rows);
+            maps.Add(Engine.PixelShuffle(Engine.Reshape(Engine.TensorTranspose(blocks), new[] { 1, 4 * pyramid.Width, grid.H, grid.W }), 2));
+        }
         maps.Add(map);
-        while (maps.Count < pyramid.Levels && maps[maps.Count - 1].Shape[2] >= 2 && maps[maps.Count - 1].Shape[3] >= 2)
-            maps.Add(Engine.MaxPool2D(maps[maps.Count - 1], 2, 2, 0));
+        while (maps.Count < pyramid.Levels)
+        {
+            var last = maps[maps.Count - 1];
+            int lh = last.Shape[2], lw = last.Shape[3];
+            if (maps.Count == 2 && lh >= 2 && lw >= 2)
+            {
+                maps.Add(Engine.MaxPool2D(last, 2, 2, 0));
+                continue;
+            }
+            // Conv2d(kernel 3, stride 2, padding 1) as im2col then a linear map.
+            int oh = (lh - 1) / 2 + 1, ow = (lw - 1) / 2 + 1, channels = last.Shape[1];
+            var patches = Engine.Unfold(last, new[] { 3, 3 }, new[] { 2, 2 }, new[] { 1, 1 });
+            var convolved = Rows(pyramid.Downsamples[maps.Count], Engine.TensorTranspose(Engine.Reshape(patches, new[] { 9 * channels, oh * ow })));
+            maps.Add(Engine.Reshape(Engine.TensorTranspose(convolved), new[] { 1, pyramid.Width, oh, ow }));
+        }
 
         int levels = maps.Count;
         var levelEmbedding = Rows(pyramid.LevelEmbedding, OneHot(Enumerable.Range(0, levels).ToList(), pyramid.Levels));
@@ -285,9 +314,11 @@ internal abstract class GroundingHeadModule<T>
         int start = 0;
         for (int level = 0; level < levels; level++)
         {
-            int h = maps[level].Shape[2], w = maps[level].Shape[3], count = h * w;
-            var levelRows = Engine.TensorTranspose(Engine.Reshape(maps[level], new[] { d, count }));
-            tokens[level] = Rows(pyramid.Norms[level], Rows(pyramid.Projections[level], levelRows));
+            int channels = maps[level].Shape[1], h = maps[level].Shape[2], w = maps[level].Shape[3], count = h * w;
+            var levelRows = Engine.TensorTranspose(Engine.Reshape(maps[level], new[] { channels, count }));
+            // DINO's input projection: 1x1 convolution, then group normalization over the [1, d, h, w] map.
+            var projected = Engine.Reshape(Engine.TensorTranspose(Rows(pyramid.Projections[level], levelRows)), new[] { 1, width, h, w });
+            tokens[level] = Engine.TensorTranspose(Engine.Reshape(pyramid.Norms[level].Forward(projected), new[] { width, count }));
             embeddings[level] = Engine.TensorBroadcastTo(
                 Engine.TensorSlice(levelEmbedding, new[] { level, 0 }, new[] { 1, width }), new[] { count, width });
             centres[level] = GridCentres(Engine, h, w);
