@@ -145,14 +145,12 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
         int dim = sequenceEmbeddings.Shape[2];
 
         // Gather the EOS-position embedding into a [B, hiddenSize] tensor.
-        var eosPooled = new Vector<T>(batch * dim);
-        for (int b = 0; b < batch; b++)
+        Tensor<T> eosTensor;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int eosPos = seqLen - 1;
-            for (int d = 0; d < dim; d++)
-                eosPooled[b * dim + d] = sequenceEmbeddings[b * seqLen * dim + eosPos * dim + d];
+            var engine = AiDotNetEngine.Current;
+            eosTensor = engine.Reshape(engine.TensorNarrow(sequenceEmbeddings, 1, seqLen - 1, 1), new[] { batch, dim }).Clone();
         }
-        var eosTensor = new Tensor<T>(new[] { batch, dim }, eosPooled);
 
         // Project to the shared image-text embedding space.
         return _textProjection.Forward(eosTensor);

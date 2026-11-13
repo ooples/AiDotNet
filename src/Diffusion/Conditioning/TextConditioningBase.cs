@@ -222,15 +222,14 @@ public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IC
     {
         int batchSize = results.Count;
         int seqLen = MaxSequenceLength;
-        var data = new Vector<T>(batchSize * seqLen);
+        // Token ids are integral: pack them (zero-padded / truncated to seqLen) and convert to T in one bulk cast.
+        var tokenIds = new int[batchSize * seqLen];
         for (int b = 0; b < batchSize; b++)
         {
             var ids = results[b].TokenIds;
-            int written = Math.Min(ids.Count, seqLen);
-            for (int i = 0; i < written; i++)
-                data[b * seqLen + i] = NumOps.FromDouble(ids[i]);
+            ids.CopyTo(0, tokenIds, b * seqLen, Math.Min(ids.Count, seqLen));
         }
-        return new Tensor<T>(new[] { batchSize, seqLen }, data);
+        return new Tensor<int>(new[] { batchSize, seqLen }, new Vector<int>(tokenIds)).Cast<T>();
     }
 
     // === Compile host (#1272 W2) ===

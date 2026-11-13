@@ -32,32 +32,14 @@ public class LineArtPreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 1, height, width });
+        if (!PreprocessorFilters.HasInterior(shape[2], shape[3]))
+            return new Tensor<T>(new[] { shape[0], 1, shape[2], shape[3] });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    // Laplacian for line extraction
-                    double center = NumOps.ToDouble(data[b, 0, h, w]) * 4;
-                    double neighbors = NumOps.ToDouble(data[b, 0, h - 1, w])
-                                     + NumOps.ToDouble(data[b, 0, h + 1, w])
-                                     + NumOps.ToDouble(data[b, 0, h, w - 1])
-                                     + NumOps.ToDouble(data[b, 0, h, w + 1]);
-                    double line = Math.Min(1.0, Math.Abs(center - neighbors) * 3.0);
-
-                    // Invert so lines are white on black
-                    result[b, 0, h, w] = NumOps.FromDouble(line);
-                }
-            }
-        }
-
-        return result;
+        // Laplacian line response of channel 0 over the interior, min(1, 3 |4 c - neighbours|); the border stays 0
+        var laplacian = PreprocessorFilters.Interior3x3(PreprocessorFilters.Channel(data, 0), PreprocessorFilters.Laplacian);
+        var line = engine.TensorMin(engine.TensorMultiplyScalar(engine.TensorAbs(laplacian), NumOps.FromDouble(3.0)), NumOps.One);
+        return PreprocessorFilters.PadBorder(line);
     }
 }

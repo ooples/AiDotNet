@@ -12,8 +12,9 @@ namespace AiDotNet.Diffusion.Guidance;
 /// <remarks>
 /// <para>
 /// APG projects the guidance direction to reduce components that cause artifacts.
-/// It decomposes the guidance vector into parallel and perpendicular components
-/// relative to the conditional prediction, keeping only the beneficial part.
+/// It decomposes the guidance vector (per sample) into parallel and orthogonal components
+/// relative to the conditional prediction; the parallel component causes oversaturation and is
+/// down-weighted, while the orthogonal component, which improves quality, is kept.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Standard guidance can sometimes push the image in bad
@@ -21,7 +22,9 @@ namespace AiDotNet.Diffusion.Guidance;
 /// part of the guidance while discarding the part that causes problems.
 /// </para>
 /// <para>
-/// Reference: Ahn et al., "Adaptive Projected Guidance", 2024
+/// Reference: Sadat et al., "Eliminating Oversaturation and Artifacts of High Guidance Scales in Diffusion
+/// Models", 2024 (APG). The update is d_perp + eta d_par with eta = 1 - projectionStrength; the paper's eta = 0
+/// corresponds to projectionStrength = 1.
 /// </para>
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
@@ -38,7 +41,7 @@ public class AdaptiveProjectedGuidance<T> : IGuidanceMethod<T>
     /// <summary>
     /// Initializes a new Adaptive Projected Guidance instance.
     /// </summary>
-    /// <param name="projectionStrength">Strength of perpendicular projection removal. 0=standard CFG, 1=full projection. Default: 0.5.</param>
+    /// <param name="projectionStrength">How much of the parallel (oversaturating) component is removed. 0=standard CFG, 1=full projection (the paper's eta = 0). Default: 0.5.</param>
     public AdaptiveProjectedGuidance(double projectionStrength = 0.5)
     {
         _projectionStrength = projectionStrength;
@@ -47,47 +50,33 @@ public class AdaptiveProjectedGuidance<T> : IGuidanceMethod<T>
     /// <inheritdoc />
     public Tensor<T> Apply(Tensor<T> unconditional, Tensor<T> conditional, double scale, double timestep)
     {
-        var uncondSpan = unconditional.AsSpan();
-        var condSpan = conditional.AsSpan();
+        // The projection previously accumulated in double; Half squares overflow for ordinary finite logits.
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+            return new AdaptiveProjectedGuidance<double>(_projectionStrength)
+                .Apply(unconditional.Cast<double>(), conditional.Cast<double>(), scale, timestep).Cast<T>();
+#endif
+        var engine = AiDotNetEngine.Current;
+        int[] shape = conditional._shape;
+        var axes = DiffusionVectorOps.SampleAxes(shape.Length);
 
         // Compute guidance direction: d = cond - uncond
-        int len = uncondSpan.Length;
-        var direction = new double[len];
-        double dotProduct = 0;
-        double condNormSq = 0;
+        var direction = engine.TensorSubtract(conditional, unconditional);
 
-        for (int i = 0; i < len; i++)
-        {
-            double c = NumOps.ToDouble(condSpan[i]);
-            double u = NumOps.ToDouble(uncondSpan[i]);
-            direction[i] = c - u;
-            dotProduct += direction[i] * c;
-            condNormSq += c * c;
-        }
+        // Project the direction onto each sample's conditional prediction: parallel = (<d, c> / <c, c>) c
+        // (0 when |c|^2 <= 1e-10)
+        var dotProduct = engine.ReduceSum(engine.TensorMultiply(direction, conditional), axes, true);
+        var condNormSq = engine.ReduceSum(engine.TensorSquare(conditional), axes, true);
+        var nonDegenerate = engine.TensorGreaterThan(condNormSq, NumOps.FromDouble(1e-10));
+        var safeNormSq = engine.TensorWhere(nonDegenerate, condNormSq, Tensor<T>.CreateDefault(condNormSq._shape, NumOps.One));
+        var projScale = engine.TensorMultiply(engine.TensorDivide(dotProduct, safeNormSq), nonDegenerate);
+        var parallel = engine.TensorMultiply(engine.TensorBroadcastTo(projScale, shape), conditional);
 
-        // Project direction onto conditional prediction
-        double projScale = condNormSq > 1e-10 ? dotProduct / condNormSq : 0;
+        // Orthogonal component (kept) and parallel component (causes oversaturation, down-weighted by the
+        // projection strength): update = d_perp + (1 - projectionStrength) d_par, as in APG with eta = 1 - strength
+        var perpendicular = engine.TensorSubtract(direction, parallel);
+        var update = engine.TensorAdd(perpendicular, engine.TensorMultiplyScalar(parallel, NumOps.FromDouble(1.0 - _projectionStrength)));
 
-        var result = new Tensor<T>(unconditional._shape);
-        var resultSpan = result.AsWritableSpan();
-
-        for (int i = 0; i < len; i++)
-        {
-            double c = NumOps.ToDouble(condSpan[i]);
-
-            // Parallel component (aligned with conditional)
-            double parallel = projScale * c;
-
-            // Perpendicular component (causes artifacts)
-            double perpendicular = direction[i] - parallel;
-
-            // Remove perpendicular component based on projection strength
-            double projectedDirection = parallel + perpendicular * (1.0 - _projectionStrength);
-
-            resultSpan[i] = NumOps.FromDouble(
-                NumOps.ToDouble(uncondSpan[i]) + scale * projectedDirection);
-        }
-
-        return result;
+        return engine.TensorAdd(unconditional, engine.TensorMultiplyScalar(update, NumOps.FromDouble(scale)));
     }
 }

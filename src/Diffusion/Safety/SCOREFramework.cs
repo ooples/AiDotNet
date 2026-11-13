@@ -110,13 +110,8 @@ public class SCOREFramework<T>
 
     private T ComputeMSE(Vector<T> a, Vector<T> b)
     {
-        var sum = NumOps.Zero;
         var len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
+        var sum = DiffusionVectorOps.SquaredDistance(a, b);
         return len > 0 ? NumOps.Divide(sum, NumOps.FromDouble(len)) : NumOps.Zero;
     }
 

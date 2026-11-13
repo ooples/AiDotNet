@@ -24371,3 +24371,7 @@ AiDotNet.TextToSpeech.TtsModelBase<T>.MonotonicDurations(AiDotNet.Tensors.Linear
 AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>.BayesianNetworkSynthOptions(AiDotNet.Models.Options.BayesianNetworkSynthOptions<T>! other) -> void
 *REMOVED*static AiDotNet.NeuralNetworks.Layers.SSM.SSMQuantizationHelper<T>.ComputeQuantizationError(AiDotNet.Interfaces.ILayer<T>! layer, int bitWidth) -> double
 static AiDotNet.NeuralNetworks.Layers.SSM.SSMQuantizationHelper<T>.ComputeQuantizationError(AiDotNet.Interfaces.ILayer<T>! layer, int bitWidth) -> T
+*REMOVED*AiDotNet.Diffusion.Safety.SGRACEEraser<T>.MeasureStylePresence(AiDotNet.Tensors.LinearAlgebra.Vector<T>! currentParameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! baseParameters, int styleIndex) -> double
+AiDotNet.Diffusion.Safety.SGRACEEraser<T>.MeasureStylePresence(AiDotNet.Tensors.LinearAlgebra.Vector<T>! currentParameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! baseParameters, int styleIndex) -> T
+*REMOVED*AiDotNet.Diffusion.Audio.GriffinLim<T>.ComputeSpectralConvergence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetMagnitude, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> double
+AiDotNet.Diffusion.Audio.GriffinLim<T>.ComputeSpectralConvergence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetMagnitude, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> T

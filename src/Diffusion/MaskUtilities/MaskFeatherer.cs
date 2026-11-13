@@ -72,39 +72,13 @@ public class MaskFeatherer<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>A feathered mask with smooth edge transitions.</returns>
     public Tensor<T> Apply(Tensor<T> mask)
     {
-        var shape = mask._shape;
-        int height = shape[0];
-        int width = shape.Length > 1 ? shape[1] : 1;
-        var result = new Tensor<T>(shape);
-        var zero = NumOps.Zero;
-        var one = NumOps.One;
+        var engine = AiDotNetEngine.Current;
+        int size = 2 * _radius + 1;
 
-        // Box blur approximation of Gaussian feathering
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                T sum = zero;
-                int count = 0;
-
-                for (int dy = -_radius; dy <= _radius; dy++)
-                {
-                    for (int dx = -_radius; dx <= _radius; dx++)
-                    {
-                        int ny = Math.Max(0, Math.Min(y + dy, height - 1));
-                        int nx = Math.Max(0, Math.Min(x + dx, width - 1));
-                        sum = NumOps.Add(sum, mask[ny, nx]);
-                        count++;
-                    }
-                }
-
-                var avg = NumOps.Divide(sum, NumOps.FromDouble(count));
-                if (NumOps.LessThan(avg, zero)) avg = zero;
-                if (NumOps.GreaterThan(avg, one)) avg = one;
-                result[y, x] = avg;
-            }
-        }
-
-        return result;
+        // Box blur approximation of Gaussian feathering: a replicate-padded box sum divided by the window size
+        var box = Tensor<T>.CreateDefault(new[] { size, size }, NumOps.One);
+        var sum = MaskVectorOps.ReplicateFilter2D(mask, box);
+        var avg = engine.TensorDivideScalar(sum, NumOps.FromDouble(size * size));
+        return engine.TensorClamp(avg, NumOps.Zero, NumOps.One);
     }
 }

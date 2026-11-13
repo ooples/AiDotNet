@@ -110,30 +110,20 @@ public class RACEEraser<T>
     /// <returns>Perturbed prompt embedding.</returns>
     public Vector<T> AttackerStep(Vector<T> promptEmbedding, Vector<T> gradient)
     {
-        // PGD-style attack: x = x + lr * sign(grad) for targeted attack
-        var result = new Vector<T>(promptEmbedding.Length);
-        var lr = NumOps.FromDouble(_attackLearningRate);
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            var grad = i < gradient.Length ? gradient[i] : NumOps.Zero;
-            var sign = NumOps.FromDouble(!NumOps.LessThan(grad, NumOps.Zero) ? 1.0 : -1.0);
-            var step = NumOps.Multiply(lr, sign);
-            result[i] = NumOps.Add(promptEmbedding[i], step);
-        }
-
-        return result;
+        // PGD-style attack: x = x + lr * sign(grad) for targeted attack, sign(g) = +1 for g >= 0 and -1 otherwise
+        // (a missing gradient entry counts as 0, so +1)
+        var engine = AiDotNetEngine.Current;
+        var grad = DiffusionVectorOps.Fit(gradient, promptEmbedding.Length).AsTensor();
+        var negative = engine.TensorLessThan(grad, NumOps.Zero);
+        var sign = engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(negative, NumOps.FromDouble(2.0)));
+        var step = engine.TensorMultiplyScalar(sign, NumOps.FromDouble(_attackLearningRate)).ToVector();
+        return engine.Add(promptEmbedding, step);
     }
 
     private T ComputeMSE(Vector<T> a, Vector<T> b)
     {
-        var sum = NumOps.Zero;
         var len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(a[i], b[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
+        var sum = DiffusionVectorOps.SquaredDistance(a, b);
         return len > 0 ? NumOps.Divide(sum, NumOps.FromDouble(len)) : NumOps.Zero;
     }
 
