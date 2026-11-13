@@ -100,18 +100,16 @@ public class MaskFromPoints<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     {
         var engine = AiDotNetEngine.Current;
         var mask = new Tensor<T>(new[] { height, width });
-        int radiusSq = _pointRadius * _pointRadius;
-
-        // Apply positive points
+        // Each point computes distances only over its disk's clipped bounding square
         foreach (var (py, px) in positivePoints)
-            mask = engine.TensorMax(mask, MaskVectorOps.Disk<T>(height, width, py, px, radiusSq));
+            mask = MaskVectorOps.UnionDisk(mask, py, px, _pointRadius);
 
         // Apply negative points
         if (negativePoints != null)
         {
             var erased = new Tensor<T>(new[] { height, width });
             foreach (var (py, px) in negativePoints)
-                erased = engine.TensorMax(erased, MaskVectorOps.Disk<T>(height, width, py, px, radiusSq));
+                erased = MaskVectorOps.UnionDisk(erased, py, px, _pointRadius);
             mask = engine.TensorWhere(erased, new Tensor<T>(new[] { height, width }), mask);
         }
 

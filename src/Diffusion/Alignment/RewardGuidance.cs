@@ -89,18 +89,18 @@ public class RewardGuidance<T>
     /// <returns>The clipped gradient vector.</returns>
     private Vector<T> ClipGradientNorm(Vector<T> gradient)
     {
-        // Compute L2 norm (Half is reduced in double: its squares overflow for ordinary reward gradients)
+        // Compute the L2 norm and the clip scale in double: a Half norm above 65504 is infinity in Half, and
+        // 1 / infinity would zero the gradient instead of clipping it.
         var engine = AiDotNetEngine.Current;
-        var norm = DiffusionVectorOps.Norm(gradient);
+        double norm = DiffusionVectorOps.NormInDouble(gradient);
 
-        if (NumOps.LessThanOrEquals(norm, NumOps.FromDouble(_gradientClipNorm)))
+        if (norm <= _gradientClipNorm)
         {
             return gradient;
         }
 
         // Scale down
-        var clipScale = NumOps.Divide(NumOps.FromDouble(_gradientClipNorm), norm);
-        return engine.Multiply(gradient, clipScale);
+        return engine.Multiply(gradient, NumOps.FromDouble(_gradientClipNorm / norm));
     }
 
     /// <summary>

@@ -95,12 +95,16 @@ internal static class PreprocessorFilters
     internal static Tensor<T> PadBorder<T>(Tensor<T> interior)
         => AiDotNetEngine.Current.Pad(interior, 1, 1, 1, 1, MathHelper.GetNumericOperations<T>().Zero);
 
-    /// <summary>sqrt(gx^2 + gy^2) of a [batch, 2, h, w] gradient pair, as [batch, 1, h, w].</summary>
+    /// <summary>
+    /// sqrt(gx^2 + gy^2) of a [batch, 2, h, w] gradient pair, as [batch, 1, h, w]. In double, narrowed once: Half
+    /// gradients of 200 square to 40000 each, and their sum overflows Half.
+    /// </summary>
     internal static Tensor<T> Magnitude<T>(Tensor<T> gradients)
     {
         var engine = AiDotNetEngine.Current;
-        var squared = engine.TensorSquare(gradients);
-        return engine.TensorSqrt(engine.TensorAdd(Channel(squared, 0), Channel(squared, 1)));
+        var squared = engine.TensorSquare(TensorCopyHelper.CastLogical<T, double>(gradients));
+        return TensorCopyHelper.CastLogical<double, T>(
+            engine.TensorSqrt(engine.TensorAdd(Channel(squared, 0), Channel(squared, 1))));
     }
 
     /// <summary>

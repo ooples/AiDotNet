@@ -66,11 +66,14 @@ public class MaskFromSegmentation<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>A binary mask where selected labels are 1 and others are 0.</returns>
     public Tensor<T> Apply(Tensor<T> segmentationMap)
     {
-        // A pixel is selected when its truncated label is one of the selected labels
+        // A pixel is selected when its truncated label is one of the selected labels. Compared in double, which
+        // holds every int label exactly: converted to T, distinct labels can merge (2049 rounds to 2048 in Half).
         var engine = AiDotNetEngine.Current;
-        var labels = new Tensor<int>(new[] { _selectedLabels.Count }, new Vector<int>(_selectedLabels)).Cast<T>();
-        var selected = engine.TensorIsIn(engine.TensorTrunc(segmentationMap), labels, false);
-        return engine.TensorWhere(selected,
-            Tensor<T>.CreateDefault(segmentationMap._shape, NumOps.One), new Tensor<T>(segmentationMap._shape));
+        var labels = new Tensor<double>(_selectedLabels.Select(label => (double)label).ToArray(),
+            new[] { _selectedLabels.Count });
+        var map = engine.TensorTrunc(TensorCopyHelper.CastLogical<T, double>(segmentationMap));
+        var selected = engine.TensorIsIn(map, labels, false);
+        return TensorCopyHelper.CastLogical<double, T>(engine.TensorWhere(selected,
+            Tensor<double>.CreateDefault(segmentationMap._shape, 1.0), new Tensor<double>(segmentationMap._shape)));
     }
 }

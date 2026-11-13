@@ -347,8 +347,10 @@ public partial class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     internal static Tensor<T> RenoiseToSigma(Tensor<T> denoised, Tensor<T> noise, T nextSigma, double sigmaMin)
     {
         var engine = AiDotNetEngine.Current;
-        var noiseScale = NumOps.Sqrt(NumOps.Subtract(NumOps.Multiply(nextSigma, nextSigma),
-            NumOps.FromDouble(sigmaMin * sigmaMin)));
+        // In double, with a rounding-negative variance clamped to zero: at the minimum sigma a Half nextSigma
+        // squared falls below sigmaMin^2, and the square root of the difference would be NaN.
+        double sigma = NumOps.ToDouble(nextSigma);
+        var noiseScale = NumOps.FromDouble(Math.Sqrt(Math.Max(0.0, sigma * sigma - sigmaMin * sigmaMin)));
         return engine.TensorAdd(denoised, engine.TensorMultiplyScalar(noise, noiseScale));
     }
 

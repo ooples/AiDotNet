@@ -90,8 +90,9 @@ public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
         var engine = AiDotNetEngine.Current;
         var mask = new Tensor<T>(new[] { height, width });
 
+        // Each box writes only its clipped rectangle, not a full-canvas indicator per box
         foreach (var (top, left, bottom, right) in boxes)
-            mask = engine.TensorMax(mask, MaskVectorOps.Rectangle<T>(height, width, top, left, bottom, right));
+            mask = MaskVectorOps.UnionRectangle(mask, top, left, bottom, right);
 
         return mask;
     }

@@ -75,10 +75,11 @@ public class MaskFeatherer<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
         var engine = AiDotNetEngine.Current;
         int size = 2 * _radius + 1;
 
-        // Box blur approximation of Gaussian feathering: a replicate-padded box sum divided by the window size
-        var box = Tensor<T>.CreateDefault(new[] { size, size }, NumOps.One);
-        var sum = MaskVectorOps.ReplicateFilter2D(mask, box);
-        var avg = engine.TensorDivideScalar(sum, NumOps.FromDouble(size * size));
-        return engine.TensorClamp(avg, NumOps.Zero, NumOps.One);
+        // Box blur approximation of Gaussian feathering: a replicate-padded box sum divided by the window size.
+        // In double, narrowed once: the window size size^2 exceeds Half's range from radius 128 on.
+        var box = Tensor<double>.CreateDefault(new[] { size, size }, 1.0);
+        var sum = MaskVectorOps.ReplicateFilter2D(TensorCopyHelper.CastLogical<T, double>(mask), box);
+        var avg = engine.TensorDivideScalar(sum, (double)size * size);
+        return TensorCopyHelper.CastLogical<double, T>(engine.TensorClamp(avg, 0.0, 1.0));
     }
 }

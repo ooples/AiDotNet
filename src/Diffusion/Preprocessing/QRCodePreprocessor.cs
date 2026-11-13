@@ -46,10 +46,12 @@ public class QRCodePreprocessor<T> : DiffusionPreprocessorBase<T>
     {
         var engine = AiDotNetEngine.Current;
 
-        // Adaptive threshold: a pixel is dark (0) if below the local mean (neighbourhood clipped to the image) - 0.02
-        var pixel = PreprocessorFilters.Channel(data, 0);
+        // Adaptive threshold: a pixel is dark (0) if below the local mean (neighbourhood clipped to the image) - 0.02.
+        // The mean, threshold and comparison stay in double and only the binary result is narrowed: a Half mean and
+        // threshold round enough to flip pixels within a Half ulp of the threshold.
+        var pixel = TensorCopyHelper.CastLogical<T, double>(PreprocessorFilters.Channel(data, 0));
         var localMean = PreprocessorFilters.ClippedBoxMean(pixel, _blockSize / 2);
-        var dark = engine.TensorLessThan(pixel, engine.TensorAddScalar(localMean, NumOps.FromDouble(-0.02)));
-        return engine.ScalarMinusTensor(NumOps.One, dark);
+        var dark = engine.TensorLessThan(pixel, engine.TensorAddScalar(localMean, -0.02));
+        return TensorCopyHelper.CastLogical<double, T>(engine.ScalarMinusTensor(1.0, dark));
     }
 }

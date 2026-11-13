@@ -72,11 +72,13 @@ public class MaskBlur<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
         var engine = AiDotNetEngine.Current;
         int half = _kernelSize / 2;
 
-        // Gaussian kernel exp(-(dy^2 + dx^2) / (2 sigma^2)) = g(dy) g(dx), normalized to sum to 1
-        var offsets = engine.TensorArange<T>(-half, half + 1, 1);
-        var g = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(offsets), NumOps.FromDouble(-1.0 / (2.0 * _sigma * _sigma))));
-        var kernel = engine.TensorOuter(g, g);
-        kernel = engine.TensorDivideScalar(kernel, engine.TensorSum(kernel));
+        // Gaussian kernel exp(-(dy^2 + dx^2) / (2 sigma^2)) = g(dy) g(dx), normalized to sum to 1. Built and
+        // normalized in double, then narrowed once: -1 / (2 sigma^2) leaves Half's range for a small sigma, and
+        // 0 * -infinity at the center tap is NaN.
+        var offsets = engine.TensorArange<double>(-half, half + 1, 1);
+        var g = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(offsets), -1.0 / (2.0 * _sigma * _sigma)));
+        var wide = engine.TensorOuter(g, g);
+        var kernel = TensorCopyHelper.CastLogical<double, T>(engine.TensorDivideScalar(wide, engine.TensorSum(wide)));
 
         var blurred = MaskVectorOps.ReplicateFilter2D(mask, kernel);
         return engine.TensorClamp(blurred, NumOps.Zero, NumOps.One);
