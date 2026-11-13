@@ -173,7 +173,8 @@ internal static class PreprocessingTensorOps
         var zeros = new Tensor<T>(new[] { x.Shape[1] });
         if (!ops.GreaterThan(syy, eps))
             return zeros;
-        var r = engine.TensorDivide(sxy, engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, syy)));
+        // sqrt(Sxx) sqrt(Syy), not sqrt(Sxx Syy): the product passes 65504 in Half once both sums pass 256
+        var r = engine.TensorDivide(sxy, engine.TensorMultiplyScalar(engine.TensorSqrt(sxx), ops.Sqrt(syy)));
         return engine.TensorWhere(engine.TensorGreaterThan(sxx, eps), r, zeros);
     }
 
@@ -191,7 +192,8 @@ internal static class PreprocessingTensorOps
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
         var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { p });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
-        var denom = engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, engine.TensorSumOfSquares(yc)));
+        // sqrt(Sxx) sqrt(Syy), not sqrt(Sxx Syy): the product passes 65504 in Half once both sums pass 256
+        var denom = engine.TensorMultiplyScalar(engine.TensorSqrt(sxx), ops.Sqrt(engine.TensorSumOfSquares(yc)));
         return engine.TensorWhere(
             engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), engine.TensorDivide(sxy, denom), new Tensor<T>(new[] { p }));
     }
