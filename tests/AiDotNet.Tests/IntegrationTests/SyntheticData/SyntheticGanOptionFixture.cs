@@ -51,7 +51,10 @@ internal static class SyntheticGanOptionFixture
         var data = new Matrix<T>(12, 3);
         for (int row = 0; row < data.Rows; row++)
         {
-            data[row, 0] = ops.FromDouble(row / 12.0);
+            // Two well-separated clusters (rows 0-5 near 0, rows 6-11 near 1): a variational GMM finds two modes
+            // here, so VGMModes 1 and 2 fit different encodings. A single linear ramp is one mode to the VB fit
+            // at 12 rows, and every VGMModes value then encoded it identically.
+            data[row, 0] = ops.FromDouble((row < 6 ? 0.0 : 1.0) + row / 120.0);
             data[row, 1] = ops.FromDouble(row % 2);
             data[row, 2] = ops.FromDouble(Math.Sin(row + .5));
         }
