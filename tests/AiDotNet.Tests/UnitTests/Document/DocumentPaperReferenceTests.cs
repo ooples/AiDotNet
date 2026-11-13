@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using AiDotNet.Document;
+using AiDotNet.Document.Analysis.PageSegmentation;
 using AiDotNet.Document.LayoutAware;
 using AiDotNet.Document.OCR.TextDetection;
 using AiDotNet.Document.OCR.TextRecognition;
@@ -147,6 +149,28 @@ public sealed class DocumentPaperReferenceTests
         Assert.Equal("ab", text);
         Assert.Equal(new[] { pa, pb }, perCharacter, new Tolerance(1e-12));
         Assert.Equal((pa + pb) / 2, confidence, 12);
+    }
+
+    [Fact]
+    public void DocBank_RegionConfidenceIsTheMeanSoftmaxProbabilityOfItsClass()
+    {
+        // The segmentation head emits logits. A 10x10 block whose class-1 logit is 2 (all others 0) among 13
+        // classes has probability e^2 / (e^2 + 12) per pixel; averaging the raw logits instead gives 2.
+        using var model = new DocBank<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 13),
+            options: new DocBankOptions { ImageSize = 64 });
+        var logits = new Tensor<double>(new[] { 1, 13, 12, 12 });
+        for (int y = 1; y <= 10; y++)
+            for (int x = 1; x <= 10; x++)
+                logits[0, 1, y, x] = 2.0;
+        var result = model.ParseSegmentationOutput(logits, 0.3);
+
+        var region = Assert.Single(result.Regions);
+        Assert.Equal(DocumentRegionType.Paragraph, region.RegionType);
+        Assert.Equal(new[] { 1.0, 1.0, 10.0, 10.0 }, region.BoundingBox.ToArray());
+        Assert.Equal(Math.Exp(2) / (Math.Exp(2) + 12), region.Confidence, 12);
+        Assert.Equal(1.0, Enumerable.Range(0, 13).Sum(c => result.ClassProbabilities[0, c, 0, 0]), 12);
     }
 
     private sealed class Tolerance : System.Collections.Generic.IEqualityComparer<double>
