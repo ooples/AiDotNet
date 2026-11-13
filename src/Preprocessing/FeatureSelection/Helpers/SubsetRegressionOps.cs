@@ -74,7 +74,6 @@ internal static class SubsetRegressionOps
     public static Tensor<T> RSquared<T>(Tensor<T> y, Tensor<T> prediction, Tensor<T> center, out bool valid)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int n = y.Length;
         var ssRes = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(y, prediction)), new[] { 0 }, true);
         var ssTot = engine.ReduceSum(

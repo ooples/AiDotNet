@@ -186,7 +186,6 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int p = instance.Length;
-        int c = draws.Shape[0];
 
         var ends = engine.TensorConcatenate(
             new[] { engine.Reshape(baseline, new[] { 1, p }), engine.Reshape(instance, new[] { 1, p }) }, 0);

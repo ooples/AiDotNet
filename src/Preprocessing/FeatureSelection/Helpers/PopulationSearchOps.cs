@@ -26,7 +26,6 @@ internal static class PopulationSearchOps
         var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.TensorSubtract(y, engine.ReduceMean(y, new[] { 0 }, true));
-        var sxy = engine.ReduceSum(engine.TensorMultiply(xc, engine.TensorBroadcastTo(yc, new[] { n, p })), new[] { 0 }, false);
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         var syy = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorSquare(yc), new[] { 0 }, false), new[] { p });
         T tiny = PreprocessingTensorOps.Tolerance<T>(1e-10);

@@ -94,7 +94,6 @@ internal static class FastIcaOps
     private static Tensor<T> Normalize<T>(Tensor<T> v)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, true));
         return PopulationSearchOps.Greater(norm, PreprocessingTensorOps.Filled(new[] { 1 }, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             ? engine.TensorDivide(v, engine.TensorBroadcastTo(norm, new[] { v.Length }))

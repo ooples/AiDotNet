@@ -92,17 +92,7 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var y = Tensor<T>.FromVector(target);
 
         // The default model is fitted once on the original data and then scored on every permuted copy
-        Func<Matrix<T>, Vector<T>, T> scorer;
-        if (_scorer is not null)
-        {
-            scorer = _scorer;
-        }
-        else
-        {
-            var coefficients = SubsetRegressionOps.FitLinear(x, y);
-            scorer = (m, v) => PopulationSearchOps.Value(
-                SubsetRegressionOps.LinearRSquared(Tensor<T>.FromMatrix(m), Tensor<T>.FromVector(v), coefficients));
-        }
+        Func<Matrix<T>, Vector<T>, T> scorer = _scorer ?? DefaultScorer(x, y);
 
         // Compute baseline score
         var baselineScore = PreprocessingTensorOps.Filled(new[] { 1 }, scorer(data, target));
@@ -147,6 +137,17 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importanceScores, numToSelect);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// R^2 of a linear model fitted once to <paramref name="x"/> and <paramref name="y"/>, evaluated on the data it is
+    /// given (the permuted copies).
+    /// </summary>
+    private static Func<Matrix<T>, Vector<T>, T> DefaultScorer(Tensor<T> x, Tensor<T> y)
+    {
+        var coefficients = SubsetRegressionOps.FitLinear(x, y);
+        return (m, v) => PopulationSearchOps.Value(
+            SubsetRegressionOps.LinearRSquared(Tensor<T>.FromMatrix(m), Tensor<T>.FromVector(v), coefficients));
     }
 
     /// <inheritdoc />

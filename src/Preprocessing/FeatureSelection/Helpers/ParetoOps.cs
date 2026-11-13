@@ -83,9 +83,8 @@ internal static class ParetoOps
             }
 
             var members = new Tensor<int>((int[])front.Clone(), new[] { count });
-            foreach (var objective in objectives)
+            foreach (var values in objectives.Select(objective => engine.TensorIndexSelect(objective, members, 0)))
             {
-                var values = engine.TensorIndexSelect(objective, members, 0);
                 var order = PreprocessingTensorOps.StableOrder(values, descending: false);
                 var sorted = engine.TensorIndexSelect(values, new Tensor<int>((int[])order.Clone(), new[] { count }), 0);
                 var sortedMembers = new int[count];
