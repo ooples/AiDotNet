@@ -371,8 +371,9 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         for (int i = 0; i < l; i++)
         {
             var row = Engine.TensorSlice(rows, new[] { i, 0 }, new[] { 1, rows.Shape[1] });
-            double predicted = NumOps.ToDouble(model.Extend(new[] { token }, row, cache)[0]);
-            result[i] = phones[i] == 0 ? 0 : Math.Max(i == 0 ? 0 : 1, (int)Math.Round(predicted, MidpointRounding.ToEven));
+            // One rounded (half to even) scalar read per step.
+            int predicted = RoundedIds(model.Extend(new[] { token }, row, cache))[0];
+            result[i] = phones[i] == 0 ? 0 : Math.Max(i == 0 ? 0 : 1, predicted);
             token = Math.Min(result[i], _options.DurationCodes);
         }
         return result;
