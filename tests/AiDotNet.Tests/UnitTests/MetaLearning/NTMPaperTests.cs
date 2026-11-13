@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Data.Structures;
+using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.IntegrationTests.MetaLearning;
+using Moq;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.MetaLearning;
@@ -264,6 +267,228 @@ public class NTMPaperTests
         Assert.Equal(new[] { 1.0, 0.0, 0.0 }, labelSlots[2]);
         Assert.Equal(new[] { 0.0, 0.0, 0.0 }, labelSlots[3]);
         Assert.All(controller.Inputs, input => Assert.Equal(7, input.Length));
+    }
+
+    private static Tensor<Half> HalfVec(params double[] values)
+        => new Tensor<Half>(values.Select(v => (Half)v).ToArray(), new[] { values.Length });
+
+    /// <summary>A 2 x 2 Half memory holding diag(300, 300), loaded by full erase-and-add writes.</summary>
+    private static NTMMemory<Half> LargeHalfMemory()
+    {
+        var memory = new NTMMemory<Half>(2, 2, randomSeed: 1);
+        memory.Write(HalfVec(1.0, 0.0), HalfVec(1.0, 1.0), HalfVec(300.0, 0.0));
+        memory.Write(HalfVec(0.0, 1.0), HalfVec(1.0, 1.0), HalfVec(0.0, 300.0));
+        Assert.Equal(300.0, (double)memory.GetValue(0, 0));
+        Assert.Equal(300.0, (double)memory.GetValue(1, 1));
+        return memory;
+    }
+
+    /// <summary>
+    /// Eq. 6 on an all-zero memory in Half: every cosine similarity is zero, so the content weighting is uniform.
+    /// The 1e-8 norm floor flushed to zero in Half and the similarity was 0/0 = NaN.
+    /// </summary>
+    [Fact]
+    public void HalfContentAddressing_OnZeroMemory_IsUniform()
+    {
+        var memory = new NTMMemory<Half>(4, 3, randomSeed: 1);
+        var weights = memory.Address(NTMAddressingParameters<Half>.ContentOnly(HalfVec(1.0, 0.0, 0.0)), HalfVec(0, 0, 0, 0));
+
+        for (int i = 0; i < 4; i++)
+            Assert.Equal(0.25, (double)weights[i], 1e-3);
+    }
+
+    /// <summary>
+    /// Eq. 5-6 in Half with entries of 300: cos(k, M_0) = 1 and cos(k, M_1) = 0, so w = softmax([1, 0]). A row's
+    /// squared norm, 90000, overflowed Half's 65504 and the similarity collapsed to 0, giving [0.5, 0.5].
+    /// </summary>
+    [Fact]
+    public void HalfContentAddressing_WithLargeEntries_DoesNotOverflow()
+    {
+        var weights = LargeHalfMemory().Address(NTMAddressingParameters<Half>.ContentOnly(HalfVec(1.0, 0.0)), HalfVec(0, 0));
+
+        double expected = Math.E / (1.0 + Math.E);
+        Assert.Equal(expected, (double)weights[0], 2e-3);
+        Assert.Equal(1.0 - expected, (double)weights[1], 2e-3);
+    }
+
+    /// <summary>
+    /// The usage penalty is the summed row norms over Size * Width: (300 + 300) / 4 = 150 for diag(300, 300). The
+    /// squared row norms overflowed Half to infinity.
+    /// </summary>
+    [Fact]
+    public void HalfUsagePenalty_WithLargeEntries_DoesNotOverflow()
+    {
+        Assert.Equal(150.0, (double)LargeHalfMemory().ComputeUsagePenalty(), 1e-9);
+    }
+
+    /// <summary>
+    /// Eq. 9 with gamma = 1000 on w~ = [0.1, 0.2, 0.3, 0.4]: the largest entry dominates, w = [0, 0, 0, 1]. Every
+    /// w~(i)^1000 underflowed to zero in double and the normalization was 0/0 = NaN.
+    /// </summary>
+    [Fact]
+    public void Sharpening_WithLargeGamma_DoesNotUnderflow()
+    {
+        // A zero gate keeps w_{t-1} as w~, unshifted; the zero memory makes the content weighting irrelevant.
+        var memory = new NTMMemory<double>(4, 3, randomSeed: 1);
+        var parameters = new NTMAddressingParameters<double>(Key, Vec(1.0), Vec(0.0), NoShift, Vec(1000.0));
+
+        AssertClose(new[] { 0.0, 0.0, 0.0, 1.0 }, memory.Address(parameters, PreviousWeights));
+    }
+
+    /// <summary>
+    /// Seeded random memory is (u - 0.5) * 0.1 per element, computed in double and rounded to T once, as it always
+    /// was. Rounding u to float first and scaling in float changed seeded float memories.
+    /// </summary>
+    [Fact]
+    public void SeededRandomMemory_InFloat_IsTheDoubleValueRoundedOnce()
+    {
+        var memory = new NTMMemory<float>(8, 8, randomSeed: 5);
+        memory.InitializeRandom();
+
+        var random = RandomHelper.CreateSeededRandom(5);
+        for (int i = 0; i < 8; i++)
+            for (int j = 0; j < 8; j++)
+                Assert.Equal((float)((random.NextDouble() - 0.5) * 0.1), memory.GetValue(i, j));
+    }
+
+    /// <summary>
+    /// Seeded controller weights are (2u - 1) * scale per weight, computed in double and rounded to T once, as they
+    /// always were. Rounding u to float first and scaling in float changed seeded float controllers.
+    /// </summary>
+    [Theory]
+    [InlineData(NTMControllerType.LSTM)]
+    [InlineData(NTMControllerType.MLP)]
+    public void SeededControllerWeights_InFloat_AreTheDoubleValuesRoundedOnce(NTMControllerType type)
+    {
+        var options = new NTMOptions<float, Matrix<float>, Tensor<float>>(
+            new Mock<IFullModel<float, Matrix<float>, Tensor<float>>>().Object)
+        {
+            MemoryWidth = 3, NumReadHeads = 1, ControllerHiddenSize = 4, NumClasses = 2, RandomSeed = 9,
+        };
+        INTMController<float> controller = type == NTMControllerType.LSTM
+            ? new LSTMNTMController<float, Matrix<float>, Tensor<float>>(options)
+            : new MLPNTMController<float, Matrix<float>, Tensor<float>>(options);
+
+        // The first tensor: the LSTM input gates [16, 6] (Xavier) or the MLP first layer [4, 6] (He), where 6 is
+        // the constructor's estimate of the input width (3 + 1 read head * 3).
+        int rows = type == NTMControllerType.LSTM ? 16 : 4;
+        double scale = type == NTMControllerType.LSTM ? Math.Sqrt(2.0 / (6 + 4)) : Math.Sqrt(2.0 / 6);
+        var parameters = controller.GetParameters();
+        var random = RandomHelper.CreateSeededRandom(9);
+        for (int i = 0; i < rows * 6; i++)
+            Assert.Equal((float)((random.NextDouble() * 2.0 - 1.0) * scale), parameters[i]);
+    }
+
+    private static MetaLearningTask<double, Matrix<double>, Tensor<double>> OtherTask()
+        => new()
+        {
+            SupportSetX = new Matrix<double>(new[,] { { -0.8, 0.3 }, { 0.2, -0.9 }, { 0.6, 0.6 } }),
+            SupportSetY = Vec(1.0, 0.0, 1.0),
+            QuerySetX = new Matrix<double>(new[,] { { -0.4, 0.7 }, { 0.1, -0.3 } }),
+            QuerySetY = Vec(1.0, 0.0),
+            NumWays = 2, NumShots = 1, NumQueryPerClass = 1,
+        };
+
+    private static void AssertSamePredictions(Tensor<double> expected, Tensor<double> actual)
+    {
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i]);
+    }
+
+    /// <summary>
+    /// Santoro et al. 2016 wipe the memory between episodes, so adapting to a task starts from the initial memory,
+    /// fresh head weightings and a reset controller: adapting to the same task twice predicts the same. The LSTM
+    /// controller used to continue from the hidden state the previous adapted model left behind.
+    /// </summary>
+    [Fact]
+    public void Adapt_ToTheSameTaskTwice_PredictsTheSame()
+    {
+        var algorithm = Algorithm(NTMControllerType.LSTM, 0.01);
+        var task = Task();
+
+        var first = algorithm.Adapt(task).Predict(task.QuerySetX);
+        var second = algorithm.Adapt(task).Predict(task.QuerySetX);
+
+        AssertSamePredictions(first, second);
+    }
+
+    /// <summary>
+    /// After meta-training, adaptation still starts a fresh episode: it predicts exactly what an untrained
+    /// algorithm given the same controller weights predicts. It used to clone the last training episode's
+    /// written memory and carry the heads' last weightings into the adapted model.
+    /// </summary>
+    [Fact]
+    public void Adapt_AfterMetaTraining_StartsFromAFreshEpisode()
+    {
+        var task = Task();
+        var trained = Algorithm(NTMControllerType.LSTM, 0.01);
+        trained.MetaTrain(new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { OtherTask() }));
+
+        // The same weights in an algorithm that has never trained (its first Adapt resolves the input width).
+        var untrained = Algorithm(NTMControllerType.LSTM, 0.01);
+        untrained.Adapt(task);
+        untrained.Controller.SetParameters(trained.Controller.GetParameters());
+
+        AssertSamePredictions(
+            untrained.Adapt(task).Predict(task.QuerySetX),
+            trained.Adapt(task).Predict(task.QuerySetX));
+    }
+
+    /// <summary>
+    /// Adapted models share the controller's weights but not its recurrent state: adapting a second task does not
+    /// change what the first adapted model predicts.
+    /// </summary>
+    [Fact]
+    public void AdaptedModels_KeepTheirOwnControllerState()
+    {
+        var task = Task();
+        var expected = Algorithm(NTMControllerType.LSTM, 0.01).Adapt(task).Predict(task.QuerySetX);
+
+        var algorithm = Algorithm(NTMControllerType.LSTM, 0.01);
+        var first = algorithm.Adapt(task);
+        algorithm.Adapt(OtherTask()).Predict(OtherTask().QuerySetX);
+
+        AssertSamePredictions(expected, first.Predict(task.QuerySetX));
+    }
+
+    /// <summary>
+    /// Graves et al. 2014 section 4 train by backpropagation through time: the update is exactly -lr times the
+    /// gradient of the episode loss (cross-entropy over the query steps), which a central finite difference of
+    /// that same loss reproduces. The forward finite difference of a squared-error loss used before does not.
+    /// </summary>
+    [Theory]
+    [InlineData(NTMControllerType.LSTM)]
+    [InlineData(NTMControllerType.MLP)]
+    public void MetaTrain_UpdateIsTheEpisodeLossGradient(NTMControllerType type)
+    {
+        const double learningRate = 1e-3;
+        const double step = 1e-5;
+        var task = Task();
+        var batch = new TaskBatch<double, Matrix<double>, Tensor<double>>(new[] { task });
+        var algorithm = Algorithm(type, learningRate);
+        algorithm.Adapt(task); // resolves the controller's input width without changing any weight
+
+        var initial = algorithm.Controller.GetParameters();
+        algorithm.MetaTrain(batch);
+        var updated = algorithm.Controller.GetParameters();
+        Assert.Equal(initial.Length, updated.Length);
+
+        double EpisodeLoss(int index, double offset)
+        {
+            var shifted = initial.Clone();
+            shifted[index] += offset;
+            algorithm.Controller.SetParameters(shifted);
+            return algorithm.MetaTrain(batch); // the loss before its own update
+        }
+
+        for (int i = 0; i < initial.Length; i += 5)
+        {
+            double gradient = (initial[i] - updated[i]) / learningRate;
+            double numeric = (EpisodeLoss(i, step) - EpisodeLoss(i, -step)) / (2 * step);
+            Assert.True(Math.Abs(gradient - numeric) <= 1e-6 + 1e-4 * Math.Abs(numeric),
+                $"Parameter {i}: update gives gradient {gradient}, central difference {numeric}.");
+        }
     }
 
     /// <summary>A controller that records every input and addresses by content only.</summary>

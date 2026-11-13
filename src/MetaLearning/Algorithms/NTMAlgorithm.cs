@@ -226,6 +226,9 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.NTM;
 
+    /// <summary>The controller the algorithm trains, shared with every adapted model.</summary>
+    internal INTMController<T> Controller => _controller;
+
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -271,6 +274,13 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         {
             throw new ArgumentNullException(nameof(task));
         }
+
+        // Every episode starts from the initial memory, fresh head weightings and a reset controller (Santoro et
+        // al. 2016, section 3: memory is wiped between episodes), exactly as MetaTrain's episodes do. Without
+        // this the adapted model inherited the last training episode's memory and head weightings and whatever
+        // controller state the previous Adapt or Predict left behind, so adapting to the same task twice gave
+        // different predictions.
+        ResetMemoryState();
 
         // For NTM, adaptation involves using the controller to write to memory
         // and returning a model that can continue using this memory state
@@ -510,15 +520,6 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     }
 
     /// <summary>
-    /// Adds memory regularization to the loss.
-    /// </summary>
-    private T AddMemoryRegularization(T baseLoss)
-    {
-        using var noGrad = new NoGradScope<T>();
-        return AddMemoryRegularizationTerms(Tensor<T>.CreateDefault(new[] { 1 }, baseLoss))[0];
-    }
-
-    /// <summary>
     /// Adds the memory regularization terms to a loss tensor, on the tape so they shape the controller update.
     /// </summary>
     private Tensor<T> AddMemoryRegularizationTerms(Tensor<T> baseLoss)
@@ -624,11 +625,6 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         => NTMSequences<T>.SplitRows(NTMSequences<T>.OneHotRows(outputs, steps, _ntmOptions.NumClasses));
 
     private Tensor<T> FlattenTensor(Tensor<T> tensor) => NTMSequences<T>.Flatten(tensor);
-
-    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return Engine.TensorConcatenate([a, b], axis: 0);
-    }
 
     /// <summary>
     /// The episode loss: the configured loss (cross-entropy with logits by default) of the query scores against
@@ -883,6 +879,11 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
     // The one-hot label presented with the next input (Santoro et al. 2016: x_t arrives with y_{t-1}).
     private Tensor<T>? _pendingLabel;
 
+    // This model's own controller recurrent state. The controller's weights are shared with the algorithm and
+    // every other adapted model, so its hidden state is swapped in before each step and saved after it;
+    // otherwise adapting a second task overwrote the state the first adapted model would continue from.
+    private object? _controllerState;
+
     /// <summary>
     /// Initializes a new instance of the NTMModel class.
     /// </summary>
@@ -910,6 +911,8 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         {
             _readContents.Add(new Tensor<T>(new int[] { options.MemoryWidth }));
         }
+
+        _controllerState = (controller as INTMControllerState)?.CaptureState();
     }
 
     /// <inheritdoc/>
@@ -982,8 +985,15 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         // Combine input (and the previous label) with previous read contents
         var controllerInput = CombineInputWithReadContents(PresentLabel(input, label));
 
-        // Forward pass through controller
+        // Forward pass through controller, from this model's own recurrent state
+        var stateful = _controller as INTMControllerState;
+        if (stateful is not null && _controllerState is not null)
+        {
+            stateful.RestoreState(_controllerState);
+        }
+
         var controllerOutput = _controller.Forward(controllerInput, _readContents);
+        _controllerState = stateful?.CaptureState();
 
         // Generate addressing parameters
         var readAddressing = _controller.GenerateReadAddressing(controllerOutput);
@@ -1066,25 +1076,6 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
         return Engine.TensorConcatenate(pieces, 0);
     }
 
-    /// <summary>
-    /// Converts tensor output to the expected output type.
-    /// </summary>
-    private TOutput ConvertTensorToOutput(Tensor<T> tensor)
-    {
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)tensor;
-        }
-
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)tensor.ToVector();
-        }
-
-        // Default: return the tensor cast to TOutput
-        return (TOutput)(object)tensor;
-    }
-
     /// <inheritdoc/>
     public void Train(TInput inputs, TOutput targets)
     {
@@ -1123,11 +1114,47 @@ public class NTMMemory<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
 
-    // Content-addressing denominator floor on the squared norms (eq. 6 has none; it guards zero rows and keys).
-    private const double NormFloor = 1e-8;
+    // Content-addressing denominator floor on the norms (eq. 6 has none; it guards zero rows and keys). It is the
+    // square root of the 1e-8 floor the squared norms have always had, and a normal Half value.
+    private const double NormFloor = 1e-4;
 
     // Floor applied before the sharpening power (eq. 9), so log(0) never reaches the tape.
     private const double SharpenFloor = 1e-16;
+
+    // Floors inside the row-norm computation: the row scale and the scaled sum of squares of an all-zero row.
+    private const double ScaleFloor = 1e-12;
+    private const double SquareFloor = 1e-24;
+
+    // The smallest positive normal Half. A floor below it flushes to zero in Half arithmetic, which turns the
+    // guards above into 0/0 and log(0).
+    private const double HalfSmallestNormal = 6.103515625e-5;
+
+    /// <summary>A guard constant in T that stays positive in Half (Half flushes 1e-8 and smaller to zero).</summary>
+    private static T Floor(double epsilon)
+        => NumOps.FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+
+    /// <summary>
+    /// The L2 norm of every row of a <c>[rows, width]</c> tensor, <c>[rows]</c>. Each row is divided by its
+    /// largest magnitude before squaring and the norm scaled back, so squares of large entries never overflow
+    /// (Half saturates at 65504, so a row entry of 256 already did).
+    /// </summary>
+    private static Tensor<T> RowNorms(Tensor<T> rows)
+    {
+        int count = rows.Shape[0];
+        var scale = Engine.TensorClampMin(Engine.ReduceMax(Engine.TensorAbs(rows), new[] { 1 }, true), Floor(ScaleFloor));
+        var scaled = Engine.TensorMultiply(rows, Engine.TensorReciprocal(scale));
+        var sumSquares = Engine.ReduceSum(Engine.TensorMultiply(scaled, scaled), new[] { 1 }, false);
+        return Engine.TensorMultiply(
+            Engine.Reshape(scale, new[] { count }),
+            Engine.TensorSqrt(Engine.TensorClampMin(sumSquares, Floor(SquareFloor))));
+    }
+
+    /// <summary>The rows of a <c>[rows, width]</c> tensor divided by their norms, floored at <see cref="NormFloor"/>.</summary>
+    private static Tensor<T> UnitRows(Tensor<T> rows)
+    {
+        var norms = Engine.TensorClampMin(RowNorms(rows), Floor(NormFloor));
+        return Engine.TensorMultiply(rows, Engine.Reshape(Engine.TensorReciprocal(norms), new[] { rows.Shape[0], 1 }));
+    }
 
     private Tensor<T> _contents;
     private readonly int _size;
@@ -1200,15 +1227,11 @@ public class NTMMemory<T>
         }
 
         var memory = width == _width ? _contents : Engine.TensorNarrow(_contents, 1, 0, width);
-        var normFloor = NumOps.FromDouble(NormFloor);
 
-        // K[k, M(i)] = k . M(i) / (||k|| ||M(i)||)  (eq. 6)
-        var dot = Engine.Reshape(Engine.TensorMatMul(memory, Engine.Reshape(key, new[] { width, 1 })), new[] { _size });
-        var rowNorms = Engine.TensorSqrt(Engine.TensorClampMin(
-            Engine.ReduceSum(Engine.TensorMultiply(memory, memory), new[] { 1 }, false), normFloor));
-        var keyNorm = Engine.TensorSqrt(Engine.TensorClampMin(
-            Engine.ReduceSum(Engine.TensorMultiply(key, key), new[] { 0 }, true), normFloor));
-        var similarity = Engine.TensorDivide(dot, Engine.TensorMultiply(rowNorms, keyNorm));
+        // K[k, M(i)] = k . M(i) / (||k|| ||M(i)||)  (eq. 6), as the dot product of the unit vectors so neither
+        // the squares nor the dot product of large entries can overflow.
+        var unitKey = Engine.Reshape(UnitRows(Engine.Reshape(key, new[] { 1, width })), new[] { width, 1 });
+        var similarity = Engine.Reshape(Engine.TensorMatMul(UnitRows(memory), unitKey), new[] { _size });
 
         // w^c = softmax(beta K)  (eq. 5)
         var content = Engine.Softmax(
@@ -1224,9 +1247,14 @@ public class NTMMemory<T>
         // w~(i) = sum_j w^g(j) s(i - j)  (eq. 8)
         var shifted = CircularConvolution(gated, NTMSequences<T>.Flatten(parameters.Shift));
 
-        // w(i) = w~(i)^gamma / sum_j w~(j)^gamma  (eq. 9)
+        // w(i) = w~(i)^gamma / sum_j w~(j)^gamma  (eq. 9). The ratio is unchanged by dividing w~ by its largest
+        // entry first, which keeps that entry's power at 1: otherwise a large gamma underflows every power to
+        // zero and the normalization is 0/0.
+        var sharpenFloor = Floor(SharpenFloor);
+        var peak = Engine.TensorClampMin(Engine.ReduceMax(shifted, new[] { 0 }, true), sharpenFloor);
+        var relative = Engine.TensorMultiply(shifted, Engine.TensorReciprocal(peak));
         var powered = Engine.TensorExp(Engine.TensorMultiply(
-            Engine.TensorLog(Engine.TensorClampMin(shifted, NumOps.FromDouble(SharpenFloor))),
+            Engine.TensorLog(Engine.TensorClampMin(relative, sharpenFloor)),
             NTMSequences<T>.Flatten(parameters.Sharpening)));
         return Engine.TensorMultiply(powered, Engine.TensorReciprocal(Engine.ReduceSum(powered, new[] { 0 }, true)));
     }
@@ -1331,17 +1359,15 @@ public class NTMMemory<T>
     /// </summary>
     public void InitializeRandom()
     {
-        var draws = new Tensor<T>(new int[] { _size, _width });
-        for (int i = 0; i < draws.Length; i++)
+        var values = new Tensor<T>(new int[] { _size, _width });
+        for (int i = 0; i < values.Length; i++)
         {
-            // One uniform draw per element in row-major order, as always, so a seeded memory is unchanged.
-            draws[i] = NumOps.FromDouble(_random.NextDouble());
+            // (u - 0.5) * 0.1, uniform in [-0.05, 0.05): one draw per element in row-major order, scaled in double
+            // and rounded to T once, so a seeded memory is unchanged in every T.
+            values[i] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.1);
         }
 
-        // (u - 0.5) * 0.1: uniform in [-0.05, 0.05).
-        using var noGrad = new NoGradScope<T>();
-        _contents = Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(draws, NumOps.FromDouble(-0.5)), NumOps.FromDouble(0.1));
+        _contents = values;
     }
 
     /// <summary>
@@ -1387,10 +1413,8 @@ public class NTMMemory<T>
     /// </summary>
     internal Tensor<T> UsagePenaltyTensor()
     {
-        // Floored below the square root so an all-zero row has a finite gradient.
-        var rowNormsSquared = Engine.ReduceSum(Engine.TensorMultiply(_contents, _contents), new[] { 1 }, false);
-        var rowNorms = Engine.TensorSqrt(Engine.TensorClampMin(rowNormsSquared, NumOps.FromDouble(1e-24)));
-        var usage = Engine.ReduceSum(rowNorms, new[] { 0 }, true);
+        // Floored below the square root so an all-zero row has a finite gradient, in Half as well.
+        var usage = Engine.ReduceSum(RowNorms(_contents), new[] { 0 }, true);
         return Engine.TensorDivideScalar(usage, NumOps.FromDouble((double)_size * _width));
     }
 
@@ -1518,6 +1542,19 @@ public interface INTMController<T>
 }
 
 /// <summary>
+/// A controller whose recurrent state can be saved and restored, so several adapted NTM models can share its
+/// weights while each continues from its own state.
+/// </summary>
+internal interface INTMControllerState
+{
+    /// <summary>The controller's current recurrent state. The returned object is never mutated afterwards.</summary>
+    object CaptureState();
+
+    /// <summary>Makes a state returned by <see cref="CaptureState"/> the controller's current state.</summary>
+    void RestoreState(object state);
+}
+
+/// <summary>
 /// Projections and parameter layout shared by the NTM controllers.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
@@ -1619,17 +1656,6 @@ internal static class NTMControllerMath<T>
             offset += tensor.Length;
         }
     }
-
-    /// <summary>
-    /// A tensor of uniform draws in [-scale, scale], drawn from <paramref name="draws"/> already filled with
-    /// uniform [0, 1) values.
-    /// </summary>
-    internal static Tensor<T> ScaleUniform(Tensor<T> draws, double scale)
-    {
-        using var noGrad = new NoGradScope<T>();
-        var centered = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(draws, NumOps.FromDouble(2.0)), NumOps.FromDouble(-1.0));
-        return Engine.TensorMultiplyScalar(centered, NumOps.FromDouble(scale));
-    }
 }
 
 /// <summary>
@@ -1654,7 +1680,7 @@ internal static class NTMControllerMath<T>
 /// </code>
 /// </para>
 /// </remarks>
-public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
+public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>, INTMControllerState
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -1772,15 +1798,15 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
     private Tensor<T> InitializeTensor(int[] shape, double scale)
     {
-        var draws = new Tensor<T>(shape);
-        for (int i = 0; i < draws.Length; i++)
+        var weights = new Tensor<T>(shape);
+        for (int i = 0; i < weights.Length; i++)
         {
-            // One uniform draw per weight, in the same order as always, so a seeded controller is unchanged.
-            draws[i] = NumOps.FromDouble(_random.NextDouble());
+            // Xavier initialization, uniform in [-scale, scale]: one draw per weight in the same order as
+            // always, scaled in double and rounded to T once, so a seeded controller is unchanged in every T.
+            weights[i] = NumOps.FromDouble((_random.NextDouble() * 2.0 - 1.0) * scale);
         }
 
-        // Xavier initialization: uniform in [-scale, scale]
-        return NTMControllerMath<T>.ScaleUniform(draws, scale);
+        return weights;
     }
 
     /// <inheritdoc/>
@@ -1919,6 +1945,35 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
         _hiddenState = new Tensor<T>(new int[] { _hiddenSize });
         _cellState = new Tensor<T>(new int[] { _hiddenSize });
     }
+
+    // The hidden and cell states are replaced on every step and reset, never written in place, so the pair
+    // itself is the snapshot.
+    object INTMControllerState.CaptureState() => new LstmState(_hiddenState, _cellState);
+
+    void INTMControllerState.RestoreState(object state)
+    {
+        Guard.NotNull(state);
+        if (state is not LstmState lstm)
+        {
+            throw new ArgumentException("The state was not captured from an LSTM NTM controller.", nameof(state));
+        }
+
+        _hiddenState = lstm.Hidden;
+        _cellState = lstm.Cell;
+    }
+
+    private sealed class LstmState
+    {
+        public LstmState(Tensor<T> hidden, Tensor<T> cell)
+        {
+            Hidden = hidden;
+            Cell = cell;
+        }
+
+        public Tensor<T> Hidden { get; }
+
+        public Tensor<T> Cell { get; }
+    }
 }
 
 /// <summary>
@@ -1945,7 +2000,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 /// </code>
 /// </para>
 /// </remarks>
-public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
+public class MLPNTMController<T, TInput, TOutput> : INTMController<T>, INTMControllerState
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -2045,15 +2100,15 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
 
     private Tensor<T> InitializeTensor(int[] shape, double scale)
     {
-        var draws = new Tensor<T>(shape);
-        for (int i = 0; i < draws.Length; i++)
+        var weights = new Tensor<T>(shape);
+        for (int i = 0; i < weights.Length; i++)
         {
-            // One uniform draw per weight, in the same order as always, so a seeded controller is unchanged.
-            draws[i] = NumOps.FromDouble(_random.NextDouble());
+            // He initialization, uniform in [-scale, scale]: one draw per weight in the same order as
+            // always, scaled in double and rounded to T once, so a seeded controller is unchanged in every T.
+            weights[i] = NumOps.FromDouble((_random.NextDouble() * 2.0 - 1.0) * scale);
         }
 
-        // He initialization: uniform in [-scale, scale]
-        return NTMControllerMath<T>.ScaleUniform(draws, scale);
+        return weights;
     }
 
     /// <inheritdoc/>
@@ -2185,6 +2240,20 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
     {
         // MLP is stateless, but reset cached hidden state
         _lastHiddenState = new Tensor<T>(new int[] { _hiddenSize });
+    }
+
+    // The cached hidden state is replaced by every forward and reset, never written in place.
+    object INTMControllerState.CaptureState() => _lastHiddenState;
+
+    void INTMControllerState.RestoreState(object state)
+    {
+        Guard.NotNull(state);
+        if (state is not Tensor<T> hidden)
+        {
+            throw new ArgumentException("The state was not captured from an MLP NTM controller.", nameof(state));
+        }
+
+        _lastHiddenState = hidden;
     }
 }
 
