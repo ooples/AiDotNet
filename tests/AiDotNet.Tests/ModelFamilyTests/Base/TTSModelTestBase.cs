@@ -249,8 +249,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             // A model that reconstructs the recording (StyleTTS 2) and outputs a waveform trains on the target itself.
             Audio = recording,
             Durations = durations,
-            Pitch = pitch,
-            Energy = energy,
+            Pitch = new Tensor<double>(new[] { pitch.Length }, new Vector<double>(pitch)).Cast<T>(),
+            Energy = new Tensor<double>(new[] { energy.Length }, new Vector<double>(energy)).Cast<T>(),
             SpeakerId = 0,
             LanguageId = 0,
             LinearSpectrogram = linear,

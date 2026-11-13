@@ -45,8 +45,9 @@ public class AdaSpeech2PaperTests
         return mel;
     }
 
-    private static double[] Pitch(int frames) => Enumerable.Range(0, frames).Select(f => 140.0 + 30.0 * Math.Sin(0.5 * f)).ToArray();
-    private static double[] Energy(int frames) => Enumerable.Range(0, frames).Select(f => 5.0 + Math.Cos(0.3 * f)).ToArray();
+    private static Tensor<double> Pitch(int frames) => Vec(Enumerable.Range(0, frames).Select(f => 140.0 + 30.0 * Math.Sin(0.5 * f)).ToArray());
+    private static Tensor<double> Energy(int frames) => Vec(Enumerable.Range(0, frames).Select(f => 5.0 + Math.Cos(0.3 * f)).ToArray());
+    private static Tensor<double> Vec(double[] values) => new(new[] { values.Length }, new Vector<double>(values));
 
     private static TtsTrainingSample<double> Sample(int speaker)
     {

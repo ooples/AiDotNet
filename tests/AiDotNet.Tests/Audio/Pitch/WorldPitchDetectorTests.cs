@@ -64,7 +64,8 @@ public class WorldPitchDetectorTests
         Assert.Equal((int)setting["n"]!, x.Length);
 
         var detector = new WorldPitchDetector<double>(sampleRate: fs, refineWithStoneMask: false);
-        var (f0, times) = detector.EstimateF0(x, (double)setting["frame_period"]!);
+        var (f0Tensor, timesTensor) = detector.EstimateF0(new Tensor<double>(new[] { x.Length }, new Vector<double>(x)), (double)setting["frame_period"]!);
+        double[] f0 = f0Tensor.ToArray(), times = timesTensor.ToArray();
 
         AssertContoursMatch(Values(setting, "dio"), f0, "dio");
         var expectedTimes = Values(setting, "t");
@@ -81,9 +82,9 @@ public class WorldPitchDetectorTests
         var x = Signal(fs, (double)setting["seconds"]!);
 
         var detector = new WorldPitchDetector<double>(sampleRate: fs);
-        var (f0, _) = detector.EstimateF0(x, (double)setting["frame_period"]!);
+        var (f0, _) = detector.EstimateF0(new Tensor<double>(new[] { x.Length }, new Vector<double>(x)), (double)setting["frame_period"]!);
 
-        AssertContoursMatch(Values(setting, "stonemask"), f0, "stonemask");
+        AssertContoursMatch(Values(setting, "stonemask"), f0.ToArray(), "stonemask");
     }
 
     private static void AssertContoursMatch(double[] expected, double[] actual, string stage)

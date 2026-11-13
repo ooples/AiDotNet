@@ -60,8 +60,8 @@ public class AdaSpeechPaperTests
             Tokens = Tokens(tokens),
             Mel = Mel(frames, phase),
             Durations = new[] { 3, 3, 3, 3, 2 },
-            Pitch = Enumerable.Range(0, frames).Select(f => 140.0 + 30.0 * Math.Sin(0.5 * f)).ToArray(),
-            Energy = Enumerable.Range(0, frames).Select(f => 5.0 + Math.Cos(0.3 * f)).ToArray(),
+            Pitch = new Tensor<double>(new[] { frames }, new Vector<double>(Enumerable.Range(0, frames).Select(f => 140.0 + 30.0 * Math.Sin(0.5 * f)).ToArray())),
+            Energy = new Tensor<double>(new[] { frames }, new Vector<double>(Enumerable.Range(0, frames).Select(f => 5.0 + Math.Cos(0.3 * f)).ToArray())),
             SpeakerId = speaker,
         };
     }
