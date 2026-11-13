@@ -56,9 +56,14 @@ public class LeveneTest<T> : IStatisticalTest<T>
     /// <returns>Statistical test result with p-value.</returns>
     public StatisticalTestResult<T> Test(T[][] groups)
     {
+        if (groups is null) throw new ArgumentNullException(nameof(groups));
+
         int k = groups.Length;
         if (k < 2)
             throw new ArgumentException("Need at least 2 groups for Levene's test.");
+
+        if (groups.Any(g => g is null || g.Length == 0))
+            throw new ArgumentException("Each group must contain at least one observation.", nameof(groups));
 
         var groupSizes = groups.Select(g => g.Length).ToArray();
         int N = groupSizes.Sum();
@@ -139,17 +144,11 @@ public class LeveneTest<T> : IStatisticalTest<T>
     }
 
     private static double Mean(Tensor<double> values)
-    {
-        if (values.Length == 0)
-            throw new InvalidOperationException("Sequence contains no elements");
-        return AiDotNetEngine.Current.TensorMean(values);
-    }
+        => AiDotNetEngine.Current.TensorMean(values);
 
     private static double Median(Tensor<double> values)
     {
         int n = values.Length;
-        if (n == 0)
-            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
         var sorted = EvaluationTensorOps<double>.SortNaNFirst(values);
         return n % 2 == 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[n / 2];
     }

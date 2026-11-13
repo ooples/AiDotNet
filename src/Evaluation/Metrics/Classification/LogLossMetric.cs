@@ -76,6 +76,9 @@ public class LogLossMetric<T> : IProbabilisticClassificationMetric<T>
     /// <param name="epsilon">Small value to clip probabilities and avoid log(0). Default: 1e-15.</param>
     public LogLossMetric(double epsilon = 1e-15)
     {
+        if (double.IsNaN(epsilon) || double.IsInfinity(epsilon) || epsilon <= 0 || epsilon > 0.5)
+            throw new ArgumentOutOfRangeException(nameof(epsilon), "Epsilon must be finite and in (0, 0.5].");
+
         _epsilon = epsilon;
     }
 

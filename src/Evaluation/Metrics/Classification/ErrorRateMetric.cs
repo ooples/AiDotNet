@@ -46,8 +46,10 @@ public class ErrorRateMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        var (_, _, fp, fn) = EvaluationTensorOps<T>.BinaryConfusion(predictions, actuals, NumOps.One);
-        int incorrect = fp + fn;
+        var predicted = EvaluationTensorOps<T>.ToTensor(predictions);
+        var expected = EvaluationTensorOps<T>.ToTensor(actuals);
+        int incorrect = predictions.Length -
+            EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.PairEqualMask(predicted, expected));
 
         return NumOps.FromDouble((double)incorrect / predictions.Length);
     }

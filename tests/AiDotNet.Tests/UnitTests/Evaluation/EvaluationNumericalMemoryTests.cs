@@ -190,7 +190,7 @@ public class EvaluationNumericalMemoryTests
         for (int j = 0; j < negatives; j++)
         {
             double left = scores[i], right = scores[positives + j];
-            double kernel = left > right ? 1 : Math.Abs(left - right) < 1e-10 ? 0.5 : 0;
+            double kernel = left > right ? 1 : (left == right || Math.Abs(left - right) < 1e-10) ? 0.5 : 0;
             rowSums[i] += kernel;
             columnSums[j] += kernel;
             total += kernel;
@@ -697,6 +697,116 @@ public class EvaluationNumericalMemoryTests
         Assert.Equal((Half)0, result.Statistic);
         Assert.Equal((Half)1, result.PValue);
         Assert.Equal((Half)0, result.EffectSize);
+    }
+
+
+    [Fact]
+    public void HalfIsotonicInterpolation_KeepsSubnormalProductsWide()
+    {
+        Half end = (Half)(2 * (double)Half.Epsilon);
+        var calibrator = new ProbabilityCalibrator<Half>(new ProbabilityCalibratorOptions
+            { CalibratorMethod = ProbabilityCalibrationMethod.IsotonicRegression });
+        calibrator.Fit(new Vector<Half>(new[] { (Half)0, end, end }),
+            new Vector<Half>(new[] { (Half)0, (Half)1, (Half)0 }));
+        Assert.Equal((Half)0.25, calibrator.Transform(new Vector<Half>(new[] { Half.Epsilon }))[0]);
+    }
+
+    [Fact]
+    public void DecimalIsotonicInterpolation_PreservesCloseLargeCoordinates()
+    {
+        const decimal start = 10000000000000000m;
+        var calibrator = new ProbabilityCalibrator<decimal>(new ProbabilityCalibratorOptions
+            { CalibratorMethod = ProbabilityCalibrationMethod.IsotonicRegression });
+        calibrator.Fit(new Vector<decimal>(new[] { start, start + 2 }),
+            new Vector<decimal>(new[] { 0m, 1m }));
+        Assert.Equal(0.5m, calibrator.Transform(new Vector<decimal>(new[] { start + 1 }))[0]);
+    }
+
+    [Fact]
+    public void FloatHistogram_FitAndLookupUseTheSameUnroundedEdges()
+    {
+        var calibrator = new ProbabilityCalibrator<float>(new ProbabilityCalibratorOptions
+            { CalibratorMethod = ProbabilityCalibrationMethod.HistogramBinning, NumBins = 10 });
+        var fitted = calibrator.FitTransform(new Vector<float>(new[] { 0.7f, 0.75f }),
+            new Vector<float>(new[] { 1f, 0f }));
+        Assert.Equal(new[] { 1f, 0f }, fitted.ToArray());
+        Assert.Equal(new[] { 1f, 0f }, calibrator.Transform(new Vector<float>(new[] { 0.7f, 0.7001f })).ToArray());
+    }
+
+    [Fact]
+    public void ErrorRate_CountsMismatchesOutsideTheBinaryLabels()
+    {
+        var metric = new ErrorRateMetric<double>();
+        Assert.Equal(1.0, metric.Compute(new[] { 2.0 }, new[] { 3.0 }));
+        Assert.Equal(2.0 / 3, metric.Compute(new[] { 2.0, 3.0, 4.0 }, new[] { 3.0, 3.0, 5.0 }));
+        Assert.Equal(1.0 / 3, metric.Compute(new[] { 0.0, 1.0, 1.0 }, new[] { 0.0, 0.0, 1.0 }));
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(0.50001)]
+    public void LogLoss_RejectsInvalidClippingIntervals(double epsilon)
+    {
+        Assert.Equal("epsilon", Assert.Throws<ArgumentOutOfRangeException>(() => new LogLossMetric<double>(epsilon)).ParamName);
+    }
+
+    [Fact]
+    public void LogLoss_AllowsTheDegenerateHalfProbabilityInterval()
+    {
+        Assert.Equal(Math.Log(2), new LogLossMetric<double>(0.5)
+            .Compute(new[] { 0.0, 1.0 }, new[] { 0.0, 1.0 }), 12);
+    }
+
+    [Fact]
+    public void HalfPointEnergyAndAlternateMape_ReduceWideAndRetainFloors()
+    {
+        var energy = new EnergyScoreMetric<Half>();
+        Assert.Equal((Half)100, energy.Compute(Enumerable.Repeat((Half)100, 1000).ToArray(), new Half[1000]));
+        Assert.Equal((Half)40000, energy.Compute(new[] { (Half)60000, (Half)0, (Half)0 },
+            new[] { (Half)(-60000), (Half)0, (Half)0 }));
+        var mape = new MeanAbsolutePercentageErrorMetric<Half>();
+        Assert.Equal((Half)0, mape.Compute(new Half[1], new Half[1]));
+        Assert.Equal((Half)(100 * (double)Half.Epsilon / 1e-10), mape.Compute(new[] { Half.Epsilon }, new Half[1]));
+        Assert.Equal((Half)50, mape.Compute(Enumerable.Repeat((Half)1, 70000).ToArray(),
+            Enumerable.Repeat((Half)2, 70000).ToArray()));
+    }
+
+    [Fact]
+    public void Levene_RejectsInvalidGroupsAtThePublicBoundary()
+    {
+        var test = new LeveneTest<Half>();
+        Assert.Equal("groups", Assert.Throws<ArgumentNullException>(() => test.Test(null!)).ParamName);
+        Assert.Equal("groups", Assert.Throws<ArgumentException>(() =>
+            test.Test(new[] { Array.Empty<Half>(), new[] { (Half)1 } })).ParamName);
+        Assert.Equal("groups", Assert.Throws<ArgumentException>(() =>
+            test.Test(new Half[][] { null!, new[] { (Half)1 } })).ParamName);
+    }
+
+    [Fact]
+    public void DeLong_IdenticalInfinitiesContributeHalfAPair()
+    {
+        double[] scores = { double.PositiveInfinity, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity };
+        var positives = new Tensor<double>(new[] { 1.0, 1.0, 0.0, 0.0 }, new[] { 4 });
+        var negatives = new Tensor<double>(new[] { 0.0, 0.0, 1.0, 1.0 }, new[] { 4 });
+        var method = typeof(DeLongTest<double>).GetMethod("ComputeComponents",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)!;
+        var (auc, rows, columns) = Assert.IsType<(double, Tensor<double>, Tensor<double>)>(
+            method.Invoke(null, new object[] { scores, positives, negatives }));
+        Assert.Equal(0.5, auc);
+        Assert.Equal(new[] { 0.75, 0.25 }, rows.ToArray());
+        Assert.Equal(new[] { 0.25, 0.75 }, columns.ToArray());
+    }
+
+    [Theory]
+    [InlineData(1.0, 2.0)]
+    [InlineData(2.0, 0.0)]
+    public void DecimalTweedie_DoesNotEvaluateAnInvalidMaskedLogarithm(double power, double expected)
+    {
+        Assert.Equal((decimal)expected, new TweedieLossMetric<decimal>(power).Compute(new[] { 1m }, new[] { 0m }));
     }
 
 }

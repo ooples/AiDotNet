@@ -145,8 +145,10 @@ public class DeLongTest<T> : IStatisticalTest<T>
                 var left = engine.TensorBroadcastTo(positives, shape);
                 var right = engine.TensorBroadcastTo(negatives, shape);
                 var above = engine.TensorGreaterThan(left, right);
-                var tied = engine.TensorMultiply(EvaluationTensorOps<double>.Not(above),
-                    engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtract(left, right)), 1e-10));
+                var equal = EvaluationTensorOps<double>.And(engine.TensorEquals(left, right),
+                    EvaluationTensorOps<double>.Not(EvaluationTensorOps<double>.NanMask(left)));
+                var near = engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtract(left, right)), 1e-10);
+                var tied = engine.TensorMultiply(EvaluationTensorOps<double>.Not(above), engine.TensorMax(equal, near));
                 var kernel = engine.TensorAdd(above, engine.TensorMultiplyScalar(tied, 0.5));
                 rowTotal = engine.TensorAdd(rowTotal, engine.ReduceSum(kernel, new[] { 1 }, false));
                 var columnTotal = engine.TensorAdd(engine.TensorNarrow(columnSums, 0, column, columns),

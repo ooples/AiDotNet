@@ -56,12 +56,11 @@ public class MeanAbsolutePercentageErrorMetric<T> : IRegressionMetric<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
-        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
-        // |actual - pred| / max(|actual|, epsilon), as a percentage
-        var denominator = EvaluationTensorOps<T>.MaxPreservingNaN(engine.TensorAbs(actual), NumOps.FromDouble(_epsilon));
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var denominator = EvaluationTensorOps<double>.MaxPreservingNaN(engine.TensorAbs(actual), _epsilon);
         var relative = engine.TensorDivide(engine.TensorAbs(engine.TensorSubtract(actual, pred)), denominator);
-        return NumOps.Multiply(NumOps.FromDouble(100.0), engine.TensorMean(relative));
+        return NumOps.FromDouble(100.0 * engine.TensorMean(relative));
     }
 
     /// <inheritdoc />

@@ -5,6 +5,8 @@ namespace AiDotNet.Evaluation;
 /// <summary>Uniform calibration bins with double reductions and bounded sample workspaces.</summary>
 internal static class EvaluationBinOps
 {
+    internal const int SampleBlockSize = 65_536;
+
     internal static (Tensor<double> Counts, Tensor<double> MeanScores, Tensor<double> MeanLabels) Averages(
         Tensor<double> scores, Tensor<double> labels, int numBins)
     {
@@ -20,9 +22,9 @@ internal static class EvaluationBinOps
             double upper = (double)(bin + 1) / numBins;
             int count = 0;
             double scoreSum = 0, labelSum = 0;
-            for (int start = 0; start < n; start += 65536)
+            for (int start = 0; start < n; start += SampleBlockSize)
             {
-                int length = Math.Min(65536, n - start);
+                int length = Math.Min(SampleBlockSize, n - start);
                 var sample = engine.TensorNarrow(scores, 0, start, length);
                 var targets = engine.TensorNarrow(labels, 0, start, length);
                 var belowUpper = bin == numBins - 1

@@ -69,7 +69,7 @@ public class ProbabilityCalibrator<T>
     /// <summary>
     /// Histogram bin edges and probabilities.
     /// </summary>
-    private T[]? _binEdges;
+    private double[]? _binEdges;
     private T[]? _binProbabilities;
 
     /// <summary>
@@ -465,10 +465,28 @@ public class ProbabilityCalibrator<T>
         var x2 = engine.TensorGather(x, hi, 0);
         var y1 = engine.TensorGather(y, lo, 0);
         var y2 = engine.TensorGather(y, hi, 0);
-        var diff = engine.TensorSubtract(x2, x1);
-        var flat = engine.TensorLessThan(engine.TensorAbs(diff), NumOps.FromDouble(1e-10));
-        var interpolated = engine.TensorAdd(y1, engine.TensorDivide(
-            engine.TensorMultiply(engine.TensorSubtract(s, x1), engine.TensorSubtract(y2, y1)), diff));
+        Tensor<T> flat, interpolated;
+        if (typeof(T) == typeof(decimal))
+        {
+            // Preserve decimal differences that would disappear when absolute coordinates are cast to double.
+            var diff = engine.TensorSubtract(x2, x1);
+            flat = engine.TensorLessThan(engine.TensorAbs(diff), NumOps.FromDouble(1e-10));
+            var safeDiff = engine.TensorWhere(flat, engine.TensorOnesLike(diff), diff);
+            interpolated = engine.TensorAdd(y1, engine.TensorDivide(
+                engine.TensorMultiply(engine.TensorSubtract(s, x1), engine.TensorSubtract(y2, y1)), safeDiff));
+        }
+        else
+        {
+            var wideX1 = x1.Cast<double>();
+            var wideY1 = y1.Cast<double>();
+            var diff = engine.TensorSubtract(x2.Cast<double>(), wideX1);
+            var wideFlat = engine.TensorLessThan(engine.TensorAbs(diff), 1e-10);
+            var safeDiff = engine.TensorWhere(wideFlat, engine.TensorOnesLike(diff), diff);
+            interpolated = engine.TensorAdd(wideY1, engine.TensorDivide(
+                engine.TensorMultiply(engine.TensorSubtract(s.Cast<double>(), wideX1),
+                    engine.TensorSubtract(y2.Cast<double>(), wideY1)), safeDiff)).Cast<T>();
+            flat = wideFlat.Cast<T>();
+        }
         var inner = engine.TensorWhere(flat, y1, interpolated);
 
         // Scores at or below the first point take its value, then scores at or above the last point take the last value
@@ -621,13 +639,13 @@ public class ProbabilityCalibrator<T>
     private void FitHistogramBinning(T[] scores, T[] labels)
     {
         int numBins = _options.NumBins;
-        _binEdges = new T[numBins + 1];
+        _binEdges = new double[numBins + 1];
         _binProbabilities = new T[numBins];
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         var edges = engine.TensorDivideScalar(engine.TensorArange<double>(0, numBins + 1), (double)numBins);
-        _binEdges = edges.Cast<T>().ToArray();
+        _binEdges = edges.ToArray();
         if (numBins == 0) return;
 
         // Mean label per bin [b/numBins, (b+1)/numBins) (the last bin also holds 1.0); empty bins take the midpoint
@@ -649,7 +667,7 @@ public class ProbabilityCalibrator<T>
         int maxBins = Math.Min(_options.NumBins, n);
 
         double bestBic = double.NegativeInfinity;
-        T[]? bestEdges = null;
+        double[]? bestEdges = null;
         T[]? bestProbs = null;
 
         if (maxBins >= 2)
@@ -697,7 +715,7 @@ public class ProbabilityCalibrator<T>
     // positives / count clamped to [1e-10, 1 - 1e-10] (empty bins: the edge midpoint), and
     // BIC = binomial log-likelihood - numBins / 2 * ln n. A NaN score sorts first and stops the partition, so every
     // bin is then empty.
-    private static (double Bic, T[] Edges, T[] Probs) ScoreQuantileBinning(
+    private static (double Bic, double[] Edges, T[] Probs) ScoreQuantileBinning(
         Tensor<double> sortedScores, Tensor<double> labelPrefix, int numBins, bool hasNaN)
     {
         var engine = AiDotNetEngine.Current;
@@ -751,7 +769,7 @@ public class ProbabilityCalibrator<T>
 
         // BIC = log-likelihood - (k/2) * log(n), where k = numBins (one parameter per bin)
         double bic = logLikelihood - (numBins / 2.0) * Math.Log(n);
-        return (bic, edges.Cast<T>().ToArray(), probs.Cast<T>().ToArray());
+        return (bic, edges.ToArray(), probs.Cast<T>().ToArray());
     }
 
     private T[] TransformHistogramBinning(T[] scores)
@@ -763,12 +781,12 @@ public class ProbabilityCalibrator<T>
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         var allScores = new Tensor<T>(scores, new[] { scores.Length }).Cast<double>();
-        var binEdges = new Tensor<T>(_binEdges, new[] { _binEdges.Length }).Cast<double>().ToArray();
+        var binEdges = _binEdges;
         var binProbabilities = new Tensor<T>(_binProbabilities, new[] { numBins }).Cast<double>().ToArray();
         var result = new T[scores.Length];
-        for (int start = 0; start < scores.Length; start += 65536)
+        for (int start = 0; start < scores.Length; start += EvaluationBinOps.SampleBlockSize)
         {
-            int length = Math.Min(65536, scores.Length - start);
+            int length = Math.Min(EvaluationBinOps.SampleBlockSize, scores.Length - start);
             var sample = engine.TensorNarrow(allScores, 0, start, length);
             var valid = EvaluationTensorOps<double>.Not(EvaluationTensorOps<double>.NanMask(sample));
             var matched = engine.TensorZerosLike(sample);
