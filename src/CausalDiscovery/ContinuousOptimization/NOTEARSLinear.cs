@@ -238,11 +238,9 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
         // Fallback: if optimization produced no edges (can happen with near-degenerate data
         // where the symmetric saddle point isn't fully escaped), use correlation structure.
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
-                    hasEdges = true;
+        var offDiagonalMagnitude = Engine.TensorMultiply(
+            Engine.TensorAbs(Tensor<T>.FromMatrix(result)), OffDiagonalMask(d));
+        bool hasEdges = Engine.TensorCountNonzero(Engine.TensorGreaterThan(offDiagonalMagnitude, NumOps.Zero)) > 0;
 
         return hasEdges ? result : FallbackCorrelationGraph(data);
     }
@@ -446,12 +444,10 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
         double objective = loss + alpha * h + 0.5 * rho * h * h;
         T augFactor = NumOps.FromDouble(alpha + rho * h);
 
-        var grad = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                grad[i, j] = NumOps.Add(lossGrad[i, j], NumOps.Multiply(augFactor, hGrad[i, j]));
+        var grad = Engine.TensorAdd(Tensor<T>.FromMatrix(lossGrad),
+            Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(hGrad), augFactor));
 
-        return (grad, objective);
+        return (grad.ToMatrix(), objective);
     }
 
     /// <summary>

@@ -692,17 +692,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         var metrics = new Dictionary<string, T>();
 
         // Calculate MSE and MAE
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -881,10 +871,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
 
         // Convert to ONNX format
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
@@ -900,10 +887,7 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -928,13 +912,18 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
     {
         if (input.Length != processed.Length)
         {
+            // Add over the shared prefix, keep input's tail; a detached result shaped like input, as before.
             int minLen = Math.Min(input.Length, processed.Length);
-            var result = new Tensor<T>(input._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Add(input[i], processed[i]);
-            for (int i = minLen; i < input.Length; i++)
-                result[i] = input[i];
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return input.Clone();
+            var aFlat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+            var bFlat = Engine.Reshape(processed.Contiguous(), new[] { processed.Length });
+            var head = Engine.TensorAdd(Engine.TensorNarrow(aFlat, 0, 0, minLen), Engine.TensorNarrow(bFlat, 0, 0, minLen));
+            var combined = minLen == input.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(aFlat, 0, minLen, input.Length - minLen) }, 0);
+            return Engine.Reshape(combined, input._shape);
         }
 
         return Engine.TensorAdd(input, processed);
@@ -960,65 +949,40 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
             int seqLen = input.Shape[1];
             int features = input.Shape[2];
 
-            _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
-            _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-
-            var normalized = new Tensor<T>(input._shape);
             T epsilon = NumOps.FromDouble(1e-5);
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        sum = NumOps.Add(sum, input[b, t, f]);
-                    }
-                    T mean = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                    _instanceMean[b, 0, f] = mean;
+            // Per (batch, feature) statistics over time: mean, then sqrt(population variance + eps).
+            T count = NumOps.FromDouble(seqLen);
+            var shape = new[] { batchSize, seqLen, features };
+            var x = Engine.Reshape(input.Contiguous(), shape);
+            var mean = Engine.TensorDivideScalar(Engine.ReduceSum(x, new[] { 1 }, true), count);
+            var centered = Engine.TensorSubtract(x, Engine.TensorBroadcastTo(mean, shape));
+            var variance = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, true), count);
+            var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, epsilon));
+            _instanceMean = mean;
+            _instanceStd = std;
 
-                    T varSum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        var diff = NumOps.Subtract(input[b, t, f], mean);
-                        varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-                    }
-                    T std = NumOps.Sqrt(NumOps.Add(NumOps.Divide(varSum, NumOps.FromDouble(seqLen)), epsilon));
-                    _instanceStd[b, 0, f] = std;
-
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        normalized[b, t, f] = NumOps.Divide(NumOps.Subtract(input[b, t, f], mean), std);
-                    }
-                }
-            }
-
-            return normalized;
+            return Engine.Reshape(Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape)), input._shape);
         }
         else
         {
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input._shape);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];
 
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < horizonLen; t++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[b, 0, f]);
-                        denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
-                    }
-                }
-            }
-
-            return denormalized;
+            // x * std + mean with the (batch, feature) statistics broadcast over time (detached, as before).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var shape = new[] { batchSize, horizonLen, features };
+            var statShape = new[] { batchSize, 1, features };
+            var std = Engine.TensorBroadcastTo(Engine.TensorSlice(_instanceStd, new[] { 0, 0, 0 }, statShape), shape);
+            var mean = Engine.TensorBroadcastTo(Engine.TensorSlice(_instanceMean, new[] { 0, 0, 0 }, statShape), shape);
+            var x = Engine.Reshape(input.Contiguous(), shape);
+            return Engine.Reshape(Engine.TensorAdd(Engine.TensorMultiply(x, std), mean), input._shape);
         }
     }
 
@@ -1083,6 +1047,21 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         var newInput = new Tensor<T>(new[] { batchSize, _sequenceLength, features });
 
         int keepLen = _sequenceLength - steps;
+        if (steps >= 0 && keepLen >= 0 && batchSize > 0 && features > 0)
+        {
+            // Window = the last keepLen input steps followed by the first steps predictions (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new System.Collections.Generic.List<Tensor<T>>(2);
+            if (keepLen > 0)
+                parts.Add(Engine.TensorSlice(input, new[] { 0, steps, 0 }, new[] { batchSize, keepLen, features }));
+            if (steps > 0)
+                parts.Add(Engine.TensorSlice(predictions, new[] { 0, 0, 0 }, new[] { batchSize, steps, features }));
+            if (parts.Count == 0)
+                return newInput;
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
+        // Out-of-range step counts keep the element-wise copy so they fail exactly as before.
         for (int b = 0; b < batchSize; b++)
         {
             for (int t = 0; t < keepLen; t++)
@@ -1123,6 +1102,26 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && _numFeatures > 0 && totalSteps > 0
+            && predictions.TrueForAll(p => p.Rank == 3 && p.Shape[0] >= batchSize && p.Shape[2] >= _numFeatures))
+        {
+            // The leading steps of each prediction in order, zero-padded to the requested length (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var pred in predictions)
+            {
+                int take = Math.Min(pred.Shape[1], totalSteps - filled);
+                if (take <= 0)
+                    continue;
+                parts.Add(Engine.TensorSlice(pred, new[] { 0, 0, 0 }, new[] { batchSize, take, _numFeatures }));
+                filled += take;
+            }
+            if (filled < totalSteps)
+                parts.Add(new Tensor<T>(new[] { batchSize, totalSteps - filled, _numFeatures }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, totalSteps, _numFeatures });
 
         int currentStep = 0;

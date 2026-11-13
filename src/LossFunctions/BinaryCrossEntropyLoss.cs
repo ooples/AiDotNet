@@ -49,22 +49,18 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Clamp values to prevent log(0) using NumericalStabilityHelper
-            T p = NumericalStabilityHelper.ClampProbability(predicted[i], NumericalStabilityHelper.SmallEpsilon);
-            T oneMinusP = NumericalStabilityHelper.ClampProbability(NumOps.Subtract(NumOps.One, p), NumericalStabilityHelper.SmallEpsilon);
+        // Clamp values to prevent log(0): p and (1 - p) are both clamped into [eps, 1 - eps]
+        // (NumericalStabilityHelper.ClampProbability), so SafeLog reduces to a plain log.
+        T eps = NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon);
+        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
+        var y = actual.AsTensor();
+        var p = Engine.TensorClamp(predicted.AsTensor(), eps, oneMinusEps);
+        var oneMinusP = Engine.TensorClamp(Engine.ScalarMinusTensor(NumOps.One, p), eps, oneMinusEps);
 
-            // -[y*log(p) + (1-y)*log(1-p)]
-            sum = NumOps.Add(sum, NumOps.Add(
-                NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(p, NumericalStabilityHelper.SmallEpsilon)),
-                NumOps.Multiply(
-                    NumOps.Subtract(NumOps.One, actual[i]),
-                    NumericalStabilityHelper.SafeLog(oneMinusP, NumericalStabilityHelper.SmallEpsilon)
-                )
-            ));
-        }
+        // -[y*log(p) + (1-y)*log(1-p)]
+        var term1 = Engine.TensorMultiply(y, Engine.TensorLog(p));
+        var term2 = Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, y), Engine.TensorLog(oneMinusP));
+        T sum = Engine.TensorSum(Engine.TensorAdd(term1, term2));
 
         return NumOps.Negate(NumOps.Divide(sum, NumOps.FromDouble(predicted.Length)));
     }

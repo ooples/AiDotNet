@@ -156,11 +156,7 @@ public partial class RobustRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
         {
             // If using intercept, the last element is the intercept
-            Coefficients = new Vector<T>(parameters.Length - 1);
-            for (int i = 0; i < parameters.Length - 1; i++)
-            {
-                Coefficients[i] = parameters[i];
-            }
+            Coefficients = parameters.GetSubVector(0, parameters.Length - 1);
             Intercept = parameters[parameters.Length - 1];
         }
         else
@@ -223,9 +219,10 @@ public partial class RobustRegression<T> : RegressionBase<T>
     {
         T tolerance = NumOps.FromDouble(_options.Tolerance);
 
-        for (int i = 0; i < oldCoefficients.Length; i++)
+        if (oldCoefficients.Length > 0)
         {
-            if (NumOps.GreaterThan(NumOps.Abs(NumOps.Subtract(oldCoefficients[i], newCoefficients[i])), tolerance))
+            var change = Engine.Abs(Engine.Subtract(oldCoefficients, newCoefficients));
+            if (Engine.TensorCountNonzero(Engine.TensorGreaterThan(change.AsTensor(), tolerance)) > 0)
             {
                 return false;
             }
@@ -286,11 +283,7 @@ public partial class RobustRegression<T> : RegressionBase<T>
         var newModel = (RobustRegression<T>)this.Clone();
 
         // Extract coefficients (all elements except the last)
-        Vector<T> newCoefficients = new Vector<T>(parameters.Length - 1);
-        for (int i = 0; i < parameters.Length - 1; i++)
-        {
-            newCoefficients[i] = parameters[i];
-        }
+        Vector<T> newCoefficients = parameters.GetSubVector(0, parameters.Length - 1);
 
         // Extract intercept (last element)
         T newIntercept = parameters[parameters.Length - 1];

@@ -228,13 +228,11 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
 
         // Symmetrize X'X to handle floating-point rounding in matrix multiplication
         // (X'X is mathematically symmetric but may have tiny asymmetries)
-        for (int i = 0; i < xTx.Rows; i++)
-            for (int j = i + 1; j < xTx.Columns; j++)
-            {
-                var avg = NumOps.Divide(NumOps.Add(xTx[i, j], xTx[j, i]), NumOps.FromDouble(2.0));
-                xTx[i, j] = avg;
-                xTx[j, i] = avg;
-            }
+        // A / 2 + A^T / 2: halving by a power of two is exact, so the diagonal is unchanged, and halving
+        // before the addition keeps entries near the type's maximum from overflowing.
+        T half = NumOps.FromDouble(0.5);
+        xTx = Engine.MatrixAdd(
+            Engine.MatrixMultiplyScalar(xTx, half), Engine.MatrixMultiplyScalar(Engine.MatrixTranspose(xTx), half));
 
         // Always add minimum ridge regularization for numerical stability (prevents
         // Cholesky failure on collinear/degenerate data).
@@ -243,10 +241,7 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
         var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
         var effectiveReg = Math.Max(regularizationStrength, 1e-4);
         T regTerm = NumOps.FromDouble(effectiveReg);
-        for (int i = 0; i < xTx.Rows; i++)
-        {
-            xTx[i, i] = NumOps.Add(xTx[i, i], regTerm);
-        }
+        xTx = RegressionEngineOps2.AddDiagonal(xTx, regTerm);
 
         var xTy = basisFunctions.Transpose().Multiply(y);
         try
@@ -294,39 +289,43 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
             totalBasis += _options.Degree + _knots[i].Length;
         }
 
-        var basis = new Matrix<T>(x.Rows, totalBasis);
+        if (x.Rows == 0)
+        {
+            return new Matrix<T>(0, totalBasis);
+        }
 
-        // Constant term
-        for (int i = 0; i < x.Rows; i++)
-            basis[i, 0] = NumOps.One;
-
-        int columnIndex = 1;
+        // Build each basis column as a whole vector, then stack them as the columns of the matrix.
+        var columns = new List<Tensor<T>>(totalBasis) { Engine.Fill(x.Rows, NumOps.One).AsTensor() };
+        var zeros = Engine.FillZero<T>(x.Rows).AsTensor();
+        T splineDegree = NumOps.FromDouble(_options.Degree);
 
         for (int feature = 0; feature < x.Columns; feature++)
         {
             var featureVector = x.GetColumn(feature);
 
-            // Linear and higher-order terms
-            for (int degree = 1; degree <= _options.Degree; degree++)
+            // Linear and higher-order terms: x, x^2, ..., x^degree
+            if (_options.Degree > 0)
             {
-                for (int i = 0; i < x.Rows; i++)
-                    basis[i, columnIndex] = NumOps.Power(featureVector[i], NumOps.FromDouble(degree));
-                columnIndex++;
+                var powers = RegressionEngineOps2.PolynomialExpand(
+                    new Tensor<T>(new[] { x.Rows, 1 }, featureVector).ToMatrix(), _options.Degree);
+                columns.Add(Tensor<T>.FromMatrix(powers));
             }
 
-            // Knot terms
-            for (int k = 0; k < _knots[feature].Length; k++)
+            // Knot terms: (x - knot)^degree where x > knot, else 0
+            var knots = _knots[feature];
+            foreach (var knot in knots)
             {
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    var diff = NumOps.Subtract(featureVector[i], _knots[feature][k]);
-                    basis[i, columnIndex] = NumOps.GreaterThan(diff, NumOps.Zero)
-                        ? NumOps.Power(diff, NumOps.FromDouble(_options.Degree))
-                        : NumOps.Zero;
-                }
-                columnIndex++;
+                var diff = Engine.Subtract(featureVector, Engine.Fill(x.Rows, knot)).AsTensor();
+                columns.Add(Engine.TensorWhere(
+                    Engine.TensorGreaterThan(diff, NumOps.Zero),
+                    Engine.TensorPower(diff, splineDegree),
+                    zeros));
             }
         }
+
+        // Bias and knot terms are rank-1 columns; the polynomial block is already [rows, degree].
+        var basis = Engine.TensorConcatenate(
+            columns.Select(c => c.Rank == 1 ? Engine.Reshape(c, new[] { x.Rows, 1 }) : c).ToArray(), 1).ToMatrix();
 
         return basis;
     }

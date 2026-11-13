@@ -339,59 +339,31 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
     {
         if (condSet.Count == 0) return ComputeCorrelation(data, i, j);
 
-        double meanI = 0, meanJ = 0;
-        for (int k = 0; k < n; k++)
+        // Sequential residualization: regress the running residuals of i and j on one centered
+        // conditioning variable at a time; a variable whose variance is not above 1e-10 is skipped.
+        var x = Tensor<T>.FromMatrix(data);
+        var conditioning = CenterColumns(SelectColumns(x, condSet.ToArray()));
+        var residI = CenterColumns(SelectColumns(x, new[] { i }));
+        var residJ = CenterColumns(SelectColumns(x, new[] { j }));
+        var tiny = NumOps.FromDouble(1e-10);
+
+        for (int c = 0; c < condSet.Count; c++)
         {
-            meanI += NumOps.ToDouble(data[k, i]);
-            meanJ += NumOps.ToDouble(data[k, j]);
-        }
-        meanI /= n; meanJ /= n;
-
-        var residI = new double[n];
-        var residJ = new double[n];
-        for (int k = 0; k < n; k++)
-        {
-            residI[k] = NumOps.ToDouble(data[k, i]) - meanI;
-            residJ[k] = NumOps.ToDouble(data[k, j]) - meanJ;
-        }
-
-        foreach (int c in condSet)
-        {
-            double meanC = 0;
-            for (int k = 0; k < n; k++) meanC += NumOps.ToDouble(data[k, c]);
-            meanC /= n;
-
-            double covIC = 0, covJC = 0, varC = 0;
-            for (int k = 0; k < n; k++)
-            {
-                double dc = NumOps.ToDouble(data[k, c]) - meanC;
-                covIC += residI[k] * dc;
-                covJC += residJ[k] * dc;
-                varC += dc * dc;
-            }
-
-            if (varC > 1e-10)
-            {
-                double bI = covIC / varC;
-                double bJ = covJC / varC;
-                for (int k = 0; k < n; k++)
-                {
-                    double dc = NumOps.ToDouble(data[k, c]) - meanC;
-                    residI[k] -= bI * dc;
-                    residJ[k] -= bJ * dc;
-                }
-            }
+            var dc = Engine.TensorSlice(conditioning, new[] { 0, c }, new[] { n, 1 });
+            var varC = Engine.ReduceSum(Engine.TensorSquare(dc), new[] { 0 }, true);
+            var usable = Engine.TensorGreaterThan(varC, tiny);
+            var safeVar = Engine.TensorWhere(usable, varC, Engine.TensorOnesLike(varC));
+            var bI = Engine.TensorWhere(usable,
+                Engine.TensorDivide(Engine.ReduceSum(Engine.TensorMultiply(residI, dc), new[] { 0 }, true), safeVar),
+                Engine.TensorZerosLike(varC));
+            var bJ = Engine.TensorWhere(usable,
+                Engine.TensorDivide(Engine.ReduceSum(Engine.TensorMultiply(residJ, dc), new[] { 0 }, true), safeVar),
+                Engine.TensorZerosLike(varC));
+            residI = Engine.TensorSubtract(residI, Engine.TensorMatMul(dc, bI));
+            residJ = Engine.TensorSubtract(residJ, Engine.TensorMatMul(dc, bJ));
         }
 
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int k = 0; k < n; k++)
-        {
-            sxy += residI[k] * residJ[k];
-            sxx += residI[k] * residI[k];
-            syy += residJ[k] * residJ[k];
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.UncenteredCorrelation(residI, residJ));
     }
 
     private static IEnumerable<List<int>> GetCombinations(List<int> items, int size)

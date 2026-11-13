@@ -300,6 +300,48 @@ public static class TapeTrainingStep<T>
     }
 
     /// <summary>
+    /// Collects both owned trainable parameters and externally shared trainable parameters referenced
+    /// by <paramref name="layer"/> (e.g., <see cref="ISharedParameterConsumerLayer{T}"/> or detachable
+    /// fused readout tables) for gradient-checkpointing dependency and multi-touch tracking.
+    /// </summary>
+    internal static void CollectLayerReferencedParameters(
+        ILayer<T> layer,
+        List<Tensor<T>> parameters,
+        HashSet<Tensor<T>> seen,
+        bool materializedOnly = false)
+    {
+        if (layer is ITrainableLayer<T> trainable)
+        {
+            foreach (var parameter in trainable.GetTrainableParameters())
+            {
+                if (materializedOnly && (parameter is null || parameter.Length == 0)) continue;
+                if (seen.Add(parameter)) parameters.Add(parameter);
+            }
+        }
+
+        if (layer is ISharedParameterConsumerLayer<T> shared)
+        {
+            foreach (var parameter in shared.GetSharedTrainableParameters())
+            {
+                if (materializedOnly && (parameter is null || parameter.Length == 0)) continue;
+                if (seen.Add(parameter)) parameters.Add(parameter);
+            }
+        }
+
+        if (layer is IDetachableFusedReadoutLossLayer<T> detachableHead
+            && detachableHead.TryGetVocabularyRowsForSampling(out var vocabRows, out var headBias, out _))
+        {
+            if (vocabRows is not null && vocabRows.GradFn is null && (!materializedOnly || vocabRows.Length > 0) && seen.Add(vocabRows))
+                parameters.Add(vocabRows);
+            if (headBias is not null && headBias.GradFn is null && (!materializedOnly || headBias.Length > 0) && seen.Add(headBias))
+                parameters.Add(headBias);
+        }
+
+        foreach (var child in layer.GetSubLayers())
+            CollectLayerReferencedParameters(child, parameters, seen, materializedOnly);
+    }
+
+    /// <summary>
     /// Collects all ITrainableLayer instances for ZeroGrad. Cached separately from parameters.
     /// </summary>
     public static ITrainableLayer<T>[] CollectTrainableLayers(IEnumerable<ILayer<T>> layers, int structureVersion = 0)

@@ -89,15 +89,11 @@ public class CharbonnierLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            T diff = NumOps.Subtract(predicted[i], actual[i]);
-            T diffSquared = NumOps.Multiply(diff, diff);
-            // sqrt(diff² + ε²)
-            T charbonnier = NumOps.Sqrt(NumOps.Add(diffSquared, _epsilonSquared));
-            sum = NumOps.Add(sum, charbonnier);
-        }
+        var diff = Engine.TensorSubtract(predicted.AsTensor(), actual.AsTensor());
+        var diffSquared = Engine.TensorMultiply(diff, diff);
+        // sqrt(diff² + ε²)
+        var charbonnier = Engine.TensorSqrt(Engine.TensorAddScalar(diffSquared, _epsilonSquared));
+        T sum = Engine.TensorSum(charbonnier);
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }

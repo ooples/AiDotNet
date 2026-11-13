@@ -41,24 +41,8 @@ public sealed class CompositeLossWithLogits<T> : LossFunctionBase<T>
     /// <inheritdoc/>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
-        var probabilities = new Vector<T>(predicted.Length);
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double logit = NumOps.ToDouble(predicted[i]);
-            double probability;
-            if (logit >= 0.0)
-            {
-                double expNeg = Math.Exp(-logit);
-                probability = 1.0 / (1.0 + expNeg);
-            }
-            else
-            {
-                double expPos = Math.Exp(logit);
-                probability = expPos / (1.0 + expPos);
-            }
-
-            probabilities[i] = NumOps.FromDouble(probability);
-        }
+        // Same sigmoid as the tape path, so both paths score the same probabilities.
+        var probabilities = Engine.TensorSigmoid(predicted.AsTensor()).ToVector();
 
         return _probabilityLoss.CalculateLoss(probabilities, actual);
     }
