@@ -26,7 +26,14 @@ public class TextRecognitionResult<T>
     /// <summary>
     /// Gets the confidence as a double value.
     /// </summary>
-    public double ConfidenceValue { get; init; }
+    /// <remarks>Defaults to <see cref="Confidence"/> converted to double when it is not set.</remarks>
+    public double ConfidenceValue
+    {
+        get => _confidenceValue ?? MathHelper.GetNumericOperations<T>().ToDouble(Confidence);
+        init => _confidenceValue = value;
+    }
+
+    private readonly double? _confidenceValue;
 
     /// <summary>
     /// Gets the per-character confidence scores.
@@ -73,7 +80,14 @@ public class CharacterRecognition<T>
     /// <summary>
     /// Gets the confidence as a double value.
     /// </summary>
-    public double ConfidenceValue { get; init; }
+    /// <remarks>Defaults to <see cref="Confidence"/> converted to double when it is not set.</remarks>
+    public double ConfidenceValue
+    {
+        get => _confidenceValue ?? MathHelper.GetNumericOperations<T>().ToDouble(Confidence);
+        init => _confidenceValue = value;
+    }
+
+    private readonly double? _confidenceValue;
 
     /// <summary>
     /// Gets the position in the sequence (0-based index).

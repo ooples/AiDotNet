@@ -65,4 +65,38 @@ internal static class DocumentTensorOps
         var head = rows == output.Shape[0] ? matrix : engine.TensorSlice(matrix, new[] { 0, 0 }, new[] { rows, vocab });
         return RowArgMax(engine, head);
     }
+
+    /// <summary>
+    /// The rows <c>i &lt; min(rows, limit)</c> of an output viewed as <c>[rows, columns]</c> whose value in
+    /// <paramref name="column"/> is at least <paramref name="threshold"/> (NaN never qualifies), in ascending
+    /// row order, with those values.
+    /// </summary>
+    internal static (int[] Rows, T[] Scores) RowsAtLeast<T>(IEngine engine, Tensor<T> output, int limit, int column, T threshold)
+    {
+        var scores = ColumnHead(engine, output, limit, column);
+        if (scores.Length == 0)
+            return (Array.Empty<int>(), Array.Empty<T>());
+        var hit = engine.TensorGreaterEqual(scores, Tensor<T>.CreateDefault(new[] { scores.Length }, threshold));
+        int[] rows = engine.TensorNonzero(hit).ToArray();
+        if (rows.Length == 0)
+            return (rows, Array.Empty<T>());
+        var picked = engine.TensorIndexSelect(scores, new Tensor<int>((int[])rows.Clone(), new[] { rows.Length }), 0);
+        return (rows, picked.ToArray());
+    }
+
+    /// <summary>
+    /// Column <paramref name="column"/> of the first <c>min(rows, limit)</c> rows of an output viewed as
+    /// <c>[rows, columns]</c> (its first axis is the row axis).
+    /// </summary>
+    internal static Tensor<T> ColumnHead<T>(IEngine engine, Tensor<T> output, int limit, int column)
+    {
+        int rows = output.Rank == 0 ? 0 : Math.Min(output.Shape[0], limit);
+        if (rows <= 0 || output.Length == 0)
+            return new Tensor<T>(new[] { 0 });
+        int columns = output.Length / output.Shape[0];
+        if (column < 0 || column >= columns)
+            throw new IndexOutOfRangeException($"Column {column} is outside the output's {columns} columns.");
+        var matrix = engine.Reshape(output, new[] { output.Shape[0], columns });
+        return engine.Reshape(engine.TensorSlice(matrix, new[] { 0, column }, new[] { rows, 1 }), new[] { rows });
+    }
 }

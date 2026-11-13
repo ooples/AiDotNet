@@ -254,17 +254,6 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
 
     }
 
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
-    }
-
     #endregion
 
     #region IDocumentQA Implementation
@@ -315,20 +304,8 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
     private string DecodeOutput(Tensor<T> output, int maxLength)
     {
         var tokens = new List<int>();
-        int seqLen = Math.Min(output.Shape[0], maxLength);
-
-        for (int t = 0; t < seqLen; t++)
+        foreach (int maxIdx in DocumentTensorOps.GreedyRowTokens(Engine, output, maxLength))
         {
-            int vocabSize = output.Shape.Length > 1 ? output.Shape[1] : _vocabSize;
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = NumOps.ToDouble(output[t, v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-
             // BERT-style special tokens: 0=PAD, 101=CLS, 102=SEP
             if (maxIdx == 102) break; // SEP token
             if (maxIdx == 0 || maxIdx == 101) continue; // Skip PAD and CLS
@@ -432,35 +409,8 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
     /// InfographicVQA uses ImageNet normalization with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies InfographicVQA's industry-standard postprocessing: pass-through (VQA outputs are already final).

@@ -260,17 +260,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         InvalidateParameterCountCache();
     }
 
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
-    }
-
     #endregion
 
     #region IDocumentQA Implementation
@@ -323,20 +312,8 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     private string DecodeOutput(Tensor<T> output, int maxLength)
     {
         var tokens = new List<int>();
-        int seqLen = Math.Min(output.Shape[0], maxLength);
-
-        for (int t = 0; t < seqLen; t++)
+        foreach (int maxIdx in DocumentTensorOps.GreedyRowTokens(Engine, output, maxLength))
         {
-            int vocabSize = output.Shape.Length > 1 ? output.Shape[1] : _vocabSize;
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = NumOps.ToDouble(output[t, v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-
             // Special tokens: 0=PAD, 1=BOS, 2=EOS
             if (maxIdx == 2) break; // EOS token
             if (maxIdx <= 2) continue; // Skip special tokens
@@ -581,57 +558,8 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     /// mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225] (Google paper).
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        // Engine-accelerated per-channel normalization: (x - mean) / std
-        // Process each (batch, channel) slice as a flat tensor for vectorized math
-        var normalized = new Tensor<T>(image._shape);
-        int spatialSize = height * width;
-        var srcSpan = image.Data.Span;
-        var dstSpan = normalized.Data.Span;
-
-        // Hoist the per-channel scalar conversions out of the batch loop so we don't
-        // re-run NumOps.FromDouble on the same constants once per batch element.
-        var channelMeans = new T[channels];
-        var channelStds = new T[channels];
-        for (int c = 0; c < channels; c++)
-        {
-            channelMeans[c] = NumOps.FromDouble(c < means.Length ? means[c] : 0.5);
-            channelStds[c] = NumOps.FromDouble(c < stds.Length ? stds[c] : 0.5);
-        }
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T mean = channelMeans[c];
-                T std = channelStds[c];
-
-                int offset = (b * channels + c) * spatialSize;
-
-                // Extract channel slice as a flat tensor
-                var sliceData = new T[spatialSize];
-                srcSpan.Slice(offset, spatialSize).CopyTo(sliceData);
-                var channelTensor = new Tensor<T>(sliceData, [spatialSize]);
-
-                // Engine-accelerated: (channel - mean) / std
-                var centered = Engine.TensorSubtractScalar(channelTensor, mean);
-                var norm = Engine.TensorDivideScalar(centered, std);
-
-                // Copy result back
-                norm.Data.Span.CopyTo(dstSpan.Slice(offset, spatialSize));
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies MATCHA's industry-standard postprocessing: pass-through (chart QA outputs are already final).
