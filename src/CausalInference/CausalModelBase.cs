@@ -1227,6 +1227,23 @@ public abstract partial class CausalModelBase<T> : ICausalModel<T>, IModelShape,
         return NumOps.Multiply(valuePeak, NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(w, v)), Engine.TensorSum(w)));
     }
 
+    /// <summary>
+    /// Treatment values as 0/1 ints, rejecting anything more than 1e-6 from 0 or 1.
+    /// </summary>
+    private protected Vector<int> RoundBinaryTreatment(Vector<T> treatment)
+    {
+        var raw = treatment.AsTensor();
+        var rounded = Engine.TensorRound(raw);
+        var offInteger = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(raw, rounded)), NumOps.FromDouble(1e-6));
+        var binary = Engine.TensorAdd(Engine.TensorEquals(rounded, NumOps.Zero), Engine.TensorEquals(rounded, NumOps.One));
+        if (Engine.TensorCountNonzero(offInteger) > 0 || Engine.TensorCountNonzero(binary) != treatment.Length)
+        {
+            throw new ArgumentException("Treatment indicators must be 0 or 1.", nameof(treatment));
+        }
+
+        return rounded.Cast<int>().ToVector();
+    }
+
     /// <summary>A [length] tensor holding <paramref name="value"/> everywhere.</summary>
     private protected static Vector<T> Constant(int length, T value)
         => Tensor<T>.CreateDefault(new[] { length }, value).ToVector();

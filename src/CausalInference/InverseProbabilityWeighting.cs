@@ -208,15 +208,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
     {
         // Convert treatment vector to int with validation
-        var raw = treatment.AsTensor();
-        var rounded = Engine.TensorRound(raw);
-        var offInteger = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(raw, rounded)), NumOps.FromDouble(1e-6));
-        var binary = Engine.TensorAdd(Engine.TensorEquals(rounded, NumOps.Zero), Engine.TensorEquals(rounded, NumOps.One));
-        if (Engine.TensorCountNonzero(offInteger) > 0 || Engine.TensorCountNonzero(binary) != treatment.Length)
-        {
-            throw new ArgumentException("Treatment indicators must be 0 or 1.", nameof(treatment));
-        }
-        var treatmentInt = rounded.Cast<int>().ToVector();
+        var treatmentInt = RoundBinaryTreatment(treatment);
 
         // Validate outcome alignment before caching
         if (features.Rows != outcome.Length)
