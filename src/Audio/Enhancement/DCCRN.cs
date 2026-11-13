@@ -556,7 +556,8 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             enhancedStft = ForwardNative(stft);
         }
 
-        return PostprocessOutput(enhancedStft);
+        // torch.istft(length=...): the enhanced waveform has exactly as many samples as the input.
+        return ComputeInverseSTFT(enhancedStft, input.Length);
     }
 
     /// <inheritdoc/>
@@ -752,34 +753,34 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Computes complex STFT.
+    /// Complex STFT <c>[1, 2, fftSize / 2 + 1, frames]</c> (real, imaginary) as
+    /// <c>torch.stft(x, n_fft, hop, window=torch.hann_window(n_fft), center=True, pad_mode="constant",
+    /// return_complex=True)</c> computes it.
     /// </summary>
+    /// <remarks>
+    /// The signal is zero-padded by <c>fftSize / 2</c> on both sides, so frame <c>t</c> is centred on
+    /// sample <c>t * hop</c>, there are <c>1 + samples / hop</c> frames, and every sample lies under a
+    /// window that <see cref="ComputeInverseSTFT"/> can invert. Constant rather than reflect padding
+    /// keeps clips shorter than half a window valid; the DCCRN reference front end also pads with
+    /// zeros.
+    /// </remarks>
     private Tensor<T> ComputeComplexSTFT(Tensor<T> audio)
     {
         // Built from fresh values as before (not part of the autodiff graph).
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var samples = AudioEngineOps.Flatten(Engine, audio);
-        int numFrames = (samples.Length - _fftSize) / _hopSize + 1;
+        var samples = AudioEngineOps.Flatten(Engine, audio).Cast<double>();
+        int pad = _fftSize / 2;
+        int numFrames = samples.Length / _hopSize + 1;
         int numBins = _fftSize / 2 + 1;
+        var padded = pad == 0
+            ? samples
+            : Engine.Concat(new[] { new Tensor<double>([pad]), samples, new Tensor<double>([pad]) }, 0);
 
-        // Shape: [1, 2, numBins, numFrames] for batch, real/imag, freq, time. Audio shorter than one
-        // analysis frame (including empty audio, where the count would be negative) is analysed as
-        // one zero-padded frame instead of producing an empty or invalid time axis.
-        numFrames = Math.Max(1, numFrames);
-
-        var window = CreateHannWindow(_fftSize);
-        var frames = new Tensor<T>[numFrames];
-        for (int frame = 0; frame < numFrames; frame++)
-        {
-            int start = frame * _hopSize;
-            int available = Math.Max(0, Math.Min(_fftSize, samples.Length - start));
-            var frameData = available > 0
-                ? AudioEngineOps.FitLength(Engine, Engine.TensorSlice(samples, [start], [available]), _fftSize)
-                : new Tensor<T>([_fftSize]);
-            frames[frame] = Engine.TensorMultiply(frameData, window);
-        }
-        // Bound the DFT basis independently of FFT size; all index and phase arithmetic stays wide.
-        var frameColumns = Engine.TensorTranspose(Engine.TensorStack(frames, 0)).Cast<double>();
+        // [frames, fftSize] windowed frames, gathered in one index select; all phase arithmetic stays wide.
+        var frames = Engine.TensorMultiply(
+            AudioEngineOps.GatherFrameBins(Engine, padded, numFrames, _fftSize, _hopSize, 0),
+            Engine.TensorBroadcastTo(Engine.Reshape(AnalysisWindow(), [1, _fftSize]), [numFrames, _fftSize]));
+        var frameColumns = Engine.TensorTranspose(frames);
         var real = new Tensor<double>([numBins, numFrames]);
         var imag = new Tensor<double>([numBins, numFrames]);
         int blockSize = Math.Max(1, 262144 / _fftSize);
@@ -807,24 +808,38 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Computes inverse STFT.
+    /// Inverse of <see cref="ComputeComplexSTFT"/>, as <c>torch.istft(X, n_fft, hop,
+    /// window=torch.hann_window(n_fft), center=True, length=length)</c> computes it: each frame is the
+    /// real inverse DFT of its one-sided spectrum, windowed again, overlap-added, divided by the
+    /// overlap-added squared window, and the centre padding is trimmed.
     /// </summary>
-    private Tensor<T> ComputeInverseSTFT(Tensor<T> stft)
+    /// <param name="stft">The one-sided complex spectrum <c>[1, 2, bins, frames]</c>.</param>
+    /// <param name="length">Samples to return; <c>null</c> gives <c>hop * (frames - 1)</c>, torch's default.</param>
+    private Tensor<T> ComputeInverseSTFT(Tensor<T> stft, int? length = null)
     {
         // Built from fresh values as before (not part of the autodiff graph).
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int numBins = stft.Shape[2];
         int numFrames = stft.Shape[3];
-        int numSamples = numFrames * _hopSize + _fftSize;
+        int pad = _fftSize / 2;
+        int outputLength = length ?? Math.Max(0, _hopSize * (numFrames - 1));
+        if (outputLength < 0)
+            throw new ArgumentOutOfRangeException(nameof(length), "Output length must be non-negative.");
 
-        if (numFrames <= 0 || numBins <= 0)
-            return new Tensor<T>([numSamples]);
+        if (numFrames <= 0 || numBins <= 0 || outputLength == 0)
+            return new Tensor<T>([outputLength]);
 
-        var window = CreateHannWindow(_fftSize);
+        var window = AnalysisWindow();
 
-        // frame[t, n] = sum_k (re[k, t] cos(2 pi k n / N) - im[k, t] sin(2 pi k n / N)) * w[n] / N
-        var real = Engine.Reshape(Engine.TensorSlice(stft, [0, 0, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]).Cast<double>();
-        var imag = Engine.Reshape(Engine.TensorSlice(stft, [0, 1, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]).Cast<double>();
+        // irfft: x[n] = (1 / N) sum_k c_k (re[k] cos(2 pi k n / N) - im[k] sin(2 pi k n / N)), where
+        // c_k = 1 for the DC and Nyquist bins and 2 for every other bin (its conjugate partner
+        // X[N - k] is implied by the one-sided spectrum).
+        var binWeights = new double[numBins];
+        for (int k = 0; k < numBins; k++) binWeights[k] = k == 0 || 2 * k == _fftSize ? 1.0 : 2.0;
+        var weightColumn = Engine.TensorBroadcastTo(
+            new Tensor<double>(binWeights, [numBins, 1]), [numBins, numFrames]);
+        var real = Engine.TensorMultiply(Engine.Reshape(Engine.TensorSlice(stft, [0, 0, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]).Cast<double>(), weightColumn);
+        var imag = Engine.TensorMultiply(Engine.Reshape(Engine.TensorSlice(stft, [0, 1, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]).Cast<double>(), weightColumn);
         var sums = new Tensor<double>([numFrames, _fftSize]);
         int blockSize = Math.Max(1, 262144 / _fftSize);
         for (int start = 0; start < numBins;)
@@ -839,19 +854,45 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             start += count;
         }
         var weighted = Engine.TensorDivideScalar(
-            Engine.TensorMultiply(sums, Engine.TensorBroadcastTo(Engine.Reshape(window.Cast<double>(), [1, _fftSize]), [numFrames, _fftSize])),
-            (double)_fftSize).Cast<T>();
+            Engine.TensorMultiply(sums, Engine.TensorBroadcastTo(Engine.Reshape(window, [1, _fftSize]), [numFrames, _fftSize])),
+            (double)_fftSize);
 
-        var frames = new List<Tensor<T>>(numFrames);
+        // Overlap-add the frames and the squared window over the padded signal
+        int paddedLength = _fftSize + _hopSize * (numFrames - 1);
+        var squaredWindow = Engine.TensorSquare(window);
+        var frames = new List<Tensor<double>>(numFrames);
+        var envelopeFrames = new List<Tensor<double>>(numFrames);
         var starts = new List<int>(numFrames);
         for (int frame = 0; frame < numFrames; frame++)
         {
             frames.Add(Engine.Reshape(Engine.TensorSlice(weighted, [frame, 0], [1, _fftSize]), [_fftSize]));
+            envelopeFrames.Add(squaredWindow);
             starts.Add(frame * _hopSize);
         }
+        var signal = AudioEngineOps.OverlapAdd(Engine, frames, starts, paddedLength);
+        var envelope = AudioEngineOps.OverlapAdd(Engine, envelopeFrames, starts, paddedLength);
 
-        return AudioEngineOps.OverlapAdd(Engine, frames, starts, numSamples);
+        // torch.istft divides by the envelope where it exceeds 1e-11; samples no window covers stay 0
+        var covered = Engine.TensorGreaterThan(envelope, 1e-11);
+        var safeEnvelope = Engine.TensorWhere(covered, envelope, Tensor<double>.CreateDefault([paddedLength], 1.0));
+        var normalized = Engine.TensorWhere(covered, Engine.TensorDivide(signal, safeEnvelope), new Tensor<double>([paddedLength]));
+
+        // Trim the centre padding, then cut or zero-extend to the requested length
+        int available = Math.Max(0, Math.Min(outputLength, paddedLength - pad));
+        var trimmed = available == 0
+            ? new Tensor<double>([0])
+            : Engine.TensorSlice(normalized, [pad], [available]);
+        return AudioEngineOps.FitLength(Engine, trimmed, outputLength).Cast<T>();
     }
+
+    /// <summary>
+    /// The periodic Hann window <c>0.5 - 0.5 cos(2 pi n / N)</c>, the default of
+    /// <c>torch.hann_window</c> and of librosa's <c>get_window('hann', N, fftbins=True)</c>.
+    /// </summary>
+    /// <remarks>A one-sample window is <c>[1]</c>, as <c>torch.hann_window(1)</c> returns.</remarks>
+    private Tensor<double> AnalysisWindow() => _fftSize == 1
+        ? Tensor<double>.CreateDefault([1], 1.0)
+        : Engine.TensorHannWindow<double>(_fftSize, periodic: true);
 
     /// <summary>
     /// True complex convolution (Hu 2020): for complex input carried as [B, 2*Cin, F, T] (real channels
@@ -989,14 +1030,6 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var croppedA = Engine.TensorSlice(a, [0, 0, 0, 0], [a.Shape[0], a.Shape[1], height, width]);
         var croppedB = Engine.TensorSlice(b, [0, 0, 0, 0], [b.Shape[0], b.Shape[1], height, width]);
         return Engine.Concat(new[] { croppedA, croppedB }, 1);
-    }
-
-    /// <summary>
-    /// Creates a Hann window.
-    /// </summary>
-    private Tensor<T> CreateHannWindow(int size)
-    {
-        return AudioEngineOps.SymmetricHannWindow<T>(Engine, size);
     }
 
     #endregion
