@@ -74,43 +74,13 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
-        var studentSoftBatch = new Vector<T>[batchSize];
-        var teacherSoftBatch = new Vector<T>[batchSize];
+        // Standard distillation loss per sample (soft T²·KL, blended with hard CE when labels are given)
+        T totalLoss = Engine.Sum(DistillationHelper<T>.StandardSampleLosses(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha));
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            // Standard distillation loss
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            studentSoftBatch[r] = studentSoft;
-            teacherSoftBatch[r] = teacherSoft;
-
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss;
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(NumOps.FromDouble(Alpha), hardLoss),
-                    NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softLoss));
-            }
-            else
-            {
-                sampleLoss = softLoss;
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        var studentSoftBatch = DistillationHelper<T>.RowsOf(DistillationHelper<T>.SoftmaxRows(studentBatchOutput, Temperature));
+        var teacherSoftBatch = DistillationHelper<T>.RowsOf(DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, Temperature));
 
         var standardLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
         var distributionLoss = ComputeDistributionalLoss(studentSoftBatch, teacherSoftBatch);
@@ -127,78 +97,28 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        var studentSoftBatch = new Vector<T>[batchSize];
-        var teacherSoftBatch = new Vector<T>[batchSize];
-
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            var gradient = new Vector<T>(outputDim);
-
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            studentSoftBatch[r] = studentSoft;
-            teacherSoftBatch[r] = teacherSoft;
-
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    // Soft gradient (temperature-scaled)
-                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
-
-                    // Hard gradient
-                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-
-                    // Combined gradient: Alpha * hardGrad + (1 - Alpha) * softGrad
-                    gradient[i] = NumOps.Add(
-                        NumOps.Multiply(NumOps.FromDouble(Alpha), hardGrad),
-                        NumOps.Multiply(NumOps.FromDouble(1.0 - Alpha), softGrad));
-                }
-            }
-            else
-            {
-                for (int i = 0; i < outputDim; i++)
-                {
-                    // Soft gradient (temperature-scaled)
-                    var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
-                }
-            }
-
-            gradientBatch.SetRow(r, gradient);
-        }
+        // Standard gradient, averaged over the batch like the standard loss
+        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        var gradientBatch = Engine.MatrixMultiplyScalar(
+            DistillationHelper<T>.StandardSampleGradients(studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha),
+            oneOverBatch);
 
         if (_distributionWeight > 0)
         {
-            var distributionalGradient = ComputeDistributionalGradient(studentSoftBatch, teacherSoftBatch);
+            var studentSoft = DistillationHelper<T>.SoftmaxRows(studentBatchOutput, Temperature);
+            var teacherSoft = DistillationHelper<T>.SoftmaxRows(teacherBatchOutput, Temperature);
 
-            for (int r = 0; r < batchSize; r++)
-            {
-                for (int c = 0; c < outputDim; c++)
-                {
-                    var standardGrad = NumOps.Multiply(gradientBatch[r, c], NumOps.FromDouble(1.0 - _distributionWeight));
-                    var distGrad = NumOps.Multiply(distributionalGradient[r, c], NumOps.FromDouble(_distributionWeight));
-                    gradientBatch[r, c] = NumOps.Add(standardGrad, distGrad);
-                }
-            }
+            // The distributional loss is a function of the whole batch of softened student distributions; its
+            // gradient w.r.t. those probabilities goes through the softmax(z / T) Jacobian to reach the logits:
+            //   ∂L/∂z_k = p_k * (∂L/∂p_k - Σ_m (∂L/∂p_m) p_m) / T
+            var probGradient = ComputeDistributionalGradient(DistillationHelper<T>.RowsOf(studentSoft), DistillationHelper<T>.RowsOf(teacherSoft));
+            var logitGradient = DistillationHelper<T>.SoftmaxJacobianProduct(Tensor<T>.FromMatrix(studentSoft), Tensor<T>.FromMatrix(probGradient), Temperature);
+
+            gradientBatch = Engine.MatrixAdd(
+                Engine.MatrixMultiplyScalar(gradientBatch, NumOps.FromDouble(1.0 - _distributionWeight)),
+                Engine.MatrixMultiplyScalar(logitGradient.ToMatrix(), NumOps.FromDouble(_distributionWeight)));
         }
-
-        // Average gradients over the batch
-        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
 
         return gradientBatch;
     }
@@ -244,22 +164,12 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         var teacherVars = ComputeVariances(teacherPredictions, teacherMeans, numClasses);
 
         // MSE on means (first moment)
-        T meanLoss = NumOps.Zero;
-        for (int i = 0; i < numClasses; i++)
-        {
-            double diff = studentMeans[i] - teacherMeans[i];
-            meanLoss = NumOps.Add(meanLoss, NumOps.FromDouble(diff * diff));
-        }
-        meanLoss = NumOps.Divide(meanLoss, NumOps.FromDouble(numClasses));
+        var meanDiff = Engine.Subtract(studentMeans, teacherMeans);
+        T meanLoss = NumOps.Divide(Engine.DotProduct(meanDiff, meanDiff), NumOps.FromDouble(numClasses));
 
         // MSE on variances (second moment)
-        T varLoss = NumOps.Zero;
-        for (int i = 0; i < numClasses; i++)
-        {
-            double diff = studentVars[i] - teacherVars[i];
-            varLoss = NumOps.Add(varLoss, NumOps.FromDouble(diff * diff));
-        }
-        varLoss = NumOps.Divide(varLoss, NumOps.FromDouble(numClasses));
+        var varDiff = Engine.Subtract(studentVars, teacherVars);
+        T varLoss = NumOps.Divide(Engine.DotProduct(varDiff, varDiff), NumOps.FromDouble(numClasses));
 
         // Combined loss (equal weight to both moments)
         return NumOps.Add(
@@ -269,27 +179,10 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
 
     private T ComputeMMDLoss(Vector<T>[] studentPredictions, Vector<T>[] teacherPredictions)
     {
-        // Maximum Mean Discrepancy with RBF kernel
-        // MMD² = E[k(x,x')] - 2E[k(x,y)] + E[k(y,y')]
-        // where x~student, y~teacher
-
-        int n = studentPredictions.Length;
-
-        // E[k(x,x')] - student vs student
-        T studentKernel = ComputeAverageKernel(studentPredictions, studentPredictions);
-
-        // E[k(y,y')] - teacher vs teacher
-        T teacherKernel = ComputeAverageKernel(teacherPredictions, teacherPredictions);
-
-        // E[k(x,y)] - student vs teacher (cross term)
-        T crossKernel = ComputeAverageKernel(studentPredictions, teacherPredictions);
-
-        // MMD² = k(x,x') - 2*k(x,y) + k(y,y')
-        var mmd = NumOps.Add(studentKernel, teacherKernel);
-        mmd = NumOps.Subtract(mmd, NumOps.Multiply(crossKernel, NumOps.FromDouble(2.0)));
-
-        // Return squared MMD (already computed above)
-        return mmd;
+        double studentKernel = ComputeAverageKernel(studentPredictions, studentPredictions);
+        double teacherKernel = ComputeAverageKernel(teacherPredictions, teacherPredictions);
+        double crossKernel = ComputeAverageKernel(studentPredictions, teacherPredictions);
+        return NumOps.FromDouble(studentKernel + teacherKernel - 2.0 * crossKernel);
     }
 
     private T ComputeEntropyLoss(Vector<T>[] studentPredictions, Vector<T>[] teacherPredictions)
@@ -297,114 +190,87 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         int batchSize = studentPredictions.Length;
 
         // Compute entropy for each prediction
-        var studentEntropies = new double[batchSize];
-        var teacherEntropies = new double[batchSize];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            studentEntropies[i] = ComputeEntropy(studentPredictions[i]);
-            teacherEntropies[i] = ComputeEntropy(teacherPredictions[i]);
-        }
+        var studentEntropies = ComputeEntropies(studentPredictions);
+        var teacherEntropies = ComputeEntropies(teacherPredictions);
 
         // MSE on entropies (uncertainty calibration)
-        T entropyLoss = NumOps.Zero;
-        for (int i = 0; i < batchSize; i++)
-        {
-            double diff = studentEntropies[i] - teacherEntropies[i];
-            entropyLoss = NumOps.Add(entropyLoss, NumOps.FromDouble(diff * diff));
-        }
+        var diff = Engine.Subtract(studentEntropies, teacherEntropies);
+        T entropyLoss = Engine.DotProduct(diff, diff);
 
         return NumOps.Divide(entropyLoss, NumOps.FromDouble(batchSize));
     }
 
-    private double[] ComputeMeans(Vector<T>[] predictions, int numClasses)
+    /// <summary>
+    /// Per-class mean over the batch.
+    /// </summary>
+    private Vector<T> ComputeMeans(Vector<T>[] predictions, int numClasses)
     {
-        int batchSize = predictions.Length;
-        var means = new double[numClasses];
-
-        for (int classIdx = 0; classIdx < numClasses; classIdx++)
-        {
-            double sum = 0;
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                sum += Convert.ToDouble(predictions[sampleIdx][classIdx]);
-            }
-            means[classIdx] = sum / batchSize;
-        }
-
-        return means;
+        var values = DistillationHelper<T>.StackRows(predictions);
+        return Engine.Reshape(Engine.ReduceMean(values, [0], keepDims: false), [numClasses]).ToVector();
     }
 
-    private double[] ComputeVariances(Vector<T>[] predictions, double[] means, int numClasses)
+    /// <summary>
+    /// Per-class (population) variance over the batch around the given means.
+    /// </summary>
+    private Vector<T> ComputeVariances(Vector<T>[] predictions, Vector<T> means, int numClasses)
     {
-        int batchSize = predictions.Length;
-        var variances = new double[numClasses];
-
-        for (int classIdx = 0; classIdx < numClasses; classIdx++)
-        {
-            double sumSquaredDiff = 0;
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                double val = Convert.ToDouble(predictions[sampleIdx][classIdx]);
-                double diff = val - means[classIdx];
-                sumSquaredDiff += diff * diff;
-            }
-            variances[classIdx] = sumSquaredDiff / batchSize;
-        }
-
-        return variances;
+        var values = DistillationHelper<T>.StackRows(predictions);
+        var centered = Engine.TensorSubtract(
+            values, Engine.TensorBroadcastTo(Engine.Reshape(Tensor<T>.FromVector(means), [1, numClasses]), values.Shape.ToArray()));
+        return Engine.Reshape(
+            Engine.ReduceMean(Engine.TensorMultiply(centered, centered), [0], keepDims: false), [numClasses]).ToVector();
     }
 
-    private T ComputeAverageKernel(Vector<T>[] set1, Vector<T>[] set2)
+    /// <summary>
+    /// Average RBF kernel value over all pairs of the two sets (the diagonal is skipped when both are the
+    /// same set, so a set is not compared with itself sample by sample).
+    /// </summary>
+    private double ComputeAverageKernel(Vector<T>[] set1, Vector<T>[] set2)
     {
-        int n1 = set1.Length;
-        int n2 = set2.Length;
-        T sum = NumOps.Zero;
-        int pairCount = 0;
-
-        for (int i = 0; i < n1; i++)
+        int n = set1.Length, m = set2.Length;
+        bool sameSet = ReferenceEquals(set1, set2);
+        double pairs = sameSet ? n * (double)(n - 1) : n * (double)m;
+        if (pairs == 0) return 0;
+        var a = DistillationHelper<T>.StackRows(set1).Cast<double>();
+        var b = sameSet ? a : DistillationHelper<T>.StackRows(set2).Cast<double>();
+        double sum = 0;
+        for (int i = 0; i < n; i += DistillationPairOps.RowBlockSize)
         {
-            for (int j = 0; j < n2; j++)
+            var left = Engine.TensorNarrow(a, 0, i, Math.Min(DistillationPairOps.RowBlockSize, n - i));
+            for (int j = 0; j < m; j += DistillationPairOps.RowBlockSize)
             {
-                if (set1 == set2 && i == j) continue; // Skip diagonal for same set
-
-                double kernelValue = RBFKernel(set1[i], set2[j]);
-                sum = NumOps.Add(sum, NumOps.FromDouble(kernelValue));
-                pairCount++;
+                var right = Engine.TensorNarrow(b, 0, j, Math.Min(DistillationPairOps.RowBlockSize, m - j));
+                sum += Engine.TensorSum(RBFKernelBlock(left, right, i, j, sameSet));
             }
         }
-
-        return pairCount > 0 ? NumOps.Divide(sum, NumOps.FromDouble(pairCount)) : NumOps.Zero;
+        return sum / pairs;
     }
 
-    private double RBFKernel(Vector<T> v1, Vector<T> v2)
+    /// <summary>
+    /// RBF kernel k(x,y) = exp(-||x-y||²/(2*σ²)) for every row pair ([n, d] and [m, d] -> [n, m]), with the
+    /// squared distance summed from the explicit differences.
+    /// </summary>
+    private Tensor<double> RBFKernelBlock(Tensor<double> a, Tensor<double> b, int rowStart, int columnStart, bool sameSet)
     {
-        // RBF kernel: k(x,y) = exp(-||x-y||²/(2*σ²))
-        double squaredDistance = 0;
-
-        for (int i = 0; i < v1.Length; i++)
-        {
-            double diff = Convert.ToDouble(v1[i]) - Convert.ToDouble(v2[i]);
-            squaredDistance += diff * diff;
-        }
-
-        return Math.Exp(-squaredDistance / (2.0 * _mmdBandwidth * _mmdBandwidth));
+        var squaredDistance = DistillationPairOps.DistanceBlock(a, b);
+        var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(squaredDistance, -1.0 / (2.0 * _mmdBandwidth * _mmdBandwidth)));
+        if (!sameSet) return kernel;
+        var rows = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<int>(rowStart, rowStart + a.Shape[0], 1), [a.Shape[0], 1]), kernel.Shape.ToArray());
+        var columns = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<int>(columnStart, columnStart + b.Shape[0], 1), [1, b.Shape[0]]), kernel.Shape.ToArray());
+        return Engine.TensorWhere(Engine.TensorNotEquals(rows, columns).Cast<double>(), kernel, new Tensor<double>(kernel.Shape.ToArray()));
     }
 
-    private double ComputeEntropy(Vector<T> probabilities)
+    /// <summary>
+    /// Entropy -Σ p log p of every prediction (terms with p &lt;= ε are skipped).
+    /// </summary>
+    private Vector<T> ComputeEntropies(Vector<T>[] predictions)
     {
-        double entropy = 0;
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            double p = Convert.ToDouble(probabilities[i]);
-            if (p > Epsilon)
-            {
-                entropy -= p * Math.Log(p);
-            }
-        }
-
-        return entropy;
+        var p = DistillationHelper<T>.StackRows(predictions);
+        var terms = Engine.TensorWhere(
+            Engine.TensorGreaterThan(p, NumOps.FromDouble(Epsilon)),
+            Engine.TensorMultiply(p, Engine.TensorLog(p)),
+            new Tensor<T>(p.Shape.ToArray()));
+        return Engine.Negate(DistillationHelper<T>.RowSums(terms));
     }
 
     private Matrix<T> ComputeDistributionalGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
@@ -418,100 +284,91 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         };
     }
 
+    /// <summary>
+    /// Gradient of the moment matching loss w.r.t. the student probabilities:
+    /// L = ½·mean_c (μs_c - μt_c)² + ½·mean_c (vs_c - vt_c)², so
+    /// ∂L/∂p_bc = (μs_c - μt_c)/(B·C) + 2 (vs_c - vt_c)(p_bc - μs_c)/(B·C).
+    /// </summary>
     private Matrix<T> ComputeMomentMatchingGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
     {
         int batchSize = studentSoft.Length;
         int numClasses = studentSoft[0].Length;
+        int[] shape = [batchSize, numClasses];
 
         var studentMeans = ComputeMeans(studentSoft, numClasses);
         var teacherMeans = ComputeMeans(teacherSoft, numClasses);
         var studentVars = ComputeVariances(studentSoft, studentMeans, numClasses);
         var teacherVars = ComputeVariances(teacherSoft, teacherMeans, numClasses);
 
-        var gradient = new Matrix<T>(batchSize, numClasses);
+        var p = DistillationHelper<T>.StackRows(studentSoft);
+        T scale = NumOps.FromDouble(1.0 / ((double)batchSize * numClasses));
+        var meanGrad = Engine.TensorMultiplyScalar(
+            Engine.Reshape(Tensor<T>.FromVector(Engine.Subtract(studentMeans, teacherMeans)), [1, numClasses]), scale);
+        var centered = Engine.TensorSubtract(
+            p, Engine.TensorBroadcastTo(Engine.Reshape(Tensor<T>.FromVector(studentMeans), [1, numClasses]), shape));
+        var varScale = Engine.TensorMultiplyScalar(
+            Engine.Reshape(Tensor<T>.FromVector(Engine.Subtract(studentVars, teacherVars)), [1, numClasses]),
+            NumOps.Multiply(NumOps.FromDouble(2.0), scale));
+        var varGrad = Engine.TensorMultiply(centered, Engine.TensorBroadcastTo(varScale, shape));
 
-        for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-        {
-            for (int classIdx = 0; classIdx < numClasses; classIdx++)
-            {
-                double p_i = Convert.ToDouble(studentSoft[sampleIdx][classIdx]);
-
-                double meanGrad = (studentMeans[classIdx] - teacherMeans[classIdx]) / ((double)batchSize * numClasses);
-
-                double centered = p_i - studentMeans[classIdx];
-                double varGrad = 2.0 * centered * (studentVars[classIdx] - teacherVars[classIdx]) / ((double)batchSize * numClasses);
-
-                double totalGrad = 0.5 * meanGrad + 0.5 * varGrad;
-
-                gradient[sampleIdx, classIdx] = NumOps.FromDouble(totalGrad);
-            }
-        }
-
-        return gradient;
+        return Engine.TensorAdd(Engine.TensorBroadcastTo(meanGrad, shape), varGrad).ToMatrix();
     }
 
+    /// <summary>
+    /// Gradient of MMD² = E[k(s,s')] + E[k(t,t')] - 2E[k(s,t)] w.r.t. the student probabilities, with
+    /// ∂k(x,y)/∂x = -k(x,y)(x - y)/σ² and the same pair normalization as the loss (n(n-1) for the
+    /// student-student term without the diagonal, n·m for the cross term).
+    /// </summary>
     private Matrix<T> ComputeMMDGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
     {
-        int batchSize = studentSoft.Length;
-        int numClasses = studentSoft[0].Length;
-
-        var gradient = new Matrix<T>(batchSize, numClasses);
-
-        for (int i = 0; i < batchSize; i++)
+        int n = studentSoft.Length, m = teacherSoft.Length, dimensions = studentSoft[0].Length;
+        double sigmaSquared = _mmdBandwidth * _mmdBandwidth;
+        var students = DistillationHelper<T>.StackRows(studentSoft).Cast<double>();
+        var teachers = DistillationHelper<T>.StackRows(teacherSoft).Cast<double>();
+        var blocks = new List<Tensor<double>>();
+        for (int i = 0; i < n; i += DistillationPairOps.RowBlockSize)
         {
-            for (int classIdx = 0; classIdx < numClasses; classIdx++)
+            int count = Math.Min(DistillationPairOps.RowBlockSize, n - i);
+            var left = Engine.TensorNarrow(students, 0, i, count);
+            var gradient = new Tensor<double>([count, dimensions]);
+            void Accumulate(Tensor<double> others, bool sameSet, double scale)
             {
-                double gradSum = 0;
-
-                for (int j = 0; j < batchSize; j++)
+                for (int j = 0; j < others.Shape[0]; j += DistillationPairOps.RowBlockSize)
                 {
-                    if (i != j)
-                    {
-                        double k_ij = RBFKernel(studentSoft[i], studentSoft[j]);
-                        double diff_ij = Convert.ToDouble(studentSoft[i][classIdx]) - Convert.ToDouble(studentSoft[j][classIdx]);
-                        gradSum += 2.0 * k_ij * diff_ij / (_mmdBandwidth * _mmdBandwidth);
-                    }
-
-                    double k_it = RBFKernel(studentSoft[i], teacherSoft[j]);
-                    double diff_it = Convert.ToDouble(studentSoft[i][classIdx]) - Convert.ToDouble(teacherSoft[j][classIdx]);
-                    gradSum -= 2.0 * k_it * diff_it / (_mmdBandwidth * _mmdBandwidth);
+                    var right = Engine.TensorNarrow(others, 0, j, Math.Min(DistillationPairOps.RowBlockSize, others.Shape[0] - j));
+                    var kernel = RBFKernelBlock(left, right, i, j, sameSet);
+                    var differences = Engine.TensorSubtract(
+                        Engine.TensorMultiply(left, Engine.TensorBroadcastTo(Engine.ReduceSum(kernel, [1], keepDims: true), left.Shape.ToArray())),
+                        Engine.TensorMatMul(kernel, right));
+                    gradient = Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(differences, scale));
                 }
-
-                gradSum /= (double)batchSize * batchSize;
-                gradient[i, classIdx] = NumOps.FromDouble(gradSum);
             }
+            if (n > 1) Accumulate(students, true, -2.0 / (sigmaSquared * n * (double)(n - 1)));
+            if (m > 0) Accumulate(teachers, false, 2.0 / (sigmaSquared * n * (double)m));
+            blocks.Add(gradient);
         }
-
-        return gradient;
+        return Engine.TensorConcatenate(blocks.ToArray(), 0).Cast<T>().ToMatrix();
     }
 
+    /// <summary>
+    /// Gradient of mean_b (Hs_b - Ht_b)² w.r.t. the student probabilities, using
+    /// ∂H/∂p = -(1 + log(p + ε)).
+    /// </summary>
     private Matrix<T> ComputeEntropyGradient(Vector<T>[] studentSoft, Vector<T>[] teacherSoft)
     {
         int batchSize = studentSoft.Length;
         int numClasses = studentSoft[0].Length;
+        int[] shape = [batchSize, numClasses];
 
-        var gradient = new Matrix<T>(batchSize, numClasses);
+        var entropyDiff = Engine.Subtract(ComputeEntropies(studentSoft), ComputeEntropies(teacherSoft));
 
-        for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-        {
-            double studentEntropy = ComputeEntropy(studentSoft[sampleIdx]);
-            double teacherEntropy = ComputeEntropy(teacherSoft[sampleIdx]);
+        var p = DistillationHelper<T>.StackRows(studentSoft);
+        var entropyGrad = Engine.TensorNegate(Engine.TensorAddScalar(
+            Engine.TensorLog(Engine.TensorAddScalar(p, NumOps.FromDouble(Epsilon))), NumOps.One));
 
-            double entropyDiff = studentEntropy - teacherEntropy;
-
-            for (int classIdx = 0; classIdx < numClasses; classIdx++)
-            {
-                double p_i = Convert.ToDouble(studentSoft[sampleIdx][classIdx]);
-
-                double entropyGrad = -(1.0 + Math.Log(p_i + Epsilon));
-
-                double totalGrad = 2.0 * entropyDiff * entropyGrad / batchSize;
-
-                gradient[sampleIdx, classIdx] = NumOps.FromDouble(totalGrad);
-            }
-        }
-
-        return gradient;
+        var rowScale = Engine.TensorMultiplyScalar(
+            Engine.Reshape(Tensor<T>.FromVector(entropyDiff), [batchSize, 1]), NumOps.FromDouble(2.0 / batchSize));
+        return Engine.TensorMultiply(entropyGrad, Engine.TensorBroadcastTo(rowScale, shape)).ToMatrix();
     }
 
 }

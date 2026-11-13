@@ -124,12 +124,6 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     private Tensor<T>? _sparseGradients;
 
     /// <summary>
-    /// Cached input from forward pass for computing sparse gradients in backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedInput;
-
-    /// <summary>
     /// Maximum number of sparse full-rank parameters to allocate.
     /// </summary>
     /// <remarks>
@@ -278,14 +272,8 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         _activeSparseCount[0] = NumOps.Zero;
 
         // Initialize importance scores (uniform initially)
-        _parameterImportance = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                _parameterImportance[i, j] = NumOps.Zero;
-            }
-        }
+        _parameterImportance = new Matrix<T>(outputSize, inputSize); // zero-filled
+
 
         // Sparse scaling factor (typically smaller than LoRA scaling)
         _sparseScaling = NumOps.FromDouble(0.1);
@@ -318,9 +306,6 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Cache input for the sparse-gradient backward only when a manual backward will read it
-        SaveForBackward(ref _cachedInput, input);
-
         // 1. Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -331,12 +316,9 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> sparseOutput = ForwardSparseFullRank(input);
 
         // Sum all three components
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            T sum = NumOps.Add(baseOutput[i], loraOutput[i]);
-            result[i] = NumOps.Add(sum, sparseOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(
+            Engine.TensorAdd(baseOutput, loraOutput), Engine.Reshape(sparseOutput, baseOutput.Shape.ToArray()));
+
 
         return result;
     }
@@ -370,134 +352,94 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
             return new Tensor<T>(new[] { batchSize, outputSize }, zeroData);
         }
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
+        // Sparse matrix multiplication: output[b, row_k] += (value_k * scaling) * input[b, col_k] for every
+        // active entry k. Gathering input columns and scatter-adding into output rows keeps work and memory
+        // at O(activeCount * batch); no one-hot or dense [outputSize, inputSize] delta is built.
+        Tensor<int> rows = ActiveCoordinates(_sparseRows, activeCount);
+        Tensor<int> cols = ActiveCoordinates(_sparseColumns, activeCount);
+        Tensor<T> scaledValues;
+        Tensor<T> inputColumns;
+        Tensor<T> output;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
+            scaledValues = Engine.TensorBroadcastTo(Engine.Reshape(
+                Engine.TensorMultiplyScalar(Engine.TensorNarrow(_sparseValues, 0, 0, activeCount), _sparseScaling),
+                [activeCount, 1]), [activeCount, batchSize]);
+            inputColumns = Engine.TensorIndexSelect(
+                Engine.TensorTranspose(Engine.Reshape(input, [batchSize, inputSize])), cols, 0); // [activeCount, batch]
+            Tensor<T> outputByRow = Engine.TensorScatterAdd(
+                new Tensor<T>([outputSize, batchSize]), rows, Engine.TensorMultiply(inputColumns, scaledValues), 0);
+            output = Engine.TensorTranspose(outputByRow);
         }
 
-        // Compute sparse matrix multiplication
-        Matrix<T> output = new Matrix<T>(batchSize, outputSize);
-        for (int sparseIndex = 0; sparseIndex < activeCount; sparseIndex++)
-        {
-            int row = (int)Convert.ToDouble(_sparseRows[sparseIndex]);
-            int col = (int)Convert.ToDouble(_sparseColumns[sparseIndex]);
-            T weight = NumOps.Multiply(_sparseValues[sparseIndex], _sparseScaling);
+        if (AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed) return output;
 
-            // output[b, row] += weight * input[b, col]
-            for (int b = 0; b < batchSize; b++)
-            {
-                T contribution = NumOps.Multiply(weight, inputMatrix[b, col]);
-                output[b, row] = NumOps.Add(output[b, row], contribution);
-            }
-        }
-
-        // Convert back to tensor
-        Vector<T> outputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                outputData[idx++] = output[i, j];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
+        // The closure keeps only the gathered [activeCount, batch] columns and the coordinate lists.
+        int[] inputShape = input.Shape.ToArray();
+        return RegisterManualBackwardNode(output, [input, _sparseValues],
+            gradient => BackwardSparseFullRank(gradient, inputColumns, scaledValues, rows, cols, inputShape, outputSize));
     }
 
     /// <summary>
-    /// Performs backward pass through the sparse full-rank component.
+    /// Reads the first <paramref name="activeCount"/> stored coordinates as integer indices.
     /// </summary>
-    /// <param name="outputGradient">Output gradient tensor.</param>
-    /// <returns>Input gradient tensor.</returns>
-    private Tensor<T> BackwardSparseFullRank(Tensor<T> outputGradient)
+    private Tensor<int> ActiveCoordinates(Tensor<T> coordinates, int activeCount)
+        => Engine.TensorNarrow(coordinates, 0, 0, activeCount).Cast<int>();
+
+    /// <summary>
+    /// Flat row-major position (row * inputSize + col) of each active sparse coordinate.
+    /// </summary>
+    private Tensor<int> ActiveFlatPositions(int activeCount, int inputSize)
+        => Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(ActiveCoordinates(_sparseRows, activeCount), inputSize),
+            ActiveCoordinates(_sparseColumns, activeCount));
+
+    /// <summary>
+    /// Scatter-adds one value per active coordinate into a flat [outputSize * inputSize] tensor
+    /// (repeated coordinates accumulate). Cost: one dense buffer plus O(activeCount).
+    /// </summary>
+    private Tensor<T> ScatterActiveToDense(Tensor<T> values, int activeCount, int outputSize, int inputSize)
+        => Engine.TensorScatterAdd(
+            new Tensor<T>([outputSize * inputSize]), ActiveFlatPositions(activeCount, inputSize), values, 0);
+
+    /// <summary>
+    /// Builds the dense [outputSize, inputSize] matrix holding value * scaling at every active
+    /// (row, col) sparse coordinate. Used only for merging, where a dense matrix is the result.
+    /// </summary>
+    private Tensor<T> BuildScaledSparseDelta(int activeCount, int outputSize, int inputSize)
     {
-        int batchSize = outputGradient.Shape[0];
-        int outputSize = outputGradient.Shape.Length > 1 ? outputGradient.Shape[1] : outputGradient.Length;
-        int inputSize = GetInputShape()[0];
+        Tensor<T> weights = Engine.TensorMultiplyScalar(Engine.TensorNarrow(_sparseValues, 0, 0, activeCount), _sparseScaling);
+        return Engine.Reshape(ScatterActiveToDense(weights, activeCount, outputSize, inputSize), [outputSize, inputSize]);
+    }
 
-        // Initialize sparse gradients
-        _sparseGradients = new Tensor<T>([_maxSparseParams]);
+    /// <summary>
+    /// Backward pass through the sparse full-rank component, using the columns gathered in the forward pass.
+    /// </summary>
+    /// <returns>Gradients for the layer input and for the full-capacity sparse value tensor.</returns>
+    private Tensor<T>?[] BackwardSparseFullRank(
+        Tensor<T> outputGradient, Tensor<T> inputColumns, Tensor<T> scaledValues,
+        Tensor<int> rows, Tensor<int> cols, int[] inputShape, int outputSize)
+    {
+        int activeCount = rows.Length;
+        int batchSize = inputColumns.Shape[1];
+        int inputSize = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
 
-        // If no sparse parameters, return zeros
-        int activeCount = ActiveSparseParams;
-        if (activeCount == 0)
-        {
-            Vector<T> zeroData = new Vector<T>(batchSize * inputSize);
-            return new Tensor<T>(new[] { batchSize, inputSize }, zeroData);
-        }
+        // grad[b, row_k] for every active entry: [activeCount, batch]
+        Tensor<T> gradientRows = Engine.TensorIndexSelect(
+            Engine.TensorTranspose(Engine.Reshape(outputGradient, [batchSize, outputSize])), rows, 0);
 
-        // Validate cached input is available
-        if (_cachedInput == null)
-        {
-            throw new InvalidOperationException("Forward must be called before Backward");
-        }
+        // dL/dValue_k = scaling * Σ_b grad[b, row_k] * input[b, col_k]
+        Tensor<T> valueGradients = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(gradientRows, inputColumns), [1], false), _sparseScaling);
+        Tensor<T> fullValueGradients = activeCount < _maxSparseParams
+            ? Engine.TensorConcatenate([valueGradients, new Tensor<T>([_maxSparseParams - activeCount])], 0)
+            : valueGradients;
+        _sparseGradients = fullValueGradients;
 
-        // Convert gradient to matrix
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * outputSize + j];
-            }
-        }
-
-        // Convert cached input to matrix
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = _cachedInput[i * inputSize + j];
-            }
-        }
-
-        // Compute input gradients and parameter gradients
-        Matrix<T> inputGradMatrix = new Matrix<T>(batchSize, inputSize);
-
-        for (int sparseIndex = 0; sparseIndex < activeCount; sparseIndex++)
-        {
-            int row = (int)Convert.ToDouble(_sparseRows[sparseIndex]);
-            int col = (int)Convert.ToDouble(_sparseColumns[sparseIndex]);
-            T weight = NumOps.Multiply(_sparseValues[sparseIndex], _sparseScaling);
-
-            T paramGrad = NumOps.Zero;
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Input gradient: dL/dInput[b, col] += weight * dL/dOutput[b, row]
-                T grad = NumOps.Multiply(weight, gradMatrix[b, row]);
-                inputGradMatrix[b, col] = NumOps.Add(inputGradMatrix[b, col], grad);
-
-                // Parameter gradient: dL/dWeight[row, col] = Σ_batch (input[b, col] * dL/dOutput[b, row])
-                // This is the correct gradient formula for linear layers (outer product of input and output error)
-                T inputVal = inputMatrix[b, col];
-                T outputGrad = gradMatrix[b, row];
-                T gradContribution = NumOps.Multiply(inputVal, outputGrad);
-                paramGrad = NumOps.Add(paramGrad, gradContribution);
-            }
-
-            _sparseGradients[sparseIndex] = NumOps.Multiply(paramGrad, _sparseScaling);
-        }
-
-        // Convert input gradients back to tensor
-        Vector<T> inputGradData = new Vector<T>(batchSize * inputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputGradData[idx++] = inputGradMatrix[i, j];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, inputSize }, inputGradData);
+        // dL/dInput[b, col_k] += (value_k * scaling) * grad[b, row_k]
+        Tensor<T> inputGradientByColumn = Engine.TensorScatterAdd(
+            new Tensor<T>([inputSize, batchSize]), cols, Engine.TensorMultiply(gradientRows, scaledValues), 0);
+        return [Engine.Reshape(Engine.TensorTranspose(inputGradientByColumn), inputShape), fullValueGradients];
     }
 
     /// <summary>
@@ -536,41 +478,25 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         T oneMinusEma = NumOps.FromDouble(1.0 - _importanceEMA);
 
         // Estimate per-parameter importance from LoRA gradients
-        // Higher LoRA gradients suggest that parameter needs more capacity
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                // Compute approximate gradient magnitude for this weight
-                // by looking at contributions through LoRA paths
-                T gradMagnitude = NumOps.Zero;
+        // Higher LoRA gradients suggest that parameter needs more capacity.
+        // Gradient flows through A[j, r] and B[r, i]; the LoRA parameter gradients are laid out as
+        // [dA ([inputSize, rank]) row-major, dB ([rank, outputSize]) row-major], so
+        // magnitude[i, j] = Σ_r |dA[j, r]| * |dB[r, i]| = (|dB|^T * |dA|^T)[i, j].
+        int rank = Rank;
+        int aCount = inputSize * rank;
+        int bCount = rank * outputSize;
+        Tensor<T> gradMagnitude = loraGradients.Length >= aCount + bCount
+            ? Engine.TensorMatMul(
+                Engine.TensorTranspose(Engine.TensorAbs(Engine.Reshape(
+                    Tensor<T>.FromVector(loraGradients.GetSubVector(aCount, bCount)), [rank, outputSize]))),
+                Engine.TensorTranspose(Engine.TensorAbs(Engine.Reshape(
+                    Tensor<T>.FromVector(loraGradients.GetSubVector(0, aCount)), [inputSize, rank]))))
+            : new Tensor<T>([outputSize, inputSize]);
 
-                // Sum contributions from all rank components
-                int rank = Rank;
-                for (int r = 0; r < rank; r++)
-                {
-                    // Gradient flows through A[j,r] and B[r,i]
-                    int aIndex = j * rank + r;
-                    int bIndex = r * outputSize + i;
-
-                    if (aIndex < loraGradients.Length && bIndex < loraGradients.Length)
-                    {
-                        T contribution = NumOps.Multiply(
-                            NumOps.Abs(loraGradients[aIndex]),
-                            NumOps.Abs(loraGradients[bIndex]));
-                        gradMagnitude = NumOps.Add(gradMagnitude, contribution);
-                    }
-                }
-
-                // Update importance with EMA
-                T oldImportance = _parameterImportance[i, j];
-                T newImportance = NumOps.Add(
-                    NumOps.Multiply(emaFactor, oldImportance),
-                    NumOps.Multiply(oneMinusEma, gradMagnitude));
-
-                _parameterImportance[i, j] = newImportance;
-            }
-        }
+        // Update importance with EMA
+        _parameterImportance = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(_parameterImportance), emaFactor),
+            Engine.TensorMultiplyScalar(gradMagnitude, oneMinusEma)).ToMatrix();
     }
 
     /// <summary>
@@ -598,51 +524,58 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int inputSize = GetInputShape()[0];
 
-        // Create list of (importance, position) pairs
-        var importanceList = new List<(T importance, int row, int col)>();
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                importanceList.Add((_parameterImportance[i, j], i, j));
-            }
-        }
-
-        // Sort by importance (descending)
-        importanceList.Sort((a, b) =>
-            Convert.ToDouble(b.importance).CompareTo(Convert.ToDouble(a.importance)));
+        // Rank every position by importance (descending; master's List.Sort gave no tie guarantee)
+        int total = outputSize * inputSize;
+        int[] order = Engine.TensorArgsort(
+            Engine.Reshape(Tensor<T>.FromMatrix(_parameterImportance), [total]), 0, true).ToArray();
 
         // Select top-k positions for sparse full-rank updates
-        var existingSparseUpdates = GetSparseUpdates();
-        int selectedCount = Math.Min(_maxSparseParams, importanceList.Count);
-        for (int i = 0; i < selectedCount; i++)
+        int selectedCount = Math.Min(_maxSparseParams, total);
+        int[] selectedPositions = new int[selectedCount];
+        Array.Copy(order, selectedPositions, selectedCount);
+        Tensor<int> selected = new Tensor<int>(selectedPositions, [selectedCount]);
+
+        // Existing sparse values laid out densely by (row, col), plus a mask of allocated positions
+        int activeCount = ActiveSparseParams;
+        Tensor<T> existingValues = new Tensor<T>([total]);
+        Tensor<T> existingMask = new Tensor<T>([total]);
+        if (activeCount > 0)
         {
-            var entry = importanceList[i];
-            var key = (entry.row, entry.col);
-
-            // Preserve existing values if already allocated, otherwise initialize small random
-            if (existingSparseUpdates.TryGetValue(key, out var existingValue))
-            {
-                _sparseValues[i] = existingValue;
-            }
-            else
-            {
-                // Initialize new sparse parameter with small random value
-                Random rng = RandomHelper.CreateSecureRandom();
-                double randVal = (rng.NextDouble() - 0.5) * 0.02; // Small initialization
-                _sparseValues[i] = NumOps.FromDouble(randVal);
-            }
-
-            _sparseRows[i] = NumOps.FromDouble(entry.row);
-            _sparseColumns[i] = NumOps.FromDouble(entry.col);
+            existingValues = ScatterActiveToDense(
+                Engine.TensorNarrow(_sparseValues, 0, 0, activeCount), activeCount, outputSize, inputSize);
+            existingMask = ScatterActiveToDense(
+                Tensor<T>.CreateDefault([activeCount], NumOps.One), activeCount, outputSize, inputSize);
         }
 
-        for (int i = selectedCount; i < _maxSparseParams; i++)
+        // Preserve existing values if already allocated, otherwise initialize a small random value
+        // uniform in [-0.01, 0.01) (master drew (u - 0.5) * 0.02 from an unseeded secure generator).
+        Tensor<T> freshValues = Engine.TensorRandomUniformRange<T>(
+            [selectedCount], NumOps.FromDouble(-0.01), NumOps.FromDouble(0.01));
+        Tensor<T> newValues = Engine.TensorWhere(
+            Engine.TensorIndexSelect(existingMask, selected, 0),
+            Engine.TensorIndexSelect(existingValues, selected, 0),
+            freshValues);
+
+        // Row and column of each selected flat position (row = position / inputSize, col = position % inputSize)
+        Tensor<T> rowOfPosition = Engine.Reshape(Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<T>(0, outputSize, 1), [outputSize, 1]), [outputSize, inputSize]), [total]);
+        Tensor<T> colOfPosition = Engine.Reshape(Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<T>(0, inputSize, 1), [1, inputSize]), [outputSize, inputSize]), [total]);
+        Tensor<T> newRows = Engine.TensorIndexSelect(rowOfPosition, selected, 0);
+        Tensor<T> newCols = Engine.TensorIndexSelect(colOfPosition, selected, 0);
+
+        // Entries past the selection are cleared
+        if (selectedCount < _maxSparseParams)
         {
-            _sparseValues[i] = NumOps.Zero;
-            _sparseRows[i] = NumOps.Zero;
-            _sparseColumns[i] = NumOps.Zero;
+            Tensor<T> padding = new Tensor<T>([_maxSparseParams - selectedCount]);
+            newValues = Engine.TensorConcatenate([newValues, padding], 0);
+            newRows = Engine.TensorConcatenate([newRows, padding], 0);
+            newCols = Engine.TensorConcatenate([newCols, padding], 0);
         }
+
+        newValues.AsSpan().CopyTo(_sparseValues.AsWritableSpan());
+        newRows.AsSpan().CopyTo(_sparseRows.AsWritableSpan());
+        newCols.AsSpan().CopyTo(_sparseColumns.AsWritableSpan());
         _activeSparseCount[0] = NumOps.FromDouble(selectedCount);
     }
 
@@ -658,12 +591,16 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         // Update sparse full-rank parameters
         if (_sparseGradients != null)
         {
+            // values[0 : activeCount] -= learningRate * grads[0 : activeCount]
             int activeCount = ActiveSparseParams;
-            for (int i = 0; i < activeCount; i++)
+            if (activeCount > 0)
             {
-                T update = NumOps.Multiply(_sparseGradients[i], learningRate);
-                _sparseValues[i] = NumOps.Subtract(_sparseValues[i], update);
+                Tensor<T> updated = Engine.TensorSubtract(
+                    Engine.TensorNarrow(_sparseValues, 0, 0, activeCount),
+                    Engine.TensorMultiplyScalar(Engine.TensorNarrow(_sparseGradients, 0, 0, activeCount), learningRate));
+                updated.AsSpan().CopyTo(_sparseValues.AsWritableSpan().Slice(0, activeCount));
             }
+
         }
 
         // Update base layer if not frozen
@@ -711,37 +648,20 @@ public partial class HRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
 
-        // Create merged parameters
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Start with base weights
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
-
-        // Add LoRA contribution
+        // Start with base weights and add the LoRA contribution ([inputSize, outputSize]) and the
+        // sparse full-rank contribution ([outputSize, inputSize]). DenseLayer stores its weights
+        // input-major and FullyConnectedLayer output-major. Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(mergedParams[i], loraWeights[row, col]);
-        }
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
-        // Add sparse full-rank contribution
         int activeCount = ActiveSparseParams;
-        for (int sparseIndex = 0; sparseIndex < activeCount; sparseIndex++)
+        if (activeCount > 0)
         {
-            int row = (int)Convert.ToDouble(_sparseRows[sparseIndex]);
-            int col = (int)Convert.ToDouble(_sparseColumns[sparseIndex]);
-            int paramIndex = row * inputSize + col;
-
-            if (paramIndex < weightCount)
-            {
-                T sparseContribution = NumOps.Multiply(_sparseValues[sparseIndex], _sparseScaling);
-                mergedParams[paramIndex] = NumOps.Add(mergedParams[paramIndex], sparseContribution);
-            }
+            Matrix<T> sparseDelta = BuildScaledSparseDelta(activeCount, outputSize, inputSize).ToMatrix();
+            mergedParams = AddFlatWeightsToParameters(
+                mergedParams, isOutputMajor ? sparseDelta : sparseDelta.Transpose(), weightCount);
         }
 
         // Use helper method to clone base layer and preserve activation function

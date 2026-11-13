@@ -164,9 +164,9 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
     /// This method performs the core PiSSA initialization:
     /// 1. Computes SVD: W = U Σ V^T
     /// 2. Extracts top-r components: U_r, Σ_r, V_r
-    /// 3. Initializes A = V_r^T (right singular vectors)
-    /// 4. Initializes B = U_r Σ_r (left singular vectors scaled by singular values)
-    /// 5. Computes residual: W_residual = W - B*A
+    /// 3. Initializes A = V_r sqrt(Σ_r / s) (right singular vectors, s = alpha / rank)
+    /// 4. Initializes B = sqrt(Σ_r / s) U_r^T (left singular vectors)
+    /// 5. Computes residual: W_residual = W - U_r Σ_r V_r^T, so the adapter starts equal to W
     /// </para>
     /// <para><b>For Beginners:</b> This is where the magic happens!
     ///
@@ -210,28 +210,20 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
         // Extract top-r singular values and vectors
         int r = Rank;
 
-        // Create A matrix from top-r right singular vectors: A = V_r
-        // V^T has dimensions (inputSize x inputSize), we take first r rows and transpose to get V_r
-        Matrix<T> matrixA = new Matrix<T>(inputSize, r);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < r; j++)
-            {
-                matrixA[i, j] = svd.Vt[j, i]; // Result: V_r (dimensions: inputSize × rank)
-            }
-        }
-
-        // Create B matrix from top-r left singular vectors scaled by singular values: B = Σ_r * U_r^T
-        // U has dimensions (outputSize x outputSize), we take first r columns, scale, and transpose
-        Matrix<T> matrixB = new Matrix<T>(r, outputSize);
-        for (int i = 0; i < r; i++)
-        {
-            T singularValue = svd.S[i];
-            for (int j = 0; j < outputSize; j++)
-            {
-                matrixB[i, j] = NumOps.Multiply(svd.U[j, i], singularValue); // Result: Σ_r * U_r^T (dimensions: rank × outputSize)
-            }
-        }
+        // PiSSA (Meng et al., 2024) splits the principal singular values evenly between the factors and,
+        // as in PEFT, divides them by the LoRA scaling first so that the scaled product the LoRA layer
+        // applies, scaling * A * B, is exactly the rank-r principal part: with d = sqrt(S_r / scaling),
+        //   A = V_r * diag(d)   (inputSize × rank)
+        //   B = diag(d) * U_r^T (rank × outputSize)
+        T scaling = _loraLayer.Scaling;
+        Tensor<T> splitSingularValues = Engine.TensorSqrt(Engine.TensorDivideScalar(
+            Tensor<T>.FromVector(svd.S.GetSubVector(0, r)), scaling));
+        Matrix<T> matrixA = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(Engine.MatrixTranspose(svd.Vt.GetSubMatrix(0, 0, r, inputSize))),
+            Engine.Reshape(splitSingularValues, [1, r])).ToMatrix();
+        Matrix<T> matrixB = Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(Engine.MatrixTranspose(svd.U.GetSubMatrix(0, 0, outputSize, r))),
+            Engine.Reshape(splitSingularValues, [r, 1])).ToMatrix();
 
         // Compute the low-rank approximation: W_rank_r = B*A
         // Note: matrixA is [inputSize x r], matrixB is [r x outputSize]
@@ -251,41 +243,16 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
         // So we need: W = (A * B)^T + W_residual
         // Therefore: W_residual = W - (A * B)^T
 
-        Matrix<T> lowRankApprox = matrixA.Multiply(matrixB); // [inputSize x rank] * [rank x outputSize] = [inputSize x outputSize]
+        // The LoRA layer applies scaling * A * B, so that is the principal part to remove from W
+        Matrix<T> lowRankApprox = Engine.MatrixMultiplyScalar(matrixA.Multiply(matrixB), scaling); // [inputSize x outputSize]
         Matrix<T> lowRankApproxTransposed = lowRankApprox.Transpose(); // [outputSize x inputSize]
 
         // Compute residual: W_residual = W - (B*A approximation)
-        _residualWeights = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                _residualWeights[i, j] = NumOps.Subtract(pretrainedWeights[i, j], lowRankApproxTransposed[i, j]);
-            }
-        }
+        _residualWeights = Engine.MatrixSubtract(pretrainedWeights, lowRankApproxTransposed);
 
         // Set the LoRA layer's A and B matrices
         // Note: LoRALayer expects A: [inputSize x rank], B: [rank x outputSize]
-        Vector<T> loraParams = new Vector<T>((int)_loraLayer.ParameterCount);
-        int idx = 0;
-
-        // Pack matrix A
-        for (int i = 0; i < matrixA.Rows; i++)
-        {
-            for (int j = 0; j < matrixA.Columns; j++)
-            {
-                loraParams[idx++] = matrixA[i, j];
-            }
-        }
-
-        // Pack matrix B
-        for (int i = 0; i < matrixB.Rows; i++)
-        {
-            for (int j = 0; j < matrixB.Columns; j++)
-            {
-                loraParams[idx++] = matrixB[i, j];
-            }
-        }
+        Vector<T> loraParams = Vector<T>.Concatenate(matrixA.ToRowVector(), matrixB.ToRowVector());
 
         _loraLayer.SetParameters(loraParams);
         _initializedFromSVD = true;
@@ -381,33 +348,23 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
                 nameof(input));
         }
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
+        // View input as [batchSize, inputSize]
+        Tensor<T> inputMatrix = Engine.Reshape(input, [batchSize, inputSize]);
 
-        // Compute residual output: W_residual * input^T -> [batchSize, outputSize]
-        Matrix<T> residualOutput = inputMatrix.Multiply(_residualWeights.Transpose());
+        // Compute residual output: input * W_residual^T -> [batchSize, outputSize]
+        Tensor<T> residualOutput = Engine.TensorMatMul(
+            inputMatrix, Tensor<T>.FromMatrix(Engine.MatrixTranspose(_residualWeights)));
 
         // Compute LoRA output
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
-        // Sum the outputs
+        // Sum the outputs, plus the base layer's bias (the merged layer keeps it, so the adapter must too)
         int outputSize = _residualWeights.Rows;
-        Tensor<T> result = new Tensor<T>(new[] { batchSize, outputSize });
-
-        for (int i = 0; i < batchSize; i++)
+        Tensor<T> result = Engine.TensorAdd(residualOutput, Engine.Reshape(loraOutput, [batchSize, outputSize]));
+        Tensor<T>? biasRows = BaseBiasRows(_baseLayer.GetParameters(), outputSize * inputSize, outputSize, batchSize);
+        if (biasRows is not null)
         {
-            for (int j = 0; j < outputSize; j++)
-            {
-                int idx = i * outputSize + j;
-                result[idx] = NumOps.Add(residualOutput[i, j], loraOutput[idx]);
-            }
+            result = Engine.TensorAdd(result, biasRows);
         }
 
         return result;
@@ -458,38 +415,21 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = _residualWeights.Rows;
         int inputSize = _residualWeights.Columns;
 
-        Matrix<T> mergedWeights = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                mergedWeights[i, j] = NumOps.Add(_residualWeights[i, j], loraWeights[i, j]);
-            }
-        }
+        // MergeWeights() is [inputSize, outputSize] (A * B), so its transpose lines up with the
+        // [outputSize, inputSize] residual, matching the forward pass (input * W_residual^T + input * A * B).
+        Matrix<T> mergedWeights = Engine.MatrixAdd(_residualWeights, Engine.MatrixTranspose(loraWeights));
 
-        // Create parameters vector: [merged weights, biases]
-        // Get biases from base layer
+        // The residual is output-major; DenseLayer's flat weights are input-major.
+        if (_baseLayer is DenseLayer<T>)
+            mergedWeights = Engine.MatrixTranspose(mergedWeights);
+
+        // Create parameters vector: [merged weights (row-major), biases unchanged]
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = outputSize * inputSize;
         int biasCount = baseParams.Length - weightCount;
-
-        Vector<T> mergedParams = new Vector<T>(weightCount + biasCount);
-
-        // Pack merged weights
-        int idx = 0;
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                mergedParams[idx++] = mergedWeights[i, j];
-            }
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[idx++] = baseParams[i];
-        }
+        Vector<T> mergedParams = biasCount > 0
+            ? Vector<T>.Concatenate(mergedWeights.ToRowVector(), baseParams.GetSubVector(weightCount, biasCount))
+            : mergedWeights.ToRowVector();
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

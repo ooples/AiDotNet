@@ -180,14 +180,12 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
         _seed = seed;
         _basisGenerator = RandomHelper.CreateSeededRandom(_seed);
 
-        // Initialize coefficients to zero (NOLA starts with no effect)
+        // Keep the initial adaptation zero while allowing coefficient gradients to start learning.
         _coefficientsA = new Tensor<T>([_numBasis]);
-        _coefficientsB = new Tensor<T>([_numBasis]);
-        for (int i = 0; i < _numBasis; i++)
-        {
-            _coefficientsA[i] = NumOps.Zero;
-            _coefficientsB[i] = NumOps.Zero;
-        }
+        // One nonzero A coefficient gives B a gradient while zero B preserves the initial base output.
+        _coefficientsA[0] = NumOps.One;
+        _coefficientsB = new Tensor<T>([_numBasis]); // fresh tensors are zero-filled
+
 
         // NOLA trains only its coefficient tensors; random bases are reproducibly derived from the
         // seed and the inherited standard LoRA factors are unused.
@@ -230,9 +228,10 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Reconstructs matrix A from linear combination of random basis matrices.
+    /// Computes a linear combination of seeded random basis matrices, generating the bases in bounded
+    /// blocks and recording one manual backward node for the coefficients.
     /// </summary>
-    /// <returns>Reconstructed matrix A (inputSize × rank).</returns>
+    /// <returns>The combined [rows, cols] matrix.</returns>
     /// <remarks>
     /// <para>
     /// Computes: A = Σ(coefficient_i * basis_i) for all basis matrices.
@@ -243,25 +242,66 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// each template is a color, and each coefficient controls how much of that color to use.
     /// </para>
     /// </remarks>
-    private Matrix<T> ReconstructMatrixA()
+    private Tensor<T> CombineBases(int rows, int cols, int basisOffset, Tensor<T> coefficients)
     {
-        int inputSize = GetInputShape()[0];
-        Matrix<T> matrixA = new Matrix<T>(inputSize, Rank);
-
-        // Linear combination of basis matrices
-        for (int b = 0; b < _numBasis; b++)
+        Tensor<T> sum;
+        // Random bases are constants: retaining each block on the forward tape defeats rematerialization.
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            Matrix<T> basis = GenerateRandomBasis(inputSize, Rank, b);
-            T coef = _coefficientsA[b];
-
-            for (int i = 0; i < inputSize; i++)
+            int blockSize = BasisBlockSize(rows, cols);
+            sum = new Tensor<T>([rows, cols]);
+            for (int start = 0; start < _numBasis; start += blockSize)
             {
-                for (int j = 0; j < Rank; j++)
-                {
-                    matrixA[i, j] = NumOps.Add(matrixA[i, j], NumOps.Multiply(basis[i, j], coef));
-                }
+                int count = Math.Min(blockSize, _numBasis - start);
+                var bases = GenerateBasisBlock(rows, cols, basisOffset + start, count);
+                var weights = Engine.Reshape(Engine.TensorNarrow(coefficients, 0, start, count), [count, 1, 1]);
+                sum = Engine.TensorAdd(sum, Engine.ReduceSum(Engine.TensorMultiply(bases, weights), [0], false));
             }
         }
+
+        if (AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed) return sum;
+
+        // The closure retains dimensions and the seed-bearing adapter, never generated basis tensors.
+        return RegisterManualBackwardNode(sum, [coefficients],
+            gradient => [BasisCoefficientGradient(gradient, rows, cols, basisOffset)]);
+    }
+
+    private static int BasisBlockSize(int rows, int cols)
+        => (int)Math.Max(1, Math.Min(16, 65_536L / ((long)rows * cols)));
+
+    private Tensor<T> GenerateBasisBlock(int rows, int cols, int basisOffset, int count)
+    {
+        var bases = new Tensor<T>[count];
+        for (int b = 0; b < count; b++)
+            bases[b] = Tensor<T>.FromMatrix(GenerateRandomBasis(rows, cols, basisOffset + b));
+        return Engine.TensorStack(bases, 0);
+    }
+
+    private Tensor<T> BasisCoefficientGradient(Tensor<T> gradient, int rows, int cols, int basisOffset)
+    {
+        using var arenaSuspension = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        int blockSize = BasisBlockSize(rows, cols);
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < _numBasis; start += blockSize)
+        {
+            int count = Math.Min(blockSize, _numBasis - start);
+            var bases = GenerateBasisBlock(rows, cols, basisOffset + start, count);
+            // d(sum_i c_i basis_i)/dc_i is basis_i; contract with the incoming matrix gradient.
+            var products = Engine.TensorMultiply(bases, Engine.Reshape(gradient, [1, rows, cols]));
+            blocks.Add(Engine.ReduceSum(products, [1, 2], false));
+        }
+        return Engine.TensorConcatenate(blocks.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// Reconstructs matrix A (inputSize × rank) from its basis coefficients.
+    /// </summary>
+    private Tensor<T> ReconstructMatrixA()
+    {
+        int inputSize = GetInputShape()[0];
+        // Linear combination of basis matrices: A = sum_b coefA[b] * basis_b
+        Tensor<T> matrixA = CombineBases(inputSize, Rank, 0, _coefficientsA);
 
         return matrixA;
     }
@@ -279,25 +319,11 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// Together, A and B form the complete NOLA adaptation.
     /// </para>
     /// </remarks>
-    private Matrix<T> ReconstructMatrixB()
+    private Tensor<T> ReconstructMatrixB()
     {
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
-        Matrix<T> matrixB = new Matrix<T>(Rank, outputSize);
-
-        // Linear combination of basis matrices
-        for (int b = 0; b < _numBasis; b++)
-        {
-            Matrix<T> basis = GenerateRandomBasis(Rank, outputSize, _numBasis + b);  // Offset by numBasis for B
-            T coef = _coefficientsB[b];
-
-            for (int i = 0; i < Rank; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    matrixB[i, j] = NumOps.Add(matrixB[i, j], NumOps.Multiply(basis[i, j], coef));
-                }
-            }
-        }
+        // Linear combination of basis matrices (offset by numBasis for B): B = sum_b coefB[b] * basis_b
+        Tensor<T> matrixB = CombineBases(Rank, outputSize, _numBasis, _coefficientsB);
 
         return matrixB;
     }
@@ -331,47 +357,24 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
         // Reconstruct NOLA matrices A and B
-        Matrix<T> matrixA = ReconstructMatrixA();
-        Matrix<T> matrixB = ReconstructMatrixB();
+        Tensor<T> matrixA = ReconstructMatrixA();
+        Tensor<T> matrixB = ReconstructMatrixB();
 
         // Compute NOLA contribution: input * A * B * scaling
         int batchSize = input.Shape[0];
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
-
-        // Compute: input * A (result: [batchSize, rank])
-        Matrix<T> intermediate = inputMatrix.Multiply(matrixA);
-
-        // Compute: intermediate * B (result: [batchSize, outputSize])
-        Matrix<T> nolaOutput = intermediate.Multiply(matrixB);
+        // Compute: input * A (result: [batchSize, rank]), then * B (result: [batchSize, outputSize])
+        Tensor<T> intermediate = Engine.TensorMatMul(
+            Engine.Reshape(input, [batchSize, inputSize]), matrixA);
+        Tensor<T> nolaOutput = Engine.TensorMatMul(intermediate, matrixB);
 
         // Apply scaling (alpha / rank)
         T scaling = NumOps.Divide(
             NumOps.FromDouble(Alpha),
             NumOps.FromDouble(Rank));
-        nolaOutput = nolaOutput.Multiply(scaling);
-
-        // Convert to tensor
-        Vector<T> nolaOutputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                nolaOutputData[idx++] = nolaOutput[i, j];
-            }
-        }
-        Tensor<T> nolaOutputTensor = new Tensor<T>(new[] { batchSize, outputSize }, nolaOutputData);
+        Tensor<T> nolaOutputTensor = Engine.TensorMultiplyScalar(nolaOutput, scaling);
 
         // Sum base and NOLA outputs
         Tensor<T> result = Engine.TensorAdd(baseOutput, nolaOutputTensor);
@@ -391,19 +394,9 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        // Update coefficients for A
-        for (int i = 0; i < _numBasis; i++)
-        {
-            T update = NumOps.Multiply(_coefficientsAGradient[i], learningRate);
-            _coefficientsA[i] = NumOps.Subtract(_coefficientsA[i], update);
-        }
-
-        // Update coefficients for B
-        for (int i = 0; i < _numBasis; i++)
-        {
-            T update = NumOps.Multiply(_coefficientsBGradient[i], learningRate);
-            _coefficientsB[i] = NumOps.Subtract(_coefficientsB[i], update);
-        }
+        // Update coefficients for A and B: c -= learningRate * dc
+        Engine.TensorSubtractInPlace(_coefficientsA, Tensor<T>.FromVector(Engine.Multiply(_coefficientsAGradient, learningRate)));
+        Engine.TensorSubtractInPlace(_coefficientsB, Tensor<T>.FromVector(Engine.Multiply(_coefficientsBGradient, learningRate)));
 
         // Update base layer if not frozen
         if (!_freezeBaseLayer)
@@ -430,18 +423,25 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     public override ILayer<T> MergeToOriginalLayer()
     {
         // Reconstruct full matrices from coefficients
-        Matrix<T> matrixA = ReconstructMatrixA();
-        Matrix<T> matrixB = ReconstructMatrixB();
+        Tensor<T> matrixA = ReconstructMatrixA();
+        Tensor<T> matrixB = ReconstructMatrixB();
 
-        // Compute merged weight matrix: A * B * scaling
+        if (_baseLayer is not DenseLayer<T> && _baseLayer is not FullyConnectedLayer<T>)
+        {
+            throw new InvalidOperationException(
+                $"NOLAAdapter merging only supports DenseLayer or FullyConnectedLayer base layers, not {_baseLayer.GetType().Name}.");
+        }
+
+        // Compute merged weight matrix: A * B * scaling ([inputSize, outputSize], the forward's input * A * B)
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
-        Matrix<T> mergedWeight = matrixA.Multiply(matrixB).Multiply(scaling);
+        Matrix<T> mergedWeight = Engine.TensorMultiplyScalar(Engine.TensorMatMul(matrixA, matrixB), scaling).ToMatrix();
 
-        // This requires knowledge of the base layer type to properly merge
-        // For now, we'll throw an exception indicating this needs layer-specific implementation
-        throw new NotSupportedException(
-            "MergeToOriginalLayer requires layer-type-specific implementation. " +
-            "Derived classes should override this method to handle their specific base layer type.");
+        // A merge reads the base weights, so bring them up now, then add the delta in the base layer's
+        // own weight order (DenseLayer input-major, FullyConnectedLayer output-major); biases unchanged.
+        MaterializeBaseLayerParameters();
+        int weightCount = mergedWeight.Rows * mergedWeight.Columns;
+        Vector<T> mergedParams = AddInputMajorDeltaToParameters(_baseLayer.GetParameters(), mergedWeight, weightCount);
+        return CreateMergedLayerWithClone(mergedParams);
     }
 
     /// <summary>

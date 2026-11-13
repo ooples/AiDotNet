@@ -158,22 +158,11 @@ public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
         int matrixAParamCount = inputSize * rank;
         int matrixBParamCount = rank * outputSize;
 
-        // Create updated parameters vector
-        Vector<T> updatedLoraParams = new Vector<T>(loraParams.Length);
-
-        // Copy matrix A unchanged (frozen)
-        for (int i = 0; i < matrixAParamCount; i++)
-        {
-            updatedLoraParams[i] = loraParams[i];
-        }
-
-        // Update matrix B only
-        for (int i = 0; i < matrixBParamCount; i++)
-        {
-            int idx = matrixAParamCount + i;
-            T update = NumOps.Multiply(loraGrads[idx], learningRate);
-            updatedLoraParams[idx] = NumOps.Subtract(loraParams[idx], update);
-        }
+        // Matrix A is frozen (copied unchanged); only matrix B is updated: B -= learningRate * dB
+        Vector<T> updatedB = Engine.Subtract(
+            loraParams.GetSubVector(matrixAParamCount, matrixBParamCount),
+            Engine.Multiply(loraGrads.GetSubVector(matrixAParamCount, matrixBParamCount), learningRate));
+        Vector<T> updatedLoraParams = Vector<T>.Concatenate(loraParams.GetSubVector(0, matrixAParamCount), updatedB);
 
         // Set the updated parameters back to the LoRA layer
         _loraLayer.SetParameters(updatedLoraParams);
@@ -240,22 +229,13 @@ public partial class LoRAFAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights (add LoRA contribution to base weights)
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged (LoRA doesn't modify biases)
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights (add LoRA contribution to base weights). loraWeights is
+        // [inputSize, outputSize]; DenseLayer stores its weights input-major and
+        // FullyConnectedLayer output-major, so the latter uses the transpose.
+        // Biases are kept unchanged (LoRA doesn't modify biases).
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

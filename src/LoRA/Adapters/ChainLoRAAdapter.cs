@@ -355,10 +355,8 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             Tensor<T> adapterOutput = adapter.Forward(input);
 
             // Add adapter contribution to result
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Add(result[i], adapterOutput[i]);
-            }
+            result = Engine.TensorAdd(result, adapterOutput);
+
         }
 
         return result;
@@ -416,31 +414,25 @@ public partial class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
             throw new InvalidOperationException("ChainLoRAAdapter merging only supports DenseLayer or FullyConnectedLayer base layers");
         }
 
+        // A merge reads the base weights, so bring them up now.
+        MaterializeBaseLayerParameters();
+
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create merged parameters starting with base layer weights and biases
-        Vector<T> mergedParams = baseParams.Clone();
-
-        // Merge each adapter in the chain sequentially
+        // Sum every adapter's delta (each A × B, already scaled by alpha/rank, [inputSize, outputSize]),
+        // then add the total to the base weights in the base layer's own order: DenseLayer stores its
+        // weights input-major, FullyConnectedLayer output-major. Biases remain unchanged.
+        Matrix<T> chainDelta = new Matrix<T>(inputSize, outputSize);
         foreach (var adapter in _adapterChain)
         {
-            // Get the merged weights from this adapter (B × A, already scaled by alpha/rank)
-            Matrix<T> adapterWeights = adapter.MergeWeights();
-
-            // Add this adapter's contribution to the merged weights
-            // DenseLayer uses [inputSize, outputSize] convention
-            for (int i = 0; i < weightCount; i++)
-            {
-                int row = i / outputSize;
-                int col = i % outputSize;
-                mergedParams[i] = NumOps.Add(mergedParams[i], adapterWeights[row, col]);
-            }
-            // Note: Biases remain unchanged (indices weightCount to end)
+            chainDelta = Engine.MatrixAdd(chainDelta, adapter.MergeWeights());
         }
+
+        Vector<T> mergedParams = AddInputMajorDeltaToParameters(baseParams, chainDelta, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

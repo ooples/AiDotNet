@@ -231,45 +231,26 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> gatingWeights = _gatingNetwork.Forward(input);
         _lastGatingWeights = gatingWeights.Clone();
 
-        // Forward through all experts
-        Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput._shape);
-
-        // Initialize combined output to zero
-        for (int i = 0; i < combinedExpertOutput.Length; i++)
-        {
-            combinedExpertOutput[i] = NumOps.Zero;
-        }
-
         // Get batch size for proper indexing
         int batchSize = input.Shape[0];
         int outputDim = baseOutput.Length / batchSize;
 
-        // Compute weighted sum of expert outputs
+        // Gating weights are [batchSize, numExperts]; each sample's expert output is weighted by
+        // its gating weight (broadcast over the output dimension) and accumulated expert by expert.
+        Tensor<T> gating2D = Engine.Reshape(gatingWeights, [batchSize, _experts.Length]);
+        Tensor<T> combined2D = new Tensor<T>([batchSize, outputDim]);
         for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
         {
             // Forward through this expert
-            Tensor<T> expertOutput = _experts[expertIdx].Forward(input);
-
-            // Weight each sample's expert output by its corresponding gating weight
-            for (int batchIdx = 0; batchIdx < batchSize; batchIdx++)
-            {
-                T gatingWeight = gatingWeights[batchIdx * _experts.Length + expertIdx];
-
-                for (int dimIdx = 0; dimIdx < outputDim; dimIdx++)
-                {
-                    int outputIdx = batchIdx * outputDim + dimIdx;
-                    T weightedValue = NumOps.Multiply(expertOutput[outputIdx], gatingWeight);
-                    combinedExpertOutput[outputIdx] = NumOps.Add(combinedExpertOutput[outputIdx], weightedValue);
-                }
-            }
+            Tensor<T> expertOutput = Engine.Reshape(_experts[expertIdx].Forward(input), [batchSize, outputDim]);
+            Tensor<T> expertGate = Engine.TensorNarrow(gating2D, 1, expertIdx, 1);
+            combined2D = Engine.TensorAdd(combined2D, Engine.TensorMultiply(expertOutput, expertGate));
         }
+
+        Tensor<T> combinedExpertOutput = Engine.Reshape(combined2D, baseOutput.Shape.ToArray());
 
         // Sum base output and combined expert output
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], combinedExpertOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, combinedExpertOutput);
 
         return result;
     }
@@ -351,30 +332,19 @@ public partial class XLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
         // Average all expert contributions (since we don't have input-specific gating at merge time)
         T expertScaling = NumOps.Divide(NumOps.One, NumOps.FromDouble(_experts.Length));
 
-        // Start with base weights
-        for (int i = 0; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
-
-        // Add averaged expert contributions
+        // Start with base weights and add the averaged expert contributions. Expert deltas are
+        // [inputSize, outputSize]; DenseLayer stores its weights input-major and
+        // FullyConnectedLayer output-major, so the latter uses the transpose.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = baseParams.Clone();
         for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
         {
-            Matrix<T> expertWeights = _experts[expertIdx].MergeWeights();
-
-            for (int i = 0; i < weightCount; i++)
-            {
-                int row = i / inputSize;
-                int col = i % inputSize;
-                T scaledExpertWeight = NumOps.Multiply(expertWeights[row, col], expertScaling);
-                mergedParams[i] = NumOps.Add(mergedParams[i], scaledExpertWeight);
-            }
+            Matrix<T> scaledExpertWeights = Engine.MatrixMultiplyScalar(_experts[expertIdx].MergeWeights(), expertScaling);
+            mergedParams = AddFlatWeightsToParameters(
+                mergedParams, isOutputMajor ? scaledExpertWeights.Transpose() : scaledExpertWeights, weightCount);
         }
 
         // Use helper method to clone base layer and preserve activation function

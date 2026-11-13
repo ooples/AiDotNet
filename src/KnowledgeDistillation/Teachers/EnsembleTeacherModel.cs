@@ -2,6 +2,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.KnowledgeDistillation.Strategies;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -276,31 +277,8 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </summary>
     private Vector<T> Softmax(Vector<T> logits)
     {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-
-        // Find max for numerical stability
-        double max = Convert.ToDouble(logits[0]);
-        for (int i = 1; i < n; i++)
-        {
-            double val = Convert.ToDouble(logits[i]);
-            if (val > max) max = val;
-        }
-
-        // Compute exp(logit - max) and sum
-        double sum = 0;
-        var expValues = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            expValues[i] = Math.Exp(Convert.ToDouble(logits[i]) - max);
-            sum += expValues[i];
-        }
-
-        // Normalize to get probabilities
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.FromDouble(expValues[i] / sum);
-        }
+        // Max-shifted (numerically stable) softmax: exp(logit - max) / sum
+        var result = Engine.Softmax(Tensor<T>.FromVector(logits), -1).ToVector();
 
         return result;
     }
@@ -310,32 +288,8 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
     /// </summary>
     private Vector<T> LogSoftmax(Vector<T> logits)
     {
-        int n = logits.Length;
-        var result = new Vector<T>(n);
-
-        // Find max for numerical stability
-        double max = Convert.ToDouble(logits[0]);
-        for (int i = 1; i < n; i++)
-        {
-            double val = Convert.ToDouble(logits[i]);
-            if (val > max) max = val;
-        }
-
-        // Compute log-sum-exp for normalization
-        double logSumExp = 0;
-        var shiftedLogits = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            shiftedLogits[i] = Convert.ToDouble(logits[i]) - max;
-            logSumExp += Math.Exp(shiftedLogits[i]);
-        }
-        logSumExp = Math.Log(logSumExp);
-
-        // Compute log-probabilities: log(exp(logit - max) / sum) = (logit - max) - log(sum)
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = NumOps.FromDouble(shiftedLogits[i] - logSumExp);
-        }
+        // Log-probabilities: (logit - max) - log(sum(exp(logit - max)))
+        var result = Engine.TensorLogSoftmax(Tensor<T>.FromVector(logits), 0).ToVector();
 
         return result;
     }
@@ -382,18 +336,11 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
 
     private int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
+        // First index of the maximum (strictly-greater scan semantics, NaN never wins)
+        int maxIndex = DistillationHelper<T>.ArgMax(vector);
 
         return maxIndex;
     }
+
+    private static IEngine Engine => AiDotNetEngine.Current;
 }

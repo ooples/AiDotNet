@@ -503,22 +503,13 @@ public partial class MultiLoRAAdapter<T> : LoRAAdapterBase<T>, IContextAwareInfe
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights. loraWeights is [inputSize, outputSize]; DenseLayer stores its weights
+        // input-major ([inputSize, outputSize]) and FullyConnectedLayer output-major
+        // ([outputSize, inputSize]), so the FullyConnectedLayer case uses the transpose.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);
