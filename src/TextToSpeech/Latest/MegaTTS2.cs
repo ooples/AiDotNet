@@ -399,7 +399,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// not drawn (the length follows the durations); top-k sampling of what remains.
     /// </summary>
     internal int[] SampleProsody(IReadOnlyList<Prompt> target, IReadOnlyList<Prompt>? style, Tensor<T> pooled, Random random,
-        Action<IReadOnlyList<double>>? observeDistribution = null)
+        Action<Tensor<T>>? observeDistribution = null)
     {
         var model = Network.ProsodyModel;
         MegaTts3DurationCache<T> Prefill(IEnumerable<Prompt> prompts)
@@ -414,20 +414,17 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
         var targetCache = Prefill(target);
         var styleCache = style is null ? null : Prefill(style);
-        double gamma = style is null ? 0 : _options.ProsodyInterpolation;
+        T gamma = NumOps.FromDouble(style is null ? 0 : _options.ProsodyInterpolation);
         int n = pooled.Shape[0], h = pooled.Shape[1], v = _options.Codes + 1;
         var codes = new int[n];
         int token = Network.StartToken;
-        double[] Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
+        var startMask = new bool[v];
+        startMask[0] = true;
+        Tensor<T> Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
         {
-            var logits = model.Extend(new[] { token }, row, cache);
-            var p = new double[v];
-            double max = double.NegativeInfinity;
-            for (int c = 0; c < v; c++) max = Math.Max(max, p[c] = NumOps.ToDouble(logits[0, c]));
-            double sum = 0;
-            for (int c = 0; c < v; c++) sum += p[c] = Math.Exp(p[c] - max);
-            for (int c = 0; c < v; c++) p[c] /= sum;
-            return p;
+            var logits = Engine.Reshape(Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v });
+            var e = Engine.TensorExp(Engine.TensorAddScalar(logits, NumOps.Negate(Engine.TensorMaxValue(logits))));
+            return Engine.TensorDivideScalar(e, Engine.TensorSum(e));
         }
         for (int i = 0; i < n; i++)
         {
@@ -436,9 +433,9 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             if (styleCache is not null)
             {
                 var q = Probabilities(styleCache, row);
-                for (int c = 0; c < v; c++) p[c] = (1 - gamma) * p[c] + gamma * q[c];
+                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, NumOps.Subtract(NumOps.One, gamma)), Engine.TensorMultiplyScalar(q, gamma));
             }
-            p[0] = 0;
+            p = TtsSampling<T>.Fill(p, startMask, NumOps.Zero);
             observeDistribution?.Invoke(p);
             codes[i] = TopK(p, _options.TopK, random) - 1;
             token = codes[i] + 1;
@@ -447,16 +444,11 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     // Top-k random sampling (Fan et al. 2018): the k most probable tokens, renormalized, one draw.
-    private static int TopK(double[] probabilities, int k, Random random)
+    internal static int TopK(Tensor<T> probabilities, int k, Random random)
     {
-        var top = Enumerable.Range(0, probabilities.Length).OrderByDescending(i => probabilities[i]).ThenBy(i => i).Take(k).ToArray();
-        double u = random.NextDouble() * top.Sum(i => probabilities[i]);
-        foreach (int i in top)
-        {
-            u -= probabilities[i];
-            if (u < 0) return i;
-        }
-        return top[top.Length - 1];
+        var top = TtsSampling<T>.StableOrder(probabilities, descending: true).Take(k).ToArray();
+        var weights = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorIndexSelect(probabilities, new Tensor<int>(top, new[] { top.Length }), 0);
+        return top[TtsSampling<T>.DrawPosition(weights, random.NextDouble(), inclusive: false)];
     }
 
     internal Tensor<T> Content(int[] phones)
