@@ -140,6 +140,9 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     private EmaTeacher<T>? _teacher;
     private Tensor<T>? _maskedCenter;
 
+    /// <summary>The masked-prediction loss's running centre of the teacher's outputs (null before the first loss).</summary>
+    internal Tensor<T>? MaskedPredictionCenter => _maskedCenter;
+
     // The EMA teacher and the masked-prediction loss follow iBOT (Zhou et al. 2022), which TIPS and SigLIP 2 adopt:
     // teacher momentum 0.996, student temperature 0.1, teacher temperature 0.04, centre momentum 0.9.
     private const double TeacherMomentum = 0.996;
@@ -378,12 +381,6 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     }
 
     /// <summary>
-    /// The LocCa decoder on the caption so far <c>[L, CaptioningDecoderDim]</c> (start and token embeddings) with the
-    /// projected vision tokens <c>[N, CaptioningDecoderDim]</c> as memory: positions added, then per layer
-    /// <c>x = LN(x + CausalSelfAttention(x))</c>, <c>x = LN(x + CrossAttention(x, memory))</c>,
-    /// <c>x = LN(x + MLP(x))</c>.
-    /// </summary>
-    /// <summary>
     /// LocCa's captioning loss for one image (Wan et al. 2024; SigLIP 2 section 2.2): the decoder reads the caption
     /// teacher-forced (the start token, then the reference tokens shifted by one, under the causal mask) and every
     /// position takes the cross-entropy of the next reference token. With <paramref name="parallel"/> (CapPa's
@@ -455,6 +452,12 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
             CaptionBlock(layer).SelfAttention.UseCausalMask = causal;
     }
 
+    /// <summary>
+    /// The LocCa decoder on the caption so far <c>[L, CaptioningDecoderDim]</c> (start and token embeddings) with the
+    /// projected vision tokens <c>[N, CaptioningDecoderDim]</c> as memory: positions added, then per layer
+    /// <c>x = LN(x + CausalSelfAttention(x))</c>, <c>x = LN(x + CrossAttention(x, memory))</c>,
+    /// <c>x = LN(x + MLP(x))</c>.
+    /// </summary>
     internal Tensor<T> DecodeCaption(Tensor<T> sequence, Tensor<T> memory)
     {
         var positionEmbedding = _captionPositionEmbedding ?? throw new InvalidOperationException("The captioning decoder is not initialized.");
@@ -502,10 +505,6 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return Layers[index];
     }
 
-    /// <summary>
-    /// The tied input embedding of a caption token: its column of the vocabulary projection's
-    /// <c>[width, vocab]</c> weights, as a <c>[1, width]</c> row.
-    /// </summary>
     // The tied input embeddings [n, width] of several tokens: columns of the vocabulary projection.
     private Tensor<T> CaptionTokenEmbeddings(int[] tokens, int width)
     {
@@ -516,6 +515,10 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return Engine.TensorTranspose(Engine.TensorIndexSelect(projection, new Tensor<int>([tokens.Length], Vector<int>.FromArray(tokens)), 1));
     }
 
+    /// <summary>
+    /// The tied input embedding of a caption token: its column of the vocabulary projection's
+    /// <c>[width, vocab]</c> weights, as a <c>[1, width]</c> row.
+    /// </summary>
     private Tensor<T> CaptionTokenEmbedding(int token, int width)
     {
         int projectionIndex = _captioningDecoderEnd - 1;
@@ -588,17 +591,20 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return PatchPredictions(masked, maskIndices);
     }
 
-    // The vision encoder after the patch embedding, then the masked-prediction decoder, read at the given patches.
-    private Tensor<T> PatchPredictions(Tensor<T> embedded, int[] patches)
+    // The vision encoder after the patch embedding, then the masked-prediction decoder, read at the given patches
+    // (every patch when null).
+    private Tensor<T> PatchPredictions(Tensor<T> embedded, int[]? patches)
     {
         var encoded = embedded;
         for (int i = 1; i < _visionEncoderEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
         var predictions = ForwardMimDecoder(encoded);
         int features = predictions.Shape[predictions.Rank - 1];
+        var rows = predictions.Reshape([predictions.Length / features, features]);
+        if (patches is null)
+            return rows;
         if (patches.Length == 0)
             return new Tensor<T>([0, features]);
-        var rows = predictions.Reshape([predictions.Length / features, features]);
         return Engine.TensorIndexSelect(rows, new Tensor<int>([patches.Length], Vector<int>.FromArray(patches)), 0);
     }
 
@@ -607,7 +613,8 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     /// image with the masked patches replaced by the mask token, the EMA teacher sees the whole image, and at every
     /// masked patch the student's prediction is trained toward the teacher's: the cross-entropy between the teacher's
     /// centred, sharpened softmax <c>softmax((t − c) / 0.04)</c> and the student's <c>log_softmax(s / 0.1)</c>,
-    /// averaged over the masked patches. The centre <c>c</c> then follows the teacher's mean output with momentum 0.9.
+    /// averaged over the masked patches. The centre <c>c</c> then follows the teacher's mean output over every patch of
+    /// the image (iBOT's patch centre, <c>teacher_patch.mean(1)</c>) with momentum 0.9.
     /// </summary>
     /// <param name="image">The image.</param>
     /// <param name="maskIndices">The patches to mask.</param>
@@ -617,7 +624,8 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         ThrowIfDisposed();
         if (maskIndices is null || maskIndices.Length == 0) throw new ArgumentException("At least one patch must be masked.", nameof(maskIndices));
         var student = PredictMaskedPatches(image, maskIndices);
-        var teacher = TeacherPatchPredictions(image, maskIndices);
+        var teacherAll = TeacherPatchPredictions(image, null);
+        var teacher = Engine.TensorIndexSelect(teacherAll, new Tensor<int>([maskIndices.Length], Vector<int>.FromArray(maskIndices)), 0);
         int masked = student.Shape[0], features = student.Shape[1];
         var center = _maskedCenter is not null && _maskedCenter.Shape[1] == features ? _maskedCenter : new Tensor<T>([1, features]);
         var targets = Engine.Softmax(Engine.TensorMultiplyScalar(
@@ -625,13 +633,16 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         var logProbabilities = Engine.TensorLogSoftmax(Engine.TensorMultiplyScalar(student, NumOps.FromDouble(1.0 / StudentTemperature)), 1);
         var loss = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(targets, logProbabilities), [0, 1], false),
             NumOps.FromDouble(-1.0 / masked));
-        _maskedCenter = Engine.TensorAdd(Engine.TensorMultiplyScalar(center, NumOps.FromDouble(CenterMomentum)),
-            Engine.TensorMultiplyScalar(Engine.ReduceMean(teacher, [0], true), NumOps.FromDouble(1 - CenterMomentum)));
+        var updated = Engine.TensorAdd(Engine.TensorMultiplyScalar(center, NumOps.FromDouble(CenterMomentum)),
+            Engine.TensorMultiplyScalar(Engine.ReduceMean(teacherAll, [0], true), NumOps.FromDouble(1 - CenterMomentum)));
+        // The centre outlives this call: copy it out of the engine's result, which may be per-step arena scratch.
+        _maskedCenter = new Tensor<T>([1, features], Vector<T>.FromArray(updated.ToArray()));
         return loss;
     }
 
-    /// <summary>The EMA teacher's predictions at <paramref name="patches"/> of the whole (unmasked) image, without gradient.</summary>
-    internal Tensor<T> TeacherPatchPredictions(Tensor<T> image, int[] patches)
+    /// <summary>The EMA teacher's predictions at <paramref name="patches"/> (every patch when null) of the whole
+    /// (unmasked) image, without gradient.</summary>
+    internal Tensor<T> TeacherPatchPredictions(Tensor<T> image, int[]? patches)
         => Teacher().Run(() => PatchPredictions(Layers[0].Forward(PreprocessImage(image)), patches));
 
     /// <summary>Moves the EMA teacher toward the student after an optimizer step (momentum 0.996).</summary>
@@ -860,12 +871,6 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         meta.AdditionalInfo["MimMaskRatio"] = _options.MimMaskRatio.ToString();
         return meta;
     }
-
-    /// <inheritdoc />
-
-
-    /// <inheritdoc />
-
 
     #endregion
 
