@@ -579,6 +579,13 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             denominator = Engine.DotProduct(previous, previous);
         }
 
+        // All-zero residuals (an exact in-sample fit) carry no serial correlation: rho is 0 and the Cochrane-Orcutt
+        // loop has converged. Dividing gave 0/0 = NaN, which quasi-differenced the data into NaN.
+        if (NumOps.Equals(denominator, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+
         return NumOps.Divide(numerator, denominator);
     }
 
