@@ -75,6 +75,10 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     public override ModelOptions GetOptions() => _a2cOptions;
     private readonly Trajectory<T> _trajectory;
 
+    // s_{t+1} of the latest stored step: the n-step returns bootstrap V(s_T) from it when the rollout ends
+    // mid-episode.
+    private Vector<T>? _bootstrapState;
+
     private INeuralNetwork<T> _policyNetwork;
     private INeuralNetwork<T> _valueNetwork;
 
@@ -208,12 +212,7 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         // action-selector to policy-diagnostic and break evaluation loops
         // that expect a deterministic action. The full π(·|s) is still
         // observable via the underlying policy network's Predict.
-        int bestIdx = 0;
-        for (int i = 1; i < probs.Length; i++)
-        {
-            if (NumOps.GreaterThan(probs[i], probs[bestIdx]))
-                bestIdx = i;
-        }
+        int bestIdx = probs.Length == 0 ? 0 : RLTensorOps.ArgMax(probs);
         var oneHot = new Vector<T>(_a2cOptions.ActionSize);
         oneHot[bestIdx] = NumOps.One;
         return oneHot;
@@ -221,37 +220,30 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
     {
-        var action = new Vector<T>(_a2cOptions.ActionSize);
-
-        for (int i = 0; i < _a2cOptions.ActionSize; i++)
-        {
-            var mean = output[i];
-            var logStd = output[_a2cOptions.ActionSize + i];
-            var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
-
-            if (training)
-            {
-                // Sample from Gaussian using MathHelper
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
-                action[i] = NumOps.Add(mean, NumOps.Multiply(std, noise));
-            }
-            else
-            {
-                action[i] = mean;
-            }
-        }
-
-        return action;
+        // Gaussian head [mean | log_std]: mean + exp(log_std) * N(0, 1) when training, the mean otherwise.
+        return RLTensorOps.GaussianHeadAction(output, _a2cOptions.ActionSize, training, Random);
     }
 
     /// <inheritdoc/>
+    /// <remarks><paramref name="done"/> is termination: nothing is bootstrapped after the step. Use the
+    /// terminated/truncated overload when a time limit cut the episode off.</remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, terminated: done, truncated: false);
+
+    /// <inheritdoc/>
+    /// <remarks>A truncated step bootstraps V(nextState) into its return (Stable-Baselines3 and CleanRL); a
+    /// terminated one does not.</remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool terminated, bool truncated)
     {
-        var stateTensor = Tensor<T>.FromVector(state);
-        var valueTensor = _valueNetwork.Predict(stateTensor);
-        var value = valueTensor.ToVector()[0];
+        var value = RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(state)));
         var logProb = ComputeLogProb(state, action);
-        _trajectory.AddStep(state, action, reward, value, logProb, done);
+        bool bootstraps = truncated && !terminated;
+        T bootstrapValue = bootstraps
+            ? RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(nextState)))
+            : NumOps.Zero;
+        _trajectory.AddStep(state, action, reward, value, logProb, terminated, bootstraps, bootstrapValue);
+        _bootstrapState = nextState?.Clone();
     }
 
     private T ComputeLogProb(Vector<T> state, Vector<T> action)
@@ -262,30 +254,26 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         if (_a2cOptions.IsContinuous)
         {
-            T totalLogProb = NumOps.Zero;
-            for (int i = 0; i < _a2cOptions.ActionSize; i++)
-            {
-                var mean = policyOutput[i];
-                var logStd = policyOutput[_a2cOptions.ActionSize + i];
-                var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
-                var diff = NumOps.Subtract(action[i], mean);
-                var variance = NumOps.Multiply(std, std);
-
-                var logProb = NumOps.FromDouble(
-                    -0.5 * Math.Log(2 * Math.PI) -
-                    NumOps.ToDouble(logStd) -
-                    0.5 * NumOps.ToDouble(NumOps.Divide(NumOps.Multiply(diff, diff), variance))
-                );
-
-                totalLogProb = NumOps.Add(totalLogProb, logProb);
-            }
-            return totalLogProb;
+            // sum_i [-0.5 log(2 pi) - log sigma_i - 0.5 (a_i - mu_i)^2 / sigma_i^2], sigma = exp(log_std)
+            int actionSize = _a2cOptions.ActionSize;
+            var engine = AiDotNetEngine.Current;
+            var mean = policyOutput.GetSubVector(0, actionSize);
+            var logStd = policyOutput.GetSubVector(actionSize, actionSize);
+            var std = engine.Exp(logStd);
+            var diff = engine.Subtract(RLTensorOps.Head(action, actionSize), mean);
+            var variance = engine.Multiply(std, std);
+            var squaredTerm = engine.Multiply(engine.Divide(engine.Multiply(diff, diff), variance), NumOps.FromDouble(0.5));
+            var perDimension = engine.Subtract(
+                engine.Subtract(Vector<T>.CreateDefault(actionSize, NumOps.FromDouble(-0.5 * Math.Log(2 * Math.PI))), logStd),
+                squaredTerm);
+            return engine.Sum(perDimension);
         }
         else
         {
             var probs = Softmax(policyOutput);
             int actionIndex = ArgMax(action);
-            return NumOps.FromDouble(Math.Log(NumOps.ToDouble(probs[actionIndex]) + 1e-10));
+            // log(p + 1e-10) in double, as before: 1e-10 rounds to zero in Half.
+            return RLTensorOps.LogWithFloor(probs[actionIndex], 1e-10);
         }
     }
 
@@ -309,35 +297,24 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var advantages = _trajectory.Advantages ?? throw new InvalidOperationException("Advantages not initialized.");
         var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
 
-        var batchStates = new Tensor<T>([trajLen, stateSize]);
-        var batchReturns = new Tensor<T>([trajLen, 1]);
-
-        for (int i = 0; i < trajLen; i++)
-        {
-            var state = _trajectory.States[i];
-            for (int j = 0; j < stateSize; j++)
-                batchStates[i, j] = state[j];
-            batchReturns[i, 0] = returns[i];
-        }
+        // [trajLen, stateSize] states and [trajLen, 1] returns, stacked in bulk.
+        var batchStates = RLTensorOps.StackRows(_trajectory.States.Select(stateRow => RLTensorOps.Head(stateRow, stateSize)).ToList());
+        var batchReturns = RLTensorOps.FromList(returns, trajLen, 1);
 
         // --- Update value network (MSE regression on returns) ---
         _valueNetwork.Train(batchStates, batchReturns);
         T valueLoss = _valueNetwork.GetLastLoss();
 
         // Build advantages tensor and action data for engine ops
-        var advantagesTensor = new Tensor<T>([trajLen]);
-        for (int i = 0; i < trajLen; i++)
-            advantagesTensor[i] = advantages[i];
+        var advantagesTensor = RLTensorOps.FromList(advantages, trajLen);
 
         int[] actionIndices = _a2cOptions.IsContinuous ? Array.Empty<int>() : new int[trajLen];
         Tensor<T>? actionsTensor = null;
 
         if (_a2cOptions.IsContinuous)
         {
-            actionsTensor = new Tensor<T>([trajLen, _a2cOptions.ActionSize]);
-            for (int i = 0; i < trajLen; i++)
-                for (int j = 0; j < _a2cOptions.ActionSize; j++)
-                    actionsTensor[i, j] = _trajectory.Actions[i][j];
+            int actionSize = _a2cOptions.ActionSize;
+            actionsTensor = RLTensorOps.StackRows(_trajectory.Actions.Select(actionRow => RLTensorOps.Head(actionRow, actionSize)).ToList());
         }
         else
         {
@@ -381,53 +358,29 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         LossHistory.Add(totalLoss);
         _trajectory.Clear();
+        _bootstrapState = null;
 
         return totalLoss;
     }
 
     private void ComputeAdvantages()
     {
-        var advantages = new List<T>();
-        var returns = new List<T>();
-
-        T runningReturn = NumOps.Zero;
-
-        for (int t = _trajectory.Length - 1; t >= 0; t--)
+        // A rollout that stops mid-episode truncates its last step there: R_T = V(s_T) of the stored next state
+        // (Mnih et al. 2016, Algorithm S3; Stable-Baselines3's last_values).
+        if (_bootstrapState is not null)
         {
-            if (_trajectory.Dones[t])
-            {
-                runningReturn = _trajectory.Rewards[t];
-            }
-            else
-            {
-                runningReturn = NumOps.Add(
-                    _trajectory.Rewards[t],
-                    NumOps.Multiply(DiscountFactor, runningReturn)
-                );
-            }
-
-            returns.Insert(0, runningReturn);
-            var advantage = NumOps.Subtract(runningReturn, _trajectory.Values[t]);
-            advantages.Insert(0, advantage);
+            _trajectory.TruncateLastStep(RLTensorOps.FirstValue(_valueNetwork.Predict(Tensor<T>.FromVector(_bootstrapState))));
         }
 
-        // Normalize advantages using StatisticsHelper
-        var stdAdv = StatisticsHelper<T>.CalculateStandardDeviation(advantages);
-        T meanAdv = NumOps.Zero;
-        foreach (var adv in advantages)
-            meanAdv = NumOps.Add(meanAdv, adv);
-        meanAdv = NumOps.Divide(meanAdv, NumOps.FromDouble(advantages.Count));
+        // n-step returns: R_t = r_t + gamma R_{t+1}, restarted after a terminal step (nothing bootstrapped) and after a
+        // truncated one (V(s_{t+1}) bootstrapped, as SB3 and CleanRL do on truncation).
+        var returns = RLTensorOps.DiscountedReturns(
+            Vector<T>.FromEnumerable(_trajectory.Rewards), _trajectory.NextValues(), _trajectory.ChainCuts(), DiscountFactor);
+        var advantages = AiDotNetEngine.Current.Subtract(returns, Vector<T>.FromEnumerable(_trajectory.Values));
 
-        for (int i = 0; i < advantages.Count; i++)
-        {
-            advantages[i] = NumOps.Divide(
-                NumOps.Subtract(advantages[i], meanAdv),
-                NumOps.Add(stdAdv, NumOps.FromDouble(1e-8))
-            );
-        }
-
-        _trajectory.Advantages = advantages;
-        _trajectory.Returns = returns;
+        // Normalize advantages: (A - mean) / (std + 1e-8), unbiased std
+        _trajectory.Advantages = RLTensorOps.NormalizeAdvantages(advantages.ToList());
+        _trajectory.Returns = returns.ToList();
     }
 
     // UpdateValueNetwork removed — value network now trained via _valueNetwork.Train()
@@ -438,33 +391,26 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var stateTensor = Tensor<T>.FromVector(state);
         var policyOutputTensor = _policyNetwork.Predict(stateTensor);
         var policyOutput = policyOutputTensor.ToVector();
+        var engine = AiDotNetEngine.Current;
 
         if (_a2cOptions.IsContinuous)
         {
-            T entropy = NumOps.Zero;
-            for (int i = 0; i < _a2cOptions.ActionSize; i++)
-            {
-                var logStd = policyOutput[_a2cOptions.ActionSize + i];
-                entropy = NumOps.Add(entropy,
-                    NumOps.Add(NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI * Math.E)), logStd)
-                );
-            }
-            return entropy;
+            // sum_i [0.5 log(2 pi e) + log_std_i]
+            int actionSize = _a2cOptions.ActionSize;
+            var logStd = policyOutput.GetSubVector(actionSize, actionSize);
+            var perDimension = engine.Add(
+                Vector<T>.CreateDefault(actionSize, NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI * Math.E))), logStd);
+            return engine.Sum(perDimension);
         }
         else
         {
-            var probs = Softmax(policyOutput);
-            T entropy = NumOps.Zero;
-
-            for (int i = 0; i < probs.Length; i++)
-            {
-                var p = NumOps.ToDouble(probs[i]);
-                if (p > 1e-10)
-                {
-                    entropy = NumOps.Subtract(entropy, NumOps.FromDouble(p * Math.Log(p)));
-                }
-            }
-            return entropy;
+            // -sum p log p over the probabilities above 1e-10
+            var probs = Softmax(policyOutput).AsTensor();
+            var zeros = engine.TensorFullLike(probs, NumOps.Zero);
+            var kept = engine.TensorGreaterThan(probs, NumOps.FromDouble(1e-10));
+            var safeProbs = engine.TensorWhere(kept, probs, engine.TensorFullLike(probs, NumOps.One));
+            var plogp = engine.TensorWhere(kept, engine.TensorMultiply(probs, engine.TensorLog(safeProbs)), zeros);
+            return NumOps.Negate(engine.TensorSum(plogp));
         }
     }
 
@@ -512,95 +458,56 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     // Helper methods
     private Vector<T> Softmax(Vector<T> logits)
     {
-        var maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (NumOps.GreaterThan(logits[i], maxLogit))
-                maxLogit = logits[i];
-        }
-
-        var exps = new Vector<T>(logits.Length);
-        T sumExp = NumOps.Zero;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var exp = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
-            exps[i] = exp;
-            sumExp = NumOps.Add(sumExp, exp);
-        }
-
-        for (int i = 0; i < exps.Length; i++)
-        {
-            exps[i] = NumOps.Divide(exps[i], sumExp);
-        }
-
-        return exps;
+        // exp(z - max z) / sum exp(z - max z)
+        return RLTensorOps.StableSoftmax(logits);
     }
 
     private int SampleCategorical(Vector<T> probs)
     {
         double rand = Random.NextDouble();
-        double cumProb = 0;
-
-        for (int i = 0; i < probs.Length; i++)
-        {
-            cumProb += NumOps.ToDouble(probs[i]);
-            if (rand < cumProb) return i;
-        }
-
-        return probs.Length - 1;
+        return RLTensorOps.SampleFromCdf(probs, rand, probs.Length - 1, strict: true);
     }
 
     private int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], vector[maxIndex]))
-                maxIndex = i;
-        }
-        return maxIndex;
+        // An empty vector keeps the scan's index-0 default.
+        return vector.Length == 0 ? 0 : RLTensorOps.ArgMax(vector);
     }
 
     private Vector<T> ComputePolicyOutputGradient(Vector<T> policyOutput, Vector<T> action, T advantage)
     {
         var gradient = new Vector<T>(policyOutput.Length);
         var scaledAdvantage = NumOps.Divide(advantage, NumOps.FromDouble(_trajectory.Length));
+        var engine = AiDotNetEngine.Current;
 
         if (_a2cOptions.IsContinuous)
         {
             // Continuous: Gaussian policy [mean, log_std]
             int actionSize = _a2cOptions.ActionSize;
-            for (int i = 0; i < actionSize; i++)
-            {
-                var mean = policyOutput[i];
-                var logStd = policyOutput[actionSize + i];
-                var std = NumOps.Exp(logStd);
-                var actionDiff = NumOps.Subtract(action[i], mean);
-                var stdSquared = NumOps.Multiply(std, std);
+            var mean = policyOutput.GetSubVector(0, actionSize);
+            var logStd = policyOutput.GetSubVector(actionSize, actionSize);
+            var std = engine.Exp(logStd);
+            var actionDiff = engine.Subtract(RLTensorOps.Head(action, actionSize), mean);
+            var stdSquared = engine.Multiply(std, std);
 
-                // ∇μ: -(a - μ) / σ² * advantage
-                gradient[i] = NumOps.Negate(
-                    NumOps.Multiply(scaledAdvantage, NumOps.Divide(actionDiff, stdSquared)));
+            // d/d mu: -(a - mu) / sigma^2 * advantage
+            var meanGradient = engine.Negate(engine.Multiply(engine.Divide(actionDiff, stdSquared), scaledAdvantage));
 
-                // ∇log_σ: -((a-μ)² / σ² - 1) * advantage
-                var normalizedDiff = NumOps.Divide(actionDiff, std);
-                var term = NumOps.Subtract(NumOps.Multiply(normalizedDiff, normalizedDiff), NumOps.One);
-                gradient[actionSize + i] = NumOps.Negate(NumOps.Multiply(scaledAdvantage, term));
-            }
+            // d/d log sigma: -((a - mu)^2 / sigma^2 - 1) * advantage
+            var normalizedDiff = engine.Divide(actionDiff, std);
+            var term = engine.Subtract(engine.Multiply(normalizedDiff, normalizedDiff), Vector<T>.CreateDefault(actionSize, NumOps.One));
+            var logStdGradient = engine.Negate(engine.Multiply(term, scaledAdvantage));
+
+            meanGradient.AsSpan().CopyTo(gradient.AsWritableSpan().Slice(0, actionSize));
+            logStdGradient.AsSpan().CopyTo(gradient.AsWritableSpan().Slice(actionSize, actionSize));
         }
         else
         {
-            // Discrete: softmax policy
+            // Discrete: softmax policy, -(onehot(a) - pi) * advantage
             var softmax = ComputeSoftmax(policyOutput);
             int selectedAction = GetDiscreteAction(action);
-
-            for (int i = 0; i < policyOutput.Length; i++)
-            {
-                var indicator = (i == selectedAction) ? NumOps.One : NumOps.Zero;
-                var grad = NumOps.Subtract(indicator, softmax[i]);
-                gradient[i] = NumOps.Negate(NumOps.Multiply(scaledAdvantage, grad));
-            }
+            var indicator = RLTensorOps.OneHot<T>(policyOutput.Length, selectedAction);
+            gradient = engine.Negate(engine.Multiply(engine.Subtract(indicator, softmax), scaledAdvantage));
         }
 
         return gradient;
@@ -608,38 +515,13 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private Vector<T> ComputeSoftmax(Vector<T> logits)
     {
-        var softmax = new Vector<T>(logits.Length);
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (NumOps.GreaterThan(logits[i], maxLogit))
-                maxLogit = logits[i];
-        }
-
-        T sumExp = NumOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var exp = NumOps.Exp(NumOps.Subtract(logits[i], maxLogit));
-            softmax[i] = exp;
-            sumExp = NumOps.Add(sumExp, exp);
-        }
-
-        for (int i = 0; i < softmax.Length; i++)
-        {
-            softmax[i] = NumOps.Divide(softmax[i], sumExp);
-        }
-
-        return softmax;
+        // exp(z - max z) / sum exp(z - max z)
+        return RLTensorOps.StableSoftmax(logits);
     }
 
     private int GetDiscreteAction(Vector<T> action)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.FromDouble(0.5)))
-                return i;
-        }
-        return 0;
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.FromDouble(0.5));
     }
 
 

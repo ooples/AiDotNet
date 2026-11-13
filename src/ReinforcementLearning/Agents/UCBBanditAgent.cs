@@ -67,14 +67,9 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
         _options = options;
         Options = _options;
         _random = Random;
-        _qValues = new Vector<T>(_options.NumArms);
+        _qValues = Vector<T>.CreateDefault(_options.NumArms, NumOps.Zero);
         _actionCounts = new Vector<int>(_options.NumArms);
         _totalSteps = 0;
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _qValues[i] = NumOps.Zero;
-            _actionCounts[i] = 0;
-        }
     }
 
     /// <inheritdoc />
@@ -82,29 +77,18 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     {
         _totalSteps++;
 
-        // Select arm with highest UCB value
-        int selectedArm = 0;
-        double maxUCB = double.NegativeInfinity;
-
-        for (int a = 0; a < _options.NumArms; a++)
+        // Select arm with highest UCB value Q(a) + c * sqrt(ln t / N(a)). An unvisited arm scores
+        // +infinity, so the first unvisited arm wins outright (explore unvisited arms first).
+        var engine = AiDotNetEngine.Current;
+        var counts = RLTensorOps.CountsAs<T>(_actionCounts);
+        var unvisited = engine.TensorEquals(counts.AsTensor(), NumOps.Zero).ToVector();
+        int selectedArm = RLTensorOps.FirstPositiveIndex(unvisited, NumOps.Zero, out bool hasUnvisited);
+        if (!hasUnvisited && _options.NumArms > 0)
         {
-            double ucb;
-            if (_actionCounts[a] == 0)
-            {
-                ucb = double.PositiveInfinity;  // Explore unvisited arms first
-            }
-            else
-            {
-                double exploitation = NumOps.ToDouble(_qValues[a]);
-                double exploration = _options.ExplorationParameter * Math.Sqrt(Math.Log(_totalSteps) / _actionCounts[a]);
-                ucb = exploitation + exploration;
-            }
-
-            if (ucb > maxUCB)
-            {
-                maxUCB = ucb;
-                selectedArm = a;
-            }
+            // ln(t) / N(a) from the integer counts (in Half, t past 65504 would make ln(t) infinite for every arm).
+            var ratio = RLTensorOps.UcbRatio<T>(_totalSteps, _actionCounts);
+            var exploration = engine.Multiply(engine.Sqrt(ratio), NumOps.FromDouble(_options.ExplorationParameter));
+            selectedArm = RLTensorOps.ArgMax(engine.Add(_qValues, exploration));
         }
 
         var result = new Vector<T>(_options.NumArms);
@@ -129,28 +113,15 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         var metrics = new Dictionary<string, T>();
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            metrics[$"q_arm_{i}"] = _qValues[i];
-            metrics[$"count_arm_{i}"] = NumOps.FromDouble(_actionCounts[i]);
-        }
+        RLTensorOps.AddIndexedMetrics(metrics, _options.NumArms,
+            ("q_arm_", _qValues), ("count_arm_", RLTensorOps.CountsAs<T>(_actionCounts)));
         metrics["total_steps"] = NumOps.FromDouble(_totalSteps);
         return metrics;
     }
@@ -159,11 +130,8 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override void ResetEpisode()
     {
         _totalSteps = 0;
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _qValues[i] = NumOps.Zero;
-            _actionCounts[i] = 0;
-        }
+        _qValues.Fill(NumOps.Zero);
+        _actionCounts.Fill(0);
     }
 
     /// <inheritdoc />

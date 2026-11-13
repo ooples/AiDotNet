@@ -142,13 +142,10 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
                 // Add exploration bonus: r + κ√τ where τ is time since last visit
                 int timeSinceVisit = _totalSteps - _timeSteps[planState][planAction];
                 double explorationBonus = _options.Kappa * Math.Sqrt(timeSinceVisit);
-                T bonusReward = NumOps.Add(planReward, NumOps.FromDouble(explorationBonus));
 
-                T planCurrentQ = _qTable[planState][planAction];
-                T planMaxNextQ = GetMaxQValue(planNextState);
-                T planTarget = NumOps.Add(bonusReward, NumOps.Multiply(DiscountFactor, planMaxNextQ));
-                T planDelta = NumOps.Subtract(planTarget, planCurrentQ);
-                _qTable[planState][planAction] = NumOps.Add(planCurrentQ, NumOps.Multiply(LearningRate, planDelta));
+                // Simulated Q-learning update of one table entry (sequential: each planning
+                // step reads the values the previous one wrote).
+                PlanningUpdate(planState, planAction, planNextState, planReward, explorationBonus);
             }
         }
 
@@ -161,12 +158,22 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
     /// <inheritdoc />
     public override T Train() => NumOps.Zero;
 
+    /// <summary>
+    /// One simulated Q-learning update with the Dyna-Q+ bonus:
+    /// Q(s,a) += lr * (r + bonus + gamma * max Q(s') - Q(s,a)).
+    /// </summary>
+    private void PlanningUpdate(string planState, int planAction, string planNextState, T planReward, double explorationBonus)
+    {
+        T bonusReward = NumOps.Add(planReward, NumOps.FromDouble(explorationBonus));
+        T planTarget = RLTensorOps.BootstrapTarget(NumOps, bonusReward, DiscountFactor, GetMaxQValue(planNextState));
+        _qTable[planState][planAction] = RLTensorOps.TdStep(NumOps, _qTable[planState][planAction], planTarget, LearningRate);
+    }
+
     private void EnsureStateExists(Vector<T> state)
     {
         string stateKey = GetStateKey(state);
         if (!_qTable.ContainsKey(stateKey))
         {
-            _qTable[stateKey] = new Dictionary<int, T>();
             // Optimistic initialization with state-seeded jitter (Sutton &
             // Barto §2.6). Pure-zero init leaves GetGreedyAction stuck at
             // action 0 for every unseen state — degenerate "same action
@@ -178,18 +185,18 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
             // argmaxes pre-training. Amplitude (1e-6) is well below any
             // real reward — first real Q-update overwrites this jitter.
             var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                double jitter = seedRng.NextDouble() * 1e-6;
-                _qTable[stateKey][a] = NumOps.FromDouble(jitter);
-            }
+            // One NextDouble() draw per action in order (the seeded stream is unchanged), scaled
+            // to the 1e-6 jitter band with a single engine multiply.
+            var jitter = AiDotNetEngine.Current.Multiply(
+                Vector<T>.CreateRandom(seedRng, _options.ActionSize), NumOps.FromDouble(1e-6));
+            _qTable[stateKey] = RLTensorOps.ToRow(jitter);
         }
     }
 
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
-    private int GetGreedyAction(string stateKey) { int best = 0; T bestVal = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], bestVal)) { bestVal = _qTable[stateKey][a]; best = a; } return best; }
-    private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], max)) max = _qTable[stateKey][a]; return max; }
-    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+    private int GetGreedyAction(string stateKey) { int best = RLTensorOps.ArgMax(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize)); return best; }
+    private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = RLTensorOps.Max(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize)); return max; }
+    private int ArgMax(Vector<T> values) { int maxIndex = RLTensorOps.ArgMax(values); return maxIndex; }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["model_size"] = NumOps.FromDouble(_model.Count), ["epsilon"] = NumOps.FromDouble(_epsilon), ["total_steps"] = NumOps.FromDouble(_totalSteps) };

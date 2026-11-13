@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning.Parameters;
@@ -54,28 +55,35 @@ public sealed class QTableParameterSource<T> : IParameterSource<T>, AiDotNet.Mod
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var result = new Vector<T>(checked((int)ParameterCount));
-        int idx = 0;
-        foreach (var row in _table.Values)
+        if (_table.Count == 0)
         {
-            for (int action = 0; action < _actionSize; action++)
-            {
-                result[idx++] = row.TryGetValue(action, out var v) ? v : _ops.Zero;
-            }
+            // An empty table still reports one zero row so the parameter count is never zero.
+            return Vector<T>.CreateDefault(checked((int)ParameterCount), _ops.Zero);
         }
-        return result;
+
+        var zero = _ops.Zero;
+        int actionSize = _actionSize;
+        return Vector<T>.FromEnumerable(_table.Values.SelectMany(
+            row => Enumerable.Range(0, actionSize).Select(action => row.TryGetValue(action, out var v) ? v : zero)));
     }
 
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int idx = 0;
+        // Pure data movement back into the dictionary rows: stream the flat vector in order and
+        // stop when it runs out, exactly like the indexed refill.
+        using var values = ((IEnumerable<T>)parameters).GetEnumerator();
         foreach (var row in _table.Values)
         {
-            for (int action = 0; action < _actionSize && idx < parameters.Length; action++)
+            for (int action = 0; action < _actionSize; action++)
             {
-                row[action] = parameters[idx++];
+                if (!values.MoveNext())
+                {
+                    return;
+                }
+
+                row[action] = values.Current;
             }
         }
     }
@@ -137,21 +145,18 @@ public sealed class ValueTableParameterSource<T> : IParameterSource<T>, AiDotNet
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var result = new Vector<T>(_table.Count);
-        int idx = 0;
-        foreach (var value in _table.Values) result[idx++] = value;
-        return result;
+        return Vector<T>.FromEnumerable(_table.Values);
     }
 
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int idx = 0;
+        using var values = ((IEnumerable<T>)parameters).GetEnumerator();
         foreach (var key in _table.Keys.ToList())
         {
-            if (idx >= parameters.Length) break;
-            _table[key] = parameters[idx++];
+            if (!values.MoveNext()) break;
+            _table[key] = values.Current;
         }
     }
 
@@ -206,14 +211,8 @@ public sealed class MatrixParameterSource<T> : IParameterSource<T>
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var m = _get();
-        var result = new Vector<T>(m.Rows * m.Columns);
-        int idx = 0;
-        for (int r = 0; r < m.Rows; r++)
-        {
-            for (int c = 0; c < m.Columns; c++) result[idx++] = m[r, c];
-        }
-        return result;
+        // Row-major flatten: one bulk copy of the matrix storage.
+        return Vector<T>.FromSpan(_get().AsSpan());
     }
 
     /// <inheritdoc />
@@ -221,11 +220,9 @@ public sealed class MatrixParameterSource<T> : IParameterSource<T>
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var m = _get();
-        int idx = 0;
-        for (int r = 0; r < m.Rows; r++)
-        {
-            for (int c = 0; c < m.Columns && idx < parameters.Length; c++) m[r, c] = parameters[idx++];
-        }
+        // Row-major refill of as many entries as the vector holds, as one bulk copy.
+        int count = Math.Min(parameters.Length, m.Rows * m.Columns);
+        parameters.AsSpan().Slice(0, count).CopyTo(m.AsWritableSpan());
     }
 }
 
@@ -250,10 +247,7 @@ public sealed class VectorParameterSource<T> : IParameterSource<T>
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var v = _get();
-        var result = new Vector<T>(v.Length);
-        for (int i = 0; i < v.Length; i++) result[i] = v[i];
-        return result;
+        return Vector<T>.FromSpan(_get().AsSpan());
     }
 
     /// <inheritdoc />
@@ -261,7 +255,8 @@ public sealed class VectorParameterSource<T> : IParameterSource<T>
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         var v = _get();
-        for (int i = 0; i < v.Length && i < parameters.Length; i++) v[i] = parameters[i];
+        int count = Math.Min(v.Length, parameters.Length);
+        parameters.AsSpan().Slice(0, count).CopyTo(v.AsWritableSpan());
     }
 }
 
@@ -342,31 +337,28 @@ public sealed class QTableEntriesParameterSource<T> : IParameterSource<T>, AiDot
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var result = new Vector<T>(checked((int)ParameterCount));
-        int idx = 0;
-        foreach (var row in Rows())
+        int count = checked((int)ParameterCount);
+        var flat = Vector<T>.FromEnumerable(Rows().SelectMany(row => Actions(row).Select(action => row[action])));
+        if (flat.Length == count)
         {
-            foreach (var action in Actions(row))
-            {
-                if (idx >= result.Length) break;
-                result[idx++] = row[action];
-            }
+            return flat;
         }
-        while (idx < result.Length) result[idx++] = _ops.Zero;
-        return result;
+
+        // Only the padded empty table differs from the entry count: a single zero.
+        return Vector<T>.CreateDefault(count, _ops.Zero);
     }
 
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int idx = 0;
+        using var values = ((IEnumerable<T>)parameters).GetEnumerator();
         foreach (var row in Rows())
         {
             foreach (var action in Actions(row).ToList())
             {
-                if (idx >= parameters.Length) return;
-                row[action] = parameters[idx++];
+                if (!values.MoveNext()) return;
+                row[action] = values.Current;
             }
         }
     }
@@ -424,7 +416,6 @@ public sealed class InterleavedCountParameterSource<T> : IParameterSource<T>
     private readonly Vector<int> _first;
     private readonly Vector<int> _second;
     private readonly int _pairs;
-    private readonly INumericOperations<T> _ops = MathHelper.GetNumericOperations<T>();
 
     /// <summary>Creates a source over <paramref name="pairs"/> (first, second) counter pairs.</summary>
     public InterleavedCountParameterSource(Vector<int> first, Vector<int> second, int pairs)
@@ -440,25 +431,36 @@ public sealed class InterleavedCountParameterSource<T> : IParameterSource<T>
     /// <inheritdoc />
     public Vector<T> GetParameters()
     {
-        var result = new Vector<T>(_pairs * 2);
-        int idx = 0;
-        for (int i = 0; i < _pairs; i++)
+        if (_pairs == 0)
         {
-            result[idx++] = _ops.FromDouble(_first[i]);
-            result[idx++] = _ops.FromDouble(_second[i]);
+            return new Vector<T>(0);
         }
-        return result;
+
+        // Stack the two count vectors as the columns of a [pairs, 2] tensor: its row-major layout
+        // is the interleaved first/second order. Cast converts every count to T in one bulk pass.
+        var engine = AiDotNetEngine.Current;
+        var interleaved = engine.TensorStack(
+            new[] { _first.GetSubVector(0, _pairs).AsTensor(), _second.GetSubVector(0, _pairs).AsTensor() }, 1);
+        return interleaved.Cast<T>().ToVector();
     }
 
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
-        int idx = 0;
-        for (int i = 0; i < _pairs && idx + 1 < parameters.Length; i++)
+        int pairs = Math.Min(_pairs, parameters.Length / 2);
+        if (pairs == 0)
         {
-            _first[i] = (int)_ops.ToDouble(parameters[idx++]);
-            _second[i] = (int)_ops.ToDouble(parameters[idx++]);
+            return;
         }
+
+        // Truncate toward zero (the (int) cast), de-interleave with stride-2 gathers, and convert
+        // the now-integral values to int in bulk.
+        var engine = AiDotNetEngine.Current;
+        var truncated = engine.Truncate(parameters.GetSubVector(0, pairs * 2));
+        var first = engine.StridedGather(truncated, 0, 2, pairs).AsTensor().Cast<int>();
+        var second = engine.StridedGather(truncated, 1, 2, pairs).AsTensor().Cast<int>();
+        first.AsSpan().CopyTo(_first.AsWritableSpan());
+        second.AsSpan().CopyTo(_second.AsWritableSpan());
     }
 }

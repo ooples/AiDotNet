@@ -191,14 +191,7 @@ public partial class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradien
 
     private int GetActionIndex(Vector<T> action)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
-        }
-        return 0;
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)
@@ -217,23 +210,9 @@ public partial class SARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGradien
     {
         EnsureStateExists(stateKey);
 
-        int bestAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qValues = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int bestAction = RLTensorOps.ArgMax(qValues);
+        bool allEqual = RLTensorOps.AllEqual(qValues, NumOps);
 
         // Sutton & Barto §2.3: tie-break with a deterministic state hash so unseen
         // states (all-zero Q-values) don't collapse to action 0 for every state.

@@ -202,12 +202,8 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     /// </summary>
     internal Vector<T> GetNetworkParameters()
     {
-        var values = new List<T>();
-        foreach (var parameters in Networks.Select(network => network.GetParameters()))
-        {
-            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
-        }
-        return new Vector<T>(values.ToArray());
+        // Every network's parameters, end to end.
+        return RLTensorOps.Concat(Networks.Select(network => network.GetParameters()).ToArray());
     }
 
     /// <summary>
@@ -285,12 +281,8 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
                 nameof(gradients));
         }
 
-        var updated = new Vector<T>(currentParams.Length);
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            updated[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
-
+        // theta <- theta - lr * g
+        var updated = Engine.Subtract(currentParams, Engine.Multiply(gradients, learningRate));
         SetParameters(updated);
     }
 
@@ -379,10 +371,7 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
                         + $"for {width} parameters. The gradient layout must match GetParameters().");
                 }
 
-                for (int i = 0; i < width; i++)
-                {
-                    gradients[offset + i] = trainedGradients[i];
-                }
+                trainedGradients.AsSpan().CopyTo(gradients.AsWritableSpan().Slice(offset, width));
             }
 
             offset += width;

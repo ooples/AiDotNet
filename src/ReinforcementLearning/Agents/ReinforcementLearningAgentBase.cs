@@ -227,6 +227,20 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         StoreExperience(state, action, reward, nextState, done);
     }
 
+    /// <summary>
+    /// Stores a transition, telling termination apart from truncation.
+    /// </summary>
+    /// <remarks>
+    /// Agents that bootstrap on truncation (the on-policy rollout agents) override this. The default treats either
+    /// as the end of the episode, as <see cref="StoreExperience(Vector{T}, Vector{T}, T, Vector{T}, bool)"/> with
+    /// <c>done = terminated || truncated</c>.
+    /// </remarks>
+    public virtual void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool terminated, bool truncated)
+    {
+        StoreExperience(state, action, reward, nextState, terminated || truncated);
+    }
+
 
     /// <summary>
     /// Performs one training step, updating the agent's policy/value function.
@@ -330,17 +344,8 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
 
         // Decode the supervised target into an (action, reward) pair. argmax over
         // target gives the preferred action; the value at that index is its reward.
-        int bestIndex = 0;
-        T bestValue = target[0];
-        for (int i = 1; i < target.Length; i++)
-        {
-            if (NumOps.GreaterThan(target[i], bestValue))
-            {
-                bestValue = target[i];
-                bestIndex = i;
-            }
-        }
-
+        int bestIndex = RLTensorOps.ArgMax(target);
+        T bestValue = target[bestIndex];
         // Build a one-hot action vector with the same dimensionality as the target so
         // discrete agents can decode it via argmax in StoreExperience/SelectAction.
         var actionVec = new Vector<T>(target.Length);
@@ -925,12 +930,7 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
         var list = values.ToList();
         if (list.Count == 0) return NumOps.Zero;
 
-        T sum = NumOps.Zero;
-        foreach (var value in list)
-        {
-            sum = NumOps.Add(sum, value);
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(list.Count));
+        return RLTensorOps.Average(list);
     }
 
     /// <summary>

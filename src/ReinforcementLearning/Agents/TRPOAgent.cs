@@ -91,7 +91,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     // Appendix D: "a separate set of parameters specifies the log standard deviation of each element" (continuous).
     private Vector<T> _logStd;
 
-    private List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)> _trajectoryBuffer;
+    private List<(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done, bool truncated)> _trajectoryBuffer;
     private int _updateCount;
     private double _lastKl, _lastImprovement;
 
@@ -110,7 +110,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         _options = options;
         Options = _options;
         _updateCount = 0;
-        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool)>();
+        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool, bool)>();
 
         _policyNetwork = CreatePolicyNetwork();
         _valueNetwork = CreateValueNetwork();
@@ -202,9 +202,18 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
 
     /// <inheritdoc />
+    /// <remarks><paramref name="done"/> is termination: nothing is bootstrapped after the step. Use the
+    /// terminated/truncated overload when a time limit cut the episode off.</remarks>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
+        => StoreExperience(state, action, reward, nextState, terminated: done, truncated: false);
+
+    /// <inheritdoc />
+    /// <remarks>A truncated step bootstraps the baseline's V(nextState) and ends the advantage chain; a terminated
+    /// one bootstraps nothing.</remarks>
+    public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState,
+        bool terminated, bool truncated)
     {
-        _trajectoryBuffer.Add((state, action, reward, nextState, done));
+        _trajectoryBuffer.Add((state, action, reward, nextState, terminated, truncated && !terminated));
 
         if (_trajectoryBuffer.Count >= _options.StepsPerUpdate)
         {
@@ -254,6 +263,8 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
         // Generalized advantage estimation; lambda = 1 is the paper's discounted return minus the baseline. A
         // trajectory cut off by the buffer is bootstrapped with the baseline's value of its last next state.
+        // The chain also restarts after a truncated step; its V(next state) is bootstrapped like the buffer cutoff's.
+        var truncatedSteps = _trajectoryBuffer.Select(step => step.truncated).ToArray();
         var advantages = new double[n];
         var returns = new double[n];
         double running = 0;
@@ -262,7 +273,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             bool done = _trajectoryBuffer[i].done;
             double value = NumOps.ToDouble(values[i]);
             double next = done ? 0 : NumOps.ToDouble(nextValues[i]);
-            if (done || i == n - 1) running = 0;
+            if (done || truncatedSteps[i] || i == n - 1) running = 0;
             double delta = NumOps.ToDouble(_trajectoryBuffer[i].reward) + gamma * next - value;
             running = delta + gamma * lambda * running;
             advantages[i] = running;

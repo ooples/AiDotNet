@@ -73,13 +73,9 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
         _options = options;
         Options = _options;
         _random = Random;
-        _successCounts = new Vector<int>(_options.NumArms);
-        _failureCounts = new Vector<int>(_options.NumArms);
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _successCounts[i] = 1;  // Prior
-            _failureCounts[i] = 1;  // Prior
-        }
+        // Beta(1, 1) prior: one pseudo-success and one pseudo-failure per arm.
+        _successCounts = Vector<int>.CreateDefault(_options.NumArms, 1);
+        _failureCounts = Vector<int>.CreateDefault(_options.NumArms, 1);
     }
 
     /// <inheritdoc />
@@ -172,41 +168,35 @@ public partial class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         var metrics = new Dictionary<string, T>();
-        for (int i = 0; i < _options.NumArms; i++)
+        var engine = AiDotNetEngine.Current;
+        var successes = RLTensorOps.CountsAs<T>(_successCounts);
+        var failures = RLTensorOps.CountsAs<T>(_failureCounts);
+        // Posterior mean successes / (successes + failures) per arm, formed from the integer counts (their sum
+        // overflows Half past 65504).
+        var means = new Vector<T>(0);
+        if (_options.NumArms > 0)
         {
-            double mean = (double)_successCounts[i] / (_successCounts[i] + _failureCounts[i]);
-            metrics[$"mean_arm_{i}"] = NumOps.FromDouble(mean);
-            metrics[$"successes_arm_{i}"] = NumOps.FromDouble(_successCounts[i]);
-            metrics[$"failures_arm_{i}"] = NumOps.FromDouble(_failureCounts[i]);
+            var successCounts = _successCounts.AsTensor().Cast<double>().ToVector();
+            var failureCounts = _failureCounts.AsTensor().Cast<double>().ToVector();
+            means = engine.Divide(successCounts, engine.Add(successCounts, failureCounts)).AsTensor().Cast<T>().ToVector();
         }
+        RLTensorOps.AddIndexedMetrics(metrics, _options.NumArms,
+            ("mean_arm_", means), ("successes_arm_", successes), ("failures_arm_", failures));
         return metrics;
     }
 
     /// <inheritdoc />
     public override void ResetEpisode()
     {
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _successCounts[i] = 1;
-            _failureCounts[i] = 1;
-        }
+        _successCounts.Fill(1);
+        _failureCounts.Fill(1);
     }
 
     /// <inheritdoc />

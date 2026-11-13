@@ -281,15 +281,8 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         // ReinforcementLearningAgentBase.Train(state, target) contract
         // which expects target to be a one-hot action vector.
         var qValues = ComputeQValues(state);
-        int bestIdx = 0;
-        for (int i = 1; i < qValues.Length; i++)
-        {
-            if (NumOps.GreaterThan(qValues[i], qValues[bestIdx]))
-                bestIdx = i;
-        }
-        var oneHot = new Vector<T>(_options.ActionSize);
-        oneHot[bestIdx] = NumOps.One;
-        return oneHot;
+        int bestIdx = qValues.Length == 0 ? 0 : RLTensorOps.ArgMax(qValues);
+        return RLTensorOps.OneHot<T>(_options.ActionSize, bestIdx);
     }
 
     private Vector<T> ComputeQValues(Vector<T> state)
@@ -309,22 +302,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             // the dot product of raw logits with z would silently produce
             // mathematically wrong Q-values for both action selection
             // and TD targets.
-            var qValues = new Vector<T>(_options.ActionSize);
-            double deltaZ = (_options.VMax - _options.VMin) / (_options.NumAtoms - 1);
-
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                var atomProbs = SoftmaxAtomSlice(output, action * _options.NumAtoms, _options.NumAtoms);
-                T qValue = NumOps.Zero;
-                for (int atom = 0; atom < _options.NumAtoms; atom++)
-                {
-                    double z = _options.VMin + atom * deltaZ;
-                    qValue = NumOps.Add(qValue, NumOps.Multiply(atomProbs[atom], NumOps.FromDouble(z)));
-                }
-                qValues[action] = qValue;
-            }
-
-            return qValues;
+            return ExpectedAtomValues(output);
         }
 
         return output;
@@ -339,29 +317,34 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     /// </summary>
     private Vector<T> SoftmaxAtomSlice(Vector<T> logits, int offset, int count)
     {
-        // Subtract max for numerical stability before exponentiation.
-        double maxLogit = double.NegativeInfinity;
-        for (int i = 0; i < count; i++)
+        // exp(l - max l) / sum, over one action's atom logits; the max skips NaN (a strict greater-than scan from
+        // -infinity), and an all-zero sum is left unnormalised.
+        var engine = AiDotNetEngine.Current;
+        var slice = logits.GetSubVector(offset, count);
+        T maxLogit = RLTensorOps.MaxAbove(slice, NumOps.FromDouble(double.NegativeInfinity));
+        var probs = engine.TensorExp(engine.TensorSubtractScalar(slice.AsTensor(), maxLogit));
+        T sumExp = engine.TensorSum(probs);
+        if (NumOps.GreaterThan(sumExp, NumOps.Zero))
         {
-            double l = NumOps.ToDouble(logits[offset + i]);
-            if (l > maxLogit) maxLogit = l;
+            probs = engine.TensorMultiplyScalar(probs, NumOps.Divide(NumOps.One, sumExp));
         }
+        return probs.ToVector();
+    }
 
-        var probs = new Vector<T>(count);
-        double sumExp = 0.0;
-        for (int i = 0; i < count; i++)
-        {
-            double e = Math.Exp(NumOps.ToDouble(logits[offset + i]) - maxLogit);
-            probs[i] = NumOps.FromDouble(e);
-            sumExp += e;
-        }
-        if (sumExp > 0)
-        {
-            T invSum = NumOps.FromDouble(1.0 / sumExp);
-            for (int i = 0; i < count; i++)
-                probs[i] = NumOps.Multiply(probs[i], invSum);
-        }
-        return probs;
+    /// <summary>
+    /// C51 expected values Q(s, a) = sum_i z_i p_i(s, a) for every action, with p the per-action softmax over the
+    /// atom logits and z_i = VMin + i * deltaZ.
+    /// </summary>
+    private Vector<T> ExpectedAtomValues(Vector<T> output)
+    {
+        var engine = AiDotNetEngine.Current;
+        int numAtoms = _options.NumAtoms;
+        double deltaZ = (_options.VMax - _options.VMin) / (numAtoms - 1);
+        var support = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, numAtoms, 1), NumOps.FromDouble(deltaZ)),
+            NumOps.FromDouble(_options.VMin)).ToVector();
+        return Vector<T>.FromEnumerable(Enumerable.Range(0, _options.ActionSize)
+            .Select(action => engine.DotProduct(SoftmaxAtomSlice(output, action * numAtoms, numAtoms), support)));
     }
 
     /// <inheritdoc />
@@ -370,21 +353,13 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         // N-step learning: accumulate transitions
         _nStepBuffer.Add((state, action, reward, nextState, done));
 
-        if (_nStepBuffer.Count >= _options.NSteps || done)
+        // On episode end every pending transition is stored with its truncated n-step return (Hessel et al. 2018,
+        // as Dopamine and Stable-Baselines3 flush the n-step queue), not only the oldest one.
+        while (_nStepBuffer.Count > 0 && (_nStepBuffer.Count >= _options.NSteps || done))
         {
-            // Compute n-step return
             var (nStepState, nStepAction, nStepReturn, nStepNextState, nStepDone) = ComputeNStepReturn();
             _replayBuffer.Add(nStepState, nStepAction, nStepReturn, nStepNextState, nStepDone);
-
-            // Clear n-step buffer on episode end
-            if (done)
-            {
-                _nStepBuffer.Clear();
-            }
-            else
-            {
-                _nStepBuffer.RemoveAt(0);
-            }
+            _nStepBuffer.RemoveAt(0);
         }
 
         _stepCount++;
@@ -404,18 +379,15 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         var firstState = _nStepBuffer[0].state;
         var firstAction = _nStepBuffer[0].action;
 
-        T nStepReturn = NumOps.Zero;
-        T discount = NumOps.One;
+        // sum_i gamma^i r_i up to and including the first terminal transition
+        int doneIndex = _nStepBuffer.FindIndex(transition => transition.done);
+        int length = doneIndex >= 0 ? doneIndex + 1 : _nStepBuffer.Count;
+        var rewards = Vector<T>.FromEnumerable(_nStepBuffer.Take(length).Select(transition => transition.reward));
+        T nStepReturn = RLTensorOps.DiscountedSum(rewards, DiscountFactor, out _);
 
-        for (int i = 0; i < _nStepBuffer.Count; i++)
+        if (doneIndex >= 0)
         {
-            nStepReturn = NumOps.Add(nStepReturn, NumOps.Multiply(discount, _nStepBuffer[i].reward));
-            discount = NumOps.Multiply(discount, DiscountFactor);
-
-            if (_nStepBuffer[i].done)
-            {
-                return (firstState, firstAction, nStepReturn, _nStepBuffer[i].nextState, true);
-            }
+            return (firstState, firstAction, nStepReturn, _nStepBuffer[doneIndex].nextState, true);
         }
 
         var lastTransition = _nStepBuffer[_nStepBuffer.Count - 1];
@@ -463,8 +435,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         {
             packedTarget = new Vector<T>(outputSize);
             int copyLen = Math.Min(outputSize, target.Length);
-            for (int i = 0; i < copyLen; i++)
-                packedTarget[i] = target[i];
+            target.AsSpan().Slice(0, copyLen).CopyTo(packedTarget.AsWritableSpan());
         }
 
         var stateTensor = Tensor<T>.FromVector(state);
@@ -498,22 +469,13 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         int n = batch.Count;
 
         // n-step discount gamma^NSteps, shared by both update paths.
-        T nStepDiscount = NumOps.One;
-        for (int k = 0; k < _options.NSteps; k++)
-        {
-            nStepDiscount = NumOps.Multiply(nStepDiscount, DiscountFactor);
-        }
+        T nStepDiscount = _options.NSteps <= 0
+            ? NumOps.One
+            : RLTensorOps.DiscountPowers(DiscountFactor, _options.NSteps + 1)[_options.NSteps];
 
         // One batched states tensor: the whole minibatch goes through the tape in a single
         // forward/backward pass, exactly as DQNAgent.Train does.
-        var states = new Tensor<T>([n, stateSize]);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < stateSize; j++)
-            {
-                states[i, j] = batch[i].state[j];
-            }
-        }
+        var states = RLTensorOps.Batch(batch.Select(experience => experience.state), stateSize);
 
         var priorities = new List<double>(n);
         T totalLoss = _options.UseDistributional
@@ -560,43 +522,28 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         int n = batch.Count;
 
         // Targets are built OUTSIDE the tape: the target network must not be tape-tracked.
+        var engine = AiDotNetEngine.Current;
         var currentQBatch = _onlineNetwork.Predict(states);
-        var targetQ = new Tensor<T>([n, actionSize]);
+        var takenActions = batch.Select(experience => ArgMax(experience.action)).ToList();
+        var rewards = Vector<T>.FromEnumerable(batch.Select(experience => experience.reward));
+        var done = batch.Select(experience => experience.done).ToArray();
 
-        for (int i = 0; i < n; i++)
-        {
-            var experience = batch[i];
-            int actionIndex = ArgMax(experience.action);
+        // Double Q-learning: the ONLINE network selects the next action, the TARGET network evaluates it
+        // (van Hasselt et al. 2016). The next states go through each network as one batch; a terminal row's
+        // bootstrap is discarded, so its own state stands in.
+        var nextStates = RLTensorOps.Batch(batch.Select(experience => experience.done ? experience.state : experience.nextState), _options.StateSize);
+        var bestNextActions = RLTensorOps.Rows(_onlineNetwork.Predict(nextStates), n).Select(ArgMax).ToList();
+        var nextQTarget = _targetNetwork.Predict(nextStates);
+        int targetWidth = n == 0 ? 0 : nextQTarget.ToVector().Length / n;
+        var evaluated = RLTensorOps.PickPerRow(nextQTarget, n, targetWidth, bestNextActions);
+        var targets = RLTensorOps.TdTargets(rewards, evaluated, done, nStepDiscount);
 
-            for (int a = 0; a < actionSize; a++)
-            {
-                targetQ[i, a] = currentQBatch[(i * actionSize) + a];
-            }
+        // Importance-sampling weighting belongs on the sample's contribution to the loss, and
+        // the priority is the unweighted magnitude of the TD error (Schaul et al. 2016).
+        var tdErrors = engine.Subtract(targets, RLTensorOps.PickPerRow(currentQBatch, n, actionSize, takenActions));
+        priorities.AddRange(engine.Abs(tdErrors).AsTensor().Cast<double>().ToVector());
 
-            T target;
-            if (experience.done)
-            {
-                target = experience.reward;
-            }
-            else
-            {
-                // Double Q-learning: the ONLINE network selects the next action, the TARGET
-                // network evaluates it (van Hasselt et al. 2016).
-                int bestActionIndex = ArgMax(ComputeQValues(experience.nextState));
-                var nextQValuesTarget = ComputeQValuesFromNetwork(_targetNetwork, experience.nextState);
-                target = NumOps.Add(
-                    experience.reward,
-                    NumOps.Multiply(nStepDiscount, nextQValuesTarget[bestActionIndex]));
-            }
-
-            T tdError = NumOps.Subtract(target, targetQ[i, actionIndex]);
-
-            // Importance-sampling weighting belongs on the sample's contribution to the loss, and
-            // the priority is the unweighted magnitude of the TD error (Schaul et al. 2016).
-            priorities.Add(Math.Abs(NumOps.ToDouble(tdError)));
-
-            targetQ[i, actionIndex] = target;
-        }
+        var targetQ = RLTensorOps.ReplaceTakenActionValues(currentQBatch, n, actionSize, takenActions, targets);
 
         // Single batched training step -- tape-based forward + loss + optimizer update.
         _onlineNetwork.Train(states, targetQ);
@@ -641,78 +588,20 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         // Rows are (sample, action) pairs so the softmax below reduces over each action's atom
         // slice -- the same per-action normalisation ComputeQValues uses. A softmax over the flat
         // ActionSize*NumAtoms row would couple actions that C51 keeps independent.
-        var coefficients = new Tensor<T>([n * actionSize, numAtoms]);
-        double lossSum = 0.0;
+        var samples = Enumerable.Range(0, n)
+            .Select(i => CategoricalTarget(batch[i], ArgMax(batch[i].action), weights[i], discount, n))
+            .ToList();
 
-        for (int i = 0; i < n; i++)
-        {
-            var experience = batch[i];
-            int actionIndex = ArgMax(experience.action);
-            double weight = weights[i];
-            double reward = NumOps.ToDouble(experience.reward);
-
-            // Double Q-learning: the ONLINE network picks the next action, the TARGET network
-            // supplies the distribution that gets projected.
-            int bestActionIndex = ArgMax(ComputeQValues(experience.nextState));
-            var nextLogits = _targetNetwork.Predict(Tensor<T>.FromVector(experience.nextState)).ToVector();
-            var nextProbs = SoftmaxAtomSlice(nextLogits, bestActionIndex * numAtoms, numAtoms);
-
-            // Categorical projection: shift the support by the n-step return, clamp it back into
-            // [VMin, VMax], and split each atom's mass between its two neighbouring supports. When
-            // the transition is terminal every atom maps to the reward, so the projected
-            // distribution collapses to a point mass there -- which is what C51 requires.
-            var projected = new double[numAtoms];
-            for (int atom = 0; atom < numAtoms; atom++)
-            {
-                double tz = experience.done
-                    ? reward
-                    : reward + (discount * (vMin + (atom * deltaZ)));
-                tz = Math.Max(vMin, Math.Min(vMax, tz));
-
-                double b = (tz - vMin) / deltaZ;
-                int lower = (int)Math.Floor(b);
-                int upper = (int)Math.Ceiling(b);
-                double mass = NumOps.ToDouble(nextProbs[atom]);
-
-                if (lower == upper)
-                {
-                    projected[lower] += mass;
-                }
-                else
-                {
-                    projected[lower] += mass * (upper - b);
-                    projected[upper] += mass * (b - lower);
-                }
-            }
-
-            // Rainbow section 3.5 prioritises transitions by the KL loss, which for a fixed target
-            // distribution is this cross-entropy up to a constant.
-            var currentLogits = _onlineNetwork.Predict(Tensor<T>.FromVector(experience.state)).ToVector();
-            var currentProbs = SoftmaxAtomSlice(currentLogits, actionIndex * numAtoms, numAtoms);
-
-            double crossEntropy = 0.0;
-            for (int atom = 0; atom < numAtoms; atom++)
-            {
-                if (projected[atom] <= 0.0)
-                {
-                    continue;
-                }
-
-                crossEntropy -= projected[atom]
-                    * Math.Log(Math.Max(NumOps.ToDouble(currentProbs[atom]), 1e-8));
-            }
-
-            priorities.Add(crossEntropy);
-            lossSum += weight * crossEntropy;
-
-            // -w_i * m_k / n on the taken action's row; every other row stays zero, so only the
-            // action that was actually taken receives gradient.
-            int row = (i * actionSize) + actionIndex;
-            for (int atom = 0; atom < numAtoms; atom++)
-            {
-                coefficients[row, atom] = NumOps.FromDouble(-weight * projected[atom] / n);
-            }
-        }
+        // Rainbow section 3.5 prioritises transitions by the KL loss, which for a fixed target
+        // distribution is this cross-entropy up to a constant.
+        var crossEntropies = samples.Select(sample => sample.CrossEntropy).ToList();
+        priorities.AddRange(crossEntropies);
+        double lossSum = n == 0
+            ? 0.0
+            : AiDotNetEngine.Current.DotProduct(Vector<double>.FromEnumerable(weights.Take(n)), Vector<double>.FromEnumerable(crossEntropies));
+        var coefficients = n == 0
+            ? new Tensor<T>([0, numAtoms])
+            : AiDotNetEngine.Current.TensorConcatenate(samples.Select(sample => sample.Coefficients).ToArray(), 0);
 
         trainable.TrainWithCustomLoss(states, logits =>
         {
@@ -742,22 +631,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             // Same softmax-before-expectation correction as the online
             // ComputeQValues — the C51 head emits raw atom logits and we
             // need true probabilities to compute Q(s,a) = Σ z·p.
-            var qValues = new Vector<T>(_options.ActionSize);
-            double deltaZ = (_options.VMax - _options.VMin) / (_options.NumAtoms - 1);
-
-            for (int action = 0; action < _options.ActionSize; action++)
-            {
-                var atomProbs = SoftmaxAtomSlice(output, action * _options.NumAtoms, _options.NumAtoms);
-                T qValue = NumOps.Zero;
-                for (int atom = 0; atom < _options.NumAtoms; atom++)
-                {
-                    double z = _options.VMin + atom * deltaZ;
-                    qValue = NumOps.Add(qValue, NumOps.Multiply(atomProbs[atom], NumOps.FromDouble(z)));
-                }
-                qValues[action] = qValue;
-            }
-
-            return qValues;
+            return ExpectedAtomValues(output);
         }
 
         return output;
@@ -765,19 +639,68 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
+        return RLTensorOps.ArgMax(values);
+    }
 
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
+    /// <summary>
+    /// One transition's C51 target (Bellemare et al. 2017, Algorithm 1): the target network's distribution for
+    /// the online network's next action, projected onto the support shifted by the n-step return; returns the
+    /// sample's [ActionSize, NumAtoms] loss coefficients (-w m / n on the taken action's row, zero elsewhere) and
+    /// its cross-entropy against the online distribution.
+    /// </summary>
+    private (Tensor<T> Coefficients, double CrossEntropy) CategoricalTarget(
+        (Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done) experience,
+        int actionIndex, double weight, double discount, int n)
+    {
+        var engine = AiDotNetEngine.Current;
+        int actionSize = _options.ActionSize;
+        int numAtoms = _options.NumAtoms;
+        double vMin = _options.VMin;
+        double vMax = _options.VMax;
+        double deltaZ = (vMax - vMin) / (numAtoms - 1);
+        double reward = NumOps.ToDouble(experience.reward);
 
-        return maxIndex;
+        // Double Q-learning: the ONLINE network picks the next action, the TARGET network
+        // supplies the distribution that gets projected.
+        int bestActionIndex = ArgMax(ComputeQValues(experience.nextState));
+        var nextLogits = _targetNetwork.Predict(Tensor<T>.FromVector(experience.nextState)).ToVector();
+        var mass = SoftmaxAtomSlice(nextLogits, bestActionIndex * numAtoms, numAtoms).AsTensor().Cast<double>();
+
+        // Categorical projection: shift the support by the n-step return, clamp it back into
+        // [VMin, VMax], and split each atom's mass between its two neighbouring supports. When
+        // the transition is terminal every atom maps to the reward, so the projected
+        // distribution collapses to a point mass there -- which is what C51 requires.
+        var support = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorArange<double>(0, numAtoms, 1), deltaZ), vMin);
+        var shifted = experience.done
+            ? engine.TensorFullLike(support, reward)
+            : engine.TensorAddScalar(engine.TensorMultiplyScalar(support, discount), reward);
+        var tz = engine.TensorClamp(shifted, vMin, vMax);
+        var b = engine.TensorDivideScalar(engine.TensorSubtractScalar(tz, vMin), deltaZ);
+        var lower = engine.TensorFloor(b);
+        var upper = engine.TensorCeiling(b);
+        var onSupport = engine.TensorEquals(lower, upper);
+        var zeros = engine.TensorFullLike(b, 0.0);
+        var lowerMass = engine.TensorWhere(onSupport, mass, engine.TensorMultiply(mass, engine.TensorSubtract(upper, b)));
+        var upperMass = engine.TensorWhere(onSupport, zeros, engine.TensorMultiply(mass, engine.TensorSubtract(b, lower)));
+        var projected = engine.TensorScatterAdd(
+            engine.TensorScatterAdd(zeros, lower.Cast<int>(), lowerMass, 0), upper.Cast<int>(), upperMass, 0);
+
+        // -sum_k m_k log max(p_k, 1e-8) over the atoms with positive projected mass
+        var currentLogits = _onlineNetwork.Predict(Tensor<T>.FromVector(experience.state)).ToVector();
+        var currentProbs = SoftmaxAtomSlice(currentLogits, actionIndex * numAtoms, numAtoms).AsTensor().Cast<double>();
+        var flooredProbs = engine.TensorWhere(
+            engine.TensorLessThan(currentProbs, 1e-8), engine.TensorFullLike(currentProbs, 1e-8), currentProbs);
+        var terms = engine.TensorWhere(
+            engine.TensorGreaterThan(projected, 0.0), engine.TensorMultiply(projected, engine.TensorLog(flooredProbs)), zeros);
+        double crossEntropy = -engine.TensorSum(terms);
+
+        // -w_i * m_k / n on the taken action's row; every other row stays zero, so only the
+        // action that was actually taken receives gradient.
+        var row = engine.TensorDivideScalar(engine.TensorMultiplyScalar(projected, -weight), (double)n).Cast<T>();
+        var rows = engine.TensorTile(engine.Reshape(row, [1, numAtoms]), [actionSize, 1]);
+        var taken = engine.TensorTile(engine.Reshape(RLTensorOps.OneHot<T>(actionSize, actionIndex).AsTensor(), [actionSize, 1]), [1, numAtoms]);
+        var coefficients = engine.TensorWhere(taken, rows, engine.TensorFullLike(rows, NumOps.Zero));
+        return (coefficients, crossEntropy);
     }
 
     /// <inheritdoc />
@@ -851,11 +774,9 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
                 nameof(gradients));
         }
 
-        var newParams = new Vector<T>(currentParams.Length);
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            newParams[i] = NumOps.Subtract(currentParams[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        // theta - lr * g
+        var engine = AiDotNetEngine.Current;
+        var newParams = engine.Subtract(currentParams, engine.Multiply(gradients, learningRate));
 
         SetParameters(newParams);
     }

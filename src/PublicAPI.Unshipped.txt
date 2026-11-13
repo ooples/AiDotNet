@@ -24375,3 +24375,21 @@ static AiDotNet.NeuralNetworks.Layers.SSM.SSMQuantizationHelper<T>.ComputeQuanti
 AiDotNet.Diffusion.Safety.SGRACEEraser<T>.MeasureStylePresence(AiDotNet.Tensors.LinearAlgebra.Vector<T>! currentParameters, AiDotNet.Tensors.LinearAlgebra.Vector<T>! baseParameters, int styleIndex) -> T
 *REMOVED*AiDotNet.Diffusion.Audio.GriffinLim<T>.ComputeSpectralConvergence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetMagnitude, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> double
 AiDotNet.Diffusion.Audio.GriffinLim<T>.ComputeSpectralConvergence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetMagnitude, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! signal) -> T
+AiDotNet.ReinforcementLearning.Agents.AdvancedRL.LSPIAgent<T>.JointFeatureSize.get -> int
+virtual AiDotNet.ReinforcementLearning.Agents.AdvancedRL.LSPIAgent<T>.StateActionFeatures(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, int action) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Interfaces.IRLAgent<T>.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool terminated, bool truncated) -> void
+virtual AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningAgentBase<T>.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool terminated, bool truncated) -> void
+override AiDotNet.ReinforcementLearning.Agents.PPO.PPOAgent<T>.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool terminated, bool truncated) -> void
+override AiDotNet.ReinforcementLearning.Agents.A2C.A2CAgent<T>.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool terminated, bool truncated) -> void
+override AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.StoreExperience(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextState, bool terminated, bool truncated) -> void
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.Truncations.get -> System.Collections.Generic.List<bool>!
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.Truncations.init -> void
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.BootstrapValues.get -> System.Collections.Generic.List<T>!
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.BootstrapValues.init -> void
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.AddStep(AiDotNet.Tensors.LinearAlgebra.Vector<T>! state, AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, T reward, T value, T logProb, bool terminated, bool truncated, T bootstrapValue) -> void
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.TruncateLastStep(T bootstrapValue) -> void
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.NextValues() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ReinforcementLearning.Common.Trajectory<T>.ChainCuts() -> bool[]!
+AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys
+const AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys.Truncated = "truncated" -> string!
+static AiDotNet.ReinforcementLearning.Environments.EnvironmentInfoKeys.IsTruncated(System.Collections.Generic.IReadOnlyDictionary<string!, object!>? info) -> bool

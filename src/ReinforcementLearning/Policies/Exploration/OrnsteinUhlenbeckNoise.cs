@@ -69,13 +69,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             _sigma = sigma;
             _mu = mu;
             _dt = dt;
-            _state = new Vector<T>(actionSize);
-
             // Initialize state to zeros
-            for (int i = 0; i < actionSize; i++)
-            {
-                _state[i] = NumOps.Zero;
-            }
+            _state = Vector<T>.CreateDefault(actionSize, NumOps.Zero);
         }
 
         /// <summary>
@@ -89,23 +84,21 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         {
             ValidateActionSize(_state.Length, actionSpaceSize, nameof(actionSpaceSize));
 
-            var noisyAction = new Vector<T>(actionSpaceSize);
+            // Ornstein-Uhlenbeck process: dx = θ(μ - x)dt + σ√dt * dW, one standard-normal draw per dimension
+            var engine = AiDotNetEngine.Current;
+            var x = RLTensorOps.Head(_state, actionSpaceSize);
+            var dW = RLTensorOps.StandardNormal<T>(random, actionSpaceSize);
+            var drift = engine.Multiply(
+                engine.Multiply(engine.Subtract(Vector<T>.CreateDefault(actionSpaceSize, NumOps.FromDouble(_mu)), x), NumOps.FromDouble(_theta)),
+                NumOps.FromDouble(_dt));
+            var diffusion = engine.Multiply(dW, NumOps.FromDouble(_sigma * Math.Sqrt(_dt)));
 
-            for (int i = 0; i < actionSpaceSize; i++)
-            {
-                // Ornstein-Uhlenbeck process: dx = θ(μ - x)dt + σ√dt * dW
-                double x = NumOps.ToDouble(_state[i]);
-                double dW = NumOps.ToDouble(BoxMullerSample(random));
-                double dx = _theta * (_mu - x) * _dt + _sigma * Math.Sqrt(_dt) * dW;
+            // Update noise state
+            var newX = engine.Add(x, engine.Add(drift, diffusion));
+            newX.AsSpan().CopyTo(_state.AsWritableSpan());
 
-                // Update noise state
-                double newX = x + dx;
-                _state[i] = NumOps.FromDouble(newX);
-
-                // Add noise to action
-                double actionValue = NumOps.ToDouble(policyAction[i]) + newX;
-                noisyAction[i] = NumOps.FromDouble(actionValue);
-            }
+            // Add noise to action
+            var noisyAction = engine.Add(RLTensorOps.Head(policyAction, actionSpaceSize), newX);
 
             // Clamp to valid action range
             return ClampAction(noisyAction);
@@ -125,10 +118,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         /// </summary>
         public override void Reset()
         {
-            for (int i = 0; i < _state.Length; i++)
-            {
-                _state[i] = NumOps.Zero;
-            }
+            _state.Fill(NumOps.Zero);
         }
     }
 }
