@@ -17,6 +17,8 @@ internal static class GroundingDetections<T>
     /// Takes the first <paramref name="maxDetections"/> eligible candidates in candidate order, then runs greedy
     /// non-maximum suppression in descending-confidence order (Neubeck and Van Gool, 2006; torchvision.ops.nms):
     /// a box is dropped when its IoU with a higher-confidence kept box exceeds <paramref name="iouThreshold"/>.
+    /// Equal confidences are visited in candidate order, so ties (common once the confidence saturates or is
+    /// clamped) keep the earlier candidate and the output does not depend on an unstable sort.
     /// </summary>
     /// <param name="engine">Engine to run on.</param>
     /// <param name="boxes">Candidate boxes <c>[n, 4]</c> as normalized (x1, y1, x2, y2).</param>
@@ -43,11 +45,35 @@ internal static class GroundingDetections<T>
             return new Tensor<T>([FieldsPerDetection]);
 
         var candidateIndex = new Tensor<int>(new[] { candidates.Count }, Vector<int>.FromList(candidates));
-        var candidateBoxes = engine.TensorIndexSelect(boxes.Reshape([count, 4]), candidateIndex, 0);
         var candidateConfidences = engine.TensorIndexSelect(confidences.Reshape([count]), candidateIndex, 0);
 
-        var keep = engine.Nms(candidateBoxes, candidateConfidences, iouThreshold);
-        int kept = keep.Length;
+        // Visit order: descending confidence, ties in candidate order (engine argsort and Nms are not stable).
+        int[] visit = DescendingStableOrder(engine, candidateConfidences);
+        var orderedCandidates = new int[visit.Length];
+        for (int i = 0; i < visit.Length; i++)
+            orderedCandidates[i] = candidates[visit[i]];
+        var orderedIndex = new Tensor<int>(new[] { visit.Length }, Vector<int>.FromArray(orderedCandidates));
+        var candidateBoxes = engine.TensorIndexSelect(boxes.Reshape([count, 4]), orderedIndex, 0);
+        candidateConfidences = engine.TensorIndexSelect(confidences.Reshape([count]), orderedIndex, 0);
+
+        int n = candidates.Count;
+        int[] overlaps = Overlaps(engine, candidateBoxes, iouThreshold);
+        var suppressed = new bool[n];
+        var keptRows = new List<int>();
+        for (int i = 0; i < n; i++)
+        {
+            if (suppressed[i])
+                continue;
+            keptRows.Add(i);
+            for (int j = i + 1; j < n; j++)
+            {
+                if (overlaps[i * n + j] != 0)
+                    suppressed[j] = true;
+            }
+        }
+
+        int kept = keptRows.Count;
+        var keep = new Tensor<int>(new[] { kept }, Vector<int>.FromList(keptRows));
         var rows = engine.TensorConcatenate(
             [
                 engine.TensorIndexSelect(candidateBoxes, keep, 0),
@@ -55,6 +81,73 @@ internal static class GroundingDetections<T>
             ], 1);
         return rows.Reshape([kept * FieldsPerDetection]);
     }
+
+    /// <summary>
+    /// The positions of a <c>[n]</c> tensor ordered by descending value, equal values in ascending position.
+    /// The engine sort is not stable, so each run of equal sorted values has its positions re-sorted as integers.
+    /// </summary>
+    internal static int[] DescendingStableOrder(IEngine engine, Tensor<T> values)
+    {
+        int n = values.Length;
+        var (sorted, indices) = engine.TensorSort(values.Reshape([n]), 0, true);
+        int[] order = indices.ToArray();
+        if (n < 2)
+            return order;
+
+        int[] startsRun = engine.TensorNotEquals(engine.TensorSlice(sorted, [1], [n - 1]),
+            engine.TensorSlice(sorted, [0], [n - 1])).Cast<int>().ToArray();
+        int runStart = 0;
+        for (int i = 1; i <= n; i++)
+        {
+            if (i < n && startsRun[i - 1] == 0)
+                continue;
+            if (i - runStart > 1)
+                Array.Sort(order, runStart, i - runStart);
+            runStart = i;
+        }
+
+        return order;
+    }
+
+    /// <summary>
+    /// The row-major <c>[n * n]</c> 0/1 matrix of box pairs whose IoU exceeds <paramref name="iouThreshold"/>.
+    /// Narrow types (Half, BFloat16) compute the IoU in float so the threshold test is not decided by their
+    /// rounding.
+    /// </summary>
+    private static int[] Overlaps(IEngine engine, Tensor<T> boxes, double iouThreshold)
+    {
+        if (IsNarrow)
+        {
+            var wide = boxes.Cast<float>();
+            return engine.TensorGreaterThan(engine.BoxIou(wide, wide), (float)iouThreshold).Cast<int>().ToArray();
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return engine.TensorGreaterThan(engine.BoxIou(boxes, boxes), numOps.FromDouble(iouThreshold))
+            .Cast<int>().ToArray();
+    }
+
+    /// <summary>True for types narrower than float (Half, BFloat16), whose sums saturate and lose precision.</summary>
+    private static bool IsNarrow => MathHelper.GetNumericOperations<T>().PrecisionBits < 24;
+
+    /// <summary>
+    /// The sum of each row of a <c>[n, width]</c> matrix, as <c>[n]</c>. Narrow types accumulate in float: a
+    /// Half running sum stops growing at 2048 when adding ones, and loses every addend below half its spacing.
+    /// </summary>
+    internal static Tensor<T> SumRows(IEngine engine, Tensor<T> matrix)
+    {
+        if (!IsNarrow)
+            return engine.ReduceSum(matrix, [1], false);
+        return engine.ReduceSum(matrix.Cast<float>(), [1], false).Cast<T>();
+    }
+
+    /// <summary>
+    /// <c>floor(values * factor)</c> as integers. The product is formed in double: an index must not depend on
+    /// how <typeparamref name="T"/> rounds it (Half rounds 0.5 * 4099 = 2049.5 up to 2050, and overflows once
+    /// the factor passes 65504).
+    /// </summary>
+    internal static int[] FloorScaled(IEngine engine, Tensor<T> values, double factor) =>
+        engine.TensorFloor(engine.TensorMultiplyScalar(values.Cast<double>(), factor)).Cast<int>().ToArray();
 
     /// <summary>
     /// DETR-style query decoding shared by DINO-X and Grounding DINO 1.5: the flattened decoder output is cut into
@@ -185,7 +278,7 @@ internal static class GroundingDetections<T>
             engine.ReduceSum(Take(engine, decoderOut, positions, [cells, read]), [1], false),
             numOps.FromDouble(logitScale));
         var attention = engine.TensorExp(engine.TensorSubtractScalar(logits, engine.TensorMaxValue(logits)));
-        var meanAttention = numOps.Divide(engine.TensorSum(attention), numOps.FromDouble(cells));
+        var meanAttention = Mean(engine, attention);
         var seedThreshold = numOps.Multiply(meanAttention, numOps.FromDouble(seedFactor));
         var growThreshold = numOps.Multiply(seedThreshold, numOps.FromDouble(growFactor));
 
@@ -273,17 +366,40 @@ internal static class GroundingDetections<T>
             }
         }
 
-        var regionAttention = engine.TensorScatterAdd(new Tensor<T>([regions]),
-            new Tensor<int>(new[] { memberRegions.Count }, Vector<int>.FromList(memberRegions)),
-            Take(engine, attention, memberCells.ToArray(), [memberCells.Count]), 0);
-        var expected = engine.TensorMultiplyScalar(IntsAsT(sizes.ToArray()), meanAttention);
-        var ratio = engine.TensorClampMax(engine.TensorDivide(regionAttention, expected), numOps.One);
+        // Each region's mean attention, accumulated in float for narrow types (a Half region sum saturates).
+        var memberIndex = new Tensor<int>(new[] { memberRegions.Count }, Vector<int>.FromList(memberRegions));
+        var memberAttention = Take(engine, attention, memberCells.ToArray(), [memberCells.Count]);
+        var regionMean = IsNarrow
+            ? RegionMeans(engine, memberAttention.Cast<float>(), memberIndex, sizes.ToArray()).Cast<T>()
+            : RegionMeans(engine, memberAttention, memberIndex, sizes.ToArray());
+        var ratio = engine.TensorClampMax(engine.TensorDivideScalar(regionMean, meanAttention), numOps.One);
         confidences = engine.TensorSigmoid(engine.TensorSubtractScalar(ratio, numOps.FromDouble(confidenceOffset)));
 
         var grid = numOps.FromDouble(gridSize);
         Tensor<T> Edge(List<int> values) =>
             engine.TensorDivideScalar(IntsAsT(values.ToArray()), grid).Reshape([regions, 1]);
         boxes = engine.TensorConcatenate([Edge(minCols), Edge(minRows), Edge(maxCols), Edge(maxRows)], 1);
+    }
+
+    /// <summary>The mean of every value; narrow types sum in float and round the mean to T once.</summary>
+    private static T Mean(IEngine engine, Tensor<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (IsNarrow)
+            return numOps.FromDouble((double)engine.TensorSum(values.Cast<float>()) / values.Length);
+        return numOps.Divide(engine.TensorSum(values), numOps.FromDouble(values.Length));
+    }
+
+    /// <summary>
+    /// The mean of the values assigned to each group: <paramref name="values"/>[i] belongs to group
+    /// <paramref name="groups"/>[i], and group g has <paramref name="sizes"/>[g] members.
+    /// </summary>
+    private static Tensor<TWide> RegionMeans<TWide>(IEngine engine, Tensor<TWide> values, Tensor<int> groups,
+        int[] sizes)
+    {
+        var sums = engine.TensorScatterAdd(new Tensor<TWide>([sizes.Length]), groups, values, 0);
+        var counts = new Tensor<int>(new[] { sizes.Length }, Vector<int>.FromArray(sizes)).Cast<TWide>();
+        return engine.TensorDivide(sums, counts);
     }
 
     /// <summary>Integer values as a <c>[n]</c> tensor of <typeparamref name="T"/>.</summary>
@@ -299,7 +415,7 @@ internal static class GroundingDetections<T>
         int end = Math.Min(to, matrix.Shape[1]);
         if (end <= from)
             return new Tensor<T>([rows]);
-        return engine.ReduceSum(engine.TensorSlice(matrix, [0, from], [rows, end - from]), [1], false);
+        return SumRows(engine, engine.TensorSlice(matrix, [0, from], [rows, end - from]));
     }
 
     /// <summary>
@@ -312,7 +428,8 @@ internal static class GroundingDetections<T>
         int width = matrix.Shape[1];
         var scale = RowScale(engine, matrix);
         var scaled = engine.TensorDivide(matrix, engine.TensorBroadcastTo(scale, [rows, width]));
-        var meanSquare = engine.ReduceMean(engine.TensorMultiply(scaled, scaled), [1], false);
+        var meanSquare = engine.TensorMultiplyScalar(SumRows(engine, engine.TensorMultiply(scaled, scaled)),
+            MathHelper.GetNumericOperations<T>().FromDouble(1.0 / width));
         return engine.TensorMultiply(engine.TensorSqrt(meanSquare), scale.Reshape([rows]));
     }
 
@@ -326,7 +443,7 @@ internal static class GroundingDetections<T>
         int width = matrix.Shape[1];
         var scale = RowScale(engine, matrix);
         var scaled = engine.TensorDivide(matrix, engine.TensorBroadcastTo(scale, [rows, width]));
-        var sumSquare = engine.ReduceSum(engine.TensorMultiply(scaled, scaled), [1], false);
+        var sumSquare = SumRows(engine, engine.TensorMultiply(scaled, scaled));
         return engine.TensorMultiply(engine.TensorSqrt(sumSquare), scale.Reshape([rows]));
     }
 

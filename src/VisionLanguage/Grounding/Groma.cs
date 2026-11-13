@@ -206,22 +206,25 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         var spatialX = Engine.TensorDivideScalar(GroundingDetections<T>.IntsAsT(cellColumns).Reshape(queryShape), grid);
         var spatialY = Engine.TensorDivideScalar(GroundingDetections<T>.IntsAsT(cellRows).Reshape(queryShape), grid);
 
-        var attnSum = Engine.ReduceSum(weights, [1], false);
+        var attnSum = GroundingDetections<T>.SumRows(Engine, weights);
         var hasWeight = Engine.TensorGreaterThan(attnSum, NumOps.FromDouble(1e-8));
         var safeSum = Engine.TensorWhere(hasWeight, attnSum,
             Tensor<T>.CreateDefault([numRegionQueries], NumOps.One));
         var middle = Tensor<T>.CreateDefault([numRegionQueries], NumOps.FromDouble(0.5));
         var cx = Engine.TensorWhere(hasWeight,
-            Engine.TensorDivide(Engine.ReduceSum(Engine.TensorMultiply(spatialX, weights), [1], false), safeSum), middle);
+            Engine.TensorDivide(GroundingDetections<T>.SumRows(Engine, Engine.TensorMultiply(spatialX, weights)), safeSum),
+            middle);
         var cy = Engine.TensorWhere(hasWeight,
-            Engine.TensorDivide(Engine.ReduceSum(Engine.TensorMultiply(spatialY, weights), [1], false), safeSum), middle);
+            Engine.TensorDivide(GroundingDetections<T>.SumRows(Engine, Engine.TensorMultiply(spatialY, weights)), safeSum),
+            middle);
 
         // Predict width/height from the weighted spatial variance: max(0.05, 4 sqrt(var)), at most 1
         Tensor<T> Extent(Tensor<T> spatial, Tensor<T> centre)
         {
             var offset = Engine.TensorSubtract(spatial,
                 Engine.TensorBroadcastTo(centre.Reshape([numRegionQueries, 1]), queryShape));
-            var spread = Engine.ReduceSum(Engine.TensorMultiply(weights, Engine.TensorMultiply(offset, offset)), [1], false);
+            var spread = GroundingDetections<T>.SumRows(Engine,
+                Engine.TensorMultiply(weights, Engine.TensorMultiply(offset, offset)));
             var variance = Engine.TensorWhere(hasWeight, Engine.TensorDivide(spread, safeSum), spread);
             return Engine.TensorClampMax(Engine.TensorMax(
                 Engine.TensorMultiplyScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(4.0)), NumOps.FromDouble(0.05)),
@@ -247,11 +250,10 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
 
         // Score each region against text-conditioned decoder features: the region of interest starts at
-        // floor(cx * outDim) % outDim and spans max(1, floor(w * outDim / 2)) values, read cyclically.
-        int[] roiStarts = Engine.TensorFloor(Engine.TensorMultiplyScalar(cx, NumOps.FromDouble(outDim)))
-            .Cast<int>().ToArray();
-        int[] roiSpans = Engine.TensorFloor(Engine.TensorMultiplyScalar(regionW, NumOps.FromDouble(outDim * 0.5)))
-            .Cast<int>().ToArray();
+        // floor(cx * outDim) % outDim and spans max(1, floor(w * outDim / 2)) values, read cyclically. The
+        // positions are integers, so they are derived without rounding the products to T.
+        int[] roiStarts = GroundingDetections<T>.FloorScaled(Engine, cx, outDim);
+        int[] roiSpans = GroundingDetections<T>.FloorScaled(Engine, regionW, outDim * 0.5);
         int longestSpan = 1;
         for (int q = 0; q < numRegionQueries; q++)
         {
@@ -267,9 +269,16 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
                 roiPositions[q * longestSpan + d] = d < roiSpans[q] ? (roiStarts[q] + d) % outDim : -1;
         }
 
-        var roiFeatSum = Engine.ReduceSum(GroundingDetections<T>.Take(Engine, decoderOut, roiPositions,
-            [numRegionQueries, longestSpan]), [1], false);
-        var roiConf = Engine.TensorSigmoid(Engine.TensorDivide(roiFeatSum, GroundingDetections<T>.IntsAsT(roiSpans)));
+        var roiFeatSum = GroundingDetections<T>.SumRows(Engine, GroundingDetections<T>.Take(Engine, decoderOut,
+            roiPositions, [numRegionQueries, longestSpan]));
+
+        // Divide by each span through its reciprocal, formed in double and rounded to T once: a span past 2048
+        // is not exact in Half, and one past 65504 overflows it.
+        var inverseSpans = new double[numRegionQueries];
+        for (int q = 0; q < numRegionQueries; q++)
+            inverseSpans[q] = 1.0 / roiSpans[q];
+        var roiConf = Engine.TensorSigmoid(Engine.TensorMultiply(roiFeatSum,
+            new Tensor<double>(new[] { numRegionQueries }, Vector<double>.FromArray(inverseSpans)).Cast<T>()));
         var confidences = Engine.TensorSigmoid(Engine.TensorAddScalar(
             Engine.TensorMultiplyScalar(Engine.TensorMultiply(roiConf, regionScores), NumOps.FromDouble(5.0)),
             NumOps.FromDouble(-2.0)));

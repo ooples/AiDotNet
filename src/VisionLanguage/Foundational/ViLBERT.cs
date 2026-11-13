@@ -294,17 +294,9 @@ public partial class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFus
     }
 
     /// <summary>
-    /// Mean-pool a rank-2 [N, D] tensor over the N dimension to [D], or
-    /// a rank-3 [B, N, D] tensor to [B, D]. This is the paper-standard
-    /// pooling for ViLBERT's task heads — the paper uses the [IMG]/[CLS]
-    /// token position directly, but mean-pool over the token dim is
-    /// equivalent under the smoke-test's random-init weights (no
-    /// task-specific pretraining).
-    /// </summary>
-    /// <summary>
     /// Mean-pools token embeddings for the task head: [tokens, dim] -> [dim], or
     /// [batch, tokens, dim] -> [batch, dim]; a higher rank averages every axis between the batch and
-    /// feature axes.
+    /// feature axes. The paper reads the [IMG]/[CLS] positions instead; mean pooling stands in for them here.
     /// </summary>
     /// <remarks>
     /// These must be RECORDED reductions. Accumulating the mean element by element produces a tensor

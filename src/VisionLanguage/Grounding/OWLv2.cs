@@ -186,8 +186,8 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         int dim = Math.Max(1, outDim / actualPatches);
         var features = Engine.TensorSlice(decoderOut.Reshape([outDim]), [0], [actualPatches * dim])
             .Reshape([actualPatches, dim]);
-        var confidences = Engine.TensorSigmoid(Engine.TensorDivideScalar(
-            Engine.ReduceSum(features, [1], false), NumOps.FromDouble(dim)));
+        var confidences = Engine.TensorSigmoid(Engine.TensorMultiplyScalar(
+            GroundingDetections<T>.SumRows(Engine, features), NumOps.FromDouble(1.0 / dim)));
         var boxes = GroundingDetections<T>.PatchOffsetBoxes(Engine, features, gridSize);
         var eligible = Engine.TensorMultiply(
             GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),

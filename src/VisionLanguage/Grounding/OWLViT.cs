@@ -212,8 +212,8 @@ public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         var unit = Engine.TensorDivide(features, Engine.TensorBroadcastTo(safeNorms, [actualPatches, dim]));
 
         // Objectness score from text-conditioned patch features, then the box regression
-        var confidences = Engine.TensorSigmoid(Engine.TensorDivideScalar(
-            Engine.ReduceSum(unit, [1], false), NumOps.FromDouble(dim)));
+        var confidences = Engine.TensorSigmoid(Engine.TensorMultiplyScalar(
+            GroundingDetections<T>.SumRows(Engine, unit), NumOps.FromDouble(1.0 / dim)));
         var boxes = GroundingDetections<T>.PatchOffsetBoxes(Engine, unit, gridSize);
         var eligible = Engine.TensorMultiply(
             GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),

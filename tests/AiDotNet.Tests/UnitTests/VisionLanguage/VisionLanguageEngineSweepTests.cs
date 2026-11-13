@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.VisionLanguage;
@@ -273,8 +274,22 @@ public class VisionLanguageEngineSweepTests
 
         GroundingDetections<double>.AttentionRegions(AiDotNetEngine.Current, decoderOut, cap, scale, seed, grow, offset,
             out var boxes, out var confidences);
+        var expected = ScalarAttentionRegions(decoderOut.ToArray(), cap, scale, seed, grow, offset);
 
-        // The scalar Ferret decoding this replaces.
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected.Count, confidences.Length);
+        for (int r = 0; r < expected.Count; r++)
+        {
+            for (int f = 0; f < 4; f++)
+                Assert.Equal(expected[r][f], boxes[r, f], Tolerance);
+            Assert.Equal(expected[r][4], confidences[r], 1e-9);
+        }
+    }
+
+    /// <summary>The scalar Ferret decoding that GroundingDetections.AttentionRegions replaces, in double.</summary>
+    private static List<double[]> ScalarAttentionRegions(double[] decoderOut, int cap, double scale, double seed,
+        double grow, double offset)
+    {
         int outDim = decoderOut.Length;
         int gridSize = Math.Max(2, (int)Math.Sqrt(outDim));
         int featsPerCell = Math.Max(1, outDim / (gridSize * gridSize));
@@ -329,13 +344,127 @@ public class VisionLanguageEngineSweepTests
             });
         }
 
-        Assert.NotEmpty(expected);
+        return expected;
+    }
+
+    [Fact]
+    public void AttentionRegions_Half_LargeRegionMeanDoesNotSaturate()
+    {
+        // A 70 x 70 grid (one value per cell). Rows 0-5 are a high-attention block (attention 1), row 6 is near
+        // zero, and rows 7-69 hold one seed cell (attention 1) in a field of 4409 cells at attention 0.3. With
+        // Ferret-v2's thresholds the field grows from the seed into one region of mean 0.30, below the global
+        // mean 0.36. A Half running sum of that region stops growing at 1024 (adding 0.3 rounds away), which
+        // drops the ratio from 0.84 to about 0.65; the sums must be formed in float.
+        const int grid = 70;
+        double medium = Math.Log(0.3) / 0.08;
+        var values = new Half[grid * grid];
+        for (int cell = 0; cell < values.Length; cell++)
+        {
+            int row = cell / grid;
+            values[cell] = (Half)(row < 6 ? 0.0 : row == 6 ? -200.0 : medium);
+        }
+        values[7 * grid] = (Half)0.0;
+        var decoderOut = new Tensor<Half>(new[] { values.Length }, new Vector<Half>(values));
+
+        GroundingDetections<Half>.AttentionRegions(AiDotNetEngine.Current, decoderOut, 8, 0.08, 1.3, 0.6, 0.8,
+            out var boxes, out var confidences);
+        var expected = ScalarAttentionRegions(values.Select(v => (double)v).ToArray(), 8, 0.08, 1.3, 0.6, 0.8);
+
+        Assert.Equal(2, expected.Count);
         Assert.Equal(expected.Count, confidences.Length);
         for (int r = 0; r < expected.Count; r++)
         {
             for (int f = 0; f < 4; f++)
-                Assert.Equal(expected[r][f], boxes[r, f], Tolerance);
-            Assert.Equal(expected[r][4], confidences[r], 1e-9);
+                Assert.Equal(expected[r][f], (double)boxes[r, f], 1e-3);
+            Assert.Equal(expected[r][4], (double)confidences[r], 2e-3);
+        }
+    }
+
+    [Fact]
+    public void GroundingSelect_TiedConfidences_KeepCandidateOrder()
+    {
+        // Twenty disjoint boxes with one confidence, except that box 4 repeats box 3. Greedy NMS visits equal
+        // confidences in candidate order, so box 3 is kept, box 4 is suppressed, and the rest come out in order.
+        // An unstable sort (introsort permutes equal keys past 16 items) reorders them.
+        const int count = 20;
+        var boxData = new double[count * 4];
+        for (int i = 0; i < count; i++)
+        {
+            int slot = i == 4 ? 3 : i;
+            boxData[i * 4] = slot * 0.05;
+            boxData[i * 4 + 1] = 0.0;
+            boxData[i * 4 + 2] = slot * 0.05 + 0.04;
+            boxData[i * 4 + 3] = 0.04;
+        }
+        var boxes = new Tensor<double>(new[] { count, 4 }, new Vector<double>(boxData));
+        var confidences = Tensor<double>.CreateDefault(new[] { count }, 0.5);
+        var eligible = Tensor<double>.CreateDefault(new[] { count }, 1.0);
+
+        var kept = GroundingDetections<double>.Select(AiDotNetEngine.Current, boxes, confidences, eligible, count, 0.5);
+
+        var expected = new List<double>();
+        for (int i = 0; i < count; i++)
+        {
+            if (i == 4) continue;
+            for (int f = 0; f < 4; f++) expected.Add(boxData[i * 4 + f]);
+            expected.Add(0.5);
+        }
+        Assert.Equal(expected.ToArray(), kept.ToArray());
+    }
+
+    [Fact]
+    public void ColumnSum_Half_DoesNotSaturateAt2048()
+    {
+        // A Half running sum of ones stops at 2048 (2048 + 1 rounds back to 2048); 4096 itself is exact.
+        var ones = Tensor<Half>.CreateDefault(new[] { 2, 4096 }, (Half)1.0);
+
+        var sums = GroundingDetections<Half>.ColumnSum(AiDotNetEngine.Current, ones, 0, 4096);
+
+        Assert.Equal(new[] { (Half)4096.0, (Half)4096.0 }, sums.ToArray());
+    }
+
+    [Fact]
+    public void FloorScaled_Half_IndexIsNotRoundedByTheElementType()
+    {
+        // 0.5 * 4099 = 2049.5, which Half rounds to 2050 before the floor; 0.5 * 140000 overflows Half.
+        var values = new Tensor<Half>(new[] { 1 }, new Vector<Half>(new[] { (Half)0.5 }));
+
+        Assert.Equal(new[] { 2049 }, GroundingDetections<Half>.FloorScaled(AiDotNetEngine.Current, values, 4099));
+        Assert.Equal(new[] { 70000 }, GroundingDetections<Half>.FloorScaled(AiDotNetEngine.Current, values, 140000));
+    }
+
+    [Fact]
+    public void SigLIP2DecodeCaption_FeedsBackTheTiedEmbeddingOfEachGreedyToken()
+    {
+        using var model = SmallSigLIP2();
+        var vision = Random(15, 4, 16);
+
+        var logits = model.DecodeCaption(vision);
+
+        // The vocabulary projection is the only [CaptioningDecoderDim, VocabSize] = [16, 40] dense layer.
+        var projection = model.Layers.OfType<DenseLayer<double>>().Select(l => l.GetWeights())
+            .Single(w => w is not null && w.Rank == 2 && w.Shape[0] == 16 && w.Shape[1] == 40);
+        Assert.NotNull(projection);
+        var weights = projection ?? new Tensor<double>(new[] { 16, 40 });
+
+        var sequence = new List<double[]> { Enumerable.Repeat(0.01, 16).ToArray() };
+        Assert.Equal(3 * 40, logits.Length);
+        for (int step = 0; step < 3; step++)
+        {
+            var input = new Tensor<double>(new[] { sequence.Count, 16 },
+                new Vector<double>(sequence.SelectMany(row => row).ToArray()));
+            var output = model.ForwardCaptioningDecoder(model.CrossAttend(input, vision));
+            int lastRow = (sequence.Count - 1) * 40;
+            int next = 0;
+            for (int v = 0; v < 40; v++)
+            {
+                Assert.Equal(output[lastRow + v], logits[step * 40 + v], 1e-9);
+                if (output[lastRow + v] > output[lastRow + next]) next = v;
+            }
+
+            var embedding = new double[16];
+            for (int d = 0; d < 16; d++) embedding[d] = weights[d, next];
+            sequence.Add(embedding);
         }
     }
 }

@@ -329,13 +329,20 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
             return OnnxImageEncoder.Run(preprocessed);
         }
 
-        // Get vision encoder features (before projection, since decoder cross-attends to full features)
-        var visionFeatures = ForwardVisionEncoder(preprocessed);
+        // The decoder cross-attends to the vision tower's (projected) patch tokens
+        return DecodeCaption(ForwardVisionEncoder(preprocessed));
+    }
 
-        // Greedy autoregressive decoding: the sequence is a start-of-sequence embedding followed by the
-        // embedding of every token generated so far. Each step cross-attends the whole sequence to the vision
-        // tokens, runs the decoder, and takes the last position's logits; their argmax is the next token,
-        // embedded with the vocabulary projection's weights (tied input/output embeddings).
+    /// <summary>
+    /// Greedy autoregressive decoding: the sequence is a start-of-sequence embedding followed by the
+    /// embedding of every token generated so far. Each step cross-attends the whole sequence to the vision
+    /// tokens, runs the decoder, and takes the last position's logits; their argmax is the next token,
+    /// embedded with the vocabulary projection's weights (tied input/output embeddings).
+    /// </summary>
+    /// <param name="visionFeatures">Vision tokens, read as rows of <c>CaptioningDecoderDim</c> values.</param>
+    /// <returns>The <c>[MaxCaptionLength * VocabSize]</c> logits of every step.</returns>
+    internal Tensor<T> DecodeCaption(Tensor<T> visionFeatures)
+    {
         int maxLen = _options.MaxCaptionLength;
         if (maxLen <= 0)
             return new Tensor<T>([0]);
@@ -741,7 +748,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     /// <summary>
     /// Forwards through the captioning decoder layers.
     /// </summary>
-    private Tensor<T> ForwardCaptioningDecoder(Tensor<T> input)
+    internal Tensor<T> ForwardCaptioningDecoder(Tensor<T> input)
     {
         if (!_options.IncludeCaptioningDecoder)
             return input;
