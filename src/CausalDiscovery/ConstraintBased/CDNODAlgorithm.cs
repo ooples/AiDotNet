@@ -71,14 +71,10 @@ public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
 
         // Augment data with context variable C (normalized row index)
         int dAug = d + 1;
-        var augData = new Matrix<T>(n, dAug);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-                augData[i, j] = data[i, j];
-            // Context variable = normalized row index
-            augData[i, d] = NumOps.FromDouble((double)i / (n - 1));
-        }
+        // Context variable = normalized row index
+        var context = Engine.TensorDivideScalar(
+            Engine.TensorArange<T>(0, n, 1), NumOps.FromDouble(n - 1)).Reshape(new[] { n, 1 });
+        var augData = Engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(data), context }, 1).ToMatrix();
 
         int contextIdx = d; // index of context variable
 
@@ -167,18 +163,12 @@ public class CDNODAlgorithm<T> : ConstraintBasedBase<T>
         ApplyMeekRules(adj, oriented, d);
 
         // Build d x d adjacency matrix (drop context variable)
-        var W = new Matrix<T>(d, d);
+        // Include edge if oriented i→j or undirected (skip if oriented j→i)
+        var edgeMask = new bool[d * d];
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                if (!adj[i, j]) continue;
-
-                // Include edge if oriented i→j or undirected (skip if oriented j→i)
-                if (!oriented[j, i])
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-            }
-        }
+                edgeMask[i * d + j] = adj[i, j] && !oriented[j, i];
+        var W = ApplyEdgeMask(edgeMask, ComputeAbsoluteCorrelationMatrix(data));
 
         return W;
     }

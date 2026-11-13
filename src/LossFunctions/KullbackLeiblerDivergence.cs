@@ -61,13 +61,10 @@ public class KullbackLeiblerDivergence<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // KL(P||Q) = sum(P(i) * log(P(i)/Q(i))
-            T ratio = NumericalStabilityHelper.SafeDiv(actual[i], predicted[i], NumericalStabilityHelper.SmallEpsilon);
-            sum = NumOps.Add(sum, NumOps.Multiply(actual[i], NumericalStabilityHelper.SafeLog(ratio, NumericalStabilityHelper.SmallEpsilon)));
-        }
+        // KL(P||Q) = sum(P(i) * log(P(i)/Q(i))
+        var p = actual.AsTensor();
+        var ratio = SafeDivideTensor(p, predicted.AsTensor(), NumericalStabilityHelper.SmallEpsilon);
+        T sum = Engine.TensorSum(Engine.TensorMultiply(p, SafeLogTensor(ratio, NumericalStabilityHelper.SmallEpsilon)));
 
         return sum;
     }

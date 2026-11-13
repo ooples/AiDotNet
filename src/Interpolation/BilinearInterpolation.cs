@@ -145,12 +145,6 @@ public partial class BilinearInterpolation<T> : I2DInterpolation<T>
     /// <returns>The index of the lower bound of the interval containing the point.</returns>
     private int FindInterval(Vector<T> values, T point)
     {
-        for (int i = 0; i < values.Length - 1; i++)
-        {
-            if (_numOps.LessThanOrEquals(point, values[i + 1]))
-                return i;
-        }
-
-        return values.Length - 2;
+        return InterpolationSearch.FirstSegmentReaching(values, point, 0, values.Length - 2);
     }
 }

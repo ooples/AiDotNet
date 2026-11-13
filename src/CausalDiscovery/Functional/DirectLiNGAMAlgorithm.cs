@@ -45,6 +45,12 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ResearchPaper("DirectLiNGAM: A Direct Method for Learning a Linear Non-Gaussian Structural Equation Model", "https://jmlr.org/papers/v12/shimizu11a.html", Year = 2011, Authors = "Shohei Shimizu, Takanori Inazumi, Yasuhiro Sogawa, Aapo Hyvarinen, Yoshinobu Kawahara, Takashi Washio, Patrik O. Hoyer, Kenneth Bollen")]
 public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
 {
+    /// <summary>
+    /// Centered sum of squares at or below which a regressor has no variation and its coefficient is 0,
+    /// in both the root-residualization and the final regression stage.
+    /// </summary>
+    private const double VarianceFloor = 1e-10;
+
     private double _threshold = 0.1;
 
     /// <summary>
@@ -82,11 +88,9 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
         var standardized = StandardizeData(data);
 
         var remaining = Enumerable.Range(0, d).ToList();
+        T varianceFloor = NumOps.FromDouble(VarianceFloor);
         var causalOrder = new List<int>();
-        var currentData = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                currentData[i, j] = standardized[i, j];
+        var currentData = standardized;
 
         // Iteratively find root and regress out
         while (remaining.Count > 0)
@@ -126,70 +130,52 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
             // Regress out root from remaining variables
             if (remaining.Count > 0)
             {
-                var rootCol = currentData.GetColumn(root);
-                var newData = new Matrix<T>(n, d);
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < d; j++)
-                        newData[i, j] = currentData[i, j];
+                // Every remaining column is replaced by its residual after regressing on the root
+                // (the centered RegressOut residual, for all columns at once).
+                var current = Tensor<T>.FromMatrix(currentData);
+                var centered = CenterColumns(current);
+                var rootCentered = Engine.TensorSliceAxis(centered, 1, root).Reshape(new[] { n, 1 });
+                // beta = sxy / sxx, or 0 when the root has no variation (sxx <= 1e-10)
+                var sxx = Engine.TensorBroadcastTo(Engine.ReduceSum(Engine.TensorSquare(rootCentered), new[] { 0 }, true), new[] { 1, centered.Shape[1] });
+                var sxy = Engine.TensorMatMul(Engine.TensorTranspose(rootCentered), centered);
+                var beta = Engine.TensorWhere(Engine.TensorGreaterThan(sxx, varianceFloor),
+                    Engine.TensorDivide(sxy, sxx), Engine.TensorZerosLike(sxy));
+                var residuals = Engine.TensorSubtract(centered, Engine.TensorMatMul(rootCentered, beta));
 
-                foreach (int j in remaining)
-                {
-                    var col = currentData.GetColumn(j);
-                    var resid = RegressOut(col, rootCol);
-                    for (int i = 0; i < n; i++) newData[i, j] = resid[i];
-                }
-
-                currentData = newData;
+                var remainingIndex = new Tensor<int>(remaining.ToArray(), new[] { remaining.Count });
+                var replace = Engine.TensorScatter(new Tensor<T>(new[] { d }), remainingIndex,
+                    Engine.TensorOnesLike(new Tensor<T>(new[] { remaining.Count })), 0).Reshape(new[] { 1, d });
+                currentData = Engine.TensorWhere(Engine.TensorBroadcastTo(replace, new[] { n, d }), residuals, current)
+                    .ToMatrix();
             }
         }
 
         // Estimate B matrix using OLS in causal order
-        var B = new Matrix<T>(d, d);
-
         // The UNTHRESHOLDED coefficients are kept alongside the thresholded graph. VARLiNGAM forms
         // (I - B_0) M_tau from B_0, and a matrix operation on a thresholded matrix biases its result:
         // every coefficient below the edge threshold is treated as an exact zero rather than as the
         // small value it is. Thresholding belongs to the reported GRAPH, not to the algebra.
-        var raw = new Matrix<T>(d, d);
+        // Simple regression coefficient of every column j on every column p: G[p, j] / G[p, p] with
+        // G the centered Gram matrix, 0 when G[p, p] is not above VarianceFloor.
+        var standardCentered = CenterColumns(Tensor<T>.FromMatrix(standardized));
+        var gram = Engine.TensorMatMul(Engine.TensorTranspose(standardCentered), standardCentered);
+        var sxxColumn = Engine.TensorDiagonal(gram).Reshape(new[] { d, 1 });
+        var validRow = Engine.TensorBroadcastTo(Engine.TensorGreaterThan(sxxColumn, varianceFloor), new[] { d, d });
+        var safeSxx = Engine.TensorWhere(validRow, Engine.TensorBroadcastTo(sxxColumn, new[] { d, d }),
+            Engine.TensorOnesLike(gram));
+        var coefficients = Engine.TensorWhere(validRow, Engine.TensorDivide(gram, safeSxx), Engine.TensorZerosLike(gram));
+
+        // Only parent -> j pairs with the parent earlier in the causal order carry a coefficient.
+        var earlierPairs = new List<int>();
         for (int idx = 1; idx < d; idx++)
-        {
-            int j = causalOrder[idx];
-            var yCol = standardized.GetColumn(j);
-
             for (int pidx = 0; pidx < idx; pidx++)
-            {
-                int parent = causalOrder[pidx];
-                var xCol = standardized.GetColumn(parent);
+                earlierPairs.Add(causalOrder[pidx] * d + causalOrder[idx]);
+        var raw = CausalTensorHelpers.KeepPositions(coefficients, earlierPairs);
 
-                // Simple regression coefficient
-                T nT = NumOps.FromDouble(n);
-                T mx = NumOps.Zero, my = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    mx = NumOps.Add(mx, xCol[i]);
-                    my = NumOps.Add(my, yCol[i]);
-                }
-                mx = NumOps.Divide(mx, nT);
-                my = NumOps.Divide(my, nT);
-
-                T sxy = NumOps.Zero, sxx = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    T dx = NumOps.Subtract(xCol[i], mx);
-                    sxy = NumOps.Add(sxy, NumOps.Multiply(dx, NumOps.Subtract(yCol[i], my)));
-                    sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
-                }
-
-                double sxx_d = NumOps.ToDouble(sxx);
-                T beta = sxx_d > 1e-10 ? NumOps.Divide(sxy, sxx) : NumOps.Zero;
-                double beta_d = NumOps.ToDouble(beta);
-                raw[parent, j] = beta;
-                if (Math.Abs(beta_d) >= _threshold)
-                    B[parent, j] = beta;
-            }
-        }
-
+        var rawTensor = Tensor<T>.FromMatrix(raw);
+        var keep = Engine.TensorGreaterEqual(Engine.TensorAbs(rawTensor),
+            Engine.TensorFullLike(rawTensor, NumOps.FromDouble(_threshold)));
         RawCoefficients = raw;
-        return B;
+        return Engine.TensorWhere(keep, rawTensor, Engine.TensorZerosLike(rawTensor)).ToMatrix();
     }
 }

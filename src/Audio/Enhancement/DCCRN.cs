@@ -756,39 +756,48 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> ComputeComplexSTFT(Tensor<T> audio)
     {
-        var samples = audio.ToVector().ToArray();
+        // Built from fresh values as before (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var samples = AudioEngineOps.Flatten(Engine, audio);
         int numFrames = (samples.Length - _fftSize) / _hopSize + 1;
         int numBins = _fftSize / 2 + 1;
 
-        // Shape: [1, 2, numBins, numFrames] for batch, real/imag, freq, time
-        var stft = new Tensor<T>([1, 2, numBins, numFrames]);
-        var window = CreateHannWindow(_fftSize);
+        // Shape: [1, 2, numBins, numFrames] for batch, real/imag, freq, time. Audio shorter than one
+        // analysis frame (including empty audio, where the count would be negative) is analysed as
+        // one zero-padded frame instead of producing an empty or invalid time axis.
+        numFrames = Math.Max(1, numFrames);
 
+        var window = CreateHannWindow(_fftSize);
+        var frames = new Tensor<T>[numFrames];
         for (int frame = 0; frame < numFrames; frame++)
         {
             int start = frame * _hopSize;
-            var frameData = new double[_fftSize];
-
-            for (int i = 0; i < _fftSize && start + i < samples.Length; i++)
-            {
-                frameData[i] = NumOps.ToDouble(samples[start + i]) * window[i];
-            }
-
-            for (int k = 0; k < numBins; k++)
-            {
-                double real = 0, imag = 0;
-                for (int n = 0; n < _fftSize; n++)
-                {
-                    double angle = -2 * Math.PI * k * n / _fftSize;
-                    real += frameData[n] * Math.Cos(angle);
-                    imag += frameData[n] * Math.Sin(angle);
-                }
-                stft[[0, 0, k, frame]] = NumOps.FromDouble(real);
-                stft[[0, 1, k, frame]] = NumOps.FromDouble(imag);
-            }
+            int available = Math.Max(0, Math.Min(_fftSize, samples.Length - start));
+            var frameData = available > 0
+                ? AudioEngineOps.FitLength(Engine, Engine.TensorSlice(samples, [start], [available]), _fftSize)
+                : new Tensor<T>([_fftSize]);
+            frames[frame] = Engine.TensorMultiply(frameData, window);
         }
 
-        return stft;
+        // DFT: X[k] = sum_n x[n] (cos(2 pi k n / N) - i sin(2 pi k n / N)).
+        var (cosBasis, sinBasis) = DftBasis(numBins);
+        var frameColumns = Engine.TensorTranspose(Engine.TensorStack(frames, 0));
+        var real = Engine.TensorMatMul(cosBasis, frameColumns);
+        var imag = Engine.TensorNegate(Engine.TensorMatMul(sinBasis, frameColumns));
+
+        return Engine.Reshape(Engine.TensorStack([real, imag], 0), [1, 2, numBins, numFrames]);
+    }
+
+    /// <summary>
+    /// The real DFT basis <c>cos / sin(2 pi k n / N)</c> as <c>[numBins, N]</c> tensors; <c>k n</c> is
+    /// reduced modulo N first so the angle stays in <c>[0, 2 pi)</c>.
+    /// </summary>
+    private (Tensor<T> Cos, Tensor<T> Sin) DftBasis(int numBins)
+    {
+        var kn = Engine.TensorOuterProduct(Engine.TensorArange<T>(0, numBins, 1), Engine.TensorArange<T>(0, _fftSize, 1));
+        var reduced = Engine.TensorFmod(kn, Tensor<T>.CreateDefault([numBins, _fftSize], NumOps.FromDouble(_fftSize)));
+        var angle = Engine.TensorMultiplyScalar(reduced, NumOps.FromDouble(2 * Math.PI / _fftSize));
+        return (Engine.TensorCos(angle), Engine.TensorSin(angle));
     }
 
     /// <summary>
@@ -796,33 +805,37 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> ComputeInverseSTFT(Tensor<T> stft)
     {
+        // Built from fresh values as before (not part of the autodiff graph).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int numBins = stft.Shape[2];
         int numFrames = stft.Shape[3];
         int numSamples = numFrames * _hopSize + _fftSize;
 
-        var audio = new Tensor<T>([numSamples]);
+        if (numFrames <= 0 || numBins <= 0)
+            return new Tensor<T>([numSamples]);
+
         var window = CreateHannWindow(_fftSize);
 
+        // frame[t, n] = sum_k (re[k, t] cos(2 pi k n / N) - im[k, t] sin(2 pi k n / N)) * w[n] / N
+        var real = Engine.Reshape(Engine.TensorSlice(stft, [0, 0, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]);
+        var imag = Engine.Reshape(Engine.TensorSlice(stft, [0, 1, 0, 0], [1, 1, numBins, numFrames]), [numBins, numFrames]);
+        var (cosBasis, sinBasis) = DftBasis(numBins);
+        var sums = Engine.TensorSubtract(
+            Engine.TensorMatMul(Engine.TensorTranspose(real), cosBasis),
+            Engine.TensorMatMul(Engine.TensorTranspose(imag), sinBasis));
+        var weighted = Engine.TensorDivideScalar(
+            Engine.TensorMultiply(sums, Engine.TensorBroadcastTo(Engine.Reshape(window, [1, _fftSize]), [numFrames, _fftSize])),
+            NumOps.FromDouble(_fftSize));
+
+        var frames = new List<Tensor<T>>(numFrames);
+        var starts = new List<int>(numFrames);
         for (int frame = 0; frame < numFrames; frame++)
         {
-            int start = frame * _hopSize;
-
-            for (int n = 0; n < _fftSize && start + n < numSamples; n++)
-            {
-                double sum = 0;
-                for (int k = 0; k < numBins; k++)
-                {
-                    double real = NumOps.ToDouble(stft[[0, 0, k, frame]]);
-                    double imag = NumOps.ToDouble(stft[[0, 1, k, frame]]);
-                    double angle = 2 * Math.PI * k * n / _fftSize;
-                    sum += real * Math.Cos(angle) - imag * Math.Sin(angle);
-                }
-                double currentVal = NumOps.ToDouble(audio[[start + n]]);
-                audio[[start + n]] = NumOps.FromDouble(currentVal + sum * window[n] / _fftSize);
-            }
+            frames.Add(Engine.Reshape(Engine.TensorSlice(weighted, [frame, 0], [1, _fftSize]), [_fftSize]));
+            starts.Add(frame * _hopSize);
         }
 
-        return audio;
+        return AudioEngineOps.OverlapAdd(Engine, frames, starts, numSamples);
     }
 
     /// <summary>
@@ -956,37 +969,19 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         int height = Math.Min(a.Shape[2], b.Shape[2]);
         int width = Math.Min(a.Shape[3], b.Shape[3]);
-        int newChannels = a.Shape[1] + b.Shape[1];
-        var result = new Tensor<T>([a.Shape[0], newChannels, height, width]);
 
-        // Copy a (use minimum dimensions for safety)
-        for (int i = 0; i < a.Shape[0]; i++)
-            for (int c = 0; c < a.Shape[1]; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        result[[i, c, h, w]] = a[[i, c, h, w]];
-
-        // Copy b
-        for (int i = 0; i < b.Shape[0]; i++)
-            for (int c = 0; c < b.Shape[1]; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        result[[i, a.Shape[1] + c, h, w]] = b[[i, c, h, w]];
-
-        return result;
+        // Channels of a then channels of b, each cropped to the common spatial extent
+        var croppedA = Engine.TensorSlice(a, [0, 0, 0, 0], [a.Shape[0], a.Shape[1], height, width]);
+        var croppedB = Engine.TensorSlice(b, [0, 0, 0, 0], [b.Shape[0], b.Shape[1], height, width]);
+        return Engine.Concat(new[] { croppedA, croppedB }, 1);
     }
 
     /// <summary>
     /// Creates a Hann window.
     /// </summary>
-    private double[] CreateHannWindow(int size)
+    private Tensor<T> CreateHannWindow(int size)
     {
-        var window = new double[size];
-        for (int i = 0; i < size; i++)
-        {
-            window[i] = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (size - 1)));
-        }
-        return window;
+        return AudioEngineOps.SymmetricHannWindow<T>(Engine, size);
     }
 
     #endregion

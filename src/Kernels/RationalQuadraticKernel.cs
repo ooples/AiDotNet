@@ -152,18 +152,24 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
             throw new ArgumentException("Vectors must have the same length.");
 
         // Compute squared Euclidean distance
-        double r2 = 0;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
-            r2 += diff * diff;
-        }
+        T r2 = SquaredDistance(x1, x2);
 
         // Compute RQ kernel: sigma^2 * (1 + r^2/(2*alpha*l^2))^(-alpha)
-        double scaledR2 = r2 / (2.0 * _alpha * _lengthScale * _lengthScale);
-        double result = _variance * Math.Pow(1.0 + scaledR2, -_alpha);
+        T scaledR2 = _numOps.Divide(r2, _numOps.FromDouble(2.0 * _alpha * _lengthScale * _lengthScale));
+        T result = _numOps.Multiply(_numOps.FromDouble(_variance),
+            _numOps.Power(_numOps.Add(_numOps.One, scaledR2), _numOps.FromDouble(-_alpha)));
 
-        return _numOps.FromDouble(result);
+        return result;
+    }
+
+    /// <summary>
+    /// Squared Euclidean distance between two points, computed with engine ops.
+    /// </summary>
+    private static T SquaredDistance(Vector<T> x1, Vector<T> x2)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(x1, x2);
+        return engine.DotProduct(diff, diff);
     }
 
     /// <summary>
@@ -185,30 +191,19 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        int d = x1.Length;
-        var gradient = new Vector<T>(d);
-
-        // Compute squared distance
-        double r2 = 0;
-        for (int i = 0; i < d; i++)
-        {
-            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
-            r2 += diff * diff;
-        }
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(x1, x2);
+        T r2 = engine.DotProduct(diff, diff);
 
         // Precompute common factors
         double l2 = _lengthScale * _lengthScale;
-        double scaledR2 = r2 / (2.0 * _alpha * l2);
-        double baseTerm = 1.0 + scaledR2;
-        double factor = -_variance * Math.Pow(baseTerm, -_alpha - 1) / l2;
+        T scaledR2 = _numOps.Divide(r2, _numOps.FromDouble(2.0 * _alpha * l2));
+        T baseTerm = _numOps.Add(_numOps.One, scaledR2);
+        T factor = _numOps.Divide(
+            _numOps.Multiply(_numOps.FromDouble(-_variance), _numOps.Power(baseTerm, _numOps.FromDouble(-_alpha - 1))),
+            _numOps.FromDouble(l2));
 
-        for (int i = 0; i < d; i++)
-        {
-            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
-            gradient[i] = _numOps.FromDouble(factor * diff);
-        }
-
-        return gradient;
+        return engine.Multiply(diff, factor);
     }
 
     /// <summary>
@@ -227,23 +222,18 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
     /// - Maximizing the log marginal likelihood
     /// </para>
     /// </remarks>
-    public Dictionary<string, double> CalculateHyperparameterGradients(Vector<T> x1, Vector<T> x2)
+    public Dictionary<string, T> CalculateHyperparameterGradients(Vector<T> x1, Vector<T> x2)
     {
         // Compute squared distance
-        double r2 = 0;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
-            r2 += diff * diff;
-        }
+        T r2 = SquaredDistance(x1, x2);
 
         double l2 = _lengthScale * _lengthScale;
-        double scaledR2 = r2 / (2.0 * _alpha * l2);
-        double baseTerm = 1.0 + scaledR2;
-        double baseTermPowAlpha = Math.Pow(baseTerm, -_alpha);
-        double k = _variance * baseTermPowAlpha;
+        T scaledR2 = _numOps.Divide(r2, _numOps.FromDouble(2.0 * _alpha * l2));
+        T baseTerm = _numOps.Add(_numOps.One, scaledR2);
+        T baseTermPowAlpha = _numOps.Power(baseTerm, _numOps.FromDouble(-_alpha));
+        T k = _numOps.Multiply(_numOps.FromDouble(_variance), baseTermPowAlpha);
 
-        var gradients = new Dictionary<string, double>();
+        var gradients = new Dictionary<string, T>();
 
         // dk/d(variance) = (1 + r^2/(2*alpha*l^2))^(-alpha)
         gradients["variance"] = baseTermPowAlpha;
@@ -252,23 +242,25 @@ public class RationalQuadraticKernel<T> : IKernelFunction<T>
         // The derivative d/dl[r^2/(2*alpha*l^2)] = -r^2/(alpha*l^3)
         // So dk/dl = k * r^2 / (l * l^2 * baseTerm) = k * r^2 / (l * (l^2 + r^2/(2*alpha)))
         //          = k * 2*alpha * r^2 / (l * (2*alpha*l^2 + r^2))
-        double denom = 2.0 * _alpha * l2 + r2;
-        if (Math.Abs(denom) > 1e-10)
+        T denom = _numOps.Add(_numOps.FromDouble(2.0 * _alpha * l2), r2);
+        if (_numOps.GreaterThan(_numOps.Abs(denom), _numOps.FromDouble(1e-10)))
         {
             // Fixed: added factor of 2 that was missing
-            gradients["lengthScale"] = k * 2.0 * _alpha * r2 / (_lengthScale * denom);
+            gradients["lengthScale"] = _numOps.Divide(
+                _numOps.Multiply(_numOps.Multiply(k, _numOps.FromDouble(2.0 * _alpha)), r2),
+                _numOps.Multiply(_numOps.FromDouble(_lengthScale), denom));
         }
         else
         {
-            gradients["lengthScale"] = 0;
+            gradients["lengthScale"] = _numOps.Zero;
         }
 
         // dk/d(alpha) = k * [ scaledR2/baseTerm - log(baseTerm) ]
         // where scaledR2 = r^2/(2*alpha*l^2) and baseTerm = 1 + scaledR2
         // Derivation: d/da [(1+s)^{-a}] = (1+s)^{-a} * [s/(1+s) - ln(1+s)]
         // where ds/da = -s/a, giving the s/(1+s) term from the chain rule
-        double logBase = Math.Log(Math.Max(baseTerm, 1e-10));
-        gradients["alpha"] = k * (scaledR2 / baseTerm - logBase);
+        T logBase = _numOps.Log(MathHelper.Max(baseTerm, _numOps.FromDouble(1e-10)));
+        gradients["alpha"] = _numOps.Multiply(k, _numOps.Subtract(_numOps.Divide(scaledR2, baseTerm), logBase));
 
         return gradients;
     }

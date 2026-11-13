@@ -213,40 +213,21 @@ public partial class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageA
         int instrLen = instrTokens.Length;
 
         // Step 3: Project to 3D world model latent space
-        var worldLatent = new double[worldDim];
+        var engine = Engine;
         int blockSize = Math.Max(1, dim / worldDim);
-        for (int w = 0; w < worldDim; w++)
-        {
-            double sum = 0;
-            int start = w * blockSize;
-            int end = Math.Min(start + blockSize, dim);
-            for (int d = start; d < end; d++)
-                sum += NumOps.ToDouble(visualFeatures[d]);
-            worldLatent[w] = sum / Math.Max(1, end - start);
-        }
+        var worldLatent = BlockMeans(visualFeatures, worldDim, blockSize);
 
-        // Step 4: Compute goal representation from instruction
-        var goalLatent = new double[worldDim];
-        for (int w = 0; w < worldDim; w++)
-        {
-            if (instrLen > 0)
-            {
-                double instrVal = NumOps.ToDouble(instrTokens[w % instrLen]);
-                goalLatent[w] = Math.Tanh(instrVal / 100.0);
-            }
-        }
+        // Step 4: Compute goal representation from instruction: tanh(instr[w % instrLen] / 100).
+        var goalLatent = instrLen > 0
+            ? engine.TensorTanh(engine.TensorDivideScalar(CyclicTake(instrTokens, worldDim), NumOps.FromDouble(100.0)))
+            : new Tensor<T>([worldDim]);
 
-        // Step 5: Process through VLM decoder for action reasoning
-        var condInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            int wIdx = d % worldDim;
-            // Condition on world model state and goal difference
-            double goalDiff = goalLatent[wIdx] - worldLatent[wIdx];
-            vis += goalDiff * 0.2;
-            condInput[d] = NumOps.FromDouble(vis);
-        }
+        // Step 5: Process through VLM decoder for action reasoning.
+        // Condition on world model state and goal difference: vis[d] + 0.2 (goal - world)[d % worldDim].
+        var goalDiff = engine.TensorSubtract(goalLatent, worldLatent);
+        var condInput = engine.TensorAdd(
+            visualFeatures.Reshape([dim]),
+            engine.TensorMultiplyScalar(CyclicTake(goalDiff, dim), NumOps.FromDouble(0.2)));
 
         var decoderOut = condInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -255,70 +236,90 @@ public partial class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageA
         // Step 6: World model-guided action generation
         // Generate actions that move the predicted world state toward the goal
         int totalActions = actionDim * horizon;
-        var actions = new double[totalActions];
+        if (actionDim == 0 && horizon > 0)
+            throw new DivideByZeroException("The world model update maps state dimensions onto zero action dimensions.");
+        if (totalActions == 0)
+            return new Tensor<T>([totalActions]);
+
+        // Decoder output conditioning 0.1 decoderOut[min(actionIdx, length - 1)] of every action.
+        int decoderLength = decoderOut.Length;
+        if (decoderLength == 0)
+            throw new IndexOutOfRangeException("The decoder output has no features to condition the actions on.");
+        var decoderTerm = engine.TensorMultiplyScalar(
+            engine.TensorTake(
+                decoderOut.Reshape([decoderLength]),
+                engine.TensorMin(engine.TensorArange<int>(0, totalActions, 1), decoderLength - 1)),
+            NumOps.FromDouble(0.1));
+
+        // Scale by remaining distance (larger steps when far from goal): 1 - step / horizon.
+        var remainingFraction = engine.ScalarMinusTensor(
+            NumOps.One,
+            engine.TensorDivideScalar(engine.TensorArange<T>(0, horizon, 1), NumOps.FromDouble(horizon)));
+        int wBlockSize = Math.Max(1, worldDim / actionDim);
+        T stateRate = NumOps.FromDouble(0.1);
+        T epsilon = NumOps.FromDouble(1e-8);
 
         // Current world state (evolves as we predict actions)
-        var currentState = new double[worldDim];
-        Array.Copy(worldLatent, currentState, worldDim);
+        var currentState = worldLatent;
+        var stepActions = new List<Tensor<T>>(horizon);
 
         for (int step = 0; step < horizon; step++)
         {
-            // Compute state-to-goal direction in world model latent space
-            var direction = new double[worldDim];
-            double dirNorm = 0;
-            for (int w = 0; w < worldDim; w++)
-            {
-                direction[w] = goalLatent[w] - currentState[w];
-                dirNorm += direction[w] * direction[w];
-            }
-            dirNorm = Math.Sqrt(dirNorm) + 1e-8;
-
-            // Normalize direction
-            for (int w = 0; w < worldDim; w++)
-                direction[w] /= dirNorm;
+            // Compute state-to-goal direction in world model latent space and normalize it
+            // by its L2 norm + 1e-8.
+            var direction = engine.TensorSubtract(goalLatent, currentState);
+            var dirNorm = engine.TensorAddScalar(
+                engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(direction, direction), [0], true)), epsilon);
+            direction = engine.TensorDivide(direction, engine.TensorBroadcastTo(dirNorm, [worldDim]));
 
             // Map world model direction to robot action space
-            // The 7 DOF action maps to: 3 translation + 3 rotation + 1 gripper
-            for (int a = 0; a < actionDim; a++)
-            {
-                int actionIdx = step * actionDim + a;
-
-                // Aggregate relevant world model dimensions for this action
-                double actionVal = 0;
-                int wBlockSize = Math.Max(1, worldDim / actionDim);
-                int wStart = a * wBlockSize;
-                int wEnd = Math.Min(wStart + wBlockSize, worldDim);
-
-                for (int w = wStart; w < wEnd; w++)
-                    actionVal += direction[w];
-                actionVal /= Math.Max(1, wEnd - wStart);
-
-                // Scale by remaining distance (larger steps when far from goal)
-                double remainingFraction = 1.0 - (double)step / horizon;
-                actionVal *= remainingFraction;
-
-                // Add decoder output conditioning
-                int decoderIdx = Math.Min(actionIdx, decoderOut.Length - 1);
-                actionVal += NumOps.ToDouble(decoderOut[decoderIdx]) * 0.1;
-
-                actions[actionIdx] = actionVal;
-            }
+            // The 7 DOF action maps to: 3 translation + 3 rotation + 1 gripper.
+            // Each action is the mean of its block of world model dimensions, scaled by the
+            // remaining distance, plus the decoder output conditioning.
+            var actionVal = engine.TensorAdd(
+                engine.TensorMultiply(BlockMeans(direction, actionDim, wBlockSize), Pick(remainingFraction, step)),
+                engine.TensorSlice(decoderTerm, [step * actionDim], [actionDim]));
+            stepActions.Add(actionVal);
 
             // Step 7: World model forward prediction - update current state
-            for (int w = 0; w < worldDim; w++)
-            {
-                // Apply predicted action's effect on world state
-                int actionRef = w % actionDim;
-                currentState[w] += actions[step * actionDim + actionRef] * 0.1;
-            }
+            // Apply predicted action's effect on world state: state[w] += 0.1 action[w % actionDim].
+            currentState = engine.TensorAdd(currentState, engine.TensorMultiplyScalar(CyclicTake(actionVal, worldDim), stateRate));
         }
 
         // Step 8: Package result with tanh bounding
-        var result = new Tensor<T>([totalActions]);
-        for (int t = 0; t < totalActions; t++)
-            result[t] = NumOps.FromDouble(Math.Tanh(actions[t]));
+        var result = engine.TensorTanh(engine.TensorConcatenate(stepActions.ToArray(), 0));
 
         return result;
+    }
+
+    /// <summary>
+    /// The mean of each block b = [b * blockSize, min(b * blockSize + blockSize, n)) of a flat
+    /// sequence, or 0 for a block that starts past the end.
+    /// </summary>
+    /// <param name="values">The sequence (read flattened).</param>
+    /// <param name="blocks">Number of blocks.</param>
+    /// <param name="blockSize">Block width (at least 1).</param>
+    /// <returns>A [blocks] tensor of block means.</returns>
+    private Tensor<T> BlockMeans(Tensor<T> values, int blocks, int blockSize)
+    {
+        var engine = Engine;
+        int n = values.Length;
+        if (n == 0 || blocks == 0)
+            return new Tensor<T>([blocks]);
+
+        var positions = engine.TensorAdd(
+            engine.TensorBroadcastTo(
+                engine.TensorMultiplyScalar(engine.TensorArange<int>(0, blocks, 1), blockSize).Reshape([blocks, 1]),
+                [blocks, blockSize]),
+            engine.TensorBroadcastTo(engine.TensorArange<int>(0, blockSize, 1).Reshape([1, blockSize]), [blocks, blockSize]));
+        var inBlock = engine.TensorLessThan(positions, n).Cast<T>();
+        var blockValues = engine.TensorWhere(
+            inBlock,
+            engine.TensorTake(values.Reshape([n]), engine.TensorMin(positions, n - 1)),
+            new Tensor<T>([blocks, blockSize]));
+        return engine.TensorDivide(
+            engine.ReduceSum(blockValues, [1], false),
+            engine.TensorMax(engine.ReduceSum(inBlock, [1], false), NumOps.One));
     }
 
     protected override void InitializeLayers()
@@ -360,10 +361,7 @@ public partial class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageA
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

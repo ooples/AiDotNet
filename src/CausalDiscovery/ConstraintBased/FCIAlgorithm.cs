@@ -203,24 +203,24 @@ public class FCIAlgorithm<T> : ConstraintBasedBase<T>
         }
 
         // Build weighted adjacency from PAG using Matrix<T>
-        var W = new Matrix<T>(d, d);
+        // i → j (arrowhead at j) keeps |corr|; an uncertain mark keeps half of it.
+        var arrowMask = new bool[d * d];
+        var uncertainMask = new bool[d * d];
         for (int i = 0; i < d; i++)
         {
             for (int j = 0; j < d; j++)
             {
-                if (!adj[i, j]) continue;
-                if (edgeMark[i, j] == 2) // i → j (arrowhead at j)
-                {
-                    double weight = Math.Abs(ComputePartialCorr(data, i, j, []));
-                    W[i, j] = NumOps.FromDouble(weight);
-                }
-                else if (edgeMark[i, j] == 3) // uncertain
-                {
-                    double weight = 0.5 * Math.Abs(ComputePartialCorr(data, i, j, []));
-                    W[i, j] = NumOps.FromDouble(weight);
-                }
+                arrowMask[i * d + j] = adj[i, j] && edgeMark[i, j] == 2;
+                uncertainMask[i * d + j] = adj[i, j] && edgeMark[i, j] == 3;
             }
         }
+
+        var absCorrelation = ComputeAbsoluteCorrelationMatrix(data);
+        var halfCorrelation = Engine.TensorMultiplyScalar(
+            Tensor<T>.FromMatrix(absCorrelation), NumOps.FromDouble(0.5)).ToMatrix();
+        var W = Engine.TensorAdd(
+            Tensor<T>.FromMatrix(ApplyEdgeMask(arrowMask, absCorrelation)),
+            Tensor<T>.FromMatrix(ApplyEdgeMask(uncertainMask, halfCorrelation))).ToMatrix();
 
         return W;
     }
