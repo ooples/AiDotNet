@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -102,7 +103,7 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         var similarities = new double[clientIds.Count];
         int totalParams = layerNames.Sum(ln => naiveAvg[ln].Length);
         var avgFlat = FlattenLayers(naiveAvg, layerNames, totalParams);
-        double normAvg = NumOps.ToDouble(Engine.DotProduct(avgFlat, avgFlat));
+        double normAvg = FederatedReductions.SquaredNorm(avgFlat);
 
         for (int c = 0; c < clientIds.Count; c++)
         {
@@ -120,8 +121,8 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             }
 
             var clientFlat = FlattenLayers(clientModel, layerNames, totalParams);
-            double dot = NumOps.ToDouble(Engine.DotProduct(clientFlat, avgFlat));
-            double normClient = NumOps.ToDouble(Engine.DotProduct(clientFlat, clientFlat));
+            double dot = FederatedReductions.Dot(clientFlat, avgFlat);
+            double normClient = FederatedReductions.SquaredNorm(clientFlat);
             double denom = Math.Sqrt(normClient) * Math.Sqrt(normAvg);
             similarities[c] = denom > 0 ? dot / denom : 0.0;
         }

@@ -208,10 +208,10 @@ public class GroupFairnessConstraint<T> : FederatedLearningComponentBase<T>, IFa
         int size = Math.Min(clientModel.Shape[0], globalModel.Shape[0]);
         var start = new[] { 0 };
         var length = new[] { size };
-        var diff = Engine.TensorSubtract(
+        double sumSq = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SumOfSquaredDifferences(
             Engine.TensorSlice(clientModel.Reshape(clientModel.Length), start, length),
             Engine.TensorSlice(globalModel.Reshape(globalModel.Length), start, length));
-        return -Math.Sqrt(NumOps.ToDouble(Engine.TensorSumOfSquares(diff))); // Higher is better
+        return -Math.Sqrt(sumSq); // Higher is better
     }
 
     private static double ComputeDemographicParityViolation(Dictionary<int, double> groupPerformances)

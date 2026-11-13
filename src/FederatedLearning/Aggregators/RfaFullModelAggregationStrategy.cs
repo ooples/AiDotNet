@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -61,34 +62,25 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
         var clientIds = clientParameters.Keys.OrderBy(id => id).ToArray();
 
         // Initialize with an unweighted average (stable starting point).
-        var current = new Vector<T>(parameterCount);
-        foreach (var clientId in clientIds)
-        {
-            current = Engine.Add(current, clientParameters[clientId]);
-        }
-
-        current = Engine.Divide(current, NumOps.FromDouble(clientIds.Length));
+        var clientVectors = clientIds.Select(id => clientParameters[id]).ToArray();
+        var current = FederatedReductions.Mean(clientVectors);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            var next = new Vector<T>(parameterCount);
+            // Smoothed Weiszfeld step: weights w_i = alpha_i / max(||current - p_i||, epsilon), normalized before
+            // they are applied so no unnormalized 1 / epsilon factor ever multiplies a parameter in T.
+            var w = new double[clientIds.Length];
             double weightSum = 0.0;
-
-            foreach (var clientId in clientIds)
+            for (int c = 0; c < clientIds.Length; c++)
             {
-                var p = clientParameters[clientId];
-                var offset = Engine.Subtract(current, p);
-                double dist = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(offset, offset)));
-                dist = Math.Max(dist, _epsilon);
-
-                double w = 1.0 / dist;
-                if (_useClientWeights && clientWeights.TryGetValue(clientId, out var cw) && cw > 0.0)
+                double dist = Math.Max(Math.Sqrt(FederatedReductions.SquaredDistance(current, clientVectors[c])), _epsilon);
+                w[c] = 1.0 / dist;
+                if (_useClientWeights && clientWeights.TryGetValue(clientIds[c], out var cw) && cw > 0.0)
                 {
-                    w *= cw;
+                    w[c] *= cw;
                 }
 
-                weightSum += w;
-                next = Engine.Add(next, Engine.Multiply(p, NumOps.FromDouble(w)));
+                weightSum += w[c];
             }
 
             if (weightSum <= 0.0)
@@ -96,10 +88,8 @@ public sealed class RfaFullModelAggregationStrategy<T, TInput, TOutput> :
                 break;
             }
 
-            next = Engine.Divide(next, NumOps.FromDouble(weightSum));
-
-            var step = Engine.Subtract(next, current);
-            double delta = NumOps.ToDouble(Engine.DotProduct(step, step));
+            var next = FederatedReductions.WeightedSum(clientVectors, w.Select(x => x / weightSum).ToArray());
+            double delta = FederatedReductions.SquaredDistance(next, current);
             current = next;
             if (Math.Sqrt(delta) <= _tolerance)
             {

@@ -183,20 +183,36 @@ internal class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStra
 
     /// <summary>
     /// Sum over rows of KL(q_global || p_local) between the temperature-softened softmaxes over each row's
-    /// not-true classes (Lee et al. 2022, FedNTD). The true class is excluded by giving it a -infinity logit.
+    /// not-true classes (Lee et al. 2022, FedNTD). Half / BFloat16 logits are evaluated in float, where the
+    /// 1e-10 probability floor is representable (in Half it rounds to 0 and log(0) makes the loss infinite).
     /// </summary>
     private T NotTrueKlSum(Tensor<T> local, Tensor<T> global, int[] trueClassIndices)
     {
+        if (AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>())
+        {
+            return NumOps.FromDouble(NotTrueKlSumCore(local.Cast<float>(), global.Cast<float>(), trueClassIndices, _temperature));
+        }
+
+        return NotTrueKlSumCore(local, global, trueClassIndices, _temperature);
+    }
+
+    private static TV NotTrueKlSumCore<TV>(Tensor<TV> local, Tensor<TV> global, int[] trueClassIndices, double temperature)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
         int rows = local.Shape[0];
         int classes = local.Shape[1];
-        var invTemperature = NumOps.FromDouble(1.0 / _temperature);
+        var invTemperature = ops.FromDouble(1.0 / temperature);
         var localScaled = Engine.TensorMultiplyScalar(local, invTemperature);
         var globalScaled = Engine.TensorMultiplyScalar(global, invTemperature);
 
+        // Non-finite input: a NaN makes the sum NaN, an infinity makes the largest magnitude infinite. (Testing the
+        // sum alone would also reject finite logits whose total merely overflows.)
         var localTotal = Engine.TensorSum(localScaled);
         var globalTotal = Engine.TensorSum(globalScaled);
-        if (NumOps.IsNaN(localTotal) || NumOps.IsInfinity(localTotal)
-            || NumOps.IsNaN(globalTotal) || NumOps.IsInfinity(globalTotal))
+        var localLargest = Engine.TensorMaxValue(Engine.TensorAbs(localScaled));
+        var globalLargest = Engine.TensorMaxValue(Engine.TensorAbs(globalScaled));
+        if (ops.IsNaN(localTotal) || ops.IsInfinity(localLargest)
+            || ops.IsNaN(globalTotal) || ops.IsInfinity(globalLargest))
         {
             throw new InvalidOperationException(
                 $"Non-finite temperature-scaled logit: local sum={localTotal}, global sum={globalTotal}.");
@@ -208,20 +224,20 @@ internal class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStra
             trueMask[(r * classes) + trueClassIndices[r]] = 1;
         }
 
-        var isTrue = Vector<int>.Wrap(trueMask).AsTensor().Reshape(rows, classes).Cast<T>();
-        var excluded = new Tensor<T>(new[] { rows, classes });
-        Engine.TensorFill(excluded, NumOps.FromDouble(double.NegativeInfinity));
+        var isTrue = Vector<int>.Wrap(trueMask).AsTensor().Reshape(rows, classes).Cast<TV>();
+        var excluded = new Tensor<TV>(new[] { rows, classes });
+        Engine.TensorFill(excluded, ops.FromDouble(double.NegativeInfinity));
         var pLocal = Engine.TensorSoftmax(Engine.TensorWhere(isTrue, excluded, localScaled), 1);
         var qGlobal = Engine.TensorSoftmax(Engine.TensorWhere(isTrue, excluded, globalScaled), 1);
 
         // KL(q || p) = sum q * log(q / max(p, 1e-10)), skipping terms with q <= 1e-10.
-        var floor = NumOps.FromDouble(1e-10);
+        var floor = ops.FromDouble(1e-10);
         var logRatio = Engine.TensorSubtract(
             Engine.TensorLog(Engine.TensorClampMin(qGlobal, floor)),
             Engine.TensorLog(Engine.TensorClampMin(pLocal, floor)));
         var terms = Engine.TensorMultiply(qGlobal, logRatio);
         var kept = Engine.TensorWhere(
-            Engine.TensorGreaterThan(qGlobal, floor), terms, new Tensor<T>(new[] { rows, classes }));
+            Engine.TensorGreaterThan(qGlobal, floor), terms, new Tensor<TV>(new[] { rows, classes }));
         return Engine.TensorSum(kept);
     }
 

@@ -141,7 +141,7 @@ internal class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentB
         foreach (var layerName in reference.Keys)
         {
             int len = reference[layerName].Length;
-            var sum = new Vector<T>(len);
+            var votes = new List<Vector<T>>(clientSigns.Count);
             foreach (var client in clientSigns.Values)
             {
                 if (!client.TryGetValue(layerName, out var clientLayer))
@@ -155,12 +155,27 @@ internal class SignSGDCompressor<T> : Infrastructure.FederatedLearningComponentB
                         $"Client layer '{layerName}' length {clientLayer.Length} does not match reference length {len}.");
                 }
 
-                sum = Engine.Add(sum, Vector<T>.Wrap(clientLayer));
+                votes.Add(Vector<T>.Wrap(clientLayer));
             }
 
-            var aggregated = _useMajorityVote
-                ? Engine.Multiply(Engine.Sign(sum), NumOps.FromDouble(_learningRate))
-                : Engine.Multiply(sum, NumOps.FromDouble(_learningRate / clientSigns.Count));
+            // The vote is tallied with weight 1 (majority) or lr / numClients (mean) per client; Half / BFloat16
+            // tallies are formed in float, since a Half running count saturates at 2048 and can flip the sign.
+            Vector<T> aggregated;
+            if (votes.Count == 0)
+            {
+                aggregated = new Vector<T>(len);
+            }
+            else if (_useMajorityVote)
+            {
+                var tally = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.WeightedSum(
+                    votes, Enumerable.Repeat(1.0, votes.Count).ToArray());
+                aggregated = Engine.Multiply(Engine.Sign(tally), NumOps.FromDouble(_learningRate));
+            }
+            else
+            {
+                aggregated = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.WeightedSum(
+                    votes, Enumerable.Repeat(_learningRate / clientSigns.Count, votes.Count).ToArray());
+            }
 
             result[layerName] = aggregated.ToArray();
         }

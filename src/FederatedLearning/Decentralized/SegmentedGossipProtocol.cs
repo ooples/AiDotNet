@@ -96,7 +96,9 @@ public class SegmentedGossipProtocol<T> : Infrastructure.FederatedLearningCompon
                 {
                     var mine = Vector<T>.Wrap(myParams, lo, hi - lo);
                     var theirs = Vector<T>.Wrap(peerParams, lo, hi - lo);
-                    Engine.Multiply(Engine.Add(mine, theirs), NumOps.FromDouble(0.5))
+                    // 0.5 a + 0.5 b rather than (a + b) / 2: the sum of two large Half values overflows.
+                    var half = NumOps.FromDouble(0.5);
+                    Engine.Add(Engine.Multiply(mine, half), Engine.Multiply(theirs, half))
                         .AsSpan().CopyTo(updated.AsSpan(lo, hi - lo));
                 }
 

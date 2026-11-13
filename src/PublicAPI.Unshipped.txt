@@ -22922,7 +22922,7 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 *REMOVED*AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.DivideAndConquerAggregationStrategy(int numByzantine = 1, int subspaceDimension = 10, int seed = 42) -> void
-AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.DivideAndConquerAggregationStrategy(int numByzantine = 1, int subspaceDimension = 10000, int seed = 42, int iterations = 1, double filterFraction = 1.0) -> void
+AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.DivideAndConquerAggregationStrategy(int numByzantine = 1, int subspaceDimension = 10000, int seed = 42, int iterations = 1, double filterFraction = 1) -> void
 AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.Iterations.get -> int
 AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.FilterFraction.get -> double
 *REMOVED*AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.ClearAllDistributions() -> void

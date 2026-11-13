@@ -152,11 +152,9 @@ public class FedAGHNPersonalization<T> : Infrastructure.FederatedLearningCompone
                 $"Gradient lengths must match. Got gradA={gradA.Length}, gradB={gradB.Length}.");
         }
 
-        var a = Vector<T>.Wrap(gradA);
-        var b = Vector<T>.Wrap(gradB);
-        T dot = Engine.DotProduct(a, b);
-        T denom = NumOps.Multiply(Engine.Norm(a), Engine.Norm(b));
-        return NumOps.GreaterThan(denom, NumOps.FromDouble(1e-10)) ? NumOps.Divide(dot, denom) : NumOps.Zero;
+        // Formed in double (float for the Half / BFloat16 sums): a Half dot product or norm product overflows and
+        // the 1e-10 guard rounds to 0.
+        return NumOps.FromDouble(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.Cosine(Vector<T>.Wrap(gradA), Vector<T>.Wrap(gradB), 1e-10));
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -217,20 +218,9 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
     {
         // Work with squared distances from the mean for efficiency.
         // This is equivalent to a 1D projection (distance to centroid) for mixture modeling.
-        var mean = new Vector<T>(dim);
-        for (int c = 0; c < n; c++)
-        {
-            mean = Engine.Add(mean, vectors[c]);
-        }
-
-        mean = Engine.Divide(mean, NumOps.FromDouble(n));
-
-        var sqDistances = new double[n];
-        for (int c = 0; c < n; c++)
-        {
-            var diff = Engine.Subtract(vectors[c], mean);
-            sqDistances[c] = NumOps.ToDouble(Engine.DotProduct(diff, diff));
-        }
+        var rows = Engine.TensorStack(vectors.Select(v => v.AsTensor()).ToArray(), 0);
+        var mean = FederatedReductions.Mean(vectors);
+        var sqDistances = FederatedReductions.RowSquaredDistances(rows, mean);
 
         // Initialize EM parameters using cross-round beliefs as priors.
         double piH = 0;

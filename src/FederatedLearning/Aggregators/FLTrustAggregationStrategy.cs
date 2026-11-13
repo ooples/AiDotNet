@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -101,7 +102,7 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
         }
 
         var serverFlat = FlattenLayers(_serverGradient, layerNames, totalParams);
-        double serverNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(serverFlat, serverFlat)));
+        double serverNorm = Math.Sqrt(FederatedReductions.SquaredNorm(serverFlat));
 
         // Compute trust scores (ReLU'd cosine similarity with server gradient).
         var clientIds = clientModels.Keys.ToList();
@@ -128,8 +129,8 @@ public class FLTrustAggregationStrategy<T> : ParameterDictionaryAggregationStrat
             }
 
             var clientFlat = FlattenLayers(clientModel, layerNames, totalParams);
-            double dot = NumOps.ToDouble(Engine.DotProduct(clientFlat, serverFlat));
-            double clientNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(clientFlat, clientFlat)));
+            double dot = FederatedReductions.Dot(clientFlat, serverFlat);
+            double clientNorm = Math.Sqrt(FederatedReductions.SquaredNorm(clientFlat));
             clientNorms[c] = clientNorm;
             double cosSim = (clientNorm > 0 && serverNorm > 0) ? dot / (clientNorm * serverNorm) : 0.0;
             trustScores[c] = Math.Max(0.0, cosSim); // ReLU

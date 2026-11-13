@@ -265,10 +265,42 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
             throw new ArgumentException("No client gradients to aggregate.", nameof(clientSparseGradients));
         }
 
-        var aggregated = new Dictionary<string, Tensor<T>>(layerSizes.Count);
+        // Half / BFloat16 are accumulated in float (a Half running sum loses every addend below half an ulp of the
+        // total and overflows at 65504) and cast back once.
+        var result = new Dictionary<string, T[]>(layerSizes.Count);
+        if (AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>())
+        {
+            foreach (var (layerName, agg) in ScatterMean(clientSparseGradients, layerSizes, numClients, t => t.Cast<float>()))
+            {
+                result[layerName] = agg.Cast<T>().ToArray();
+            }
+        }
+        else
+        {
+            foreach (var (layerName, agg) in ScatterMean(clientSparseGradients, layerSizes, numClients, t => t))
+            {
+                result[layerName] = agg.ToArray();
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Per layer, (1 / numClients) * sum over clients of their sparse entries scattered into a dense vector,
+    /// accumulated in <typeparamref name="TV"/> (the values are converted by <paramref name="widen"/>).
+    /// </summary>
+    private static Dictionary<string, Tensor<TV>> ScatterMean<TV>(
+        Dictionary<int, Dictionary<string, List<(int Index, T Value)>>> clientSparseGradients,
+        Dictionary<string, int> layerSizes,
+        int numClients,
+        Func<Tensor<T>, Tensor<TV>> widen)
+    {
+        var invClients = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>().FromDouble(1.0 / numClients);
+        var aggregated = new Dictionary<string, Tensor<TV>>(layerSizes.Count);
         foreach (var (layerName, size) in layerSizes)
         {
-            aggregated[layerName] = new Tensor<T>(new[] { size });
+            aggregated[layerName] = new Tensor<TV>(new[] { size });
         }
 
         foreach (var (clientId, sparseGrad) in clientSparseGradients)
@@ -301,20 +333,15 @@ public class TopKSparsificationCompressor<T> : Infrastructure.FederatedLearningC
                 if (entries.Count > 0)
                 {
                     aggregated[layerName] = Engine.TensorScatterAdd(
-                        agg, Vector<int>.Wrap(indices).AsTensor(), Vector<T>.Wrap(values).AsTensor(), 0);
+                        agg,
+                        Vector<int>.Wrap(indices).AsTensor(),
+                        Engine.TensorMultiplyScalar(widen(Vector<T>.Wrap(values).AsTensor()), invClients),
+                        0);
                 }
             }
         }
 
-        // Average and convert to T[].
-        var result = new Dictionary<string, T[]>(layerSizes.Count);
-        var invClients = NumOps.FromDouble(1.0 / numClients);
-        foreach (var (layerName, agg) in aggregated)
-        {
-            result[layerName] = Engine.TensorMultiplyScalar(agg, invClients).ToArray();
-        }
-
-        return result;
+        return aggregated;
     }
 
     /// <summary>Gets the compression ratio (fraction of elements kept).</summary>

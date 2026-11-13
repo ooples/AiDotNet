@@ -41,7 +41,6 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
 
     // Cache stored as one [count, featureDim] matrix so every query is a handful of whole-tensor ops.
     private Tensor<T>? _cacheFeatures;
-    private Tensor<T>? _cacheNorms;
     private int[] _cacheLabels = Array.Empty<int>();
 
     /// <summary>
@@ -105,7 +104,6 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
         if (features.Length == 0)
         {
             _cacheFeatures = null;
-            _cacheNorms = null;
             _cacheLabels = Array.Empty<int>();
             return;
         }
@@ -139,7 +137,6 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
         var cache = Engine.TensorStack(
             features.Select(row => Vector<T>.Wrap(row).AsTensor()).ToArray(), 0);
         _cacheFeatures = cache;
-        _cacheNorms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(cache, cache), new[] { 1 }, false));
         _cacheLabels = (int[])labels.Clone();
     }
 
@@ -165,8 +162,7 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
         }
 
         var cache = _cacheFeatures;
-        var cacheNorms = _cacheNorms;
-        if (cache is null || cacheNorms is null || _cacheLabels.Length == 0)
+        if (cache is null || _cacheLabels.Length == 0)
         {
             throw new InvalidOperationException("Cache not built. Call BuildCache first.");
         }
@@ -180,24 +176,51 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
                 nameof(queryFeatures));
         }
 
+        // Half / BFloat16 features are evaluated in float: the squared distances and norms pass 65504 and the
+        // cosine norm floor rounds to 0 in Half. The class probabilities are cast back once.
         var query = Vector<T>.Wrap(queryFeatures).AsTensor().Reshape(1, featureDim);
-        Tensor<T> distances;
-        if (_distanceMetric == DistanceMetricType.Euclidean)
+        if (AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>())
+        {
+            return Predict(cache.Cast<float>(), query.Cast<float>(), _cacheLabels, _k, _temperature, _distanceMetric, numClasses)
+                .Cast<T>().ToArray();
+        }
+
+        return Predict(cache, query, _cacheLabels, _k, _temperature, _distanceMetric, numClasses).ToArray();
+    }
+
+    /// <summary>
+    /// exp(-(d - d_min) / tau) weighted class vote over the k cached rows nearest to the [1, featureDim] query.
+    /// </summary>
+    private static Tensor<TV> Predict<TV>(
+        Tensor<TV> cache,
+        Tensor<TV> query,
+        int[] cacheLabels,
+        int k,
+        double temperature,
+        DistanceMetricType distanceMetric,
+        int numClasses)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        int count = cache.Shape[0];
+        int featureDim = cache.Shape[1];
+        Tensor<TV> distances;
+        if (distanceMetric == DistanceMetricType.Euclidean)
         {
             var diff = Engine.TensorSubtract(cache, Engine.TensorBroadcastTo(query, new[] { count, featureDim }));
             distances = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, false));
         }
         else
         {
+            var cacheNorms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(cache, cache), new[] { 1 }, false));
             var dots = Engine.TensorMatMul(cache, query.Reshape(featureDim, 1)).Reshape(count);
-            T queryNorm = Engine.Norm(Vector<T>.Wrap(queryFeatures));
+            TV queryNorm = ops.Sqrt(Engine.TensorSum(Engine.TensorMultiply(query, query)));
             var denom = Engine.TensorMax(
-                Engine.TensorMultiplyScalar(cacheNorms, queryNorm), NumOps.FromDouble(CosineNormFloor));
-            distances = Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorDivide(dots, denom)), NumOps.One);
+                Engine.TensorMultiplyScalar(cacheNorms, queryNorm), ops.FromDouble(CosineNormFloor));
+            distances = Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorDivide(dots, denom)), ops.One);
         }
 
         // The k smallest distances are the k largest negated distances.
-        int effectiveK = Math.Min(_k, count);
+        int effectiveK = Math.Min(k, count);
         var negNearest = Engine.TensorTopK(Engine.TensorNegate(distances), effectiveK, 0, out var nearest);
 
         // exp(-(d - d_min) / tau): shifting by the nearest distance leaves the normalized weights unchanged
@@ -205,23 +228,23 @@ public class KNNPersonalization<T> : Infrastructure.FederatedLearningComponentBa
         var shifted = Engine.TensorSubtract(
             negNearest,
             Engine.TensorBroadcastTo(Engine.ReduceMax(negNearest, new[] { 0 }, true), new[] { effectiveK }));
-        var weights = Engine.TensorExp(Engine.TensorDivideScalar(shifted, NumOps.FromDouble(_temperature)));
+        var weights = Engine.TensorExp(Engine.TensorDivideScalar(shifted, ops.FromDouble(temperature)));
 
-        int[] neighborLabels = nearest.ToArray().Select(i => _cacheLabels[i]).ToArray();
+        int[] neighborLabels = nearest.ToArray().Select(i => cacheLabels[i]).ToArray();
         bool[] validLabel = neighborLabels.Select(label => label >= 0 && label < numClasses).ToArray();
         int[] scatterLabels = neighborLabels.Select(label => label >= 0 && label < numClasses ? label : 0).ToArray();
-        weights = Engine.TensorWhere(validLabel, weights, new Tensor<T>(new[] { effectiveK }));
+        weights = Engine.TensorWhere(validLabel, weights, new Tensor<TV>(new[] { effectiveK }));
 
-        T totalWeight = Engine.TensorSum(weights);
-        if (!NumOps.GreaterThan(totalWeight, NumOps.Zero))
+        TV totalWeight = Engine.TensorSum(weights);
+        if (!ops.GreaterThan(totalWeight, ops.Zero))
         {
             // No neighbor carries a label in [0, numClasses): fall back to the uniform distribution.
-            return Enumerable.Repeat(NumOps.FromDouble(1.0 / numClasses), numClasses).ToArray();
+            return new Tensor<TV>(Enumerable.Repeat(ops.FromDouble(1.0 / numClasses), numClasses).ToArray(), new[] { numClasses });
         }
 
         var classMass = Engine.ScatterAdd(
             weights, new Tensor<int>(scatterLabels, new[] { effectiveK }), 0, numClasses);
-        return Engine.TensorDivideScalar(classMass, totalWeight).ToArray();
+        return Engine.TensorDivideScalar(classMass, totalWeight);
     }
 
     /// <summary>

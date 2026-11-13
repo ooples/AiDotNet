@@ -142,8 +142,14 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
         double totalWeight,
         int d)
     {
-        var mixed = new Vector<T>(d);
-        var coveredWeight = new Vector<T>(d);
+        var rows = new List<Vector<T>>();
+        var shares = new List<double>();
+        var selfWeight = new double[d];
+        for (int i = 0; i < d; i++)
+        {
+            selfWeight[i] = 1.0;
+        }
+
         foreach (var (neighborId, w) in mixingWeights)
         {
             if (!neighborValues.TryGetValue(neighborId, out var values))
@@ -151,19 +157,27 @@ public class DeTAGProtocol<T> : Infrastructure.FederatedLearningComponentBase<T>
                 continue;
             }
 
+            // A shorter neighbor vector contributes (and takes self-weight) only on its leading coordinates.
             int len = Math.Min(d, values.Length);
-            var share = NumOps.FromDouble(w / totalWeight);
+            double share = w / totalWeight;
             var padded = new Vector<T>(d);
             values.AsSpan(0, len).CopyTo(padded.AsWritableSpan());
-            mixed = Engine.Add(mixed, Engine.Multiply(padded, share));
-
-            var covered = new T[d];
-            Vector<T>.Wrap(covered, 0, len).Fill(share);
-            coveredWeight = Engine.Add(coveredWeight, Vector<T>.Wrap(covered));
+            rows.Add(padded);
+            shares.Add(share);
+            for (int i = 0; i < len; i++)
+            {
+                selfWeight[i] -= share;
+            }
         }
 
-        var selfWeight = Engine.ScalarMinusTensor(NumOps.One, coveredWeight.AsTensor()).ToVector();
-        return Engine.Add(mixed, Engine.Multiply(selfWeight, Vector<T>.Wrap(local, 0, d)));
+        var self = Engine.Multiply(new Tensor<double>(selfWeight, new[] { d }).Cast<T>().ToVector(), Vector<T>.Wrap(local, 0, d));
+        if (rows.Count == 0)
+        {
+            return self;
+        }
+
+        var mixed = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.WeightedSum(rows, shares.ToArray());
+        return Engine.Add(mixed, self);
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Decentralized;
 
@@ -139,8 +140,7 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
             double blockNorm = 0;
             for (int i = start; i < end; i++)
             {
-                var layerGrad = Vector<T>.Wrap(gradient[layerNames[i]]);
-                blockNorm += NumOps.ToDouble(Engine.DotProduct(layerGrad, layerGrad));
+                blockNorm += FederatedReductions.SquaredNorm(Vector<T>.Wrap(gradient[layerNames[i]]));
             }
 
             _blockImportanceScores[b] += Math.Sqrt(blockNorm); // Accumulate L2 norm.
@@ -220,7 +220,8 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
 
         foreach (var (layerName, layerParams) in template)
         {
-            var averaged = new Vector<T>(layerParams.Length);
+            var members = new List<Vector<T>>();
+            var weights = new List<double>();
             double layerWeight = 0;
 
             foreach (var (neighborId, block) in clientBlocks)
@@ -234,14 +235,16 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
                             $"Neighbor {neighborId} layer '{layerName}' length {neighborLayer.Length} differs from expected {layerParams.Length}.");
                     }
 
-                    averaged = Engine.Add(averaged, Engine.Multiply(Vector<T>.Wrap(neighborLayer), NumOps.FromDouble(w)));
-
+                    members.Add(Vector<T>.Wrap(neighborLayer));
+                    weights.Add(w);
                     layerWeight += w;
                 }
             }
 
+            // sum_j (w_j / W) x_j: the mixing weights are normalized before they touch T, so unnormalized weights
+            // cannot overflow a Half accumulator.
             result[layerName] = layerWeight > 0
-                ? Engine.Divide(averaged, NumOps.FromDouble(layerWeight)).ToArray()
+                ? AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.WeightedSum(members, weights.Select(w => w / layerWeight).ToArray()).ToArray()
                 : new Vector<T>(layerParams.Length).ToArray();
         }
 

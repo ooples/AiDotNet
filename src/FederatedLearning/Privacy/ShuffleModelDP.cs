@@ -222,15 +222,11 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
         var reference = shuffledUpdates[0];
         var result = new Dictionary<string, T[]>(reference.Count);
         int n = shuffledUpdates.Count;
-        var weight = NumOps.FromDouble(1.0 / n);
 
         foreach (var layerName in reference.Keys)
         {
             int layerLen = reference[layerName].Length;
-            var aggregated = new T[layerLen];
-
-            Vector<T>.Wrap(aggregated).Fill(NumOps.Zero);
-
+            var members = new List<Vector<T>>(n);
             foreach (var update in shuffledUpdates)
             {
                 if (!update.TryGetValue(layerName, out var layerData))
@@ -246,10 +242,11 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
                         nameof(shuffledUpdates));
                 }
 
-                Engine.Add(Vector<T>.Wrap(aggregated), Engine.Multiply(Vector<T>.Wrap(layerData), weight))
-                    .AsSpan().CopyTo(aggregated);
+                members.Add(Vector<T>.Wrap(layerData));
             }
 
+            // Mean of the shuffled updates (formed in float for Half / BFloat16, whose running sums saturate).
+            var aggregated = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.Mean(members).ToArray();
             result[layerName] = aggregated;
         }
 
@@ -372,8 +369,8 @@ public class ShuffleModelDP<T> : PrivacyMechanismBase<Dictionary<string, T[]>, T
     {
         var flat = Vector<T>.Wrap(model.Values.SelectMany(layer => layer).ToArray());
         double norm = squaredNorm
-            ? Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(flat, flat)))
-            : NumOps.ToDouble(Engine.Sum(Engine.Abs(flat)));
+            ? Math.Sqrt(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SquaredNorm(flat))
+            : AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SumAbs(flat.AsTensor());
         var factor = NumOps.FromDouble(norm > _clipNorm ? _clipNorm / norm : 1.0);
 
         var clipped = new Dictionary<string, T[]>(model.Count);

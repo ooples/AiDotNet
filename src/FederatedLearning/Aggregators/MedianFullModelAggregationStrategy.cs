@@ -30,9 +30,10 @@ public sealed class MedianFullModelAggregationStrategy<T, TInput, TOutput> :
         int n = clientIds.Length;
 
         var sorted = SortCoordinatesAcrossClients(clientParameters, clientIds);
+        // Even n: mean of the two middle order statistics, formed as 0.5 a + 0.5 b so it cannot overflow.
         var aggregated = (n % 2 == 1)
             ? OrderStatisticRow(sorted, n / 2)
-            : Engine.Multiply(SumOrderStatisticRows(sorted, (n / 2) - 1, 2), NumOps.FromDouble(0.5));
+            : CombineOrderStatisticRows(sorted, BlockMeanWeights(n, (n / 2) - 1, 2));
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

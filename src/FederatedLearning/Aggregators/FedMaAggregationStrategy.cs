@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -231,12 +232,7 @@ public class FedMaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     {
         var va = Vector<T>.Wrap(a, offsetA, length);
         var vb = Vector<T>.Wrap(b, offsetB, length);
-        double dot = NumOps.ToDouble(Engine.DotProduct(va, vb));
-        double normA = NumOps.ToDouble(Engine.DotProduct(va, va));
-        double normB = NumOps.ToDouble(Engine.DotProduct(vb, vb));
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-10 ? dot / denom : 0;
+        return FederatedReductions.Cosine(va, vb, 1e-10);
     }
 
     /// <summary>

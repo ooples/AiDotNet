@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -390,8 +391,7 @@ public class FedSamAggregationStrategy<T> : ParameterDictionaryAggregationStrate
         double normSq = 0;
         foreach (var (_, grad) in gradient)
         {
-            var g = Vector<T>.Wrap(grad);
-            normSq += NumOps.ToDouble(Engine.DotProduct(g, g));
+            normSq += FederatedReductions.SquaredNorm(Vector<T>.Wrap(grad));
         }
 
         return Math.Sqrt(normSq);

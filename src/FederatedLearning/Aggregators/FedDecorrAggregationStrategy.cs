@@ -83,9 +83,13 @@ internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationS
         }
 
         // Shi et al. 2023: L_FedDecorr = (1 / d^2) * ||K||_F^2, K the correlation matrix of the batch.
-        var correlation = ComputeCorrelationTensor(features);
-        var normalized = NumOps.Divide(Engine.TensorSumOfSquares(correlation), NumOps.FromDouble((double)d * d));
-        return NumOps.Multiply(NumOps.FromDouble(_decorrelationWeight), normalized);
+        // Half / BFloat16 are evaluated in float: the column variances, the 1e-8 std floor and ||K||_F^2 (up to
+        // d^2) do not fit Half.
+        var x = Tensor<T>.FromMatrix(features);
+        double frobeniusSq = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? Engine.TensorSumOfSquares(ComputeCorrelationTensor(x.Cast<float>()))
+            : NumOps.ToDouble(Engine.TensorSumOfSquares(ComputeCorrelationTensor(x)));
+        return NumOps.FromDouble(_decorrelationWeight * frobeniusSq / ((double)d * d));
     }
 
     /// <summary>
@@ -116,24 +120,27 @@ internal class FedDecorrAggregationStrategy<T> : ParameterDictionaryAggregationS
             return new Matrix<T>(d, d);
         }
 
-        var corrMatrix = ComputeCorrelationTensor(features).ToMatrix();
+        var x = Tensor<T>.FromMatrix(features);
+        var corrMatrix = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? ComputeCorrelationTensor(x.Cast<float>()).Cast<T>().ToMatrix()
+            : ComputeCorrelationTensor(x).ToMatrix();
         return corrMatrix;
     }
 
     /// <summary>
     /// K = Z^T Z / N where Z is the batch standardised per column (population std, floored at 1e-8).
     /// </summary>
-    private static Tensor<T> ComputeCorrelationTensor(Matrix<T> features)
+    private static Tensor<TV> ComputeCorrelationTensor<TV>(Tensor<TV> x)
     {
-        int n = features.Rows;
-        int d = features.Columns;
-        var x = Tensor<T>.FromMatrix(features);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        int n = x.Shape[0];
+        int d = x.Shape[1];
         var centered = Engine.TensorSubtract(x, Engine.TensorBroadcastTo(Engine.ReduceMean(x, new[] { 0 }, true), new[] { n, d }));
         var std = Engine.TensorClampMin(
             Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, true)),
-            NumOps.FromDouble(1e-8));
+            ops.FromDouble(1e-8));
         var z = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, new[] { n, d }));
-        return Engine.TensorDivideScalar(Engine.TensorMatMul(Engine.TensorTranspose(z), z), NumOps.FromDouble(n));
+        return Engine.TensorDivideScalar(Engine.TensorMatMul(Engine.TensorTranspose(z), z), ops.FromDouble(n));
     }
 
     /// <summary>Gets the decorrelation regularization weight (lambda).</summary>

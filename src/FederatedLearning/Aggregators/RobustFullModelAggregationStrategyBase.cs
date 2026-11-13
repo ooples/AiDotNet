@@ -73,12 +73,24 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
         return Engine.TensorSlice(sorted, new[] { row, 0 }, new[] { 1, p }).ToVector();
     }
 
-    /// <summary>Sums rows [<paramref name="start"/>, <paramref name="start"/> + <paramref name="count"/>) of an [n, P] tensor.</summary>
-    private protected static Vector<T> SumOrderStatisticRows(Tensor<T> sorted, int start, int count)
+    /// <summary>
+    /// sum_r rowWeights[r] * row r of an [n, P] tensor of sorted order statistics, as a length-P vector.
+    /// Means and clamped (winsorized) means are formed with the 1/count factor folded into the row weights, and
+    /// a narrow T (Half, BFloat16) is combined in float, so a client average cannot overflow or saturate.
+    /// </summary>
+    private protected static Vector<T> CombineOrderStatisticRows(Tensor<T> sorted, double[] rowWeights)
+        => FederatedReductions.WeightedRowSum(sorted, rowWeights);
+
+    /// <summary>Row weights that average rows [<paramref name="start"/>, <paramref name="start"/> + <paramref name="count"/>) of <paramref name="rows"/> rows.</summary>
+    private protected static double[] BlockMeanWeights(int rows, int start, int count)
     {
-        int p = sorted.Shape[1];
-        var block = Engine.TensorSlice(sorted, new[] { start, 0 }, new[] { count, p });
-        return Engine.ReduceSum(block, new[] { 0 }, false).ToVector();
+        var weights = new double[rows];
+        for (int r = start; r < start + count; r++)
+        {
+            weights[r] = 1.0 / count;
+        }
+
+        return weights;
     }
 
     protected double ComputeSquaredL2Distance(Vector<T> a, Vector<T> b)
@@ -88,8 +100,7 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
             throw new ArgumentException("Vector length mismatch when computing distance.");
         }
 
-        var diff = Engine.Subtract(a, b);
-        return NumOps.ToDouble(Engine.DotProduct(diff, diff));
+        return FederatedReductions.SquaredDistance(a, b);
     }
 
     protected Vector<T> WeightedAverageOrUnweightedAverage(
@@ -109,32 +120,24 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
             throw new ArgumentException($"Missing parameters for selected clients: {string.Join(", ", missing)}.", nameof(selectedClientIds));
         }
 
-        int parameterCount = clientParameters[selectedClientIds[0]].Length;
-        var aggregated = new Vector<T>(parameterCount);
-
+        var vectors = selectedClientIds.Select(id => clientParameters[id]).ToArray();
         if (!useClientWeights)
         {
-            var denom = NumOps.FromDouble(selectedClientIds.Count);
-            foreach (var clientId in selectedClientIds)
-            {
-                aggregated = Engine.Add(aggregated, clientParameters[clientId]);
-            }
-
-            return Engine.Divide(aggregated, denom);
+            return FederatedReductions.Mean(vectors);
         }
 
         double totalWeight = GetTotalWeightOrThrow(clientWeights, selectedClientIds, nameof(clientWeights));
-        foreach (var clientId in selectedClientIds)
+        var normalizedWeights = new double[selectedClientIds.Count];
+        for (int c = 0; c < normalizedWeights.Length; c++)
         {
-            if (!clientWeights.TryGetValue(clientId, out var weight))
+            if (!clientWeights.TryGetValue(selectedClientIds[c], out var weight))
             {
-                throw new ArgumentException($"Missing weight for client {clientId}.", nameof(clientWeights));
+                throw new ArgumentException($"Missing weight for client {selectedClientIds[c]}.", nameof(clientWeights));
             }
 
-            var normalizedWeightT = NumOps.FromDouble(weight / totalWeight);
-            aggregated = Engine.Add(aggregated, Engine.Multiply(clientParameters[clientId], normalizedWeightT));
+            normalizedWeights[c] = weight / totalWeight;
         }
 
-        return aggregated;
+        return FederatedReductions.WeightedSum(vectors, normalizedWeights);
     }
 }

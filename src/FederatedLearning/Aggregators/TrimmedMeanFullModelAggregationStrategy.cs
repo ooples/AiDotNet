@@ -49,7 +49,7 @@ public sealed class TrimmedMeanFullModelAggregationStrategy<T, TInput, TOutput> 
         }
 
         var sorted = SortCoordinatesAcrossClients(clientParameters, clientIds);
-        var aggregated = Engine.Divide(SumOrderStatisticRows(sorted, trim, kept), NumOps.FromDouble(kept));
+        var aggregated = CombineOrderStatisticRows(sorted, BlockMeanWeights(n, trim, kept));
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

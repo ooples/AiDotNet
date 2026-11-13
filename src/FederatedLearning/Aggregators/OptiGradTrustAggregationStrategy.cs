@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -109,14 +110,14 @@ public class OptiGradTrustAggregationStrategy<T> : ParameterDictionaryAggregatio
             meanFlat = Engine.Add(meanFlat, Engine.Multiply(clientFlats[c], NumOps.FromDouble(w)));
         }
 
-        double meanNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(meanFlat, meanFlat)));
+        double meanNorm = Math.Sqrt(FederatedReductions.SquaredNorm(meanFlat));
 
         // Compute current trust scores and update reputations.
         var currentTrust = new double[n];
         for (int c = 0; c < n; c++)
         {
-            double dot = NumOps.ToDouble(Engine.DotProduct(clientFlats[c], meanFlat));
-            double clientNorm = Math.Sqrt(NumOps.ToDouble(Engine.DotProduct(clientFlats[c], clientFlats[c])));
+            double dot = FederatedReductions.Dot(clientFlats[c], meanFlat);
+            double clientNorm = Math.Sqrt(FederatedReductions.SquaredNorm(clientFlats[c]));
             double cosSim = (clientNorm > 0 && meanNorm > 0) ? dot / (clientNorm * meanNorm) : 0.0;
             currentTrust[c] = Math.Max(0.0, cosSim);
         }

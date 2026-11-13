@@ -23,6 +23,8 @@ public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<
     private readonly double _epsilon;
     private Vector<T>? _momentum;
     private Vector<T>? _accumulator;
+    private Vector<float>? _momentumWide;
+    private Vector<float>? _accumulatorWide;
 
     public FedAdagradServerOptimizer(double learningRate = 1.0, double epsilon = 1e-3, double beta1 = 0.9)
     {
@@ -52,19 +54,43 @@ public sealed class FedAdagradServerOptimizer<T> : FederatedServerOptimizerBase<
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
 
         int n = currentGlobalParameters.Length;
-        _momentum ??= new Vector<T>(n);
-        _accumulator ??= new Vector<T>(n);
 
-        // Reddi et al. 2021, Algorithm 2 (FedAdagrad): m_t = b1 m + (1 - b1) d, v_t = v + d^2,
-        // x = x + lr * m_t / (sqrt(v_t) + tau).
-        var g = Engine.Subtract(aggregatedTargetParameters, currentGlobalParameters);
-        _momentum = Engine.Add(
-            Engine.Multiply(_momentum, NumOps.FromDouble(_beta1)), Engine.Multiply(g, NumOps.FromDouble(1.0 - _beta1)));
-        _accumulator = Engine.Add(_accumulator, Engine.Multiply(g, g));
+        // Half / BFloat16 keep their optimizer state in float (as the previous double state did): the squared
+        // deltas and the accumulated moments pass Half's 65504 long before the parameters do.
+        if (AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>())
+        {
+            var mWide = _momentumWide ?? new Vector<float>(n);
+            var vWide = _accumulatorWide ?? new Vector<float>(n);
+            var updatedWide = StepCore(Widen(currentGlobalParameters), Widen(aggregatedTargetParameters), ref mWide, ref vWide);
+            _momentumWide = mWide;
+            _accumulatorWide = vWide;
+            return updatedWide.AsTensor().Cast<T>().ToVector();
+        }
 
-        var denominator = Engine.TensorAddScalar(Engine.Sqrt(_accumulator).AsTensor(), NumOps.FromDouble(_epsilon)).ToVector();
-        var step = Engine.Multiply(Engine.Divide(_momentum, denominator), NumOps.FromDouble(_learningRate));
-        return Engine.Add(currentGlobalParameters, step);
+        var m = _momentum ?? new Vector<T>(n);
+        var v = _accumulator ?? new Vector<T>(n);
+        var updated = StepCore(currentGlobalParameters, aggregatedTargetParameters, ref m, ref v);
+        _momentum = m;
+        _accumulator = v;
+        return updated;
+    }
+
+    private static Vector<float> Widen(Vector<T> v) => v.AsTensor().Cast<float>().ToVector();
+
+    /// <summary>
+    /// Reddi et al. 2021, Algorithm 2 (FedAdagrad): m = b1 m + (1 - b1) d, v = v + d^2,
+    /// x = x + lr m / (sqrt(v) + tau).
+    /// </summary>
+    private Vector<TV> StepCore<TV>(Vector<TV> x, Vector<TV> target, ref Vector<TV> m, ref Vector<TV> v)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        var g = Engine.Subtract(target, x);
+        m = Engine.Add(Engine.Multiply(m, ops.FromDouble(_beta1)), Engine.Multiply(g, ops.FromDouble(1.0 - _beta1)));
+        v = Engine.Add(v, Engine.Multiply(g, g));
+
+        var denominator = Engine.TensorAddScalar(Engine.Sqrt(v).AsTensor(), ops.FromDouble(_epsilon)).ToVector();
+        var step = Engine.Multiply(Engine.Divide(m, denominator), ops.FromDouble(_learningRate));
+        return Engine.Add(x, step);
     }
 
     /// <inheritdoc />

@@ -273,7 +273,7 @@ public sealed class FederatedAdvancedCapabilities<T>
         return !(maxExcess > 1e-6);
     }
 
-    private double L2Norm(Vector<T> v) => _numOps.ToDouble(Engine.Norm(v));
+    private static double L2Norm(Vector<T> v) => Math.Sqrt(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SquaredNorm(v));
 
     private byte[] Digest(Vector<T> v)
     {

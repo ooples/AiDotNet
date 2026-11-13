@@ -66,14 +66,15 @@ public class NeuralCleanseDetector<T> : Infrastructure.FederatedLearningComponen
 
             // Every non-empty group has exactly groupSize coordinates; groups past the end stay 0.
             int fullGroups = Math.Min(_numClasses, d / groupSize);
-            var groupL1 = fullGroups == 0 ? Array.Empty<T>() : Engine.ReduceSum(
-                Engine.TensorAbs(Engine.TensorSlice(update.AsTensor(), new[] { 0 }, new[] { fullGroups * groupSize })
-                    .Reshape(fullGroups, groupSize)),
-                new[] { 1 },
-                false).ToArray();
-            for (int c = 0; c < fullGroups; c++)
+            // Half / BFloat16 group sums are formed in float (a Half sum saturates at 2048 and overflows at 65504).
+            if (fullGroups > 0)
             {
-                groupNorms[c] = NumOps.ToDouble(groupL1[c]);
+                var groups = Engine.TensorSlice(update.AsTensor(), new[] { 0 }, new[] { fullGroups * groupSize })
+                    .Reshape(fullGroups, groupSize);
+                var groupL1 = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+                    ? GroupL1(groups.Cast<float>())
+                    : GroupL1(groups);
+                Array.Copy(groupL1, groupNorms, fullGroups);
             }
 
             // Compute anomaly index: MAD-based outlier detection on group norms
@@ -118,6 +119,10 @@ public class NeuralCleanseDetector<T> : Infrastructure.FederatedLearningComponen
 
         return filtered;
     }
+
+    /// <summary>L1 norm of every row of a [groups, size] tensor.</summary>
+    private static double[] GroupL1<TV>(Tensor<TV> groups)
+        => Engine.ReduceSum(Engine.TensorAbs(groups), new[] { 1 }, false).Cast<double>().ToArray();
 
     private static double GetMedian(double[] values)
     {

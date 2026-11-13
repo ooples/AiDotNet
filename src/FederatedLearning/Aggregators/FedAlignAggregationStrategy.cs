@@ -123,14 +123,21 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
             return NumOps.Zero;
         }
 
-        T distance = _distanceMetric switch
+        if (_distanceMetric != AlignmentDistanceMetric.L2
+            && _distanceMetric != AlignmentDistanceMetric.CKA
+            && _distanceMetric != AlignmentDistanceMetric.MMD)
         {
-            AlignmentDistanceMetric.L2 => ComputeL2Distance(localFeatures, globalFeatures),
-            AlignmentDistanceMetric.CKA => ComputeCKADistance(localFeatures, globalFeatures),
-            AlignmentDistanceMetric.MMD => ComputeMMDDistance(localFeatures, globalFeatures),
-            _ => throw new ArgumentOutOfRangeException(nameof(_distanceMetric),
-                $"Unknown alignment distance metric: {_distanceMetric}.")
-        };
+            throw new ArgumentOutOfRangeException(nameof(_distanceMetric),
+                $"Unknown alignment distance metric: {_distanceMetric}.");
+        }
+
+        // Half / BFloat16 features are evaluated in float: the sums of squares, Gram products and kernel
+        // bandwidths below pass Half's 65504, and its 1e-8 / 1e-10 guards would round to 0.
+        var local = Tensor<T>.FromMatrix(localFeatures);
+        var global = Tensor<T>.FromMatrix(globalFeatures);
+        T distance = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? NumOps.FromDouble(Distance(_distanceMetric, local.Cast<float>(), global.Cast<float>()))
+            : Distance(_distanceMetric, local, global);
 
         return NumOps.Multiply(NumOps.FromDouble(_alignmentWeight), distance);
     }
@@ -148,79 +155,94 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
         return NumOps.Add(taskLoss, alignmentLoss);
     }
 
+    private static TV Distance<TV>(AlignmentDistanceMetric metric, Tensor<TV> local, Tensor<TV> global) => metric switch
+    {
+        AlignmentDistanceMetric.L2 => ComputeL2Distance(local, global),
+        AlignmentDistanceMetric.CKA => ComputeCKADistance(local, global),
+        _ => ComputeMMDDistance(local, global),
+    };
+
+    private static AiDotNet.Tensors.Interfaces.INumericOperations<TV> Ops<TV>() =>
+        AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+
     /// <summary>
     /// Mean squared L2 distance: (1/N) * sum_i ||f_local_i - f_global_i||^2.
     /// </summary>
-    private static T ComputeL2Distance(Matrix<T> local, Matrix<T> global)
+    private static TV ComputeL2Distance<TV>(Tensor<TV> local, Tensor<TV> global)
     {
-        var diff = Engine.TensorSubtract(Tensor<T>.FromMatrix(local), Tensor<T>.FromMatrix(global));
-        return NumOps.Divide(Engine.TensorSumOfSquares(diff), NumOps.FromDouble(local.Rows));
+        var ops = Ops<TV>();
+        var diff = Engine.TensorSubtract(local, global);
+        return ops.Divide(Engine.TensorSumOfSquares(diff), ops.FromDouble(local.Shape[0]));
     }
 
     /// <summary>
     /// Linear CKA distance: 1 - ||X^T Y||_F^2 / (||X^T X||_F * ||Y^T Y||_F) on column-centred features.
     /// </summary>
-    private static T ComputeCKADistance(Matrix<T> local, Matrix<T> global)
+    private static TV ComputeCKADistance<TV>(Tensor<TV> local, Tensor<TV> global)
     {
+        var ops = Ops<TV>();
+
         // Center features (subtract column means).
-        var localCentered = CenterFeatures(Tensor<T>.FromMatrix(local));
-        var globalCentered = CenterFeatures(Tensor<T>.FromMatrix(global));
+        var localCentered = CenterFeatures(local);
+        var globalCentered = CenterFeatures(global);
 
         // Linear CKA: HSIC(K_X, K_Y) / sqrt(HSIC(K_X, K_X) * HSIC(K_Y, K_Y))
-        // where HSIC with linear kernel = ||X^T Y||_F^2 / (n-1)^2
+        // where HSIC with linear kernel = ||X^T Y||_F^2 / (n-1)^2. The denominator is formed as
+        // sqrt(a) * sqrt(b) so the product of the two squared norms cannot overflow.
         var crossNorm = FrobeniusNormOfProduct(localCentered, globalCentered);
         var localNorm = FrobeniusNormOfProduct(localCentered, localCentered);
         var globalNorm = FrobeniusNormOfProduct(globalCentered, globalCentered);
 
-        var denom = NumOps.Sqrt(NumOps.Multiply(localNorm, globalNorm));
-        var cka = NumOps.GreaterThan(denom, NumOps.FromDouble(1e-10))
-            ? NumOps.Divide(crossNorm, denom)
-            : NumOps.Zero;
+        var denom = ops.Multiply(ops.Sqrt(localNorm), ops.Sqrt(globalNorm));
+        var cka = ops.GreaterThan(denom, ops.FromDouble(1e-10))
+            ? ops.Divide(crossNorm, denom)
+            : ops.Zero;
 
-        return NumOps.Subtract(NumOps.One, cka);
+        return ops.Subtract(ops.One, cka);
     }
 
     /// <summary>
-    /// Unbiased MMD^2 (Gretton et al. 2012, eq. 3) with an RBF kernel whose bandwidth is the median heuristic.
+    /// Unbiased MMD^2 U-statistic for paired samples (Gretton et al. 2012, Lemma 6 with m = n):
+    /// (1 / (n(n-1))) sum_{i != j} [k(x_i, x_j) + k(y_i, y_j) - k(x_i, y_j) - k(x_j, y_i)], with an RBF
+    /// kernel whose bandwidth is the median heuristic, clamped at 0.
     /// </summary>
-    private static T ComputeMMDDistance(Matrix<T> local, Matrix<T> global)
+    private static TV ComputeMMDDistance<TV>(Tensor<TV> x, Tensor<TV> y)
     {
-        int n = local.Rows;
-        var x = Tensor<T>.FromMatrix(local);
-        var y = Tensor<T>.FromMatrix(global);
+        var ops = Ops<TV>();
+        int n = x.Shape[0];
 
         // Compute median of pairwise distances for bandwidth selection.
         var medianDist = EstimateMedianPairwiseDistance(x, n);
-        var floor = NumOps.FromDouble(1e-8);
-        var bandwidth = NumOps.GreaterThan(medianDist, floor) ? medianDist : floor;
-        var negGamma = NumOps.Negate(NumOps.Divide(NumOps.One,
-            NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Multiply(bandwidth, bandwidth))));
+        var floor = ops.FromDouble(1e-8);
+        var bandwidth = ops.GreaterThan(medianDist, floor) ? medianDist : floor;
+        var negGamma = ops.Negate(ops.Divide(ops.One,
+            ops.Multiply(ops.FromDouble(2.0), ops.Multiply(bandwidth, bandwidth))));
 
         // Sums over i != j: the full kernel sum minus its diagonal (k(x_i, x_i) = 1, k(x_i, y_i) = exp(-gamma ||x_i - y_i||^2)).
         var kxx = OffDiagonalKernelSum(PairwiseSquaredDistances(x, x), negGamma);
         var kyy = OffDiagonalKernelSum(PairwiseSquaredDistances(y, y), negGamma);
         var kxy = OffDiagonalKernelSum(PairwiseSquaredDistances(x, y), negGamma);
 
-        var normFactor = NumOps.FromDouble(n * (n - 1));
-        var mmd = NumOps.Divide(
-            NumOps.Add(NumOps.Subtract(kxx, NumOps.Multiply(NumOps.FromDouble(2.0), kxy)), kyy),
+        var normFactor = ops.FromDouble(n * (n - 1));
+        var mmd = ops.Divide(
+            ops.Add(ops.Subtract(kxx, ops.Multiply(ops.FromDouble(2.0), kxy)), kyy),
             normFactor);
-        return NumOps.GreaterThan(mmd, NumOps.Zero) ? mmd : NumOps.Zero;
+        return ops.GreaterThan(mmd, ops.Zero) ? mmd : ops.Zero;
     }
 
     /// <summary>Subtracts each column's mean from an [n, d] feature tensor.</summary>
-    private static Tensor<T> CenterFeatures(Tensor<T> features)
+    private static Tensor<TV> CenterFeatures<TV>(Tensor<TV> features)
     {
         var means = Engine.ReduceMean(features, new[] { 0 }, true);
         return Engine.TensorSubtract(features, Engine.TensorBroadcastTo(means, new[] { features.Shape[0], features.Shape[1] }));
     }
 
     /// <summary>||A^T B||_F^2 for [n, d] feature tensors.</summary>
-    private static T FrobeniusNormOfProduct(Tensor<T> a, Tensor<T> b)
+    private static TV FrobeniusNormOfProduct<TV>(Tensor<TV> a, Tensor<TV> b)
         => Engine.TensorSumOfSquares(Engine.TensorMatMul(Engine.TensorTranspose(a), b));
 
     /// <summary>[n, m] matrix of squared Euclidean distances between the rows of a [n, d] and b [m, d].</summary>
-    private static Tensor<T> PairwiseSquaredDistances(Tensor<T> a, Tensor<T> b)
+    private static Tensor<TV> PairwiseSquaredDistances<TV>(Tensor<TV> a, Tensor<TV> b)
     {
         int n = a.Shape[0];
         int m = b.Shape[0];
@@ -228,28 +250,28 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
         var bSq = Engine.TensorBroadcastTo(
             Engine.TensorTranspose(Engine.ReduceSum(Engine.TensorSquare(b), new[] { 1 }, true)), new[] { n, m });
         var cross = Engine.TensorMultiplyScalar(
-            Engine.TensorMatMul(a, Engine.TensorTranspose(b)), NumOps.FromDouble(2.0));
-        return Engine.TensorClampMin(Engine.TensorSubtract(Engine.TensorAdd(aSq, bSq), cross), NumOps.Zero);
+            Engine.TensorMatMul(a, Engine.TensorTranspose(b)), Ops<TV>().FromDouble(2.0));
+        return Engine.TensorClampMin(Engine.TensorSubtract(Engine.TensorAdd(aSq, bSq), cross), Ops<TV>().Zero);
     }
 
     /// <summary>Sum over i != j of exp(-gamma * d2[i, j]).</summary>
-    private static T OffDiagonalKernelSum(Tensor<T> squaredDistances, T negGamma)
+    private static TV OffDiagonalKernelSum<TV>(Tensor<TV> squaredDistances, TV negGamma)
     {
         var kernel = Engine.TensorExp(Engine.TensorMultiplyScalar(squaredDistances, negGamma));
-        return NumOps.Subtract(Engine.TensorSum(kernel), Engine.TensorTrace(kernel));
+        return Ops<TV>().Subtract(Engine.TensorSum(kernel), Engine.TensorTrace(kernel));
     }
 
     /// <summary>
     /// Median of a deterministic sample (every step-th pair i &lt; j in row order, at most 500) of the
     /// pairwise Euclidean distances between the rows of <paramref name="features"/>.
     /// </summary>
-    private static T EstimateMedianPairwiseDistance(Tensor<T> features, int n)
+    private static TV EstimateMedianPairwiseDistance<TV>(Tensor<TV> features, int n)
     {
         // Use a sample of pairwise distances for efficiency.
         int maxPairs = Math.Min(n * (n - 1) / 2, 500);
         if (maxPairs == 0)
         {
-            return NumOps.One;
+            return Ops<TV>().One;
         }
 
         var pairIndices = new List<int>(maxPairs);
@@ -270,7 +292,7 @@ public class FedAlignAggregationStrategy<T> : ParameterDictionaryAggregationStra
 
         if (pairIndices.Count == 0)
         {
-            return NumOps.One;
+            return Ops<TV>().One;
         }
 
         var allDistances = Engine.TensorSqrt(PairwiseSquaredDistances(features, features)).Reshape(n * n);

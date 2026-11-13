@@ -69,8 +69,9 @@ public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
 
         var values = Engine.TensorSlice(gradient.Reshape(gradient.Length), new[] { 0 }, new[] { originalSize });
 
-        // Entries with |value| < 1e-15 are not inserted.
-        var significant = Engine.TensorGreaterThan(Engine.TensorAbs(values), NumOps.FromDouble(1e-15));
+        // Entries with |value| < 1e-15 are not inserted (|value| >= 1e-15 is kept, the bound itself included).
+        var significant = Engine.ScalarMinusTensor(
+            NumOps.One, Engine.TensorLessThan(Engine.TensorAbs(values), NumOps.FromDouble(1e-15)));
         values = Engine.TensorWhere(significant, values, new Tensor<T>(new[] { originalSize }));
 
         var rows = new Tensor<T>[depth];
@@ -155,7 +156,9 @@ public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
         }
 
         var lower = Engine.TensorSlice(sorted, new[] { (depth / 2) - 1, 0 }, new[] { 1, originalSize }).Reshape(originalSize);
-        return Engine.TensorMultiplyScalar(Engine.TensorAdd(lower, upper), NumOps.FromDouble(0.5));
+        // 0.5 a + 0.5 b rather than (a + b) / 2: the sum of two large Half estimates overflows 65504.
+        var half = NumOps.FromDouble(0.5);
+        return Engine.TensorAdd(Engine.TensorMultiplyScalar(lower, half), Engine.TensorMultiplyScalar(upper, half));
     }
 
     /// <summary>Hash bucket indices and +-1 signs of elements 0..count-1 for sketch row <paramref name="depth"/>.</summary>

@@ -204,9 +204,18 @@ public class FedLcAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             counts = registered;
         }
 
-        var clamped = Engine.TensorClampMin(counts.AsTensor(), NumOps.FromDouble(1e-8));
-        var margin = Engine.TensorPower(clamped, NumOps.FromDouble(-0.25));
-        return Engine.TensorMultiplyScalar(margin, NumOps.FromDouble(_calibrationTemperature)).ToVector();
+        // Half evaluates the margin in float: its 1e-8 floor rounds to 0, which would give an infinite margin.
+        return AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? Margin(counts.AsTensor().Cast<float>(), _calibrationTemperature).Cast<T>().ToVector()
+            : Margin(counts.AsTensor(), _calibrationTemperature).ToVector();
+    }
+
+    private static Tensor<TV> Margin<TV>(Tensor<TV> counts, double temperature)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        var clamped = Engine.TensorClampMin(counts, ops.FromDouble(1e-8));
+        var margin = Engine.TensorPower(clamped, ops.FromDouble(-0.25));
+        return Engine.TensorMultiplyScalar(margin, ops.FromDouble(temperature));
     }
 
     /// <summary>Gets the logit calibration temperature (tau).</summary>

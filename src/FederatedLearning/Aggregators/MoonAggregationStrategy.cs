@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -175,12 +176,7 @@ public class MoonAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
             throw new ArgumentException("Vectors must have the same length for cosine similarity.");
         }
 
-        double dot = NumOps.ToDouble(Engine.DotProduct(a, b));
-        double normA = NumOps.ToDouble(Engine.DotProduct(a, a));
-        double normB = NumOps.ToDouble(Engine.DotProduct(b, b));
-
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > CosineDenominatorEpsilon ? dot / denom : 0.0;
+        return FederatedReductions.Cosine(a, b, CosineDenominatorEpsilon);
     }
 
     /// <summary>Gets the contrastive loss weight (mu).</summary>

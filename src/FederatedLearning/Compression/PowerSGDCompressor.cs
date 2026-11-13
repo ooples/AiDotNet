@@ -57,11 +57,11 @@ public class PowerSGDCompressor<T> : FederatedLearningComponentBase<T>
         if (gradient is null) throw new ArgumentNullException(nameof(gradient));
 
         int totalSize = gradient.Shape[0];
-        int rank = Math.Min(_options.PowerSGDRank, totalSize);
 
         // Reshape 1D gradient into a 2D matrix (approximately square), zero-padding the tail.
         int rows = (int)Math.Ceiling(Math.Sqrt(totalSize));
         int cols = (int)Math.Ceiling((double)totalSize / rows);
+        int rank = EffectiveRank(rows, cols);
         var padded = new Tensor<T>(new[] { rows * cols });
         gradient.AsSpan().Slice(0, totalSize).CopyTo(padded.AsWritableSpan());
         var g = padded.Reshape(rows, cols);
@@ -123,11 +123,18 @@ public class PowerSGDCompressor<T> : FederatedLearningComponentBase<T>
     {
         int rows = (int)Math.Ceiling(Math.Sqrt(originalSize));
         int cols = (int)Math.Ceiling((double)originalSize / rows);
-        int rank = Math.Min(_options.PowerSGDRank, originalSize);
+        int rank = EffectiveRank(rows, cols);
 
         double compressedSize = (rows * rank) + (cols * rank);
         return compressedSize / originalSize;
     }
+
+    /// <summary>
+    /// The approximation rank min(r, rows, cols) for a rows x cols gradient matrix: a rank above min(rows, cols) has
+    /// no extra columns to fill (the orthogonalized P has at most min(rows, cols) columns), as in the reference
+    /// PowerSGD hook's <c>min(n, m, matrix_approximation_rank)</c>.
+    /// </summary>
+    private int EffectiveRank(int rows, int cols) => Math.Min(_options.PowerSGDRank, Math.Min(rows, cols));
 
     private static Tensor<T> InitializeRandomMatrix(int rows, int cols)
     {

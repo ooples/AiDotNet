@@ -100,7 +100,10 @@ public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
         int size = combined.Shape[0];
 
         // Mean absolute value for scaling.
-        var scale = size > 0 ? Engine.TensorMean(Engine.TensorAbs(combined)) : NumOps.Zero;
+        // (Formed as sum|x| / n with the sum in float for Half / BFloat16, where a running sum saturates at 2048.)
+        var scale = size > 0
+            ? NumOps.FromDouble(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SumAbs(combined) / size)
+            : NumOps.Zero;
 
         // 1-bit encode: sign * scale, with sign(x) = +1 for x >= 0 and -1 otherwise (including NaN).
         var nonNegative = Engine.TensorAdd(
@@ -125,7 +128,7 @@ public class ErrorFeedbackCompressor<T> : FederatedLearningComponentBase<T>
     {
         if (!_clientErrors.TryGetValue(clientId, out var error)) return NumOps.Zero;
 
-        return NumOps.Sqrt(Engine.TensorSumOfSquares(error));
+        return NumOps.FromDouble(Math.Sqrt(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SumOfSquares(error)));
     }
 
     /// <summary>

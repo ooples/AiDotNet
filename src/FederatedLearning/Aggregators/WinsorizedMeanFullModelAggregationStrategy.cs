@@ -51,21 +51,18 @@ public sealed class WinsorizedMeanFullModelAggregationStrategy<T, TInput, TOutpu
         }
 
         // After sorting each coordinate, every order statistic below lowerIndex clamps to row lowerIndex and every
-        // one above upperIndex clamps to row upperIndex, so the winsorized sum is the kept block plus those repeats.
+        // one above upperIndex clamps to row upperIndex, so the winsorized mean weights row lowerIndex by
+        // (lowerIndex + 1) / n, row upperIndex by (n - upperIndex) / n and every row between by 1 / n.
         var sorted = SortCoordinatesAcrossClients(clientParameters, clientIds);
-        var sum = SumOrderStatisticRows(sorted, lowerIndex, upperIndex - lowerIndex + 1);
-        if (lowerIndex > 0)
+        var rowWeights = new double[n];
+        for (int r = lowerIndex; r <= upperIndex; r++)
         {
-            sum = Engine.Add(sum, Engine.Multiply(OrderStatisticRow(sorted, lowerIndex), NumOps.FromDouble(lowerIndex)));
+            rowWeights[r] = 1.0 / n;
         }
 
-        int upperRepeats = n - 1 - upperIndex;
-        if (upperRepeats > 0)
-        {
-            sum = Engine.Add(sum, Engine.Multiply(OrderStatisticRow(sorted, upperIndex), NumOps.FromDouble(upperRepeats)));
-        }
-
-        var aggregated = Engine.Divide(sum, NumOps.FromDouble(n));
+        rowWeights[lowerIndex] += (double)lowerIndex / n;
+        rowWeights[upperIndex] += (double)(n - 1 - upperIndex) / n;
+        var aggregated = CombineOrderStatisticRows(sorted, rowWeights);
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

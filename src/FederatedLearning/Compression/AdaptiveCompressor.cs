@@ -158,7 +158,7 @@ public class AdaptiveCompressor<T> : FederatedLearningComponentBase<T>
         // Importance = L2 norm of gradient (larger gradients carry more information)
         int size = gradient.Shape[0];
         var leading = Engine.TensorSlice(gradient.Reshape(gradient.Length), new[] { 0 }, new[] { size });
-        double norm = Math.Sqrt(NumOps.ToDouble(Engine.TensorSumOfSquares(leading)));
+        double norm = Math.Sqrt(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SumOfSquares(leading));
 
         // Map norm to [0, 1] using sigmoid-like scaling
         // norm of 1.0 maps to ~0.5; higher norms approach 1.0

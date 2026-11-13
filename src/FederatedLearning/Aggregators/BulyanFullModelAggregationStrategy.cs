@@ -79,18 +79,34 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
         }
 
         var sorted = SortCoordinatesAcrossClients(clientParameters, selectedClientIds.ToArray());
-        var median = (m % 2 == 1)
-            ? OrderStatisticRow(sorted, m / 2)
-            : Engine.Multiply(SumOrderStatisticRows(sorted, (m / 2) - 1, 2), NumOps.FromDouble(0.5));
-        var medianRows = Engine.TensorBroadcastTo(median.AsTensor().Reshape(1, parameterCount), new[] { m, parameterCount });
-        var distanceToMedian = Engine.TensorAbs(Engine.TensorSubtract(sorted, medianRows));
-        Engine.TensorTopK(Engine.TensorNegate(distanceToMedian), beta, 0, out var closestRows);
-        var closest = Engine.TensorTakeAlongDim(sorted, closestRows, 0);
-        var aggregated = Engine.Divide(
-            Engine.ReduceSum(closest, new[] { 0 }, false).ToVector(),
-            NumOps.FromDouble(beta));
+
+        // A narrow T (Half, BFloat16) is evaluated in float: |x - median| and the beta-term sum can pass 65504.
+        var aggregated = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+            ? ClosestToMedianMean(sorted.Cast<float>(), beta).Cast<T>().ToVector()
+            : ClosestToMedianMean(sorted, beta).ToVector();
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
+    }
+
+    /// <summary>
+    /// Per coordinate (column) of an [m, P] tensor of sorted values, the mean of the <paramref name="beta"/>
+    /// values closest to the column's median (the mean of the two middle values for an even m).
+    /// </summary>
+    private static Tensor<TV> ClosestToMedianMean<TV>(Tensor<TV> sorted, int beta)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        int m = sorted.Shape[0];
+        int p = sorted.Shape[1];
+        var upper = Engine.TensorSlice(sorted, new[] { m / 2, 0 }, new[] { 1, p });
+        var median = m % 2 == 1
+            ? upper
+            : Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(Engine.TensorSlice(sorted, new[] { (m / 2) - 1, 0 }, new[] { 1, p }), ops.FromDouble(0.5)),
+                Engine.TensorMultiplyScalar(upper, ops.FromDouble(0.5)));
+        var distanceToMedian = Engine.TensorAbs(Engine.TensorSubtract(sorted, Engine.TensorBroadcastTo(median, new[] { m, p })));
+        Engine.TensorTopK(Engine.TensorNegate(distanceToMedian), beta, 0, out var closestRows);
+        var closest = Engine.TensorTakeAlongDim(sorted, closestRows, 0);
+        return Engine.ReduceSum(Engine.TensorMultiplyScalar(closest, ops.FromDouble(1.0 / beta)), new[] { 0 }, false);
     }
 
     private List<int> SelectMultiKrumCandidates(
