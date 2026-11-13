@@ -238,6 +238,17 @@ public class VideoWarpAndMaskReferenceTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ProPainterRejectsAWidthThatDoesNotSplitAcrossTheHeads()
+    {
+        // NumFeatures 5 gives 20 transformer channels: 8 heads of 2 would leave 4 channels unattended and zero.
+        await Task.Yield();
+        var options = new ProPainterOptions { NumFeatures = 5, NumTransformerBlocks = 1, NumHeads = 8 };
+        Assert.Throws<ArgumentException>(() => options.Validate());
+        Assert.Throws<ArgumentException>(() => new ProPainter<double>(Arch(), options));
+        new ProPainterOptions { NumFeatures = 4, NumTransformerBlocks = 1, NumHeads = 8 }.Validate();
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task MaskedPsnrIsComputedInDouble()
     {
         // The masked error 3e38 - (-3e38) = 6e38 overflows float; in double MSE = 3.6e77 over the one masked
