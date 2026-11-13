@@ -285,5 +285,32 @@ public class FinanceNumericalRegressionTests
         double expected = (Math.Pow(equity, 252.0 / returns.Length) - 1) / drawdown;
         Assert.Equal((Half)expected, RiskRatios<Half>.Calmar(returns));
     }
+
+    [Fact]
+    public void Calmar_KeepsDrawdownWhenTheCompoundedCurveOverflowsDouble()
+    {
+        // 3^1100 is far past double.MaxValue: a direct product turns the peak into infinity and every drawdown
+        // after it into NaN. The final -50% step is a 0.5 drawdown from that peak.
+        var returns = Enumerable.Repeat(2.0, 1100).Concat(new[] { -0.5 }).ToArray();
+        double logEquity = 1100 * Math.Log(3) + Math.Log(0.5);
+        double expected = (Math.Exp(logEquity / returns.Length) - 1) / 0.5;
+        Assert.Equal(expected, RiskRatios<double>.Calmar(returns, periodsPerYear: 1), 9);
+    }
+
+    [Fact]
+    public void HalfSharpeAndSortino_ScaleSmallDeviationsAboveSubnormals()
+    {
+        // Deviations of 2e-4 square to 4e-8, below Half's smallest normal 6.1e-5: an unscaled sum of squares
+        // rounds to a handful of subnormal steps (or to zero once divided by the count).
+        var returns = Enumerable.Range(0, 8).Select(i => (Half)(i % 2 == 0 ? -0.0001 : 0.0003)).ToArray();
+        double[] wide = returns.Select(value => (double)value).ToArray();
+        double mean = wide.Average();
+        double std = Math.Sqrt(wide.Sum(value => (value - mean) * (value - mean)) / (wide.Length - 1));
+        double downside = Math.Sqrt(wide.Sum(value => Math.Min(value, 0) * Math.Min(value, 0)) / wide.Length);
+        double expectedSharpe = mean / std * Math.Sqrt(252);
+        double expectedSortino = mean / downside * Math.Sqrt(252);
+        Assert.InRange((double)RiskRatios<Half>.Sharpe(returns), expectedSharpe * 0.99, expectedSharpe * 1.01);
+        Assert.InRange((double)RiskRatios<Half>.Sortino(returns), expectedSortino * 0.99, expectedSortino * 1.01);
+    }
 }
 #endif

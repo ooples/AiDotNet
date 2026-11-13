@@ -84,18 +84,14 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         }
 
         var rf = NumOps.FromDouble(riskFreePerPeriod);
-        var n = NumOps.FromDouble(returns.Count);
         var engine = AiDotNetEngine.Current;
         var excess = engine.TensorSubtractScalar(ToTensor(returns), rf);
-        var mean = engine.TensorSum(excess);
+        var mean = MeanOf(excess, returns.Count);
 
         // Downside: the excesses that are not positive.
         var downside = engine.TensorWhere(
             engine.TensorGreaterThan(excess, NumOps.Zero), engine.TensorZerosLike(excess), excess);
-        var downsideSq = engine.TensorSumOfSquares(downside);
-
-        mean = NumOps.Divide(mean, n);
-        var downsideDev = NumOps.Sqrt(NumOps.Divide(downsideSq, n));
+        var downsideDev = RootMeanSquare(downside, returns.Count);
         if (!NumOps.GreaterThan(downsideDev, NumOps.Zero))
         {
             return NumOps.Zero;
@@ -116,29 +112,50 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
             return NumOps.Zero;
         }
 
-        // Compound an equity curve, tracking the running peak (starting from 1) and the worst drawdown.
+        // The equity curve is compounded wide: Half spaces values near 1 by 2^-10, so 1 + 1e-4 would round
+        // back to 1 and every small return would vanish from the curve.
         var engine = AiDotNetEngine.Current;
-        var curve = engine.TensorCumProd(engine.TensorAddScalar(ToTensor(returns).Cast<double>(), 1.0), 0);
-        var peak = engine.TensorMax(engine.TensorCumMax(curve, 0), 1.0);
-        var drawdowns = engine.TensorWhere(
-            engine.TensorGreaterThan(peak, 0.0),
-            engine.TensorDivide(engine.TensorSubtract(peak, curve), peak),
-            engine.TensorZerosLike(peak));
-        var maxDrawdown = engine.TensorMaxValue(drawdowns);
-        var equity = curve.AsSpan()[returns.Count - 1];
+        var wide = ToTensor(returns).Cast<double>();
+        int count = returns.Count;
+        double maxDrawdown;
+        double annualizedReturn;
+        if (engine.TensorCountNonzero(engine.TensorGreaterThan(wide, -1.0)) == count)
+        {
+            // Every growth factor is positive: compound in log space, so a long winning run cannot overflow
+            // the curve (3^700 is past double) and turn the running peak and every drawdown into NaN.
+            // drawdown = 1 - curve / peak = -expm1(log curve - log peak), with the peak starting from 1.
+            var logCurve = engine.TensorCumSum(engine.TensorLog1p(wide), 0);
+            var logPeak = engine.TensorMax(engine.TensorCumMax(logCurve, 0), 0.0);
+            maxDrawdown = engine.TensorMaxValue(
+                engine.TensorNegate(engine.TensorExpm1(engine.TensorSubtract(logCurve, logPeak))));
+            annualizedReturn = Math.Exp(logCurve.AsSpan()[count - 1] * periodsPerYear / count) - 1.0;
+        }
+        else
+        {
+            // A return at or below -100% (or NaN) has no logarithm: compound the curve directly.
+            var curve = engine.TensorCumProd(engine.TensorAddScalar(wide, 1.0), 0);
+            var peak = engine.TensorMax(engine.TensorCumMax(curve, 0), 1.0);
+            var drawdowns = engine.TensorWhere(
+                engine.TensorGreaterThan(peak, 0.0),
+                engine.TensorDivide(engine.TensorSubtract(peak, curve), peak),
+                engine.TensorZerosLike(peak));
+            maxDrawdown = engine.TensorMaxValue(drawdowns);
+            var equity = curve.AsSpan()[count - 1];
+
+            // A losing streak can drive the compounded equity to zero or negative
+            // (any period return <= -100%). Math.Pow of a non-positive base by a
+            // fractional exponent is NaN, so treat a wiped-out account as a total
+            // (-100%) annualized loss rather than emitting NaN.
+            annualizedReturn = equity > 0
+                ? Math.Pow(equity, (double)periodsPerYear / count) - 1.0
+                : -1.0;
+        }
 
         if (!(maxDrawdown > 0))
         {
             return NumOps.Zero;
         }
 
-        // A losing streak can drive the compounded equity to zero or negative
-        // (any period return <= -100%). Math.Pow of a non-positive base by a
-        // fractional exponent is NaN, so treat a wiped-out account as a total
-        // (-100%) annualized loss rather than emitting NaN.
-        double annualizedReturn = equity > 0
-            ? Math.Pow(equity, (double)periodsPerYear / returns.Count) - 1.0
-            : -1.0;
         return NumOps.FromDouble(annualizedReturn / maxDrawdown);
     }
 
@@ -146,12 +163,45 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
     {
         var engine = AiDotNetEngine.Current;
         var excess = engine.TensorSubtractScalar(ToTensor(returns), riskFree);
-        var mean = NumOps.Divide(engine.TensorSum(excess), NumOps.FromDouble(returns.Count));
-        var sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(excess, mean));
+        var mean = MeanOf(excess, returns.Count);
 
         // Sample standard deviation (n-1) — unbiased for a return sample.
-        var std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(returns.Count - 1)));
+        var std = RootMeanSquare(engine.TensorSubtractScalar(excess, mean), returns.Count - 1);
         return (mean, std);
+    }
+
+    /// <summary>Sum / count; a count past T's range (Half: 65504) divides by sqrt(count) twice instead of zeroing the mean.</summary>
+    private static T MeanOf(Tensor<T> values, int count)
+    {
+        T sum = AiDotNetEngine.Current.TensorSum(values);
+        T n = NumOps.FromDouble(count);
+        if (!NumOps.IsInfinity(n))
+        {
+            return NumOps.Divide(sum, n);
+        }
+
+        T rootCount = NumOps.FromDouble(Math.Sqrt(count));
+        return NumOps.Divide(NumOps.Divide(sum, rootCount), rootCount);
+    }
+
+    /// <summary>sqrt(sum(x^2) / divisor), with x pre-scaled by its largest magnitude.</summary>
+    /// <remarks>
+    /// Return deviations near 1e-4 square to 1e-8, below Half's smallest normal (6.1e-5), so an unscaled sum of
+    /// squares rounds to a few subnormal steps or to zero; squares of deviations past 255 overflow Half instead.
+    /// Scaling by the largest |x| keeps every square in [0, 1]. Zero when every value is zero (or NaN).
+    /// </remarks>
+    private static T RootMeanSquare(Tensor<T> values, int divisor)
+    {
+        var engine = AiDotNetEngine.Current;
+        T scale = engine.TensorMaxValue(engine.TensorAbs(values));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+
+        T unitSquares = engine.TensorSumOfSquares(engine.TensorDivideScalar(values, scale));
+        return NumOps.Multiply(scale,
+            NumOps.Divide(NumOps.Sqrt(unitSquares), NumOps.FromDouble(Math.Sqrt(divisor))));
     }
 
     private static Tensor<T> ToTensor(IReadOnlyList<T> returns)
