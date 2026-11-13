@@ -160,6 +160,7 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
 
         // 3. Score each candidate with MaxSim against the query's per-token
         //    embeddings.
+        var noMatch = NumOps.FromDouble(double.NegativeInfinity);
         var scored = candidates.Select(doc =>
         {
             string content = doc.Content ?? string.Empty;
@@ -169,7 +170,7 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
             // by IColBertEmbedder contract, so cosine == dot product.
             // A document without tokens has no match for any query token.
             if (docTokens == 0)
-                return (doc, score: NumOps.FromDouble(double.NegativeInfinity));
+                return (doc, score: noMatch);
 
             var similarities = Engine.TensorMatMul(
                 queryMatrix, Engine.TensorTranspose(Engine.TensorNarrow(docEmb, 0, 0, docTokens)));

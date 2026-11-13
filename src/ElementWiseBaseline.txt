@@ -16677,7 +16677,6 @@
 2	ADNELEM002|AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings.KGEmbeddingBase<T>.InitializeEmbeddings(System.Random)
 1	ADNELEM002|AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings.RotatEEmbedding<T>.OnInitialize(AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings.KGEmbeddingOptions, System.Random, AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph<T>)
 1	ADNELEM002|AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings.TemporalTransEEmbedding<T>.OnInitialize(AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings.KGEmbeddingOptions, System.Random, AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph<T>)
-1	ADNELEM002|AiDotNet.RetrievalAugmentedGeneration.Retrievers.ColBERTRetriever<T>.RetrieveCore(string, int, System.Collections.Generic.Dictionary<string, object>)
 1	ADNELEM002|AiDotNet.Safety.Adversarial.AdversarialImageEvaluator<T>.ComputeFeatureSqueezingScore(System.ReadOnlySpan<T>)
 5	ADNELEM002|AiDotNet.Safety.Adversarial.AdversarialImageEvaluator<T>.ComputeHighFrequencyAnomalyScore(System.ReadOnlySpan<T>, int[])
 1	ADNELEM002|AiDotNet.Safety.Adversarial.AdversarialImageEvaluator<T>.ComputeHistogramAnomalyScore(System.ReadOnlySpan<T>)
