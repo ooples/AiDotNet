@@ -286,4 +286,22 @@ public class FeatureSelectionHelperRoundThreeTests
         Assert.Equal(0, neighbors[1][0]);
         Assert.Equal(1, neighbors[2][0]);
     }
+
+    // Mantegna's Levy step with u from the draws (0.5, 0) and v from (0.99995, 0): u = sqrt(2 ln 2) sigma, sigma =
+    // 0.69658 for beta = 1.5, and v = sqrt(-2 ln 0.99995) = 0.0100001, so 0.01 u / |v|^(2/3) = 0.176698 and a
+    // difference of 0.5 steps 0.088349. In Half 0.99995 rounds to 1, so v was 0 and the factor infinite: the
+    // first dimension stepped infinity and the second (cuckoo on the best nest) inf * 0 = NaN.
+    [Fact(Timeout = 60000)]
+    public async Task CuckooLevyStep_Half_StaysFiniteWhenADrawRoundsToOne()
+    {
+        await Task.CompletedTask;
+        var draws = new Tensor<double>(new[] { 0.5, 0, 0.99995, 0, 0.5, 0, 0.99995, 0 }, new[] { 2, 4 });
+        var cuckoo = new Tensor<Half>(new[] { (Half)0.75, (Half)1 }, new[] { 2 });
+        var best = new Tensor<Half>(new[] { (Half)0.25, (Half)1 }, new[] { 2 });
+
+        var step = CuckooSearch<Half>.LevyStep(draws, cuckoo, best);
+
+        Assert.Equal(0.088349, (double)step[0], 3);
+        Assert.Equal(0.0, (double)step[1]);
+    }
 }
