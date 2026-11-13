@@ -159,15 +159,12 @@ public partial class AiModelResult<T, TInput, TOutput>
         // Filter by confidence threshold if specified
         if (confidenceThreshold.HasValue)
         {
-            var filtered = new List<Vector<T>>();
-            for (int i = 0; i < vectors.Count; i++)
-            {
-                var maxConfidence = vectors[i].ToArray().Select(v => Convert.ToDouble(v)).Max();
-                if (maxConfidence >= confidenceThreshold.Value)
-                {
-                    filtered.Add(vectors[i]);
-                }
-            }
+            // Keep the predictions whose largest value (their confidence) reaches the threshold.
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var confidences = ResultEngine.ReduceMax(StackPredictions(vectors), new[] { 1 }, false);
+            var threshold = ResultEngine.TensorFullLike(confidences, numOps.FromDouble(confidenceThreshold.Value));
+            int[] keep = ResultEngine.TensorGreaterEqual(confidences, threshold).Cast<int>().ToArray();
+            var filtered = vectors.Where((_, index) => keep[index] != 0).ToList();
 
             if (filtered.Count > 0)
             {
@@ -220,21 +217,55 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </summary>
     private Vector<T> ComputeMean(List<Vector<T>> vectors)
     {
-        int length = vectors[0].Length;
-        var result = new T[length];
+        // Each prediction is divided by the count before summing so the sum cannot overflow in low precision.
+        var stacked = StackPredictions(vectors);
+        var count = MathHelper.GetNumericOperations<T>().FromDouble(vectors.Count);
+        return ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(stacked, count), new[] { 0 }, false).ToVector();
+    }
 
-        for (int i = 0; i < length; i++)
+    /// <summary>The predictions stacked into a [count, length] tensor.</summary>
+    private static Tensor<T> StackPredictions(List<Vector<T>> vectors)
+    {
+        return ResultEngine.TensorStack(vectors.Select(vector => Tensor<T>.FromVector(vector)).ToArray(), 0);
+    }
+
+    /// <summary>The index of each prediction's largest value (the first one on ties).</summary>
+    private static int[] PredictedClasses(List<Vector<T>> vectors)
+    {
+        return ResultEngine.TensorArgMax(StackPredictions(vectors), 1).ToArray();
+    }
+
+    /// <summary>
+    /// Votes per predicted class, with the winner being the most voted class and ties going to the class that
+    /// was voted for first.
+    /// </summary>
+    private static (int WinningClass, int Votes) CountVotes(List<Vector<T>> vectors)
+    {
+        var votes = new Dictionary<int, int>();
+        var order = new List<int>();
+        foreach (int predictedClass in PredictedClasses(vectors))
         {
-            double sum = 0;
-            foreach (var vector in vectors)
+            if (votes.TryGetValue(predictedClass, out int count))
             {
-                sum += Convert.ToDouble(vector[i]);
+                votes[predictedClass] = count + 1;
             }
-
-            result[i] = (T)Convert.ChangeType(sum / vectors.Count, typeof(T));
+            else
+            {
+                votes[predictedClass] = 1;
+                order.Add(predictedClass);
+            }
         }
 
-        return new Vector<T>(result);
+        int winningClass = order[0];
+        foreach (int candidate in order)
+        {
+            if (votes[candidate] > votes[winningClass])
+            {
+                winningClass = candidate;
+            }
+        }
+
+        return (winningClass, votes[winningClass]);
     }
 
     /// <summary>
@@ -242,20 +273,20 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </summary>
     private Vector<T> ComputeMedian(List<Vector<T>> vectors)
     {
+        int count = vectors.Count;
         int length = vectors[0].Length;
-        var result = new T[length];
-
-        for (int i = 0; i < length; i++)
+        var sorted = ResultEngine.TensorSort(StackPredictions(vectors), 0).Values;
+        int mid = count / 2;
+        var upper = ResultEngine.Reshape(ResultEngine.TensorSlice(sorted, new[] { mid, 0 }, new[] { 1, length }), new[] { length });
+        if (count % 2 != 0)
         {
-            var values = vectors.Select(v => Convert.ToDouble(v[i])).OrderBy(v => v).ToList();
-            int mid = values.Count / 2;
-            double median = values.Count % 2 == 0
-                ? (values[mid - 1] + values[mid]) / 2.0
-                : values[mid];
-            result[i] = (T)Convert.ChangeType(median, typeof(T));
+            return upper.ToVector();
         }
 
-        return new Vector<T>(result);
+        // The two middle values are halved before adding so their sum cannot overflow in low precision.
+        var lower = ResultEngine.Reshape(ResultEngine.TensorSlice(sorted, new[] { mid - 1, 0 }, new[] { 1, length }), new[] { length });
+        var two = MathHelper.GetNumericOperations<T>().FromDouble(2.0);
+        return ResultEngine.TensorAdd(ResultEngine.TensorDivideScalar(lower, two), ResultEngine.TensorDivideScalar(upper, two)).ToVector();
     }
 
     /// <summary>
@@ -263,16 +294,7 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </summary>
     private Vector<T> ComputeMax(List<Vector<T>> vectors)
     {
-        int length = vectors[0].Length;
-        var result = new T[length];
-
-        for (int i = 0; i < length; i++)
-        {
-            double max = vectors.Max(v => Convert.ToDouble(v[i]));
-            result[i] = (T)Convert.ChangeType(max, typeof(T));
-        }
-
-        return new Vector<T>(result);
+        return ResultEngine.ReduceMax(StackPredictions(vectors), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
@@ -280,16 +302,9 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </summary>
     private Vector<T> ComputeMin(List<Vector<T>> vectors)
     {
-        int length = vectors[0].Length;
-        var result = new T[length];
-
-        for (int i = 0; i < length; i++)
-        {
-            double min = vectors.Min(v => Convert.ToDouble(v[i]));
-            result[i] = (T)Convert.ChangeType(min, typeof(T));
-        }
-
-        return new Vector<T>(result);
+        // min(x) = -max(-x).
+        var negated = ResultEngine.TensorNegate(StackPredictions(vectors));
+        return ResultEngine.TensorNegate(ResultEngine.ReduceMax(negated, new[] { 0 }, false)).ToVector();
     }
 
     /// <summary>
@@ -297,42 +312,11 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </summary>
     private Vector<T> ComputeVote(List<Vector<T>> vectors)
     {
+        // Each vector votes for its argmax class; the result is the winning class one-hot encoded.
         int length = vectors[0].Length;
-        var votes = new Dictionary<int, int>();
-
-        // Each vector votes for its argmax class
-        foreach (var vector in vectors)
-        {
-            int predictedClass = 0;
-            double maxValue = Convert.ToDouble(vector[0]);
-
-            for (int i = 1; i < length; i++)
-            {
-                double value = Convert.ToDouble(vector[i]);
-                if (value > maxValue)
-                {
-                    maxValue = value;
-                    predictedClass = i;
-                }
-            }
-
-            votes.TryGetValue(predictedClass, out int count);
-            votes[predictedClass] = count + 1;
-        }
-
-        // Find winning class
-        int winningClass = votes.OrderByDescending(kvp => kvp.Value).First().Key;
-
-        // Create one-hot result
-        var result = new T[length];
-        for (int i = 0; i < length; i++)
-        {
-            result[i] = i == winningClass
-                ? (T)Convert.ChangeType(1.0, typeof(T))
-                : (T)Convert.ChangeType(0.0, typeof(T));
-        }
-
-        return new Vector<T>(result);
+        var (winningClass, _) = CountVotes(vectors);
+        var oneHot = ResultEngine.TensorOneHot<T>(new Tensor<int>(new[] { winningClass }, new[] { 1 }), length);
+        return ResultEngine.Reshape(oneHot, new[] { length }).ToVector();
     }
 
     /// <summary>
@@ -340,30 +324,20 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </summary>
     private Vector<T> ComputeWeightedMean(List<Vector<T>> vectors)
     {
-        int length = vectors[0].Length;
-        var result = new T[length];
+        // Each prediction is weighted by its largest value (its confidence).
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var stacked = StackPredictions(vectors);
+        var weights = ResultEngine.ReduceMax(stacked, new[] { 1 }, false);
+        T totalWeight = ResultEngine.TensorSum(weights);
 
-        // Weight by max confidence in each vector
-        var weights = vectors.Select(v => v.ToArray().Select(x => Convert.ToDouble(x)).Max()).ToList();
-        double totalWeight = weights.Sum();
-
-        if (Math.Abs(totalWeight) < 1e-10)
+        if (numOps.LessThan(numOps.Abs(totalWeight), MatrixExtensions.SafeTolerance<T>(1e-10)))
         {
             return ComputeMean(vectors); // Fallback to simple mean
         }
 
-        for (int i = 0; i < length; i++)
-        {
-            double weightedSum = 0;
-            for (int j = 0; j < vectors.Count; j++)
-            {
-                weightedSum += Convert.ToDouble(vectors[j][i]) * weights[j];
-            }
-
-            result[i] = (T)Convert.ChangeType(weightedSum / totalWeight, typeof(T));
-        }
-
-        return new Vector<T>(result);
+        // Normalising the weights first keeps the weighted sum within range in low precision.
+        var normalized = ResultEngine.Reshape(ResultEngine.TensorDivideScalar(weights, totalWeight), new[] { 1, vectors.Count });
+        return ResultEngine.Reshape(ResultEngine.TensorMatMul(normalized, stacked), new[] { vectors[0].Length }).ToVector();
     }
 
     /// <summary>
@@ -371,22 +345,11 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// </summary>
     private Vector<T> ComputeGeometricMean(List<Vector<T>> vectors)
     {
-        int length = vectors[0].Length;
-        var result = new T[length];
+        // exp(mean(log(max(x, eps)))), with eps = 1e-10 or the smallest normal value of a narrower type.
         var numOps = MathHelper.GetNumericOperations<T>();
-
-        for (int i = 0; i < length; i++)
-        {
-            int index = i; // Capture for lambda
-            double logSum = vectors
-                .Select(vector => Math.Log(Math.Max(numOps.ToDouble(vector[index]), 1e-10)))
-                .Sum();
-
-            double geoMean = Math.Exp(logSum / vectors.Count);
-            result[i] = numOps.FromDouble(geoMean);
-        }
-
-        return new Vector<T>(result);
+        var floored = ResultEngine.TensorMax(StackPredictions(vectors), MatrixExtensions.SafeTolerance<T>(1e-10));
+        var logs = ResultEngine.TensorDivideScalar(ResultEngine.TensorLog(floored), numOps.FromDouble(vectors.Count));
+        return ResultEngine.TensorExp(ResultEngine.ReduceSum(logs, new[] { 0 }, false)).ToVector();
     }
 
     /// <summary>
@@ -399,21 +362,26 @@ public partial class AiModelResult<T, TInput, TOutput>
             return 0;
         }
 
-        var mean = ComputeMean(vectors);
-        double sumSquaredDiff = 0;
-        int count = 0;
+        // Population standard deviation of every value around its element-wise mean.
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int count = vectors.Count;
+        int length = vectors[0].Length;
+        var stacked = StackPredictions(vectors);
+        var mean = ResultEngine.Reshape(Tensor<T>.FromVector(ComputeMean(vectors)), new[] { 1, length });
+        var deviations = ResultEngine.TensorSubtract(stacked, ResultEngine.TensorBroadcastTo(mean, new[] { count, length }));
 
-        foreach (var vector in vectors)
+        // The deviations are divided by their largest magnitude before squaring so the squares cannot overflow,
+        // and the mean of squares is taken per row then across rows so no partial sum exceeds the row length.
+        T scale = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(deviations));
+        if (numOps.Equals(scale, numOps.Zero))
         {
-            for (int i = 0; i < vector.Length; i++)
-            {
-                double diff = Convert.ToDouble(vector[i]) - Convert.ToDouble(mean[i]);
-                sumSquaredDiff += diff * diff;
-                count++;
-            }
+            return 0;
         }
 
-        return Math.Sqrt(sumSquaredDiff / count);
+        var squares = ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(deviations, scale));
+        var rowMeans = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(squares, numOps.FromDouble(length)), new[] { 1 }, false);
+        T meanSquare = ResultEngine.TensorSum(ResultEngine.TensorDivideScalar(rowMeans, numOps.FromDouble(count)));
+        return numOps.ToDouble(scale) * Math.Sqrt(numOps.ToDouble(meanSquare));
     }
 
     /// <summary>
@@ -424,28 +392,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         if (method == PredictionAggregationMethod.Vote)
         {
             // For voting, confidence is the proportion of votes for the winning class
-            var votes = new Dictionary<int, int>();
-
-            foreach (var vector in vectors)
-            {
-                int predictedClass = 0;
-                double maxValue = Convert.ToDouble(vector[0]);
-
-                for (int i = 1; i < vector.Length; i++)
-                {
-                    double value = Convert.ToDouble(vector[i]);
-                    if (value > maxValue)
-                    {
-                        maxValue = value;
-                        predictedClass = i;
-                    }
-                }
-
-                votes.TryGetValue(predictedClass, out int count);
-                votes[predictedClass] = count + 1;
-            }
-
-            int maxVotes = votes.Values.Max();
+            var (_, maxVotes) = CountVotes(vectors);
             return (double)maxVotes / vectors.Count;
         }
         else
@@ -469,18 +416,8 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         if (output is Matrix<T> matrix)
         {
-            // Flatten matrix to vector
-            var data = new T[matrix.Rows * matrix.Columns];
-            int idx = 0;
-            for (int i = 0; i < matrix.Rows; i++)
-            {
-                for (int j = 0; j < matrix.Columns; j++)
-                {
-                    data[idx++] = matrix[i, j];
-                }
-            }
-
-            return new Vector<T>(data);
+            // Flatten matrix to vector (row-major)
+            return matrix.ToRowVector();
         }
 
         if (output is Tensor<T> tensor)

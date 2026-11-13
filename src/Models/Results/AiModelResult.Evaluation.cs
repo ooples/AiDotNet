@@ -316,13 +316,8 @@ public partial class AiModelResult<T, TInput, TOutput>
             return numOps.Zero;
         }
 
-        var sum = numOps.Zero;
-        for (int i = 0; i < values.Length; i++)
-        {
-            sum = numOps.Add(sum, values[i]);
-        }
-
-        return numOps.Divide(sum, numOps.FromDouble(values.Length));
+        // Each value is divided by the count before summing so the sum cannot overflow in low precision.
+        return ResultEngine.TensorSum(ResultEngine.TensorDivideScalar(values, numOps.FromDouble(values.Length)));
     }
 
     private static bool TryGetAlignedVectorsInternal(
@@ -481,44 +476,13 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private static Vector<T> ArgMaxToLabelVectorInternal(Matrix<T> scores)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var labels = new Vector<T>(scores.Rows);
-
-        for (int row = 0; row < scores.Rows; row++)
-        {
-            int bestIndex = 0;
-            T bestValue = scores[row, 0];
-
-            for (int col = 1; col < scores.Columns; col++)
-            {
-                var value = scores[row, col];
-                if (numOps.GreaterThan(value, bestValue))
-                {
-                    bestValue = value;
-                    bestIndex = col;
-                }
-            }
-
-            labels[row] = numOps.FromDouble(bestIndex);
-        }
-
-        return labels;
+        // The label of each row is the column of its largest score (the first one on ties).
+        return ResultEngine.TensorArgMax(Tensor<T>.FromMatrix(scores), 1).Cast<T>().ToVector();
     }
 
     private static Vector<T> FlattenToVectorInternal(Matrix<T> matrix)
     {
-        var flattened = new Vector<T>(matrix.Rows * matrix.Columns);
-        int index = 0;
-
-        for (int row = 0; row < matrix.Rows; row++)
-        {
-            for (int col = 0; col < matrix.Columns; col++)
-            {
-                flattened[index++] = matrix[row, col];
-            }
-        }
-
-        return flattened;
+        return matrix.ToRowVector();
     }
 
     private static ErrorStats<T> CalculateErrorStatsInternal(
