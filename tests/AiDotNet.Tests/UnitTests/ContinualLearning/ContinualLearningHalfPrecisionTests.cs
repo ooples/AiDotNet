@@ -229,4 +229,36 @@ public class ContinualLearningHalfPrecisionTests
 
         return result;
     }
+
+    [Fact]
+    public void GemTrainerViolationRate_CountsBeyondHalfRange()
+    {
+        // 2500 of 3000 batches violate. A mean of 0/1 flags in Half stops counting at 2048.
+        var flags = new System.Collections.Generic.List<bool>();
+        for (int i = 0; i < 3000; i++)
+        {
+            flags.Add(i < 2500);
+        }
+
+        double rate = AiDotNet.ContinualLearning.Trainers.GEMTrainer<Half, Tensor<Half>, Tensor<Half>>.ViolationRate(flags);
+
+        Assert.Equal(2500.0 / 3000.0, rate, 12);
+    }
+
+    [Fact]
+    public void GemProjection_Half_LargeTaskGradientGramStaysFinite()
+    {
+        // Stored task gradient [300, 0], proposed gradient [-1, 0] (margin 0, no normalization).
+        // Dual: lambda = (0 - g . g_k) / (g_k . g_k) = 300 / 90000, so g' = g + lambda g_k = [0, 0].
+        // In Half the Gram entry 90000 overflows past 65504 and the projection was lost.
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(
+            new MeanSquaredErrorLoss<Half>(),
+            new GEMOptions<Half> { NormalizeGradients = false, Margin = 0.0 });
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)300.0f, (Half)0.0f }));
+
+        var projected = gem.ProjectGradient(new Vector<Half>(new[] { (Half)(-1.0f), (Half)0.0f }));
+
+        Assert.Equal(0.0, (double)projected[0], 3);
+        Assert.Equal(0.0, (double)projected[1], 3);
+    }
 }

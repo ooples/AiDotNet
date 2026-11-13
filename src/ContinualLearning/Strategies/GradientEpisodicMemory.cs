@@ -415,10 +415,14 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
                 throw new ArgumentException("Vectors must have the same length");
         }
 
-        var g = gradient.AsTensor();
-        var taskRows = Engine.TensorStack(_taskGradients.Select(t => t.AsTensor()).ToArray(), 0);
+        // The projection runs in double whatever T is. In Half the Gram entries g_i · g_j of
+        // unnormalized gradients overflow past 65504 (a gradient norm above 256 is enough), and the QP
+        // tolerance is far below Half's resolution, so the multipliers would be lost.
+        var g = gradient.AsTensor().Cast<double>();
+        var taskRows = Engine.TensorStack(_taskGradients.Select(t => t.AsTensor().Cast<double>()).ToArray(), 0);
+        double margin = NumOps.ToDouble(_margin);
         var dots = Engine.TensorMatMul(taskRows, g.Reshape(g.Length, 1)).Reshape(_taskGradients.Count);
-        var violations = Engine.TensorNonzero(Engine.TensorLessThan(dots, _margin)).ToArray();
+        var violations = Engine.TensorNonzero(Engine.TensorLessThan(dots, margin)).ToArray();
 
         if (violations.Length == 0)
             return gradient;
@@ -428,20 +432,20 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         var violatedIndices = new Tensor<int>(violations, new[] { numViolations });
         var violatedRows = Engine.TensorIndexSelect(taskRows, violatedIndices, 0);
         var G = Engine.TensorMatMul(violatedRows, Engine.TensorTranspose(violatedRows));
-        var a = Engine.ScalarMinusTensor(_margin, Engine.TensorIndexSelect(dots, violatedIndices, 0));
+        var a = Engine.ScalarMinusTensor(margin, Engine.TensorIndexSelect(dots, violatedIndices, 0));
 
         // Solve the dual QP exactly
         var lambda = SolveQPDual(G, a);
 
         // Compute projected gradient: g' = g + sum(lambda_k * g_k) over the multipliers above 1e-10
         var activeLambda = Engine.TensorWhere(
-            Engine.TensorGreaterThan(lambda, NumOps.FromDouble(1e-10)),
+            Engine.TensorGreaterThan(lambda, 1e-10),
             lambda,
-            new Tensor<T>(new[] { numViolations }));
+            new Tensor<double>(new[] { numViolations }));
         var correction = Engine.TensorMatMul(
             Engine.TensorTranspose(violatedRows), activeLambda.Reshape(numViolations, 1));
 
-        return Engine.TensorAdd(g, correction.Reshape(g.Length)).AsVector();
+        return Engine.TensorAdd(g, correction.Reshape(g.Length)).Cast<T>().AsVector();
     }
 
     /// <summary>
@@ -516,19 +520,19 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
     /// to the constrained optimum.
     /// </para>
     /// </remarks>
-    private Tensor<T> SolveQPDual(Tensor<T> G, Tensor<T> a)
+    private Tensor<double> SolveQPDual(Tensor<double> G, Tensor<double> a)
     {
         int n = a.Length;
 
         var quadratic = G.ToMatrix();
         var linear = Engine.TensorNegate(a).AsVector();
 
-        var program = new AiDotNet.Solvers.QuadraticProgramming.QuadraticProgram<T>(
+        var program = new AiDotNet.Solvers.QuadraticProgramming.QuadraticProgram<double>(
             quadratic,
             linear,
-            lowerBounds: Engine.Fill(n, NumOps.Zero));      // all zeros: lambda >= 0
+            lowerBounds: new Vector<double>(n));      // all zeros: lambda >= 0
 
-        var solver = new AiDotNet.Solvers.QuadraticProgramming.ActiveSetQuadraticProgramSolver<T>(
+        var solver = new AiDotNet.Solvers.QuadraticProgramming.ActiveSetQuadraticProgramSolver<double>(
             new ActiveSetQuadraticProgramSolverOptions
             {
                 MaxIterations = _maxQPIterations,
@@ -542,12 +546,12 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         if (solution.Solution is null ||
             solution.Status != AiDotNet.Solvers.LinearProgramming.LinearProgramStatus.Optimal)
         {
-            return new Tensor<T>(new[] { n });
+            return new Tensor<double>(new[] { n });
         }
 
         // Clamp away any residue on the wrong side of the bound; a negative multiplier would
         // flip the sign of that memory's contribution to the projected gradient.
-        return Engine.TensorMax(solution.Solution.AsTensor(), NumOps.Zero);
+        return Engine.TensorMax(solution.Solution.AsTensor(), 0.0);
     }
 
     #endregion

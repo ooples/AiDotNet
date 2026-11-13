@@ -216,7 +216,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             double epochViolations = 0.0;
             int batchCount = 0;
             var batchLosses = new List<T>();
-            int violatedBatches = 0;
+            var batchViolated = new List<bool>();
 
             // Shuffle indices for this epoch
             var indices = Enumerable.Range(0, numSamples)
@@ -282,10 +282,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                         totalConstraintViolations++;
                     }
                 }
-                if (violatedConstraint)
-                {
-                    violatedBatches++;
-                }
+                batchViolated.Add(violatedConstraint);
 
                 // Adjust gradients using strategy (GEM projects gradients if they violate constraints)
                 var adjustedGradients = Strategy.AdjustGradients(Model, batchGradients);
@@ -314,7 +311,7 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
             if (batchCount > 0)
             {
                 epochLoss = Engine.Mean(new Vector<T>(batchLosses));
-                epochViolations = (double)violatedBatches / batchCount;
+                epochViolations = ViolationRate(batchViolated);
             }
 
             lossHistory.Add(epochLoss);
@@ -419,4 +416,19 @@ public class GEMTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
     }
 
     #endregion
+
+    /// <summary>
+    /// The fraction of batches whose gradient violated a stored-task constraint. Counted in int: a
+    /// mean of 0/1 flags in T stops counting at 2048 in Half.
+    /// </summary>
+    internal static double ViolationRate(IReadOnlyList<bool> batchViolated)
+    {
+        if (batchViolated.Count == 0)
+        {
+            return 0.0;
+        }
+
+        int violated = batchViolated.Count(v => v);
+        return (double)violated / batchViolated.Count;
+    }
 }
