@@ -96,93 +96,102 @@ public partial class ABODDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-        int d = X.Columns;
+        var engine = Engine;
+        int n = trainingData.Rows;
+        var training = AnomalyTensorOps.ToTensor(trainingData);
+        var queries = AnomalyTensorOps.ToTensor(X);
 
+        // Pairs (A, B) of training points with A before B
+        var ones = Tensor<T>.CreateOnes(new[] { n, n });
+        var pairs = engine.TensorTranspose(engine.TensorTril(ones, -1));
+
+        // Constant tensors shared by every query
+        var constants = new AbofConstants
+        {
+            Pairs = pairs,
+            PairOnes = ones,
+            PairZeros = Tensor<T>.CreateZeros(new[] { n, n }),
+            PointOnes = Tensor<T>.CreateOnes(new[] { n }),
+            MaxValue = engine.Fill(1, NumOps.MaxValue).AsTensor(),
+            Epsilon = NumOps.FromDouble(1e-10),
+            MinusOne = NumOps.FromDouble(-1.0)
+        };
+
+        // ABOF (Angle-Based Outlier Factor) of every query point
+        var abofs = new Tensor<T>[X.Rows];
         for (int p = 0; p < X.Rows; p++)
         {
-            // Extract query point row as Vector<T> for vectorized ops
-            var pointP = new Vector<T>(X.GetRowReadOnlySpan(p).ToArray());
-
-            // Compute ABOF (Angle-Based Outlier Factor)
-            T abof = ComputeABOF(pointP, trainingData);
-
-            // ABOF is inversely related to outlierness — invert for consistent scoring
-            scores[p] = NumOps.GreaterThan(abof, NumOps.Zero)
-                ? NumOps.Divide(NumOps.One, abof)
-                : NumOps.MaxValue;
+            abofs[p] = ComputeABOF(
+                AnomalyTensorOps.SubtractRow(training, engine.TensorSliceAxis(queries, 0, p)), constants);
         }
 
-        return scores;
+        // ABOF is inversely related to outlierness — invert for consistent scoring
+        var abof = engine.TensorConcatenate(abofs, 0);
+        var positive = engine.TensorGreaterThan(abof, NumOps.Zero);
+        return engine.TensorWhere(positive,
+            engine.TensorReciprocal(engine.TensorWhere(positive, abof, Tensor<T>.CreateOnes(new[] { X.Rows }))),
+            engine.Fill(X.Rows, NumOps.MaxValue).AsTensor()).ToVector();
     }
 
-    private T ComputeABOF(Vector<T> point, Matrix<T> trainingData)
+    // ABOF of a point from the difference vectors PA = A - P to every training point A ([n, d]), over the
+    // pairs (A, B) marked in pairs ([n, n] 0/1): the variance of cos(PA, PB) weighted by 1 / (|PA|^2 |PB|^2),
+    // skipping training points closer than 1e-10. Returns a [1] tensor; MaxValue without (weighted) pairs.
+    private Tensor<T> ComputeABOF(Tensor<T> differences, AbofConstants constants)
     {
-        int n = trainingData.Rows;
-        int d = trainingData.Columns;
-        T epsilon = NumOps.FromDouble(1e-10);
+        var engine = Engine;
+        int n = differences.Shape[0];
+        var pairs = constants.Pairs;
+        T epsilon = constants.Epsilon;
+        var zeros = constants.PairZeros;
+        var maxValue = constants.MaxValue;
 
-        var weightedAngles = new List<T>();
-        var weights = new List<T>();
+        // |PA|^2 and |PA| via dot products; points at distance < epsilon do not take part
+        var normSq = engine.ReduceSum(engine.TensorSquare(differences), new[] { 1 }, false);
+        var norm = engine.TensorSqrt(normSq);
+        var valid = engine.ScalarMinusTensor(NumOps.One, engine.TensorLessThan(norm, epsilon));
+        var safeNorm = engine.TensorWhere(valid, norm, constants.PointOnes);
+        var safeNormSq = engine.TensorWhere(valid, normSq, constants.PointOnes);
+        var mask = engine.TensorMultiply(pairs, engine.TensorMultiply(
+            AnomalyTensorOps.BroadcastColumn(valid, n), AnomalyTensorOps.BroadcastRow(valid, n)));
 
-        for (int i = 0; i < n; i++)
-        {
-            // Extract row as Vector<T> and compute PA = A - P via IEngine
-            var pointA = new Vector<T>(trainingData.GetRowReadOnlySpan(i).ToArray());
-            var pa = Engine.Subtract(pointA, point);
+        // cos(angle) = (PA . PB) / (|PA| |PB|), clamped to [-1, 1]; weight = 1 / (|PA|^2 |PB|^2)
+        var dots = engine.TensorMatMul(differences, engine.TensorTranspose(differences));
+        var cosAngle = engine.TensorClamp(
+            engine.TensorDivide(dots, AnomalyTensorOps.MultiplyRow(AnomalyTensorOps.BroadcastColumn(safeNorm, n), safeNorm)),
+            constants.MinusOne, NumOps.One);
+        var weight = engine.TensorWhere(mask, engine.TensorReciprocal(
+            AnomalyTensorOps.MultiplyRow(AnomalyTensorOps.BroadcastColumn(safeNormSq, n), safeNormSq)), zeros);
+        var weightedAngles = engine.TensorWhere(mask, engine.TensorMultiply(cosAngle, weight), zeros);
 
-            // Squared norm via dot product (SIMD-accelerated)
-            T paNormSq = Engine.DotProduct(pa, pa);
-            T paNorm = NumOps.Sqrt(paNormSq);
-            if (NumOps.LessThan(paNorm, epsilon)) continue;
+        // Weighted mean and variance of the angles (angle = weighted angle / weight)
+        var pairCount = SumAll(mask);
+        var sumWeights = SumAll(weight);
+        var mean = engine.TensorDivide(SumAll(weightedAngles), sumWeights);
+        var angle = engine.TensorDivide(weightedAngles, engine.TensorWhere(mask, weight, constants.PairOnes));
+        var diff = engine.TensorSubtract(angle, engine.TensorBroadcastTo(engine.Reshape(mean, new[] { 1, 1 }), new[] { n, n }));
+        var variance = SumAll(engine.TensorWhere(mask, engine.TensorMultiply(weight, engine.TensorSquare(diff)), zeros));
 
-            for (int k = i + 1; k < n; k++)
-            {
-                var pointB = new Vector<T>(trainingData.GetRowReadOnlySpan(k).ToArray());
-                var pb = Engine.Subtract(pointB, point);
+        var abof = engine.TensorWhere(engine.TensorLessThan(sumWeights, epsilon), maxValue,
+            engine.TensorDivide(variance, sumWeights));
+        return engine.TensorWhere(engine.TensorGreaterThan(pairCount, NumOps.Zero), abof, maxValue);
+    }
 
-                T pbNormSq = Engine.DotProduct(pb, pb);
-                T pbNorm = NumOps.Sqrt(pbNormSq);
-                if (NumOps.LessThan(pbNorm, epsilon)) continue;
+    // Tensors and scalars that do not change between the queries of one scoring call.
+    private sealed class AbofConstants
+    {
+        public required Tensor<T> Pairs { get; init; }
+        public required Tensor<T> PairOnes { get; init; }
+        public required Tensor<T> PairZeros { get; init; }
+        public required Tensor<T> PointOnes { get; init; }
+        public required Tensor<T> MaxValue { get; init; }
+        public required T Epsilon { get; init; }
+        public required T MinusOne { get; init; }
+    }
 
-                // cos(angle) = (PA · PB) / (|PA| * |PB|) via vectorized dot product
-                T dot = Engine.DotProduct(pa, pb);
-                T cosAngle = NumOps.Divide(dot, NumOps.Multiply(paNorm, pbNorm));
-
-                // Clamp for numerical stability
-                T negOne = NumOps.FromDouble(-1.0);
-                if (NumOps.LessThan(cosAngle, negOne)) cosAngle = negOne;
-                if (NumOps.GreaterThan(cosAngle, NumOps.One)) cosAngle = NumOps.One;
-
-                // Weight = 1 / (|PA|² * |PB|²)
-                T weight = NumOps.Divide(NumOps.One, NumOps.Multiply(paNormSq, pbNormSq));
-
-                weightedAngles.Add(NumOps.Multiply(cosAngle, weight));
-                weights.Add(weight);
-            }
-        }
-
-        if (weights.Count == 0) return NumOps.MaxValue;
-
-        // Weighted variance of angles
-        T sumWeights = NumOps.Zero;
-        T sumWeightedAngles = NumOps.Zero;
-        foreach (var w in weights) sumWeights = NumOps.Add(sumWeights, w);
-        foreach (var wa in weightedAngles) sumWeightedAngles = NumOps.Add(sumWeightedAngles, wa);
-
-        if (NumOps.LessThan(sumWeights, epsilon)) return NumOps.MaxValue;
-
-        T mean = NumOps.Divide(sumWeightedAngles, sumWeights);
-
-        T variance = NumOps.Zero;
-        for (int i = 0; i < weightedAngles.Count; i++)
-        {
-            T angle = NumOps.Divide(weightedAngles[i], weights[i]);
-            T diff = NumOps.Subtract(angle, mean);
-            variance = NumOps.Add(variance,
-                NumOps.Multiply(weights[i], NumOps.Multiply(diff, diff)));
-        }
-
-        return NumOps.Divide(variance, sumWeights);
+    // Sum of all entries of a [n, n] tensor as a [1] tensor.
+    private Tensor<T> SumAll(Tensor<T> values)
+    {
+        var engine = Engine;
+        return engine.ReduceSum(engine.ReduceSum(values, new[] { 1 }, false), new[] { 0 }, true);
     }
 }

@@ -48,6 +48,8 @@ namespace AiDotNet.SpeechRecognition.NeMo;
                 ReferenceBatchSize = 2048,
                 LearningRate = 0.001,
                 Source = "Rekesh et al. 2023, Sec. 4.1: Fast Conformer models were trained using cosine scheduler with a 15k linear warmup, AdamW, global batch size 2048 across 32 GPUs. Peak learning rate 0.001 for CTC.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class ParakeetCTC<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

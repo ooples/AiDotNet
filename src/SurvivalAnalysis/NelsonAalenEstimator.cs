@@ -110,50 +110,29 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
             return;
         }
 
-        int numTimes = TrainedEventTimes.Length;
-        _cumulativeHazard = new Vector<T>(numTimes);
-        _variance = new Vector<T>(numTimes);
-        BaselineSurvivalFunction = new Vector<T>(numTimes);
+        var engine = AiDotNetEngine.Current;
 
-        double cumulativeH = 0;
-        double cumulativeVar = 0;
+        // Count events and at-risk at each event time
+        var (atRisk, eventsAtTime) = CountAtRiskAndEvents(times, events, TrainedEventTimes);
 
-        for (int t = 0; t < numTimes; t++)
-        {
-            T eventTime = TrainedEventTimes[t];
-            double eventTimeDouble = NumOps.ToDouble(eventTime);
+        // A time with nobody at risk adds nothing; divide by 1 there to keep 0/0 out of the sums.
+        var hasRisk = engine.TensorGreaterThan(atRisk, NumOps.Zero);
+        var safeRisk = engine.TensorWhere(hasRisk, atRisk,
+            Tensor<T>.CreateDefault(new[] { TrainedEventTimes.Length }, NumOps.One));
 
-            // Count events and at-risk at this time
-            int eventsAtTime = 0;
-            int atRisk = 0;
+        // Nelson-Aalen increment: d(t)/n(t)
+        var hazardIncrement = engine.TensorMultiply(hasRisk, engine.TensorDivide(eventsAtTime, safeRisk));
 
-            for (int i = 0; i < times.Length; i++)
-            {
-                double ti = NumOps.ToDouble(times[i]);
-                if (ti >= eventTimeDouble)
-                    atRisk++;
-                if (Math.Abs(ti - eventTimeDouble) < 1e-10 && events[i] == 1)
-                    eventsAtTime++;
-            }
+        // Variance increment: d(t)/n(t)^2, squared in T so a large cohort cannot overflow int.
+        var varianceIncrement = engine.TensorMultiply(hasRisk,
+            engine.TensorDivide(eventsAtTime, engine.TensorMultiply(safeRisk, safeRisk)));
 
-            if (atRisk > 0)
-            {
-                // Nelson-Aalen increment: d(t)/n(t)
-                double hazardIncrement = (double)eventsAtTime / atRisk;
-                cumulativeH += hazardIncrement;
+        var cumulativeHazard = engine.TensorCumSum(hazardIncrement, 0);
+        _cumulativeHazard = cumulativeHazard.ToVector();
+        _variance = engine.TensorCumSum(varianceIncrement, 0).ToVector();
 
-                // Variance increment: d(t)/n(t)^2
-                // atRisk * atRisk is squared in int and overflows for a large cohort,
-                // so the variance term flips sign rather than shrinking.
-                cumulativeVar += (double)eventsAtTime / ((double)atRisk * atRisk);
-            }
-
-            _cumulativeHazard[t] = NumOps.FromDouble(cumulativeH);
-            _variance[t] = NumOps.FromDouble(cumulativeVar);
-
-            // Survival from cumulative hazard: S(t) = exp(-H(t))
-            BaselineSurvivalFunction[t] = NumOps.FromDouble(Math.Exp(-cumulativeH));
-        }
+        // Survival from cumulative hazard: S(t) = exp(-H(t))
+        BaselineSurvivalFunction = engine.TensorExp(engine.TensorNegate(cumulativeHazard)).ToVector();
     }
 
     /// <summary>
@@ -163,20 +142,11 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
-        int numSubjects = x.Rows;
-        var result = new Matrix<T>(numSubjects, times.Length);
+        var engine = AiDotNetEngine.Current;
+        var survival = engine.TensorExp(engine.TensorNegate(CumulativeHazardAt(times)));
 
-        for (int i = 0; i < numSubjects; i++)
-        {
-            for (int t = 0; t < times.Length; t++)
-            {
-                double queryTime = NumOps.ToDouble(times[t]);
-                double cumHazard = InterpolateCumulativeHazard(queryTime);
-                result[i, t] = NumOps.FromDouble(Math.Exp(-cumHazard));
-            }
-        }
-
-        return result;
+        return engine.TensorBroadcastTo(survival.Reshape(new[] { 1, times.Length }),
+            new[] { x.Rows, times.Length }).ToMatrix();
     }
 
     /// <summary>
@@ -187,44 +157,22 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         EnsureFitted();
 
         int numSubjects = features?.Rows ?? 1;
-        var result = new Matrix<T>(numSubjects, times.Length);
 
-        for (int i = 0; i < numSubjects; i++)
-        {
-            for (int t = 0; t < times.Length; t++)
-            {
-                double queryTime = NumOps.ToDouble(times[t]);
-                double cumHazard = InterpolateCumulativeHazard(queryTime);
-                result[i, t] = NumOps.FromDouble(cumHazard);
-            }
-        }
-
-        return result;
+        return AiDotNetEngine.Current.TensorBroadcastTo(
+            CumulativeHazardAt(times).Reshape(new[] { 1, times.Length }),
+            new[] { numSubjects, times.Length }).ToMatrix();
     }
 
     /// <summary>
-    /// Interpolates cumulative hazard at a specific time.
+    /// Evaluates the cumulative hazard step function at each query time.
     /// </summary>
-    private double InterpolateCumulativeHazard(double queryTime)
+    private Tensor<T> CumulativeHazardAt(Vector<T> queryTimes)
     {
         if (TrainedEventTimes is null || _cumulativeHazard is null || TrainedEventTimes.Length == 0)
-            return 0;
+            return new Tensor<T>(new[] { queryTimes.Length });
 
-        // Find the appropriate time point
-        int idx = -1;
-        for (int i = TrainedEventTimes.Length - 1; i >= 0; i--)
-        {
-            if (NumOps.ToDouble(TrainedEventTimes[i]) <= queryTime)
-            {
-                idx = i;
-                break;
-            }
-        }
-
-        if (idx < 0)
-            return 0; // Before first event time
-
-        return NumOps.ToDouble(_cumulativeHazard[idx]);
+        // Value at the last event time <= t; 0 before the first event time
+        return EvaluateStepFunction(queryTimes, TrainedEventTimes, _cumulativeHazard, NumOps.Zero);
     }
 
     /// <summary>
@@ -232,10 +180,7 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     /// </summary>
     public override Vector<T> PredictHazardRatio(Matrix<T> x)
     {
-        var result = new Vector<T>(x.Rows);
-        for (int i = 0; i < x.Rows; i++)
-            result[i] = NumOps.One;
-        return result;
+        return Vector<T>.CreateDefault(x.Rows, NumOps.One);
     }
 
     /// <summary>
@@ -245,15 +190,9 @@ public partial class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     {
         EnsureFitted();
 
-        var result = new Vector<T>(times.Length);
-        for (int t = 0; t < times.Length; t++)
-        {
-            double queryTime = NumOps.ToDouble(times[t]);
-            double cumHazard = InterpolateCumulativeHazard(queryTime);
-            result[t] = NumOps.FromDouble(Math.Exp(-cumHazard));
-        }
+        var engine = AiDotNetEngine.Current;
 
-        return result;
+        return engine.TensorExp(engine.TensorNegate(CumulativeHazardAt(times))).ToVector();
     }
 
     /// <summary>

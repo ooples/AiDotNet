@@ -15,10 +15,10 @@ public class DeepLearningCausalDiscoveryTests
     private sealed class CastleAdjacencyHarness : CASTLEAlgorithm<double>
     {
         public Matrix<double> BuildScaleAware(double[,] learned, Matrix<double> covariance, int dimensions)
-            => BuildFinalAdjacency(learned, covariance, dimensions);
+            => BuildFinalAdjacency(Tensor<double>.FromMatrix(new Matrix<double>(learned)), covariance, dimensions);
 
         public Matrix<double> Build(double[,] learned, Matrix<double> covariance, int dimensions, double threshold)
-            => BuildFinalAdjacency(learned, covariance, dimensions, threshold);
+            => BuildFinalAdjacency(Tensor<double>.FromMatrix(new Matrix<double>(learned)), covariance, dimensions, threshold);
     }
 
     /// <summary>

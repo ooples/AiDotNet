@@ -216,13 +216,11 @@ public class GFCIAlgorithm<T> : HybridBase<T>
 
                 if (bidirected[i, j])
                 {
-                    double weight = Math.Abs(ComputeCorrelation(data, i, j));
-                    W[i, j] = NumOps.FromDouble(weight);
+                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputeCorrelation(data, i, j)));
                 }
                 else if (oriented[i, j])
                 {
-                    double weight = ComputeOLSWeight(data, i, j, n);
-                    W[i, j] = NumOps.FromDouble(weight);
+                    W[i, j] = NumOps.FromDouble(ComputeOLSWeight(data, i, j));
                 }
                 else if (!oriented[j, i] && !bidirected[j, i])
                 {
@@ -250,106 +248,21 @@ public class GFCIAlgorithm<T> : HybridBase<T>
     {
         if (condSet.Count == 0) return ComputeCorrelation(data, i, j);
 
-        int p = condSet.Count;
+        // Residualize i and j on all conditioning variables at once (multivariate OLS on centered
+        // columns, ridge 1e-10) to avoid order-dependent sequential residualization.
+        var x = Tensor<T>.FromMatrix(data);
+        int[] predictors = condSet.ToArray();
+        var (_, residI) = FitCenteredRegression(x, i, predictors);
+        var (_, residJ) = FitCenteredRegression(x, j, predictors);
 
-        // Build all residuals simultaneously using multivariate OLS
-        // to avoid order-dependent sequential residualization
-        double meanI = 0, meanJ = 0;
-        for (int k = 0; k < n; k++)
-        {
-            meanI += NumOps.ToDouble(data[k, i]);
-            meanJ += NumOps.ToDouble(data[k, j]);
-        }
-        meanI /= n; meanJ /= n;
-
-        // Compute conditioning variable means
-        var condMeans = new double[p];
-        for (int ci = 0; ci < p; ci++)
-        {
-            for (int k = 0; k < n; k++)
-                condMeans[ci] += NumOps.ToDouble(data[k, condSet[ci]]);
-            condMeans[ci] /= n;
-        }
-
-        // Build normal equations: X'X (p x p) and X'y for both i and j
-        var XtX = new double[p, p];
-        var XtI = new double[p];
-        var XtJ = new double[p];
-
-        for (int k = 0; k < n; k++)
-        {
-            var dx = new double[p];
-            for (int ci = 0; ci < p; ci++)
-                dx[ci] = NumOps.ToDouble(data[k, condSet[ci]]) - condMeans[ci];
-            double di = NumOps.ToDouble(data[k, i]) - meanI;
-            double dj = NumOps.ToDouble(data[k, j]) - meanJ;
-
-            for (int a = 0; a < p; a++)
-            {
-                XtI[a] += dx[a] * di;
-                XtJ[a] += dx[a] * dj;
-                for (int b = a; b < p; b++)
-                    XtX[a, b] += dx[a] * dx[b];
-            }
-        }
-        for (int a = 0; a < p; a++)
-        {
-            XtX[a, a] += 1e-10; // Ridge
-            for (int b = a + 1; b < p; b++)
-                XtX[b, a] = XtX[a, b];
-        }
-
-        // Solve for coefficients via Gaussian elimination
-        var betaI = SolveSmallSystem(XtX, XtI, p);
-        var betaJ = SolveSmallSystem(XtX, XtJ, p);
-
-        // Compute residuals
-        var residI = new double[n];
-        var residJ = new double[n];
-        for (int k = 0; k < n; k++)
-        {
-            residI[k] = NumOps.ToDouble(data[k, i]) - meanI;
-            residJ[k] = NumOps.ToDouble(data[k, j]) - meanJ;
-            for (int ci = 0; ci < p; ci++)
-            {
-                double dc = NumOps.ToDouble(data[k, condSet[ci]]) - condMeans[ci];
-                residI[k] -= betaI[ci] * dc;
-                residJ[k] -= betaJ[ci] * dc;
-            }
-        }
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int k = 0; k < n; k++)
-        {
-            sxy += residI[k] * residJ[k];
-            sxx += residI[k] * residI[k];
-            syy += residJ[k] * residJ[k];
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.UncenteredCorrelation(residI, residJ));
     }
 
     // SolveSmallSystem is inherited from CausalDiscoveryBase<T>
 
-    private double ComputeOLSWeight(Matrix<T> data, int parent, int child, int n)
+    private double ComputeOLSWeight(Matrix<T> data, int parent, int child)
     {
-        double meanP = 0, meanC = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanP += NumOps.ToDouble(data[i, parent]);
-            meanC += NumOps.ToDouble(data[i, child]);
-        }
-        meanP /= n; meanC /= n;
-
-        double cov = 0, varP = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dp = NumOps.ToDouble(data[i, parent]) - meanP;
-            cov += dp * (NumOps.ToDouble(data[i, child]) - meanC);
-            varP += dp * dp;
-        }
-
-        return varP > 1e-10 ? cov / varP : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.RegressionSlope(data, parent, child));
     }
 
     private static IEnumerable<List<int>> GetCombinations(List<int> items, int size)

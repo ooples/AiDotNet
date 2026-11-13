@@ -211,8 +211,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
             var xWithInt = x.AddConstantColumn(NumOps.One);
             var xTx = xWithInt.Transpose().Multiply(xWithInt);
             var xTy = xWithInt.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            xTx = AddToDiagonal(xTx, NumOps.FromDouble(1e-10));
             var solution = SolveSystem(xTx, xTy);
             Intercept = solution[0];
             Coefficients = solution.Slice(1, x.Columns);
@@ -221,8 +220,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
         {
             var xTx = x.Transpose().Multiply(x);
             var xTy = x.Transpose().Multiply(y);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            xTx = AddToDiagonal(xTx, NumOps.FromDouble(1e-10));
             Coefficients = SolveSystem(xTx, xTy);
         }
     }
@@ -233,6 +231,24 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// <param name="x">The feature matrix.</param>
     /// <param name="y">The target vector.</param>
     /// <exception cref="ArgumentException">Thrown when the number of rows in x doesn't match the length of y.</exception>
+    /// <summary>
+    /// Returns <paramref name="matrix"/> + <paramref name="value"/> * I.
+    /// </summary>
+    private Matrix<T> AddToDiagonal(Matrix<T> matrix, T value)
+    {
+        return Engine.MatrixAdd(matrix, Matrix<T>.CreateDiagonal(Engine.Fill(matrix.Rows, value)));
+    }
+
+    /// <summary>
+    /// Divides every column j of <paramref name="matrix"/> by <paramref name="scales"/>[j].
+    /// </summary>
+    private Matrix<T> DivideColumns(Matrix<T> matrix, Vector<T> scales)
+    {
+        var broadcastScales = Engine.TensorBroadcastTo(
+            new Tensor<T>(new[] { 1, scales.Length }, scales), new[] { matrix.Rows, matrix.Columns });
+        return Engine.TensorDivide(Tensor<T>.FromMatrix(matrix), broadcastScales).ToMatrix();
+    }
+
     private void ValidateInputs(Matrix<T> x, Vector<T> y)
     {
         if (x.Rows != y.Length)
@@ -262,8 +278,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
         Matrix<T> basisFunctions = new Matrix<T>(x.Rows, numBasisFunctions);
 
         // First column is the intercept (all 1s)
-        for (int i = 0; i < x.Rows; i++)
-            basisFunctions[i, 0] = NumOps.One;
+        basisFunctions.SetColumn(0, Engine.Fill(x.Rows, NumOps.One));
 
         if (storeFittedKnots)
         {
@@ -291,10 +306,12 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
                 knots = _trainingKnots[i];
             }
 
-            for (int j = 0; j < _options.NumSplines; j++)
+            int j = 0;
+            foreach (var knot in knots.Take(_options.NumSplines))
             {
-                Vector<T> spline = CreateSpline(feature, knots[j], _options.Degree);
+                Vector<T> spline = CreateSpline(feature, knot, _options.Degree);
                 basisFunctions.SetColumn(1 + i * _options.NumSplines + j, spline);
+                j++;
             }
         }
 
@@ -310,7 +327,8 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
     {
         Vector<T> sortedFeature = new Vector<T>(feature.OrderBy(v => v));
         int step = sortedFeature.Length / (_options.NumSplines + 1);
-        return new Vector<T>([.. Enumerable.Range(1, _options.NumSplines).Select(i => sortedFeature[i * step])]);
+        var knotPositions = Enumerable.Range(1, _options.NumSplines).Select(i => i * step).ToArray();
+        return RegressionEngineOps.Gather(sortedFeature, knotPositions);
     }
 
     /// <summary>
@@ -322,22 +340,13 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// <returns>A vector of spline function values.</returns>
     private Vector<T> CreateSpline(Vector<T> feature, T knot, int degree)
     {
-        return new Vector<T>(feature.Select(x => SplineFunction(x, knot, degree)));
-    }
-
-    /// <summary>
-    /// Computes the spline function value for a given input, knot, and degree.
-    /// </summary>
-    /// <param name="x">The input value.</param>
-    /// <param name="knot">The knot point.</param>
-    /// <param name="degree">The degree of the spline.</param>
-    /// <returns>The spline function value.</returns>
-    private T SplineFunction(T x, T knot, int degree)
-    {
-        T diff = NumOps.Subtract(x, knot);
-        return NumOps.GreaterThan(diff, NumOps.Zero)
-            ? NumOps.Power(diff, NumOps.FromDouble(degree))
-            : NumOps.Zero;
+        // Truncated power basis: (x - knot)^degree where x > knot, else 0
+        var diff = Engine.Subtract(feature, Engine.Fill(feature.Length, knot));
+        var diffTensor = Tensor<T>.FromVector(diff);
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(diffTensor, NumOps.Zero),
+            Engine.TensorPower(diffTensor, NumOps.FromDouble(degree)),
+            Tensor<T>.FromVector(Engine.FillZero<T>(feature.Length))).ToVector();
     }
 
     /// <summary>
@@ -350,27 +359,23 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
         // Truncated power splines produce values like (x-knot)^3 which vary enormously
         int n = _basisFunctions.Rows;
         int p = _basisFunctions.Columns;
-        _basisScales = new Vector<T>(p);
-        for (int j = 0; j < p; j++)
-        {
-            T sumSq = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(_basisFunctions[i, j], _basisFunctions[i, j]));
-            T scale = NumOps.Sqrt(NumOps.Divide(sumSq, NumOps.FromDouble(n)));
-            if (NumOps.LessThan(scale, NumOps.FromDouble(1e-10)))
-                scale = NumOps.One;
-            _basisScales[j] = scale;
-            for (int i = 0; i < n; i++)
-                _basisFunctions[i, j] = NumOps.Divide(_basisFunctions[i, j], scale);
-        }
+        // Column RMS, with near-zero scales replaced by 1
+        var sumSq = Engine.ReduceSum(
+            Engine.TensorSquare(Tensor<T>.FromMatrix(_basisFunctions)), new[] { 0 }, keepDims: false).ToVector();
+        var scales = Engine.Sqrt(Engine.Divide(sumSq, NumOps.FromDouble(n)));
+        var scaleTensor = Tensor<T>.FromVector(scales);
+        _basisScales = Engine.TensorWhere(
+            Engine.TensorLessThan(scaleTensor, NumOps.FromDouble(1e-10)),
+            Tensor<T>.FromVector(Engine.Fill(p, NumOps.One)),
+            scaleTensor).ToVector();
+        _basisFunctions = DivideColumns(_basisFunctions, _basisScales);
 
         Matrix<T> xTx = _basisFunctions.Transpose().Multiply(_basisFunctions);
         var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
 
         // Add small ridge penalty for additional stability with ill-conditioned spline bases
         T ridgePenalty = NumOps.FromDouble(0.001);
-        for (int i = 0; i < regularizedXTx.Rows; i++)
-            regularizedXTx[i, i] = NumOps.Add(regularizedXTx[i, i], ridgePenalty);
+        regularizedXTx = AddToDiagonal(regularizedXTx, ridgePenalty);
 
         Vector<T> xTy = _basisFunctions.Transpose().Multiply(y);
 
@@ -417,13 +422,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
         // Apply the same scaling used during training
         if (_basisScales.Length == inputBasisFunctions.Columns)
         {
-            for (int j = 0; j < inputBasisFunctions.Columns; j++)
-            {
-                for (int i = 0; i < inputBasisFunctions.Rows; i++)
-                {
-                    inputBasisFunctions[i, j] = NumOps.Divide(inputBasisFunctions[i, j], _basisScales[j]);
-                }
-            }
+            inputBasisFunctions = DivideColumns(inputBasisFunctions, _basisScales);
         }
 
         return inputBasisFunctions.Multiply(_coefficients);
@@ -487,18 +486,15 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
     protected override Vector<T> CalculateFeatureImportances()
     {
         int numFeatures = _basisFunctions.Columns / _options.NumSplines;
-        Vector<T> importances = new Vector<T>(numFeatures);
-
-        for (int i = 0; i < numFeatures; i++)
+        if (numFeatures <= 0)
         {
-            T importance = NumOps.Zero;
-            for (int j = 0; j < _options.NumSplines; j++)
-            {
-                importance = NumOps.Add(importance, NumOps.Abs(_coefficients[i * _options.NumSplines + j]));
-            }
-            importances[i] = importance;
+            return new Vector<T>(Math.Max(0, numFeatures));
         }
 
-        return importances;
+        // importance_i = sum_j |coefficient[i * NumSplines + j]| over each feature's block of splines
+        int span = numFeatures * _options.NumSplines;
+        var absCoefficients = Engine.Abs(_coefficients.GetSubVector(0, span));
+        return Engine.ReduceSum(
+            new Tensor<T>(new[] { numFeatures, _options.NumSplines }, absCoefficients), new[] { 1 }, keepDims: false).ToVector();
     }
 }

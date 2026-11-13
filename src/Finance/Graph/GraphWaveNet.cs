@@ -108,11 +108,16 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     #endregion
 
     #region Graph Fields
-    private double[,]? _nodeEmbedding1;
-    private double[,]? _nodeEmbedding2;
-    private double[,]? _adaptiveAdjacency;
-    private readonly double[,]? _predefinedAdjacency;
-    private readonly double[,]? _predefinedAdjacencyTranspose;
+    /// <summary>Node embedding E1, trained through the adaptive adjacency.</summary>
+    [TrainableParameter]
+    private Tensor<T>? _nodeEmbedding1;
+    /// <summary>Node embedding E2, trained through the adaptive adjacency.</summary>
+    [TrainableParameter]
+    private Tensor<T>? _nodeEmbedding2;
+    // Not readonly: a checkpoint restore replaces the graph (and what is derived from it) rather than
+    // copying into a constructor-built tensor that may be absent or shaped for a different NumNodes.
+    private Tensor<T>? _predefinedAdjacency;
+    private Tensor<T>? _predefinedAdjacencyTranspose;
     private readonly Random _random;
     #endregion
 
@@ -223,7 +228,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// strongly each node influences others.
     /// </para>
     /// </remarks>
-    public double[,]? LearnedAdjacency => _adaptiveAdjacency is not null ? (double[,])_adaptiveAdjacency.Clone() : null;
+    public Tensor<T>? LearnedAdjacency => CurrentAdaptiveAdjacency();
 
     #endregion
 
@@ -233,6 +238,8 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// Initializes a new instance of the GraphWaveNet model in ONNX mode for inference.
     /// </summary>
     /// <remarks>
+    /// <para>Every parameter is required: an ONNX model is inference-only, so it takes no optimizer or loss
+    /// function, and the native constructor is the one overload with optional parameters.</para>
     /// <para>
     /// <b>For Beginners:</b> In the GraphWaveNet model, GraphWaveNet sets up the architecture and options. This prepares the model for training or inference.
     /// </para>
@@ -240,11 +247,9 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     public GraphWaveNet(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        GraphWaveNetOptions<T>? options = null,
-        double[,]? predefinedAdjacency = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        GraphWaveNetOptions<T>? options,
+        Tensor<T>? predefinedAdjacency)
+        : base(architecture, new MeanSquaredErrorLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -256,9 +261,8 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new GraphWaveNetOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+        _lossFunction = new MeanSquaredErrorLoss<T>();
+        _optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
@@ -277,9 +281,9 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         _useAdaptiveGraph = _options.UseAdaptiveGraph;
         _usePredefinedGraph = _options.UsePredefinedGraph;
 
-        GraphAdjacency.RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
+        RequireAdjacencyNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
         _predefinedAdjacency = predefinedAdjacency;
-        _predefinedAdjacencyTranspose = predefinedAdjacency is not null ? TransposeMatrix(predefinedAdjacency) : null;
+        _predefinedAdjacencyTranspose = predefinedAdjacency is not null ? Engine.TensorTranspose(predefinedAdjacency).Contiguous() : null;
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         if (_useAdaptiveGraph)
@@ -297,7 +301,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     public GraphWaveNet(
         NeuralNetworkArchitecture<T> architecture,
         GraphWaveNetOptions<T>? options = null,
-        double[,]? predefinedAdjacency = null,
+        Tensor<T>? predefinedAdjacency = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -326,9 +330,9 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         _useAdaptiveGraph = _options.UseAdaptiveGraph;
         _usePredefinedGraph = _options.UsePredefinedGraph;
 
-        GraphAdjacency.RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
-        _predefinedAdjacency = predefinedAdjacency ?? CreateDefaultAdjacencyMatrix(_numNodes);
-        _predefinedAdjacencyTranspose = TransposeMatrix(_predefinedAdjacency);
+        RequireAdjacencyNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
+        _predefinedAdjacency = predefinedAdjacency ?? ProximityAdjacency(_numNodes, rowNormalize: true);
+        _predefinedAdjacencyTranspose = Engine.TensorTranspose(_predefinedAdjacency).Contiguous();
         _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         if (_useAdaptiveGraph)
@@ -351,129 +355,36 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private void InitializeNodeEmbeddings()
     {
-        _nodeEmbedding1 = new double[_numNodes, _nodeEmbeddingDim];
-        _nodeEmbedding2 = new double[_numNodes, _nodeEmbeddingDim];
-
+        // Uniform on [-scale, scale], as master's (u - 0.5) * 2 * scale draws were, sampled by the engine in T.
+        // Each embedding's stream is seeded from the model's Random, so a fixed Seed reproduces both.
         double scale = Math.Sqrt(2.0 / (_numNodes + _nodeEmbeddingDim));
-        for (int i = 0; i < _numNodes; i++)
-        {
-            for (int j = 0; j < _nodeEmbeddingDim; j++)
-            {
-                _nodeEmbedding1[i, j] = (_random.NextDouble() - 0.5) * 2 * scale;
-                _nodeEmbedding2[i, j] = (_random.NextDouble() - 0.5) * 2 * scale;
-            }
-        }
-
-        UpdateAdaptiveAdjacency();
+        var shape = new[] { _numNodes, _nodeEmbeddingDim };
+        T low = NumOps.FromDouble(-scale);
+        T high = NumOps.FromDouble(scale);
+        _nodeEmbedding1 = Engine.TensorRandomUniformRange(shape, low, high, _random.Next());
+        _nodeEmbedding2 = Engine.TensorRandomUniformRange(shape, low, high, _random.Next());
     }
 
     /// <summary>
-    /// Updates the adaptive adjacency matrix from current node embeddings.
+    /// The learned graph built from the current node embeddings, as a detached constant, or null when the model
+    /// has no embeddings. Computed on demand so it always reflects the embeddings, including after the
+    /// parameters are restored or copied into a clone.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, UpdateAdaptiveAdjacency updates internal parameters or state. This keeps the GraphWaveNet architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    private void UpdateAdaptiveAdjacency()
+    private Tensor<T>? CurrentAdaptiveAdjacency()
     {
         if (_nodeEmbedding1 is null || _nodeEmbedding2 is null)
-            return;
+            return null;
 
-        _adaptiveAdjacency = new double[_numNodes, _numNodes];
-        var rawScores = new double[_numNodes, _numNodes];
-
-        // Compute E1 * E2^T
-        for (int i = 0; i < _numNodes; i++)
-        {
-            for (int j = 0; j < _numNodes; j++)
-            {
-                double score = 0;
-                for (int k = 0; k < _nodeEmbeddingDim; k++)
-                {
-                    score += _nodeEmbedding1[i, k] * _nodeEmbedding2[j, k];
-                }
-                rawScores[i, j] = Math.Max(0, score); // ReLU
-            }
-        }
-
-        // Apply row-wise softmax
-        for (int i = 0; i < _numNodes; i++)
-        {
-            double maxVal = double.NegativeInfinity;
-            for (int j = 0; j < _numNodes; j++)
-                maxVal = Math.Max(maxVal, rawScores[i, j]);
-
-            double sumExp = 0;
-            for (int j = 0; j < _numNodes; j++)
-            {
-                _adaptiveAdjacency[i, j] = Math.Exp(rawScores[i, j] - maxVal);
-                sumExp += _adaptiveAdjacency[i, j];
-            }
-
-            for (int j = 0; j < _numNodes; j++)
-                _adaptiveAdjacency[i, j] /= sumExp;
-        }
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2);
     }
 
     /// <summary>
-    /// Creates a default adjacency matrix with proximity-based connections.
+    /// softmax(ReLU(E1 E2^T)) over each row (Wu et al. 2019). Built from engine ops only, so under the
+    /// gradient tape the node embeddings receive gradients.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, CreateDefaultAdjacencyMatrix builds and wires up model components. This sets up the GraphWaveNet architecture before use.
-    /// </para>
-    /// </remarks>
-    private double[,] CreateDefaultAdjacencyMatrix(int numNodes)
-    {
-        var adj = new double[numNodes, numNodes];
-
-        for (int i = 0; i < numNodes; i++)
-        {
-            adj[i, i] = 1.0;
-            int range = Math.Max(1, numNodes / 10);
-            for (int j = Math.Max(0, i - range); j <= Math.Min(numNodes - 1, i + range); j++)
-            {
-                if (i != j)
-                {
-                    double distance = Math.Abs(i - j);
-                    adj[i, j] = Math.Exp(-distance / range);
-                }
-            }
-        }
-
-        // Row-normalize
-        for (int i = 0; i < numNodes; i++)
-        {
-            double rowSum = 0;
-            for (int j = 0; j < numNodes; j++)
-                rowSum += adj[i, j];
-            if (rowSum > 0)
-                for (int j = 0; j < numNodes; j++)
-                    adj[i, j] /= rowSum;
-        }
-
-        return adj;
-    }
-
-    /// <summary>
-    /// Transposes a matrix.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, TransposeMatrix performs a supporting step in the workflow. It keeps the GraphWaveNet architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private double[,] TransposeMatrix(double[,] matrix)
-    {
-        int rows = matrix.GetLength(0);
-        int cols = matrix.GetLength(1);
-        var transposed = new double[cols, rows];
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                transposed[j, i] = matrix[i, j];
-        return transposed;
-    }
+    private Tensor<T> ComputeAdaptiveAdjacency(Tensor<T> embedding1, Tensor<T> embedding2)
+        => Engine.TensorSoftmax(Engine.TensorReLU(Engine.TensorMatMul(embedding1, Engine.TensorTranspose(embedding2))), 1);
 
     /// <summary>
     /// Initializes all layers for the GraphWaveNet model.
@@ -562,15 +473,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>After a step, the adaptive graph is refreshed from the node embeddings.</remarks>
-    protected override void OnTrainingStepEnded(bool succeeded)
-    {
-        if (!succeeded || !_useAdaptiveGraph) return;
-        var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
-        UpdateNodeEmbeddingsFromGradient(lossVec);
-        UpdateAdaptiveAdjacency();
-    }
     /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so
     /// dropout and the adaptive-graph conv stay in training mode under
@@ -581,40 +483,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     {
         return Forward(input);
     }
-
-    /// <summary>
-    /// Updates node embeddings based on loss gradient.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, UpdateNodeEmbeddingsFromGradient updates internal parameters or state. This keeps the GraphWaveNet architecture aligned with the latest values.
-    /// </para>
-    /// </remarks>
-    private void UpdateNodeEmbeddingsFromGradient(Vector<T> gradient)
-    {
-        if (_nodeEmbedding1 is null || _nodeEmbedding2 is null)
-            return;
-
-        double lr = 0.001;
-        double gradNorm = 0;
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            double val = NumOps.ToDouble(gradient[i]);
-            gradNorm += val * val;
-        }
-        gradNorm = Math.Sqrt(gradNorm + 1e-8);
-
-        for (int i = 0; i < _numNodes; i++)
-        {
-            for (int j = 0; j < _nodeEmbeddingDim; j++)
-            {
-                double noise = (_random.NextDouble() - 0.5) * lr / gradNorm;
-                _nodeEmbedding1[i, j] += noise;
-                _nodeEmbedding2[i, j] += noise;
-            }
-        }
-    }
-
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
     /// <summary>
@@ -736,16 +604,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = Math.Min(predictions.Data.Length, actuals.Data.Length);
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], actuals.Data.Span[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -843,8 +702,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
             totalSize *= dim;
 
         var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-            flattened.Data.Span[i] = input.Data.Span[i];
+        input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
     }
@@ -866,16 +724,18 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
             return nodeFeatures;
 
         // Collect the graph supports (constant, non-trainable adjacency matrices).
-        var supports = new List<double[,]>();
+        var supports = new List<Tensor<T>>();
         if (_usePredefinedGraph && _predefinedAdjacency is not null)
         {
             supports.Add(_predefinedAdjacency);
             if (_predefinedAdjacencyTranspose is not null)
                 supports.Add(_predefinedAdjacencyTranspose);
         }
-        if (_useAdaptiveGraph && _adaptiveAdjacency is not null)
+        if (_useAdaptiveGraph && _nodeEmbedding1 is not null && _nodeEmbedding2 is not null)
         {
-            supports.Add(_adaptiveAdjacency);
+            // Rebuilt from the embeddings on every call: under the training tape the embeddings get gradients,
+            // and at inference it equals the cached LearnedAdjacency.
+            supports.Add(ComputeAdaptiveAdjacency(_nodeEmbedding1, _nodeEmbedding2));
         }
 
         // Reshape features to [numNodes, featuresPerNode] via the tape-aware
@@ -891,7 +751,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         var result = xMat;
         foreach (var support in supports)
         {
-            var supportTensor = BuildConstantMatrix(support);  // [numNodes, numNodes]
+            var supportTensor = Engine.Reshape(support.Contiguous(), new[] { _numNodes, _numNodes });
             var currentPower = xMat;
             for (int k = 0; k < _diffusionSteps; k++)
             {
@@ -904,21 +764,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
 
         return Engine.Reshape(result, nodeFeatures._shape);
     }
-
-    /// <summary>
-    /// Builds a constant (non-trainable) <see cref="Tensor{T}"/> from a graph
-    /// support matrix so it can participate in tape-aware matmuls without being
-    /// treated as a learnable parameter.
-    /// </summary>
-    private Tensor<T> BuildConstantMatrix(double[,] matrix)
-    {
-        var data = new T[_numNodes * _numNodes];
-        for (int i = 0; i < _numNodes; i++)
-            for (int j = 0; j < _numNodes; j++)
-                data[i * _numNodes + j] = NumOps.FromDouble(matrix[i, j]);
-        return new Tensor<T>(new[] { _numNodes, _numNodes }, new Vector<T>(data));
-    }
-
     #endregion
 
     #region Forecasting Methods
@@ -952,8 +797,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
 
         var flatInput = FlattenInput(input);
         var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(flatInput.Data.Span[i]));
+        NumOps.ToFloatSpan(flatInput.Data.Span.Slice(0, flatInput.Data.Length), inputData.AsSpan(0, flatInput.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(inputData,
             new[] { 1, _numNodes, _sequenceLength, _numFeatures });
@@ -964,8 +808,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(new[] { _numNodes * _forecastHorizon }, new Vector<T>(outputData));
     }
@@ -1024,30 +867,22 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
-        var inputVec = input.ToVector();
-        var predVec = prediction.ToVector();
-        // Use actual input size, not calculated expected size
-        int inputSize = inputVec.Length;
+        // [input after the first shiftSize values | leading predictions | zeros], detached.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int inputSize = input.Length;
         int shiftSize = Math.Min(_numNodes * _numFeatures, inputSize);
-        var shifted = new T[inputSize];
-
-        // Copy shifted values from input (avoiding index out of range)
         int copyLen = Math.Max(0, inputSize - shiftSize);
-        for (int i = 0; i < copyLen; i++)
-        {
-            int srcIdx = i + shiftSize;
-            if (srcIdx < inputVec.Length)
-                shifted[i] = inputVec[srcIdx];
-        }
-        // Fill end with prediction values
-        for (int i = 0; i < Math.Min(shiftSize, predVec.Length); i++)
-        {
-            int dstIdx = inputSize - shiftSize + i;
-            if (dstIdx >= 0 && dstIdx < inputSize)
-                shifted[dstIdx] = predVec[i];
-        }
-
-        return new Tensor<T>(new[] { inputSize }, new Vector<T>(shifted));
+        int fill = Math.Max(0, Math.Min(shiftSize, prediction.Length));
+        var parts = new List<Tensor<T>>(3);
+        if (copyLen > 0)
+            parts.Add(Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { inputSize }), 0, inputSize - copyLen, copyLen));
+        if (fill > 0)
+            parts.Add(Engine.TensorNarrow(Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length }), 0, 0, fill));
+        if (inputSize - copyLen - fill > 0)
+            parts.Add(new Tensor<T>(new[] { inputSize - copyLen - fill }));
+        if (parts.Count == 0)
+            return new Tensor<T>(new[] { inputSize });
+        return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.Select(p => p.Contiguous()).ToArray(), 0);
     }
 
     /// <summary>
@@ -1089,19 +924,38 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 0 });
 
         int len = samples[0].ToVector().Length;
-        var result = new T[len * quantiles.Length];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        for (int pos = 0; pos < len; pos++)
+        // One row per sample, sorted down each position; quantile q reads row (int)(q * (n - 1)).
+        var rows = new Tensor<T>[samples.Count];
+        for (int s = 0; s < samples.Count; s++)
+            rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s], new[] { samples[s].Length }), 0, 0, len);
+        var grid = Engine.TensorStack(rows, 0);
+
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) > 0)
         {
-            var values = samples.Select(s => NumOps.ToDouble(s.ToVector()[pos])).OrderBy(v => v).ToList();
-            for (int q = 0; q < quantiles.Length; q++)
+            // NaN sorts first under the default double comparer; keep that exact ordering.
+            var result = new T[len * quantiles.Length];
+            for (int pos = 0; pos < len; pos++)
             {
-                int idx = (int)(quantiles[q] * (values.Count - 1));
-                result[q * len + pos] = NumOps.FromDouble(values[idx]);
+                var values = samples.Select(s => NumOps.ToDouble(s.ToVector()[pos])).OrderBy(v => v).ToList();
+
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    int idx = (int)(quantiles[q] * (values.Count - 1));
+                    result[q * len + pos] = NumOps.FromDouble(values[idx]);
+                }
             }
+
+            return new Tensor<T>(new[] { quantiles.Length, len }, new Vector<T>(result));
         }
 
-        return new Tensor<T>(new[] { quantiles.Length, len }, new Vector<T>(result));
+        var sorted = Engine.TensorSort(grid, 0, false).Values;
+        var picks = new int[quantiles.Length];
+        for (int q = 0; q < quantiles.Length; q++)
+            picks[q] = (int)(quantiles[q] * (samples.Count - 1));
+
+        return Engine.TensorIndexSelect(sorted, new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks)), 0);
     }
 
     /// <summary>
@@ -1122,21 +976,13 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         var resultVec = quantileResult.ToVector();
 
         int len = samples[0].ToVector().Length;
-        var lowerVec = new T[len];
-        var medianVec = new T[len];
-        var upperVec = new T[len];
+        var flat = Tensor<T>.FromVector(resultVec);
 
-        for (int i = 0; i < len; i++)
-        {
-            lowerVec[i] = resultVec[i];
-            medianVec[i] = resultVec[len + i];
-            upperVec[i] = resultVec[2 * len + i];
-        }
-
+        // Rows 0, 1 and 2 of the [quantiles, len] block are the lower, median and upper bounds.
         return (
-            new Tensor<T>(new[] { len }, new Vector<T>(medianVec)),
-            new Tensor<T>(new[] { len }, new Vector<T>(lowerVec)),
-            new Tensor<T>(new[] { len }, new Vector<T>(upperVec))
+            Engine.TensorNarrow(flat, 0, len, len).Contiguous(),
+            Engine.TensorNarrow(flat, 0, 0, len).Contiguous(),
+            Engine.TensorNarrow(flat, 0, 2 * len, len).Contiguous()
         );
     }
 

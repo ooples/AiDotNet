@@ -95,40 +95,11 @@ public partial class BayesianDetector<T> : AnomalyDetectorBase<T>
         _nFeatures = X.Columns;
         T nT = NumOps.FromDouble(n);
 
-        // Compute sample mean
-        var sampleMean = new Vector<T>(_nFeatures);
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, X[i, j]);
-            }
-            sampleMean[j] = NumOps.Divide(sum, nT);
-        }
-
-        // Compute sample covariance
-        var sampleCov = new Matrix<T>(_nFeatures, _nFeatures);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j1 = 0; j1 < _nFeatures; j1++)
-            {
-                T diff1 = NumOps.Subtract(X[i, j1], sampleMean[j1]);
-                for (int j2 = 0; j2 < _nFeatures; j2++)
-                {
-                    T diff2 = NumOps.Subtract(X[i, j2], sampleMean[j2]);
-                    sampleCov[j1, j2] = NumOps.Add(sampleCov[j1, j2], NumOps.Multiply(diff1, diff2));
-                }
-            }
-        }
-
-        for (int j1 = 0; j1 < _nFeatures; j1++)
-        {
-            for (int j2 = 0; j2 < _nFeatures; j2++)
-            {
-                sampleCov[j1, j2] = NumOps.Divide(sampleCov[j1, j2], nT);
-            }
-        }
+        // Compute sample mean and (population) sample covariance
+        var engine = Engine;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var sampleMean = engine.ReduceMean(data, new[] { 0 }, false);
+        var sampleCov = AnomalyTensorOps.Covariance(AnomalyTensorOps.SubtractRow(data, sampleMean), nT);
 
         // Prior parameters (vague/weakly informative)
         T kappa0 = NumOps.FromDouble(_priorStrength);
@@ -138,39 +109,23 @@ public partial class BayesianDetector<T> : AnomalyDetectorBase<T>
         T kappaN = NumOps.Add(kappa0, nT);
         T nuN = NumOps.Add(nu0, nT);
 
-        // Posterior mean
-        _posteriorMean = new Vector<T>(_nFeatures);
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            _posteriorMean[j] = NumOps.Divide(
-                NumOps.Add(NumOps.Multiply(kappa0, sampleMean[j]), NumOps.Multiply(nT, sampleMean[j])),
-                kappaN);
-        }
+        // Posterior mean (kappa0 * mean + n * mean) / kappaN
+        _posteriorMean = engine.TensorDivideScalar(engine.TensorAdd(
+            engine.TensorMultiplyScalar(sampleMean, kappa0), engine.TensorMultiplyScalar(sampleMean, nT)), kappaN).ToVector();
 
-        // Posterior covariance (for predictive distribution)
-        _posteriorCovariance = new Matrix<T>(_nFeatures, _nFeatures);
+        // Posterior covariance (for predictive distribution), regularized on the diagonal
         T scale = NumOps.Divide(
             NumOps.Add(kappaN, NumOps.One),
             NumOps.Multiply(kappaN, NumOps.Subtract(nuN, NumOps.FromDouble(_nFeatures - 1))));
-        T regularization = NumOps.FromDouble(1e-6);
-
-        for (int j1 = 0; j1 < _nFeatures; j1++)
-        {
-            for (int j2 = 0; j2 < _nFeatures; j2++)
-            {
-                _posteriorCovariance[j1, j2] = NumOps.Multiply(scale, sampleCov[j1, j2]);
-                if (j1 == j2)
-                {
-                    _posteriorCovariance[j1, j2] = NumOps.Add(_posteriorCovariance[j1, j2], regularization);
-                }
-            }
-        }
+        var posteriorCovariance = engine.TensorAdd(engine.TensorMultiplyScalar(sampleCov, scale),
+            AnomalyTensorOps.ScaledIdentity(_nFeatures, NumOps.FromDouble(1e-6)));
+        _posteriorCovariance = posteriorCovariance.ToMatrix();
 
         // Compute precision (inverse covariance)
-        _posteriorPrecision = InvertMatrix(_posteriorCovariance);
+        _posteriorPrecision = LinalgDispatch<T>.Inv(posteriorCovariance).ToMatrix();
 
         // Compute log normalization for MVN
-        T logDet = LogDeterminant(_posteriorCovariance);
+        T logDet = LogDeterminant(posteriorCovariance);
         T half = NumOps.FromDouble(0.5);
         _logNormalization = NumOps.Negate(NumOps.Multiply(half,
             NumOps.Add(NumOps.FromDouble(_nFeatures * Math.Log(2 * Math.PI)), logDet)));
@@ -182,131 +137,19 @@ public partial class BayesianDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private Matrix<T> InvertMatrix(Matrix<T> matrix)
+    // log|det| from the LU pivots (partial pivoting); -1e30 (approximately negative infinity) when a pivot
+    // is below 1e-10 in magnitude.
+    private T LogDeterminant(Tensor<T> matrix)
     {
-        int n = matrix.Rows;
-        var result = new Matrix<T>(n, n);
-        var temp = new Matrix<T>(n, n);
-        T eps = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var (_, _, U) = LinalgDispatch<T>.LU(matrix);
+        var pivots = engine.TensorAbs(LinalgDispatch<T>.Diagonal(U));
+        if (NumOps.LessThan(engine.TensorMinValue(pivots), NumOps.FromDouble(1e-10)))
         {
-            for (int j = 0; j < n; j++)
-            {
-                temp[i, j] = matrix[i, j];
-                result[i, j] = (i == j) ? NumOps.One : NumOps.Zero;
-            }
+            return NumOps.FromDouble(-1e30);
         }
 
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(temp[row, col]), NumOps.Abs(temp[maxRow, col])))
-                {
-                    maxRow = row;
-                }
-            }
-
-            if (maxRow != col)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    T tmpVal = temp[col, j];
-                    temp[col, j] = temp[maxRow, j];
-                    temp[maxRow, j] = tmpVal;
-
-                    tmpVal = result[col, j];
-                    result[col, j] = result[maxRow, j];
-                    result[maxRow, j] = tmpVal;
-                }
-            }
-
-            T pivot = temp[col, col];
-            if (NumOps.LessThan(NumOps.Abs(pivot), eps))
-            {
-                pivot = eps;
-            }
-
-            for (int j = 0; j < n; j++)
-            {
-                temp[col, j] = NumOps.Divide(temp[col, j], pivot);
-                result[col, j] = NumOps.Divide(result[col, j], pivot);
-            }
-
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = temp[row, col];
-                    for (int j = 0; j < n; j++)
-                    {
-                        temp[row, j] = NumOps.Subtract(temp[row, j], NumOps.Multiply(factor, temp[col, j]));
-                        result[row, j] = NumOps.Subtract(result[row, j], NumOps.Multiply(factor, result[col, j]));
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private T LogDeterminant(Matrix<T> matrix)
-    {
-        int n = matrix.Rows;
-        var temp = new Matrix<T>(n, n);
-        T eps = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                temp[i, j] = matrix[i, j];
-            }
-        }
-
-        T logDet = NumOps.Zero;
-
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(temp[row, col]), NumOps.Abs(temp[maxRow, col])))
-                {
-                    maxRow = row;
-                }
-            }
-
-            if (maxRow != col)
-            {
-                for (int j = col; j < n; j++)
-                {
-                    T tmpVal = temp[col, j];
-                    temp[col, j] = temp[maxRow, j];
-                    temp[maxRow, j] = tmpVal;
-                }
-            }
-
-            if (NumOps.LessThan(NumOps.Abs(temp[col, col]), eps))
-            {
-                return NumOps.FromDouble(-1e30); // Approximate negative infinity
-            }
-
-            logDet = NumOps.Add(logDet, NumOps.Log(NumOps.Abs(temp[col, col])));
-
-            for (int row = col + 1; row < n; row++)
-            {
-                T factor = NumOps.Divide(temp[row, col], temp[col, col]);
-                for (int j = col + 1; j < n; j++)
-                {
-                    temp[row, j] = NumOps.Subtract(temp[row, j], NumOps.Multiply(factor, temp[col, j]));
-                }
-            }
-        }
-
-        return logDet;
+        return engine.TensorSum(engine.TensorLog(pivots));
     }
 
     /// <inheritdoc/>
@@ -323,29 +166,11 @@ public partial class BayesianDetector<T> : AnomalyDetectorBase<T>
         var posteriorMean = _posteriorMean ?? throw new InvalidOperationException("_posteriorMean has not been initialized.");
         var posteriorPrecision = _posteriorPrecision ?? throw new InvalidOperationException("_posteriorPrecision has not been initialized.");
 
-        var scores = new Vector<T>(X.Rows);
-        T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Compute Mahalanobis distance squared
-            T mahalSq = NumOps.Zero;
-            for (int j1 = 0; j1 < _nFeatures; j1++)
-            {
-                T diff1 = NumOps.Subtract(X[i, j1], posteriorMean[j1]);
-                for (int j2 = 0; j2 < _nFeatures; j2++)
-                {
-                    T diff2 = NumOps.Subtract(X[i, j2], posteriorMean[j2]);
-                    mahalSq = NumOps.Add(mahalSq, NumOps.Multiply(NumOps.Multiply(diff1, posteriorPrecision[j1, j2]), diff2));
-                }
-            }
-
-            // Negative log likelihood (higher = more anomalous)
-            T negLogLikelihood = NumOps.Negate(NumOps.Subtract(_logNormalization, NumOps.Multiply(half, mahalSq)));
-
-            scores[i] = negLogLikelihood;
-        }
-
-        return scores;
+        // Negative log likelihood (higher = more anomalous): -(logNormalization - mahalanobis^2 / 2)
+        var engine = Engine;
+        var centered = AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), posteriorMean.AsTensor());
+        var mahalSq = AnomalyTensorOps.MahalanobisSquared(centered, AnomalyTensorOps.ToTensor(posteriorPrecision));
+        return engine.TensorNegate(engine.ScalarMinusTensor(_logNormalization,
+            engine.TensorMultiplyScalar(mahalSq, NumOps.FromDouble(0.5)))).ToVector();
     }
 }

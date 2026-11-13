@@ -71,30 +71,26 @@ public class TripletLoss<T> : LossFunctionBase<T>
         }
 
         var batchSize = anchor.Rows;
-        var totalLoss = NumOps.Zero;
+        var anchorTensor = Tensor<T>.FromMatrix(anchor);
+        var positiveDistance = RowEuclideanDistances(anchorTensor, Tensor<T>.FromMatrix(positive));
+        var negativeDistance = RowEuclideanDistances(anchorTensor, Tensor<T>.FromMatrix(negative));
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            var anchorSample = anchor.GetRow(i);
-            var positiveSample = positive.GetRow(i);
-            var negativeSample = negative.GetRow(i);
-
-            var positiveDistance = VectorHelper.EuclideanDistance(anchorSample, positiveSample);
-            var negativeDistance = VectorHelper.EuclideanDistance(anchorSample, negativeSample);
-
-            // max(0, positive_distance - negative_distance + margin)
-            var loss = MathHelper.Max(
-                NumOps.Zero,
-                NumOps.Add(
-                    NumOps.Subtract(positiveDistance, negativeDistance),
-                    _margin
-                )
-            );
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
+        // max(0, positive_distance - negative_distance + margin), per sample
+        var loss = Engine.TensorMax(
+            Engine.TensorAddScalar(Engine.TensorSubtract(positiveDistance, negativeDistance), _margin),
+            NumOps.Zero);
+        var totalLoss = Engine.TensorSum(loss);
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>
+    /// Euclidean distance between matching rows of two [rows, columns] tensors: sqrt(Σ_j (a_ij - b_ij)²).
+    /// </summary>
+    private Tensor<T> RowEuclideanDistances(Tensor<T> a, Tensor<T> b)
+    {
+        var diff = Engine.TensorSubtract(a, b);
+        return Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false));
     }
 
 

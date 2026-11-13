@@ -2,6 +2,7 @@ name: Commit Message Lint
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -9,7 +10,7 @@ concurrency:
 
 jobs:
   commitlint:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ (github.event.pull_request.draft != true) && (!startsWith(github.head_ref, 'release-please--')) }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out the PR
