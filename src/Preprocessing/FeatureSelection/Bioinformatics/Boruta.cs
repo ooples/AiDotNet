@@ -29,9 +29,9 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
     private readonly int _maxIterations;
     private readonly double _pValue;
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, double[]>? _importanceFunction;
+    private readonly Func<Matrix<T>, Vector<T>, Vector<T>>? _importanceFunction;
 
-    private double[]? _importances;
+    private Vector<T>? _importances;
     private BorutaDecision[]? _decisions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
@@ -44,7 +44,7 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
     }
 
     public int MaxIterations => _maxIterations;
-    public double[]? Importances => _importances;
+    public Vector<T>? Importances => _importances;
     public BorutaDecision[]? Decisions => _decisions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
@@ -54,7 +54,7 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
     public Boruta(
         int maxIterations = 100,
         double pValue = 0.05,
-        Func<Matrix<T>, Vector<T>, double[]>? importanceFunction = null,
+        Func<Matrix<T>, Vector<T>, Vector<T>>? importanceFunction = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -91,50 +91,43 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Track hits (times feature beats max shadow)
-        var hits = new int[p];
-        _importances = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+
+        // Track hits (times feature beats max shadow) and summed importances
+        // Hits are counted in int and importances summed in double: over more than 2048 iterations a running
+        // total in a narrow T such as Half stops growing (2048 + 1 rounds back to 2048)
+        var hitCounts = new Tensor<int>(new[] { p });
+        var importanceSum = new Tensor<double>(new[] { p });
+        var shadowOrder = new int[n * p];
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Create shadow features (shuffled copies)
-            var extendedData = new T[n, 2 * p];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                    extendedData[i, j] = data[i, j];
-            }
-
-            // Create shuffled shadows
+            // Create shadow features: column j shuffled by its own random permutation
             for (int j = 0; j < p; j++)
             {
                 var indices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).ToArray();
                 for (int i = 0; i < n; i++)
-                    extendedData[i, p + j] = data[indices[i], j];
+                    shadowOrder[i * p + j] = indices[i];
             }
 
-            var extendedMatrix = new Matrix<T>(extendedData);
+            var shadows = engine.TensorTakeAlongDim(X, new Tensor<int>((int[])shadowOrder.Clone(), new[] { n, p }), 0);
+            var extendedMatrix = engine.TensorConcatenate(new[] { X, shadows }, 1).ToMatrix();
 
             // Get importances
-            var allImportances = GetImportances(extendedMatrix, target);
-
-            // Find max shadow importance
-            double maxShadow = double.MinValue;
-            for (int j = p; j < 2 * p; j++)
-                maxShadow = Math.Max(maxShadow, allImportances[j]);
+            var allImportances = Tensor<T>.FromVector(GetImportances(extendedMatrix, target));
+            var real = engine.TensorSlice(allImportances, new[] { 0 }, new[] { p });
+            var maxShadow = engine.TensorMaxValue(engine.TensorSlice(allImportances, new[] { p }, new[] { p }));
 
             // Count hits
-            for (int j = 0; j < p; j++)
-            {
-                if (allImportances[j] > maxShadow)
-                    hits[j]++;
-                _importances[j] += allImportances[j];
-            }
+            hitCounts = engine.TensorAdd(hitCounts, engine.TensorGreaterThan(real, maxShadow).Cast<int>());
+            importanceSum = engine.TensorAdd(importanceSum, real.Cast<double>());
         }
 
         // Average importances
-        for (int j = 0; j < p; j++)
-            _importances[j] /= _maxIterations;
+        var importances = engine.TensorDivideScalar(importanceSum, (double)_maxIterations).Cast<T>();
+        _importances = importances.ToVector();
+        var hits = hitCounts.AsSpan().ToArray();
 
         // Make decisions using binomial test
         _decisions = new BorutaDecision[p];
@@ -171,19 +164,14 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         if (selected.Count == 0)
         {
             // Fall back to best features by importance
-            selected = _importances
-                .Select((imp, idx) => (Imp: imp, Index: idx))
-                .OrderByDescending(x => x.Imp)
-                .Take(Math.Max(1, p / 10))
-                .Select(x => x.Index)
-                .ToList();
+            selected = PreprocessingTensorOps.TopKIndicesSorted(importances, Math.Max(1, p / 10)).ToList();
         }
 
         _selectedIndices = selected.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double[] GetImportances(Matrix<T> data, Vector<T> target)
+    private Vector<T> GetImportances(Matrix<T> data, Vector<T> target)
     {
         if (_importanceFunction is not null)
             return _importanceFunction(data, target);
@@ -191,40 +179,11 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         return DefaultImportances(data, target);
     }
 
-    private double[] DefaultImportances(Matrix<T> data, Vector<T> target)
+    private Vector<T> DefaultImportances(Matrix<T> data, Vector<T> target)
     {
         // Correlation-based importance
-        int n = data.Rows;
-        int p = data.Columns;
-        var importances = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                importances[j] = Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
-        return importances;
+        return Engine.TensorAbs(
+            PreprocessingTensorOps.TargetCorrelations(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target))).ToVector();
     }
 
     private double BinomialThreshold(int n, double alpha)
@@ -267,15 +226,7 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         if (_selectedIndices is null)
             throw new InvalidOperationException("Boruta has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

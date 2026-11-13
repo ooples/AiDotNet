@@ -94,11 +94,7 @@ public class SequenceSplitter<T> : DataSplitterBase<T>
                     $"Sequence column ({_sequenceColumn}) exceeds feature count ({nFeatures}).");
             }
 
-            seqIds = new int[nSamples];
-            for (int i = 0; i < nSamples; i++)
-            {
-                seqIds[i] = (int)Convert.ToDouble(X[i, _sequenceColumn]);
-            }
+            seqIds = PreprocessingTensorOps.IntColumn(X, _sequenceColumn);
         }
 
         // Group samples by sequence

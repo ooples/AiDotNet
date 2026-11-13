@@ -83,49 +83,17 @@ public class CovariateShiftSplitter<T> : DataSplitterBase<T>
 
         int shiftDim = Math.Min(_shiftDimension, nFeatures - 1);
 
-        // Get values along the shift dimension
-        var values = new double[nSamples];
-        for (int i = 0; i < nSamples; i++)
-        {
-            values[i] = Convert.ToDouble(X[i, shiftDim]);
-        }
-
-        // Calculate percentiles
-        var sortedValues = values.OrderBy(v => v).ToArray();
-        double median = sortedValues[nSamples / 2];
-        double q25 = sortedValues[(int)(nSamples * 0.25)];
-        double q75 = sortedValues[(int)(nSamples * 0.75)];
-
-        // Determine shift threshold based on shift strength
-        // Higher shift strength means more separation
-        double trainThreshold = median - (median - q25) * _shiftStrength;
-        double testThreshold = median + (q75 - median) * _shiftStrength;
-
-        // Categorize samples
-        var trainCandidates = new List<int>();
-        var testCandidates = new List<int>();
-        var middleSamples = new List<int>();
-
-        for (int i = 0; i < nSamples; i++)
-        {
-            if (values[i] <= trainThreshold)
-            {
-                trainCandidates.Add(i);
-            }
-            else if (values[i] >= testThreshold)
-            {
-                testCandidates.Add(i);
-            }
-            else
-            {
-                middleSamples.Add(i);
-            }
-        }
+        // Get values along the shift dimension. Half and BFloat16 are categorized in float: the percentile differences
+        // of finite Half values (q75 - median = 60000 - -30000) overflow to inf, which empties the test candidates.
+        var values = PreprocessingTensorOps.Column(X, shiftDim);
+        var (trainCandidates, testCandidates, middleSamples) = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? Categorize(values.Cast<float>(), _shiftStrength)
+            : Categorize(values, _shiftStrength);
 
         // Shuffle candidates
-        var trainArray = trainCandidates.ToArray();
-        var testArray = testCandidates.ToArray();
-        var middleArray = middleSamples.ToArray();
+        var trainArray = trainCandidates;
+        var testArray = testCandidates;
+        var middleArray = middleSamples;
         ShuffleIndices(trainArray);
         ShuffleIndices(testArray);
         ShuffleIndices(middleArray);
@@ -171,5 +139,44 @@ public class CovariateShiftSplitter<T> : DataSplitterBase<T>
         }
 
         return BuildResult(X, y, trainIndices.ToArray(), testIndices.ToArray());
+    }
+
+    /// <summary>
+    /// Splits the samples by percentile thresholds on the shift column: at most
+    /// <c>median - (median - q25) * strength</c> is a train candidate, else at least
+    /// <c>median + (q75 - median) * strength</c> is a test candidate, else a middle sample.
+    /// </summary>
+    private static (int[] Train, int[] Test, int[] Middle) Categorize<TC>(Tensor<TC> values, double shiftStrength)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int nSamples = values.Length;
+
+        // Calculate percentiles: order statistics with the NaNs first, as master's OrderBy over doubles sorts them
+        var numberPositions = PreprocessingTensorOps.MaskPositions(engine.TensorEquals(values, values));
+        int nanCount = nSamples - numberPositions.Length;
+        var sortedNumbers = numberPositions.Length == 0
+            ? new Tensor<TC>(new[] { 0 })
+            : engine.TensorSort(engine.TensorIndexSelect(
+                values, new Tensor<int>(numberPositions, new[] { numberPositions.Length }), 0)).Item1;
+        TC OrderStatistic(int index) =>
+            index < nanCount ? ops.FromDouble(double.NaN) : sortedNumbers.GetFlat(index - nanCount);
+        TC median = OrderStatistic(nSamples / 2);
+        TC q25 = OrderStatistic((int)(nSamples * 0.25));
+        TC q75 = OrderStatistic((int)(nSamples * 0.75));
+
+        // Determine shift threshold based on shift strength
+        // Higher shift strength means more separation
+        TC strength = ops.FromDouble(shiftStrength);
+        TC trainThreshold = ops.Subtract(median, ops.Multiply(ops.Subtract(median, q25), strength));
+        TC testThreshold = ops.Add(median, ops.Multiply(ops.Subtract(q75, median), strength));
+
+        // Categorize samples: at most the train threshold, else at least the test threshold, else middle. A NaN is
+        // neither (every comparison with it is false, as in master), so it is a middle sample.
+        var trainMask = engine.TensorLessEqual(values, PreprocessingTensorOps.Filled(new[] { nSamples }, trainThreshold));
+        var testMask = engine.TensorMultiply(PreprocessingTensorOps.AtLeast(values, testThreshold), PreprocessingTensorOps.Not(trainMask));
+        var middleMask = PreprocessingTensorOps.Not(engine.TensorAdd(trainMask, testMask));
+        return (PreprocessingTensorOps.MaskPositions(trainMask), PreprocessingTensorOps.MaskPositions(testMask),
+            PreprocessingTensorOps.MaskPositions(middleMask));
     }
 }

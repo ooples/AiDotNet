@@ -23492,3 +23492,80 @@ AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.MaxConditioningSetSize.ge
 *REMOVED*AiDotNet.NeuralNetworks.Layers.TokenConditionedDecoderLayer<T>.TokenConditionedDecoderLayer(System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>! encoderLayers, AiDotNet.NeuralNetworks.Layers.EmbeddingLayer<T>! decoderEmbedding, System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>! decoderLayers, AiDotNet.Interfaces.ILayer<T>! outputLayer, int encoderVocabularySize, int decoderVocabularySize, int maximumDecoderLength) -> void
 AiDotNet.NeuralNetworks.Layers.TokenConditionedDecoderLayer<T>.TokenConditionedDecoderLayer(System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>! encoderLayers, AiDotNet.NeuralNetworks.Layers.EmbeddingLayer<T>! decoderEmbedding, System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>! decoderLayers, AiDotNet.Interfaces.ILayer<T>! outputLayer, int encoderVocabularySize, int decoderVocabularySize, int maximumDecoderLength, int maximumEncoderLength = 0) -> void
 override AiDotNet.Finance.Base.FinancialNLPModelBase<T>.ForecastCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, double[]? quantiles) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bayesian.ARDSelector<T>.Alphas.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bayesian.ARDSelector<T>.Alphas.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bayesian.ARDSelector<T>.Coefficients.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bayesian.ARDSelector<T>.Coefficients.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bayesian.BayesianFeatureSelector<T>.PosteriorProbabilities.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bayesian.BayesianFeatureSelector<T>.PosteriorProbabilities.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bayesian.BayesianModelAveraging<T>.InclusionProbabilities.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bayesian.BayesianModelAveraging<T>.InclusionProbabilities.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bayesian.BayesianNetworkSelector<T>.ConnectionStrengths.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bayesian.BayesianNetworkSelector<T>.ConnectionStrengths.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bayesian.SpikeAndSlabSelector<T>.InclusionProbabilities.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bayesian.SpikeAndSlabSelector<T>.InclusionProbabilities.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Association.AprioriBasedSelector<T>.AssociationScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Association.AprioriBasedSelector<T>.AssociationScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Association.FrequentPatternSelector<T>.PatternScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Association.FrequentPatternSelector<T>.PatternScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Boundary.DecisionBoundarySelector<T>.BoundaryClarityScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Boundary.DecisionBoundarySelector<T>.BoundaryClarityScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Boundary.MarginSelector<T>.MarginScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Boundary.MarginSelector<T>.MarginScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Causal.MMPCSelector<T>.AssociationScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Causal.MMPCSelector<T>.AssociationScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Causal.MarkovBlanketSelector<T>.RelevanceScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Causal.MarkovBlanketSelector<T>.RelevanceScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Classification.GiniImpuritySelector<T>.GiniReductions.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Classification.GiniImpuritySelector<T>.GiniReductions.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Classification.LDAProjectionSelector<T>.LDAScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Classification.LDAProjectionSelector<T>.LDAScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.FoldChangeSelector<T>.FoldChanges.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.FoldChangeSelector<T>.FoldChanges.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.FoldChangeSelector<T>.Log2FoldChanges.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.FoldChangeSelector<T>.Log2FoldChanges.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.MRMR<T>.MRMRScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.MRMR<T>.MRMRScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.Boruta<T>.Importances.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.Boruta<T>.Importances.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.Boruta<T>.Boruta(int maxIterations = 100, double pValue = 0.05, System.Func<AiDotNet.Tensors.LinearAlgebra.Matrix<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, double[]!>? importanceFunction = null, int? randomState = null, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.Boruta<T>.Boruta(int maxIterations = 100, double pValue = 0.05, System.Func<AiDotNet.Tensors.LinearAlgebra.Matrix<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? importanceFunction = null, int? randomState = null, int[]? columnIndices = null) -> void
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM<T>.DStatistics.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM<T>.DStatistics.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM<T>.FDR.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM<T>.FDR.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM<T>.QValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SAM<T>.QValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SignificanceAnalysis<T>.SAMScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SignificanceAnalysis<T>.SAMScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SignificanceAnalysis<T>.QValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Bioinformatics.SignificanceAnalysis<T>.QValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.Encoders.OrdinalEncoder<T>.OrdinalEncoder(System.Collections.Generic.List<double[]!>? categories = null, AiDotNet.Preprocessing.Encoders.UnknownValueHandling handleUnknown = AiDotNet.Preprocessing.Encoders.UnknownValueHandling.Error, double unknownValue = -1, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.Encoders.OrdinalEncoder<T>.OrdinalEncoder(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? categories = null, AiDotNet.Preprocessing.Encoders.UnknownValueHandling handleUnknown = AiDotNet.Preprocessing.Encoders.UnknownValueHandling.Error, double unknownValue = -1, int[]? columnIndices = null) -> void
+*REMOVED*AiDotNet.Preprocessing.Encoders.OneHotEncoder<T>.Categories.get -> System.Collections.Generic.List<double[]!>?
+AiDotNet.Preprocessing.Encoders.OneHotEncoder<T>.Categories.get -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Preprocessing.Encoders.CountEncoder<T>.CountMaps.get -> System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<double, double>!>?
+AiDotNet.Preprocessing.Encoders.CountEncoder<T>.CountMaps.get -> System.Collections.Generic.Dictionary<int, AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>!>?
+*REMOVED*AiDotNet.Preprocessing.Encoders.TargetEncoder<T>.EncodingMaps.get -> System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<double, double>!>?
+AiDotNet.Preprocessing.Encoders.TargetEncoder<T>.EncodingMaps.get -> System.Collections.Generic.Dictionary<int, AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>!>?
+*REMOVED*AiDotNet.Preprocessing.Encoders.MEstimateEncoder<T>.GlobalMean.get -> double
+AiDotNet.Preprocessing.Encoders.MEstimateEncoder<T>.GlobalMean.get -> T
+*REMOVED*AiDotNet.Preprocessing.Encoders.JamesSteinEncoder<T>.GlobalMean.get -> double
+AiDotNet.Preprocessing.Encoders.JamesSteinEncoder<T>.GlobalMean.get -> T
+*REMOVED*AiDotNet.Preprocessing.Encoders.LeaveOneOutEncoder<T>.GlobalMean.get -> double
+AiDotNet.Preprocessing.Encoders.LeaveOneOutEncoder<T>.GlobalMean.get -> T
+*REMOVED*AiDotNet.Preprocessing.Encoders.CatBoostEncoder<T>.GlobalMean.get -> double
+AiDotNet.Preprocessing.Encoders.CatBoostEncoder<T>.GlobalMean.get -> T
+*REMOVED*AiDotNet.Preprocessing.Encoders.WOEEncoder<T>.WOEValues.get -> System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<double, double>!>?
+AiDotNet.Preprocessing.Encoders.WOEEncoder<T>.WOEValues.get -> System.Collections.Generic.Dictionary<int, AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>!>?
+*REMOVED*AiDotNet.Preprocessing.Encoders.WOEEncoder<T>.CalculateInformationValue(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> System.Collections.Generic.Dictionary<int, double>!
+AiDotNet.Preprocessing.Encoders.WOEEncoder<T>.CalculateInformationValue(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> System.Collections.Generic.Dictionary<int, T>!
+*REMOVED*static AiDotNet.Preprocessing.FeatureGeneration.FunctionTransformer<T>.FromElementFunction(System.Func<double, double>! elementFunc, System.Func<double, double>? inverseElementFunc = null, bool validate = true, int[]? columnIndices = null) -> AiDotNet.Preprocessing.FeatureGeneration.FunctionTransformer<T>!
+static AiDotNet.Preprocessing.FeatureGeneration.FunctionTransformer<T>.FromElementFunction(System.Func<T, T>! elementFunc, System.Func<T, T>? inverseElementFunc = null, bool validate = true, int[]? columnIndices = null) -> AiDotNet.Preprocessing.FeatureGeneration.FunctionTransformer<T>!
+*REMOVED*AiDotNet.Preprocessing.FeatureGeneration.SplineTransformer<T>.Knots.get -> double[]![]?
+AiDotNet.Preprocessing.FeatureGeneration.SplineTransformer<T>.Knots.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>![]?
+AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>
+AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>.CategoryValueMap(AiDotNet.Tensors.LinearAlgebra.Vector<T>! categories, AiDotNet.Tensors.LinearAlgebra.Vector<T>! values) -> void
+AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>.Categories.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>.Count.get -> int
+AiDotNet.Preprocessing.Encoders.CategoryValueMap<T>.Values.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!

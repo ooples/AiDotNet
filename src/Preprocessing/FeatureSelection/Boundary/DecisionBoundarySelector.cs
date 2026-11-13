@@ -24,13 +24,13 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _boundaryClarityScores;
+    private Vector<T>? _boundaryClarityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? BoundaryClarityScores => _boundaryClarityScores;
+    public Vector<T>? BoundaryClarityScores => _boundaryClarityScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,75 +64,53 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        // Counts and class sums are taken in double: a 0/1 mask summed in a narrow T (Half stops at 2048) saturates
+        var X = Tensor<T>.FromMatrix(data).Cast<double>();
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<double>(classIndex, k)); // [k, n]
+        var classCounts = engine.ReduceSum(membership, new[] { 1 }, false);                             // [k]
+        var classMeans = engine.TensorDivide(
+            engine.TensorMatMul(membership, X), engine.Reshape(classCounts, new[] { k, 1 }));            // [k, p]
+
+        // For each pair of classes, threshold every feature at the midpoint of the class means and
+        // measure the accuracy of that boundary.
+        var totalClarity = new Tensor<double>(new[] { p });
+        int pairs = 0;
+        double half = 0.5;
+        for (int ci = 0; ci < k; ci++)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _boundaryClarityScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // For each pair of classes, find the best threshold and measure clarity
-            double totalClarity = 0;
-            int pairs = 0;
-
-            for (int ci = 0; ci < classes.Count; ci++)
+            for (int cj = ci + 1; cj < k; cj++)
             {
-                for (int cj = ci + 1; cj < classes.Count; cj++)
-                {
-                    var class1Vals = classIndices[classes[ci]].Select(i => col[i]).ToList();
-                    var class2Vals = classIndices[classes[cj]].Select(i => col[i]).ToList();
+                var mean1 = PreprocessingTensorOps.RowVector(classMeans, ci);
+                var mean2 = PreprocessingTensorOps.RowVector(classMeans, cj);
+                var threshold = engine.TensorMultiplyScalar(engine.TensorAdd(mean1, mean2), half);
+                var below = engine.TensorLessThan(X, engine.TensorBroadcastTo(engine.Reshape(threshold, new[] { 1, p }), new[] { n, p }));
 
-                    // Find optimal threshold
-                    double class1Mean = class1Vals.Average();
-                    double class2Mean = class2Vals.Average();
-                    double threshold = (class1Mean + class2Mean) / 2;
+                var below1 = engine.Reshape(engine.TensorMatMul(PreprocessingTensorOps.Row(membership, ci), below), new[] { p });
+                var below2 = engine.Reshape(engine.TensorMatMul(PreprocessingTensorOps.Row(membership, cj), below), new[] { p });
+                var count1 = engine.TensorSlice(classCounts, new[] { ci }, new[] { 1 });
+                var count2 = engine.TensorSlice(classCounts, new[] { cj }, new[] { 1 });
 
-                    // Count correct classifications
-                    int correct = 0;
-                    int total = class1Vals.Count + class2Vals.Count;
+                // class 1 below / class 2 at-or-above when mean1 < mean2, the reverse otherwise
+                var correctLow = engine.TensorAdd(below1, engine.TensorSubtract(count2, below2));
+                var correctHigh = engine.TensorAdd(engine.TensorSubtract(count1, below1), below2);
+                var correct = engine.TensorWhere(engine.TensorLessThan(mean1, mean2), correctLow, correctHigh);
 
-                    if (class1Mean < class2Mean)
-                    {
-                        correct += class1Vals.Count(v => v < threshold);
-                        correct += class2Vals.Count(v => v >= threshold);
-                    }
-                    else
-                    {
-                        correct += class1Vals.Count(v => v >= threshold);
-                        correct += class2Vals.Count(v => v < threshold);
-                    }
-
-                    // Clarity score = accuracy at boundary
-                    double clarity = (double)correct / total;
-                    totalClarity += clarity;
-                    pairs++;
-                }
+                // Clarity score = accuracy at boundary
+                totalClarity = engine.TensorAdd(totalClarity, engine.TensorDivide(correct, engine.TensorAdd(count1, count2)));
+                pairs++;
             }
-
-            _boundaryClarityScores[j] = pairs > 0 ? totalClarity / pairs : 0.5;
         }
+
+        var scores = pairs > 0
+            ? engine.TensorDivideScalar(totalClarity, (double)pairs)
+            : PreprocessingTensorOps.Filled(new[] { p }, 0.5);
+        _boundaryClarityScores = scores.Cast<T>().ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _boundaryClarityScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -150,15 +128,7 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("DecisionBoundarySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

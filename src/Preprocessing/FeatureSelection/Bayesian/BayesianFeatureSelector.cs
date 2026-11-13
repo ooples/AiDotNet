@@ -30,14 +30,14 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly double _priorProbability;
     private readonly double _threshold;
 
-    private double[]? _posteriorProbabilities;
+    private Vector<T>? _posteriorProbabilities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double PriorProbability => _priorProbability;
-    public double[]? PosteriorProbabilities => _posteriorProbabilities;
+    public Vector<T>? PosteriorProbabilities => _posteriorProbabilities;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -79,74 +79,101 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        _posteriorProbabilities = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        // Compute likelihood ratio for each feature
-        var targetArray = new double[n];
-        for (int i = 0; i < n; i++)
-            targetArray[i] = NumOps.ToDouble(target[i]);
+        var positive = engine.TensorGreaterThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5));
+        int countPos = PreprocessingTensorOps.CountNonZero(positive);
+        int countNeg = n - countPos;
 
-        double positiveCount = targetArray.Count(y => y > 0.5);
-        double negativeCount = n - positiveCount;
-
-        for (int j = 0; j < p; j++)
+        if (countPos < 2 || countNeg < 2)
         {
-            // Compute feature statistics for positive and negative classes
-            double sumPos = 0, sumNeg = 0;
-            double sumSqPos = 0, sumSqNeg = 0;
-            int countPos = 0, countNeg = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-                if (targetArray[i] > 0.5)
-                {
-                    sumPos += value;
-                    sumSqPos += value * value;
-                    countPos++;
-                }
-                else
-                {
-                    sumNeg += value;
-                    sumSqNeg += value * value;
-                    countNeg++;
-                }
-            }
-
-            if (countPos < 2 || countNeg < 2)
-            {
-                _posteriorProbabilities[j] = _priorProbability;
-                continue;
-            }
-
-            double meanPos = sumPos / countPos;
-            double meanNeg = sumNeg / countNeg;
-            double varPos = (sumSqPos / countPos) - (meanPos * meanPos) + 1e-10;
-            double varNeg = (sumSqNeg / countNeg) - (meanNeg * meanNeg) + 1e-10;
-
-            // Compute Bayes factor using t-test approximation
-            double pooledVar = ((countPos - 1) * varPos + (countNeg - 1) * varNeg) / (n - 2);
-            double standardError = Math.Sqrt(pooledVar * (1.0 / countPos + 1.0 / countNeg)) + 1e-10;
-            double tStatistic = Math.Abs(meanPos - meanNeg) / standardError;
-
-            // Convert t-statistic to likelihood ratio approximation
-            double logLikelihoodRatio = Math.Min(tStatistic * tStatistic / 2, 50);
-            double likelihoodRatio = Math.Exp(logLikelihoodRatio);
-
-            // Compute posterior using Bayes' rule
-            double posteriorOdds = (_priorProbability / (1 - _priorProbability)) * likelihoodRatio;
-            _posteriorProbabilities[j] = posteriorOdds / (1 + posteriorOdds);
+            _posteriorProbabilities = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(_priorProbability)).ToVector();
+        }
+        else
+        {
+            // Half and BFloat16 are evaluated in float and the posteriors cast back once: the 1e-10 guards, raised to
+            // 2^-14 in Half and then divided by s^2, would swamp small-scale variances, and the class moments lose
+            // the 11-bit mantissa
+            _posteriorProbabilities = PreprocessingTensorOps.IsNarrowFloat<T>()
+                ? Posteriors(X.Cast<float>(), positive.Cast<float>(), countPos, countNeg, _priorProbability).Cast<T>().ToVector()
+                : Posteriors(X, positive, countPos, countNeg, _priorProbability).ToVector();
         }
 
         // Select features that exceed threshold, up to nFeaturesToSelect
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => _posteriorProbabilities[j] >= _threshold)
-            .OrderByDescending(j => _posteriorProbabilities[j])
-            .Take(_nFeaturesToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKAtLeastSorted(
+            Tensor<T>.FromVector(_posteriorProbabilities), NumOps.FromDouble(_threshold), _nFeaturesToSelect);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// Posterior inclusion probability of every column of <paramref name="X"/> ([n, p]) from a two-sample t statistic
+    /// between the rows of the 0/1 <paramref name="positive"/> mask ([n]) and the others, both classes holding at
+    /// least two rows.
+    /// </summary>
+    private static Tensor<TC> Posteriors<TC>(Tensor<TC> X, Tensor<TC> positive, int countPos, int countNeg, double priorProbability)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int n = X.Shape[0];
+        int p = X.Shape[1];
+
+        // Class masks as [1, n] rows so the per-class sums are one matmul each.
+        var positiveRow = engine.Reshape(positive, new[] { 1, n });
+        var negativeRow = engine.Reshape(PreprocessingTensorOps.Not(positive), new[] { 1, n });
+
+        // The t statistic does not change when a column is scaled, so every column is divided by its largest
+        // magnitude s first and the 1e-10 guards are carried into those units (eps / s^2 on the variances,
+        // eps / s on the standard error): t is then exactly master's, while x^2 cannot overflow.
+        var scale = PreprocessingTensorOps.ColumnMax(engine.TensorAbs(X));
+        scale = engine.TensorWhere(engine.TensorGreaterThan(scale, ops.Zero), scale,
+            PreprocessingTensorOps.Filled(new[] { p }, ops.One));
+        var unit = engine.TensorDivide(X, engine.TensorBroadcastTo(engine.Reshape(scale, new[] { 1, p }), new[] { n, p }));
+
+        TC eps = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        var epsOverScale = engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { p }, eps), scale);
+        var epsOverScaleSquared = engine.TensorDivide(epsOverScale, scale);
+        var meanPos = engine.TensorDivideScalar(
+            engine.Reshape(engine.TensorMatMul(positiveRow, unit), new[] { p }), ops.FromDouble(countPos));
+        var meanNeg = engine.TensorDivideScalar(
+            engine.Reshape(engine.TensorMatMul(negativeRow, unit), new[] { p }), ops.FromDouble(countNeg));
+
+        // Population variances from the centred deviations: E[x^2] - E[x]^2 cancels catastrophically (in Half the
+        // mean of [1, 0.99951171875] rounds to 1 and the difference goes negative)
+        Tensor<TC> Variance(Tensor<TC> classRow, Tensor<TC> mean, int count)
+        {
+            var deviation = engine.TensorSubtract(
+                unit, engine.TensorBroadcastTo(engine.Reshape(mean, new[] { 1, p }), new[] { n, p }));
+            var sumSq = engine.Reshape(engine.TensorMatMul(classRow, engine.TensorSquare(deviation)), new[] { p });
+            return engine.TensorAdd(engine.TensorDivideScalar(sumSq, ops.FromDouble(count)), epsOverScaleSquared);
+        }
+
+        var varPos = Variance(positiveRow, meanPos, countPos);
+        var varNeg = Variance(negativeRow, meanNeg, countNeg);
+
+        // Bayes factor using a t-test approximation
+        var pooledVar = engine.TensorDivideScalar(
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(varPos, ops.FromDouble(countPos - 1)),
+                engine.TensorMultiplyScalar(varNeg, ops.FromDouble(countNeg - 1))),
+            ops.FromDouble(n - 2));
+        var standardError = engine.TensorAdd(
+            engine.TensorSqrt(engine.TensorMultiplyScalar(pooledVar, ops.FromDouble(1.0 / countPos + 1.0 / countNeg))),
+            epsOverScale);
+        // A zero mean difference is t = 0 even where eps / s underflows to 0 (0 / 0 would be NaN).
+        var meanGap = engine.TensorAbs(engine.TensorSubtract(meanPos, meanNeg));
+        var zeros = new Tensor<TC>(new[] { p });
+        var tStatistic = engine.TensorWhere(engine.TensorEquals(meanGap, zeros), zeros, engine.TensorDivide(meanGap, standardError));
+
+        // t-statistic to likelihood ratio approximation
+        var logLikelihoodRatio = engine.TensorMin(
+            engine.TensorDivideScalar(engine.TensorSquare(tStatistic), ops.FromDouble(2.0)), ops.FromDouble(50.0));
+        // Posterior using Bayes' rule: odds / (1 + odds) with odds = prior odds * exp(log LR), evaluated as
+        // sigmoid(log LR + log prior odds). The ratio form overflows to inf / inf = NaN once exp(log LR) passes the
+        // largest finite value, while the sigmoid saturates at 1.
+        TC logPriorOdds = ops.FromDouble(Math.Log(priorProbability / (1 - priorProbability)));
+        return engine.TensorSigmoid(engine.TensorAddScalar(logLikelihoodRatio, logPriorOdds));
     }
 
     /// <inheritdoc />
@@ -162,15 +189,7 @@ public class BayesianFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("BayesianFeatureSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

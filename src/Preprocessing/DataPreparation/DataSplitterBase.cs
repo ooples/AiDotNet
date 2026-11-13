@@ -227,12 +227,7 @@ public abstract class DataSplitterBase<T> : IDataSplitter<T>
     /// <returns>A new vector containing only the selected elements.</returns>
     protected Vector<T> SelectElements(Vector<T> y, int[] indices)
     {
-        var result = new Vector<T>(indices.Length);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            result[i] = y[indices[i]];
-        }
-        return result;
+        return PreprocessingTensorOps.SelectElements(y, indices);
     }
 
     /// <summary>
@@ -386,13 +381,14 @@ public abstract class DataSplitterBase<T> : IDataSplitter<T>
     {
         var uniqueSet = new HashSet<double>();
         var labels = new List<T>();
+        var values = y.ToArray();
 
-        for (int i = 0; i < y.Length; i++)
+        for (int i = 0; i < values.Length; i++)
         {
-            double key = Convert.ToDouble(y[i]);
+            double key = Convert.ToDouble(values[i]);
             if (uniqueSet.Add(key))
             {
-                labels.Add(y[i]);
+                labels.Add(values[i]);
             }
         }
 
@@ -407,10 +403,11 @@ public abstract class DataSplitterBase<T> : IDataSplitter<T>
     protected Dictionary<double, List<int>> GroupByLabel(Vector<T> y)
     {
         var groups = new Dictionary<double, List<int>>();
+        var values = y.ToArray();
 
-        for (int i = 0; i < y.Length; i++)
+        for (int i = 0; i < values.Length; i++)
         {
-            double key = Convert.ToDouble(y[i]);
+            double key = Convert.ToDouble(values[i]);
             if (!groups.TryGetValue(key, out var list))
             {
                 list = new List<int>();

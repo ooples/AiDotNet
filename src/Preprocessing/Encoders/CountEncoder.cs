@@ -36,7 +36,7 @@ public class CountEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _unknownValue;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, double>>? _countMaps;
+    private Dictionary<int, CategoryValueMap<T>>? _countMaps;
     private int _nInputFeatures;
     private int _nTrainingSamples;
 
@@ -58,7 +58,7 @@ public class CountEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the count maps for each column.
     /// </summary>
-    public Dictionary<int, Dictionary<double, double>>? CountMaps => _countMaps;
+    public Dictionary<int, CategoryValueMap<T>>? CountMaps => _countMaps;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -100,58 +100,35 @@ public class CountEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         _nInputFeatures = data.Columns;
         _nTrainingSamples = data.Rows;
+        var engine = Engine;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
-        _countMaps = new Dictionary<int, Dictionary<double, double>>();
+        _countMaps = new Dictionary<int, CategoryValueMap<T>>();
+        T trainingSamples = NumOps.FromDouble(_nTrainingSamples);
 
         foreach (int col in columnsToProcess)
         {
             // Count occurrences of each category
-            var counts = new Dictionary<double, int>();
+            var column = PreprocessingTensorOps.Column(data, col);
+            var categories = PreprocessingTensorOps.SortedUnique(column);
+            var position = PreprocessingTensorOps.LookupSorted(categories, column, out _);
+            var counts = PreprocessingTensorOps.CategoryCounts<T>(position, categories.Length);
 
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
+            // Apply normalization and log1p transform if requested
+            if (_normalize)
+                counts = engine.TensorDivideScalar(counts, trainingSamples);
+            if (_logTransform)
+                counts = engine.TensorLog1p(counts);
 
-                if (!counts.TryGetValue(categoryValue, out int count))
-                {
-                    count = 0;
-                }
-                counts[categoryValue] = count + 1;
-            }
-
-            // Convert to final encoding values
-            var countMap = new Dictionary<double, double>();
-
-            foreach (var kvp in counts)
-            {
-                double categoryValue = kvp.Key;
-                double count = kvp.Value;
-
-                // Apply normalization if requested
-                if (_normalize)
-                {
-                    count /= _nTrainingSamples;
-                }
-
-                // Apply log transform if requested
-                if (_logTransform)
-                {
-                    count = Math.Log(1 + count); // log1p to handle zero
-                }
-
-                countMap[categoryValue] = count;
-            }
-
-            _countMaps[col] = countMap;
+            _countMaps[col] = new CategoryValueMap<T>(categories, counts);
         }
     }
 
     /// <summary>
-    /// Transforms the data by replacing categories with their frequency counts.
+    /// Transforms the data by replacing categories with their counts/frequencies.
     /// </summary>
     /// <param name="data">The data to transform.</param>
-    /// <returns>The frequency encoded data.</returns>
+    /// <returns>The transformed data with count values.</returns>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_countMaps is null)
@@ -161,54 +138,49 @@ public class CountEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
 
-        for (int i = 0; i < numRows; i++)
+        // Encoded value of an unknown category (UseValue)
+        double unknownVal = _unknownValue;
+        if (_normalize)
+            unknownVal = _unknownValue / _nTrainingSamples;
+        if (_logTransform)
+            unknownVal = Math.Log(1 + unknownVal);
+        var unknown = PreprocessingTensorOps.Filled(new[] { numRows }, NumOps.FromDouble(unknownVal));
+
+        var columns = new List<Tensor<T>>(numColumns);
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (processSet.Contains(j))
             {
-                if (!processSet.Contains(j))
+                if (_countMaps.TryGetValue(j, out var countMap))
                 {
-                    // Pass-through: copy value directly
-                    result[i, j] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-                double encodedValue;
-
-                if (_countMaps.TryGetValue(j, out var countMap) &&
-                    countMap.TryGetValue(categoryValue, out encodedValue))
-                {
-                    result[i, j] = NumOps.FromDouble(encodedValue);
+                    var encoded = countMap.Map(column, unknown, out var found);
+                    ThrowOnUnknown(column, found, j);
+                    column = encoded;
                 }
                 else
                 {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case CountEncoderHandleUnknown.UseValue:
-                            double unknownVal = _unknownValue;
-                            if (_normalize)
-                            {
-                                unknownVal = _unknownValue / _nTrainingSamples;
-                            }
-                            if (_logTransform)
-                            {
-                                unknownVal = Math.Log(1 + unknownVal);
-                            }
-                            result[i, j] = NumOps.FromDouble(unknownVal);
-                            break;
-                        case CountEncoderHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                    }
+                    ThrowOnUnknown(column, new Tensor<T>(new[] { numRows }), j);
+                    column = unknown;
                 }
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
+    }
+
+    private void ThrowOnUnknown(Tensor<T> column, Tensor<T> found, int columnIndex)
+    {
+        if (_handleUnknown != CountEncoderHandleUnknown.Error)
+            return;
+
+        var missing = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(found));
+        if (missing.Length > 0)
+            throw new ArgumentException($"Unknown category value: {column.GetFlat(missing[0])} in column {columnIndex}");
     }
 
     /// <summary>

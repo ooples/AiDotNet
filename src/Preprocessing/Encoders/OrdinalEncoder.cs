@@ -42,13 +42,14 @@ public enum UnknownValueHandling
 [PipelineStage(PipelineStage.Preprocessing)]
 public class OrdinalEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
-    private readonly List<double[]>? _categories;
+    private readonly List<Vector<T>>? _categories;
     private readonly UnknownValueHandling _handleUnknown;
     private readonly double _unknownValue;
 
     // Fitted parameters: mapping from value to ordinal for each column
-    private List<Dictionary<double, int>>? _valueToOrdinal;
-    private List<Dictionary<int, double>>? _ordinalToValue;
+    private List<Tensor<T>>? _ordinalCategories;
+    private List<Tensor<T>>? _sortedCategories;
+    private List<Tensor<T>>? _sortedOrdinals;
 
     /// <summary>
     /// Gets how unknown categories are handled.
@@ -73,7 +74,7 @@ public class OrdinalEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="unknownValue">The value to use for unknown categories when handling is UseEncodedValue. Defaults to -1.</param>
     /// <param name="columnIndices">The column indices to encode, or null for all columns.</param>
     public OrdinalEncoder(
-        List<double[]>? categories = null,
+        List<Vector<T>>? categories = null,
         UnknownValueHandling handleUnknown = UnknownValueHandling.Error,
         double unknownValue = -1,
         int[]? columnIndices = null)
@@ -91,142 +92,122 @@ public class OrdinalEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
+        var columnsToProcess = new HashSet<int>(GetColumnsToProcess(numColumns));
 
-        _valueToOrdinal = new List<Dictionary<double, int>>();
-        _ordinalToValue = new List<Dictionary<int, double>>();
+        _ordinalCategories = new List<Tensor<T>>();
+        _sortedCategories = new List<Tensor<T>>();
+        _sortedOrdinals = new List<Tensor<T>>();
 
         for (int col = 0; col < numColumns; col++)
         {
+            Tensor<T> categoryOrder;
             if (!columnsToProcess.Contains(col))
             {
-                _valueToOrdinal.Add(new Dictionary<double, int>());
-                _ordinalToValue.Add(new Dictionary<int, double>());
-                continue;
+                categoryOrder = new Tensor<T>(new[] { 0 });
             }
-
-            var column = data.GetColumn(col);
-            var valueToOrdinal = new Dictionary<double, int>();
-            var ordinalToValue = new Dictionary<int, double>();
-
-            // Get category ordering
-            double[] categoryOrder;
-            if (_categories is not null && col < _categories.Count && _categories[col].Length > 0)
+            else if (_categories is not null && col < _categories.Count && _categories[col].Length > 0)
             {
                 // Use provided category ordering
-                categoryOrder = _categories[col];
+                categoryOrder = Tensor<T>.FromVector(_categories[col]);
             }
             else
             {
                 // Infer from data (sorted)
-                var uniqueValues = new HashSet<double>();
-                for (int i = 0; i < column.Length; i++)
-                {
-                    uniqueValues.Add(NumOps.ToDouble(column[i]));
-                }
-                categoryOrder = uniqueValues.OrderBy(v => v).ToArray();
+                categoryOrder = PreprocessingTensorOps.SortedUnique(PreprocessingTensorOps.Column(data, col));
             }
 
-            // Create mappings
-            for (int i = 0; i < categoryOrder.Length; i++)
+            // Sorted view of the categories (for lookups) with the ordinal of each sorted entry
+            _ordinalCategories.Add(CategoryValueMap<T>.Owned(categoryOrder));
+            if (categoryOrder.Length == 0)
             {
-                valueToOrdinal[categoryOrder[i]] = i;
-                ordinalToValue[i] = categoryOrder[i];
+                _sortedCategories.Add(categoryOrder);
+                _sortedOrdinals.Add(categoryOrder);
             }
-
-            _valueToOrdinal.Add(valueToOrdinal);
-            _ordinalToValue.Add(ordinalToValue);
+            else
+            {
+                // A repeated category keeps its last ordinal (later entries overwrite earlier ones): ties are
+                // ordered last index first, so the lookup finds the last occurrence
+                var orderIndex = PreprocessingTensorOps.StableOrder(categoryOrder, descending: false, lastAmongTies: true);
+                var order = new Tensor<int>(orderIndex, new[] { orderIndex.Length });
+                _sortedCategories.Add(CategoryValueMap<T>.Owned(Engine.TensorIndexSelect(categoryOrder, order, 0)));
+                _sortedOrdinals.Add(CategoryValueMap<T>.Owned(order.Cast<T>()));
+            }
         }
     }
 
     /// <summary>
-    /// Transforms the data by encoding categorical values as ordinal integers.
+    /// Transforms the data by replacing categorical values with their ordinal integers.
     /// </summary>
     /// <param name="data">The data to transform.</param>
-    /// <returns>The encoded data with ordinal integers.</returns>
+    /// <returns>The transformed data with ordinal values.</returns>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
-        if (_valueToOrdinal is null)
+        if (_ordinalCategories is null || _sortedCategories is null || _sortedOrdinals is null)
         {
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var unknown = PreprocessingTensorOps.Filled(new[] { numRows }, NumOps.FromDouble(_unknownValue));
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (processSet.Contains(j) && _ordinalCategories[j].Length > 0)
             {
-                T value = data[i, j];
+                var position = PreprocessingTensorOps.LookupSorted(_sortedCategories[j], column, out var found);
+                var ordinals = engine.TensorIndexSelect(_sortedOrdinals[j], position, 0);
 
-                if (processSet.Contains(j) && _valueToOrdinal[j].Count > 0)
+                if (_handleUnknown == UnknownValueHandling.Error)
                 {
-                    double doubleValue = NumOps.ToDouble(value);
-                    if (_valueToOrdinal[j].TryGetValue(doubleValue, out int ordinal))
-                    {
-                        value = NumOps.FromDouble(ordinal);
-                    }
-                    else
-                    {
-                        // Unknown value
-                        if (_handleUnknown == UnknownValueHandling.Error)
-                        {
-                            throw new ArgumentException($"Unknown category value: {doubleValue} in column {j}");
-                        }
-                        value = NumOps.FromDouble(_unknownValue);
-                    }
+                    var missing = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(found));
+                    if (missing.Length > 0)
+                        throw new ArgumentException($"Unknown category value: {column.GetFlat(missing[0])} in column {j}");
                 }
 
-                result[i, j] = value;
+                column = engine.TensorWhere(found, ordinals, unknown);
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
-    /// Reverses the ordinal encoding to get original values.
+    /// Reverses the ordinal encoding to recover original values.
     /// </summary>
-    /// <param name="data">The encoded data.</param>
-    /// <returns>The original categorical values.</returns>
+    /// <param name="data">The ordinal-encoded data.</param>
+    /// <returns>The data with original categorical values.</returns>
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
-        if (_ordinalToValue is null)
+        if (_ordinalCategories is null)
         {
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (processSet.Contains(j) && _ordinalCategories[j].Length > 0)
             {
-                T value = data[i, j];
-
-                if (processSet.Contains(j) && _ordinalToValue[j].Count > 0)
-                {
-                    int ordinal = (int)NumOps.ToDouble(value);
-                    if (_ordinalToValue[j].TryGetValue(ordinal, out double originalValue))
-                    {
-                        value = NumOps.FromDouble(originalValue);
-                    }
-                    // Unknown ordinal - keep as is
-                }
-
-                result[i, j] = value;
+                // The ordinal is the value truncated toward zero; unknown ordinals keep their value
+                column = PreprocessingTensorOps.GatherCategories(_ordinalCategories[j], column);
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
