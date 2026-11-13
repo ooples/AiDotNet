@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tokenization.Algorithms;
+using EnginePadMode = AiDotNet.Tensors.Engines.PadMode;
 
 namespace AiDotNet.Audio.Whisper;
 
@@ -173,97 +174,86 @@ internal sealed class OpenAiWhisperTranscriber<T>
 
     // ---------------------------------------------------------------- audio
 
-    private static readonly Lazy<(float[] Mel80, float[] Mel128)> Filters = new(() =>
+    // The release's mel filter banks [mels, 201], read once from the embedded float32 table and cast to T in bulk.
+    private static readonly Lazy<(Tensor<T> Mel80, Tensor<T> Mel128)> Filters = new(() =>
     {
         using var stream = typeof(OpenAiWhisperTranscriber<T>).Assembly.GetManifestResourceStream("AiDotNet.Audio.Whisper.whisper_mel_filters.gz")
             ?? throw new InvalidDataException("The embedded resource whisper_mel_filters.gz is missing.");
         using var gzip = new GZipStream(stream, CompressionMode.Decompress);
         using var reader = new BinaryReader(gzip);
-        var mel80 = new float[80 * 201];
-        var mel128 = new float[128 * 201];
-        for (int i = 0; i < mel80.Length; i++) mel80[i] = reader.ReadSingle();
-        for (int i = 0; i < mel128.Length; i++) mel128[i] = reader.ReadSingle();
-        return (mel80, mel128);
+        int bins = FftSize / 2 + 1;
+        var bytes80 = reader.ReadBytes(80 * bins * sizeof(float));
+        var bytes128 = reader.ReadBytes(128 * bins * sizeof(float));
+        if (bytes80.Length != 80 * bins * sizeof(float) || bytes128.Length != 128 * bins * sizeof(float))
+            throw new InvalidDataException("The embedded resource whisper_mel_filters.gz is truncated.");
+        var mel80 = new float[80 * bins];
+        var mel128 = new float[128 * bins];
+        Buffer.BlockCopy(bytes80, 0, mel80, 0, bytes80.Length);
+        Buffer.BlockCopy(bytes128, 0, mel128, 0, bytes128.Length);
+        return (new Tensor<float>(new[] { 80, bins }, new Vector<float>(mel80)).Cast<T>(),
+            new Tensor<float>(new[] { 128, bins }, new Vector<float>(mel128)).Cast<T>());
+    }, isThreadSafe: true);
+
+    // The periodic Hann window [1, 400] and the real DFT bases [400, 201] (cos and -sin) of the 400-point STFT.
+    private static readonly Lazy<(Tensor<T> Window, Tensor<T> Cos, Tensor<T> Sin)> Stft = new(() =>
+    {
+        var engine = AiDotNetEngine.Current;
+        var (cos, sin) = AiDotNet.LossFunctions.DftBasis<T>.Build(FftSize, FftSize / 2 + 1, negateSine: true);
+        return (engine.Reshape(engine.TensorHannWindow<T>(FftSize, true), new[] { 1, FftSize }), cos, sin);
     }, isThreadSafe: true);
 
     /// <summary><c>log_mel_spectrogram(audio, n_mels, padding)</c>: a centred, reflect-padded 400-point STFT (hop 160,
     /// periodic Hann), its power without the last frame, the mel filter bank, log10 above 1e-10, floored 8 below the
     /// maximum, then (x + 4) / 4: <c>[mels, frames]</c>.</summary>
-    public static double[,] LogMelSpectrogram(double[] audio, int mels, int padding = 0)
+    /// <remarks>The power is scaled by the square of the largest STFT component before the filter bank and the scale
+    /// is added back in the log domain (log10(max(m s^2, 1e-10)) = log10(max(m, 1e-10 / s^2)) + 2 log10 s), so a
+    /// 16-bit float never forms the overflowing squares.</remarks>
+    public static Tensor<T> LogMelSpectrogram(Tensor<T> audio, int mels, int padding = 0)
     {
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
         if (mels != 80 && mels != 128) throw new ArgumentException($"Unsupported n_mels: {mels}", nameof(mels));
-        var x = new double[audio.Length + padding];
-        Array.Copy(audio, x, audio.Length);
+        var engine = AiDotNetEngine.Current;
+        var x = engine.Reshape(audio, new[] { audio.Length });
+        if (padding > 0) x = engine.PadNd(x, new[] { 0, padding }, EnginePadMode.Constant, NumOps.Zero);
         int half = FftSize / 2, length = x.Length;
         if (length <= half) throw new ArgumentException("The audio is shorter than the STFT's reflect padding.", nameof(audio));
-        var padded = new double[length + 2 * half];
-        for (int i = 0; i < length; i++) padded[half + i] = x[i];
-        for (int i = 0; i < half; i++)
-        {
-            padded[half - 1 - i] = x[i + 1];
-            padded[half + length + i] = x[length - 2 - i];
-        }
-        int frames = 1 + length / HopLength, bins = FftSize / 2 + 1;
-        var window = new double[FftSize];
-        for (int n = 0; n < FftSize; n++) window[n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / FftSize);
-        var cos = new double[bins * FftSize];
-        var sin = new double[bins * FftSize];
-        for (int k = 0; k < bins; k++)
-            for (int n = 0; n < FftSize; n++)
-            {
-                double angle = 2 * Math.PI * ((long)k * n % FftSize) / FftSize;
-                cos[k * FftSize + n] = Math.Cos(angle);
-                sin[k * FftSize + n] = Math.Sin(angle);
-            }
+        var padded = engine.PadNd(x, new[] { half, half }, EnginePadMode.Reflect, NumOps.Zero);
+        int frames = 1 + length / HopLength, used = frames - 1;
+        var stft = Stft.Value;
+        var windows = engine.TensorSlice(engine.TensorUnfold(padded, 0, FftSize, HopLength), new[] { 0, 0 }, new[] { used, FftSize });
+        var framed = engine.TensorMultiply(windows, engine.TensorBroadcastTo(stft.Window, new[] { used, FftSize }));
+        var re = engine.TensorMatMul(framed, stft.Cos);
+        var im = engine.TensorMatMul(framed, stft.Sin);
+        T peak = engine.TensorMaxValue(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)));
+        T scale = NumOps.GreaterThan(peak, NumOps.Zero) ? peak : NumOps.One;
+        var power = engine.TensorAdd(engine.TensorSquare(engine.TensorDivideScalar(re, scale)),
+            engine.TensorSquare(engine.TensorDivideScalar(im, scale)));
         var filters = mels == 80 ? Filters.Value.Mel80 : Filters.Value.Mel128;
-        int used = frames - 1;
-        var power = new double[bins];
-        var frame = new double[FftSize];
-        var output = new double[mels, used];
-        double max = double.NegativeInfinity;
-        for (int f = 0; f < used; f++)
-        {
-            bool silent = true;
-            for (int n = 0; n < FftSize; n++)
-            {
-                frame[n] = padded[f * HopLength + n] * window[n];
-                if (frame[n] != 0.0) silent = false;
-            }
-            for (int k = 0; k < bins; k++)
-            {
-                // A frame of zeros (the padding of a short window) has zero power at every bin.
-                if (silent) { power[k] = 0.0; continue; }
-                double re = 0, im = 0;
-                for (int n = 0; n < FftSize; n++)
-                {
-                    re += frame[n] * cos[k * FftSize + n];
-                    im -= frame[n] * sin[k * FftSize + n];
-                }
-                power[k] = re * re + im * im;
-            }
-            for (int m = 0; m < mels; m++)
-            {
-                double sum = 0;
-                for (int k = 0; k < bins; k++) sum += filters[m * bins + k] * power[k];
-                double log = Math.Log10(Math.Max(sum, 1e-10));
-                output[m, f] = log;
-                if (log > max) max = log;
-            }
-        }
-        for (int m = 0; m < mels; m++)
-            for (int f = 0; f < used; f++) output[m, f] = (Math.Max(output[m, f], max - 8.0) + 4.0) / 4.0;
-        return output;
+        var mel = engine.TensorMatMul(filters, engine.TensorTranspose(power));
+        T floor = NumOps.Divide(NumOps.Divide(NumOps.FromDouble(1e-10), scale), scale);
+        T offset = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Log10(scale));
+        var log = engine.TensorAddScalar(engine.TensorLog10(engine.TensorMax(mel, floor)), offset);
+        T max = engine.TensorMaxValue(log);
+        var clipped = engine.TensorMax(log, NumOps.Subtract(max, NumOps.FromDouble(8.0)));
+        return engine.TensorDivideScalar(engine.TensorAddScalar(clipped, NumOps.FromDouble(4.0)), NumOps.FromDouble(4.0));
     }
 
-    // pad_or_trim(mel[:, start:start + size], N_FRAMES)
-    private static Tensor<T> Window(double[,] mel, int start, int size)
+    /// <summary><c>log_mel_spectrogram</c> of 16 kHz samples decoded as doubles, cast to <typeparamref name="T"/> once.</summary>
+    internal static Tensor<T> LogMelSpectrogram(double[] audio, int mels, int padding = 0)
     {
-        int mels = mel.GetLength(0);
-        var window = new Tensor<T>(new[] { mels, ChunkFrames });
-        for (int m = 0; m < mels; m++)
-            for (int f = 0; f < Math.Min(size, ChunkFrames); f++)
-                if (start + f < mel.GetLength(1)) window[m, f] = NumOps.FromDouble(mel[m, start + f]);
-        return window;
+        if (audio is null) throw new ArgumentNullException(nameof(audio));
+        return LogMelSpectrogram(new Tensor<double>(new[] { audio.Length }, new Vector<double>(audio)).Cast<T>(), mels, padding);
+    }
+
+    /// <summary><c>pad_or_trim(mel[:, start:start + size], N_FRAMES)</c>: <c>[mels, 3000]</c>.</summary>
+    internal static Tensor<T> Window(Tensor<T> mel, int start, int size)
+    {
+        var engine = AiDotNetEngine.Current;
+        int mels = mel.Shape[0], available = mel.Shape[1];
+        int take = Math.Max(0, Math.Min(Math.Min(size, ChunkFrames), available - start));
+        if (take == 0) return new Tensor<T>(new[] { mels, ChunkFrames });
+        var part = engine.TensorSlice(mel, new[] { 0, start }, new[] { mels, take });
+        return take == ChunkFrames ? part.Contiguous() : engine.PadNd(part, new[] { 0, ChunkFrames - take }, EnginePadMode.Constant, NumOps.Zero);
     }
 
     // ---------------------------------------------------------------- language detection and decoding
@@ -736,7 +726,7 @@ internal sealed class OpenAiWhisperTranscriber<T>
     {
         var d = _model.Dimensions;
         var mel = LogMelSpectrogram(audio, d.Mels, ChunkSamples);
-        int contentFrames = mel.GetLength(1) - ChunkFrames;
+        int contentFrames = mel.Shape[1] - ChunkFrames;
         if (language is null)
         {
             using var _ = new NoGradScope<T>();
