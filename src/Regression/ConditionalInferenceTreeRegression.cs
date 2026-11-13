@@ -355,7 +355,7 @@ public partial class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRe
         var sortedUnique = new Vector<T>(uniqueValues);
         int candidateCount = sortedUnique.Length - 1;
         var thresholds = engine.Divide(
-            engine.Add(sortedUnique.GetSubVector(0, candidateCount), sortedUnique.GetSubVector(1, candidateCount)),
+            engine.Add(sortedUnique.GetSubVector(0, candidateCount), RegressionEngineOps2.Slice(sortedUnique, 1, candidateCount)),
             NumOps.FromDouble(2));
 
         // One p-value per candidate. Splits that violate MinSamplesLeaf (prevents degenerate

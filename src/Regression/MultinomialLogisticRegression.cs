@@ -227,6 +227,7 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         _coefficients = new Matrix<T>(_numClasses, numFeatures + 1);
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
+        var (jitterRelative, jitterFloor) = NewtonJitter();
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -240,13 +241,24 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
                 hessian = hessian.Add(Regularization.Regularize(hessian));
             }
 
+            // The full-softmax Hessian is singular by construction: the classes' parameters are identified only up to a
+            // shift shared across classes, and that shift is its null space. The gradient is orthogonal to it (per
+            // feature, the class residuals p - y sum to zero), so a scale-relative ridge makes the Newton system
+            // solvable without changing the step in any identified direction. The Hessian of the log-likelihood is
+            // negative semi-definite, so the ridge goes on -H (pushing eigenvalues away from zero) and the sign is
+            // restored; adding it to H directly could turn a small negative curvature positive and reverse the step.
+            hessian = RegressionEngineOps2.AddRelativeDiagonalJitter(hessian.Negate(), jitterRelative, jitterFloor).Negate();
+
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
 
-            // Reshape update into _coefficients shape: _numClasses × (numFeatures+1)
-            Matrix<T> updateMatrix = new Matrix<T>(_coefficients.Rows, _coefficients.Columns);
-            int copied = Math.Min(update.Length, _coefficients.Rows * _coefficients.Columns);
-            update.AsSpan().Slice(0, copied).CopyTo(updateMatrix.AsWritableSpan());
+            // The gradient (X^T (Y - P), [feature, class]) and the Hessian (xx^T kron h) both order the parameters
+            // feature-major, index = feature * classes + class, so the update is too; _coefficients is
+            // [class, feature]. Copying it straight in moved each step onto the wrong (class, feature) pairs.
+            Matrix<T> featureMajor = new Matrix<T>(_coefficients.Columns, _coefficients.Rows);
+            int copied = Math.Min(update.Length, featureMajor.Rows * featureMajor.Columns);
+            update.AsSpan().Slice(0, copied).CopyTo(featureMajor.AsWritableSpan());
+            Matrix<T> updateMatrix = featureMajor.Transpose();
 
             _coefficients = _coefficients.Subtract(updateMatrix);
 
@@ -326,6 +338,25 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         var expScores = Engine.TensorExp(Engine.TensorSubtract(scoreTensor, maxScores));
         var sumExpScores = Engine.TensorBroadcastTo(Engine.ReduceSum(expScores, new[] { 1 }, keepDims: true), shape);
         return Engine.TensorDivide(expScores, sumExpScores).ToMatrix();
+    }
+
+    /// <summary>
+    /// The relative and absolute diagonal jitter that make the Newton system of the full-softmax Hessian solvable.
+    /// </summary>
+    /// <remarks>
+    /// Both must survive being stored in T. The relative jitter must change a diagonal entry: 1e-8 is below half an ulp
+    /// of a float (eps 1.2e-7), so float kept the singular Hessian unchanged; four machine epsilons of T is at least two
+    /// ulps, and double keeps 1e-8, which is larger. The floor covers an exactly-zero diagonal (a feature that is zero
+    /// in every sample): 1e-12 rounds to 0 in Half, whose smallest subnormal is 2^-24, so the floor is at least eps^2.
+    /// </remarks>
+    internal static (T Relative, T Floor) NewtonJitter()
+    {
+        double machineEpsilon = typeof(T) == typeof(float) ? Math.Pow(2, -23)
+            : typeof(T) == typeof(Half) ? Math.Pow(2, -10)
+            : Math.Pow(2, -52);
+        var ops = MathHelper.GetNumericOperations<T>();
+        return (ops.FromDouble(Math.Max(1e-8, 4 * machineEpsilon)),
+            ops.FromDouble(Math.Max(1e-12, machineEpsilon * machineEpsilon)));
     }
 
     /// <summary>

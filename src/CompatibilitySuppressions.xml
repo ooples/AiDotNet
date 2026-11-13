@@ -42068,4 +42068,25 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.NeuralNetworks.Layers.TokenConditionedDecoderLayer`1.#ctor(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.NeuralNetworks.Layers.EmbeddingLayer{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32,System.Int32,System.Int32)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.NeuralNetworks.Layers.TokenConditionedDecoderLayer`1.#ctor(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.NeuralNetworks.Layers.EmbeddingLayer{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32,System.Int32,System.Int32)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.NeuralNetworks.Layers.TokenConditionedDecoderLayer`1.#ctor(System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.NeuralNetworks.Layers.EmbeddingLayer{`0},System.Collections.Generic.IEnumerable{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32,System.Int32,System.Int32)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>

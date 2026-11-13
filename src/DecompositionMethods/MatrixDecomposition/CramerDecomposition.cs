@@ -159,8 +159,9 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
     /// The engine determinant is LU-based, so an exactly singular matrix gives a rounding residue
     /// (about 6.7e-16 for [[1,2,3],[4,5,6],[7,8,9]]) rather than an exact zero. Hadamard's inequality
     /// bounds |det A| by the product of the column norms; a determinant at or below
-    /// n * eps * that bound cannot be told apart from zero. eps = 2^(1 - p) for a p-bit significand,
-    /// which is 0 for integer types, so they keep the exact-zero test.
+    /// n * eps * that bound cannot be told apart from zero. eps is the machine epsilon of T (the gap
+    /// between 1 and the next representable value), which is 0 for integer types, so they keep the
+    /// exact-zero test.
     /// </remarks>
     private bool IsNumericallySingular(T det)
     {
@@ -172,8 +173,26 @@ public class CramerDecomposition<T> : MatrixDecompositionBase<T>
 
         var columnNorms = Engine.TensorNorm(Tensor<T>.FromMatrix(A), 0, false);
         T hadamardBound = Engine.Product(columnNorms.ToVector());
-        T epsilon = NumOps.Power(NumOps.FromDouble(2), NumOps.FromDouble(1 - NumOps.PrecisionBits));
+        T epsilon = MachineEpsilon.Value;
         T threshold = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(n), epsilon), hadamardBound);
         return NumOps.LessThanOrEquals(NumOps.Abs(det), threshold);
     }
+
+    // Machine epsilon of T. PrecisionBits is the storage width (64 for double), not the significand, so it
+    // cannot give 2^(1 - p); the IEEE significands are listed instead. A type whose 1/2 is 0 is an integer type.
+    private static readonly Lazy<T> MachineEpsilon = new(() =>
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (ops.Equals(ops.Divide(ops.One, ops.FromDouble(2)), ops.Zero))
+        {
+            return ops.Zero;
+        }
+
+        // decimal's determinant is computed in double (LinalgDispatch has float and double kernels only), so its
+        // residue on a singular matrix is double round-off, about 1e-16, not decimal's 1e-28: bound it by double's.
+        double epsilon = typeof(T) == typeof(float) ? Math.Pow(2, -23)
+            : typeof(T) == typeof(Half) ? Math.Pow(2, -10)
+            : Math.Pow(2, -52);
+        return ops.FromDouble(epsilon);
+    });
 }

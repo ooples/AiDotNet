@@ -234,7 +234,7 @@ public partial class BeveridgeNelsonDecomposition<T> : TimeSeriesDecompositionBa
         }
 
         // Calculate first differences
-        Vector<T> differenced = Engine.Subtract(TimeSeries.GetSubVector(1, n - 1), TimeSeries.GetSubVector(0, n - 1));
+        Vector<T> differenced = Engine.Subtract(AiDotNet.Regression.RegressionEngineOps2.Slice(TimeSeries, 1, n - 1), TimeSeries.GetSubVector(0, n - 1));
 
         // Calculate mean of differenced series
         T meanDiff = StatisticsHelper<T>.CalculateMean(differenced);

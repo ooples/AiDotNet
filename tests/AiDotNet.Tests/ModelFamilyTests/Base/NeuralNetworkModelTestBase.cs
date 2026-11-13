@@ -4444,6 +4444,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is not ITrainingObjectiveProvider<T> objectiveProvider)
             return proposedTarget;
 
+        // The resolved target is trained on for every later step, so it must not come from the test's step arena:
+        // a model resolving with engine ops would otherwise hand back a buffer the arena reissues mid-training
+        // (CLAP's caption ids turned into waveform samples by the third step).
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.HamiltonianDynamics)
             proposedTarget = CreateCanonicalHamiltonianDynamicsTarget(input);
 

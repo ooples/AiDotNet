@@ -711,7 +711,7 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
             }
 
             return engine.Divide(
-                engine.Add(uniqueValues.GetSubVector(0, count), uniqueValues.GetSubVector(1, count)),
+                engine.Add(uniqueValues.GetSubVector(0, count), RegressionEngineOps2.Slice(uniqueValues, 1, count)),
                 NumOps.FromDouble(2.0));
         }
 
@@ -1080,8 +1080,9 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         // gain = 0.5 * (leftGrad^2/(leftHess+lambda) + rightGrad^2/(rightHess+lambda) - totalGrad^2/(totalHess+lambda))
         T lambda = NumOps.FromDouble(_options.L2Regularization);
         var lambdas = engine.Fill(candidates, lambda);
-        var leftTerm = engine.Divide(engine.Multiply(leftGrad, leftGrad), engine.Add(leftHess, lambdas));
-        var rightTerm = engine.Divide(engine.Multiply(rightGrad, rightGrad), engine.Add(rightHess, lambdas));
+        // An empty side has zero hessian (and zero gradient): with the default lambda of 0 its term is 0, not 0/0.
+        var leftTerm = RegressionEngineOps.DivideWherePositive(engine.Multiply(leftGrad, leftGrad), engine.Add(leftHess, lambdas));
+        var rightTerm = RegressionEngineOps.DivideWherePositive(engine.Multiply(rightGrad, rightGrad), engine.Add(rightHess, lambdas));
         T totalTerm = NumOps.Divide(NumOps.Multiply(totalGrad, totalGrad), NumOps.Add(totalHess, lambda));
         var gains = engine.Multiply(
             engine.Subtract(engine.Add(leftTerm, rightTerm), engine.Fill(candidates, totalTerm)),

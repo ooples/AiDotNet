@@ -1082,7 +1082,7 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             {
                 Tensor<T>.CreateDefault(new[] { 1 }, NumOps.One),
                 Engine.ScalarMinusTensor(NumOps.One, Engine.TensorEquals(
-                    Tensor<T>.FromVector(sortedVector.GetSubVector(1, n - 1)),
+                    Tensor<T>.FromVector(RegressionEngineOps2.Slice(sortedVector, 1, n - 1)),
                     Tensor<T>.FromVector(sortedVector.GetSubVector(0, n - 1))))
             }, 0)
             : Tensor<T>.CreateDefault(new[] { n }, NumOps.One);

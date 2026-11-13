@@ -76,6 +76,27 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
 
     /// <inheritdoc/>
     /// <remarks>
+    /// The model reads at most <see cref="MaxSequenceLength"/> tokens: a longer [Time] or [Batch, Time] input keeps its
+    /// first <see cref="MaxSequenceLength"/> positions, as a tokenizer truncating to the context window would. Training
+    /// forwards through the same forecast, so both see the same window.
+    /// </remarks>
+    protected override Tensor<T> ForecastCore(Tensor<T> input, double[]? quantiles)
+        => base.ForecastCore(TruncateToContextWindow(input), quantiles);
+
+    /// <summary>
+    /// The first <see cref="MaxSequenceLength"/> positions of a [Time] or [Batch, Time] token input; other inputs, and
+    /// inputs that already fit, are returned unchanged.
+    /// </summary>
+    private Tensor<T> TruncateToContextWindow(Tensor<T> input)
+    {
+        int limit = MaxSequenceLength;
+        if (limit <= 0 || (input.Rank != 1 && input.Rank != 2)) return input;
+        int timeAxis = input.Rank - 1;
+        return input.Shape[timeAxis] <= limit ? input : Engine.TensorNarrow(input, timeAxis, 0, limit);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The size of the vocabulary (how many unique tokens the model knows).
     /// Larger vocabularies allow more precise language understanding but require more memory.

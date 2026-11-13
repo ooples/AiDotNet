@@ -73,8 +73,11 @@ public static class RankingMetrics<T>
 
         // Discount 1 / log2(rank + 1) for ranks 1..cutoff and zero beyond the cutoff, plus its
         // cumulative sum with a leading zero so any rank range sums by two lookups.
-        var discounts = engine.TensorReciprocal(engine.TensorLog2(
-            engine.TensorLinspace(NumOps.FromDouble(2.0), NumOps.FromDouble(cutoff + 1.0), cutoff)));
+        // Linspace needs two points, so a cutoff of 1 builds its single rank position (2) directly.
+        var rankPositions = cutoff == 1
+            ? Tensor<T>.CreateDefault(new[] { 1 }, NumOps.FromDouble(2.0))
+            : engine.TensorLinspace(NumOps.FromDouble(2.0), NumOps.FromDouble(cutoff + 1.0), cutoff);
+        var discounts = engine.TensorReciprocal(engine.TensorLog2(rankPositions));
         if (cutoff < n)
         {
             discounts = engine.TensorConcatenate(new[] { discounts, Tensor<T>.CreateDefault(new[] { n - cutoff }, NumOps.Zero) }, 0);

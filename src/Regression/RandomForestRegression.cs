@@ -364,9 +364,9 @@ public partial class RandomForestRegression<T> : AsyncDecisionTreeRegressionBase
             importances = Engine.Add(importances, treeImportance);
         }
 
-        // Normalize importances
+        // Normalize importances; with no split anywhere (a constant target) every importance stays 0
         T sum = numFeatures == 0 ? NumOps.Zero : Engine.Sum(importances);
-        FeatureImportances = Engine.Divide(importances, sum);
+        FeatureImportances = NumOps.GreaterThan(sum, NumOps.Zero) ? Engine.Divide(importances, sum) : importances;
     }
 
 }

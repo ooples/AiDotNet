@@ -9,6 +9,18 @@ namespace AiDotNet.Regression;
 internal static class RegressionEngineOps2
 {
     /// <summary>
+    /// <paramref name="count"/> elements of <paramref name="source"/> from <paramref name="start"/>, or an empty vector
+    /// when <paramref name="count"/> is 0.
+    /// </summary>
+    /// <remarks>
+    /// Vector.GetSubVector rejects a start index equal to the length even for zero elements, so slicing "everything
+    /// after the first" out of a one-element vector (an intercept-only fit, a single lag, a one-sample series) threw
+    /// where the element loops it replaced simply ran zero times.
+    /// </remarks>
+    public static Vector<T> Slice<T>(Vector<T> source, int start, int count)
+        => count == 0 ? new Vector<T>(0) : source.GetSubVector(start, count);
+
+    /// <summary>
     /// Wraps integer positions as a rank-1 <see cref="Tensor{T}"/> of <see cref="int"/> for the
     /// engine's index operations.
     /// </summary>

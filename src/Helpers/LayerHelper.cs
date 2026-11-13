@@ -6022,7 +6022,8 @@ public static partial class LayerHelper<T>
             new DenseLayer<T>(decoderVocabularySize, identityActivation),
             encoderVocabularySize: 32128,
             decoderVocabularySize: decoderVocabularySize,
-            maximumDecoderLength: maxAudioTokens);
+            maximumDecoderLength: maxAudioTokens,
+            maximumEncoderLength: maxTextLength);
     }
 
     /// <summary>

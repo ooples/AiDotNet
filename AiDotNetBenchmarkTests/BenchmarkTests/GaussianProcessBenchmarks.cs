@@ -176,7 +176,7 @@ public class SpecializedKernelBenchmarks
     [Params(100, 500)]
     public int NumRFFFeatures { get; set; }
 
-    private Vector<double>[] _gridCoordinates = null!;
+    private Vector<double>[] _gridCoordinates = Array.Empty<Vector<double>>();
     private GridKernel<double> _gridKernel = null!;
     private RFFKernel<double> _rffKernel = null!;
     private CosineKernel<double> _cosineKernel = null!;
