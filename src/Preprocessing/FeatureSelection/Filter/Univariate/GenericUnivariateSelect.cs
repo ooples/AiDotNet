@@ -143,6 +143,14 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 {
                     throw new ArgumentException("For FPR/FDR/FWE modes, param (alpha) must be between 0 and 1.", nameof(_param));
                 }
+                // these modes threshold p-values, which mutual information does not produce (scikit-learn rejects the
+                // pair too); checked here so the invalid pair fails at construction, not at Fit
+                if (_scoringFunction == SelectKBestScoreFunc.MutualInfoRegression)
+                {
+                    throw new ArgumentException(
+                        $"The {_mode} mode needs p-values, which the {_scoringFunction} scoring function does not produce.",
+                        "scoringFunction");
+                }
                 break;
         }
     }
@@ -214,7 +222,8 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         }
 
         if (pValues is null)
-            throw new InvalidOperationException("Scores have not been computed.");
+            throw new InvalidOperationException(
+                $"The {_mode} mode needs p-values, which the {_scoringFunction} scoring function does not produce.");
 
         var pValueTensor = FilterStatisticTensorOps.AsTensor(pValues);
         T alpha = NumOps.FromDouble(Convert.ToDouble(_param));

@@ -61,12 +61,16 @@ public class KruskalWallisH<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
 
-        _nInputFeatures = data.Columns;
         int p = data.Columns;
 
         // Kruskal-Wallis H of every feature across the (integer) classes, tie-corrected, with chi-squared
-        // p-values (scipy.stats.kruskal)
+        // p-values (scipy.stats.kruskal, which needs at least two groups: one class makes H = 0 and p = 1 for every
+        // feature, a selection that carries no information)
         var classIndex = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        if (classCount < 2)
+            throw new ArgumentException("KruskalWallisH requires at least 2 classes.", nameof(target));
+
+        _nInputFeatures = p;
         var (h, pValues) = FeatureSelectionTensorOps.KruskalWallis(
             FilterStatisticTensorOps.AsTensor(data), FilterStatisticTensorOps.ClassOneHot<T>(classIndex, classCount));
         _hStatistics = h.ToVector();

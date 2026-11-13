@@ -65,11 +65,18 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         if (data.Rows != target.Length)
             throw new ArgumentException("Target length must match rows in data.");
 
-        _nInputFeatures = data.Columns;
         int p = data.Columns;
         var engine = Engine;
 
-        // Separate samples by class (binary): class 0 is the rounded label 0, every other label is class 1
+        // the test compares two samples (scipy.stats.mannwhitneyu): a third label would be merged into class 1
+        FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        if (classCount > 2)
+            throw new ArgumentException(
+                $"MannWhitneyU compares two classes; the target has {classCount}.", nameof(target));
+
+        _nInputFeatures = p;
+
+        // Separate samples by class (binary): class 0 is the rounded label 0, the other label is class 1
         var labels = engine.TensorRound(FilterStatisticTensorOps.AsTensor(target));
         var class0 = engine.TensorEquals(labels, NumOps.Zero);
         int n1 = engine.TensorCountNonzero(class0);
