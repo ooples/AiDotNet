@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.SelfSupervisedLearning.Losses;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -447,7 +448,7 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var normSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(normSquared, NumOps.FromDouble(1e-8)));
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(normSquared, ObjectiveOps.Epsilon<T>(1e-8)));
         return Engine.TensorDivide(tensor, norm);
     }
 

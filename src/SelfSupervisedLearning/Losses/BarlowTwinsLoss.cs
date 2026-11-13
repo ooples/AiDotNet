@@ -128,7 +128,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var variance = Engine.TensorDivideScalar(
             Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true),
             NumOps.FromDouble(batchSize));
-        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-12)));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, ObjectiveOps.Epsilon<T>(1e-12)));
         return Engine.TensorDivide(centered, std);
     }
 
@@ -233,7 +233,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var variance = Engine.TensorDivideScalar(
             Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 0 }, keepDims: true), batchSizeT);
 
-        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-8)));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, ObjectiveOps.Epsilon<T>(1e-8)));
 
         // Normalize
         return Engine.TensorDivide(centered, std);
@@ -275,7 +275,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var mean = Engine.ReduceMean(z, batchAxis, keepDims: true);
         var centred = Engine.TensorSubtract(z, mean);
         var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), batchAxis, keepDims: true);
-        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(BatchVarianceEpsilon)));
+        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, ObjectiveOps.Epsilon<T>(BatchVarianceEpsilon)));
 
         return Engine.TensorDivide(centred, scale);
     }

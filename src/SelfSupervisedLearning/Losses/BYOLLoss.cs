@@ -142,7 +142,7 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
 
         // Norm of the ORIGINAL (unnormalized) input for the chain rule, [batch, 1]
         var origNormSq = Engine.ReduceSum(Engine.TensorSquare(onlinePrediction), new[] { 1 }, keepDims: true);
-        var origNorm = Engine.TensorSqrt(Engine.TensorAddScalar(origNormSq, NumOps.FromDouble(1e-8)));
+        var origNorm = Engine.TensorSqrt(Engine.TensorAddScalar(origNormSq, ObjectiveOps.Epsilon<T>(1e-8)));
 
         // Loss = 2 - 2 * cos_sim, averaged over the batch
         var losses = Engine.TensorAddScalar(
@@ -185,7 +185,7 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, ObjectiveOps.Epsilon<T>(1e-8)));
         return Engine.TensorDivide(tensor, norm);
     }
 

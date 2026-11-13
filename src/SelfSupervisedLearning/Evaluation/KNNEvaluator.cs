@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
+using AiDotNet.SelfSupervisedLearning.Losses;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -273,7 +274,7 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             // Weight by similarity (higher is better)
             ? Engine.TensorExp(Engine.TensorDivideScalar(neighborDistances, NumOps.FromDouble(_temperature)))
             // Weight by inverse distance
-            : Engine.Reciprocal(Engine.TensorAddScalar(neighborDistances, NumOps.FromDouble(1e-8)).AsVector()).AsTensor();
+            : Engine.Reciprocal(Engine.TensorAddScalar(neighborDistances, ObjectiveOps.Epsilon<T>(1e-8)).AsVector()).AsTensor();
 
         var votes = Engine.ScatterAdd(
             weights, new Tensor<int>(neighborLabels, new[] { neighborLabels.Length }), 0, _numClasses);
@@ -316,7 +317,7 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorMultiply(tensor, tensor), new[] { 1 }, keepDims: true);
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, ObjectiveOps.Epsilon<T>(1e-8)));
         return Engine.TensorDivide(tensor, norm);
     }
 

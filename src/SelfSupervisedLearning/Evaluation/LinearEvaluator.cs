@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
+using AiDotNet.SelfSupervisedLearning.Losses;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -278,7 +279,7 @@ public class LinearEvaluator<T>
         // Cross-entropy loss: -sum_b log(p[b, label_b] + 1e-8)
         var trueProbs = Engine.ReduceSum(Engine.TensorMultiply(probs, targets), new[] { 1 }, keepDims: false);
         T totalLoss = NumOps.Negate(Engine.TensorSum(
-            Engine.TensorLog(Engine.TensorAddScalar(trueProbs, NumOps.FromDouble(1e-8)))));
+            Engine.TensorLog(Engine.TensorAddScalar(trueProbs, ObjectiveOps.Epsilon<T>(1e-8)))));
 
         // Compute gradients: dL/dW = x^T (prob - target), dL/db = sum_b (prob - target), scaled by 1/batchSize
         var scale = NumOps.FromDouble(1.0 / batchSize);

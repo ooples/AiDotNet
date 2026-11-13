@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.SelfSupervisedLearning.Losses;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -95,7 +96,7 @@ public class SelfSupervisedLearningMetrics<T>
 
         // Return log of average
         var avg = NumOps.Divide(sum, NumOps.FromDouble(Math.Max(count, 1)));
-        return NumOps.Log(NumOps.Add(avg, NumOps.FromDouble(1e-8)));
+        return NumOps.Log(NumOps.Add(avg, ObjectiveOps.Epsilon<T>(1e-8)));
     }
 
     /// <summary>
@@ -118,7 +119,7 @@ public class SelfSupervisedLearningMetrics<T>
         var eigenvalues = ComputeEigenvalues(cov);
 
         // |lambda| + 1e-8, normalized to a probability distribution
-        var magnitudes = Engine.TensorAddScalar(Engine.TensorAbs(eigenvalues), NumOps.FromDouble(1e-8));
+        var magnitudes = Engine.TensorAddScalar(Engine.TensorAbs(eigenvalues), ObjectiveOps.Epsilon<T>(1e-8));
         var p = Engine.TensorDivideScalar(magnitudes, Engine.TensorSum(magnitudes));
 
         T entropy = EntropyAboveFloor(p);
@@ -203,7 +204,7 @@ public class SelfSupervisedLearningMetrics<T>
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, ObjectiveOps.Epsilon<T>(1e-8)));
         return Engine.TensorDivide(tensor, norm);
     }
 

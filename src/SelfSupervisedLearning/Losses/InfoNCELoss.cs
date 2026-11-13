@@ -257,7 +257,7 @@ public class InfoNCELoss<T> : ContrastiveLossBase<T>
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // x / sqrt(sum(x^2) + 1e-8) per row
         var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
-        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, NumOps.FromDouble(1e-8)));
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, ObjectiveOps.Epsilon<T>(1e-8)));
         return Engine.TensorDivide(tensor, norm);
     }
     /// <summary>

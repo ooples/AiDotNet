@@ -144,7 +144,7 @@ public class DINOLoss<T> : ContrastiveLossBase<T>
 
         var shape = new[] { batchSize, _outputDim };
         var logPs = Engine.TensorLog(Engine.TensorAddScalar(
-            Engine.TensorSlice(studentProbs, new[] { 0, 0 }, shape), NumOps.FromDouble(1e-8)));
+            Engine.TensorSlice(studentProbs, new[] { 0, 0 }, shape), ObjectiveOps.Epsilon<T>(1e-8)));
         var pt = Engine.TensorSlice(teacherProbs, new[] { 0, 0 }, shape);
         return NumOps.Negate(Engine.TensorSum(Engine.TensorMultiply(pt, logPs)));
     }
