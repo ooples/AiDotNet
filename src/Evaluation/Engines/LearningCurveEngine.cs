@@ -214,11 +214,11 @@ public class LearningCurveEngine<T>
 
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
-        var tensor = new Tensor<T>(values.ToArray(), new[] { values.Count });
-        T mean = engine.TensorMean(tensor);
-        if (values.Count <= 1) return (NumOps.ToDouble(mean), 0);
-        T sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean));
-        return (NumOps.ToDouble(mean), Math.Sqrt(NumOps.ToDouble(sumSq) / (values.Count - 1)));
+        var tensor = new Tensor<T>(values.ToArray(), new[] { values.Count }).Cast<double>();
+        double mean = engine.TensorMean(tensor);
+        if (values.Count <= 1) return (mean, 0);
+        double sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean));
+        return (mean, Math.Sqrt(sumSq / (values.Count - 1)));
     }
 
     private static T[,] ExtractRows(T[,] matrix, int[] indices)

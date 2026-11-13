@@ -15,6 +15,41 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 public class EvaluationNumericalMemoryTests
 {
     [Fact]
+    public void HalfValidationSummaries_KeepLargeCountsAndSampleVarianceWide()
+    {
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+        var cv = typeof(CrossValidationEngine<Half>).GetMethod("Summarize", flags)!;
+        var curve = typeof(LearningCurveEngine<Half>).GetMethod("MeanAndStandardDeviation", flags)!;
+        var values = Enumerable.Repeat((Half)60000, 70000).ToList();
+        Assert.Equal((60000.0, 0.0, 0.0), Assert.IsType<(double, double, double)>(cv.Invoke(null, new object[] { values })));
+        Assert.Equal((60000.0, 0.0), Assert.IsType<(double, double)>(curve.Invoke(null, new object[] { values })));
+        values = new List<Half> { (Half)(-60000), (Half)60000 };
+        var (mean, std, margin) = Assert.IsType<(double, double, double)>(cv.Invoke(null, new object[] { values }));
+        Assert.Equal(0.0, mean);
+        Assert.Equal(Math.Sqrt(7200000000.0), std, 8);
+        Assert.Equal(240000.0, margin, 8);
+        var (curveMean, curveStd) = Assert.IsType<(double, double)>(curve.Invoke(null, new object[] { values }));
+        Assert.Equal(mean, curveMean);
+        Assert.Equal(std, curveStd);
+        Assert.Equal((60000.0, 0.0), Assert.IsType<(double, double)>(
+            curve.Invoke(null, new object[] { new List<Half> { (Half)60000 } })));
+    }
+
+    [Fact]
+    public void PredictionTypeInference_FloatIntegerBoundsDoNotRoundOutward()
+    {
+        Assert.Equal(PredictionType.Regression, PredictionTypeInference.Infer(
+            new Vector<float>(Enumerable.Repeat(2147483648f, 10).ToArray())));
+        Assert.Equal(PredictionType.Regression, PredictionTypeInference.Infer(
+            new Vector<float>(Enumerable.Repeat(-2147483904f, 10).ToArray())));
+        Assert.Equal(PredictionType.MultiClass, PredictionTypeInference.Infer(
+            new Vector<float>(Enumerable.Repeat(2147483520f, 10).ToArray())));
+        Assert.Equal(PredictionType.MultiClass, PredictionTypeInference.Infer(
+            new Vector<float>(Enumerable.Repeat(-2147483648f, 10).ToArray())));
+    }
+
+
+    [Fact]
     public void HalfPercentageMetrics_KeepCountsErrorsAndPercentageScalingWide()
     {
         var actual = Enumerable.Repeat((Half)60000, 70000).ToArray();

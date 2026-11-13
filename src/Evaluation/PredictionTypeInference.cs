@@ -43,8 +43,9 @@ internal static class PredictionTypeInference
             return PredictionType.Regression;
         }
 
-        if (EvaluationTensorOps<T>.Count(engine.TensorLessThan(rounded, numOps.FromDouble(int.MinValue))) > 0 ||
-            EvaluationTensorOps<T>.Count(engine.TensorGreaterThan(rounded, numOps.FromDouble(int.MaxValue))) > 0)
+        var wideRounded = rounded.Cast<double>();
+        if (EvaluationTensorOps<double>.Count(engine.TensorLessThan(wideRounded, (double)int.MinValue)) > 0 ||
+            EvaluationTensorOps<double>.Count(engine.TensorGreaterThan(wideRounded, (double)int.MaxValue)) > 0)
         {
             return PredictionType.Regression;
         }

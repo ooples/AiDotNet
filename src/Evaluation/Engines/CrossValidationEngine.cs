@@ -167,32 +167,22 @@ public class CrossValidationEngine<T>
         return AggregateResults(strategy, foldResults);
     }
 
-    private static (T Mean, T Std, T Margin) Summarize(List<T> values)
+    private static (double Mean, double Std, double Margin) Summarize(List<T> values)
     {
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<T>();
         int count = values.Count;
-        var tensor = new Tensor<T>(values.ToArray(), new[] { count });
-        T mean = engine.TensorMean(tensor);
-        T variance = count > 1
-            ? NumOps.Divide(engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean)), NumOps.FromDouble(count - 1))
-            : NumOps.Zero;
-        T std = NumOps.Sqrt(variance);
+        var tensor = new Tensor<T>(values.ToArray(), new[] { count }).Cast<double>();
+        double mean = engine.TensorMean(tensor);
+        double variance = count > 1
+            ? engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean)) / (count - 1)
+            : 0;
+        double std = Math.Sqrt(variance);
 
-        // Calculate 95% CI using t-distribution approximation
-        double tValue = 1.96; // Approximate for large n
-        if (count < 30)
-        {
-            // Simple approximation for small samples
-            tValue = 2.0 + (4.0 / count);
-        }
-
-        return (mean, std, NumOps.Multiply(std, NumOps.FromDouble(tValue / Math.Sqrt(count))));
+        // Calculate 95% CI using t-distribution approximation.
+        double tValue = count < 30 ? 2.0 + 4.0 / count : 1.96;
+        return (mean, std, std * (tValue / Math.Sqrt(count)));
     }
-
-    private static T Lower(T mean, T margin) => NumOps.Subtract(mean, margin);
-
-    private static T Upper(T mean, T margin) => NumOps.Add(mean, margin);
 
     private CrossValidationResult<T> AggregateResults(
         ICrossValidationStrategy<T> strategy,
@@ -226,10 +216,11 @@ public class CrossValidationEngine<T>
             var sampleMetric = foldResults.First().Metrics[metricName];
             var direction = sampleMetric?.Direction ?? MetricDirection.HigherIsBetter;
 
+            var report = new Tensor<double>(new[] { mean, mean - margin, mean + margin, std }, new[] { 4 }).Cast<T>().ToArray();
             var aggregated = new MetricWithCI<T>(
-                mean,
-                Lower(mean, margin),
-                Upper(mean, margin),
+                report[0],
+                report[1],
+                report[2],
                 0.95,
                 ConfidenceIntervalMethod.NormalApproximation,
                 metricName,
@@ -237,7 +228,7 @@ public class CrossValidationEngine<T>
             {
                 Category = sampleMetric?.Category ?? "Unknown",
                 Description = sampleMetric?.Description,
-                StandardDeviation = std
+                StandardDeviation = report[3]
             };
 
             aggregatedMetrics.Add(aggregated);
