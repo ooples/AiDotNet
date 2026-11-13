@@ -488,7 +488,7 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
 
     /// <summary>Sets the emotion table from tensors: the emotion vectors <c>[rows, hidden]</c> grouped by
     /// <see cref="IndexTTS2Options.EmotionGroupSizes"/>, and optionally the speaker vectors <c>[rows, style]</c>.</summary>
-    public void LoadEmotionTable(Tensor<T> emotionRows, Tensor<T>? speakerRows = null)
+    internal void LoadEmotionTable(Tensor<T> emotionRows, Tensor<T>? speakerRows)
     {
         ThrowIfDisposed();
         if (emotionRows is null) throw new ArgumentNullException(nameof(emotionRows));

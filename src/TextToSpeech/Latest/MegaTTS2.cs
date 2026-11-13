@@ -414,7 +414,8 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
         var targetCache = Prefill(target);
         var styleCache = style is null ? null : Prefill(style);
-        T gamma = NumOps.FromDouble(style is null ? 0 : _options.ProsodyInterpolation);
+        double interpolation = style is null ? 0 : _options.ProsodyInterpolation;
+        T gamma = NumOps.FromDouble(interpolation), keep = NumOps.FromDouble(1 - interpolation);
         int n = pooled.Shape[0], h = pooled.Shape[1], v = _options.Codes + 1;
         var codes = new int[n];
         int token = Network.StartToken;
@@ -433,7 +434,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             if (styleCache is not null)
             {
                 var q = Probabilities(styleCache, row);
-                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, NumOps.Subtract(NumOps.One, gamma)), Engine.TensorMultiplyScalar(q, gamma));
+                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, keep), Engine.TensorMultiplyScalar(q, gamma));
             }
             p = TtsSampling<T>.Fill(p, startMask, NumOps.Zero);
             observeDistribution?.Invoke(p);
