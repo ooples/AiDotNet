@@ -1652,7 +1652,15 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TransformerTrainingPipelineTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.GraphLayerTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.TransformerShapeCompatibilityTests.|
-      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.NeuralNetworkBaseResolveShapesTests.)
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.NeuralNetworkBaseResolveShapesTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.NODEEntmaxTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.RetrievalModuleTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabNetSparsityLossTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabPFNContextTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabRRetrievalTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabularFeatureImportanceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TabularPaperDefaultsTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.NeuralNetworkSweepReferenceTests.)
 
   - name: Unassigned - 02
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj

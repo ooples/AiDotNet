@@ -799,17 +799,19 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     /// <summary>
     /// Samples the next token using temperature scaling and nucleus (top-p) sampling.
     /// </summary>
-    private int SampleNextToken(T[] logits, double temperature, double topP)
+    internal static int SampleNextToken(T[] logits, double temperature, double topP)
     {
         if (logits.Length == 0)
             return 0;
 
         int n = logits.Length;
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
 
         // Apply temperature, then softmax
         var raw = new Tensor<T>(logits, new[] { n });
-        var scaled = Engine.TensorDivide(raw, Full(n, NumOps.FromDouble(Math.Max(temperature, 0.01))));
-        var probs = Engine.Softmax(scaled, -1);
+        var scaled = engine.TensorDivide(raw, Full(n, ops.FromDouble(Math.Max(temperature, 0.01))));
+        var probs = engine.Softmax(scaled, -1);
 
         // Nucleus (top-p) sampling: most probable first (stable, NaN last), up to and including the token
         // that brings the running total to topP
@@ -817,22 +819,22 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         // thousands of tokens a Half running sum stops growing near 0.5 (its spacing there exceeds most token
         // probabilities), so the nucleus would never reach topP.
         var order = TieBreakArgMax.StableDescendingOrder1D(probs);
-        var sortedProbs = Engine.TensorTake(probs, order).Cast<double>();
-        var cumulativeProb = Engine.TensorCumSum(sortedProbs, 0);
-        var reached = Engine.TensorGreaterEqual(cumulativeProb, Tensor<double>.CreateDefault(new[] { n }, topP));
-        int nucleusSize = Engine.TensorCountNonzero(reached) == 0 ? n : TieBreakArgMax.FirstMaxIndex(reached) + 1;
+        var sortedProbs = engine.TensorTake(probs, order).Cast<double>();
+        var cumulativeProb = engine.TensorCumSum(sortedProbs, 0);
+        var reached = engine.TensorGreaterEqual(cumulativeProb, Tensor<double>.CreateDefault(new[] { n }, topP));
+        int nucleusSize = engine.TensorCountNonzero(reached) == 0 ? n : TieBreakArgMax.FirstMaxIndex(reached) + 1;
 
         // Renormalize nucleus probabilities (their sum is the running total at the last nucleus token)
-        var nucleusProbs = Engine.TensorNarrow(sortedProbs, 0, 0, nucleusSize);
+        var nucleusProbs = engine.TensorNarrow(sortedProbs, 0, 0, nucleusSize);
         double nucleusSum = cumulativeProb.GetFlat(nucleusSize - 1);
-        var normalizedProbs = Engine.TensorDivideScalar(nucleusProbs, nucleusSum);
+        var normalizedProbs = engine.TensorDivideScalar(nucleusProbs, nucleusSum);
 
         // Sample from nucleus: the first token whose running total reaches the draw
         var random = RandomHelper.Shared;
         double sample = random.NextDouble();
-        var cumulative = Engine.TensorCumSum(normalizedProbs, 0);
-        var hit = Engine.TensorLessEqual(Tensor<double>.CreateDefault(new[] { nucleusSize }, sample), cumulative);
-        int chosen = Engine.TensorCountNonzero(hit) == 0 ? nucleusSize - 1 : TieBreakArgMax.FirstMaxIndex(hit);
+        var cumulative = engine.TensorCumSum(normalizedProbs, 0);
+        var hit = engine.TensorLessEqual(Tensor<double>.CreateDefault(new[] { nucleusSize }, sample), cumulative);
+        int chosen = engine.TensorCountNonzero(hit) == 0 ? nucleusSize - 1 : TieBreakArgMax.FirstMaxIndex(hit);
         return order.GetFlat(chosen);
     }
 
