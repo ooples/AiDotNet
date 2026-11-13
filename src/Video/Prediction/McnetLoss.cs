@@ -110,7 +110,8 @@ public static class McnetLoss<T>
             return exponent == 0 ? 1.0 : 0.0;
         }
 
-        var unit = engine.TensorMultiplyScalar(magnitudes, 1.0 / peak);
+        // Divided, not multiplied by 1 / peak: a subnormal peak's reciprocal overflows to infinity
+        var unit = engine.TensorDivideScalar(magnitudes, peak);
         var powered = engine.TensorPow(unit, exponent);
         return engine.TensorMean(powered) * Math.Pow(peak, exponent);
     }

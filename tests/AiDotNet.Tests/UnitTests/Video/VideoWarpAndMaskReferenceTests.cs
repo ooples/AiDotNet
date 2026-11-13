@@ -269,6 +269,9 @@ public class VideoWarpAndMaskReferenceTests
         await Task.Yield();
         Assert.Throws<ArgumentException>(() => new VideoCLIPVideoOptions { HiddenDimension = 32 }.Validate());
         new VideoCLIPVideoOptions { HiddenDimension = 24, HiddenDim = 24 }.Validate();
+
+        // Supplied options size the tower from HiddenDimension, so an unused HiddenDim of 64 is no error.
+        new VideoCLIPVideoOptions { HiddenDimension = 24, HiddenDim = 64 }.Validate();
     }
 
     [Fact(Timeout = 120000)]
