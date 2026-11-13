@@ -193,10 +193,8 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         ThrowIfDisposed();
         var extended = GenerateMusic(prompt ?? "Continue the music", null, extensionSeconds, numInferenceSteps, 3.0, seed);
         // Concatenate original + extension
-        var result = new Tensor<T>([inputAudio.Length + extended.Length]);
-        for (int i = 0; i < inputAudio.Length; i++) result[i] = inputAudio[i];
-        for (int i = 0; i < extended.Length; i++) result[inputAudio.Length + i] = extended[i];
-        return result;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.Concat(new[] { AudioEngineOps.Flatten(Engine, inputAudio), AudioEngineOps.Flatten(Engine, extended) }, 0);
     }
 
     /// <inheritdoc />
@@ -288,22 +286,17 @@ public partial class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> ApplyGuidance(Tensor<T> latent, Tensor<T> textEmb, double scale)
     {
-        var combined = new Tensor<T>([latent.Length + textEmb.Length]);
-        for (int i = 0; i < latent.Length; i++) combined[i] = latent[i];
-        for (int i = 0; i < textEmb.Length; i++)
-            combined[latent.Length + i] = NumOps.FromDouble(NumOps.ToDouble(textEmb[i]) * scale);
-        return combined;
+        // [latent | textEmb * scale] as one flat, fresh tensor
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var scaled = Engine.TensorMultiplyScalar(AudioEngineOps.Flatten(Engine, textEmb), NumOps.FromDouble(scale));
+        return Engine.Concat(new[] { AudioEngineOps.Flatten(Engine, latent), scaled }, 0);
     }
 
     private Tensor<T> DecodeLatentToWaveform(Tensor<T> latent, int numSamples)
     {
-        var waveform = new Tensor<T>([numSamples]);
-        for (int i = 0; i < numSamples; i++)
-        {
-            double val = i < latent.Length ? NumOps.ToDouble(latent[i % latent.Length]) : 0.0;
-            waveform[i] = NumOps.FromDouble(Math.Tanh(val));
-        }
-        return waveform;
+        // tanh of the latent, zero-padded or truncated to numSamples
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorTanh(AudioEngineOps.FitLength(Engine, latent, numSamples));
     }
 
     #endregion

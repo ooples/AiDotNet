@@ -404,43 +404,27 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
 
         // Compute search direction: d = -H * g
-        var direction = _inverseHessian.Multiply(gradient);
-        var directionSpan = direction.AsWritableSpan();
-        for (int i = 0; i < directionSpan.Length; i++)
-        {
-            directionSpan[i] = NumOps.Negate(directionSpan[i]);
-        }
+        var engine = Engine;
+        var direction = (Vector<T>)engine.Negate(_inverseHessian.Multiply(gradient));
 
         // Limit step size to prevent overshooting
         // The maximum step should be proportional to parameter magnitudes
-        var directionNorm = direction.Norm();
         var parameterNorm = parameters.Norm();
         var maxStepNorm = NumOps.GreaterThan(parameterNorm, NumOps.FromDouble(1.0))
             ? NumOps.Multiply(parameterNorm, NumOps.FromDouble(0.5))
             : NumOps.FromDouble(1.0);
 
         // Compute the proposed step
-        for (int i = 0; i < directionSpan.Length; i++)
-        {
-            directionSpan[i] = NumOps.Multiply(directionSpan[i], CurrentLearningRate);
-        }
+        direction = (Vector<T>)engine.Multiply(direction, CurrentLearningRate);
         var scaledNorm = direction.Norm();
 
         // If step is too large, scale it down
         if (NumOps.GreaterThan(scaledNorm, maxStepNorm))
         {
-            var stepScale = NumOps.Divide(maxStepNorm, scaledNorm);
-            for (int i = 0; i < directionSpan.Length; i++)
-            {
-                directionSpan[i] = NumOps.Multiply(directionSpan[i], stepScale);
-            }
+            direction = (Vector<T>)engine.Multiply(direction, NumOps.Divide(maxStepNorm, scaledNorm));
         }
 
-        var parameterSpan = parameters.AsSpan();
-        for (int i = 0; i < directionSpan.Length; i++)
-        {
-            directionSpan[i] = NumOps.Add(parameterSpan[i], directionSpan[i]);
-        }
+        direction = (Vector<T>)engine.Add(parameters, direction);
 
         // Store state for next iteration
         if (_previousParameters is null || _previousParameters.Length != parameters.Length)
@@ -448,7 +432,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             _previousParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
             _previousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
         }
-        parameterSpan.CopyTo(_previousParameters.AsWritableSpan());
+        parameters.AsSpan().CopyTo(_previousParameters.AsWritableSpan());
         gradient.AsSpan().CopyTo((_previousGradient ?? throw new InvalidOperationException("_previousGradient is null where it is required.")).AsWritableSpan());
 
         return direction;
@@ -560,7 +544,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private sealed class BfgsDirection : ISearchDirectionRule
     {
         private readonly BFGSOptimizer<T, TInput, TOutput> _owner;
-        private T[,] _inverse = new T[0, 0];
+        private Matrix<T> _inverse = new Matrix<T>(0, 0);
         private int _size;
         private bool _scaled;
 
@@ -569,35 +553,15 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         public void Reset(int parameterCount)
         {
             _size = parameterCount;
-            _inverse = new T[parameterCount, parameterCount];
+            _inverse = Matrix<T>.CreateIdentity(parameterCount);
             _scaled = false;
-
-            for (int i = 0; i < parameterCount; i++)
-            {
-                for (int j = 0; j < parameterCount; j++)
-                {
-                    _inverse[i, j] = i == j ? _owner.NumOps.One : _owner.NumOps.Zero;
-                }
-            }
         }
 
         public Vector<T> ComputeDirection(Vector<T> gradient)
         {
-            var numOps = _owner.NumOps;
-            var direction = new Vector<T>(_size);
-
-            for (int i = 0; i < _size; i++)
-            {
-                T total = numOps.Zero;
-                for (int j = 0; j < _size; j++)
-                {
-                    total = numOps.Add(total, numOps.Multiply(_inverse[i, j], gradient[j]));
-                }
-
-                direction[i] = numOps.Negate(total);
-            }
-
-            return direction;
+            // d = -H g
+            var engine = _owner.Engine;
+            return (Vector<T>)engine.Negate(engine.MatrixVectorMultiply(_inverse, gradient));
         }
 
         public void Observe(
@@ -620,55 +584,19 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 // scale, so the first step is wrong by whatever factor the units happen to be;
                 // this rescales it using the only measurement available.
                 T scale = numOps.Divide(curvature, gradientChange.DotProduct(gradientChange));
-
-                for (int i = 0; i < _size; i++)
-                {
-                    for (int j = 0; j < _size; j++)
-                    {
-                        _inverse[i, j] = i == j ? scale : numOps.Zero;
-                    }
-                }
-
+                _inverse = _owner.Engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(_size), scale);
                 _scaled = true;
             }
 
-T rho = numOps.Divide(numOps.One, curvature);
+            T rho = numOps.Divide(numOps.One, curvature);
 
-            // (I - rho s y') H (I - rho y s') + rho s s', written out so no matrix is allocated
-            // beyond the one being replaced.
-            var updated = new T[_size, _size];
-
-            for (int i = 0; i < _size; i++)
-            {
-                for (int j = 0; j < _size; j++)
-                {
-                    T total = numOps.Zero;
-
-                    for (int k = 0; k < _size; k++)
-                    {
-                        T leftEntry = numOps.Subtract(
-                            i == k ? numOps.One : numOps.Zero,
-                            numOps.Multiply(rho, numOps.Multiply(step[i], gradientChange[k])));
-
-                        T inner = numOps.Zero;
-                        for (int m = 0; m < _size; m++)
-                        {
-                            T rightEntry = numOps.Subtract(
-                                m == j ? numOps.One : numOps.Zero,
-                                numOps.Multiply(rho, numOps.Multiply(gradientChange[m], step[j])));
-
-                            inner = numOps.Add(inner, numOps.Multiply(_inverse[k, m], rightEntry));
-                        }
-
-                        total = numOps.Add(total, numOps.Multiply(leftEntry, inner));
-                    }
-
-                    updated[i, j] = numOps.Add(
-                        total, numOps.Multiply(rho, numOps.Multiply(step[i], step[j])));
-                }
-            }
-
-            _inverse = updated;
+            // (I - rho s y') H (I - rho y s') + rho s s'
+            var engine = _owner.Engine;
+            var identity = Matrix<T>.CreateIdentity(_size);
+            var left = engine.MatrixSubtract(identity, engine.MatrixMultiplyScalar(engine.OuterProduct(step, gradientChange), rho));
+            var right = engine.MatrixSubtract(identity, engine.MatrixMultiplyScalar(engine.OuterProduct(gradientChange, step), rho));
+            var correction = engine.MatrixMultiplyScalar(engine.OuterProduct(step, step), rho);
+            _inverse = engine.MatrixAdd(engine.MatrixMultiply(engine.MatrixMultiply(left, _inverse), right), correction);
         }
     }
 

@@ -76,6 +76,8 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var cov = ComputeCovarianceMatrix(data);
+        var c = Tensor<T>.FromMatrix(cov);
+        var offDiagonal = OffDiagonalMask(d);
 
         // Edge logits Z[i,j]: sigmoid(Z / tau) = edge probability. Initialize SPARSE
         // (z=-1 -> p≈0.27 at tau=1). A zero init put every edge at p=0.5 — a fully dense
@@ -85,21 +87,12 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
         // recovered 0 edges. Starting sparse gives each candidate edge a clear residual signal
         // so strong true edges get a large negative (strengthening) data-fit gradient. z=-1 is
         // mild enough that it does not saturate the sigmoid under the (now floored) temperature.
-        var Z = new Matrix<T>(d, d);
-        T zInit = NumOps.FromDouble(-1.0);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j) Z[i, j] = zInit;
-        T lr = NumOps.FromDouble(_learningRate);
+        var Z = Engine.TensorNegate(offDiagonal);
 
-        // Acyclicity penalty weight. Kept LOW (0.1) so it discourages cycles without
-        // overwhelming the data fit: with the previous rho=1 (and the runaway augmented-
-        // Lagrangian escalation before that) the positive-for-every-edge acyclicity gradient
-        // held even genuine strong edges just below p=0.5, so 0 edges were recovered. At 0.1 the
-        // data fit lifts true edges past their KL-to-0.5 equilibrium while non-edges stay near 0.5.
-        // Applied as a FIXED penalty (no augmented-Lagrangian dual ascent), so there is no alpha
-        // multiplier and no rho escalation/cap.
-        T rho = NumOps.FromDouble(0.1);
+        // OLS slope of x_i in x_j: cov[i,j] / cov[i,i], usable only where cov[i,i] > 1e-10.
+        var olsWeight = Engine.TensorMultiply(offDiagonal, ComputePairwiseOLSWeights(cov));
+        var rowVariance = Engine.TensorBroadcastTo(Engine.TensorDiagonal(c).Reshape(new[] { d, 1 }), new[] { d, d });
+        var updatable = Engine.TensorMultiply(offDiagonal, Engine.TensorGreaterThan(rowVariance, NumOps.FromDouble(1e-10)));
 
         for (int outerIter = 0; outerIter < NumSamples; outerIter++)
         {
@@ -108,103 +101,7 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
             // from 0.5 a tiny tau drives that derivative to ~0, freezing the logits. A 0.5 floor
             // keeps gradients flowing so the data fit can actually move the edges.
             double tau = Math.Max(0.5, 1.0 * Math.Pow(0.95, outerIter));
-            T tauT = NumOps.FromDouble(tau);
-
-            // Compute edge probabilities: p[i,j] = sigmoid(Z[i,j] / tau)
-            var P = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    T zScaled = NumOps.Divide(Z[i, j], tauT);
-                    double sv = NumOps.ToDouble(zScaled);
-                    double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                    P[i, j] = NumOps.FromDouble(sigVal);
-                }
-
-            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
-            var PSqC = new Matrix<T>(d, d);
-            for (int i2 = 0; i2 < d; i2++)
-                for (int j2 = 0; j2 < d; j2++)
-                    PSqC[i2, j2] = NumOps.Multiply(P[i2, j2], P[i2, j2]);
-            var expPSqC = MatrixExponentialTaylor(PSqC, d);
-            T hValC = NumOps.Zero;
-            for (int i2 = 0; i2 < d; i2++)
-                hValC = NumOps.Add(hValC, expPSqC[i2, i2]);
-            hValC = NumOps.Subtract(hValC, NumOps.FromDouble(d));
-
-            // Compute expected weighted adjacency: W[i,j] = P[i,j] * cov[i,j] / cov[i,i]
-            var W = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    T varI = cov[i, i];
-                    T eps = NumOps.FromDouble(1e-10);
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T olsWeight = NumOps.Divide(cov[i, j], varI);
-                        W[i, j] = NumOps.Multiply(P[i, j], olsWeight);
-                    }
-                }
-
-            // Compute L2 loss gradient: dL/dW = (W^T * cov - cov) for each column
-            // Simplified: gradient w.r.t. P[i,j] = dL/dW[i,j] * olsWeight
-            var gradZ = new Matrix<T>(d, d);
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-
-                    // Data fit gradient: d(-likelihood)/dP[i,j]
-                    T varI = cov[i, i];
-                    T eps = NumOps.FromDouble(1e-10);
-                    if (!NumOps.GreaterThan(varI, eps)) continue;
-
-                    T olsWeight = NumOps.Divide(cov[i, j], varI);
-
-                    // Residual contribution
-                    T residGrad = NumOps.Zero;
-                    for (int k = 0; k < d; k++)
-                    {
-                        if (k == j) continue;
-                        residGrad = NumOps.Add(residGrad, NumOps.Multiply(W[k, j], cov[i, k]));
-                    }
-                    residGrad = NumOps.Subtract(residGrad, cov[i, j]);
-                    T dataGrad = NumOps.Multiply(residGrad, olsWeight);
-
-                    // KL divergence gradient: log(P/(1-P)) (Bernoulli prior = 0.5)
-                    T pij = P[i, j];
-                    T oneMinusP = NumOps.Subtract(NumOps.One, pij);
-                    T klGrad = NumOps.Zero;
-                    if (NumOps.GreaterThan(pij, NumOps.FromDouble(1e-8)) &&
-                        NumOps.GreaterThan(oneMinusP, NumOps.FromDouble(1e-8)))
-                    {
-                        klGrad = NumOps.FromDouble(
-                            Math.Log(NumOps.ToDouble(pij) / NumOps.ToDouble(oneMinusP)));
-                    }
-
-                    // Acyclicity gradient (fixed-penalty NOTEARS): rho*h * [exp(P∘P)^T ∘ 2P][i,j]
-                    T acycGrad = NumOps.Multiply(
-                        NumOps.Multiply(rho, hValC),
-                        NumOps.Multiply(expPSqC[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
-
-                    // Total gradient w.r.t. P[i,j]
-                    T totalGradP = NumOps.Add(dataGrad, NumOps.Add(klGrad, acycGrad));
-
-                    // Chain rule: dL/dZ = dL/dP * dP/dZ = dL/dP * P*(1-P)/tau
-                    T sigDeriv = NumOps.Divide(NumOps.Multiply(pij, oneMinusP), tauT);
-                    gradZ[i, j] = NumOps.Multiply(totalGradP, sigDeriv);
-                }
-
-            // Update logits
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    Z[i, j] = NumOps.Subtract(Z[i, j], NumOps.Multiply(lr, gradZ[i, j]));
-                }
+            Z = UpdateEdgeLogits(c, Z, olsWeight, offDiagonal, updatable, tau, d);
 
             // Acyclicity is applied as a MILD FIXED penalty (rho constant, no dual multiplier), NOT
             // a growing augmented-Lagrangian dual. The original code ran the dual ascent
@@ -226,25 +123,10 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
         // orientation) and (b) the OLS coefficient of x_i in x_j is significant. This uses the
         // logits for orientation and the covariance for edge strength — the true SEM edges
         // (strong |coeff| in the correct direction) are recovered; symmetric noise is not.
-        T weightThreshold = NumOps.FromDouble(0.1);
-
-        // Collect the significant, correctly-oriented candidate edges with their strengths.
-        var candidates = new List<(int i, int j, T weight, double strength)>();
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-
-                // Learned orientation: prefer i->j over j->i.
-                if (!NumOps.GreaterThan(Z[i, j], Z[j, i])) continue;
-
-                T varI = cov[i, i];
-                if (!NumOps.GreaterThan(varI, NumOps.FromDouble(1e-10))) continue;
-
-                T weight = NumOps.Divide(cov[i, j], varI);
-                if (NumOps.GreaterThan(NumOps.Abs(weight), weightThreshold))
-                    candidates.Add((i, j, weight, Math.Abs(NumOps.ToDouble(weight))));
-            }
+        var oriented = Engine.TensorMultiply(updatable, Engine.TensorGreaterThan(Z, Engine.TensorTranspose(Z)));
+        var significant = Engine.TensorMultiply(oriented,
+            Engine.TensorGreaterThan(Engine.TensorAbs(olsWeight), NumOps.FromDouble(0.1)));
+        var candidates = Engine.TensorWhere(significant, olsWeight, Engine.TensorZerosLike(olsWeight));
 
         // The strict Z[i,j] > Z[j,i] orientation guarantees anti-symmetry (never both i->j and
         // j->i) but NOT acyclicity — three or more edges can still form a directed cycle. The
@@ -252,45 +134,61 @@ public class BayesDAGAlgorithm<T> : BayesianCausalBase<T>
         // edges greedily strongest-first and skip any that would close a cycle. Dropping the
         // weakest edge of each cycle keeps the more significant causal links, matching how
         // continuous-optimization DAG learners resolve residual cyclicity after thresholding.
-        candidates.Sort((a, b) => b.strength.CompareTo(a.strength));
-
-        var result = new Matrix<T>(d, d);
-        var adjacency = new List<int>[d];
-        for (int k = 0; k < d; k++) adjacency[k] = new List<int>();
-
-        foreach (var (i, j, weight, _) in candidates)
-        {
-            // Adding i->j closes a cycle iff j can already reach i.
-            if (CanReach(adjacency, j, i, d)) continue;
-            result[i, j] = weight;
-            adjacency[i].Add(j);
-        }
-
-        return result;
+        return ProjectToAcyclic(candidates.ToMatrix());
     }
 
-    /// <summary>Depth-first reachability test: can <paramref name="from"/> reach <paramref name="to"/> along the current directed edges?</summary>
-    private static bool CanReach(List<int>[] adjacency, int from, int to, int d)
+    /// <summary>
+    /// One gradient step on the edge logits: data fit (residual of the expected weighted adjacency
+    /// W = P ∘ OLS), KL to a Bernoulli(0.5) prior, and the fixed-penalty NOTEARS acyclicity
+    /// gradient rho·h·[exp(P∘P)^T ∘ 2P], chained through dP/dZ = P(1-P)/tau.
+    /// </summary>
+    private Tensor<T> UpdateEdgeLogits(Tensor<T> c, Tensor<T> Z, Tensor<T> olsWeight, Tensor<T> offDiagonal,
+        Tensor<T> updatable, double tau, int d)
     {
-        if (from == to) return true;
-        var visited = new bool[d];
-        var stack = new Stack<int>();
-        stack.Push(from);
-        visited[from] = true;
-        while (stack.Count > 0)
-        {
-            int node = stack.Pop();
-            foreach (int next in adjacency[node])
-            {
-                if (next == to) return true;
-                if (!visited[next])
-                {
-                    visited[next] = true;
-                    stack.Push(next);
-                }
-            }
-        }
-        return false;
+        // Acyclicity penalty weight. Kept LOW (0.1) so it discourages cycles without
+        // overwhelming the data fit: with the previous rho=1 (and the runaway augmented-
+        // Lagrangian escalation before that) the positive-for-every-edge acyclicity gradient
+        // held even genuine strong edges just below p=0.5, so 0 edges were recovered. At 0.1 the
+        // data fit lifts true edges past their KL-to-0.5 equilibrium while non-edges stay near 0.5.
+        // Applied as a FIXED penalty (no augmented-Lagrangian dual ascent), so there is no alpha
+        // multiplier and no rho escalation/cap.
+        T rho = NumOps.FromDouble(0.1);
+        var zeros = Engine.TensorZerosLike(Z);
+        var ones = Engine.TensorOnesLike(Z);
+
+        // Compute edge probabilities: p[i,j] = sigmoid(Z[i,j] / tau)
+        var P = Engine.TensorMultiply(offDiagonal, ClampedSigmoid(Z, tau));
+        var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, P);
+
+        // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
+        var expPSq = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(P, P).ToMatrix(), d));
+        T hVal = NumOps.Subtract(Engine.TensorTrace(expPSq), NumOps.FromDouble(d));
+
+        // Expected weighted adjacency W[i,j] = P[i,j] * cov[i,j] / cov[i,i]; residual
+        // sum_{k != j} W[k,j] cov[i,k] - cov[i,j] (W has a zero diagonal).
+        var W = Engine.TensorMultiply(P, olsWeight);
+        var residGrad = Engine.TensorSubtract(Engine.TensorMatMul(c, W), c);
+        var dataGrad = Engine.TensorMultiply(residGrad, olsWeight);
+
+        // KL divergence gradient: log(P/(1-P)) (Bernoulli prior = 0.5), zero unless both P and 1-P exceed 1e-8
+        var klUsable = Engine.TensorMultiply(Engine.TensorGreaterThan(P, NumOps.FromDouble(1e-8)),
+            Engine.TensorGreaterThan(oneMinusP, NumOps.FromDouble(1e-8)));
+        var klGrad = Engine.TensorLog(Engine.TensorWhere(klUsable,
+            Engine.TensorDivide(P, Engine.TensorWhere(klUsable, oneMinusP, ones)), ones));
+
+        // Acyclicity gradient (fixed-penalty NOTEARS): rho*h * [exp(P∘P)^T ∘ 2P][i,j]
+        var acycGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorTranspose(expPSq), Engine.TensorMultiplyScalar(P, NumOps.FromDouble(2))),
+            NumOps.Multiply(rho, hVal));
+
+        // Chain rule: dL/dZ = dL/dP * dP/dZ = dL/dP * P*(1-P)/tau
+        var totalGradP = Engine.TensorAdd(dataGrad, Engine.TensorAdd(klGrad, acycGrad));
+        var sigDeriv = Engine.TensorDivideScalar(Engine.TensorMultiply(P, oneMinusP), NumOps.FromDouble(tau));
+        var gradZ = Engine.TensorWhere(updatable, Engine.TensorMultiply(totalGradP, sigDeriv), zeros);
+
+        // Update logits
+        var stepped = Engine.TensorSubtract(Z, Engine.TensorMultiplyScalar(gradZ, NumOps.FromDouble(_learningRate)));
+        return Engine.TensorWhere(offDiagonal, stepped, Z);
     }
 
 }

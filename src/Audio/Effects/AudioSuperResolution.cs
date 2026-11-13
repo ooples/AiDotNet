@@ -354,17 +354,20 @@ public partial class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudio
         // Blend original and enhanced based on strength.
         // For super-resolution, enhanced may be longer than original (upsampled).
         // Blend only the overlapping region; keep enhanced-only samples intact.
-        var result = new Tensor<T>(enhanced._shape);
         int blendLen = Math.Min(original.Length, enhanced.Length);
-        for (int i = 0; i < blendLen; i++)
-        {
-            double orig = NumOps.ToDouble(original[i]);
-            double enh = NumOps.ToDouble(enhanced[i]);
-            result[i] = NumOps.FromDouble(orig + (enh - orig) * strength);
-        }
-        for (int i = blendLen; i < enhanced.Length; i++)
-            result[i] = enhanced[i];
-        return result;
+        if (blendLen == 0) return enhanced.Clone();
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var flatOriginal = AudioEngineOps.Flatten(Engine, original);
+        var flatEnhanced = AudioEngineOps.Flatten(Engine, enhanced);
+        var orig = Engine.TensorSlice(flatOriginal, [0], [blendLen]);
+        var enh = Engine.TensorSlice(flatEnhanced, [0], [blendLen]);
+        // orig + (enh - orig) * strength over the overlap.
+        var blended = Engine.TensorAdd(orig, Engine.TensorMultiplyScalar(Engine.TensorSubtract(enh, orig), NumOps.FromDouble(strength)));
+        var result = blendLen < enhanced.Length
+            ? Engine.Concat([blended, Engine.TensorSlice(flatEnhanced, [blendLen], [enhanced.Length - blendLen])], 0)
+            : blended;
+        return Engine.Reshape(result, enhanced.Shape.ToArray());
     }
 
     #endregion

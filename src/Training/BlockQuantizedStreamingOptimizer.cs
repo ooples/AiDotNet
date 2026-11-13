@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.MixedPrecision;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -49,9 +50,19 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
     private readonly double[][] _momentScratch;
     private readonly double[] _momentMax;
     private readonly string _optimizerName;
+    // The unquantized moment layouts: BF16 moments for every parameter, or FP32 moments for parameters shorter than
+    // Min8BitSize. Keyed by parameter, like the 8-bit state.
+    private readonly Dictionary<Tensor<T>, ushort[][]> _bf16State =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, float[][]> _fp32State =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     protected readonly int BlockSize;
     protected readonly double MaxUpdateRatio;
+    /// <summary>Whether every parameter keeps its moments as BF16 instead of block-quantized 8-bit values.</summary>
+    protected readonly bool UseBf16Moments;
+    /// <summary>Parameters shorter than this keep FP32 moments (bitsandbytes' <c>min_8bit_size</c>); 0 quantizes all.</summary>
+    protected readonly int Min8BitSize;
     protected int Step { get; private set; }
     protected double LearningRate { get; private set; }
 
@@ -60,9 +71,13 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
         double learningRate,
         bool[] signedMoments,
         int blockSize = 2048,
-        double maxUpdateRatio = 5.0)
+        double maxUpdateRatio = 5.0,
+        bool useBf16Moments = false,
+        int min8BitSize = 0)
     {
         _optimizerName = optimizerName;
+        UseBf16Moments = useBf16Moments;
+        Min8BitSize = Math.Max(0, min8BitSize);
         LearningRate = learningRate;
         _signedMoments = signedMoments;
         BlockSize = Math.Max(1, blockSize);
@@ -119,6 +134,12 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
             throw new ArgumentException(
                 $"{_optimizerName}.Apply: gradient length {grad.Length} does not match param length {length}.",
                 nameof(grad));
+        }
+
+        if (UseBf16Moments || length < Min8BitSize)
+        {
+            ApplyUnquantized(param, grad, length);
+            return;
         }
 
         int numBlocks = (length + BlockSize - 1) / BlockSize;
@@ -234,6 +255,75 @@ internal abstract class BlockQuantizedStreamingOptimizer<T> : IStreamingOptimize
 
         // The raw-array write path bypasses the indexer's per-element version bump, so bump
         // once here to invalidate any cached GPU buffer for the now-mutated parameter.
+        if (paramArr is not null) param.IncrementVersion();
+    }
+
+    /// <summary>
+    /// The CPU step for the BF16 and FP32 moment layouts: the same per-element update as the 8-bit path, with each
+    /// moment read from and written back to its 2-byte or 4-byte slot instead of a quantized block.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Each element's moments are decoded from their BF16 or FP32 slots, updated by the subclass's per-element "
+        + "UpdateElement and re-encoded, as ApplyOneBlock does for the 8-bit layout; the indexer is only the fallback for "
+        + "a parameter or gradient without a live backing array.")]
+    private void ApplyUnquantized(Tensor<T> param, Tensor<T> grad, int length)
+    {
+        int momentCount = _signedMoments.Length;
+        ushort[][]? bf16 = null;
+        float[][]? fp32 = null;
+        if (UseBf16Moments)
+        {
+            if (!_bf16State.TryGetValue(param, out bf16) || bf16[0].Length != length)
+            {
+                // BF16 bits 0x0000 are +0.0, so a fresh array is the zero initial moment.
+                bf16 = new ushort[momentCount][];
+                for (int m = 0; m < momentCount; m++) bf16[m] = new ushort[length];
+                _bf16State[param] = bf16;
+            }
+        }
+        else if (!_fp32State.TryGetValue(param, out fp32) || fp32[0].Length != length)
+        {
+            fp32 = new float[momentCount][];
+            for (int m = 0; m < momentCount; m++) fp32[m] = new float[length];
+            _fp32State[param] = fp32;
+        }
+
+        _ = _ops.ToDouble(param[0]);
+        _ = _ops.ToDouble(grad[0]);
+        T[]? paramArr = param.GetLiveBackingArrayOrNull();
+        T[]? gradArr = grad.GetLiveBackingArrayOrNull();
+        var previous = _previousMomentValues.AsSpan(0, momentCount);
+        var next = _nextMomentValues.AsSpan(0, momentCount);
+
+        for (int i = 0; i < length; i++)
+        {
+            for (int m = 0; m < momentCount; m++)
+            {
+                double value = bf16 is not null
+                    ? BitConverterHelper.Bf16BitsToFloat(bf16[m][i])
+                    : fp32 is not null ? fp32[m][i] : 0.0;
+                previous[m] = value;
+                next[m] = value;
+            }
+
+            double gradientValue = gradArr is not null ? ToDouble(gradArr[i]) : ToDouble(grad[i]);
+            if (!double.IsNaN(gradientValue) && !double.IsInfinity(gradientValue))
+            {
+                double parameterValue = paramArr is not null ? ToDouble(paramArr[i]) : ToDouble(param[i]);
+                double nextParameter = UpdateElement(parameterValue, gradientValue, previous, next, i);
+                if (!double.IsNaN(nextParameter) && !double.IsInfinity(nextParameter))
+                {
+                    if (paramArr is not null) paramArr[i] = FromDouble(nextParameter);
+                    else param[i] = FromDouble(nextParameter);
+                }
+            }
+
+            for (int m = 0; m < momentCount; m++)
+            {
+                if (bf16 is not null) bf16[m][i] = BitConverterHelper.FloatToBf16Bits((float)next[m]);
+                else if (fp32 is not null) fp32[m][i] = (float)next[m];
+            }
+        }
+
         if (paramArr is not null) param.IncrementVersion();
     }
 

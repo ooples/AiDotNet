@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -52,41 +53,41 @@ public static class BootstrapConfidenceInterval<T>
     }
 
     /// <summary>Mean of a return sample (per-observation).</summary>
-    public static double MeanStatistic(IReadOnlyList<double> sample)
+    public static T MeanStatistic(Vector<T> sample)
     {
-        if (sample.Count == 0)
+        if (sample is null)
         {
-            return 0.0;
+            throw new ArgumentNullException(nameof(sample));
         }
 
-        double s = 0.0;
-        for (int i = 0; i < sample.Count; i++)
+        if (sample.Length == 0)
         {
-            s += sample[i];
+            return NumOps.Zero;
         }
 
-        return s / sample.Count;
+        return AiDotNetEngine.Current.TensorMean(Tensor<T>.FromVector(sample));
     }
 
     /// <summary>Per-observation Sharpe ratio (mean / sample-stdev) of a return sample.</summary>
-    public static double SharpeStatistic(IReadOnlyList<double> sample)
+    public static T SharpeStatistic(Vector<T> sample)
     {
-        int n = sample.Count;
+        if (sample is null)
+        {
+            throw new ArgumentNullException(nameof(sample));
+        }
+
+        int n = sample.Length;
         if (n < 2)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
-        double mean = MeanStatistic(sample);
-        double sse = 0.0;
-        for (int i = 0; i < n; i++)
-        {
-            double d = sample[i] - mean;
-            sse += d * d;
-        }
-
-        double std = Math.Sqrt(sse / (n - 1));
-        return std > 0.0 ? mean / std : 0.0;
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(sample);
+        T mean = engine.TensorMean(values);
+        T sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, mean));
+        T std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(n - 1)));
+        return NumOps.GreaterThan(std, NumOps.Zero) ? NumOps.Divide(mean, std) : NumOps.Zero;
     }
 
     /// <summary>
@@ -107,7 +108,7 @@ public static class BootstrapConfidenceInterval<T>
     public static Interval Compute(
         IReadOnlyList<T> returns,
         Random rng,
-        Func<IReadOnlyList<double>, double>? statistic = null,
+        Func<Vector<T>, T>? statistic = null,
         double confidence = 0.95,
         int nResamples = 1000,
         double meanBlockLength = 1.0)
@@ -135,25 +136,22 @@ public static class BootstrapConfidenceInterval<T>
         var stat = statistic ?? SharpeStatistic;
 
         int n = returns.Count;
-        var data = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            data[i] = NumOps.ToDouble(returns[i]);
-        }
+        var data = new Vector<T>(returns.ToArray());
 
-        double pointEstimate = stat(data);
+        T pointEstimate = stat(data);
 
         if (n < 2)
         {
-            var pe = NumOps.FromDouble(pointEstimate);
-            return new Interval(pe, pe, pe);
+            return new Interval(pointEstimate, pointEstimate, pointEstimate);
         }
 
         // Probability of starting a new block each step (stationary bootstrap): p = 1 / meanBlockLength.
         double pNewBlock = 1.0 / meanBlockLength;
 
-        var estimates = new double[nResamples];
-        var resample = new double[n];
+        var engine = AiDotNetEngine.Current;
+        var dataTensor = Tensor<T>.FromVector(data);
+        var estimates = new T[nResamples];
+        var resampleIndex = new int[n];
         for (int b = 0; b < nResamples; b++)
         {
             int idx = rng.Next(n);
@@ -172,26 +170,27 @@ public static class BootstrapConfidenceInterval<T>
                     }
                 }
 
-                resample[i] = data[idx];
+                resampleIndex[i] = idx;
             }
 
-            estimates[b] = stat(resample);
+            // The resample is a gather of the original series by the drawn indices.
+            var resample = engine.TensorIndexSelect(
+                dataTensor, new Tensor<int>(new[] { n }, new Vector<int>((int[])resampleIndex.Clone())), 0);
+            estimates[b] = stat(resample.ToVector());
         }
 
-        Array.Sort(estimates);
+        var sorted = engine.TensorSort(new Tensor<T>(new[] { nResamples }, new Vector<T>(estimates)), 0, false).Values;
         double alpha = 1.0 - confidence;
-        double lower = Percentile(estimates, alpha / 2.0 * 100.0);
-        double upper = Percentile(estimates, (1.0 - alpha / 2.0) * 100.0);
+        T lower = Percentile(sorted, alpha / 2.0 * 100.0);
+        T upper = Percentile(sorted, (1.0 - alpha / 2.0) * 100.0);
 
-        return new Interval(
-            NumOps.FromDouble(pointEstimate),
-            NumOps.FromDouble(lower),
-            NumOps.FromDouble(upper));
+        return new Interval(pointEstimate, lower, upper);
     }
 
-    /// <summary>Linear-interpolated percentile of a pre-sorted array (percentile in [0, 100]).</summary>
-    private static double Percentile(double[] sorted, double percentile)
+    /// <summary>Linear-interpolated percentile of a pre-sorted tensor (percentile in [0, 100]).</summary>
+    private static T Percentile(Tensor<T> sortedTensor, double percentile)
     {
+        var sorted = sortedTensor.AsSpan();
         int n = sorted.Length;
         if (n == 1)
         {
@@ -217,6 +216,6 @@ public static class BootstrapConfidenceInterval<T>
         }
 
         double frac = rank - lo;
-        return sorted[lo] + frac * (sorted[hi] - sorted[lo]);
+        return NumOps.Add(sorted[lo], NumOps.Multiply(NumOps.FromDouble(frac), NumOps.Subtract(sorted[hi], sorted[lo])));
     }
 }
