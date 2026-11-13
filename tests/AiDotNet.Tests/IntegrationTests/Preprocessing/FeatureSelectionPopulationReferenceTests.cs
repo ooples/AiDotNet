@@ -666,6 +666,7 @@ public class FeatureSelectionPopulationReferenceTests
                 distances[i, j] = System.Math.Sqrt((acc[i] - acc[j]) * (acc[i] - acc[j]) + (cnt[i] - cnt[j]) * (cnt[i] - cnt[j]));
 
         int k = (int)System.Math.Sqrt(m);
+        var pairwise = distances; // an out parameter cannot be read inside the lambda below
         var fitness = new double[m];
         for (int i = 0; i < m; i++)
         {
@@ -674,7 +675,7 @@ public class FeatureSelectionPopulationReferenceTests
                 if (DominatesReference(acc[j], cnt[j], acc[i], cnt[i])) raw += strength[j];
 
             // sigma_i^k: distance to the k-th nearest other solution
-            var others = Enumerable.Range(0, m).Where(j => j != i).Select(j => distances[i, j]).OrderBy(d => d).ToArray();
+            var others = Enumerable.Range(0, m).Where(j => j != i).Select(j => pairwise[i, j]).OrderBy(d => d).ToArray();
             fitness[i] = raw + 1.0 / (others[k - 1] + 2);
         }
 
