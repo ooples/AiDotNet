@@ -1006,4 +1006,19 @@ public class PreprocessingSweepReviewTests
 
         Assert.Equal(new[] { 0, 2 }, selector.SelectedIndices);
     }
+
+    // x = i + 1 and y = 100 (i + 1) over eight rows, slab variance 0.001 and spike variance 1: the residual variance
+    // is 60,000 and fit = 0.5 (x'y)^2 / x'x = 1,020,000, so log BF is about 0.999 * 17 and the inclusion probability
+    // sigmoid(17) = 1. The centred target sum of squares (420,000) and the fit term overflowed Half, and the
+    // non-finite Bayes factor fell back to the prior 0.5.
+    [Fact(Timeout = 120000)]
+    public async Task SpikeAndSlabSelector_Half_TargetSumOfSquaresPast65504()
+    {
+        await Task.Yield();
+        var selector = new SpikeAndSlabSelector<Half>(nFeaturesToSelect: 1, slabVariance: 0.001, spikeVariance: 1.0);
+        selector.Fit(HalfColumn(8, i => i + 1), HalfVector(8, i => 100.0 * (i + 1)));
+
+        Assert.NotNull(selector.InclusionProbabilities);
+        Assert.Equal(1.0, (double)selector.InclusionProbabilities[0], 1e-3);
+    }
 }
