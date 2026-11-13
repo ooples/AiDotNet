@@ -579,8 +579,8 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
     }
 
     /// <summary>
-    /// Warps features by a flow given at any resolution: the flow is resampled to the feature grid (nearest source
-    /// pixel), rescaled to feature-pixel units, and the features are sampled bilinearly at pixel + flow as
+    /// Warps features by a flow given at any resolution: the flow is resampled to the feature grid (bilinear,
+    /// align_corners=False), rescaled to feature-pixel units, and the features are sampled bilinearly at pixel + flow as
     /// E2FGVI's <c>flow_warp</c> does, grid_sample(align_corners=True, padding_mode="zeros").
     /// </summary>
     /// <remarks>
@@ -590,29 +590,24 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
     internal Tensor<T> WarpFeatures(Tensor<T> features, Tensor<T> flow)
         => WarpByFlow(features, UpsampleFlow(flow, features.Shape[2], features.Shape[3]), GridSamplePadding.Zeros);
 
-    private Tensor<T> UpsampleFlow(Tensor<T> flow, int targetH, int targetW)
+    /// <summary>
+    /// Resizes a pixel-unit flow to <paramref name="targetH"/> x <paramref name="targetW"/> as E2FGVI's SPyNet does:
+    /// <c>F.interpolate(flow, mode="bilinear", align_corners=False)</c>, then dx scaled by targetW / srcW and dy by
+    /// targetH / srcH so the displacements are in the new grid's pixels.
+    /// </summary>
+    /// <remarks>This used to take the nearest source pixel, which made the flow blocky at every upsampling.</remarks>
+    internal Tensor<T> UpsampleFlow(Tensor<T> flow, int targetH, int targetW)
     {
         int batchSize = flow.Shape[0];
         int srcH = flow.Shape[2];
         int srcW = flow.Shape[3];
 
-        // Nearest source pixel min(floor(h * srcH / targetH), srcH - 1), magnitudes rescaled to the new grid
-        var rows = NearestSourceIndices(srcH, targetH);
-        var cols = NearestSourceIndices(srcW, targetW);
-        var resized = Engine.TensorIndexSelect(Engine.TensorIndexSelect(Engine.TensorNarrow(flow, 1, 0, 2), rows, 2), cols, 3);
+        var planes = Engine.TensorNarrow(flow, 1, 0, 2);
+        var resized = srcH == targetH && srcW == targetW
+            ? planes
+            : Engine.Interpolate(planes, [targetH, targetW], InterpolateMode.Bilinear, false);
         var scale = new Tensor<T>(new[] { NumOps.FromDouble((double)targetW / srcW), NumOps.FromDouble((double)targetH / srcH) }, [1, 2, 1, 1]);
         return Engine.TensorMultiply(resized, Engine.TensorBroadcastTo(scale, [batchSize, 2, targetH, targetW]));
-    }
-
-    private static Tensor<int> NearestSourceIndices(int source, int target)
-    {
-        var indices = new int[target];
-        for (int i = 0; i < target; i++)
-        {
-            indices[i] = Math.Min((int)((double)i * source / target), source - 1);
-        }
-
-        return new Tensor<int>(indices, [target]);
     }
 
     private Tensor<T> ZeroTensor(int[] shape) => new Tensor<T>(shape);
