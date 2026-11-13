@@ -240,12 +240,14 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
         {
             int bins = frameSize / 2 + 1;
             var built = new Tensor<T>[bins];
-            for (int b = 0; b < bins; b++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                var column = new Tensor<T>([frameSize]);
-                for (int n = 0; n < frameSize; n++) column[n] = basis[n, b];
-                built[b] = column;
+                for (int b = 0; b < bins; b++)
+                {
+                    built[b] = Engine.TensorSelect(basis, 1, b).Contiguous();
+                }
             }
+
             return built;
         });
 
@@ -259,10 +261,7 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
         return _constants.GetOrAdd(key, _ =>
         {
             var ops = MathHelper.GetNumericOperations<T>();
-            var t = new Tensor<T>(like.Shape.ToArray());
-            T v = ops.FromDouble(value);
-            for (int i = 0; i < t.Length; i++) t[i] = v;
-            return t;
+            return Tensor<T>.CreateDefault(like.Shape.ToArray(), ops.FromDouble(value));
         });
     }
 
@@ -299,25 +298,26 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
         var ops = MathHelper.GetNumericOperations<T>();
         int bins = frameSize / 2 + 1;
 
-        var window = new Tensor<T>([frameSize]);
-        for (int n = 0; n < frameSize; n++)
-        {
-            double hann = 0.5 - 0.5 * Math.Cos(2.0 * Math.PI * n / Math.Max(1, frameSize - 1));
-            window[n] = ops.FromDouble(hann);
-        }
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> window;
+        Tensor<T> cos;
+        Tensor<T> sin;
 
-        // Real DFT bases. Sine is negated so the pair matches e^{-i2*pi*kn/N}; the magnitude is
-        // insensitive to that sign, but keeping the convention right makes these reusable.
-        var cos = new Tensor<T>([frameSize, bins]);
-        var sin = new Tensor<T>([frameSize, bins]);
-        for (int n = 0; n < frameSize; n++)
+        // The bases are constants: build them off the tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int k = 0; k < bins; k++)
-            {
-                double angle = 2.0 * Math.PI * k * n / frameSize;
-                cos[n, k] = ops.FromDouble(Math.Cos(angle));
-                sin[n, k] = ops.FromDouble(-Math.Sin(angle));
-            }
+            // Symmetric Hann: 0.5 - 0.5·cos(2πn / max(1, N - 1)).
+            var sampleIndex = engine.TensorArange<T>(0, frameSize, 1);
+            var hannAngle = engine.TensorMultiplyScalar(
+                sampleIndex, ops.FromDouble(2.0 * Math.PI / Math.Max(1, frameSize - 1)));
+            window = engine.ScalarMinusTensor(
+                ops.FromDouble(0.5), engine.TensorMultiplyScalar(engine.TensorCos(hannAngle), ops.FromDouble(0.5)));
+
+            // Real DFT bases. Sine is negated so the pair matches e^{-i2*pi*kn/N}; the magnitude is
+            // insensitive to that sign, but keeping the convention right makes these reusable.
+            // angle[n, k] = 2π·((k·n) mod N)/N with the product reduced exactly in 64-bit integers, built in
+            // bounded blocks written straight into the two bases.
+            (cos, sin) = DftBasis<T>.Build(frameSize, bins, negateSine: true);
         }
 
         return (window, cos, sin);

@@ -33,6 +33,8 @@ public class CausalGraph<T>
 {
     private readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Gets the weighted adjacency matrix where entry [i,j] represents the causal effect from variable i to variable j.
     /// </summary>
@@ -92,16 +94,8 @@ public class CausalGraph<T>
     public int[] GetParents(int variableIndex)
     {
         ValidateIndex(variableIndex);
-        var parents = new List<int>();
-        for (int i = 0; i < NumVariables; i++)
-        {
-            if (i != variableIndex && !IsZero(AdjacencyMatrix[i, variableIndex]))
-            {
-                parents.Add(i);
-            }
-        }
-
-        return [.. parents];
+        return NonZeroIndices(Engine.GetColumn(AdjacencyMatrix, variableIndex))
+            .Where(i => i != variableIndex).ToArray();
     }
 
     /// <summary>
@@ -123,16 +117,8 @@ public class CausalGraph<T>
     public int[] GetChildren(int variableIndex)
     {
         ValidateIndex(variableIndex);
-        var children = new List<int>();
-        for (int j = 0; j < NumVariables; j++)
-        {
-            if (j != variableIndex && !IsZero(AdjacencyMatrix[variableIndex, j]))
-            {
-                children.Add(j);
-            }
-        }
-
-        return [.. children];
+        return NonZeroIndices(Engine.GetRow(AdjacencyMatrix, variableIndex))
+            .Where(j => j != variableIndex).ToArray();
     }
 
     /// <summary>
@@ -274,17 +260,7 @@ public class CausalGraph<T>
     /// </remarks>
     public bool IsDAG()
     {
-        int[] inDegree = new int[NumVariables];
-        for (int i = 0; i < NumVariables; i++)
-        {
-            for (int j = 0; j < NumVariables; j++)
-            {
-                if (!IsZero(AdjacencyMatrix[i, j]))
-                {
-                    inDegree[j]++;
-                }
-            }
-        }
+        int[] inDegree = ComputeInDegrees();
 
         var queue = new Queue<int>();
         for (int i = 0; i < NumVariables; i++)
@@ -300,15 +276,12 @@ public class CausalGraph<T>
         {
             int node = queue.Dequeue();
             visited++;
-            for (int j = 0; j < NumVariables; j++)
+            foreach (int j in NonZeroIndices(Engine.GetRow(AdjacencyMatrix, node)))
             {
-                if (!IsZero(AdjacencyMatrix[node, j]))
+                inDegree[j]--;
+                if (inDegree[j] == 0)
                 {
-                    inDegree[j]--;
-                    if (inDegree[j] == 0)
-                    {
-                        queue.Enqueue(j);
-                    }
+                    queue.Enqueue(j);
                 }
             }
         }
@@ -323,17 +296,7 @@ public class CausalGraph<T>
     /// <exception cref="InvalidOperationException">Thrown if the graph contains a cycle.</exception>
     public int[] TopologicalSort()
     {
-        int[] inDegree = new int[NumVariables];
-        for (int i = 0; i < NumVariables; i++)
-        {
-            for (int j = 0; j < NumVariables; j++)
-            {
-                if (!IsZero(AdjacencyMatrix[i, j]))
-                {
-                    inDegree[j]++;
-                }
-            }
-        }
+        int[] inDegree = ComputeInDegrees();
 
         var queue = new Queue<int>();
         for (int i = 0; i < NumVariables; i++)
@@ -349,15 +312,12 @@ public class CausalGraph<T>
         {
             int node = queue.Dequeue();
             order.Add(node);
-            for (int j = 0; j < NumVariables; j++)
+            foreach (int j in NonZeroIndices(Engine.GetRow(AdjacencyMatrix, node)))
             {
-                if (!IsZero(AdjacencyMatrix[node, j]))
+                inDegree[j]--;
+                if (inDegree[j] == 0)
                 {
-                    inDegree[j]--;
-                    if (inDegree[j] == 0)
-                    {
-                        queue.Enqueue(j);
-                    }
+                    queue.Enqueue(j);
                 }
             }
         }
@@ -378,17 +338,16 @@ public class CausalGraph<T>
     public List<(int From, int To, T Weight)> GetEdges(double minAbsWeight = 0.0)
     {
         var edges = new List<(int From, int To, T Weight)>();
-        for (int i = 0; i < NumVariables; i++)
+        var flat = Tensor<T>.FromMatrix(AdjacencyMatrix).Reshape(new[] { NumVariables * NumVariables });
+        var kept = Engine.TensorGreaterThan(Engine.TensorAbs(flat), _numOps.FromDouble(minAbsWeight));
+        int[] positions = Engine.TensorNonzero(kept).ToArray();
+        if (positions.Length == 0)
+            return edges;
+
+        T[] weights = Engine.TensorIndexSelect(flat, new Tensor<int>(positions, new[] { positions.Length }), 0).ToArray();
+        for (int e = 0; e < positions.Length; e++)
         {
-            for (int j = 0; j < NumVariables; j++)
-            {
-                T w = AdjacencyMatrix[i, j];
-                double absW = Math.Abs(_numOps.ToDouble(w));
-                if (absW > minAbsWeight)
-                {
-                    edges.Add((i, j, w));
-                }
-            }
+            edges.Add((positions[e] / NumVariables, positions[e] % NumVariables, weights[e]));
         }
 
         return edges;
@@ -411,15 +370,11 @@ public class CausalGraph<T>
     public Dictionary<int, double> GetNodeImportance()
     {
         var importance = new Dictionary<int, double>();
+        var scores = Engine.ReduceSum(Engine.TensorAbs(Tensor<T>.FromMatrix(AdjacencyMatrix)), new[] { 1 }, false)
+            .Cast<double>().ToArray();
         for (int i = 0; i < NumVariables; i++)
         {
-            double score = 0;
-            for (int j = 0; j < NumVariables; j++)
-            {
-                score += Math.Abs(_numOps.ToDouble(AdjacencyMatrix[i, j]));
-            }
-
-            importance[i] = score;
+            importance[i] = scores[i];
         }
 
         return importance;
@@ -432,19 +387,7 @@ public class CausalGraph<T>
     {
         get
         {
-            int count = 0;
-            for (int i = 0; i < NumVariables; i++)
-            {
-                for (int j = 0; j < NumVariables; j++)
-                {
-                    if (!IsZero(AdjacencyMatrix[i, j]))
-                    {
-                        count++;
-                    }
-                }
-            }
-
-            return count;
+            return Engine.TensorCountNonzero(Tensor<T>.FromMatrix(AdjacencyMatrix));
         }
     }
 
@@ -515,86 +458,54 @@ public class CausalGraph<T>
         }
 
         // Compute observational mean of target for ACE calculation
-        double obsTargetSum = 0;
-        for (int i = 0; i < n; i++)
-            obsTargetSum += _numOps.ToDouble(observationalData[i, targetVariable]);
-        double obsTargetMean = obsTargetSum / n;
+        var data = Tensor<T>.FromMatrix(observationalData);
+        T obsTargetMean = Engine.TensorMean(Engine.TensorSliceAxis(data, 1, targetVariable));
 
-        // For each observational sample, simulate the intervention:
-        // 1. Copy the sample
-        // 2. Set the intervention variable to the intervention value
-        // 3. Propagate forward through topological order using linear structural equations
-        var interventionalSamples = new double[n];
+        // Edge weights whose magnitude exceeds 1e-10; the diagonal is excluded when computing noise.
+        var weights = Tensor<T>.FromMatrix(AdjacencyMatrix);
+        var significant = Engine.TensorGreaterThan(Engine.TensorAbs(weights), _numOps.FromDouble(1e-10));
+        var activeWeights = Engine.TensorWhere(significant, weights, Engine.TensorZerosLike(weights));
+        var offDiagonal = Engine.TensorSubtract(Engine.TensorOnesLike(weights), Engine.TensorEye<T>(d));
+        var noiseWeights = Engine.TensorMultiply(activeWeights, offDiagonal);
 
-        // Pre-compute the weight matrix as double for efficiency
-        var W = new double[d, d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                W[i, j] = _numOps.ToDouble(AdjacencyMatrix[i, j]);
+        // Pre-compute residuals (noise) for each variable using observational data:
+        // ε_j = X_j - Σ_{i≠j} W[i,j] * X_i for every sample at once.
+        var residuals = Engine.TensorSubtract(data, Engine.TensorMatMul(data, noiseWeights)).ToMatrix();
 
-        // Pre-compute residuals (noise) for each variable using observational data
-        // ε_j = X_j - Σ_i W[i,j] * X_i for each sample
-        var residuals = new double[n, d];
-        for (int s = 0; s < n; s++)
+        // Simulate the intervention for all samples together: start from the observational values,
+        // force the intervention variable, then propagate forward in topological order.
+        var simulated = observationalData.Clone();
+        var forced = Engine.TensorFullLike(Engine.TensorSliceAxis(data, 1, interventionVariable), interventionValue)
+            .ToVector();
+        Engine.SetColumn(simulated, interventionVariable, forced);
+
+        // Variables downstream of the intervention are recomputed from the structural equations;
+        // upstream or unaffected variables keep their observational values.
+        var affectedByIntervention = new HashSet<int>(GetDescendants(interventionVariable));
+        affectedByIntervention.Add(interventionVariable);
+        var activeWeightMatrix = activeWeights.ToMatrix();
+
+        foreach (int j in topoOrder)
         {
-            for (int j = 0; j < d; j++)
+            if (j == interventionVariable)
             {
-                double xj = _numOps.ToDouble(observationalData[s, j]);
-                double predicted = 0;
-                for (int i = 0; i < d; i++)
-                {
-                    if (i != j && Math.Abs(W[i, j]) > 1e-10)
-                        predicted += W[i, j] * _numOps.ToDouble(observationalData[s, i]);
-                }
-                residuals[s, j] = xj - predicted;
-            }
-        }
-
-        // Simulate intervention for each sample
-        for (int s = 0; s < n; s++)
-        {
-            var simulated = new double[d];
-
-            // Copy original values as starting point
-            for (int j = 0; j < d; j++)
-                simulated[j] = _numOps.ToDouble(observationalData[s, j]);
-
-            // Apply intervention: set the intervention variable
-            simulated[interventionVariable] = _numOps.ToDouble(interventionValue);
-
-            // Forward propagation in topological order
-            // For variables downstream of the intervention, recompute using structural equations
-            // For variables upstream or not affected, keep the original values + noise
-            var affectedByIntervention = new HashSet<int>(GetDescendants(interventionVariable));
-            affectedByIntervention.Add(interventionVariable);
-
-            foreach (int j in topoOrder)
-            {
-                if (j == interventionVariable)
-                {
-                    // Intervention variable: forced to intervention value
-                    simulated[j] = _numOps.ToDouble(interventionValue);
-                    continue;
-                }
-
-                if (!affectedByIntervention.Contains(j))
-                {
-                    // Not affected by intervention: keep observational value
-                    continue;
-                }
-
-                // Affected downstream variable: recompute from parents + noise
-                double value = residuals[s, j]; // noise term
-                for (int i = 0; i < d; i++)
-                {
-                    if (Math.Abs(W[i, j]) > 1e-10)
-                        value += W[i, j] * simulated[i];
-                }
-                simulated[j] = value;
+                // Intervention variable: forced to intervention value
+                Engine.SetColumn(simulated, j, forced);
+                continue;
             }
 
-            interventionalSamples[s] = simulated[targetVariable];
+            if (!affectedByIntervention.Contains(j))
+            {
+                // Not affected by intervention: keep observational value
+                continue;
+            }
+
+            // Affected downstream variable: noise + Σ_i W[i,j] * simulated_i
+            var parentsEffect = Engine.MatrixVectorMultiply(simulated, Engine.GetColumn(activeWeightMatrix, j));
+            Engine.SetColumn(simulated, j, Engine.Add(Engine.GetColumn(residuals, j), parentsEffect));
         }
+
+        var interventionalSamples = Engine.GetColumn(simulated, targetVariable).AsTensor().Cast<double>().ToArray();
 
         return new InterventionalDistribution<T>(
             interventionVariableIndex: interventionVariable,
@@ -603,7 +514,7 @@ public class CausalGraph<T>
             targetVariableIndex: targetVariable,
             targetVariableName: FeatureNames[targetVariable],
             samples: interventionalSamples,
-            observationalMean: obsTargetMean);
+            observationalMean: _numOps.ToDouble(obsTargetMean));
     }
 
     /// <summary>
@@ -631,31 +542,27 @@ public class CausalGraph<T>
         int interventionVariable, T interventionValue,
         int targetVariable, Matrix<T> observationalData)
     {
-        int n = observationalData.Rows;
-        double intVal = _numOps.ToDouble(interventionValue);
+        var data = Tensor<T>.FromMatrix(observationalData);
+        var x = Engine.TensorSliceAxis(data, 1, interventionVariable);
+        var y = Engine.TensorSliceAxis(data, 1, targetVariable);
 
-        // Simple OLS: target = a + b * intervention + noise
-        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double x = _numOps.ToDouble(observationalData[i, interventionVariable]);
-            double y = _numOps.ToDouble(observationalData[i, targetVariable]);
-            sumX += x; sumY += y; sumXY += x * y; sumX2 += x * x;
-        }
-        double mx = sumX / n, my = sumY / n;
-        double b = (sumXY - n * mx * my) / (sumX2 - n * mx * mx + 1e-10);
-        double a = my - b * mx;
+        // Simple OLS: target = a + b * intervention + noise, with the slope from the centered
+        // moments sum(dx dy) / (sum(dx^2) + 1e-10). Centering first avoids the cancellation of
+        // sum(x^2) - n mean(x)^2 when the intervention variable has a large mean.
+        T mx = Engine.TensorMean(x), my = Engine.TensorMean(y);
+        var dx = Engine.TensorSubtractScalar(x, mx);
+        var dy = Engine.TensorSubtractScalar(y, my);
+        T b = _numOps.Divide(
+            Engine.TensorSum(Engine.TensorMultiply(dx, dy)),
+            _numOps.Add(Engine.TensorSum(Engine.TensorSquare(dx)), _numOps.FromDouble(1e-10)));
+        T a = _numOps.Subtract(my, _numOps.Multiply(b, mx));
 
-        // Generate interventional samples using the regression residuals
-        var samples = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double xObs = _numOps.ToDouble(observationalData[i, interventionVariable]);
-            double yObs = _numOps.ToDouble(observationalData[i, targetVariable]);
-            double yPred = a + b * xObs;
-            double noise = yObs - yPred;
-            samples[i] = a + b * intVal + noise;
-        }
+        // Generate interventional samples using the regression residuals:
+        // sample = a + b * value + (y - (a + b * x))
+        var yPred = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(x, b), a);
+        var noise = Engine.TensorSubtract(y, yPred);
+        T intervened = _numOps.Add(a, _numOps.Multiply(b, interventionValue));
+        var samples = Engine.TensorAddScalar(noise, intervened).Cast<double>().ToArray();
 
         return new InterventionalDistribution<T>(
             interventionVariableIndex: interventionVariable,
@@ -664,12 +571,23 @@ public class CausalGraph<T>
             targetVariableIndex: targetVariable,
             targetVariableName: FeatureNames[targetVariable],
             samples: samples,
-            observationalMean: my);
+            observationalMean: _numOps.ToDouble(my));
     }
 
     private bool IsZero(T value)
     {
         return _numOps.Equals(value, _numOps.Zero);
+    }
+
+    /// <summary>Indices of the non-zero entries of a vector, in ascending order.</summary>
+    private static int[] NonZeroIndices(Vector<T> values)
+        => Engine.TensorNonzero(values.AsTensor()).ToArray();
+
+    /// <summary>Number of incoming edges (non-zero entries) in each column of the adjacency matrix.</summary>
+    private int[] ComputeInDegrees()
+    {
+        var hasEdge = Engine.TensorNotEquals(Tensor<T>.FromMatrix(AdjacencyMatrix), _numOps.Zero);
+        return Engine.ReduceSum(hasEdge, new[] { 0 }, false).Cast<int>().ToArray();
     }
 
     private int GetIndex(string variableName)

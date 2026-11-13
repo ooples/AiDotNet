@@ -106,12 +106,12 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
         int d = data.Columns;
 
         // Initialize W = 0
-        var W = new Matrix<T>(d, d);
+        var weights = new Tensor<T>(new[] { d, d });
 
-        // Adam state (flat double[] for optimizer internals)
-        int vecLen = d * d;
-        var m = new double[vecLen];
-        var v = new double[vecLen];
+        // Adam state
+        var m = new Tensor<T>(new[] { d, d });
+        var v = new Tensor<T>(new[] { d, d });
+        var offDiagonal = OffDiagonalMask(d);
 
         double prevObj = double.MaxValue;
         _lastIterations = 0;
@@ -120,39 +120,9 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
         {
             _lastIterations = iter;
 
-            // Compute objective and gradient
-            var (obj, grad) = _equalVariance
-                ? ComputeGOLEMEV(data, W, n, d)
-                : ComputeGOLEMNV(data, W, n, d);
-
-            // Add L1 subgradient and DAG penalty gradient
-            var (dagPenalty, dagGrad) = ComputeDAGPenalty(W, d);
-            obj += _lambda2 * dagPenalty;
-
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    int idx = i * d + j;
-                    double g = NumOps.ToDouble(grad[i, j]) + _lambda2 * NumOps.ToDouble(dagGrad[i, j]);
-                    if (i != j) g += Lambda1 * Math.Sign(NumOps.ToDouble(W[i, j]));
-
-                    // Adam update
-                    m[idx] = ADAM_BETA1 * m[idx] + (1 - ADAM_BETA1) * g;
-                    v[idx] = ADAM_BETA2 * v[idx] + (1 - ADAM_BETA2) * g * g;
-
-                    double mHat = m[idx] / (1 - Math.Pow(ADAM_BETA1, iter));
-                    double vHat = v[idx] / (1 - Math.Pow(ADAM_BETA2, iter));
-
-                    double wij = NumOps.ToDouble(W[i, j]);
-                    wij -= DEFAULT_LEARNING_RATE * mHat / (Math.Sqrt(vHat) + 1e-8);
-                    W[i, j] = NumOps.FromDouble(wij);
-                }
-            }
-
-            // Zero diagonal
-            for (int i = 0; i < d; i++)
-                W[i, i] = NumOps.Zero;
+            // Objective and gradient, then one Adam step (diagonal re-zeroed)
+            double obj;
+            (weights, m, v, obj) = GolemAdamStep(data, weights, m, v, offDiagonal, iter, n, d);
 
             // Convergence check
             if (iter % CHECKPOINT_INTERVAL == 0)
@@ -164,6 +134,7 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
         }
 
         // Compute final metrics
+        var W = weights.ToMatrix();
         var (finalLoss, _) = ComputeL2Loss(data, W);
         _lastLoss = finalLoss;
 
@@ -175,6 +146,40 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
 
     #endregion
 
+    /// <summary>
+    /// One GOLEM step: score gradient plus the DAG-penalty gradient and the L1 subgradient
+    /// (off-diagonal), followed by an Adam update and a zeroed diagonal.
+    /// </summary>
+    private (Tensor<T> W, Tensor<T> M, Tensor<T> V, double Objective) GolemAdamStep(
+        Matrix<T> data, Tensor<T> W, Tensor<T> m, Tensor<T> v, Tensor<T> offDiagonal, int iter, int n, int d)
+    {
+        var current = W.ToMatrix();
+
+        // Compute objective and gradient
+        var (obj, grad) = _equalVariance
+            ? ComputeGOLEMEV(data, current, n, d)
+            : ComputeGOLEMNV(data, current, n, d);
+
+        // Add L1 subgradient and DAG penalty gradient
+        var (dagPenalty, dagGrad) = ComputeDAGPenalty(current, d);
+        obj += _lambda2 * dagPenalty;
+
+        var zeros = Engine.TensorZerosLike(W);
+        var l1 = Engine.TensorWhere(offDiagonal,
+            Engine.TensorMultiplyScalar(Engine.TensorSign(W), NumOps.FromDouble(Lambda1)), zeros);
+        var g = Engine.TensorAdd(
+            Engine.TensorAdd(Tensor<T>.FromMatrix(grad),
+                Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(dagGrad), NumOps.FromDouble(_lambda2))),
+            l1);
+
+        // Adam update
+        var (updated, newM, newV) = AdamUpdate(W, g, m, v, ADAM_BETA1, ADAM_BETA2, 1e-8, DEFAULT_LEARNING_RATE,
+            1 - Math.Pow(ADAM_BETA1, iter), 1 - Math.Pow(ADAM_BETA2, iter));
+
+        // Zero diagonal
+        return (Engine.TensorWhere(offDiagonal, updated, zeros), newM, newV, obj);
+    }
+
     #region GOLEM Score Functions
 
     /// <summary>
@@ -185,20 +190,10 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
     private (double Score, Matrix<T> Gradient) ComputeGOLEMEV(Matrix<T> X, Matrix<T> W, int n, int d)
     {
         // Compute residual R = X - XW
-        var R = new Matrix<T>(n, d);
-        double rss = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T xw = NumOps.Zero;
-                for (int k = 0; k < d; k++)
-                    xw = NumOps.Add(xw, NumOps.Multiply(X[i, k], W[k, j]));
-                R[i, j] = NumOps.Subtract(X[i, j], xw);
-                double r = NumOps.ToDouble(R[i, j]);
-                rss += r * r;
-            }
-        }
+        var x = Tensor<T>.FromMatrix(X);
+        var w = Tensor<T>.FromMatrix(W);
+        var R = Engine.TensorSubtract(x, Engine.TensorMatMul(x, w));
+        double rss = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(R)));
 
         // (double) on one operand FIRST: n * d is an int multiply that overflows
         // before the division promotes it, so a large graph silently divides by a
@@ -207,45 +202,35 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
         if (sigmaSquared < 1e-15) sigmaSquared = 1e-15;
 
         // I - W
-        var ImW = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            ImW[i, i] = NumOps.One;
-            for (int j = 0; j < d; j++)
-                ImW[i, j] = NumOps.Subtract(ImW[i, j], W[i, j]);
-        }
+        var ImW = Engine.TensorSubtract(Engine.TensorEye<T>(d), w);
 
-        double logDetImW = ComputeLogAbsDeterminant(ImW, d);
+        double logDetImW = LogAbsDeterminant(ImW);
 
         // Score = (n*d/2) * log(sigma^2) - n * log|det(I-W)|
         // Same overflow: n * d is evaluated in int before /2.0 promotes the result.
         double score = ((double)n * d / 2.0) * Math.Log(sigmaSquared) - n * logDetImW;
 
-        // Gradient
-        var grad = new Matrix<T>(d, d);
-
         // X^T R term: d/dW [(n*d/2)*log(sigma^2)] = -X^T R / sigma^2
-        for (int k = 0; k < d; k++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double xtr = 0;
-                for (int i = 0; i < n; i++)
-                    xtr += NumOps.ToDouble(X[i, k]) * NumOps.ToDouble(R[i, j]);
-                grad[k, j] = NumOps.FromDouble(-xtr / sigmaSquared);
-            }
-        }
+        var xtr = Engine.TensorMatMul(Engine.TensorTranspose(x), R);
+        var grad = Engine.TensorDivideScalar(Engine.TensorNegate(xtr), NumOps.FromDouble(sigmaSquared));
 
         // Log-det term: d/dW [-n * log|det(I-W)|] = n * (I-W)^{-T}
-        var invImW = InvertMatrix(ImW, d);
-        if (invImW != null)
-        {
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    grad[i, j] = NumOps.Add(grad[i, j], NumOps.FromDouble(n * NumOps.ToDouble(invImW[j, i])));
-        }
+        grad = AddLogDetGradient(grad, ImW, n);
 
-        return (score, grad);
+        return (score, grad.ToMatrix());
+    }
+
+    /// <summary>
+    /// Adds n * (I - W)^{-T} to the gradient when I - W is invertible.
+    /// </summary>
+    private Tensor<T> AddLogDetGradient(Tensor<T> grad, Tensor<T> ImW, int n)
+    {
+        var invImW = InvertSmallMatrix(ImW.ToMatrix());
+        if (invImW is null)
+            return grad;
+
+        return Engine.TensorAdd(grad, Engine.TensorMultiplyScalar(
+            Engine.TensorTranspose(Tensor<T>.FromMatrix(invImW)), NumOps.FromDouble(n)));
     }
 
     /// <summary>
@@ -254,32 +239,15 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
     /// </summary>
     private (double Score, Matrix<T> Gradient) ComputeGOLEMNV(Matrix<T> X, Matrix<T> W, int n, int d)
     {
-        var R = new Matrix<T>(n, d);
-        var rssPerVar = new double[d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T xw = NumOps.Zero;
-                for (int k = 0; k < d; k++)
-                    xw = NumOps.Add(xw, NumOps.Multiply(X[i, k], W[k, j]));
-                R[i, j] = NumOps.Subtract(X[i, j], xw);
-                double r = NumOps.ToDouble(R[i, j]);
-                rssPerVar[j] += r * r;
-            }
-        }
+        var x = Tensor<T>.FromMatrix(X);
+        var w = Tensor<T>.FromMatrix(W);
+        var R = Engine.TensorSubtract(x, Engine.TensorMatMul(x, w));
+        var rssPerVar = Engine.ReduceSum(Engine.TensorSquare(R), new[] { 0 }, true); // [1, d]
 
         // I - W
-        var ImW = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            ImW[i, i] = NumOps.One;
-            for (int j = 0; j < d; j++)
-                ImW[i, j] = NumOps.Subtract(ImW[i, j], W[i, j]);
-        }
+        var ImW = Engine.TensorSubtract(Engine.TensorEye<T>(d), w);
 
-        double logDetImW = ComputeLogAbsDeterminant(ImW, d);
+        double logDetImW = LogAbsDeterminant(ImW);
 
         // Guard against singular I-W: return large penalty to steer optimization away
         if (double.IsNegativeInfinity(logDetImW) || double.IsNaN(logDetImW))
@@ -288,39 +256,18 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
             return (double.MaxValue / 2, zeroGrad);
         }
 
-        double score = -n * logDetImW;
-        for (int j = 0; j < d; j++)
-        {
-            double sigmaJ = rssPerVar[j] / n;
-            if (sigmaJ < 1e-15) sigmaJ = 1e-15;
-            score += (n / 2.0) * Math.Log(sigmaJ);
-        }
+        // Per-variable residual variance, floored at 1e-15
+        var sigma = Engine.TensorMax(Engine.TensorDivideScalar(rssPerVar, NumOps.FromDouble(n)), NumOps.FromDouble(1e-15));
+        double score = -n * logDetImW
+            + (n / 2.0) * NumOps.ToDouble(Engine.TensorSum(Engine.TensorLog(sigma)));
 
-        // Gradient
-        var grad = new Matrix<T>(d, d);
-        for (int k = 0; k < d; k++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double sigmaJ = rssPerVar[j] / n;
-                if (sigmaJ < 1e-15) sigmaJ = 1e-15;
+        // Gradient: -X^T R / rss_j per column
+        var xtr = Engine.TensorMatMul(Engine.TensorTranspose(x), R);
+        var grad = Engine.TensorDivide(Engine.TensorNegate(xtr), Engine.TensorBroadcastTo(rssPerVar, new[] { d, d }));
 
-                double xtr = 0;
-                for (int i = 0; i < n; i++)
-                    xtr += NumOps.ToDouble(X[i, k]) * NumOps.ToDouble(R[i, j]);
-                grad[k, j] = NumOps.FromDouble(-xtr / rssPerVar[j]);
-            }
-        }
+        grad = AddLogDetGradient(grad, ImW, n);
 
-        var invImW = InvertMatrix(ImW, d);
-        if (invImW != null)
-        {
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    grad[i, j] = NumOps.Add(grad[i, j], NumOps.FromDouble(n * NumOps.ToDouble(invImW[j, i])));
-        }
-
-        return (score, grad);
+        return (score, grad.ToMatrix());
     }
 
     /// <summary>
@@ -329,89 +276,6 @@ public class GOLEMAlgorithm<T> : ContinuousOptimizationBase<T>
     private (double Penalty, Matrix<T> Gradient) ComputeDAGPenalty(Matrix<T> W, int d)
     {
         return ComputeNOTEARSConstraint(W);
-    }
-
-    #endregion
-
-    #region Matrix Utilities
-
-    private double ComputeLogAbsDeterminant(Matrix<T> matrix, int d)
-    {
-        // LU decomposition (partial pivoting) on a copy
-        var LU = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                LU[i, j] = matrix[i, j];
-
-        for (int k = 0; k < d; k++)
-        {
-            int maxRow = k;
-            for (int i = k + 1; i < d; i++)
-                if (NumOps.GreaterThan(NumOps.Abs(LU[i, k]), NumOps.Abs(LU[maxRow, k])))
-                    maxRow = i;
-
-            if (maxRow != k)
-                for (int j = 0; j < d; j++)
-                    (LU[k, j], LU[maxRow, j]) = (LU[maxRow, j], LU[k, j]);
-
-            if (NumOps.LessThan(NumOps.Abs(LU[k, k]), NumOps.FromDouble(1e-15)))
-                return double.NegativeInfinity;
-
-            for (int i = k + 1; i < d; i++)
-            {
-                LU[i, k] = NumOps.Divide(LU[i, k], LU[k, k]);
-                for (int j = k + 1; j < d; j++)
-                    LU[i, j] = NumOps.Subtract(LU[i, j], NumOps.Multiply(LU[i, k], LU[k, j]));
-            }
-        }
-
-        double logDet = 0;
-        for (int i = 0; i < d; i++)
-            logDet += Math.Log(Math.Abs(NumOps.ToDouble(LU[i, i])));
-        return logDet;
-    }
-
-    private Matrix<T>? InvertMatrix(Matrix<T> matrix, int d)
-    {
-        var aug = new Matrix<T>(d, 2 * d);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++) aug[i, j] = matrix[i, j];
-            aug[i, i + d] = NumOps.One;
-        }
-
-        for (int col = 0; col < d; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < d; row++)
-                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
-                    maxRow = row;
-
-            if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12))) return null;
-
-            if (maxRow != col)
-                for (int j = 0; j < 2 * d; j++)
-                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            T pivot = aug[col, col];
-            for (int j = 0; j < 2 * d; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
-
-            for (int row = 0; row < d; row++)
-            {
-                if (row != col)
-                {
-                    T factor = aug[row, col];
-                    for (int j = 0; j < 2 * d; j++)
-                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
-                }
-            }
-        }
-
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = aug[i, j + d];
-        return result;
     }
 
     #endregion

@@ -227,81 +227,108 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
         int qLen = questionTokens.Length;
 
         // Step 3: Long thinking with self-reflection and backtracking
-        var thinkingState = new double[dim];
-        var prevStepState = new double[dim]; // for self-reflection comparison
+        var engine = Engine;
+        var thinkingState = new Tensor<T>([dim]);
+        int samples = Math.Min(24, visDim);
+        int patches = Math.Min(32, visDim);
+
+        // Per-step coefficients for all steps: stepWeight = 1 / sqrt(step + 1) and the router
+        // frequency (step + 1) * 0.3.
+        var stepNumber = engine.TensorArange<T>(1, maxThinkingSteps + 1, 1);
+        var stepWeights = engine.TensorDivide(
+            Tensor<T>.CreateDefault([maxThinkingSteps], NumOps.One), engine.TensorSqrt(stepNumber));
+        var routerFrequency = engine.TensorMultiplyScalar(stepNumber, NumOps.FromDouble(0.3));
+        var expertNumber = engine.TensorArange<T>(1, numExperts + 1, 1);
+        T visualWeight = NumOps.FromDouble(0.6);
+        T questionScale = NumOps.FromDouble(0.4 / _options.VocabSize);
+        T sampleCount = NumOps.FromDouble(samples);
+        T patchTotal = NumOps.FromDouble(patches);
+        T routerFloor = NumOps.FromDouble(double.MinValue);
+        T half = NumOps.FromDouble(0.5);
+        T epsilon = NumOps.FromDouble(1e-8);
+        T keepRate = NumOps.FromDouble(0.3);
+        T questionWeight = NumOps.FromDouble(0.15);
+        // Question conditioning: q[d % qLen] / vocab (the same every step).
+        var qEmb = engine.TensorMultiplyScalar(CyclicTake(questionTokens, dim), NumOps.FromDouble(1.0 / _options.VocabSize));
+        // Expert focus 1 + 0.25 cos((e + 1)(d + 1) 0.003), the same every step.
+        var positionFocus = samples == 0
+            ? new Tensor<T>([dim, numExperts])
+            : engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(
+                    engine.TensorCos(engine.TensorMultiplyScalar(
+                        engine.TensorOuter(engine.TensorArange<T>(1, dim + 1, 1), expertNumber), NumOps.FromDouble(0.003))),
+                    NumOps.FromDouble(0.25)),
+                NumOps.One);
 
         for (int step = 0; step < maxThinkingSteps; step++)
         {
             // Save previous state for self-reflection
-            Array.Copy(thinkingState, prevStepState, dim);
+            var prevStepState = thinkingState;
 
-            double stepWeight = 1.0 / Math.Sqrt(step + 1); // diminishing but not vanishing
-
-            for (int d = 0; d < dim; d++)
+            // MoE-based reasoning: select expert based on step and position.
+            // routerScore[d, e] = sin((e + 1)(step + 1) 0.3) * mean_s(0.6 vis[(d S + s + 19 step + 5 e) % visDim]
+            //                     + 0.4 q[(s + 3 step) % qLen] / vocab); the first expert with the highest
+            // score wins. With no visual features every score is NaN and no expert wins.
+            Tensor<T> bestOutput;
+            if (samples == 0)
             {
-                // MoE-based reasoning: select expert based on step and position
-                double bestOutput = 0;
-                double bestScore = double.MinValue;
-
-                for (int e = 0; e < numExperts; e++)
-                {
-                    // Expert routing depends on thinking step (specialization)
-                    double routerScore = 0;
-                    int samples = Math.Min(24, visDim);
-                    for (int s = 0; s < samples; s++)
-                    {
-                        int vIdx = (d * samples + s + step * 19 + e * 5) % visDim;
-                        double visVal = NumOps.ToDouble(visualFeatures[vIdx]);
-                        double qVal =
-                            NumOps.ToDouble(questionTokens[(s + step * 3) % qLen])
-                            / _options.VocabSize;
-                        routerScore +=
-                            (visVal * 0.6 + qVal * 0.4) * Math.Sin((e + 1.0) * (step + 1) * 0.3);
-                    }
-                    routerScore /= samples;
-
-                    if (routerScore > bestScore)
-                    {
-                        bestScore = routerScore;
-                        // Expert computation
-                        double expertVal = 0;
-                        int patches = Math.Min(32, visDim);
-                        for (int v = 0; v < patches; v++)
-                        {
-                            int vIdx = (v + e * 9 + step * 23) % visDim;
-                            expertVal +=
-                                NumOps.ToDouble(visualFeatures[vIdx])
-                                * (1.0 + Math.Cos((e + 1.0) * (d + 1) * 0.003) * 0.25);
-                        }
-                        bestOutput = expertVal / patches;
-                    }
-                }
-
-                double qEmb = NumOps.ToDouble(questionTokens[d % qLen]) / _options.VocabSize;
-
-                // Self-reflection: compare with previous step, reduce weight if inconsistent
-                double reflectionFactor = 1.0;
-                if (step > 0)
-                {
-                    double consistency =
-                        1.0
-                        - Math.Abs(bestOutput - prevStepState[d])
-                            / (Math.Abs(bestOutput) + Math.Abs(prevStepState[d]) + 1e-8);
-                    // If inconsistent, reduce contribution (backtrack partially)
-                    reflectionFactor = 0.5 + 0.5 * consistency;
-                }
-
-                // Accumulate reasoning with reflection-modulated update
-                thinkingState[d] =
-                    thinkingState[d] * (1.0 - stepWeight * 0.3 * reflectionFactor)
-                    + (bestOutput + qEmb * 0.15) * stepWeight * reflectionFactor;
+                bestOutput = new Tensor<T>([dim]);
             }
+            else
+            {
+                var visSamples = engine.TensorMultiplyScalar(
+                    AffineModGather(visualFeatures, [dim, numExperts, samples], [samples, 5, 1], step * 19), visualWeight);
+                var qSamples = engine.TensorMultiplyScalar(AffineModGather(questionTokens, [samples], [1], step * 3), questionScale);
+                var sampleMean = engine.TensorDivideScalar(
+                    engine.ReduceSum(
+                        engine.TensorAdd(visSamples, engine.TensorBroadcastTo(qSamples.Reshape([1, 1, samples]), [dim, numExperts, samples])),
+                        [2], false),
+                    sampleCount);
+                var stepBias = engine.TensorSin(engine.TensorMultiply(expertNumber, Pick(routerFrequency, step)));
+                var routerScore = engine.TensorMultiply(
+                    sampleMean, engine.TensorBroadcastTo(stepBias.Reshape([1, numExperts]), [dim, numExperts]));
+                var bestExpert = RowFirstArgMaxMask(routerScore, routerFloor);
+
+                // Expert computation: expertVal[d, e] = mean_v vis[(v + 9 e + 23 step) % visDim]
+                //                     * (1 + 0.25 cos((e + 1)(d + 1) 0.003))
+                var expertMean = engine.TensorDivideScalar(
+                    engine.ReduceSum(AffineModGather(visualFeatures, [numExperts, patches], [9, 1], step * 23), [1], false),
+                    patchTotal);
+                var expertVal = engine.TensorMultiply(
+                    positionFocus, engine.TensorBroadcastTo(expertMean.Reshape([1, numExperts]), [dim, numExperts]));
+                bestOutput = MaskedRowSum(expertVal, bestExpert);
+            }
+
+            // Self-reflection: compare with previous step, reduce weight if inconsistent:
+            // consistency = 1 - |b - prev| / (|b| + |prev| + 1e-8); reflectionFactor = 0.5 + 0.5 consistency.
+            Tensor<T> reflectionFactor;
+            if (step > 0)
+            {
+                var consistency = engine.ScalarMinusTensor(
+                    NumOps.One,
+                    engine.TensorDivide(
+                        engine.TensorAbs(engine.TensorSubtract(bestOutput, prevStepState)),
+                        engine.TensorAddScalar(
+                            engine.TensorAdd(engine.TensorAbs(bestOutput), engine.TensorAbs(prevStepState)), epsilon)));
+                reflectionFactor = engine.TensorAddScalar(engine.TensorMultiplyScalar(consistency, half), half);
+            }
+            else
+            {
+                reflectionFactor = Tensor<T>.CreateDefault([dim], NumOps.One);
+            }
+
+            // Accumulate reasoning with reflection-modulated update
+            var scaledReflection = engine.TensorMultiply(reflectionFactor, Pick(stepWeights, step));
+            thinkingState = engine.TensorAdd(
+                engine.TensorMultiply(
+                    thinkingState,
+                    engine.ScalarMinusTensor(NumOps.One, engine.TensorMultiplyScalar(scaledReflection, keepRate))),
+                engine.TensorMultiply(
+                    engine.TensorAdd(bestOutput, engine.TensorMultiplyScalar(qEmb, questionWeight)), scaledReflection));
         }
 
         // Step 4: Generate final answer from thinking chain
-        var chainInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-            chainInput[d] = NumOps.FromDouble(thinkingState[d]);
+        var chainInput = thinkingState;
 
         var output = chainInput;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -388,10 +415,7 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

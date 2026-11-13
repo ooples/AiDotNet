@@ -94,17 +94,9 @@ public partial class ZScoreDetector<T> : AnomalyDetectorBase<T>
         ValidateInput(X);
 
         int nFeatures = X.Columns;
-        _means = new Vector<T>(nFeatures);
-        _stds = new Vector<T>(nFeatures);
 
         // Calculate mean and standard deviation for each feature
-        for (int j = 0; j < nFeatures; j++)
-        {
-            var column = X.GetColumn(j);
-            var (mean, std) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
-            _means[j] = mean;
-            _stds[j] = std;
-        }
+        (_means, _stds) = AnomalyTensorOps.ColumnMeanStd(X);
 
         // Calculate anomaly scores for training data and set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -134,38 +126,8 @@ public partial class ZScoreDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Maximum absolute Z-score across all features
-            T maxAbsZScore = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                // Skip features with zero standard deviation (constant features)
-                if (NumOps.Equals(stds[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                // Z = (x - mean) / std
-                T zScore = NumOps.Divide(
-                    NumOps.Subtract(X[i, j], means[j]),
-                    stds[j]);
-
-                T absZScore = NumOps.Abs(zScore);
-
-                if (NumOps.GreaterThan(absZScore, maxAbsZScore))
-                {
-                    maxAbsZScore = absZScore;
-                }
-            }
-
-            scores[i] = maxAbsZScore;
-        }
-
-        return scores;
+        // Maximum absolute Z-score |x - mean| / std across features (constant, zero-std features skipped)
+        return AnomalyTensorOps.MaxStandardizedDeviation(X, means, stds);
     }
 
     /// <inheritdoc/>
@@ -174,17 +136,7 @@ public partial class ZScoreDetector<T> : AnomalyDetectorBase<T>
         EnsureFitted();
 
         var scores = ScoreAnomalies(X);
-        var predictions = new Vector<T>(scores.Length);
-        T zThresholdT = NumOps.FromDouble(_zThreshold);
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            // Points with max |Z| > threshold are anomalies (-1), otherwise inliers (1)
-            predictions[i] = NumOps.GreaterThan(scores[i], zThresholdT)
-                ? NumOps.FromDouble(-1)
-                : NumOps.FromDouble(1);
-        }
-
-        return predictions;
+        // Points with max |Z| > threshold are anomalies (-1), otherwise inliers (1)
+        return AnomalyTensorOps.LabelsFromThreshold(scores, NumOps.FromDouble(_zThreshold));
     }
 }

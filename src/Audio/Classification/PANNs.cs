@@ -145,9 +145,9 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc />
     public AudioEventResult<T> Detect(Tensor<T> audio, T threshold)
     {
-        ThrowIfDisposed(); double tv = NumOps.ToDouble(threshold), dur = audio.Length / (double)_options.SampleRate;
+        ThrowIfDisposed(); double dur = audio.Length / (double)_options.SampleRate;
         var wins = SplitIntoWindows(audio); var all = new List<AudioEvent<T>>();
-        for (int w = 0; w < wins.Count; w++) { double st = w * TimeResolution; var mel = _melSpectrogram?.Forward(wins[w]) ?? throw new InvalidOperationException("MelSpectrogram not initialized."); var sc = ClassifyWindow(mel); for (int i = 0; i < sc.Length && i < ClassLabels.Count; i++) if (NumOps.ToDouble(sc[i]) >= tv) all.Add(new AudioEvent<T> { EventType = ClassLabels[i], Confidence = sc[i], StartTime = st, EndTime = Math.Min(st + _options.WindowSize, dur), PeakTime = st + _options.WindowSize / 2 }); }
+        for (int w = 0; w < wins.Count; w++) { double st = w * TimeResolution; var mel = _melSpectrogram?.Forward(wins[w]) ?? throw new InvalidOperationException("MelSpectrogram not initialized."); var sc = ClassifyWindow(mel); foreach (int i in AudioEventDetectionOps.IndicesAtOrAbove(Engine, sc, ClassLabels.Count, threshold)) all.Add(new AudioEvent<T> { EventType = ClassLabels[i], Confidence = sc[i], StartTime = st, EndTime = Math.Min(st + _options.WindowSize, dur), PeakTime = st + _options.WindowSize / 2 }); }
         var merged = MergeEvents(all);
         return new AudioEventResult<T> { Events = merged, TotalDuration = dur, DetectedEventTypes = merged.Select(e => e.EventType).Distinct().ToList(), EventStats = ComputeEventStatistics(merged) };
     }
@@ -162,9 +162,9 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc />
     public Tensor<T> GetEventProbabilities(Tensor<T> audio)
     {
-        ThrowIfDisposed(); var wins = SplitIntoWindows(audio); var p = new Tensor<T>([wins.Count, ClassLabels.Count]);
-        for (int w = 0; w < wins.Count; w++) { var mel = _melSpectrogram?.Forward(wins[w]) ?? throw new InvalidOperationException(); var sc = ClassifyWindow(mel); for (int i = 0; i < ClassLabels.Count && i < sc.Length; i++) p[w, i] = sc[i]; }
-        return p;
+        ThrowIfDisposed(); var wins = SplitIntoWindows(audio); var rows = new List<Tensor<T>>(wins.Count);
+        for (int w = 0; w < wins.Count; w++) { var mel = _melSpectrogram?.Forward(wins[w]) ?? throw new InvalidOperationException(); rows.Add(AudioEventDetectionOps.ScoreRow(ClassifyWindow(mel), ClassLabels.Count)); }
+        return AudioEventDetectionOps.StackScoreRows(Engine, rows, ClassLabels.Count);
     }
 
     /// <inheritdoc />
@@ -229,7 +229,7 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => _melSpectrogram?.Forward(rawAudio) ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
     /// <inheritdoc />
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o._shape); for (int i = 0; i < o.Length; i++) r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(o[i])))); return r; }
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => AudioEventDetectionOps.SigmoidDetached(Engine, o);
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
@@ -261,13 +261,7 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 "No model available for classification. Provide an ONNX model path or use native training mode.");
         }
 
-        var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
-        {
-            scores[i] = output[i];
-        }
-
-        return scores;
+        return AudioEventDetectionOps.HeadScores(Engine, output, ClassLabels.Count);
     }
 
     private Tensor<T> NormalizeModelInput(Tensor<T> input)
@@ -279,28 +273,18 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             return NormalizeModelInput(PreprocessAudio(input));
 
         if (input.Rank == 2)
-        {
-            var result = new Tensor<T>([1, 1, input.Shape[0], input.Shape[1]]);
-            for (int i = 0; i < input.Length; i++)
-                result[i] = input[i];
-            return result;
-        }
+            return Engine.Reshape(input, [1, 1, input.Shape[0], input.Shape[1]]);
 
         if (input.Rank == 3)
-        {
-            var result = new Tensor<T>([input.Shape[0], 1, input.Shape[1], input.Shape[2]]);
-            for (int i = 0; i < input.Length; i++)
-                result[i] = input[i];
-            return result;
-        }
+            return Engine.Reshape(input, [input.Shape[0], 1, input.Shape[1], input.Shape[2]]);
 
         throw new ArgumentException(
             $"PANNs expects raw rank-1 audio or rank-2/3/4 mel features, got rank {input.Rank}.",
             nameof(input));
     }
-    private List<Tensor<T>> SplitIntoWindows(Tensor<T> audio) { var w = new List<Tensor<T>>(); int ws = (int)(_options.WindowSize * _options.SampleRate), hs = (int)(ws * (1 - _options.WindowOverlap)); if (hs <= 0) hs = 1; int ls = 0; for (int s = 0; s + ws <= audio.Length; s += hs) { var t = new Tensor<T>([ws]); for (int i = 0; i < ws; i++) t[i] = audio[s + i]; w.Add(t); ls = s + hs; } int rs = w.Count > 0 ? ls : 0, rem = audio.Length - rs; if (rem > ws / 10) { var t = new Tensor<T>([ws]); for (int i = 0; i < rem && i < ws; i++) t[i] = audio[rs + i]; w.Add(t); } else if (w.Count == 0 && audio.Length > 0) { var t = new Tensor<T>([ws]); for (int i = 0; i < audio.Length; i++) t[i] = audio[i]; w.Add(t); } return w; }
-    private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events) { if (events.Count == 0) return events; var m = new List<AudioEvent<T>>(); foreach (var g in events.GroupBy(e => e.EventType)) { var sorted = g.OrderBy(e => e.StartTime).ToList(); var cur = sorted[0]; for (int i = 1; i < sorted.Count; i++) { var next = sorted[i]; if (next.StartTime <= cur.EndTime + 0.1) { double cc = NumOps.ToDouble(cur.Confidence), nc = NumOps.ToDouble(next.Confidence); cur = new AudioEvent<T> { EventType = cur.EventType, StartTime = cur.StartTime, EndTime = Math.Max(cur.EndTime, next.EndTime), Confidence = cc > nc ? cur.Confidence : next.Confidence, PeakTime = cc > nc ? cur.PeakTime : next.PeakTime }; } else { m.Add(cur); cur = next; } } m.Add(cur); } return m.OrderBy(e => e.StartTime).ToList(); }
-    private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events) { var s = new Dictionary<string, EventStatistics<T>>(); foreach (var g in events.GroupBy(e => e.EventType)) { var l = g.ToList(); s[g.Key] = new EventStatistics<T> { Count = l.Count, TotalDuration = l.Sum(e => e.Duration), AverageConfidence = NumOps.FromDouble(l.Average(e => NumOps.ToDouble(e.Confidence))), MaxConfidence = NumOps.FromDouble(l.Max(e => NumOps.ToDouble(e.Confidence))) }; } return s; }
+    private List<Tensor<T>> SplitIntoWindows(Tensor<T> audio) { int ws = (int)(_options.WindowSize * _options.SampleRate), hs = (int)(ws * (1 - _options.WindowOverlap)); if (hs <= 0) hs = 1; return AudioEventDetectionOps.SplitIntoWindows(Engine, audio, ws, hs, ws / 10); }
+    private List<AudioEvent<T>> MergeEvents(List<AudioEvent<T>> events) => AudioEventDetectionOps.MergeEvents(Engine, events, 0.1);
+    private Dictionary<string, EventStatistics<T>> ComputeEventStatistics(IReadOnlyList<AudioEvent<T>> events) => AudioEventDetectionOps.ComputeEventStatistics(Engine, events);
 
     #endregion
 
@@ -319,7 +303,7 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         private readonly PANNs<T> _det; private readonly T _thr; private readonly List<T> _buf; private readonly List<AudioEvent<T>> _new; private readonly Dictionary<string, T> _state; private readonly int _ws; private double _pt; private volatile bool _disp; private readonly object _lk = new();
         public event EventHandler<AudioEvent<T>>? EventDetected;
         public PANNsStreamingSession(PANNs<T> det, int sr, T thr) { _det = det; _thr = thr; _buf = []; _new = []; _state = new Dictionary<string, T>(); _ws = (int)(det._options.WindowSize * sr); foreach (var l in det.ClassLabels) _state[l] = det.NumOps.Zero; }
-        public void FeedAudio(Tensor<T> chunk) { if (_disp) throw new ObjectDisposedException(nameof(PANNsStreamingSession)); List<AudioEvent<T>>? raise = null; lock (_lk) { if (_disp) throw new ObjectDisposedException(nameof(PANNsStreamingSession)); for (int i = 0; i < chunk.Length; i++) _buf.Add(chunk[i]); while (_buf.Count >= _ws) { var w = new Tensor<T>([_ws]); for (int i = 0; i < _ws; i++) w[i] = _buf[i]; var mel = _det._melSpectrogram?.Forward(w) ?? throw new InvalidOperationException(); var scores = _det.ClassifyWindow(mel); double tv = _det.NumOps.ToDouble(_thr); for (int i = 0; i < scores.Length && i < _det.ClassLabels.Count; i++) { _state[_det.ClassLabels[i]] = scores[i]; if (_det.NumOps.ToDouble(scores[i]) >= tv) { var e = new AudioEvent<T> { EventType = _det.ClassLabels[i], Confidence = scores[i], StartTime = _pt, EndTime = _pt + _det._options.WindowSize, PeakTime = _pt + _det._options.WindowSize / 2 }; _new.Add(e); raise ??= []; raise.Add(e); } } int hs = (int)(_ws * (1 - _det._options.WindowOverlap)); if (hs <= 0) hs = 1; _buf.RemoveRange(0, hs); _pt += hs / (double)_det._options.SampleRate; } } if (raise is not null) foreach (var e in raise) EventDetected?.Invoke(this, e); }
+        public void FeedAudio(Tensor<T> chunk) { if (_disp) throw new ObjectDisposedException(nameof(PANNsStreamingSession)); List<AudioEvent<T>>? raise = null; lock (_lk) { if (_disp) throw new ObjectDisposedException(nameof(PANNsStreamingSession)); _buf.AddRange(chunk.ToArray()); while (_buf.Count >= _ws) { var w = new Tensor<T>(_buf.GetRange(0, _ws).ToArray(), [_ws]); var mel = _det._melSpectrogram?.Forward(w) ?? throw new InvalidOperationException(); var scores = _det.ClassifyWindow(mel); int nc = Math.Min(scores.Length, _det.ClassLabels.Count); for (int i = 0; i < nc; i++) _state[_det.ClassLabels[i]] = scores[i]; foreach (int i in AudioEventDetectionOps.IndicesAtOrAbove(_det.Engine, scores, nc, _thr)) { var e = new AudioEvent<T> { EventType = _det.ClassLabels[i], Confidence = scores[i], StartTime = _pt, EndTime = _pt + _det._options.WindowSize, PeakTime = _pt + _det._options.WindowSize / 2 }; _new.Add(e); raise ??= []; raise.Add(e); } int hs = (int)(_ws * (1 - _det._options.WindowOverlap)); if (hs <= 0) hs = 1; _buf.RemoveRange(0, hs); _pt += hs / (double)_det._options.SampleRate; } } if (raise is not null) foreach (var e in raise) EventDetected?.Invoke(this, e); }
         public IReadOnlyList<AudioEvent<T>> GetNewEvents() { lock (_lk) { var e = _new.ToList(); _new.Clear(); return e; } }
         public IReadOnlyDictionary<string, T> GetCurrentState() { lock (_lk) { return new Dictionary<string, T>(_state); } }
         public void Dispose() { if (_disp) return; lock (_lk) { if (_disp) return; _disp = true; _buf.Clear(); _new.Clear(); _state.Clear(); } }

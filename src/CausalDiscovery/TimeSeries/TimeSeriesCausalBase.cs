@@ -61,65 +61,109 @@ public abstract class TimeSeriesCausalBase<T> : CausalDiscoveryBase<T>
         if (maxLag <= 0 || maxLag >= n)
             throw new ArgumentOutOfRangeException(nameof(maxLag), $"maxLag must be in [1, {n - 1}].");
 
+        // laggedX[t, lag * d + col] = data[t + maxLag - lag - 1, col]; target[t] = data[t + maxLag, targetCol]
         int effectiveN = n - maxLag;
-        var laggedX = new Matrix<T>(effectiveN, d * maxLag);
-        var target = new Vector<T>(effectiveN);
-
-        for (int t = 0; t < effectiveN; t++)
-        {
-            target[t] = data[t + maxLag, targetCol];
-            for (int lag = 0; lag < maxLag; lag++)
-            {
-                for (int col = 0; col < d; col++)
-                {
-                    laggedX[t, lag * d + col] = data[t + maxLag - lag - 1, col];
-                }
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
+        var lagBlocks = new Tensor<T>[maxLag];
+        for (int lag = 0; lag < maxLag; lag++)
+            lagBlocks[lag] = Engine.TensorSlice(x, new[] { maxLag - lag - 1, 0 }, new[] { effectiveN, d });
+        var laggedX = Engine.TensorConcatenate(lagBlocks, 1).ToMatrix();
+        var target = Engine.TensorSlice(x, new[] { maxLag, targetCol }, new[] { effectiveN, 1 })
+            .Reshape(new[] { effectiveN }).ToVector();
 
         return (laggedX, target);
     }
+
+    /// <summary>
+    /// The [effectiveN] series x[offset + t - lag, variable] for t = 0..effectiveN-1, with rows outside
+    /// the data read as zero.
+    /// </summary>
+    private protected Tensor<T> LaggedSeries(Tensor<T> x, int variable, int lag, int offset, int effectiveN)
+    {
+        int n = x.Shape[0];
+        int start = offset - lag;
+        int first = Math.Max(0, start);
+        int last = Math.Min(n, start + effectiveN);
+        var column = Engine.TensorSliceAxis(x, 1, variable);
+        if (first == start && last == start + effectiveN)
+            return Engine.TensorSlice(column, new[] { start }, new[] { effectiveN });
+
+        var parts = new List<Tensor<T>>();
+        if (first > start) parts.Add(new Tensor<T>(new[] { Math.Min(first - start, effectiveN) }));
+        if (last > first) parts.Add(Engine.TensorSlice(column, new[] { first }, new[] { last - first }));
+        int tail = effectiveN - parts.Sum(p => p.Length);
+        if (tail > 0) parts.Add(new Tensor<T>(new[] { tail }));
+        return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// Residuals y - Z beta of the least-squares fit (Z'Z + ridge I) beta = Z'y over Z [n x p] and y [n];
+    /// with <paramref name="center"/> both are centered first, which is the residual of a fit with an
+    /// intercept. Z'Z is mirrored from its upper triangle so it is exactly symmetric. With the Cholesky
+    /// solver, a factorization that fails (a non-positive pivot from collinear columns whose rounding
+    /// error exceeds the ridge) falls back to partial-pivoting LU, and a system LU also reports singular
+    /// gets beta = 0 (the residual is the response), so callers see residuals instead of an exception.
+    /// </summary>
+    private protected Tensor<T> OlsResidualSeries(Tensor<T> z, Tensor<T> y, bool center, double ridge,
+        MatrixDecompositionType solver)
+    {
+        int n = z.Shape[0];
+        int p = z.Shape[1];
+        var design = center ? CenterColumns(z) : z;
+        var response = (center ? Engine.TensorSubtractScalar(y, Engine.TensorMean(y)) : y).Reshape(new[] { n, 1 });
+        var designT = Engine.TensorTranspose(design);
+        var gram = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(designT, design));
+        gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(ridge)));
+        var ztyColumn = Engine.TensorMatMul(designT, response);
+
+        Tensor<T> beta;
+        if (solver == MatrixDecompositionType.Cholesky)
+        {
+            var (factor, info) = LinalgDispatch<T>.CholeskyEx(gram);
+            if (Engine.TensorCountNonzero(info) == 0)
+            {
+                beta = LinalgDispatch<T>.CholeskySolve(ztyColumn, factor);
+            }
+            else
+            {
+                var (solution, luInfo) = LinalgDispatch<T>.SolveEx(gram, ztyColumn);
+                beta = Engine.TensorCountNonzero(luInfo) == 0 ? solution : new Tensor<T>(new[] { p, 1 });
+            }
+        }
+        else
+        {
+            var zty = ztyColumn.Reshape(new[] { p }).ToVector();
+            beta = MatrixSolutionHelper.SolveLinearSystem<T>(gram.ToMatrix(), zty, solver).AsTensor();
+        }
+
+        return Engine.TensorSubtract(response, Engine.TensorMatMul(design, beta.Reshape(new[] { p, 1 })))
+            .Reshape(new[] { n });
+    }
+
+    /// <summary>
+    /// Pearson correlation of two series (0 unless both centered sums of squares are above 1e-10).
+    /// </summary>
+    private protected double SeriesCorrelation(Tensor<T> x, Tensor<T> y)
+        => NumOps.ToDouble(CausalTensorHelpers.PearsonCorrelation(x, y));
 
     /// <summary>
     /// Computes RSS (Residual Sum of Squares) for OLS regression using generic operations.
     /// </summary>
     protected double ComputeRSS(Matrix<T> X, Vector<T> y, int n, int p)
     {
-        // Build normal equations: XtX * beta = Xty
-        var XtX = new Matrix<T>(p, p);
-        var Xty = new Vector<T>(p);
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(X[k, i], X[k, j]));
-                XtX[i, j] = sum;
-            }
-            T sumY = NumOps.Zero;
-            for (int k = 0; k < n; k++)
-                sumY = NumOps.Add(sumY, NumOps.Multiply(X[k, i], y[k]));
-            Xty[i] = sumY;
-        }
+        // Build normal equations: XtX * beta = Xty over the first n rows and p columns
+        var design = Engine.TensorSlice(Tensor<T>.FromMatrix(X), new[] { 0, 0 }, new[] { n, p });
+        var response = Engine.TensorSlice(y.AsTensor(), new[] { 0 }, new[] { n }).Reshape(new[] { n, 1 });
+        var designT = Engine.TensorTranspose(design);
+        var XtX = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(designT, design));
 
         // Ridge regularization
-        T ridge = NumOps.FromDouble(1e-6);
-        for (int i = 0; i < p; i++)
-            XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
+        XtX = Engine.TensorAdd(XtX, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-6)));
+        var Xty = Engine.TensorMatMul(designT, response).Reshape(new[] { p }).ToVector();
 
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX.ToMatrix(), Xty, MatrixDecompositionType.Lu);
 
-        double rss = 0;
-        for (int i = 0; i < n; i++)
-        {
-            T pred = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-                pred = NumOps.Add(pred, NumOps.Multiply(beta[j], X[i, j]));
-            double err = NumOps.ToDouble(NumOps.Subtract(y[i], pred));
-            rss += err * err;
-        }
-
-        return rss;
+        var residual = Engine.TensorSubtract(response, Engine.TensorMatMul(design, beta.AsTensor().Reshape(new[] { p, 1 })));
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(residual)));
     }
 }

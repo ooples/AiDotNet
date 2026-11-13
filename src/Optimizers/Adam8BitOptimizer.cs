@@ -3,7 +3,10 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using SimdVector = System.Numerics.Vector;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 
@@ -72,10 +75,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (_options.UseAdaptiveLearningRate || _options.UseAMSGrad) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
-            Tensors.Engines.Compilation.OptimizerType.Adam,
+            _options.UseDecoupledWeightDecay && _options.WeightDecay > 0.0
+                ? Tensors.Engines.Compilation.OptimizerType.AdamW
+                : Tensors.Engines.Compilation.OptimizerType.Adam,
             GetCurrentLearningRate(),
             _options.Beta1, _options.Beta2, _options.Epsilon,
-            0f, schedule)
+            _options.WeightDecay, schedule)
         { UseBf16Moments = true };
         return true;
     }
@@ -250,7 +255,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _mFullPrecision = null;
 
             // m starts at zero: the signed dynamic codebook's zero entry.
-            for (int i = 0; i < length; i++) _mQuantized[i] = DynamicQuantizationMap.SignedZeroIndex;
+            _mQuantized.Fill(DynamicQuantizationMap.SignedZeroIndex);
         }
         else
         {
@@ -260,11 +265,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
 
         // Initialize scales (scale of 1.0 works with the zero-initialized state).
-        for (int b = 0; b < _numBlocks; b++)
-        {
-            if (_mScales is not null) _mScales[b] = 1.0;
-            _vScales[b] = 1.0;
-        }
+        _mScales?.Fill(1.0);
+        _vScales.Fill(1.0);
     }
 
     /// <summary>
@@ -477,6 +479,33 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public bool FullPrecisionMoments;
         public Tensor<T>? VFullPrecision;
 
+        // GPU-resident compressed-moment buffers (allocated lazily on DirectGpuTensorEngine when T == float).
+        public IGpuBuffer? GpuMQuantized;
+        public IGpuBuffer? GpuVQuantized;
+        public IGpuBuffer? GpuMScales;
+        public IGpuBuffer? GpuVScales;
+        public IGpuBuffer? GpuMBf16;
+        public IGpuBuffer? GpuVBf16;
+        public IDirectGpuBackend? GpuBackend;
+        public bool GpuDirty;
+        public bool HostRestored;
+        // Set when a CPU step updated the host moments; the next GPU step uploads them before running. Without it a GPU
+        // step after a scheduled full-precision (CPU) step, or after a first step that ran on the CPU, reused GPU buffers
+        // holding the moments from before the CPU update.
+        public bool HostDirty;
+
+        public void FreeGpuBuffers()
+        {
+            GpuOptimizer.FreeGpuBuffer(GpuMQuantized);
+            GpuOptimizer.FreeGpuBuffer(GpuVQuantized);
+            GpuOptimizer.FreeGpuBuffer(GpuMScales);
+            GpuOptimizer.FreeGpuBuffer(GpuVScales);
+            GpuOptimizer.FreeGpuBuffer(GpuMBf16);
+            GpuOptimizer.FreeGpuBuffer(GpuVBf16);
+            GpuMQuantized = GpuVQuantized = GpuMScales = GpuVScales = GpuMBf16 = GpuVBf16 = null;
+            GpuBackend = null;
+            GpuDirty = false;
+        }
     }
 
     private readonly ConcurrentDictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
@@ -501,12 +530,24 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
         T oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(Convert.ToDouble(beta1), _tapeStep));
-        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(Convert.ToDouble(beta2), _tapeStep));
-
-        // The CUDA adam8bit_update kernel still quantizes linearly (absmax/127, /255), not with the block-wise
-        // dynamic codebook these CPU paths use, so there is no GPU 8-bit step until the Tensors kernel matches.
-
+        double lrDouble = NumOps.ToDouble(CurrentLearningRate);
+        double beta1Double = Convert.ToDouble(beta1);
+        double beta2Double = Convert.ToDouble(beta2);
+        double bc1Double = 1.0 - Math.Pow(beta1Double, _tapeStep);
+        double bc2Double = 1.0 - Math.Pow(beta2Double, _tapeStep);
+        if (bc1Double <= 0.0) bc1Double = 1.0;
+        if (bc2Double <= 0.0) bc2Double = 1.0;
+        T biasCorrection1 = NumOps.FromDouble(bc1Double);
+        T biasCorrection2 = NumOps.FromDouble(bc2Double);
+        double weightDecay = _options.WeightDecay;
+        bool decoupledWeightDecay = _options.UseDecoupledWeightDecay;
+        T decoupledDecayFactor = weightDecay > 0.0 && decoupledWeightDecay
+            ? NumOps.FromDouble(1.0 - lrDouble * weightDecay)
+            : NumOps.One;
+        T coupledDecayScalar = weightDecay > 0.0 && !decoupledWeightDecay
+            ? NumOps.FromDouble(weightDecay)
+            : NumOps.Zero;
+        DirectGpuTensorEngine? gpuEngine = typeof(T) == typeof(float) ? Engine as DirectGpuTensorEngine : null;
         int parameterIndex = -1;
         foreach (var param in context.Parameters)
         {
@@ -524,8 +565,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // configuration is eligible (compressBothMoments=true,
             // percentile>=100, no stochastic rounding); other configs fall
             // through to the dense ToDense path so quantization semantics stay
-            // bit-identical with the dense code.
-            if (!_options.UseBFloat16MomentStorage && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
+            // bit-identical with the dense code. Weight decay also takes the dense path: coupled decay adds
+            // WeightDecay * param to every row and decoupled decay scales the whole tensor, so neither is sparse, and the
+            // sparse helper would skip it.
+            if (!_options.UseBFloat16MomentStorage && weightDecay <= 0.0
+                && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 // Lazily allocate quantized state at the parameter's actual length —
                 // mirroring the same shape-mismatch handling as the dense path below
@@ -533,8 +577,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 // (the helper assumes Length matches between param and state).
                 if (!_tapeStates.TryGetValue(param, out var stateSp) || stateSp.Length != param.Length)
                 {
+                    stateSp?.FreeGpuBuffers();
                     stateSp = AllocateTapeState(param.Length);
                     _tapeStates[param] = stateSp;
+                }
+                if (stateSp.GpuDirty)
+                {
+                    SyncGpuStateToHost(stateSp);
                 }
                 if (!stateSp.FullPrecisionMoments
                     && stateSp.VQuantized is { } sparseVQuantized
@@ -544,14 +593,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                         stateSp.MQuantized, stateSp.MScales,
                         sparseVQuantized, sparseVScales,
                         _options.BlockSize, stateSp.NumBlocks,
-                        NumOps.ToDouble(CurrentLearningRate),
-                        NumOps.ToDouble(beta1), NumOps.ToDouble(beta2),
-                        NumOps.ToDouble(biasCorrection1), NumOps.ToDouble(biasCorrection2),
+                        lrDouble,
+                        beta1Double, beta2Double,
+                        bc1Double, bc2Double,
                         _options.Epsilon,
                         _options.CompressBothMoments,
                         _options.QuantizationPercentile,
                         _options.UseStochasticRounding))
                 {
+                    stateSp.HostDirty = true;
                     continue;
                 }
             }
@@ -574,6 +624,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // would index past the end of the stored vectors.
             if (!_tapeStates.TryGetValue(param, out var state) || state.Length != param.Length)
             {
+                state?.FreeGpuBuffers();
                 state = AllocateTapeState(param.Length);
                 _tapeStates[param] = state;
             }
@@ -590,6 +641,33 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 grad = Engine.Reshape(grad, param._shape);
             }
 
+            if (gpuEngine is not null && param.Length > 0 && TryStepParameterOnGpu(
+                gpuEngine, param, grad, state,
+                (float)lrDouble, (float)beta1Double, (float)beta2Double,
+                (float)_options.Epsilon, (float)bc1Double, (float)bc2Double,
+                (float)weightDecay, decoupledWeightDecay))
+            {
+                continue;
+            }
+
+            if (state.GpuDirty)
+            {
+                SyncGpuStateToHost(state);
+            }
+            // This CPU step updates the host moments below.
+            state.HostDirty = true;
+
+            if (weightDecay > 0.0)
+            {
+                if (decoupledWeightDecay)
+                {
+                    Engine.TensorMultiplyScalarInPlace(param, decoupledDecayFactor);
+                }
+                else
+                {
+                    grad = Engine.TensorAdd(grad, Engine.TensorMultiplyScalar(param, coupledDecayScalar));
+                }
+            }
             // BF16 moment storage: expand the 2-byte moments to a transient full-precision tensor,
             // run the identical Adam recurrence + update, then re-pack to BF16. Only this parameter's
             // moments are materialized at a time (per-parameter loop), so the resident footprint stays
@@ -737,6 +815,194 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
     }
 
+    private bool TryStepParameterOnGpu(
+        DirectGpuTensorEngine gpuEngine,
+        Tensor<T> param,
+        Tensor<T> grad,
+        QuantizedTapeState state,
+        float lr,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float biasCorrection1,
+        float biasCorrection2,
+        float weightDecay,
+        bool decoupledWeightDecay)
+    {
+        var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref param);
+        var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref grad);
+
+        if (_options.UseBFloat16MomentStorage)
+        {
+            if (state.GpuMBf16 is null || state.GpuVBf16 is null)
+            {
+                if (!GpuOptimizer.TryAllocBf16MomentState(pFloat.Length, out state.GpuMBf16, out state.GpuVBf16))
+                    return false;
+            }
+
+            if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackendBf16
+                && state.GpuMBf16 is { } gpuMBf16 && state.GpuVBf16 is { } gpuVBf16
+                && state.MBf16 is not null && state.VBf16 is not null)
+            {
+                UploadUShortMomentsToGpu(restoreBackendBf16, gpuMBf16, state.MBf16);
+                UploadUShortMomentsToGpu(restoreBackendBf16, gpuVBf16, state.VBf16);
+                state.HostRestored = false;
+                state.HostDirty = false;
+            }
+
+            if (!GpuOptimizer.TryAdamBf16Step(
+                pFloat, gFloat, state.GpuMBf16, state.GpuVBf16,
+                lr, beta1, beta2, epsilon, weightDecay, _tapeStep, decoupledWeightDecay))
+            {
+                return false;
+            }
+
+            state.GpuBackend = gpuEngine.GetBackend();
+            state.GpuDirty = true;
+            return true;
+        }
+
+        if (state.FullPrecisionMoments)
+        {
+            if (state.MFullPrecision is null)
+            {
+                var createdM = GpuOptimizer.CreateStateTensor(pFloat._shape);
+                state.MFullPrecision = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdM);
+            }
+            else if (!state.MFullPrecision._shape.SequenceEqual(param._shape))
+            {
+                state.MFullPrecision = ShapeMomentLike(state.MFullPrecision, param._shape);
+            }
+
+            if (state.VFullPrecision is null)
+            {
+                var createdV = GpuOptimizer.CreateStateTensor(pFloat._shape);
+                state.VFullPrecision = Unsafe.As<Tensor<float>, Tensor<T>>(ref createdV);
+            }
+            else if (!state.VFullPrecision._shape.SequenceEqual(param._shape))
+            {
+                state.VFullPrecision = ShapeMomentLike(state.VFullPrecision, param._shape);
+            }
+
+            var mRef = state.MFullPrecision!;
+            var vRef = state.VFullPrecision!;
+            var mFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref mRef);
+            var vFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref vRef);
+            return decoupledWeightDecay
+                ? GpuOptimizer.TryAdamWStep(pFloat, gFloat, mFloat, vFloat, lr, beta1, beta2, epsilon, weightDecay, _tapeStep)
+                : GpuOptimizer.TryAdamStep(pFloat, gFloat, mFloat, vFloat, lr, beta1, beta2, epsilon, weightDecay, _tapeStep);
+        }
+
+        bool canUseGpu8Bit = _options.CompressBothMoments
+            && _options.QuantizationPercentile >= 100.0
+            && !_options.UseStochasticRounding
+            && (_options.FullPrecisionUpdateFrequency <= 0 || (_tapeStep % _options.FullPrecisionUpdateFrequency) != 0);
+        if (!canUseGpu8Bit)
+            return false;
+
+        if (state.GpuMQuantized is null || state.GpuVQuantized is null
+            || state.GpuMScales is null || state.GpuVScales is null)
+        {
+            if (!GpuOptimizer.TryAllocAdam8BitState(
+                pFloat.Length, _options.BlockSize,
+                out state.GpuMQuantized, out state.GpuVQuantized,
+                out state.GpuMScales, out state.GpuVScales))
+            {
+                return false;
+            }
+        }
+
+        if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackend8
+            && state.MQuantized is not null && state.VQuantized is not null
+            && state.MScales is not null && state.VScales is not null)
+        {
+            Upload8BitMomentsToGpu(restoreBackend8, state);
+            state.HostRestored = false;
+            state.HostDirty = false;
+        }
+
+        if (!GpuOptimizer.TryAdam8BitStep(
+            pFloat, gFloat,
+            state.GpuMQuantized, state.GpuVQuantized, state.GpuMScales, state.GpuVScales,
+            lr, beta1, beta2, epsilon, biasCorrection1, biasCorrection2, _options.BlockSize,
+            weightDecay, decoupledWeightDecay))
+        {
+            return false;
+        }
+
+        state.GpuBackend = gpuEngine.GetBackend();
+        state.GpuDirty = true;
+        return true;
+    }
+
+    private static void UploadUShortMomentsToGpu(IDirectGpuBackend backend, IGpuBuffer target, ushort[] values)
+    {
+        var bytes = new byte[checked(values.Length * sizeof(ushort))];
+        Buffer.BlockCopy(values, 0, bytes, 0, bytes.Length);
+        backend.UploadByteBuffer(target, bytes);
+    }
+
+    private static void Upload8BitMomentsToGpu(IDirectGpuBackend backend, QuantizedTapeState state)
+    {
+        int len = state.Length;
+        var mBytes = state.MQuantized!.AsSpan().Slice(0, len).ToArray();
+        var vBytes = state.VQuantized!.AsSpan().Slice(0, len).ToArray();
+        backend.UploadByteBuffer(state.GpuMQuantized!, mBytes);
+        backend.UploadByteBuffer(state.GpuVQuantized!, vBytes);
+
+        int nb = state.NumBlocks;
+        var mScales = new float[nb];
+        var vScales = new float[nb];
+        var mScalesSrc = state.MScales!.AsSpan();
+        var vScalesSrc = state.VScales!.AsSpan();
+        for (int b = 0; b < nb; b++)
+        {
+            mScales[b] = (float)mScalesSrc[b];
+            vScales[b] = (float)vScalesSrc[b];
+        }
+        GpuOptimizer.FreeGpuBuffer(state.GpuMScales);
+        GpuOptimizer.FreeGpuBuffer(state.GpuVScales);
+        state.GpuMScales = backend.AllocateBuffer(mScales);
+        state.GpuVScales = backend.AllocateBuffer(vScales);
+    }
+
+    private static void SyncGpuStateToHost(QuantizedTapeState state)
+    {
+        if (!state.GpuDirty || state.GpuBackend is not { } backend)
+            return;
+
+        if (state.GpuMBf16 is not null && state.GpuVBf16 is not null
+            && state.MBf16 is not null && state.VBf16 is not null)
+        {
+            int byteCount = checked(state.Length * sizeof(ushort));
+            var mBytes = backend.DownloadByteBuffer(state.GpuMBf16, byteCount);
+            var vBytes = backend.DownloadByteBuffer(state.GpuVBf16, byteCount);
+            Buffer.BlockCopy(mBytes, 0, state.MBf16, 0, byteCount);
+            Buffer.BlockCopy(vBytes, 0, state.VBf16, 0, byteCount);
+        }
+        else if (state.GpuMQuantized is not null && state.GpuVQuantized is not null
+            && state.GpuMScales is not null && state.GpuVScales is not null
+            && state.MQuantized is not null && state.VQuantized is not null
+            && state.MScales is not null && state.VScales is not null)
+        {
+            var mBytes = backend.DownloadByteBuffer(state.GpuMQuantized, state.Length);
+            var vBytes = backend.DownloadByteBuffer(state.GpuVQuantized, state.Length);
+            mBytes.AsSpan(0, state.Length).CopyTo(state.MQuantized.AsWritableSpan());
+            vBytes.AsSpan(0, state.Length).CopyTo(state.VQuantized.AsWritableSpan());
+            var mScales = backend.DownloadBuffer(state.GpuMScales);
+            var vScales = backend.DownloadBuffer(state.GpuVScales);
+            int nb = Math.Min(state.NumBlocks, Math.Min(mScales.Length, vScales.Length));
+            var mScalesDst = state.MScales.AsWritableSpan();
+            var vScalesDst = state.VScales.AsWritableSpan();
+            for (int b = 0; b < nb; b++)
+            {
+                mScalesDst[b] = mScales[b];
+                vScalesDst[b] = vScales[b];
+            }
+        }
+
+        state.GpuDirty = false;
+    }
     /// <summary>
     /// Returns a full-precision moment tensor at <paramref name="shape"/>: zeros on first use, the same values
     /// re-laid out when only the shape changed (element count is guaranteed equal by the caller's length check).
@@ -793,15 +1059,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         };
         // v starts at zero. Unsigned byte 0 maps to the zero quantization
         // bucket, so default-init is correct.
-        for (int b = 0; b < numBlocks; b++) state.VScales[b] = 1.0;
+        state.VScales.Fill(1.0);
 
         if (_options.CompressBothMoments)
         {
             state.MQuantized = new Vector<byte>(paramLength);
             state.MScales = new Vector<double>(numBlocks);
             // m starts at zero: the signed dynamic codebook's zero entry.
-            for (int i = 0; i < paramLength; i++) state.MQuantized[i] = DynamicQuantizationMap.SignedZeroIndex;
-            for (int b = 0; b < numBlocks; b++) state.MScales[b] = 1.0;
+            state.MQuantized.Fill(DynamicQuantizationMap.SignedZeroIndex);
+            state.MScales.Fill(1.0);
         }
         else
         {
@@ -841,7 +1107,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         while (offset < total)
         {
             int n = Math.Min(chunk.Length, total - offset);
-            for (int i = 0; i < n; i++) chunk[i] = v[offset + i];
+            v.AsSpan().Slice(offset, n).CopyTo(chunk);
             writer.Write(chunk, 0, n);
             offset += n;
         }
@@ -1245,18 +1511,21 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (_vFullPrecision is not null)
         {
             // Below Min8BitSize: plain Adam on full-precision moments.
-            var mSpan = RequireMoment(_mFullPrecision, nameof(_mFullPrecision)).AsWritableSpan();
-            var vSpan = _vFullPrecision.AsWritableSpan();
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                T g = gradientSpan[i];
-                mSpan[i] = NumOps.Add(NumOps.Multiply(beta1, mSpan[i]), NumOps.Multiply(oneMinusBeta1, g));
-                vSpan[i] = NumOps.Add(NumOps.Multiply(beta2, vSpan[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
-                T denominator = NumOps.Add(NumOps.Sqrt(NumOps.Divide(vSpan[i], biasCorrection2)), epsilon);
-                T update = NumOps.Multiply(CurrentLearningRate, NumOps.Divide(NumOps.Divide(mSpan[i], biasCorrection1), denominator));
-                updatedSpan[i] = NumOps.Subtract(parameterSpan[i], update);
-            }
-            return updatedParameters;
+            var engine = Engine;
+            var gradientTensor = gradient.AsTensor();
+            var mState = RequireMoment(_mFullPrecision, nameof(_mFullPrecision)).AsTensor();
+            var vState = _vFullPrecision.AsTensor();
+            var mNew = engine.TensorAddScaled(mState, gradientTensor, beta1, oneMinusBeta1);
+            var vNew = engine.TensorAdd(
+                engine.TensorMultiplyScalar(vState, beta2),
+                engine.TensorMultiplyScalar(engine.TensorMultiply(gradientTensor, gradientTensor), oneMinusBeta2));
+            engine.TensorCopy(mNew, mState);
+            engine.TensorCopy(vNew, vState);
+            var fullDenominator = engine.TensorAddScalar(
+                engine.TensorSqrt(engine.TensorDivideScalar(vNew, biasCorrection2)), epsilon);
+            var fullUpdate = engine.TensorMultiplyScalar(
+                engine.TensorDivide(engine.TensorDivideScalar(mNew, biasCorrection1), fullDenominator), CurrentLearningRate);
+            return engine.TensorSubtract(parameters.AsTensor(), fullUpdate).AsVector();
         }
         // Resolved once, outside the per-element loop. The quantized first moment exists only when both moments are
         // compressed; otherwise m lives in _mFullPrecision.
@@ -1383,33 +1652,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         int totalSize = parameters.Rows * parameters.Columns;
 
         // Flatten matrix to vector
-        var paramVec = new Vector<T>(totalSize);
-        var gradVec = new Vector<T>(totalSize);
-        int idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                paramVec[idx] = parameters[i, j];
-                gradVec[idx] = gradient[i, j];
-                idx++;
-            }
-        }
+        var paramVec = parameters.ToRowVector();
+        var gradVec = gradient.ToRowVector();
 
         // Update using vector method
         var updatedVec = UpdateParameters(paramVec, gradVec);
 
         // Unflatten vector back to matrix
         var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
-        idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                updatedMatrix[i, j] = updatedVec[idx];
-                idx++;
-            }
-        }
+        updatedVec.AsSpan().CopyTo(updatedMatrix.AsWritableSpan());
 
         return updatedMatrix;
     }
@@ -1442,6 +1693,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // freshly-reset optimizer.
         lock (_pendingTapeStatesLock)
         {
+            foreach (var s in _tapeStates.Values) s.FreeGpuBuffers();
+            foreach (var s in _pendingTapeStatesByParameterIndex.Values) s.FreeGpuBuffers();
             _tapeStates.Clear();
             _pendingTapeStatesByParameterIndex.Clear();
         }
@@ -1674,6 +1927,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     private void WriteTapeState(BinaryWriter writer, QuantizedTapeState state)
     {
+        SyncGpuStateToHost(state);
         writer.Write(state.Length);
         writer.Write(state.NumBlocks);
         WriteByteVector(writer, state.MQuantized);
@@ -1707,6 +1961,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             state.FullPrecisionMoments = reader.ReadBoolean();
             state.VFullPrecision = ReadTensor(reader);
         }
+        state.HostRestored = true;
 
         if (state.Length < 0)
         {
@@ -1827,10 +2082,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (vector is null) return;
 
         writer.Write(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            writer.Write(vector[i]);
-        }
+        // Bounded chunks: a full-size copy of a large moment would double the checkpoint's memory.
+        WriteVectorBytesChunked(writer, vector);
     }
 
     // Reject a stream-declared element count that is negative OR larger than the bytes physically
@@ -1864,13 +2117,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         int length = reader.ReadInt32();
         ValidateDeclaredCount(reader, length, sizeof(byte), "byte-vector");
 
-        var vector = new Vector<byte>(length);
-        for (int i = 0; i < length; i++)
+        var bytes = reader.ReadBytes(length);
+        if (bytes.Length != length)
         {
-            vector[i] = reader.ReadByte();
+            throw new EndOfStreamException("Adam8BitOptimizer: byte-vector truncated.");
         }
 
-        return vector;
+        return Vector<byte>.Wrap(bytes);
     }
 
     private static void WriteDoubleVector(BinaryWriter writer, Vector<double>? vector)
@@ -2490,6 +2743,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 // pending entry into _tapeStates between the two clears would otherwise shadow the restored one.
                 lock (_pendingTapeStatesLock)
                 {
+                    foreach (var s in _tapeStates.Values) s.FreeGpuBuffers();
+                    foreach (var s in _pendingTapeStatesByParameterIndex.Values) s.FreeGpuBuffers();
                     _tapeStates.Clear();
                     _pendingTapeStatesByParameterIndex.Clear();
                     if (restoredTapeStates is not null)
@@ -2521,6 +2776,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         if (options.Min8BitSize < 0)
             throw new ArgumentOutOfRangeException(nameof(options), options.Min8BitSize,
                 "Adam8BitOptimizerOptions.Min8BitSize must be non-negative; 0 quantizes every parameter.");
+        if (double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay) || options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.WeightDecay,
+                "Adam8BitOptimizerOptions.WeightDecay must be finite and non-negative.");
     }
 
     /// <summary>

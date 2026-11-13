@@ -266,16 +266,11 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         }
 
         // Standardize the targets so they sit in the range a freshly initialized network can reach.
-        T sum = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++) sum = NumOps.Add(sum, y[i]);
+        T sum = y.Length > 0 ? Engine.Sum(y) : NumOps.Zero;
         _targetMean = y.Length > 0 ? NumOps.Divide(sum, NumOps.FromDouble(y.Length)) : NumOps.Zero;
 
-        T variance = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            T centered = NumOps.Subtract(y[i], _targetMean);
-            variance = NumOps.Add(variance, NumOps.Multiply(centered, centered));
-        }
+        var centeredY = Engine.Subtract(y, Engine.Fill(y.Length, _targetMean));
+        T variance = y.Length > 0 ? Engine.DotProduct(centeredY, centeredY) : NumOps.Zero;
 
         _targetScale = y.Length > 0
             ? NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(y.Length)))
@@ -286,13 +281,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             _targetScale = NumOps.One;   // constant targets: shift only, no rescaling
         }
 
-        var standardizedY = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            standardizedY[i] = NumOps.Divide(NumOps.Subtract(y[i], _targetMean), _targetScale);
-        }
-
-        y = standardizedY;
+        y = Engine.Divide(centeredY, _targetScale);
 
         int batchSize = _options.BatchSize;
         int numBatches = (X.Rows + batchSize - 1) / batchSize;
@@ -303,7 +292,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             int[] indices = Enumerable.Range(0, X.Rows).ToArray();
             ShuffleArray(indices);
 
-            T totalLoss = NumOps.Zero;
+            var batchLosses = new List<T>(numBatches);
 
             for (int batch = 0; batch < numBatches; batch++)
             {
@@ -321,18 +310,16 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
                 // never called, so this wires them together.
                 var weightGradients = new List<Matrix<T>>();
                 var biasGradients = new List<Vector<T>>();
-                T batchLoss = NumOps.Zero;
+                var sampleLosses = new List<T>(batchX.Rows);
 
                 for (int sample = 0; sample < batchX.Rows; sample++)
                 {
                     var activations = ForwardPass(batchX.GetRow(sample));
 
-                    var target = new Vector<T>(1);
-                    target[0] = batchY[sample];
+                    var target = batchY.GetSubVector(sample, 1);
 
                     var prediction = activations[activations.Count - 1];
-                    batchLoss = NumOps.Add(
-                        batchLoss, _options.LossFunction.CalculateLoss(prediction, target));
+                    sampleLosses.Add(_options.LossFunction.CalculateLoss(prediction, target));
 
                     var deltas = BackwardPass(activations, target);
                     AccumulateGradients(activations, deltas, weightGradients, biasGradients);
@@ -343,7 +330,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
                     UpdateParameters(weightGradients, biasGradients, batchX.Rows);
                 }
 
-                totalLoss = NumOps.Add(totalLoss, batchLoss);
+                batchLosses.Add(sampleLosses.Count == 0 ? NumOps.Zero : Engine.Sum(new Vector<T>(sampleLosses)));
             }
         }
     }
@@ -426,13 +413,9 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     private Vector<T> GetBatchElements(Vector<T> vector, int[] indices, int startIdx, int endIdx)
     {
         int batchSize = endIdx - startIdx;
-        Vector<T> result = new(batchSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            result[i] = vector[indices[startIdx + i]];
-        }
-
-        return result;
+        var batchIndices = new int[batchSize];
+        Array.Copy(indices, startIdx, batchIndices, 0, batchSize);
+        return RegressionEngineOps.Gather(vector, batchIndices);
     }
 
 
@@ -621,47 +604,33 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
                 totalLength += _weights[i].Rows * _weights[i].Columns + _biases[i].Length;
             }
 
-            var flatParameters = new Vector<T>(totalLength);
-            var flatGradients = new Vector<T>(totalLength);
+            // Row-major [W0, b0, W1, b1, ...] layout, matching the optimizer's single parameter vector
+            var parameterParts = new List<Vector<T>>(2 * _weights.Count);
+            var gradientParts = new List<Vector<T>>(2 * _weights.Count);
+            for (int i = 0; i < _weights.Count; i++)
+            {
+                parameterParts.Add(RegressionEngineOps.FlattenRowMajor(_weights[i]));
+                parameterParts.Add(_biases[i]);
+                gradientParts.Add(RegressionEngineOps.FlattenRowMajor(weightGradients[i]));
+                gradientParts.Add(biasGradients[i]);
+            }
+
+            var flatParameters = totalLength == 0 ? new Vector<T>(0) : Vector<T>.Concatenate(parameterParts);
+            var flatGradients = totalLength == 0
+                ? new Vector<T>(0)
+                : Engine.Multiply(Vector<T>.Concatenate(gradientParts), scaleFactor);
+
+            var updated = gradientOptimizer.UpdateParameters(flatParameters, flatGradients);
 
             int offset = 0;
             for (int i = 0; i < _weights.Count; i++)
             {
-                for (int r = 0; r < _weights[i].Rows; r++)
-                {
-                    for (int c = 0; c < _weights[i].Columns; c++)
-                    {
-                        flatParameters[offset] = _weights[i][r, c];
-                        flatGradients[offset] = NumOps.Multiply(weightGradients[i][r, c], scaleFactor);
-                        offset++;
-                    }
-                }
+                int weightCount = _weights[i].Rows * _weights[i].Columns;
+                updated.AsSpan().Slice(offset, weightCount).CopyTo(_weights[i].AsWritableSpan());
+                offset += weightCount;
 
-                for (int b = 0; b < _biases[i].Length; b++)
-                {
-                    flatParameters[offset] = _biases[i][b];
-                    flatGradients[offset] = NumOps.Multiply(biasGradients[i][b], scaleFactor);
-                    offset++;
-                }
-            }
-
-            var updated = gradientOptimizer.UpdateParameters(flatParameters, flatGradients);
-
-            offset = 0;
-            for (int i = 0; i < _weights.Count; i++)
-            {
-                for (int r = 0; r < _weights[i].Rows; r++)
-                {
-                    for (int c = 0; c < _weights[i].Columns; c++)
-                    {
-                        _weights[i][r, c] = updated[offset++];
-                    }
-                }
-
-                for (int b = 0; b < _biases[i].Length; b++)
-                {
-                    _biases[i][b] = updated[offset++];
-                }
+                updated.AsSpan().Slice(offset, _biases[i].Length).CopyTo(_biases[i].AsWritableSpan());
+                offset += _biases[i].Length;
             }
 
             return;
@@ -669,8 +638,9 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 
         for (int i = 0; i < _weights.Count; i++)
         {
-            Matrix<T> avgWeightGradient = weightGradients[i].Transform((g, _, _) => NumOps.Multiply(g, scaleFactor));
-            Vector<T> avgBiasGradient = biasGradients[i].Transform(g => NumOps.Multiply(g, scaleFactor));
+            Matrix<T> avgWeightGradient = Engine.TensorMultiplyScalar(
+                Tensor<T>.FromMatrix(weightGradients[i]), scaleFactor).ToMatrix();
+            Vector<T> avgBiasGradient = Engine.Multiply(biasGradients[i], scaleFactor);
 
             // For non-gradient-based optimizers, we'll use a simple update rule
             _weights[i] = _weights[i].Subtract(avgWeightGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
@@ -735,30 +705,31 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         // OLS path for reliable regression predictions
         if (_useOLS && _olsCoefficients is not null)
         {
-            var predictions = new Vector<T>(X.Rows);
-            for (int i = 0; i < X.Rows; i++)
+            var intercepts = Engine.Fill(X.Rows, _olsIntercept);
+            int used = Math.Min(X.Columns, _olsCoefficients.Length);
+            if (X.Rows == 0 || used == 0)
             {
-                T pred = _olsIntercept;
-                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
-                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
-                predictions[i] = pred;
+                return intercepts;
             }
-            return predictions;
+
+            return Engine.Add(intercepts,
+                Engine.MatrixVectorMultiply(X.GetSubMatrix(0, 0, X.Rows, used), _olsCoefficients.GetSubVector(0, used)));
         }
 
-        Vector<T> nnPredictions = new(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
+        if (X.Rows == 0)
         {
-            Vector<T> input = X.GetRow(i);
-            List<Vector<T>> activations = ForwardPass(input);
-
-            // The network is trained on standardized targets, so map its output back to the
-            // original response scale.
-            T standardized = activations[activations.Count - 1][0];
-            nnPredictions[i] = NumOps.Add(NumOps.Multiply(standardized, _targetScale), _targetMean);
+            return new Vector<T>(0);
         }
 
-        return nnPredictions;
+        // The network is trained on standardized targets, so map its first output back to the
+        // original response scale.
+        Vector<T> standardized = Vector<T>.Concatenate(X.GetRows().Select(row =>
+        {
+            List<Vector<T>> activations = ForwardPass(row);
+            return activations[activations.Count - 1].GetSubVector(0, 1);
+        }).ToList());
+
+        return Engine.Add(Engine.Multiply(standardized, _targetScale), Engine.Fill(X.Rows, _targetMean));
     }
 
     /// <summary>
@@ -848,12 +819,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
             var jacobian = vectorActivation.Derivative(input);
             // Extract diagonal from Jacobian matrix for element-wise activation functions
             int size = Math.Min(jacobian.Rows, jacobian.Columns);
-            var diagonal = new Vector<T>(size);
-            for (int i = 0; i < size; i++)
-            {
-                diagonal[i] = jacobian[i, i];
-            }
-            return diagonal;
+            return size == 0 ? new Vector<T>(0) : jacobian.GetSubMatrix(0, 0, size, size).Diagonal();
         }
 
         // If no activation function is specified, return ones (derivative of identity function)

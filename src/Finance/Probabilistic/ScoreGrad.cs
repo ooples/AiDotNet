@@ -648,16 +648,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = Math.Min(predictions.Data.Length, actuals.Data.Length);
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], actuals.Data.Span[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -758,10 +749,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
         }
 
         var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-        {
-            flattened.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
     }
@@ -896,10 +884,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
 
         var flatInput = FlattenInput(input);
         var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(flatInput.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(flatInput.Data.Span.Slice(0, flatInput.Data.Length), inputData.AsSpan(0, flatInput.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData,
@@ -914,10 +899,7 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(new[] { _forecastHorizon }, new Vector<T>(outputData));
     }
@@ -1129,10 +1111,22 @@ public partial class ScoreGrad<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
     {
+        int contextLen = ContextLength * _numFeatures;
+        int shift = Math.Min(prediction.Length, contextLen);
+        if (contextLen > 0 && input.Length >= contextLen)
+        {
+            // [input after the first shift values, up to contextLen | leading predictions], detached.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>(2);
+            if (contextLen - shift > 0)
+                parts.Add(Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, shift, contextLen - shift).Contiguous());
+            if (shift > 0)
+                parts.Add(Engine.TensorNarrow(Engine.Reshape(prediction.Contiguous(), new[] { prediction.Length }), 0, 0, shift).Contiguous());
+            return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
+        }
+
         var inputVec = input.ToVector();
         var predVec = prediction.ToVector();
-
-        int contextLen = ContextLength * _numFeatures;
         var shifted = new T[contextLen];
 
         int shiftAmount = Math.Min(predVec.Length, contextLen);
