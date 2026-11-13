@@ -813,22 +813,25 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
 
         // Nucleus (top-p) sampling: most probable first (stable, NaN last), up to and including the token
         // that brings the running total to topP
+        // The running totals are accumulated in double, as the scalar loop did: over a vocabulary of tens of
+        // thousands of tokens a Half running sum stops growing near 0.5 (its spacing there exceeds most token
+        // probabilities), so the nucleus would never reach topP.
         var order = TieBreakArgMax.StableDescendingOrder1D(probs);
-        var sortedProbs = Engine.TensorTake(probs, order);
+        var sortedProbs = Engine.TensorTake(probs, order).Cast<double>();
         var cumulativeProb = Engine.TensorCumSum(sortedProbs, 0);
-        var reached = Engine.TensorGreaterEqual(cumulativeProb, Full(n, NumOps.FromDouble(topP)));
+        var reached = Engine.TensorGreaterEqual(cumulativeProb, Tensor<double>.CreateDefault(new[] { n }, topP));
         int nucleusSize = Engine.TensorCountNonzero(reached) == 0 ? n : TieBreakArgMax.FirstMaxIndex(reached) + 1;
 
         // Renormalize nucleus probabilities (their sum is the running total at the last nucleus token)
         var nucleusProbs = Engine.TensorNarrow(sortedProbs, 0, 0, nucleusSize);
-        T nucleusSum = cumulativeProb.GetFlat(nucleusSize - 1);
-        var normalizedProbs = Engine.TensorDivide(nucleusProbs, Full(nucleusSize, nucleusSum));
+        double nucleusSum = cumulativeProb.GetFlat(nucleusSize - 1);
+        var normalizedProbs = Engine.TensorDivideScalar(nucleusProbs, nucleusSum);
 
         // Sample from nucleus: the first token whose running total reaches the draw
         var random = RandomHelper.Shared;
         double sample = random.NextDouble();
         var cumulative = Engine.TensorCumSum(normalizedProbs, 0);
-        var hit = Engine.TensorLessEqual(Full(nucleusSize, NumOps.FromDouble(sample)), cumulative);
+        var hit = Engine.TensorLessEqual(Tensor<double>.CreateDefault(new[] { nucleusSize }, sample), cumulative);
         int chosen = Engine.TensorCountNonzero(hit) == 0 ? nucleusSize - 1 : TieBreakArgMax.FirstMaxIndex(hit);
         return order.GetFlat(chosen);
     }
