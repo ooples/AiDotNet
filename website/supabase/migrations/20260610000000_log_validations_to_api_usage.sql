@@ -169,7 +169,7 @@ begin
     -- directly throws `function pg_advisory_xact_lock(uuid) does not exist`
     -- on every new-machine activation (the 20260504 fix; regressed here when
     -- this migration rebuilt the function from the pre-fix version, and
-    -- re-fixed in 20260718000300). hashtextextended(uuid::text) is a
+    -- re-fixed in 20260718145344). hashtextextended(uuid::text) is a
     -- deterministic bigint, so concurrent validations still serialise.
     perform pg_advisory_xact_lock(hashtextextended(v_license.id::text, 0));
 
