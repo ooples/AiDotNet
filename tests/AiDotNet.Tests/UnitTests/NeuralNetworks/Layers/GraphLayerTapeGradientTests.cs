@@ -314,6 +314,64 @@ public class GraphLayerTapeGradientTests
         }
     }
 
+    /// <summary>A 4-vertex path-graph Laplacian with direct (non-spectral) diffusion at two time scales.</summary>
+    private static DiffusionConvLayer<double> TinyDiffusion()
+    {
+        var layer = new DiffusionConvLayer<double>(
+            outputChannels: 2, numTimeScales: 2, numEigenvectors: 4,
+            activation: (IActivationFunction<double>)new IdentityActivation<double>(), preferSpectralDiffusion: false);
+        var laplacian = new Tensor<double>(new[] { 4, 4 });
+        foreach (var (i, j) in new[] { (0, 1), (1, 2), (2, 3) })
+        {
+            laplacian[i, j] = -1.0;
+            laplacian[j, i] = -1.0;
+            laplacian[i, i] += 1.0;
+            laplacian[j, j] += 1.0;
+        }
+        layer.SetLaplacian(laplacian);
+        return layer;
+    }
+
+    [Fact]
+    public void DiffusionConvLayer_Batched_EveryTrainableParameterReceivesGradient()
+    {
+        // The batched path copied each sample's output into a raw array, so the weights and biases
+        // never trained on batched input.
+        var rng = RandomHelper.CreateSeededRandom(81);
+        var layer = TinyDiffusion();
+        var input = RandomTensor(rng, 2, 4, 3);
+        _ = layer.Forward(input);
+        AssertEveryParameterReached(layer, input, RandomTensor(rng, 2, 4, 2));
+    }
+
+    [Fact]
+    public void DiffusionConvLayer_Batched_TapeGradientMatchesFiniteDifferences()
+    {
+        var rng = RandomHelper.CreateSeededRandom(82);
+        var layer = TinyDiffusion();
+        var input = RandomTensor(rng, 2, 4, 3);
+        _ = layer.Forward(input);
+        AssertMatchesFiniteDifferences(layer, input, RandomTensor(rng, 2, 4, 2));
+    }
+
+    [Fact]
+    public void DiffusionConvLayer_BatchedOutput_MatchesEachSampleAlone()
+    {
+        var engine = AiDotNetEngine.Current;
+        var rng = RandomHelper.CreateSeededRandom(83);
+        var layer = TinyDiffusion();
+        var input = RandomTensor(rng, 2, 4, 3);
+        var batched = layer.Forward(input);
+        for (int b = 0; b < 2; b++)
+        {
+            var sample = engine.Reshape(engine.TensorSlice(input, new[] { b, 0, 0 }, new[] { 1, 4, 3 }), new[] { 4, 3 });
+            var single = layer.Forward(sample);
+            for (int v = 0; v < 4; v++)
+                for (int o = 0; o < 2; o++)
+                    Assert.Equal(single[v, o], batched[b, v, o], 12);
+        }
+    }
+
     [Fact]
     public void ALiBiPositionalBiasLayer_PassesScoreGradientThrough()
     {
