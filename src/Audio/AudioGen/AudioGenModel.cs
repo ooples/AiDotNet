@@ -327,7 +327,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <param name="audioDecoderPath">Path to the audio decoder (EnCodec) ONNX model.</param>
     /// <param name="tokenizer">Tokenizer for text processing. REQUIRED - must match the text encoder (typically T5).</param>
     /// <param name="modelSize">Model size variant (default: Medium).</param>
-    /// <param name="sampleRate">Output sample rate in Hz (default: 32000 for AudioGen).</param>
+    /// <param name="sampleRate">Output sample rate in Hz (default: 16000 for AudioGen).</param>
     /// <param name="durationSeconds">Default generation duration in seconds (default: 5.0).</param>
     /// <param name="maxDurationSeconds">Maximum generation duration in seconds (default: 30.0).</param>
     /// <param name="temperature">Sampling temperature - higher values produce more random output (default: 1.0).</param>
@@ -408,8 +408,9 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
         // Set model dimensions based on size
         (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(_options.ModelSize);
-        _numCodebooks = 4;  // EnCodec standard
-        _codebookSize = 1024;  // EnCodec standard
+        // The exported language model's logits are laid out per codebook, so these must match the export.
+        _numCodebooks = _options.NumCodebooks;
+        _codebookSize = _options.CodebookSize;
         _maxTextLength = _options.MaxTextLength;
 
         // Set audio base class properties
@@ -462,22 +463,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// Creates an AudioGen network using native library layers for training from scratch.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="modelSize">Model size variant (default: Medium).</param>
-    /// <param name="sampleRate">Output sample rate in Hz (default: 32000 for AudioGen).</param>
-    /// <param name="durationSeconds">Default generation duration in seconds (default: 5.0).</param>
-    /// <param name="maxDurationSeconds">Maximum generation duration in seconds (default: 30.0).</param>
-    /// <param name="temperature">Sampling temperature - higher values produce more random output (default: 1.0).</param>
-    /// <param name="topK">Top-k sampling - only consider top k tokens (default: 250).</param>
-    /// <param name="topP">Top-p (nucleus) sampling threshold (default: 0.0 = disabled).</param>
-    /// <param name="guidanceScale">Classifier-free guidance scale (default: 3.0).</param>
-    /// <param name="channels">Number of audio channels, 1=mono, 2=stereo (default: 1).</param>
-    /// <param name="textHiddenDim">Text encoder hidden dimension. If 0, uses model size default.</param>
-    /// <param name="lmHiddenDim">Language model hidden dimension. If 0, uses model size default.</param>
-    /// <param name="numLmLayers">Number of language model layers. If 0, uses model size default.</param>
-    /// <param name="numHeads">Number of attention heads. If 0, uses model size default.</param>
-    /// <param name="numCodebooks">Number of EnCodec codebooks (default: 4).</param>
-    /// <param name="codebookSize">Size of each codebook vocabulary (default: 1024).</param>
-    /// <param name="maxTextLength">Maximum text sequence length (default: 256).</param>
+    /// <param name="options">Model, sampling and codec settings; null uses the AudioGen defaults in <see cref="AudioGenOptions"/>.</param>
     /// <param name="seed">Random seed for reproducibility. Overrides <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> on the options; null for both means non-deterministic generation.</param>
     /// <param name="tokenizer">Optional tokenizer for text processing. If null, creates a T5-style default.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
@@ -568,6 +554,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             : RandomHelper.CreateSecureRandom();
 
         InitializeLayers();
+        InitializeCodecDecoder();
     }
 
     #endregion
@@ -602,8 +589,8 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         }
         else
         {
-            // Calculate max audio tokens: sample_rate * max_duration / encodec_framerate (~50 tokens/sec)
-            int maxAudioTokens = (int)(_sampleRate * _maxDurationSeconds / 640);
+            // Max audio tokens: EnCodec emits 50 tokens per second (hop = sample rate / 50, 320 at 16 kHz)
+            int maxAudioTokens = (int)(_maxDurationSeconds * CodecTokensPerSecond);
 
             // Use default AudioGen architecture
             Layers.AddRange(LayerHelper<T>.CreateDefaultAudioGenLayers(
@@ -957,7 +944,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         var random = RandomHelper.CreateSeededRandom(seed);
 
         // Calculate number of tokens based on duration
-        int tokensPerSecond = 50;  // EnCodec: ~50 tokens per second at 32kHz
+        int tokensPerSecond = CodecTokensPerSecond;  // EnCodec: 50 tokens per second (hop 320 at 16 kHz)
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
         // Sampled token ids [numCodebooks, numTokens]; the running context starts with a zero start token
@@ -1053,7 +1040,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
         var random = RandomHelper.CreateSeededRandom(seed);
 
-        int tokensPerSecond = 50;
+        int tokensPerSecond = CodecTokensPerSecond;
         int numTokens = (int)(durationSeconds * tokensPerSecond);
 
         // Sampled token ids [numCodebooks, numTokens]; the running context starts with a zero start token
@@ -1213,8 +1200,7 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
         if (_useNativeMode)
         {
-            // Native mode: EnCodec-style decoding using learned embeddings
-            // Real EnCodec uses transposed convolution layers; this provides a functional approximation
+            // Native mode: the EnCodec decoder (RVQ codebook sum + SEANet decoder), as in Kreuk et al. 2022
             waveformTensor = DecodeAudioNative(audioCodes, durationSeconds);
         }
         else
@@ -1235,114 +1221,6 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         }
 
         return waveformTensor;
-    }
-
-    /// <summary>
-    /// Decodes audio codes to waveform in native mode using neural network layers.
-    /// </summary>
-    /// <remarks>
-    /// This implements a simplified EnCodec-style decoder:
-    /// 1. Convert discrete codes to continuous embeddings via codebook lookup
-    /// 2. Sum embeddings across codebooks (residual vector quantization)
-    /// 3. Upsample to target sample rate using learned interpolation
-    /// 4. Apply smoothing to reduce quantization artifacts
-    /// </remarks>
-    private Tensor<T> DecodeAudioNative(Tensor<T> audioCodes, double durationSeconds)
-    {
-        // Expected shape: [batch, numCodebooks, numTokens]
-        int numTokens = audioCodes.Shape.Length >= 3 ? audioCodes.Shape[2] : audioCodes.Length / _numCodebooks;
-        int targetSamples = (int)(durationSeconds * _sampleRate);
-        int channels = _channels > 0 ? _channels : 1;
-
-        // EnCodec operates at ~50 tokens per second (32kHz / 640 hop)
-        int samplesPerToken = targetSamples / Math.Max(1, numTokens);
-        if (samplesPerToken < 1) samplesPerToken = 1;
-
-        int[] outputShape = channels == 1 ? [targetSamples] : [channels, targetSamples];
-        if (numTokens <= 0 || targetSamples <= 0)
-            return new Tensor<T>(outputShape);
-
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-
-        // Per-token value: residual sum over codebooks of ((code / size - 0.5) * 2) / 2^cb, clamped to [-1, 1]
-        Tensor<T> codes;
-        if (audioCodes.Shape.Length >= 3)
-        {
-            codes = Engine.Reshape(
-                Engine.TensorSlice(audioCodes, [0, 0, 0], [1, _numCodebooks, numTokens]), [_numCodebooks, numTokens]);
-        }
-        else
-        {
-            codes = Engine.Reshape(AudioEngineOps.FitLength(Engine, audioCodes, _numCodebooks * numTokens), [_numCodebooks, numTokens]);
-            if (audioCodes.Length < _numCodebooks * numTokens)
-                throw new ArgumentOutOfRangeException("flatIndex", "Audio codes are shorter than numCodebooks * numTokens.");
-        }
-        var normalized = Engine.TensorMultiplyScalar(
-            Engine.TensorSubtractScalar(Engine.TensorDivideScalar(codes, NumOps.FromDouble(_codebookSize)), NumOps.FromDouble(0.5)),
-            NumOps.FromDouble(2.0));
-        var codebookWeight = Engine.TensorPower(
-            Tensor<T>.CreateDefault([_numCodebooks, 1], NumOps.FromDouble(0.5)),
-            Engine.Reshape(Engine.TensorArange<T>(0, _numCodebooks, 1), [_numCodebooks, 1]));
-        var aggregated = Engine.TensorClamp(
-            Engine.ReduceSum(Engine.TensorMultiply(normalized, Engine.TensorBroadcastTo(codebookWeight, [_numCodebooks, numTokens])), [0], keepDims: false),
-            NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-        // Interpolation target: the next token's value (the last token interpolates to itself)
-        var nextValue = numTokens == 1
-            ? aggregated
-            : Engine.Concat(new[] { Engine.TensorSlice(aggregated, [1], [numTokens - 1]), Engine.TensorSlice(aggregated, [numTokens - 1], [1]) }, 0);
-
-        // Sample geometry: token t covers [t * spt, min((t + 1) * spt, target)); samples past
-        // numTokens * spt fade the last value out linearly
-        int filledSamples = numTokens * samplesPerToken;
-        int tailSpan = Math.Max(1, targetSamples - filledSamples);
-        var tokenOf = new int[targetSamples];
-        var offset = new int[targetSamples];
-        var span = new int[targetSamples];
-        var isTail = new int[targetSamples];
-        for (int s = 0; s < targetSamples; s++)
-        {
-            if (s < filledSamples)
-            {
-                int t = s / samplesPerToken;
-                int startSample = t * samplesPerToken;
-                int endSample = Math.Min((t + 1) * samplesPerToken, targetSamples);
-                tokenOf[s] = t;
-                offset[s] = s - startSample;
-                span[s] = Math.Max(1, endSample - startSample);
-            }
-            else
-            {
-                tokenOf[s] = numTokens - 1;
-                offset[s] = s - filledSamples;
-                span[s] = tailSpan;
-                isTail[s] = 1;
-            }
-        }
-
-        var sampleShape = new[] { targetSamples };
-        var alpha = Engine.TensorDivide(
-            new Tensor<int>(offset, sampleShape).Cast<T>(), new Tensor<int>(span, sampleShape).Cast<T>());
-        var tokenIndex = new Tensor<int>(tokenOf, sampleShape);
-        var current = Engine.TensorIndexSelect(aggregated, tokenIndex, 0);
-        var next = Engine.TensorIndexSelect(nextValue, tokenIndex, 0);
-
-        // Cosine interpolation between tokens for more natural sound: (1 - cos(alpha pi)) / 2
-        T one = NumOps.One;
-        var smoothAlpha = Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorCos(Engine.TensorMultiplyScalar(alpha, NumOps.FromDouble(Math.PI)))), one),
-            NumOps.FromDouble(0.5));
-        var body = Engine.TensorAdd(
-            Engine.TensorMultiply(current, Engine.TensorAddScalar(Engine.TensorNegate(smoothAlpha), one)),
-            Engine.TensorMultiply(next, smoothAlpha));
-
-        // Fade out to avoid clicks
-        var tail = Engine.TensorMultiply(current, Engine.TensorAddScalar(Engine.TensorNegate(alpha), one));
-        var waveform = Engine.TensorWhere(new Tensor<int>(isTail, sampleShape).Cast<T>(), tail, body);
-
-        // Stereo: same value for both channels in basic mode
-        return channels == 1
-            ? waveform
-            : Engine.TensorBroadcastTo(Engine.Reshape(waveform, [1, targetSamples]), [channels, targetSamples]).Clone();
     }
 
     private void ThrowIfDisposed()

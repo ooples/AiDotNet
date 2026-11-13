@@ -22582,6 +22582,15 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecWeightsPath.get -> string?
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecWeightsPath.set -> void
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecDimension.get -> int
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecDimension.set -> void
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecFilters.get -> int
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecFilters.set -> void
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecLstmLayers.get -> int
+AiDotNet.Audio.AudioGen.AudioGenOptions.EncodecLstmLayers.set -> void
+override AiDotNet.Audio.AudioGen.AudioGenModel<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void

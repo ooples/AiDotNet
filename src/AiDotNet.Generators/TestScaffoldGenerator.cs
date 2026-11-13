@@ -8423,15 +8423,18 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "AudioGenModel" && model.TypeParameterCount == 1)
             {
                 // Production retains AudioGen-Medium (text dim 768, LM dim
-                // 1536, 24 decoder layers, four 1024-entry EnCodec books).
+                // 1536, 24 decoder layers, four 2048-entry EnCodec books and
+                // a 64-filter SEANet decoder with a 2-layer LSTM).
                 // Exercise the same token embedding -> text transformer ->
                 // cross-modal projection -> autoregressive LM -> codebook head
                 // through the public native constructor at CI-smoke scale.
+                // The frozen decoder shrinks through its options too: at the paper
+                // width it alone holds ~7.3M parameters for a few-thousand-parameter LM.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8 }" + ", seed: 42)";
+                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8, EncodecDimension = 8, EncodecFilters = 4, EncodecLstmLayers = 1 }" + ", seed: 42)";
             }
             else if (model.ClassName == "BandSplitRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
