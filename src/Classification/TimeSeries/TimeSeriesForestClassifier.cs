@@ -284,7 +284,8 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         int actualEnd = Math.Max(actualStart + 1, Math.Min(end, seqLen));
         int length = actualEnd - actualStart;
 
-        var values = NumChannels > 1
+        // By rank, not channel count: a [samples, length, 1] input has one channel and still needs the 3-D slice.
+        var values = sequences.Shape.Length > 2
             ? engine.Reshape(
                 engine.TensorSlice(sequences, new[] { 0, actualStart, channel }, new[] { numSamples, length, 1 }),
                 new[] { numSamples, length })
@@ -442,7 +443,12 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         int flat = FirstArgMaxPerRow(engine.Reshape(usable, new[] { 1, featureCount * candidates })).GetFlat(0);
         int feature = flat / candidates, position = flat % candidates;
         var pair = engine.TensorSlice(sortedT, new[] { feature, position }, new[] { 1, 2 });
-        T threshold = NumOps.Divide(engine.TensorSum(pair), NumOps.FromDouble(2.0));
+        // scikit-learn's splitter: the midpoint as a/2 + b/2 (no overflow near the type's maximum), and the lower value
+        // when rounding lands the midpoint on the upper one, which would send both sides of the gap left.
+        T lower = pair.GetFlat(0), upper = pair.GetFlat(1);
+        T half = NumOps.FromDouble(0.5);
+        T threshold = NumOps.Add(NumOps.Multiply(lower, half), NumOps.Multiply(upper, half));
+        if (!NumOps.LessThan(threshold, upper)) threshold = lower;
         return (feature, threshold, true);
     }
 
@@ -482,13 +488,16 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         int n = rows.Length;
         var column = engine.Reshape(engine.TensorSlice(x, new[] { 0, feature }, new[] { n, 1 }), new[] { n });
         var goesRight = engine.TensorGreaterThan(column, threshold);
-        int rightCount = numOps.ToInt32(engine.TensorSum(goesRight));
+        // Counted and keyed in int: T may not hold the row count or n + position exactly (Half is exact only to 2048),
+        // which miscounts the right rows and lets a right row's key collide with a left row's.
+        var goesRightIndex = goesRight.Cast<int>();
+        int rightCount = engine.TensorSum(goesRightIndex);
         var none = new Tensor<int>(new[] { 0 });
         if (rightCount == 0) return (rows, none);
         if (rightCount == n) return (none, rows);
 
         // key = goesRight * n + position orders the left rows first, then the right rows, each by position.
-        var key = engine.TensorAdd(engine.TensorMultiplyScalar(goesRight, numOps.FromDouble(n)), engine.TensorArange<T>(0, n, 1));
+        var key = engine.TensorAdd(engine.TensorMultiplyScalar(goesRightIndex, n), engine.TensorArange<int>(0, n, 1));
         var order = engine.TensorArgsort(key, 0, false);
         var arranged = engine.TensorGather(rows, order, 0);
         int leftCount = n - rightCount;

@@ -77,6 +77,76 @@ public class TimeSeriesForestReferenceTests
         }
     }
 
+    [Fact]
+    [Trait("category", "unit")]
+    public void Probabilities_average_leaf_distributions_rather_than_votes()
+    {
+        // Four identical series cannot be split, so every tree is one leaf holding the class distribution 3:1. Averaged
+        // leaf distributions give 0.75 / 0.25; averaged hard votes would give 1 / 0.
+        const int samples = 4, length = 12;
+        var sequences = new Tensor<double>(new[] { samples, length });
+        for (int s = 0; s < samples; s++)
+            for (int t = 0; t < length; t++)
+                sequences[s, t] = Math.Sin(0.5 * t);
+
+        var classifier = new TimeSeriesForestClassifier<double>(new TimeSeriesForestOptions<double> { NumTrees = 3, Seed = 2 });
+        classifier.TrainOnSequences(sequences, new Vector<double>(new[] { 0.0, 0, 0, 1 }));
+
+        var probabilities = classifier.PredictSequenceProbabilities(sequences);
+        for (int s = 0; s < samples; s++)
+        {
+            Assert.Equal(0.75, probabilities[s, 0], Tolerance);
+            Assert.Equal(0.25, probabilities[s, 1], Tolerance);
+        }
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void Single_channel_three_dimensional_input_gives_the_same_features()
+    {
+        const int samples = 3, length = 12;
+        var flat = Series(samples, length);
+        var cube = new Tensor<double>(new[] { samples, length, 1 });
+        for (int s = 0; s < samples; s++)
+            for (int t = 0; t < length; t++)
+                cube[s, t, 0] = flat[s, t];
+
+        var options = new TimeSeriesForestOptions<double> { NumTrees = 2, Seed = 4 };
+        var labels = new Vector<double>(new[] { 0.0, 1, 0 });
+        var fromFlat = new TimeSeriesForestClassifier<double>(options);
+        fromFlat.TrainOnSequences(flat, labels);
+        var fromCube = new TimeSeriesForestClassifier<double>(options);
+        fromCube.TrainOnSequences(cube, labels);
+
+        var expected = fromFlat.ExtractIntervalFeatures(flat, 2, 9, 0);
+        var actual = fromCube.ExtractIntervalFeatures(cube, 2, 9, 0);
+        Assert.Equal(expected.ToArray(), actual.ToArray());
+        Assert.Equal(fromFlat.PredictSequences(flat).ToArray(), fromCube.PredictSequences(cube).ToArray());
+    }
+
+    [Fact]
+    [Trait("category", "unit")]
+    public void A_midpoint_that_rounds_onto_the_upper_value_still_splits()
+    {
+        // 1 + 2^-23 and 1 + 2^-22 are adjacent floats; their midpoint rounds (ties to even) onto the upper one, which
+        // would send both series left. The threshold falls back to the lower value, as scikit-learn's splitter does.
+        float low = BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(1f) + 1);
+        float high = BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(1f) + 2);
+        const int length = 4;
+        var sequences = new Tensor<float>(new[] { 2, length });
+        for (int t = 0; t < length; t++)
+        {
+            sequences[0, t] = low;
+            sequences[1, t] = high;
+        }
+
+        var classifier = new TimeSeriesForestClassifier<float>(new TimeSeriesForestOptions<float> { NumTrees = 1, Seed = 1 });
+        var labels = new Vector<float>(new[] { 0f, 1f });
+        classifier.TrainOnSequences(sequences, labels);
+
+        Assert.Equal(labels.ToArray(), classifier.PredictSequences(sequences).ToArray());
+    }
+
     private static Tensor<double> Series(int samples, int length)
     {
         var sequences = new Tensor<double>(new[] { samples, length });
