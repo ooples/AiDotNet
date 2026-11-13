@@ -396,6 +396,19 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     private static (double Alpha, double Sigma) Schedule(double tau) => (Math.Cos(Math.PI * tau / 2), Math.Sin(Math.PI * tau / 2));
 
     /// <summary>
+    /// α_n = cos(πτ_n/2) and σ_n = sin(πτ_n/2) at τ_n = n / <paramref name="steps"/>, n = 0 … steps: each formed in double
+    /// and rounded to T once, as the per-step scalars always were (in T, α at τ = 1 is cos of a rounded π/2, not 0).
+    /// </summary>
+    internal static (T[] Alpha, T[] Sigma) AngularSchedule(int steps)
+    {
+        var alpha = new double[steps + 1];
+        var sigma = new double[steps + 1];
+        for (int n = 0; n <= steps; n++) (alpha[n], sigma[n]) = Schedule((double)n / steps);
+        return (new Tensor<double>(alpha, new[] { steps + 1 }).Cast<T>().ToArray(),
+            new Tensor<double>(sigma, new[] { steps + 1 }).Cast<T>().ToArray());
+    }
+
+    /// <summary>
     /// The teacher's DDIM sampling (Eq. 5): from standard-normal noise <c>[K, d]</c> at τ = 1, for n = L … 1 with
     /// τ_n = n / L, the guided velocity prediction v̂ gives x̂₀ = α_n h − σ_n v̂ and ε̂ = σ_n h + α_n v̂, and
     /// h ← α_{n−1} x̂₀ + σ_{n−1} ε̂ (the angular schedule α = cos(πτ/2), σ = sin(πτ/2)).
@@ -404,10 +417,7 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         int steps = _options.SamplingSteps;
         if (steps < 1) return noise;
-        // α_n = cos(πτ_n/2) and σ_n = sin(πτ_n/2) at τ_n = n / L, n = 0 … L, as T.
-        var angle = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, steps + 1), NumOps.FromDouble(Math.PI / (2.0 * steps)));
-        var alphas = Engine.TensorCos(angle).ToArray();
-        var sigmas = Engine.TensorSin(angle).ToArray();
+        var (alphas, sigmas) = AngularSchedule(steps);
         var h = noise;
         for (int n = steps; n >= 1; n--)
         {

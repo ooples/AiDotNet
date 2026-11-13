@@ -228,6 +228,20 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return new Tensor<T>(new[] { samples.Count }, new Vector<T>(samples.ToArray()));
     }
 
+    /// <summary>
+    /// Symbol ids carried in T as ints in [0, <paramref name="count"/>): each rounded half to even, then clamped to the
+    /// table, so +∞ reads as the last symbol and −∞ as the first, as the saturating int conversion and the clamp give
+    /// them; NaN reads as 0.
+    /// </summary>
+    internal static int[] SymbolIds(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> input, int count)
+    {
+        Validation.Guard.NotNull(engine);
+        Validation.Guard.NotNull(input);
+        var ops = MathHelper.GetNumericOperations<T>();
+        var rounded = engine.TensorNanToNum(engine.TensorRound(input), 0.0, count - 1.0, 0.0);
+        return engine.TensorClamp(rounded, ops.Zero, ops.FromDouble(count - 1)).Cast<int>().ToArray();
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// The tensor path reads <paramref name="input"/> <c>[tokens]</c> as MeloTTS symbol ids (rounded, blanks
@@ -239,9 +253,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (!HasPaperLayers) return base.PredictCore(input);
         var o = _options;
         int count = MeloSymbols.Symbols.Count;
-        // Each id rounded half to even and clamped to the symbol table; NaN and infinities read as 0.
-        var rounded = Engine.TensorNanToNum(Engine.TensorRound(input), 0.0, 0.0, 0.0);
-        var raw = Engine.TensorClamp(rounded, NumOps.Zero, NumOps.FromDouble(count - 1)).Cast<int>().ToArray();
+        var raw = SymbolIds(Engine, input, count);
         var symbols = MeloSymbols.Intersperse(raw);
         string code = MeloTextPipeline.Code(o.Language);
         var tones = MeloSymbols.Intersperse(Enumerable.Repeat(MeloSymbols.ToneStart(code), raw.Length).ToArray());

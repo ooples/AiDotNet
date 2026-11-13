@@ -880,15 +880,11 @@ public partial class BarkModel<T> : TtsModelBase<T>
     /// </summary>
     private protected int[,] ToInt32Matrix(Tensor<T> tokens)
     {
-        if (tokens.Length > 0)
-        {
-            var rounded = Engine.TensorRound(tokens);
-            if (NumOps.IsNaN(Engine.TensorSum(rounded))
-                || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(rounded), NumOps.FromDouble(2147483648.0))
-                || NumOps.LessThan(Engine.TensorMinValue(rounded), NumOps.FromDouble(-2147483648.0)))
-                throw new OverflowException("Value was either too large or too small for an Int32.");
-        }
-        return RoundedIdMatrix(tokens);
+        int rows = tokens.Shape[0], columns = tokens.Shape[1];
+        var flat = CheckedInt32(Engine, Engine.TensorRound(tokens), "Value was either too large or too small for an Int32.");
+        var values = new int[rows, columns];
+        Buffer.BlockCopy(flat, 0, values, 0, flat.Length * sizeof(int));
+        return values;
     }
 
     // A [length] tensor of `values` where `keep` is 1 and `fill` elsewhere.

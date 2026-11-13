@@ -295,13 +295,33 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
 
         var domain = GetInputDomain(new[] { length });
         bool integerIndices = domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices;
-        int range = integerIndices ? Math.Max(1, domain.MaxExclusive - domain.MinInclusive) : 0;
+        if (!integerIndices) return ScaledCharacterCodes(Engine, text, length);
+        int range = Math.Max(1, domain.MaxExclusive - domain.MinInclusive);
         var codes = new int[length];
         for (int i = 0; i < length; i++)
-            codes[i] = integerIndices ? domain.MinInclusive + text[i] % range : text[i];
-        var tokens = new Tensor<int>(codes, new[] { length }).Cast<T>();
-        // Character codes are scaled by 1/128 (a power of two, so exact in every T) for a continuous front end.
-        return integerIndices ? tokens : Engine.TensorDivideScalar(tokens, NumOps.FromDouble(128.0));
+            codes[i] = domain.MinInclusive + text[i] % range;
+        return new Tensor<int>(codes, new[] { length }).Cast<T>();
+    }
+
+    /// <summary>
+    /// The first <paramref name="length"/> character codes of <paramref name="text"/> scaled by 1/128, <c>[length]</c>.
+    /// Each code c is formed as ⌊c / 128⌋ + (c mod 128) / 128: both parts are exact in every T and their sum rounds once,
+    /// so a code above a narrow T's range (Half's 65,504; U+FFFD is 65,533) is never cast to infinity before the scaling.
+    /// </summary>
+    internal static Tensor<T> ScaledCharacterCodes(AiDotNet.Tensors.Engines.IEngine engine, string text, int length)
+    {
+        Guard.NotNull(engine);
+        Guard.NotNull(text);
+        var whole = new int[length];
+        var fraction = new int[length];
+        for (int i = 0; i < length; i++)
+        {
+            whole[i] = text[i] >> 7;
+            fraction[i] = text[i] & 127;
+        }
+        var ops = MathHelper.GetNumericOperations<T>();
+        return engine.TensorAdd(new Tensor<int>(whole, new[] { length }).Cast<T>(),
+            engine.TensorDivideScalar(new Tensor<int>(fraction, new[] { length }).Cast<T>(), ops.FromDouble(128.0)));
     }
 
     /// <summary>Longest text, in tokens, the model reads.</summary>
@@ -657,14 +677,43 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// The index of the first largest element of a tensor read flat (a scan that keeps the earlier index on ties).
     /// The ties are broken explicitly: each maximal element is keyed by <c>n − index</c>, so the arg-max is unique.
     /// </summary>
-    protected int FirstArgMax(Tensor<T> values)
+    protected int FirstArgMax(Tensor<T> values) => FirstArgMax(Engine, values);
+
+    /// <summary>
+    /// <see cref="FirstArgMax(Tensor{T})"/> on <paramref name="engine"/>. The maximal elements are found with one engine
+    /// comparison and the first of them is picked by an int scan: an index carried in T is inexact past 2,048 in Half and
+    /// overflows past 65,504.
+    /// </summary>
+    internal static int FirstArgMax(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> values)
     {
+        Guard.NotNull(engine);
         Guard.NotNull(values);
         int n = values.Length;
-        var flat = Engine.Reshape(values, new[] { n });
-        var isMax = Engine.TensorEquals(flat, Engine.TensorMaxValue(flat));
-        var reverseIndex = Engine.ScalarMinusTensor(NumOps.FromDouble(n), Engine.TensorArange<T>(0, n));
-        return Engine.TensorArgMax(Engine.TensorMultiply(isMax, reverseIndex), 0).ToArray()[0];
+        if (n == 0) throw new ArgumentException("There is no element to choose.", nameof(values));
+        var flat = engine.Reshape(values, new[] { n });
+        int first = Array.IndexOf(engine.TensorEquals(flat, engine.TensorMaxValue(flat)).Cast<int>().ToArray(), 1);
+        return first >= 0 ? first : 0;
+    }
+
+    /// <summary>
+    /// Integral values carried in T (already rounded or truncated) as ints, with a checked conversion's contract: an
+    /// <see cref="OverflowException"/> carrying <paramref name="message"/> for NaN or a value outside Int32. The extremes
+    /// are compared as doubles, since a narrow T cannot hold ±2³¹ (Half rounds them to ±∞, which a comparison in T then
+    /// lets through).
+    /// </summary>
+    internal static int[] CheckedInt32(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> integral, string message)
+    {
+        Guard.NotNull(engine);
+        Guard.NotNull(integral);
+        if (integral.Length == 0) return Array.Empty<int>();
+        var ops = MathHelper.GetNumericOperations<T>();
+        // x == x fails exactly at NaN.
+        bool hasNaN = Array.IndexOf(engine.TensorEquals(integral, integral).Cast<int>().ToArray(), 0) >= 0;
+        if (hasNaN
+            || ops.ToDouble(engine.TensorMaxValue(integral)) >= 2147483648.0
+            || ops.ToDouble(engine.TensorMinValue(integral)) < -2147483648.0)
+            throw new OverflowException(message);
+        return integral.Cast<int>().ToArray();
     }
 
     /// <summary>Level-major codec codes <c>[levels, frames]</c> (the first <paramref name="levels"/> levels) as a
@@ -784,8 +833,12 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// The hard monotonic alignment <c>[durations.Length, sum(durations)]</c> that expands phoneme i over its
     /// durations[i] frames: row i is 1 on those frames and 0 elsewhere.
     /// </summary>
-    protected Tensor<T> DurationAlignment(int[] durations)
+    protected Tensor<T> DurationAlignment(int[] durations) => DurationAlignment(Engine, durations);
+
+    /// <summary>The alignment of <see cref="DurationAlignment(int[])"/> on <paramref name="engine"/>.</summary>
+    internal static Tensor<T> DurationAlignment(AiDotNet.Tensors.Engines.IEngine engine, int[] durations)
     {
+        Guard.NotNull(engine);
         Guard.NotNull(durations);
         int total = durations.Sum();
         var owner = new int[total];
@@ -794,8 +847,8 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             for (int f = 0; f < durations[i]; f++) owner[frame++] = i;
         if (total == 0 || durations.Length == 0)
             return new Tensor<T>(new[] { durations.Length, total });
-        var frameToPhoneme = Engine.TensorOneHot<T>(new Tensor<int>(owner, new[] { total }), durations.Length);
-        return Engine.TensorTranspose(frameToPhoneme);
+        var frameToPhoneme = engine.TensorOneHot<T>(new Tensor<int>(owner, new[] { total }), durations.Length);
+        return engine.TensorTranspose(frameToPhoneme);
     }
 
     /// <summary>
@@ -866,6 +919,10 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             var inBand = engine.Reshape(engine.TensorSlice(band, new[] { frame, 0 }, new[] { 1, tokens }), new[] { tokens });
             var score = engine.Reshape(engine.TensorSlice(byFrame, new[] { frame, 0 }, new[] { 1, tokens }), new[] { tokens });
             previous = engine.TensorWhere(inBand, engine.TensorAdd(score, best), unreachable);
+            // Every path passes one cell per frame, so subtracting the frame's best total from each of its cells keeps
+            // every comparison and keeps the running totals bounded: summed over the frames they overflow a narrow T
+            // (Half's 65,504) and turn every comparison into −∞ against −∞. The band is never empty, so the best is finite.
+            previous = engine.TensorSubtractScalar(previous, engine.TensorMaxValue(previous));
             moves[frame] = engine.TensorMultiply(advance, inBand);
         }
 

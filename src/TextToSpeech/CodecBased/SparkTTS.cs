@@ -144,7 +144,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
             prompt.AddRange(TokenIds(encoded.Semantic, _options.SemanticTokenOffset, _options.CodebookSize));
         }
         else if (_options.ConstrainedSpeechDecoding) prompt.Add(Special(_options.StartSemanticToken));
-        var semantic = _languageModel!.GenerateSemantic(prompt, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed));
+        var semantic = (_languageModel ?? throw new InvalidOperationException("The language model is not initialized.")).GenerateSemantic(prompt, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed));
         return PostprocessAudio(_biCodec.Decode(TensorOf(semantic), encoded.Global));
     }
 

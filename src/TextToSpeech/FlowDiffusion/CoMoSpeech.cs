@@ -304,15 +304,33 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         return levels;
     }
 
-    /// <summary><see cref="NoiseLevels"/> as a T tensor <c>[n]</c>.</summary>
-    private Tensor<T> NoiseLevelTensor(int n)
+    /// <summary>
+    /// The teacher's Euler coefficients over ascending <paramref name="levels"/> t_i: 1 / t_i and t_{i−1} − t_i (t_{−1} = 0),
+    /// each formed in double and rounded to T once. The steps are differences of nearby levels, which forming from
+    /// levels already rounded to T would cancel.
+    /// </summary>
+    internal static (T[] InverseLevel, T[] StepSize) EulerCoefficients(double[] levels)
     {
-        double lo = Math.Pow(_options.SigmaMin, 1 / _options.Rho), hi = Math.Pow(_options.SigmaMax, 1 / _options.Rho);
-        var fraction = n == 1
-            ? Tensor<T>.CreateDefault(new[] { 1 }, NumOps.One)
-            : Engine.TensorDivideScalar(Engine.TensorArange<T>(0, n), NumOps.FromDouble(n - 1));
-        return Engine.TensorPower(Engine.TensorAddScalar(Engine.TensorMultiplyScalar(fraction, NumOps.FromDouble(hi - lo)),
-            NumOps.FromDouble(lo)), NumOps.FromDouble(_options.Rho));
+        Validation.Guard.NotNull(levels);
+        int n = levels.Length;
+        var inverse = new double[n];
+        var step = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            inverse[i] = 1.0 / levels[i];
+            step[i] = (i > 0 ? levels[i - 1] : 0.0) - levels[i];
+        }
+        return (new Tensor<double>(inverse, new[] { n }).Cast<T>().ToArray(), new Tensor<double>(step, new[] { n }).Cast<T>().ToArray());
+    }
+
+    /// <summary>The re-noising scales √(t_i² − σ_min²) of <paramref name="levels"/>, each formed in double and rounded to T
+    /// once (in T the difference of squares cancels near σ_min, and can fall below zero).</summary>
+    internal static T[] RenoiseScales(double[] levels, double sigmaMin)
+    {
+        Validation.Guard.NotNull(levels);
+        var scales = new double[levels.Length];
+        for (int i = 0; i < scales.Length; i++) scales[i] = Math.Sqrt(levels[i] * levels[i] - sigmaMin * sigmaMin);
+        return new Tensor<double>(scales, new[] { scales.Length }).Cast<T>().ToArray();
     }
 
     private static int CompatibleLength(int length) => (length + 3) / 4 * 4;
@@ -368,12 +386,11 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
     {
+        var denoiser = _denoiser ?? throw new InvalidOperationException("The denoiser is not initialized.");
         using var _ = new NoGradScope<T>();
         var (hidden, means) = Encode(tokens);
         var logDurations = LogDurations(hidden);
-        // (int)(⌈exp(log d)⌉ · lengthScale): truncation toward zero.
-        var durations = Engine.TensorTrunc(Engine.TensorMultiplyScalar(Engine.TensorCeiling(Engine.TensorExp(logDurations)),
-            NumOps.FromDouble(_options.LengthScale))).Cast<int>().ToArray();
+        var durations = CeilScaledDurations(logDurations, _options.LengthScale);
         if (durations.Sum() == 0) durations[durations.Length - 1] = 1;
         int frames = durations.Sum();
         int padded = CompatibleLength(frames);
@@ -389,16 +406,11 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
             // Algorithm 1: x_N ~ N(μ, I) scaled by t_N, then N Euler steps of dx = (x − D(x, t)) / t dt to t_0 = 0.
             var levels = NoiseLevels(_options.TeacherSamplingSteps);
             int n = levels.Length;
-            var levelTensor = NoiseLevelTensor(n);
-            // 1 / t_i and t_{i−1} − t_i (t_{−1} = 0) as T.
-            var inverseLevel = Engine.TensorReciprocal(levelTensor).ToArray();
-            var previous = n == 1 ? new Tensor<T>(new[] { 1 })
-                : Engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), Engine.TensorSlice(levelTensor, new[] { 0 }, new[] { n - 1 }) }, 0);
-            var stepSize = Engine.TensorSubtract(previous, levelTensor).ToArray();
+            var (inverseLevel, stepSize) = EulerCoefficients(levels);
             x = Engine.TensorMultiplyScalar(NoiseAroundMu(), NumOps.FromDouble(levels[^1]));
             for (int i = n - 1; i >= 0; i--)
             {
-                var d = Engine.TensorMultiplyScalar(Engine.TensorSubtract(x, Denoise(_denoiser!, x, levels[i], mu, mask)), inverseLevel[i]);
+                var d = Engine.TensorMultiplyScalar(Engine.TensorSubtract(x, Denoise(denoiser, x, levels[i], mu, mask)), inverseLevel[i]);
                 x = Engine.TensorMultiply(Engine.TensorAdd(x, Engine.TensorMultiplyScalar(d, stepSize[i])), maskRows);
             }
         }
@@ -409,14 +421,12 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
             int steps = Math.Max(1, _options.NumFlowSteps);
             // Enumerable.Reverse explicitly: on net471 an array's .Reverse() binds to the in-place MemoryExtensions.Reverse.
             var levels = Enumerable.Reverse(NoiseLevels(steps + 1)).ToArray();   // σ_max ... σ_min
-            // √(t_i² − σ_min²) as T, in the ascending order of NoiseLevels (level i here is entry steps − i).
-            var noiseScale = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.TensorSquare(NoiseLevelTensor(steps + 1)),
-                NumOps.FromDouble(-_options.SigmaMin * _options.SigmaMin))).ToArray();
-            x = Denoise(_denoiser!, Engine.TensorMultiplyScalar(NoiseAroundMu(), NumOps.FromDouble(_options.SigmaMax)), _options.SigmaMax, mu, mask);
+            var noiseScale = RenoiseScales(levels, _options.SigmaMin);
+            x = Denoise(denoiser, Engine.TensorMultiplyScalar(NoiseAroundMu(), NumOps.FromDouble(_options.SigmaMax)), _options.SigmaMax, mu, mask);
             for (int i = 1; i < steps; i++)
             {
-                var noisy = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(NoiseAroundMu(), noiseScale[steps - i]));
-                x = Denoise(_denoiser!, noisy, levels[i], mu, mask);
+                var noisy = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(NoiseAroundMu(), noiseScale[i]));
+                x = Denoise(denoiser, noisy, levels[i], mu, mask);
             }
             x = Engine.TensorMultiply(x, maskRows);
         }
@@ -560,11 +570,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
                 NumOps.FromDouble(1.0 / elements));
         }
 
-        // log(1e-8 + d); a zero duration's target is log(1e-8) itself, which a narrow T's 1e-8 (0 in Half) would lose.
-        var durationCounts = IdTensor(durations);
-        var durationTarget = Engine.TensorWhere(Engine.TensorEquals(durationCounts, NumOps.Zero),
-            Tensor<T>.CreateDefault(new[] { tokenCount }, NumOps.FromDouble(Math.Log(1e-8))),
-            Engine.TensorLog(Engine.TensorAddScalar(durationCounts, NumOps.FromDouble(1e-8))));
+        var durationTarget = LogDurationTarget(durations, 1e-8);
         var durationError = Engine.TensorSubtract(LogDurations(hidden), durationTarget);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),

@@ -264,22 +264,20 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>
-    /// <see cref="NoiseLevel"/> at t_k = k / steps, k = 0 … steps, as T. With c = cos²(πt/2) and 1 − c = sin²(πt/2) (each
-    /// clamped to [1e-9, 1 − 1e-9]) and s the schedule scale, σ(log SNR) = c s² / (c s² + 1 − c): the signal level is its
-    /// square root and the noise level the square root of (1 − c) / (c s² + 1 − c). Taking sin² directly keeps 1 − c
-    /// accurate near t = 0 in a narrow T.
+    /// <see cref="NoiseLevel(double)"/> at t_k = k / steps, k = 0 … steps: each level formed in double and rounded to T
+    /// once (as the per-step scalars always were). Formed in T, cos²(πt/2) loses 1 − c near t = 0 and the clamp at
+    /// 1 − 1e-9 rounds to 1 in float and Half.
     /// </summary>
-    private (T[] Signal, T[] Noise) NoiseLevels(int steps)
+    private (T[] Signal, T[] Noise) NoiseLevels(int steps) => NoiseLevels(steps, _options.NoiseScheduleScale);
+
+    /// <summary>The levels of <see cref="NoiseLevels(int)"/> for schedule scale <paramref name="scale"/>.</summary>
+    internal static (T[] Signal, T[] Noise) NoiseLevels(int steps, double scale)
     {
-        var angle = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, steps + 1), Ops.FromDouble(Math.PI / (2.0 * steps)));
-        T low = Ops.FromDouble(1e-9), high = Ops.FromDouble(1 - 1e-9);
-        var cosinePower = Engine.TensorClamp(Engine.TensorSquare(Engine.TensorCos(angle)), low, high);
-        var sinePower = Engine.TensorClamp(Engine.TensorSquare(Engine.TensorSin(angle)), low, high);
-        double scale = _options.NoiseScheduleScale;
-        var weighted = Engine.TensorMultiplyScalar(cosinePower, Ops.FromDouble(scale * scale));
-        var total = Engine.TensorAdd(weighted, sinePower);
-        return (Engine.TensorSqrt(Engine.TensorDivide(weighted, total)).ToArray(),
-            Engine.TensorSqrt(Engine.TensorDivide(sinePower, total)).ToArray());
+        var signal = new double[steps + 1];
+        var noise = new double[steps + 1];
+        for (int k = 0; k <= steps; k++) (signal[k], noise[k]) = NoiseLevel(k / (double)steps, scale);
+        return (new Tensor<double>(signal, new[] { steps + 1 }).Cast<T>().ToArray(),
+            new Tensor<double>(noise, new[] { steps + 1 }).Cast<T>().ToArray());
     }
 
     private Tensor<T> RestorePrompt(Tensor<T> latent, Tensor<T> prompt)
@@ -290,11 +288,14 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             Engine.TensorSlice(latent, new[] { prompt.Shape[0], 0 }, new[] { rest, latent.Shape[1] }) }, 0);
     }
 
-    internal (double Signal, double Noise) NoiseLevel(double time)
+    internal (double Signal, double Noise) NoiseLevel(double time) => NoiseLevel(time, _options.NoiseScheduleScale);
+
+    /// <summary>The signal and noise levels of <see cref="NoiseLevel(double)"/> for schedule scale <paramref name="scale"/>.</summary>
+    internal static (double Signal, double Noise) NoiseLevel(double time, double scale)
     {
         double cosinePower = Math.Pow(Math.Cos(MathPolyfill.Clamp(time, 0, 1) * Math.PI / 2), 2);
         cosinePower = MathPolyfill.Clamp(cosinePower, 1e-9, 1 - 1e-9);
-        double logSnr = Math.Log(cosinePower) - Math.Log(1 - cosinePower) + 2 * Math.Log(_options.NoiseScheduleScale);
+        double logSnr = Math.Log(cosinePower) - Math.Log(1 - cosinePower) + 2 * Math.Log(scale);
         double signalPower = 1 / (1 + Math.Exp(-logSnr));
         return (Math.Sqrt(signalPower), Math.Sqrt(1 - signalPower));
     }

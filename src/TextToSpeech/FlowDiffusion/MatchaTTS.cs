@@ -254,6 +254,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
     {
+        var decoder = _decoder ?? throw new InvalidOperationException("The flow decoder is not initialized.");
         using var _ = new NoGradScope<T>();
         var (hidden, means) = Encode(tokens);
         var logDurations = LogDurations(hidden);
@@ -270,7 +271,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         double dt = 1.0 / steps;
         T step = NumOps.FromDouble(dt);
         for (int i = 0; i < steps; i++)
-            x = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(_decoder!.Estimate(x, mu, i * dt, mask), step));
+            x = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(decoder.Estimate(x, mu, i * dt, mask), step));
         var mel = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { frames, _options.MelChannels });
         return Engine.TensorAddScalar(Engine.TensorMultiplyScalar(mel, NumOps.FromDouble(_options.MelStd)), NumOps.FromDouble(_options.MelMean));
     }

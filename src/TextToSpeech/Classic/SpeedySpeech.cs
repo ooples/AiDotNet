@@ -218,22 +218,30 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private Tensor<T> Expand(Tensor<T> encodings, int[] durations)
     {
         var expanded = LengthRegulator.Expand(encodings, durations);
-        int frames = expanded.Shape[0], channels = expanded.Shape[1];
-        int half = channels / 2;
-        if (half == 0) return Engine.TensorAdd(expanded, new Tensor<T>(new[] { frames, channels }));
-        // The frame's index within its phoneme, times 10000^(−2i / channels); sine and cosine interleaved.
-        var withinPhoneme = new int[frames];
+        return Engine.TensorAdd(expanded, PhonemePositions(durations, expanded.Shape[1]));
+    }
+
+    /// <summary>
+    /// The positional encoding <c>[sum(durations), channels]</c> that restarts at every phoneme: frame p of a phoneme has
+    /// sin(p / 10000^(2i/channels)) in channel 2i and the cosine in 2i + 1 (an odd last channel stays 0). It is a constant
+    /// of the durations, formed in double and rounded to T once; forming the angles in T moves the sines by more than T's
+    /// own rounding.
+    /// </summary>
+    internal static Tensor<T> PhonemePositions(int[] durations, int channels)
+    {
+        Validation.Guard.NotNull(durations);
+        int frames = durations.Sum();
+        var table = new double[frames * channels];
         int frame = 0;
         foreach (int d in durations)
-            for (int p = 0; p < d; p++, frame++) withinPhoneme[frame] = p;
-        var inverseFrequency = Engine.TensorExp(Engine.TensorMultiplyScalar(
-            Engine.Reshape(Engine.TensorArange<T>(0, half), new[] { 1, half }), NumOps.FromDouble(-2.0 * Math.Log(10000.0) / channels)));
-        var angle = Engine.TensorMatMul(new Tensor<int>(withinPhoneme, new[] { frames, 1 }).Cast<T>(), inverseFrequency);
-        var positions = Engine.Reshape(Engine.TensorStack(new[] { Engine.TensorSin(angle), Engine.TensorCos(angle) }, 2),
-            new[] { frames, 2 * half });
-        if (2 * half < channels)
-            positions = Engine.TensorConcatenate(new[] { positions, new Tensor<T>(new[] { frames, channels - 2 * half }) }, 1);
-        return Engine.TensorAdd(expanded, positions);
+            for (int p = 0; p < d; p++, frame++)
+                for (int i = 0; i < channels / 2; i++)
+                {
+                    double angle = p / Math.Pow(10000.0, 2.0 * i / channels);
+                    table[frame * channels + 2 * i] = Math.Sin(angle);
+                    table[frame * channels + 2 * i + 1] = Math.Cos(angle);
+                }
+        return new Tensor<double>(table, new[] { frames, channels }).Cast<T>();
     }
 
     /// <summary>Inference durations: <c>exp</c> of the prediction, at least one frame, rounded.</summary>
@@ -361,8 +369,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         var linear = Engine.TensorAddScalar(abs, NumOps.FromDouble(-0.5));
         Tensor<T> mask;
         using (new NoGradScope<T>()) mask = Engine.TensorLessThan(abs, NumOps.One);
-        var inverse
- = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
+        var inverse = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, quadratic), Engine.TensorMultiply(inverse, linear));
     }
 

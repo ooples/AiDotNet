@@ -146,7 +146,7 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
 
         using var _ = new NoGradScope<T>();
-        var generated = _tokenLanguageModel!.Generate(combinedText, promptSpeech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed));
+        var generated = (_tokenLanguageModel ?? throw new InvalidOperationException("The token language model is not initialized.")).Generate(combinedText, promptSpeech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.GenerationSeed));
         var tokenTensor = Tokens(generated);
         var acoustic = _tokenDiffusion!.Refine(tokenTensor, timbre);
         return PostprocessAudio(_acousticVocoder!.Decode(acoustic));

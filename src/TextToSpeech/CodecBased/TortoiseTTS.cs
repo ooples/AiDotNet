@@ -49,6 +49,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     internal TortoiseClvp<T>? ClvpModel => _clvp;
     private TortoiseDiffusion<T>? _diffusion;
     private TortoiseUnivNet<T>? _univNet;
+    private TortoiseUnivNet<T> UnivNetVocoder => _univNet ?? throw new InvalidOperationException("The UnivNet vocoder is not initialized.");
     private UnivNetTrainingLoss<T>? _vocoderTraining;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _vocoderDiscriminatorOptimizer;
     private bool _vocoderDiscriminatorTurn;
@@ -167,7 +168,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         RequirePipeline();
         using var _ = new NoGradScope<T>();
         var mel80 = _tokenizer!.Decode(TortoiseOps<T>.IdsOf(tokens));
-        return _univNet!.Generate(ToVocoderMel(mel80), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
+        return UnivNetVocoder.Generate(ToVocoderMel(mel80), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
     }
 
     /// <summary>Returns CLVP's scalar compatibility score for a candidate speech-code sequence.</summary>
@@ -190,7 +191,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var speech = samples.Select(s => (IReadOnlyList<int>)TortoiseOps<T>.IdsOf(s.CodecTokens is { } storedCodecTokens ? storedCodecTokens
             : EncodeToTokens(s.Audio ?? throw new ArgumentException("Every CLVP example requires CodecTokens or Audio.")))).ToArray();
         return TrainWithCustomObjective(samples[0].Tokens, samples[0].Tokens,
-            (_, _) => _clvp!.ContrastiveBatchLoss(texts, speech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17)), _optimizer);
+            (_, _) => (_clvp ?? throw new InvalidOperationException("CLVP is not initialized.")).ContrastiveBatchLoss(texts, speech, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17)), _optimizer);
     }
 
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
@@ -260,7 +261,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         Tensor<T>? savedGeneration = null;
         var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
         {
-            var generated = _univNet!.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + (int)(_vocoderTrainingSteps % int.MaxValue)));
+            var generated = UnivNetVocoder.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + (int)(_vocoderTrainingSteps % int.MaxValue)));
             savedGeneration = new Tensor<T>(generated.Shape.ToArray(), new Vector<T>(generated.ToArray()));
             return _vocoderTraining!.Generator(audio, generated, adversarial);
         }, _optimizer!);
@@ -352,7 +353,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (_options.TrainingComponent == TortoiseTrainingComponent.UnivNet)
         {
             EnsureVocoderTraining();
-            var generated = _univNet!.Generate(DiffusionMel(audio), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
+            var generated = UnivNetVocoder.Generate(DiffusionMel(audio), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 17));
             return _vocoderTraining!.Generator(audio, generated, _vocoderTrainingSteps >= _options.VocoderTraining.PretrainingSteps);
         }
         int[] text = TextIds(sample.Tokens);

@@ -311,7 +311,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// </summary>
     private (Tensor<T> Pitch, Tensor<T> Energy) PhonemeLevelTargets(double[] framePitch, Tensor<T> mel, int[] durations)
     {
-        int tokens = durations.Length, frames = durations.Sum();
+        int tokens = durations.Length;
         // Pitch: the F0 track is the double output of the WORLD pitch tracker.
         var normalizedPitch = new double[tokens];
         int start = 0;
@@ -336,17 +336,39 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         for (int p = 0; p < tokens; p++) pitch[p] = NumOps.FromDouble(normalizedPitch[p]);
 
         // Energy: each frame's ‖exp(mel)‖₂, averaged over the phoneme's frames, then normalized; 0 stays 0.
-        var melFrames = Engine.TensorSlice(mel, new[] { 0, 0 }, new[] { frames, mel.Shape[1] });
-        var frameEnergy = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(Engine.TensorExp(melFrames)), new[] { 1 }, keepDims: false));
-        var energySum = Engine.Reshape(Engine.TensorMatMul(DurationAlignment(durations), Engine.Reshape(frameEnergy, new[] { frames, 1 })),
-            new[] { tokens });
-        var counts = IdTensor(durations);
         var zeros = new Tensor<T>(new[] { tokens });
-        var phonemeEnergy = Engine.TensorWhere(Engine.TensorEquals(counts, NumOps.Zero), zeros, Engine.TensorDivide(energySum, counts));
+        var phonemeEnergy = PhonemeMeanEnergy(Engine, mel, durations);
         var normalizedEnergy = Engine.TensorDivideScalar(Engine.TensorAddScalar(phonemeEnergy, NumOps.FromDouble(-_options.EnergyMean)),
             NumOps.FromDouble(_options.EnergyStd));
         var energy = Engine.TensorWhere(Engine.TensorEquals(phonemeEnergy, NumOps.Zero), zeros, normalizedEnergy);
         return (pitch, energy);
+    }
+
+    /// <summary>
+    /// Each phoneme's mean over its frames of the frame energy ‖exp(mel_f)‖₂, <c>[durations.Length]</c> (0 for a phoneme
+    /// with no frames), of the first <c>sum(durations)</c> frames of <paramref name="mel"/> <c>[frames, channels]</c>.
+    /// A frame's norm is taken as e^{m_f} ‖exp(mel_f − m_f)‖₂ with m_f its largest log-mel value, and each phoneme's frames
+    /// are weighted by 1/d before they are added, so neither the squares nor the sums overflow a narrow T (in Half a
+    /// log-mel of 5 squares to 22,026 per channel).
+    /// </summary>
+    internal static Tensor<T> PhonemeMeanEnergy(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> mel, int[] durations)
+    {
+        Validation.Guard.NotNull(engine);
+        Validation.Guard.NotNull(mel);
+        Validation.Guard.NotNull(durations);
+        var ops = MathHelper.GetNumericOperations<T>();
+        int tokens = durations.Length, frames = durations.Sum(), channels = mel.Shape[1];
+        if (frames == 0) return new Tensor<T>(new[] { tokens });
+        var melFrames = engine.TensorSlice(mel, new[] { 0, 0 }, new[] { frames, channels });
+        var peak = engine.ReduceMax(melFrames, new[] { 1 }, keepDims: true);                                   // [frames, 1]
+        var scaled = engine.TensorExp(engine.TensorSubtract(melFrames, engine.TensorTile(peak, new[] { 1, channels })));
+        var frameEnergy = engine.TensorMultiply(engine.TensorExp(peak),
+            engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, keepDims: true)));   // [frames, 1]
+        // Row p of the alignment is 1/d_p on the phoneme's frames; a phoneme with no frames keeps its zero row (no 0 · ∞).
+        var counts = new Tensor<int>((int[])durations.Clone(), new[] { tokens, 1 }).Cast<T>();
+        var inverse = engine.TensorWhere(engine.TensorEquals(counts, ops.Zero), counts, engine.TensorReciprocal(counts));
+        var weights = engine.TensorMultiply(DurationAlignment(engine, durations), engine.TensorTile(inverse, new[] { 1, frames }));
+        return engine.Reshape(engine.TensorMatMul(weights, frameEnergy), new[] { tokens });
     }
 
     private Tensor<T> MeanAbsolute(Tensor<T> prediction, Tensor<T> target)

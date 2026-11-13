@@ -338,26 +338,21 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 
     /// <summary>A periodic Hann window of the analysis length, centred and zero-padded to the FFT size, as
     /// <see cref="TacotronSpectrogram"/> analyses with.</summary>
-    private sealed class CenteredHannWindow : IWindowFunction<T>
+    internal sealed class CenteredHannWindow : IWindowFunction<T>
     {
         private readonly int _length;
         public CenteredHannWindow(int length) => _length = length;
 
+        /// <remarks>The window is a constant of its sizes, formed in double and rounded to T once: 0.5 − 0.5 cos(2πi/N)
+        /// formed in T cancels near i = 0 (in float, 1 − cos(2π/1024) keeps about two significant digits).</remarks>
         public Vector<T> Create(int windowSize)
         {
-            var ops = MathHelper.GetNumericOperations<T>();
-            var engine = AiDotNetEngine.Current;
             int length = Math.Min(_length, windowSize), offset = (windowSize - length) / 2;
-            if (length <= 0) return new Vector<T>(windowSize);
+            var window = new double[Math.Max(0, windowSize)];
             // 0.5 − 0.5 cos(2π i / length), centred in the FFT frame with zeros either side.
-            var hann = engine.TensorAddScalar(engine.TensorMultiplyScalar(
-                engine.TensorCos(engine.TensorMultiplyScalar(engine.TensorArange<T>(0, length), ops.FromDouble(2 * Math.PI / length))),
-                ops.FromDouble(-0.5)), ops.FromDouble(0.5));
-            var parts = new List<Tensor<T>>();
-            if (offset > 0) parts.Add(new Tensor<T>(new[] { offset }));
-            parts.Add(hann);
-            if (windowSize - offset - length > 0) parts.Add(new Tensor<T>(new[] { windowSize - offset - length }));
-            return (parts.Count == 1 ? hann : engine.TensorConcatenate(parts.ToArray(), 0)).ToVector();
+            for (int i = 0; i < length; i++)
+                window[offset + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / length);
+            return new Tensor<double>(window, new[] { window.Length }).Cast<T>().ToVector();
         }
 
         public WindowFunctionType GetWindowFunctionType() => WindowFunctionType.Hanning;

@@ -193,33 +193,40 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         : Engine.TensorConcatenate(new[] { values, new Tensor<T>(new[] { length - values.Length }) }, 0);
 
     /// <summary>
-    /// The per-step reverse-process coefficients of Eq. 7's schedule as T, indexed by step − 1:
-    /// √ᾱ_s, 1/√(1 − ᾱ_s), β_s/√(1 − ᾱ_s), 1/√α_s and the posterior std √(β_s (1 − ᾱ_{s−1}) / (1 − ᾱ_s)), with
-    /// α_s = ᾱ_s/ᾱ_{s−1}, β_s = 1 − α_s and 1 − ᾱ floored at 1e-12. log ᾱ = log(ᾱ_min) (2 sin²(φ/2))^1.5 (= (1 − cos φ)^1.5),
-    /// and 1 − exp(·) is taken as −expm1(·), so the small early-step β and 1 − ᾱ keep their precision in a narrow T.
+    /// The per-step reverse-process coefficients of Eq. 7's schedule as T, indexed by step − 1: √ᾱ_s, 1/√(1 − ᾱ_s),
+    /// β_s/√(1 − ᾱ_s), 1/√α_s and the posterior std √(β_s (1 − ᾱ_{s−1}) / (1 − ᾱ_s)), with α_s = ᾱ_s/ᾱ_{s−1},
+    /// β_s = 1 − α_s and 1 − ᾱ floored at 1e-12, exactly as the sampler always formed them per step.
     /// </summary>
-    private (T[] SqrtAlphaBar, T[] InverseNoiseStd, T[] NoiseScale, T[] InverseSqrtAlpha, T[] PosteriorStd) ReverseCoefficients()
+    private (T[] SqrtAlphaBar, T[] InverseNoiseStd, T[] NoiseScale, T[] InverseSqrtAlpha, T[] PosteriorStd) ReverseCoefficients() =>
+        ReverseCoefficients(_options.NumDiffusionSteps, _options.MinimumAlphaBar);
+
+    /// <summary>
+    /// The coefficients of <see cref="ReverseCoefficients()"/> for <paramref name="steps"/> steps and ᾱ_min: each a
+    /// constant of the schedule, formed in double and rounded to T once. Formed in T, every one of them carries the
+    /// roundings of the sine, the power, the exponential and the division before it.
+    /// </summary>
+    internal static (T[] SqrtAlphaBar, T[] InverseNoiseStd, T[] NoiseScale, T[] InverseSqrtAlpha, T[] PosteriorStd) ReverseCoefficients(
+        int steps, double minimumAlphaBar)
     {
-        int n = _options.NumDiffusionSteps;
-        var half = Engine.TensorSin(Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, n + 1), Ops.FromDouble(Math.PI / (4.0 * n))));
-        var logAlphaBar = Engine.TensorMultiplyScalar(
-            Engine.TensorPower(Engine.TensorMultiplyScalar(Engine.TensorSquare(half), Ops.FromDouble(2.0)), Ops.FromDouble(1.5)),
-            Ops.FromDouble(Math.Log(_options.MinimumAlphaBar)));
-        var current = Engine.TensorSlice(logAlphaBar, new[] { 1 }, new[] { n });
-        var previous = Engine.TensorSlice(logAlphaBar, new[] { 0 }, new[] { n });
-        var floor = Ops.FromDouble(1e-12);
-        var noiseVariance = Engine.TensorMax(Engine.TensorNegate(Engine.TensorExpm1(current)), floor);              // 1 − ᾱ_s
-        var previousNoiseVariance = Engine.TensorNegate(Engine.TensorExpm1(previous));                              // 1 − ᾱ_{s−1}
-        var logAlpha = Engine.TensorSubtract(current, previous);
-        var beta = Engine.TensorNegate(Engine.TensorExpm1(logAlpha));
-        var inverseNoiseStd = Engine.TensorReciprocal(Engine.TensorSqrt(noiseVariance));
-        var half1 = Ops.FromDouble(0.5);
-        return (
-            Engine.TensorExp(Engine.TensorMultiplyScalar(current, half1)).ToArray(),
-            inverseNoiseStd.ToArray(),
-            Engine.TensorMultiply(beta, inverseNoiseStd).ToArray(),
-            Engine.TensorExp(Engine.TensorMultiplyScalar(logAlpha, Ops.FromDouble(-0.5))).ToArray(),
-            Engine.TensorSqrt(Engine.TensorDivide(Engine.TensorMultiply(beta, previousNoiseVariance), noiseVariance)).ToArray());
+        var sqrtAlphaBar = new double[steps];
+        var inverseNoiseStd = new double[steps];
+        var noiseScale = new double[steps];
+        var inverseSqrtAlpha = new double[steps];
+        var posteriorStd = new double[steps];
+        for (int s = 0; s < steps; s++)
+        {
+            double alphaBar = AlphaBar(s + 1, steps, minimumAlphaBar);
+            double previousAlphaBar = AlphaBar(s, steps, minimumAlphaBar);
+            double alpha = alphaBar / previousAlphaBar;
+            double beta = 1 - alpha;
+            sqrtAlphaBar[s] = Math.Sqrt(alphaBar);
+            inverseNoiseStd[s] = 1.0 / Math.Sqrt(Math.Max(1e-12, 1 - alphaBar));
+            noiseScale[s] = beta / Math.Sqrt(Math.Max(1e-12, 1 - alphaBar));
+            inverseSqrtAlpha[s] = 1.0 / Math.Sqrt(alpha);
+            posteriorStd[s] = Math.Sqrt(beta * (1 - previousAlphaBar) / Math.Max(1e-12, 1 - alphaBar));
+        }
+        T[] InT(double[] values) => new Tensor<double>(values, new[] { steps }).Cast<T>().ToArray();
+        return (InT(sqrtAlphaBar), InT(inverseNoiseStd), InT(noiseScale), InT(inverseSqrtAlpha), InT(posteriorStd));
     }
 
     private Tensor<T> Encode(IReadOnlyList<int> ids)
@@ -239,7 +246,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         for (int step = _options.NumDiffusionSteps; step > 0; step--)
         {
             int s = step - 1;
-            var (predicted, _) = WaveformUnet!.Forward(waveform, text, Math.Sqrt(AlphaBar(step)), speakerId);
+            var (predicted, _) = (WaveformUnet ?? throw new InvalidOperationException("The waveform U-Net is not initialized.")).Forward(waveform, text, Math.Sqrt(AlphaBar(step)), speakerId);
             if (known is not null && knownMask is not null)
             {
                 var actual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(waveform,
@@ -279,8 +286,14 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public double AlphaBar(int step)
     {
         if (step < 0 || step > _options.NumDiffusionSteps) throw new ArgumentOutOfRangeException(nameof(step));
-        double phase = step / (double)_options.NumDiffusionSteps * Math.PI / 2;
-        return Math.Exp(Math.Log(_options.MinimumAlphaBar) * Math.Pow(1 - Math.Cos(phase), 1.5));
+        return AlphaBar(step, _options.NumDiffusionSteps, _options.MinimumAlphaBar);
+    }
+
+    // ᾱ at step of steps (Eq. 7): exp(log(ᾱ_min) (1 − cos(φ))^1.5), φ = (step / steps) π/2.
+    private static double AlphaBar(int step, int steps, double minimumAlphaBar)
+    {
+        double phase = step / (double)steps * Math.PI / 2;
+        return Math.Exp(Math.Log(minimumAlphaBar) * Math.Pow(1 - Math.Cos(phase), 1.5));
     }
 
     private Tensor<T> Gaussian(int count, Random random)

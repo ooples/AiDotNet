@@ -246,20 +246,25 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     /// Sinusoidal positional encoding at rate ω (§3.6): channel k of position i is sin(ω i / 10000^(k/d)) for even k and
     /// cos for odd k, scaled by the position weight. Positions start at 1.
     /// </summary>
-    private Tensor<T> PositionalEncoding(int length, int dimension, double rate)
+    private Tensor<T> PositionalEncoding(int length, int dimension, double rate) =>
+        PositionalEncoding(length, dimension, rate, _options.PositionWeight);
+
+    /// <summary>
+    /// The table of <see cref="PositionalEncoding(int, int, double)"/> scaled by <paramref name="weight"/>,
+    /// <c>[length, dimension]</c>. It is a constant of the shapes, formed in double and rounded to T once (as the
+    /// reference's numpy table is): its angles reach ω · length, where forming them in T moves the sine by far more than
+    /// T's own rounding (float's 1-ulp error in 10000^(−k/d) is 6e-5 at an angle of 1,000).
+    /// </summary>
+    internal static Tensor<T> PositionalEncoding(int length, int dimension, double rate, double weight)
     {
-        // angle[i, k] = ω (i + 1) · 10000^(−(k − k mod 2) / d): the outer product of positions and inverse frequencies.
-        var evenIndex = new int[dimension];
-        var isEven = new int[dimension];
-        for (int k = 0; k < dimension; k++) { evenIndex[k] = k - k % 2; isEven[k] = k % 2 == 0 ? 1 : 0; }
-        var positions = Engine.TensorMultiplyScalar(
-            Engine.Reshape(Engine.TensorArange<T>(1, length + 1), new[] { length, 1 }), NumOps.FromDouble(rate));
-        var inverseFrequency = Engine.TensorExp(Engine.TensorMultiplyScalar(
-            new Tensor<int>(evenIndex, new[] { 1, dimension }).Cast<T>(), NumOps.FromDouble(-Math.Log(10000.0) / dimension)));
-        var angle = Engine.TensorMatMul(positions, inverseFrequency);                                      // [length, d]
-        var even = Engine.TensorTile(new Tensor<int>(isEven, new[] { 1, dimension }).Cast<T>(), new[] { length, 1 });
-        var encoding = Engine.TensorWhere(even, Engine.TensorSin(angle), Engine.TensorCos(angle));
-        return Engine.TensorMultiplyScalar(encoding, NumOps.FromDouble(_options.PositionWeight));
+        var table = new double[length * dimension];
+        for (int i = 0; i < length; i++)
+            for (int k = 0; k < dimension; k++)
+            {
+                double angle = rate * (i + 1) / Math.Pow(10000.0, (k - k % 2) / (double)dimension);
+                table[i * dimension + k] = weight * (k % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle));
+            }
+        return new Tensor<double>(table, new[] { length, dimension }).Cast<T>();
     }
 
     /// <summary>

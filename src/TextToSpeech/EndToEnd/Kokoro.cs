@@ -232,16 +232,8 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     // checked((int)x) per id: truncated toward zero, and an OverflowException for NaN or a value outside Int32.
-    private int[] TruncatedIds(Tensor<T> input)
-    {
-        var truncated = Engine.TensorTrunc(input);
-        if (truncated.Length > 0
-            && (NumOps.IsNaN(Engine.TensorSum(truncated))
-                || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(truncated), NumOps.FromDouble(2147483648.0))
-                || NumOps.LessThan(Engine.TensorMinValue(truncated), NumOps.FromDouble(-2147483648.0))))
-            throw new OverflowException("Arithmetic operation resulted in an overflow.");
-        return truncated.Cast<int>().ToArray();
-    }
+    private int[] TruncatedIds(Tensor<T> input) =>
+        CheckedInt32(Engine, Engine.TensorTrunc(input), "Arithmetic operation resulted in an overflow.");
 
     /// <inheritdoc />
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => IsOnnxMode ? PredictCore(input) : NativeForward(input, training: true);

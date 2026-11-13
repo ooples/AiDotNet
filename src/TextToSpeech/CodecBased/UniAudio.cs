@@ -286,7 +286,7 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         int minimum = Math.Min(maximum, Math.Max(_options.MinimumGeneratedFrames,
             // The author masks EOS while g_idx < minlen - 1.
             (int)Math.Floor(prefixPatches * _options.MinimumLengthRatio) - 1));
-        var generatedGlobal = _languageModel!.Generate(prefix, minimum, maximum, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
+        var generatedGlobal = (_languageModel ?? throw new InvalidOperationException("The language model is not initialized.")).Generate(prefix, minimum, maximum, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
         int complete = generatedGlobal.Length / _options.NumCodebooks * _options.NumCodebooks;
         if (complete == 0) return new Tensor<T>(new[] { 0 });
         var local = new int[complete];

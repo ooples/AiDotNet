@@ -197,6 +197,19 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     private double CumulativeNoise(double t) => _options.BetaMin * t + 0.5 * (_options.BetaMax - _options.BetaMin) * t * t;
     private double Noise(double t) => _options.BetaMin + (_options.BetaMax - _options.BetaMin) * t;
 
+    /// <summary>
+    /// ½ β_t h at the reverse solver's interval midpoints t_i = 1 − (i + ½) h, h = 1 / steps, with β_t = β_min +
+    /// (β_max − β_min) t: each formed in double and rounded to T once, as the reference's Python floats scale the tensors.
+    /// </summary>
+    internal static T[] StepScales(int steps, double betaMin, double betaMax)
+    {
+        double h = 1.0 / steps;
+        var scales = new double[steps];
+        for (int i = 0; i < steps; i++)
+            scales[i] = 0.5 * (betaMin + (betaMax - betaMin) * (1.0 - (i + 0.5) * h)) * h;
+        return new Tensor<double>(scales, new[] { steps }).Cast<T>().ToArray();
+    }
+
     /// <summary>Pads to the configured U-Net's actual downsampling factor (4 in the released three-resolution model).</summary>
     private int CompatibleLength(int length)
     {
@@ -270,12 +283,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         var x = Engine.TensorMultiply(Engine.TensorAdd(mu, Gaussian(mu._shape, random, 1.0 / _options.Temperature)), maskRows);
         int steps = _options.NumDiffusionSteps;
         double h = 1.0 / steps;
-        // ½ β_t h at the interval midpoints t_i = 1 − (i + ½) h, with β_t = β_min + (β_max − β_min) t, as T.
-        var midpoints = Engine.ScalarMinusTensor(NumOps.One,
-            Engine.TensorMultiplyScalar(Engine.TensorAddScalar(Engine.TensorArange<T>(0, steps), NumOps.FromDouble(0.5)), NumOps.FromDouble(h)));
-        var stepScale = Engine.TensorMultiplyScalar(
-            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(midpoints, NumOps.FromDouble(_options.BetaMax - _options.BetaMin)),
-                NumOps.FromDouble(_options.BetaMin)), NumOps.FromDouble(0.5 * h)).ToArray();
+        var stepScale = StepScales(steps, _options.BetaMin, _options.BetaMax);
         for (int i = 0; i < steps; i++)
         {
             double t = 1.0 - (i + 0.5) * h;

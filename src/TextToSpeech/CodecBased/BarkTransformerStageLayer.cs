@@ -345,8 +345,7 @@ internal partial class BarkTransformerStageLayer<T> : LayerBase<T>, IShapeContra
         var ids = new int[batches * sequence];
         for (int index = 0; index < ids.Length; index++) ids[index] = positionOffset + index % sequence;
         var positions = new Tensor<int>(ids, [batches, sequence]).Cast<T>();
-        return
- Engine.TensorAdd(hidden, _positionEmbeddings.Forward(positions));
+        return Engine.TensorAdd(hidden, _positionEmbeddings.Forward(positions));
     }
 
     private Tensor<T> RunBlocks(Tensor<T> hidden, bool useCache)
