@@ -119,48 +119,41 @@ public sealed class VoxelGridData<T>
             throw new ArgumentOutOfRangeException(nameof(occupancyChannel), "Occupancy channel is out of range.");
         }
 
+        var engine = AiDotNetEngine.Current;
         var xCenters = BuildAxisCenters(Origin[0], VoxelSize[0], Width);
         var yCenters = BuildAxisCenters(Origin[1], VoxelSize[1], Height);
         var zCenters = BuildAxisCenters(Origin[2], VoxelSize[2], Depth);
 
         int stride = includeOccupancyAsFeature ? 4 : 3;
-        var points = new List<T>();
-        var data = Voxels.Data.Span;
+        var occupancy = Voxels.Shape.Length == 4
+            ? engine.TensorSlice(Voxels, new[] { 0, 0, 0, occupancyChannel }, new[] { Depth, Height, Width, 1 })
+                .Reshape(Depth, Height, Width)
+            : Voxels;
 
-        int channelStride = Channels;
-        int sliceStride = Height * Width * channelStride;
-        int rowStride = Width * channelStride;
-
-        for (int z = 0; z < Depth; z++)
+        // Nonzero coordinates come back as (z, y, x) rows in row-major order, the order the voxel scan visits.
+        var occupied = engine.TensorNonzero(engine.TensorGreaterThan(occupancy, occupancyThreshold));
+        int pointCount = occupied.Shape[0];
+        if (pointCount == 0)
         {
-            int zOffset = z * sliceStride;
-            for (int y = 0; y < Height; y++)
-            {
-                int yOffset = zOffset + y * rowStride;
-                for (int x = 0; x < Width; x++)
-                {
-                    int baseIndex = yOffset + x * channelStride;
-                    var value = data[baseIndex + (Voxels.Shape.Length == 4 ? occupancyChannel : 0)];
-
-                    if (!NumOps.GreaterThan(value, occupancyThreshold))
-                    {
-                        continue;
-                    }
-
-                    points.Add(xCenters[x]);
-                    points.Add(yCenters[y]);
-                    points.Add(zCenters[z]);
-
-                    if (includeOccupancyAsFeature)
-                    {
-                        points.Add(value);
-                    }
-                }
-            }
+            return new PointCloudData<T>(new Tensor<T>(new[] { 0, stride }));
         }
 
-        int pointCount = points.Count / stride;
-        var tensor = new Tensor<T>(points.ToArray(), new[] { pointCount, stride });
+        var zIndex = GeometryEngineOps<T>.Column(occupied, 0);
+        var yIndex = GeometryEngineOps<T>.Column(occupied, 1);
+        var xIndex = GeometryEngineOps<T>.Column(occupied, 2);
+        var columns = new List<Tensor<T>>
+        {
+            engine.TensorIndexSelect(xCenters, xIndex, 0),
+            engine.TensorIndexSelect(yCenters, yIndex, 0),
+            engine.TensorIndexSelect(zCenters, zIndex, 0)
+        };
+
+        if (includeOccupancyAsFeature)
+        {
+            columns.Add(engine.TensorIndex(occupancy, new[] { zIndex, yIndex, xIndex }));
+        }
+
+        var tensor = engine.TensorStack(columns.ToArray(), 1);
         return new PointCloudData<T>(tensor);
     }
 
@@ -180,18 +173,11 @@ public sealed class VoxelGridData<T>
         }
     }
 
-    private static T[] BuildAxisCenters(T origin, T voxelSize, int count)
+    private static Tensor<T> BuildAxisCenters(T origin, T voxelSize, int count)
     {
-        var centers = new T[count];
-        var half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < count; i++)
-        {
-            var offset = NumOps.Add(NumOps.FromDouble(i), half);
-            centers[i] = NumOps.Add(origin, NumOps.Multiply(voxelSize, offset));
-        }
-
-        return centers;
+        var engine = AiDotNetEngine.Current;
+        var offsets = engine.TensorAddScalar(engine.TensorArange<T>(0, count, 1), NumOps.FromDouble(0.5));
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(offsets, voxelSize), origin);
     }
 
     private static void ValidateVoxels(Tensor<T> voxels)
@@ -228,12 +214,10 @@ public sealed class VoxelGridData<T>
 
     private static void ValidateVoxelSize(Vector<T> voxelSize)
     {
-        for (int i = 0; i < 3; i++)
+        var positive = AiDotNetEngine.Current.TensorGreaterThan(Tensor<T>.FromVector(voxelSize), NumOps.Zero);
+        if (AiDotNetEngine.Current.TensorCountNonzero(positive) != voxelSize.Length)
         {
-            if (!NumOps.GreaterThan(voxelSize[i], NumOps.Zero))
-            {
-                throw new ArgumentOutOfRangeException(nameof(voxelSize), "VoxelSize components must be positive.");
-            }
+            throw new ArgumentOutOfRangeException(nameof(voxelSize), "VoxelSize components must be positive.");
         }
     }
 }

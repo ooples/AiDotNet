@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Image;
 
@@ -49,10 +51,8 @@ namespace AiDotNet.Safety.Image;
     Authors = "Ricard Durall, Margret Keuper, Franz-Josef Pfreundt, Janis Keuper")]
 public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
 {
-    private readonly FastFourierTransform<T> _fft;
 
     private static readonly T Zero = NumOps.Zero;
-    private static readonly T One = NumOps.One;
     private static readonly T TwoFiftyFive = NumOps.FromDouble(255.0);
 
     /// <inheritdoc />
@@ -65,7 +65,6 @@ public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
     public FrequencyDeepfakeDetector(double threshold = 0.5)
         : base(threshold)
     {
-        _fft = new FastFourierTransform<T>();
     }
 
     /// <inheritdoc />
@@ -75,7 +74,7 @@ public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
         var analysis = Analyze(image);
         if (analysis is null) return findings;
 
-        double finalScore = analysis.Score;
+        double finalScore = NumOps.ToDouble(analysis.Score);
         if (finalScore >= Threshold)
         {
             findings.Add(new SafetyFinding
@@ -84,8 +83,9 @@ public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
                 Severity = finalScore >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
                 Confidence = finalScore,
                 Description = $"Frequency domain analysis: potential AI-generated image (score: {finalScore:F3}). " +
-                              $"Spectral flatness: {analysis.Flatness:F3}, periodic peaks: {analysis.Periodic:F3}, " +
-                              $"high-freq energy ratio: {analysis.HighFrequency:F3}.",
+                              $"Spectral flatness: {NumOps.ToDouble(analysis.Flatness):F3}, " +
+                              $"periodic peaks: {NumOps.ToDouble(analysis.Periodic):F3}, " +
+                              $"high-freq energy ratio: {NumOps.ToDouble(analysis.HighFrequency):F3}.",
                 RecommendedAction = SafetyAction.Warn,
                 SourceModule = ModuleName
             });
@@ -110,25 +110,39 @@ public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
                 "Frequency analysis needs an image of at least 8x8 pixels.", nameof(image));
         }
 
-        return analysis.Score;
+        return NumOps.ToDouble(analysis.Score);
     }
 
     /// <summary>The row-averaged spectral measurements and their weighted score.</summary>
     private sealed class Analysis
     {
-        public double Flatness { get; set; }
-        public double Periodic { get; set; }
-        public double HighFrequency { get; set; }
-        public double Score { get; set; }
+        public T Flatness { get; set; } = Zero;
+        public T Periodic { get; set; } = Zero;
+        public T HighFrequency { get; set; } = Zero;
+        public T Score { get; set; } = Zero;
     }
 
     /// <summary>Measures the image's row spectra, or returns null when it is too small to analyse.</summary>
-    private Analysis? Analyze(Tensor<T> image)
+    private static Analysis? Analyze(Tensor<T> image)
     {
-        var span = image.Data.Span;
-        if (span.Length == 0) return null;
+        if (image.Length == 0) return null;
 
-        var layout = DetermineLayout(image._shape, span.Length);
+        if (typeof(T) == typeof(Half))
+        {
+            // Row magnitudes of 0-255 pixels reach tens of thousands and their squares overflow Half (65504), so
+            // the spectra are measured in float and only the four results narrowed.
+            var wide = FrequencyDeepfakeDetector<float>.Analyze(image.Cast<float>());
+            if (wide is null) return null;
+            return new Analysis
+            {
+                Flatness = NumOps.FromDouble(wide.Flatness),
+                Periodic = NumOps.FromDouble(wide.Periodic),
+                HighFrequency = NumOps.FromDouble(wide.HighFrequency),
+                Score = NumOps.FromDouble(wide.Score),
+            };
+        }
+
+        var layout = DetermineLayout(image._shape, image.Length);
         if (layout.Height < 8 || layout.Width < 8) return null;
 
         // Find nearest power of 2 for FFT
@@ -137,172 +151,155 @@ public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
         if (fftSize > layout.Width) fftSize /= 2;
         if (fftSize < 8) return null;
 
-        // Analyze multiple rows from different parts of the image
+        using var noGrad = new NoGradScope<T>();
+        var engine = SafetyTensorOps<T>.Engine;
+
+        // Analyze multiple rows from different parts of the image: rows y = r * rowStride
+        // of channel 0, first fftSize columns, as [numRows, fftSize].
         int numRows = Math.Min(16, layout.Height);
         int rowStride = layout.Height / numRows;
+        var rows = engine.TensorNarrow(
+            engine.TensorSliceAxis(
+                engine.Reshape(
+                    engine.TensorNarrow(ChannelPlane(image, layout), 0, 0, numRows * rowStride).Contiguous(),
+                    new[] { numRows, rowStride, layout.Width }),
+                1, 0),
+            1, 0, fftSize).Contiguous();
+        rows = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Le(rows, 1.0),
+            engine.TensorMultiplyScalar(rows, TwoFiftyFive), rows);
 
-        double spectralFlatnessSum = 0;
-        double periodicPeakSum = 0;
-        double highFreqEnergySum = 0;
-        int analyzedRows = 0;
+        // FFT and magnitude spectrum, bins 1 .. halfLen-1
+        int halfLen = fftSize / 2;
+        var magnitudes = engine.TensorNarrow(SafetyTensorOps<T>.FftMagnitude(rows), 1, 1, halfLen - 1);
 
-        for (int r = 0; r < numRows; r++)
-        {
-            int y = r * rowStride;
-            if (y >= layout.Height) break;
+        // 1. Spectral flatness: geometric mean / arithmetic mean
+        //    Low flatness = concentrated spectrum (natural)
+        //    High flatness = flat spectrum (can indicate GAN artifacts)
+        var flatness = ComputeSpectralFlatness(magnitudes);
 
-            // Extract row as vector
-            var rowData = new Vector<T>(fftSize);
-            for (int x = 0; x < fftSize && x < layout.Width; x++)
-            {
-                T val = GetChannelDouble(span, layout, y, x, 0);
-                if (NumOps.LessThanOrEquals(val, One))
-                    val = NumOps.Multiply(val, TwoFiftyFive);
-                rowData[x] = val;
-            }
+        // 2. Periodic peak detection (GAN fingerprints create periodic patterns)
+        var periodicPeak = DetectPeriodicPeaks(magnitudes, halfLen);
 
-            // FFT
-            var spectrum = _fft.Forward(rowData);
-            int halfLen = spectrum.Length / 2;
+        // 3. High-frequency energy ratio (low band: bins 1 .. midBand-1)
+        int midBand = halfLen / 2;
+        int lowCount = Math.Max(0, midBand - 1);
+        var power = engine.TensorSquare(magnitudes);
+        var axis1 = new[] { 1 };
+        var lowEnergy = lowCount > 0
+            ? engine.ReduceSum(engine.TensorNarrow(power, 1, 0, lowCount), axis1, false)
+            : Tensor<T>.CreateZeros(numRows);
+        var highEnergy = engine.ReduceSum(engine.TensorNarrow(power, 1, lowCount, halfLen - 1 - lowCount), axis1, false);
+        var totalEnergy = engine.TensorAdd(lowEnergy, highEnergy);
+        var hasEnergy = SafetyTensorOps<T>.Gt(totalEnergy, 1e-10);
+        var highFreqRatio = SafetyTensorOps<T>.Where(hasEnergy,
+            engine.TensorDivide(highEnergy, SafetyTensorOps<T>.Where(hasEnergy, totalEnergy, 1.0)), 0.0);
 
-            // Compute magnitude spectrum
-            var magnitudes = new double[halfLen];
-            for (int k = 1; k < halfLen; k++)
-            {
-                magnitudes[k] = NumOps.ToDouble(spectrum[k].Magnitude);
-            }
-
-            // 1. Spectral flatness: geometric mean / arithmetic mean
-            //    Low flatness = concentrated spectrum (natural)
-            //    High flatness = flat spectrum (can indicate GAN artifacts)
-            double flatness = ComputeSpectralFlatness(magnitudes, 1, halfLen);
-
-            // 2. Periodic peak detection (GAN fingerprints create periodic patterns)
-            double periodicPeak = DetectPeriodicPeaks(magnitudes, halfLen);
-
-            // 3. High-frequency energy ratio
-            int midBand = halfLen / 2;
-            double lowEnergy = 0, highEnergy = 0;
-            for (int k = 1; k < halfLen; k++)
-            {
-                if (k < midBand) lowEnergy += magnitudes[k] * magnitudes[k];
-                else highEnergy += magnitudes[k] * magnitudes[k];
-            }
-            double totalEnergy = lowEnergy + highEnergy;
-            double highFreqRatio = totalEnergy > 1e-10 ? highEnergy / totalEnergy : 0;
-
-            spectralFlatnessSum += flatness;
-            periodicPeakSum += periodicPeak;
-            highFreqEnergySum += highFreqRatio;
-            analyzedRows++;
-        }
-
-        if (analyzedRows == 0) return null;
-
-        double avgFlatness = spectralFlatnessSum / analyzedRows;
-        double avgPeriodic = periodicPeakSum / analyzedRows;
-        double avgHighFreq = highFreqEnergySum / analyzedRows;
+        T avgFlatness = engine.TensorMean(flatness);
+        T avgPeriodic = engine.TensorMean(periodicPeak);
+        T avgHighFreq = engine.TensorMean(highFreqRatio);
 
         // Combine signals:
         // - Spectral flatness deviation from natural images (~0.1-0.3)
         //   GAN images often have flatness > 0.5
-        double flatnessAnomaly = Math.Max(0, (avgFlatness - 0.3) / 0.7);
+        T flatnessAnomaly = SafetyTensorOps<T>.MaxZero(
+            NumOps.Divide(NumOps.Subtract(avgFlatness, NumOps.FromDouble(0.3)), NumOps.FromDouble(0.7)));
 
         // - Periodic peaks (natural images rarely have them)
-        double periodicAnomaly = Math.Min(1.0, avgPeriodic);
+        T periodicAnomaly = SafetyTensorOps<T>.MinOne(avgPeriodic);
 
         // - High frequency energy (AI images often have too much or too little)
         //   Natural: ~0.2-0.4; GAN: often < 0.1 or > 0.5
-        double hfAnomaly = avgHighFreq < 0.1 ? (0.1 - avgHighFreq) * 10 :
-                           avgHighFreq > 0.5 ? (avgHighFreq - 0.5) * 2 : 0;
-        hfAnomaly = Math.Min(1.0, hfAnomaly);
+        T hfAnomaly = NumOps.LessThan(avgHighFreq, NumOps.FromDouble(0.1))
+            ? NumOps.Multiply(NumOps.Subtract(NumOps.FromDouble(0.1), avgHighFreq), NumOps.FromDouble(10))
+            : NumOps.GreaterThan(avgHighFreq, NumOps.FromDouble(0.5))
+                ? NumOps.Multiply(NumOps.Subtract(avgHighFreq, NumOps.FromDouble(0.5)), NumOps.FromDouble(2))
+                : Zero;
+        hfAnomaly = SafetyTensorOps<T>.MinOne(hfAnomaly);
+
+        T score = NumOps.Add(NumOps.Add(
+            NumOps.Multiply(NumOps.FromDouble(0.35), flatnessAnomaly),
+            NumOps.Multiply(NumOps.FromDouble(0.40), periodicAnomaly)),
+            NumOps.Multiply(NumOps.FromDouble(0.25), hfAnomaly));
 
         return new Analysis
         {
             Flatness = avgFlatness,
             Periodic = avgPeriodic,
             HighFrequency = avgHighFreq,
-            Score = Math.Min(1.0, 0.35 * flatnessAnomaly + 0.40 * periodicAnomaly + 0.25 * hfAnomaly),
+            Score = SafetyTensorOps<T>.MinOne(score),
         };
     }
 
-    private static double ComputeSpectralFlatness(double[] magnitudes, int start, int end)
+    /// <summary>Per-row spectral flatness of <c>[rows, bins]</c> magnitudes over the bins above 1e-20.</summary>
+    private static Tensor<T> ComputeSpectralFlatness(Tensor<T> magnitudes)
     {
-        int n = end - start;
-        if (n <= 0) return 0;
+        var engine = AiDotNetEngine.Current;
+        int rows = magnitudes.Shape[0];
+        if (magnitudes.Shape[1] <= 0) return Tensor<T>.CreateZeros(rows);
 
-        double logSum = 0;
-        double arithmeticSum = 0;
-        int validCount = 0;
+        var axis1 = new[] { 1 };
+        var valid = SafetyTensorOps<T>.Gt(magnitudes, 1e-20);
+        var logSum = engine.ReduceSum(SafetyTensorOps<T>.Where(valid,
+            engine.TensorLog(SafetyTensorOps<T>.Where(valid, magnitudes, 1.0)), 0.0), axis1, false);
+        var arithmeticSum = engine.ReduceSum(SafetyTensorOps<T>.Where(valid, magnitudes, 0.0), axis1, false);
+        var validCount = engine.ReduceSum(valid, axis1, false);
 
-        for (int k = start; k < end; k++)
-        {
-            double m = magnitudes[k];
-            if (m > 1e-20)
-            {
-                logSum += Math.Log(m);
-                arithmeticSum += m;
-                validCount++;
-            }
-        }
+        var usable = SafetyTensorOps<T>.And(SafetyTensorOps<T>.Gt(validCount, 0.0),
+            SafetyTensorOps<T>.Not(SafetyTensorOps<T>.Lt(arithmeticSum, 1e-20)));
+        var safeCount = SafetyTensorOps<T>.Where(usable, validCount, 1.0);
+        var geometricMean = engine.TensorExp(engine.TensorDivide(logSum, safeCount));
+        var arithmeticMean = engine.TensorDivide(arithmeticSum, safeCount);
+        usable = SafetyTensorOps<T>.And(usable, SafetyTensorOps<T>.Gt(arithmeticMean, 1e-20));
 
-        if (validCount == 0 || arithmeticSum < 1e-20) return 0;
-
-        double geometricMean = Math.Exp(logSum / validCount);
-        double arithmeticMean = arithmeticSum / validCount;
-
-        return arithmeticMean > 1e-20 ? geometricMean / arithmeticMean : 0;
+        return SafetyTensorOps<T>.Where(usable,
+            engine.TensorDivide(geometricMean, SafetyTensorOps<T>.Where(usable, arithmeticMean, 1.0)), 0.0);
     }
 
-    private static double DetectPeriodicPeaks(double[] magnitudes, int length)
+    /// <summary>
+    /// Per-row peak normalised autocorrelation of the magnitude spectrum (bins 1 .. length-1,
+    /// given as <c>[rows, length - 1]</c>) over lags 2 .. min(16, length / 4).
+    /// </summary>
+    private static Tensor<T> DetectPeriodicPeaks(Tensor<T> magnitudes, int length)
     {
-        if (length < 8) return 0;
+        var engine = AiDotNetEngine.Current;
+        int rows = magnitudes.Shape[0];
+        if (length < 8) return Tensor<T>.CreateZeros(rows);
 
         // Compute autocorrelation of the magnitude spectrum to find periodicity
         // Periodic GAN artifacts create peaks in autocorrelation at regular intervals
-        double meanMag = 0;
-        for (int k = 1; k < length; k++) meanMag += magnitudes[k];
-        meanMag /= (length - 1);
-
-        double maxCorr = 0;
-        double variance = 0;
-
-        for (int k = 1; k < length; k++)
-        {
-            double diff = magnitudes[k] - meanMag;
-            variance += diff * diff;
-        }
-        variance /= (length - 1);
-        if (variance < 1e-20) return 0;
+        var axis1 = new[] { 1 };
+        T count = NumOps.FromDouble(length - 1);
+        var meanMag = engine.TensorDivideScalar(engine.ReduceSum(magnitudes, axis1, true), count);
+        var centered = engine.TensorSubtract(magnitudes, meanMag);
+        var variance = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(centered), axis1, false), count);
+        var hasVariance = SafetyTensorOps<T>.Not(SafetyTensorOps<T>.Lt(variance, 1e-20));
 
         // Check for autocorrelation peaks at lags 2-16 (common GAN periodicities)
-        for (int lag = 2; lag <= Math.Min(16, length / 4); lag++)
-        {
-            double corr = 0;
-            int pairs = 0;
-            for (int k = 1; k < length - lag; k++)
-            {
-                corr += (magnitudes[k] - meanMag) * (magnitudes[k + lag] - meanMag);
-                pairs++;
-            }
-            if (pairs > 0) corr /= pairs;
-            double normalizedCorr = corr / variance;
-            if (normalizedCorr > maxCorr) maxCorr = normalizedCorr;
-        }
+        int maxLag = Math.Min(16, length / 4);
+        if (maxLag < 2) return Tensor<T>.CreateZeros(rows);
+        SafetyTensorOps<T>.LaggedProducts(centered, 2, maxLag + 1, out var corrSum, out _, out _);
+        var pairs = engine.ScalarMinusTensor(count, engine.TensorArange<T>(2, maxLag + 1, 1));
+        var corr = engine.TensorDivide(corrSum, engine.Reshape(pairs, new[] { 1, maxLag - 1 }));
+        var safeVariance = engine.Reshape(SafetyTensorOps<T>.Where(hasVariance, variance, 1.0), new[] { rows, 1 });
+        var normalizedCorr = engine.TensorDivide(corr, safeVariance);
+        var maxCorr = SafetyTensorOps<T>.FirstStrictMax(normalizedCorr, 0.0).Best;
 
-        return Math.Max(0, Math.Min(1.0, maxCorr));
+        return SafetyTensorOps<T>.Where(hasVariance, SafetyTensorOps<T>.MinOne(maxCorr), 0.0);
     }
 
-    private static T GetChannelDouble(ReadOnlySpan<T> data, ImageLayout layout, int y, int x, int c)
+    /// <summary>Channel 0 of the image as a <c>[height, width]</c> plane.</summary>
+    private static Tensor<T> ChannelPlane(Tensor<T> image, ImageLayout layout)
     {
-        int idx;
+        var engine = AiDotNetEngine.Current;
+        int pixels = layout.Height * layout.Width;
+        var flat = engine.Reshape(image.Contiguous(), new[] { image.Length });
+        var planeShape = new[] { layout.Height, layout.Width };
         if (layout.Format == PixFmt.CHW)
-            idx = c * layout.Height * layout.Width + y * layout.Width + x;
-        else
-            idx = (y * layout.Width + x) * layout.Channels + c;
+            return engine.Reshape(engine.TensorNarrow(flat, 0, 0, pixels), planeShape);
 
-        if (idx < 0 || idx >= data.Length) return Zero;
-        return data[idx];
+        var interleaved = engine.Reshape(engine.TensorNarrow(flat, 0, 0, pixels * layout.Channels),
+            new[] { pixels, layout.Channels });
+        return engine.Reshape(engine.TensorNarrow(interleaved, 1, 0, 1).Contiguous(), planeShape);
     }
 
     private static ImageLayout DetermineLayout(int[] shape, int dataLength)

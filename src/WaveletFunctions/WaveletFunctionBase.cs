@@ -67,6 +67,46 @@ public abstract class WaveletFunctionBase<T> : IWaveletFunction<T>
     public abstract T Calculate(T x);
 
     /// <summary>
+    /// Calculates the wavelet function at every element of <paramref name="x"/>.
+    /// </summary>
+    /// <param name="x">The input points.</param>
+    /// <returns>A tensor of the same shape holding <see cref="Calculate(T)"/> of each element.</returns>
+    /// <remarks>
+    /// <para>
+    /// The base implementation evaluates <see cref="Calculate(T)"/> element by element, so a subclass that only
+    /// overrides the scalar <see cref="Calculate(T)"/> changes every filter and transform built from this method.
+    /// Wavelets override it with a whole-tensor evaluation that is used only while their scalar
+    /// <see cref="Calculate(T)"/> has not been overridden further.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T> Calculate(Tensor<T> x)
+    {
+        if (x is null)
+        {
+            throw new System.ArgumentNullException(nameof(x));
+        }
+
+        var points = x.ToArray();
+        var values = new T[points.Length];
+        for (int i = 0; i < points.Length; i++)
+        {
+            values[i] = Calculate(points[i]);
+        }
+
+        return new Tensor<T>(values, (int[])x._shape.Clone());
+    }
+
+    /// <summary>
+    /// True when the runtime type overrides the scalar <see cref="Calculate(T)"/> below
+    /// <paramref name="declaringType"/>, so whole-tensor shortcuts written for that type no longer apply.
+    /// </summary>
+    private protected bool OverridesScalarCalculateBelow(System.Type declaringType)
+    {
+        var method = GetType().GetMethod(nameof(Calculate), new[] { typeof(T) });
+        return method is not null && method.DeclaringType != declaringType;
+    }
+
+    /// <summary>
     /// Decomposes an input signal using the wavelet transform.
     /// </summary>
     /// <param name="input">The input signal to decompose.</param>

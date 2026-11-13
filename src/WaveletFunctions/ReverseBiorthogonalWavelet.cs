@@ -242,24 +242,20 @@ namespace AiDotNet.WaveletFunctions
         /// </remarks>
         public override T Calculate(T x)
         {
-            T result = NumOps.Zero;
+            var engine = AiDotNetEngine.Current;
             int centerIndex = _reconstructionLowPass.Length / 2;
 
-            for (int k = 0; k < _reconstructionLowPass.Length; k++)
-            {
-                T shiftedX = NumOps.Subtract(x, NumOps.FromDouble(k - centerIndex));
-                T phiValue = DiscreteCascadeAlgorithm(shiftedX);
-                result = NumOps.Add(result, NumOps.Multiply(_reconstructionLowPass[k], phiValue));
-            }
-
-            return result;
+            // sum_k h[k] * phi(x - (k - center)), with phi interpolated from the cascade samples
+            var offsets = engine.TensorSubtractScalar(
+                engine.TensorArange<T>(0, _reconstructionLowPass.Length, 1), NumOps.FromDouble(centerIndex));
+            var phiValues = InterpolateCascade(DiscreteCascadeAlgorithm(), engine.ScalarMinusTensor(x, offsets));
+            return engine.TensorSum(engine.TensorMultiply(Tensor<T>.FromVector(_reconstructionLowPass), phiValues));
         }
 
         /// <summary>
         /// Implements the discrete cascade algorithm to approximate the continuous scaling function.
         /// </summary>
-        /// <param name="x">The input point at which to evaluate the scaling function.</param>
-        /// <returns>The approximated value of the scaling function at the specified point.</returns>
+        /// <returns>The scaling function sampled on [0, 1] at the cascade resolution.</returns>
         /// <remarks>
         /// <para>
         /// This method implements the discrete cascade algorithm, which iteratively approximates
@@ -278,45 +274,59 @@ namespace AiDotNet.WaveletFunctions
         /// getting closer to the "true" shape with each pass.
         /// </para>
         /// </remarks>
-        private T DiscreteCascadeAlgorithm(T x)
+        private Tensor<T> DiscreteCascadeAlgorithm()
         {
             const int resolution = 1024;
             const int iterations = 7;
-            var values = new T[resolution];
+            var engine = AiDotNetEngine.Current;
 
-            // Initialize with the scaling function
-            for (int i = 0; i < resolution; i++)
-            {
-                T xValue = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(resolution - 1));
-                values[i] = ScalingFunction(xValue);
-            }
+            // Initialize with the scaling function sampled on [0, 1]
+            var grid = engine.TensorDivideScalar(engine.TensorArange<T>(0, resolution, 1), NumOps.FromDouble(resolution - 1));
+            var values = ScalingFunction(grid).ToVector();
 
-            // Perform iterations
+            // Cascade iterations: new[i] = sum_k h[k] * values[(2i - k) mod resolution], a periodic stride-2
+            // correlation with the reversed filter whose window starts L - 1 samples before 2i.
+            var reversed = WaveletEngineOps<T>.Reverse(_reconstructionLowPass);
+            int shift = -(_reconstructionLowPass.Length - 1);
             for (int iter = 0; iter < iterations; iter++)
             {
-                var newValues = new T[resolution];
-                for (int i = 0; i < resolution; i++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int k = 0; k < _reconstructionLowPass.Length; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(_reconstructionLowPass[k], values[(2 * i - k + resolution) % resolution]));
-                    }
-
-                    newValues[i] = sum;
-                }
-
-                values = newValues;
+                values = WaveletEngineOps<T>.PeriodicCorrelate(values, reversed, 2, resolution, shift);
             }
 
-            // Interpolate to find the value at x
-            int index = (int)(Convert.ToDouble(x) * (resolution - 1));
-            index = Math.Max(0, Math.Min(resolution - 2, index));
-            T t = NumOps.Subtract(x, NumOps.Divide(NumOps.FromDouble(index), NumOps.FromDouble(resolution - 1)));
-            return NumOps.Add(
-                NumOps.Multiply(NumOps.Subtract(NumOps.One, t), values[index]),
-                NumOps.Multiply(t, values[index + 1])
-            );
+            return Tensor<T>.FromVector(values);
+        }
+
+        /// <summary>
+        /// Linearly interpolates the cascade samples (on <c>[0, 1]</c> with <c>resolution - 1</c> steps) at every
+        /// position: <c>(1 - t) * v[i] + t * v[i + 1]</c> with <c>i = clamp(trunc(x * (resolution - 1)), 0,
+        /// resolution - 2)</c> and <c>t = x - i / (resolution - 1)</c>.
+        /// </summary>
+        private static Tensor<T> InterpolateCascade(Tensor<T> values, Tensor<T> positions)
+        {
+            var engine = AiDotNetEngine.Current;
+            int resolution = values.Length;
+            int count = positions.Length;
+            T step = NumOps.FromDouble(resolution - 1);
+
+            var index = engine.TensorClamp(
+                engine.TensorTrunc(engine.TensorMultiplyScalar(positions, step)), NumOps.Zero, NumOps.FromDouble(resolution - 2));
+            var t = engine.TensorSubtract(positions, engine.TensorDivideScalar(index, step));
+
+            // Select v[index] and v[index + 1] by matching every position's index against the sample grid.
+            var shape = new[] { count, resolution };
+            var sampleGrid = engine.TensorBroadcastTo(engine.TensorArange<T>(0, resolution, 1).Reshape(1, resolution), shape);
+            var broadcastValues = engine.TensorBroadcastTo(values.Reshape(1, resolution), shape);
+            var zeros = engine.TensorZerosLike(broadcastValues);
+            var lowerIndex = engine.TensorBroadcastTo(index.Reshape(count, 1), shape);
+            var upperIndex = engine.TensorBroadcastTo(engine.TensorAddScalar(index, NumOps.One).Reshape(count, 1), shape);
+            var lower = engine.ReduceSum(
+                engine.TensorWhere(engine.TensorEquals(sampleGrid, lowerIndex), broadcastValues, zeros), new[] { 1 }, false);
+            var upper = engine.ReduceSum(
+                engine.TensorWhere(engine.TensorEquals(sampleGrid, upperIndex), broadcastValues, zeros), new[] { 1 }, false);
+
+            return engine.TensorAdd(
+                engine.TensorMultiply(engine.ScalarMinusTensor(NumOps.One, t), lower),
+                engine.TensorMultiply(t, upper));
         }
 
         /// <summary>
@@ -341,22 +351,18 @@ namespace AiDotNet.WaveletFunctions
         /// from 1 to 0 in the range [0,1], and has a quadratic tail in the range [1,2].
         /// </para>
         /// </remarks>
-        private T ScalingFunction(T x)
+        private static Tensor<T> ScalingFunction(Tensor<T> x)
         {
-            T absX = NumOps.Abs(x);
-            T result = NumOps.Zero;
+            var engine = AiDotNetEngine.Current;
+            var absX = engine.TensorAbs(x);
 
-            if (NumOps.LessThan(absX, NumOps.One))
-            {
-                result = NumOps.Subtract(NumOps.One, absX);
-            }
-            else if (NumOps.LessThan(absX, NumOps.FromDouble(2)))
-            {
-                T temp = NumOps.Subtract(NumOps.FromDouble(2), absX);
-                result = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(temp, temp));
-            }
-
-            return result;
+            // 1 - |x| for |x| < 1, 0.5 * (2 - |x|)^2 for |x| < 2, else 0
+            var inner = engine.TensorLessThan(absX, NumOps.One);
+            var support = engine.TensorLessThan(absX, NumOps.FromDouble(2));
+            var temp = engine.ScalarMinusTensor(NumOps.FromDouble(2), absX);
+            var outer = engine.TensorMultiplyScalar(engine.TensorMultiply(temp, temp), NumOps.FromDouble(0.5));
+            return engine.TensorWhere(inner, engine.ScalarMinusTensor(NumOps.One, absX),
+                engine.TensorWhere(support, outer, engine.TensorZerosLike(absX)));
         }
 
         /// <summary>
@@ -424,30 +430,85 @@ namespace AiDotNet.WaveletFunctions
         /// </remarks>
         private void DecomposeChunk(Vector<T> input, Vector<T> approximation, Vector<T> detail, int start, int end)
         {
-            int lowPassLen = _decompositionLowPass.Length;
-            int highPassLen = _decompositionHighPass.Length;
-
-            for (int i = start; i < end; i += 2)
+            // Outputs i = start, start + 2, ... < end go to index i / 2; each reads input[ext(i + j - L / 2 + 1)].
+            int count = (end - start + 1) / 2;
+            if (count <= 0 || input.Length == 0)
             {
-                T approx = NumOps.Zero;
-                T det = NumOps.Zero;
+                return;
+            }
 
-                // Apply low-pass filter for approximation
-                for (int j = 0; j < lowPassLen; j++)
+            var engine = AiDotNetEngine.Current;
+            var approx = DecompositionBranch(input, _decompositionLowPass, start, count);
+            var det = DecompositionBranch(input, _decompositionHighPass, start, count);
+            engine.StridedScatter(approximation, approx, start / 2, 1);
+            engine.StridedScatter(detail, det, start / 2, 1);
+        }
+
+        /// <summary>
+        /// <c>result[c] = sum_j f[j] * input[ext(start + 2c + j - L / 2 + 1)]</c> for <c>c &lt; count</c>, where
+        /// <c>ext</c> applies the configured boundary handling (see <see cref="GetExtendedIndex"/>).
+        /// </summary>
+        private Vector<T> DecompositionBranch(Vector<T> input, Vector<T> filter, int start, int count)
+        {
+            var engine = AiDotNetEngine.Current;
+            int n = input.Length;
+            int length = filter.Length;
+            int first = start + 1 - length / 2;
+
+            // An interior window needs no boundary extension: correlate the window alone, so a chunk costs its
+            // own length rather than a rebuild (or rotation) of the whole signal.
+            int windowEnd = first + 2 * (count - 1) + length - 1;
+            if (first >= 0 && windowEnd < n)
+            {
+                var window = input.GetSubVector(first, windowEnd - first + 1);
+                return WaveletEngineOps<T>.PeriodicCorrelate(window, filter, 2, count, 0);
+            }
+
+            switch (_boundaryMethod)
+            {
+                case BoundaryHandlingMethod.Periodic:
+                    return WaveletEngineOps<T>.PeriodicCorrelate(input, filter, 2, count, first);
+
+                case BoundaryHandlingMethod.Symmetric:
                 {
-                    int index = GetExtendedIndex(i + j - lowPassLen / 2 + 1, input.Length);
-                    approx = NumOps.Add(approx, NumOps.Multiply(_decompositionLowPass[j], input[index]));
+                    // Reflection without repeating the edge samples has period 2n - 2, which is periodic indexing
+                    // into x[0 .. n-1] followed by x[n-2 .. 1].
+                    var reflected = input;
+                    if (n > 2)
+                    {
+                        var interior = engine.TensorFlip(
+                            engine.TensorSlice(Tensor<T>.FromVector(input), new[] { 1 }, new[] { n - 2 }), new[] { 0 });
+                        reflected = engine.TensorConcatenate(new[] { Tensor<T>.FromVector(input), interior }, 0).ToVector();
+                    }
+
+                    return WaveletEngineOps<T>.PeriodicCorrelate(reflected, filter, 2, count, first);
                 }
 
-                // Apply high-pass filter for detail (may have different length)
-                for (int j = 0; j < highPassLen; j++)
+                case BoundaryHandlingMethod.ZeroPadding:
                 {
-                    int index = GetExtendedIndex(i + j - highPassLen / 2 + 1, input.Length);
-                    det = NumOps.Add(det, NumOps.Multiply(_decompositionHighPass[j], input[index]));
+                    // Indices outside the signal are clamped to the nearest edge sample.
+                    int last = first + 2 * (count - 1) + length - 1;
+                    int padLeft = Math.Max(0, -first);
+                    int padRight = Math.Max(0, last - (n - 1));
+                    var signal = Tensor<T>.FromVector(input);
+                    var parts = new List<Tensor<T>>();
+                    if (padLeft > 0)
+                    {
+                        parts.Add(engine.TensorTile(engine.TensorSlice(signal, new[] { 0 }, new[] { 1 }), new[] { padLeft }));
+                    }
+
+                    parts.Add(signal);
+                    if (padRight > 0)
+                    {
+                        parts.Add(engine.TensorTile(engine.TensorSlice(signal, new[] { n - 1 }, new[] { 1 }), new[] { padRight }));
+                    }
+
+                    var extended = parts.Count == 1 ? input : engine.TensorConcatenate(parts.ToArray(), 0).ToVector();
+                    return WaveletEngineOps<T>.PeriodicCorrelate(extended, filter, 2, count, first + padLeft);
                 }
 
-                approximation[i / 2] = approx;
-                detail[i / 2] = det;
+                default:
+                    throw new ArgumentException("Invalid boundary handling method");
             }
         }
 
@@ -520,40 +581,51 @@ namespace AiDotNet.WaveletFunctions
         {
             int len = approximation.Length;
             if (len == 0) return;
+            if (end <= start) return;
 
-            int lowPassLen = _reconstructionLowPass.Length;
-            int highPassLen = _reconstructionHighPass.Length;
+            var engine = AiDotNetEngine.Current;
 
-            for (int i = start; i < end; i++)
+            // Output i takes the taps j with i - j even, each reading coefficient (i / 2 - j + L) mod len. So even
+            // outputs 2p use the even taps and odd outputs 2p + 1 the odd taps, both reading index p + L - j: a
+            // periodic correlation over p with the reversed even/odd sub-filter, dilated by 2.
+            int firstPair = start / 2;
+            int pairCount = (end - 1) / 2 - firstPair + 1;
+            var even = engine.Add(
+                ReconstructionBranch(approximation, _reconstructionLowPass, firstPair, pairCount, odd: false),
+                ReconstructionBranch(detail, _reconstructionHighPass, firstPair, pairCount, odd: false));
+            var oddOutputs = engine.Add(
+                ReconstructionBranch(approximation, _reconstructionLowPass, firstPair, pairCount, odd: true),
+                ReconstructionBranch(detail, _reconstructionHighPass, firstPair, pairCount, odd: true));
+
+            var interleaved = new Vector<T>(2 * pairCount);
+            engine.StridedScatter(interleaved, even, 0, 2);
+            engine.StridedScatter(interleaved, oddOutputs, 1, 2);
+            engine.StridedScatter(reconstructed, interleaved.GetSubVector(start - 2 * firstPair, end - start), start, 1);
+        }
+
+        /// <summary>
+        /// One filter's contribution to the outputs <c>2p</c> (or <c>2p + 1</c> when <paramref name="odd"/>) for
+        /// <c>p = firstPair .. firstPair + pairCount - 1</c>: <c>sum_j f[j] * c[(p - j + L) mod len]</c> over the even
+        /// (or odd) taps <c>j</c>.
+        /// </summary>
+        private static Vector<T> ReconstructionBranch(Vector<T> coefficients, Vector<T> filter, int firstPair, int pairCount, bool odd)
+        {
+            var engine = AiDotNetEngine.Current;
+            int length = filter.Length;
+            int tapCount = odd ? length / 2 : (length + 1) / 2;
+            if (tapCount == 0)
             {
-                T value = NumOps.Zero;
-
-                // Apply low-pass reconstruction filter
-                for (int j = 0; j < lowPassLen; j++)
-                {
-                    int rawIndex = i / 2 - j + lowPassLen;
-                    int index = ((rawIndex % len) + len) % len;
-
-                    if ((i - j) % 2 == 0)
-                    {
-                        value = NumOps.Add(value, NumOps.Multiply(_reconstructionLowPass[j], approximation[index]));
-                    }
-                }
-
-                // Apply high-pass reconstruction filter (may have different length)
-                for (int j = 0; j < highPassLen; j++)
-                {
-                    int rawIndex = i / 2 - j + highPassLen;
-                    int index = ((rawIndex % len) + len) % len;
-
-                    if ((i - j) % 2 == 0)
-                    {
-                        value = NumOps.Add(value, NumOps.Multiply(_reconstructionHighPass[j], detail[index]));
-                    }
-                }
-
-                reconstructed[i] = value;
+                var zeros = new Vector<T>(pairCount);
+                zeros.Fill(NumOps.Zero);
+                return zeros;
             }
+
+            // Taps j = 2q (+1): the read index p + L - j runs backwards in q, so correlate with the reversed taps,
+            // starting at p + L - (largest tap).
+            var taps = engine.StridedGather(filter, odd ? 1 : 0, 2, tapCount);
+            int largestTap = 2 * (tapCount - 1) + (odd ? 1 : 0);
+            return WaveletEngineOps<T>.PeriodicCorrelate(
+                coefficients, WaveletEngineOps<T>.Reverse(taps), 1, pairCount, firstPair + length - largestTap, 2);
         }
 
         /// <summary>

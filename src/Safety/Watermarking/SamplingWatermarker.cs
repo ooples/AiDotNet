@@ -158,12 +158,20 @@ public class SamplingWatermarker<T> : TextWatermarkerBase<T>, IGenerationWaterma
         if (context.Count < _contextWidth) return;
 
         ulong seed = ContextSeed(context, context.Count);
-        T delta = NumOps.FromDouble(_delta);
+        var green = new List<int>();
         for (int token = 0; token < logits.Length; token++)
         {
-            if (WatermarkKey.Uniform(seed, token) < _gamma)
-                logits[token] = NumOps.Add(logits[token], delta);
+            if (WatermarkKey.Uniform(seed, token) < _gamma) green.Add(token);
         }
+
+        if (green.Count == 0) return;
+        var greenIds = green.ToArray();
+        var biased = SafetyTensorOps<T>.Engine.TensorIndexAdd(
+            Tensor<T>.FromVector(logits),
+            0,
+            new Tensor<int>(new[] { greenIds.Length }, new Vector<int>(greenIds)),
+            SafetyTensorOps<T>.Full(new[] { greenIds.Length }, NumOps.FromDouble(_delta)));
+        biased.AsSpan().CopyTo(logits.AsWritableSpan());
     }
 
     /// <inheritdoc />

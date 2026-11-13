@@ -323,4 +323,23 @@ public class SimplexSolverIntegrationTests
     }
 
     #endregion
+
+    [Fact]
+    public void Solve_UnderStrictShapePolicy_FindsKnownVertex()
+    {
+        // ShapePolicy.Strict() rejects implicit broadcasts ([rows, n] * [1, n]); the standard form and the
+        // pivot update must use matching shapes.
+        var program = new LinearProgram<double>(
+            objective: V(-30, -20),
+            inequalityMatrix: M(new[,] { { 4.0, 3.0 }, { 2.0, 1.0 } }),
+            inequalityBounds: V(240, 100));
+
+        using (AiDotNet.Tensors.Engines.ShapePolicy.Strict())
+        {
+            var solution = Solver().Solve(program);
+
+            Assert.Equal(LinearProgramStatus.Optimal, solution.Status);
+            Assert.Equal(-1700.0, solution.ObjectiveValue, 6);
+        }
+    }
 }

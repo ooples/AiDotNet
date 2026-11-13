@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Audio;
 
@@ -115,38 +117,25 @@ public class TranscriptionToxicityDetector<T> : AudioSafetyModuleBase<T>
 
     private AcousticFeatures ComputeAcousticFeatures(Vector<T> samples, int sampleRate)
     {
+        using var noGrad = new NoGradScope<T>();
+        var engine = SafetyTensorOps<T>.Engine;
         int length = samples.Length;
-        T sum = Zero;
-        T sumSq = Zero;
-        T maxVal = samples[0];
-        T minVal = samples[0];
-        int zeroCrossings = 0;
-        T prevSample = Zero;
+        var signal = SafetyTensorOps<T>.AsTensor(samples);
 
-        for (int i = 0; i < length; i++)
-        {
-            T val = samples[i];
-            sum = NumOps.Add(sum, val);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
-
-            if (NumOps.GreaterThan(val, maxVal)) maxVal = val;
-            if (NumOps.LessThan(val, minVal)) minVal = val;
-
-            if (i > 0 && IsZeroCrossing(prevSample, val))
-            {
-                zeroCrossings++;
-            }
-
-            prevSample = val;
-        }
+        T sum = engine.TensorSum(signal);
+        T sumSq = engine.TensorSumOfSquares(signal);
+        T maxVal = SafetyTensorOps<T>.ScanMax(signal);
+        T minVal = SafetyTensorOps<T>.ScanMin(signal);
+        T zeroCrossings = SafetyTensorOps<T>.ZeroCrossings(
+            engine.Reshape(signal, new[] { 1, length }), nanIsNegative: true).GetFlat(0);
 
         T lengthT = NumOps.FromDouble(length);
         T mean = NumOps.Divide(sum, lengthT);
         T meanSq = NumOps.Divide(sumSq, lengthT);
         T variance = NumOps.Subtract(meanSq, NumOps.Multiply(mean, mean));
-        T rms = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(meanSq)));
+        T rms = NumOps.Sqrt(meanSq);
         T dynamicRange = NumOps.Subtract(maxVal, minVal);
-        T zeroCrossingRate = NumOps.Divide(NumOps.FromDouble(zeroCrossings), lengthT);
+        T zeroCrossingRate = NumOps.Divide(zeroCrossings, lengthT);
 
         // Estimate short-term energy variation (proxy for shouting detection)
         int frameSize = sampleRate / 100; // 10ms frames
@@ -177,32 +166,13 @@ public class TranscriptionToxicityDetector<T> : AudioSafetyModuleBase<T>
             return Zero;
         }
 
-        var frameEnergies = new Vector<T>(numFrames);
-        T energySum = Zero;
+        // Non-overlapping frames [numFrames, frameSize]: per-frame mean square energy
+        var engine = SafetyTensorOps<T>.Engine;
+        var frames = SafetyTensorOps<T>.Frames(SafetyTensorOps<T>.AsTensor(samples), frameSize, frameSize, numFrames);
+        var frameEnergies = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorSquare(frames), new[] { 1 }, false), NumOps.FromDouble(frameSize));
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            T frameSumSq = Zero;
-            int start = f * frameSize;
-            for (int i = 0; i < frameSize; i++)
-            {
-                T val = samples[start + i];
-                frameSumSq = NumOps.Add(frameSumSq, NumOps.Multiply(val, val));
-            }
-
-            frameEnergies[f] = NumOps.Divide(frameSumSq, NumOps.FromDouble(frameSize));
-            energySum = NumOps.Add(energySum, frameEnergies[f]);
-        }
-
-        T energyMean = NumOps.Divide(energySum, NumOps.FromDouble(numFrames));
-        T varianceSum = Zero;
-        for (int f = 0; f < numFrames; f++)
-        {
-            T diff = NumOps.Subtract(frameEnergies[f], energyMean);
-            varianceSum = NumOps.Add(varianceSum, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(varianceSum, NumOps.FromDouble(numFrames));
+        return SafetyTensorOps<T>.MeanVariance(frameEnergies).Variance;
     }
 
     /// <summary>
@@ -313,13 +283,6 @@ public class TranscriptionToxicityDetector<T> : AudioSafetyModuleBase<T>
         T rawScore = NumOps.Add(NumOps.Add(NumOps.Add(term1, term2), NumOps.Add(term3, term4)), term5);
 
         return Clamp01(rawScore);
-    }
-
-    private static bool IsZeroCrossing(T prev, T current)
-    {
-        bool currentNonNeg = NumOps.GreaterThanOrEquals(current, Zero);
-        bool prevNonNeg = NumOps.GreaterThanOrEquals(prev, Zero);
-        return currentNonNeg != prevNonNeg;
     }
 
     private static T Clamp01(T value)

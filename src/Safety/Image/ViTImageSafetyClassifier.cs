@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Image;
 
@@ -48,8 +50,6 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     private readonly double _threshold;
     private readonly SafetyCategory[] _categories;
 
-    private static readonly T Zero = NumOps.Zero;
-    private static readonly T One = NumOps.One;
     private static readonly T TwoFiftyFive = NumOps.FromDouble(255.0);
 
     /// <inheritdoc />
@@ -79,43 +79,35 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     public override IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
     {
         var findings = new List<SafetyFinding>();
-        var span = image.Data.Span;
-        if (span.Length == 0) return findings;
+        if (image.Length == 0) return findings;
 
-        var layout = DetermineLayout(image._shape, span.Length);
+        var layout = DetermineLayout(image._shape, image.Length);
         if (layout.Height < _patchSize || layout.Width < _patchSize) return findings;
 
-        // Extract patch features
+        using var noGrad = new NoGradScope<T>();
+        var engine = Engine;
+
+        // Extract patch features: [numPatches, featureDim], patches in row-major grid order
         int patchRows = layout.Height / _patchSize;
         int patchCols = layout.Width / _patchSize;
         int numPatches = patchRows * patchCols;
-
-        var patchFeatures = new Vector<T>[numPatches];
-        int patchIdx = 0;
-
-        for (int pr = 0; pr < patchRows; pr++)
+        // Patch rows are processed in bands, so the per-pixel temporaries never cover more than BandPixels pixels.
+        int bandRows = Math.Max(1, BandPixels / Math.Max(1, _patchSize * _patchSize * patchCols));
+        var bands = new List<Tensor<T>>();
+        for (int firstRow = 0; firstRow < patchRows; firstRow += bandRows)
         {
-            for (int pc = 0; pc < patchCols; pc++)
-            {
-                patchFeatures[patchIdx] = ExtractPatchFeatures(
-                    span, layout, pr * _patchSize, pc * _patchSize);
-                patchIdx++;
-            }
+            bands.Add(ExtractPatchFeatures(image, layout, firstRow, Math.Min(bandRows, patchRows - firstRow), patchCols));
         }
+
+        var patchFeatures = bands.Count == 1 ? bands[0] : engine.TensorConcatenate(bands.ToArray(), 0);
 
         // Compute attention weights (based on feature magnitude — "how interesting is this patch?")
         var attentionWeights = ComputeAttentionWeights(patchFeatures);
 
         // Attention-weighted pooling → single feature vector
-        var globalFeature = new Vector<T>(_featureDim);
-        for (int p = 0; p < numPatches; p++)
-        {
-            for (int f = 0; f < _featureDim; f++)
-            {
-                globalFeature[f] = NumOps.Add(globalFeature[f],
-                    NumOps.Multiply(attentionWeights[p], patchFeatures[p][f]));
-            }
-        }
+        var globalFeature = engine.Reshape(
+            engine.TensorMatMul(engine.Reshape(attentionWeights, new[] { 1, numPatches }), patchFeatures),
+            new[] { _featureDim }).ToVector();
 
         // Classify against each safety category
         for (int c = 0; c < _categories.Length; c++)
@@ -140,168 +132,131 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         return findings;
     }
 
-    private Vector<T> ExtractPatchFeatures(ReadOnlySpan<T> data, ImageLayout layout,
-        int startY, int startX)
-    {
-        var features = new Vector<T>(_featureDim);
-        int channels = Math.Min(layout.Channels, 3);
+    /// <summary>
+    /// The most pixels one band of patch rows covers in <see cref="ExtractPatchFeatures"/>.
+    /// </summary>
+    internal const int BandPixels = 1 << 20;
 
-        // Per-channel statistics within the patch
-        T[] channelSum = new T[3];
-        T[] channelSumSq = new T[3];
+    /// <summary>
+    /// Features of the patches in patch rows <paramref name="firstRow"/> .. <paramref name="firstRow"/> +
+    /// <paramref name="patchRows"/> - 1, <c>[patchRows * patchCols, featureDim]</c>: channel means and
+    /// standard deviations (0-5), skin/dark/bright/red-dominant fractions (6-9) and edge density
+    /// and strength (10-11); the remaining features are zero.
+    /// </summary>
+    private Tensor<T> ExtractPatchFeatures(Tensor<T> image, ImageLayout layout, int firstRow, int patchRows, int patchCols)
+    {
+        var engine = Engine;
+        int p = _patchSize;
+        int numPatches = patchRows * patchCols;
+        int channels = Math.Min(layout.Channels, 3);
         T pixelCount = NumOps.FromDouble(_patchSize * _patchSize);
 
-        for (int c = 0; c < 3; c++)
+        // Patch-blocked planes [patchRows, p, patchCols, p] (channel c, cropped to whole patches)
+        var flat = engine.Reshape(image.Contiguous(), new[] { image.Length });
+        var blocked = new[] { patchRows, p, patchCols, p };
+        int top = firstRow * p;
+        var raw0 = engine.Reshape(CropPlane(flat, layout, 0, top, patchRows * p, patchCols * p), blocked);
+        var r = raw0;
+        var g = channels >= 2 ? engine.Reshape(CropPlane(flat, layout, 1, top, patchRows * p, patchCols * p), blocked) : raw0;
+        var b = channels >= 3 ? engine.Reshape(CropPlane(flat, layout, 2, top, patchRows * p, patchCols * p), blocked) : raw0;
+
+        // Normalize to [0,255] (decided by the red channel)
+        var scaled = SafetyTensorOps<T>.Le(r, 1.0);
+        r = SafetyTensorOps<T>.Where(scaled, engine.TensorMultiplyScalar(r, TwoFiftyFive), r);
+        g = SafetyTensorOps<T>.Where(scaled, engine.TensorMultiplyScalar(g, TwoFiftyFive), g);
+        b = SafetyTensorOps<T>.Where(scaled, engine.TensorMultiplyScalar(b, TwoFiftyFive), b);
+
+        var patchAxes = new[] { 1, 3 };
+        var featureList = new List<Tensor<T>>();
+
+        // Features 0-5: channel means and stdevs (normalized to [0,1])
+        foreach (var plane in new[] { r, g, b })
         {
-            channelSum[c] = Zero;
-            channelSumSq[c] = Zero;
-        }
-
-        T skinCount = Zero;
-        T darkCount = Zero;
-        T brightCount = Zero;
-        T redDominantCount = Zero;
-
-        T skinRMin = NumOps.FromDouble(95);
-        T darkThresh = NumOps.FromDouble(40);
-        T brightThresh = NumOps.FromDouble(220);
-
-        for (int y = startY; y < startY + _patchSize && y < layout.Height; y++)
-        {
-            for (int x = startX; x < startX + _patchSize && x < layout.Width; x++)
-            {
-                T r = GetChannel(data, layout, y, x, 0);
-                T g = channels >= 2 ? GetChannel(data, layout, y, x, 1) : r;
-                T b = channels >= 3 ? GetChannel(data, layout, y, x, 2) : r;
-
-                // Normalize to [0,255]
-                if (NumOps.LessThanOrEquals(r, One))
-                {
-                    r = NumOps.Multiply(r, TwoFiftyFive);
-                    g = NumOps.Multiply(g, TwoFiftyFive);
-                    b = NumOps.Multiply(b, TwoFiftyFive);
-                }
-
-                channelSum[0] = NumOps.Add(channelSum[0], r);
-                channelSum[1] = NumOps.Add(channelSum[1], g);
-                channelSum[2] = NumOps.Add(channelSum[2], b);
-                channelSumSq[0] = NumOps.Add(channelSumSq[0], NumOps.Multiply(r, r));
-                channelSumSq[1] = NumOps.Add(channelSumSq[1], NumOps.Multiply(g, g));
-                channelSumSq[2] = NumOps.Add(channelSumSq[2], NumOps.Multiply(b, b));
-
-                // Skin-tone heuristic
-                if (NumOps.GreaterThan(r, skinRMin) && NumOps.GreaterThan(r, g) && NumOps.GreaterThan(g, b))
-                {
-                    skinCount = NumOps.Add(skinCount, One);
-                }
-
-                // Luminance
-                T lum = NumOps.FromDouble(
-                    0.299 * NumOps.ToDouble(r) + 0.587 * NumOps.ToDouble(g) + 0.114 * NumOps.ToDouble(b));
-
-                if (NumOps.LessThan(lum, darkThresh))
-                    darkCount = NumOps.Add(darkCount, One);
-                if (NumOps.GreaterThan(lum, brightThresh))
-                    brightCount = NumOps.Add(brightCount, One);
-
-                // Red dominant
-                if (NumOps.GreaterThan(r, NumOps.Multiply(g, NumOps.FromDouble(1.5))) &&
-                    NumOps.GreaterThan(r, NumOps.Multiply(b, NumOps.FromDouble(1.5))))
-                {
-                    redDominantCount = NumOps.Add(redDominantCount, One);
-                }
-            }
-        }
-
-        // Features 0-5: channel means and stdevs
-        for (int c = 0; c < 3; c++)
-        {
-            T mean = NumOps.Divide(channelSum[c], pixelCount);
-            T meanSq = NumOps.Divide(channelSumSq[c], pixelCount);
-            T variance = NumOps.Subtract(meanSq, NumOps.Multiply(mean, mean));
-            double varD = NumOps.ToDouble(variance);
-            T stddev = NumOps.FromDouble(varD > 0 ? Math.Sqrt(varD) : 0);
-
-            features[c * 2] = NumOps.Divide(mean, TwoFiftyFive); // Normalize to [0,1]
-            features[c * 2 + 1] = NumOps.Divide(stddev, TwoFiftyFive);
+            var mean = engine.TensorDivideScalar(engine.ReduceSum(plane, patchAxes, false), pixelCount);
+            var meanSq = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(plane), patchAxes, false), pixelCount);
+            var variance = engine.TensorSubtract(meanSq, engine.TensorSquare(mean));
+            var positive = SafetyTensorOps<T>.Gt(variance, 0.0);
+            var stddev = SafetyTensorOps<T>.Where(positive,
+                engine.TensorSqrt(SafetyTensorOps<T>.Where(positive, variance, 0.0)), 0.0);
+            featureList.Add(engine.TensorDivideScalar(mean, TwoFiftyFive));
+            featureList.Add(engine.TensorDivideScalar(stddev, TwoFiftyFive));
         }
 
         // Features 6-9: semantic ratios
-        features[6] = NumOps.Divide(skinCount, pixelCount);
-        features[7] = NumOps.Divide(darkCount, pixelCount);
-        features[8] = NumOps.Divide(brightCount, pixelCount);
-        features[9] = NumOps.Divide(redDominantCount, pixelCount);
+        var skin = SafetyTensorOps<T>.And(SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.Gt(r, 95), engine.TensorGreaterThan(r, g)), engine.TensorGreaterThan(g, b));
+        var lum = engine.TensorAdd(engine.TensorAdd(
+            engine.TensorMultiplyScalar(r, NumOps.FromDouble(0.299)),
+            engine.TensorMultiplyScalar(g, NumOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(b, NumOps.FromDouble(0.114)));
+        T onePointFive = NumOps.FromDouble(1.5);
+        var redDominant = SafetyTensorOps<T>.And(
+            engine.TensorGreaterThan(r, engine.TensorMultiplyScalar(g, onePointFive)),
+            engine.TensorGreaterThan(r, engine.TensorMultiplyScalar(b, onePointFive)));
+        foreach (var mask in new[] { skin, SafetyTensorOps<T>.Lt(lum, 40), SafetyTensorOps<T>.Gt(lum, 220), redDominant })
+            featureList.Add(engine.TensorDivideScalar(engine.ReduceSum(mask, patchAxes, false), pixelCount));
 
-        // Features 10-31: edge statistics via horizontal/vertical gradients
-        T edgeCount = Zero;
-        T edgeSum = Zero;
-        for (int y = startY; y < startY + _patchSize - 1 && y < layout.Height - 1; y++)
+        // Features 10-11: edge statistics via horizontal/vertical gradients of the raw first
+        // channel, over the patch interior positions that have a right and a lower neighbour
+        var inner = new[] { patchRows, p - 1, patchCols, p - 1 };
+        var curr = engine.TensorSlice(raw0, new[] { 0, 0, 0, 0 }, inner);
+        var right = engine.TensorSlice(raw0, new[] { 0, 0, 0, 1 }, inner);
+        var below = engine.TensorSlice(raw0, new[] { 0, 1, 0, 0 }, inner);
+        var grad = engine.TensorAdd(
+            engine.TensorAbs(engine.TensorSubtract(right, curr)),
+            engine.TensorAbs(engine.TensorSubtract(below, curr)));
+        featureList.Add(engine.TensorDivideScalar(
+            engine.ReduceSum(SafetyTensorOps<T>.Gt(grad, 0.1), patchAxes, false), pixelCount));
+        featureList.Add(engine.TensorDivideScalar(engine.ReduceSum(grad, patchAxes, false), pixelCount));
+
+        var computed = engine.Reshape(engine.TensorStack(featureList.ToArray(), 2), new[] { numPatches, featureList.Count });
+        return engine.TensorConcatenate(new[]
         {
-            for (int x = startX; x < startX + _patchSize - 1 && x < layout.Width - 1; x++)
-            {
-                T curr = GetChannel(data, layout, y, x, 0);
-                T right = GetChannel(data, layout, y, x + 1, 0);
-                T below = GetChannel(data, layout, y + 1, x, 0);
-
-                T hDiff = NumOps.Abs(NumOps.Subtract(right, curr));
-                T vDiff = NumOps.Abs(NumOps.Subtract(below, curr));
-                T grad = NumOps.Add(hDiff, vDiff);
-
-                edgeSum = NumOps.Add(edgeSum, grad);
-                if (NumOps.GreaterThan(grad, NumOps.FromDouble(0.1)))
-                {
-                    edgeCount = NumOps.Add(edgeCount, One);
-                }
-            }
-        }
-
-        features[10] = NumOps.Divide(edgeCount, pixelCount);
-        features[11] = NumOps.Divide(edgeSum, pixelCount);
-
-        return features;
+            computed, Tensor<T>.CreateZeros(numPatches, _featureDim - featureList.Count)
+        }, 1);
     }
 
-    private T[] ComputeAttentionWeights(Vector<T>[] patchFeatures)
+    /// <summary>
+    /// Channel <paramref name="c"/> of the image cropped to <c>[rows, cols]</c> from row <paramref name="top"/>;
+    /// only the cropped pixels are copied.
+    /// </summary>
+    private static Tensor<T> CropPlane(Tensor<T> flat, ImageLayout layout, int c, int top, int rows, int cols)
     {
-        int n = patchFeatures.Length;
-        var weights = new T[n];
-        T sum = Zero;
+        var engine = AiDotNetEngine.Current;
+        int pixels = layout.Height * layout.Width;
+        if (layout.Format == PixFmt.CHW)
+        {
+            var plane = engine.Reshape(engine.TensorNarrow(flat, 0, c * pixels, pixels), new[] { layout.Height, layout.Width });
+            return engine.TensorSlice(plane, new[] { top, 0 }, new[] { rows, cols }).Contiguous();
+        }
+
+        var interleaved = engine.Reshape(engine.TensorNarrow(flat, 0, 0, pixels * layout.Channels),
+            new[] { layout.Height, layout.Width, layout.Channels });
+        var crop = engine.TensorSlice(interleaved, new[] { top, 0, c }, new[] { rows, cols, 1 }).Contiguous();
+        return engine.Reshape(crop, new[] { rows, cols });
+    }
+
+    private Tensor<T> ComputeAttentionWeights(Tensor<T> patchFeatures)
+    {
+        var engine = Engine;
+        int n = patchFeatures.Shape[0];
 
         // Simple attention: dot product of each patch with the mean patch
-        var meanPatch = new Vector<T>(_featureDim);
-        foreach (var pf in patchFeatures)
-        {
-            for (int f = 0; f < _featureDim; f++)
-            {
-                meanPatch[f] = NumOps.Add(meanPatch[f], pf[f]);
-            }
-        }
-        T nT = NumOps.FromDouble(n);
-        for (int f = 0; f < _featureDim; f++)
-        {
-            meanPatch[f] = NumOps.Divide(meanPatch[f], nT);
-        }
+        var meanPatch = engine.TensorDivideScalar(
+            engine.ReduceSum(patchFeatures, new[] { 0 }, false), NumOps.FromDouble(n));
+        var dot = engine.Reshape(
+            engine.TensorMatMul(patchFeatures, engine.Reshape(meanPatch, new[] { _featureDim, 1 })), new[] { n });
 
-        for (int i = 0; i < n; i++)
-        {
-            T dot = Zero;
-            for (int f = 0; f < _featureDim; f++)
-            {
-                dot = NumOps.Add(dot, NumOps.Multiply(patchFeatures[i][f], meanPatch[f]));
-            }
-            // exp(dot) for softmax
-            double expVal = Math.Exp(Math.Max(-20, Math.Min(20, NumOps.ToDouble(dot))));
-            weights[i] = NumOps.FromDouble(expVal);
-            sum = NumOps.Add(sum, weights[i]);
-        }
+        // exp(dot) for softmax, argument clamped to [-20, 20]
+        var clamped = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(dot, 20), 20.0, dot);
+        clamped = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(clamped, -20), -20.0, clamped);
+        var weights = engine.TensorExp(clamped);
+        T sum = engine.TensorSum(weights);
 
         // Normalize
         if (NumOps.GreaterThan(sum, NumOps.FromDouble(1e-10)))
         {
-            for (int i = 0; i < n; i++)
-            {
-                weights[i] = NumOps.Divide(weights[i], sum);
-            }
+            weights = engine.TensorDivideScalar(weights, sum);
         }
 
         return weights;
@@ -355,22 +310,6 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         }
 
         return Math.Max(0, Math.Min(1.0, score));
-    }
-
-    private static T GetChannel(ReadOnlySpan<T> data, ImageLayout layout, int y, int x, int c)
-    {
-        int idx;
-        if (layout.Format == PixFmt.CHW)
-        {
-            idx = c * layout.Height * layout.Width + y * layout.Width + x;
-        }
-        else
-        {
-            idx = (y * layout.Width + x) * layout.Channels + c;
-        }
-
-        if (idx < 0 || idx >= data.Length) return Zero;
-        return data[idx];
     }
 
     private static ImageLayout DetermineLayout(int[] shape, int dataLength)

@@ -10,6 +10,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -353,8 +354,9 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         var batch = SingleImage(image);
         int h = batch.Shape[2], w = batch.Shape[3], s = _options.ImageSize;
         var resized = h == s && w == s ? batch : Engine.Interpolate(batch, new[] { s, s }, InterpolateMode.Bilinear);
-        var bits = new Tensor<T>(new[] { 1, secret.Count });
-        for (int i = 0; i < secret.Count; i++) bits[0, i] = secret[i] ? NumOps.One : NumOps.Zero;
+        var bitIds = new int[secret.Count];
+        for (int i = 0; i < bitIds.Length; i++) bitIds[i] = secret[i] ? 1 : 0;
+        var bits = Engine.TensorTake(SafetyTensorOps<T>.Range(2), new Tensor<int>(new[] { 1, bitIds.Length }, new Vector<int>(bitIds)));
         var residual = EncodeResidual(resized, bits);
         if (h != s || w != s) residual = Engine.Interpolate(residual, new[] { h, w }, InterpolateMode.Bilinear);
         var encoded = Engine.TensorClip(Engine.TensorAdd(batch, residual), NumOps.Zero, NumOps.One);
@@ -366,7 +368,8 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     {
         var probabilities = Predict(Resized(SingleImage(image)));
         var bits = new bool[_options.SecretBits];
-        for (int i = 0; i < bits.Length; i++) bits[i] = NumOps.ToDouble(probabilities[0, i]) > 0.5;
+        var row = Engine.TensorNarrow(Engine.TensorSliceAxis(probabilities, 0, 0), 0, 0, bits.Length);
+        foreach (int i in Engine.TensorNonzero(SafetyTensorOps<T>.Gt(row, 0.5)).ToArray()) bits[i] = true;
         return bits;
     }
 
@@ -617,11 +620,22 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     private Tensor<T> EdgeFalloff()
     {
         int s = _options.ImageSize;
-        double[] edge = EdgeFactors(s);
-        var map = new Tensor<T>(new[] { 1, 1, s, s });
-        for (int y = 0; y < s; y++)
-            for (int x = 0; x < s; x++) map[0, 0, y, x] = NumOps.FromDouble(1.0 - edge[y] * edge[x]);
-        return map;
+        // The same factors as EdgeFactors(s): the first quarter holds factor(i), row 0 twice (rows 0 and -0), the
+        // last quarter holds factor(i) for row s - i (i >= 1), and the rows between keep 1.
+        int quarter = s / 4;
+        if (quarter == 0) return SafetyTensorOps<T>.Full(new[] { 1, 1, s, s }, NumOps.Zero);
+        var steps = SafetyTensorOps<T>.Range(quarter);
+        var factor = SafetyTensorOps<T>.Affine(Engine.TensorCos(SafetyTensorOps<T>.Affine(steps, 4 * Math.PI / s, Math.PI)), 0.5, 0.5);
+        var parts = new List<Tensor<T>>
+        {
+            Engine.TensorMultiply(factor, SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(steps, 0.5), factor, 1.0)),
+            SafetyTensorOps<T>.Full(new[] { s - 2 * quarter + 1 }, NumOps.One)
+        };
+        if (quarter > 1) parts.Add(Engine.TensorFlip(Engine.TensorNarrow(factor, 0, 1, quarter - 1), new[] { 0 }));
+
+        var edge = Engine.TensorConcatenate(parts.ToArray(), 0);
+        var map = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorOuter(edge, edge));
+        return Engine.Reshape(map.Contiguous(), new[] { 1, 1, s, s });
     }
 
     // The factor the reference's row pass leaves on each row (its column pass leaves the same on each column).
@@ -662,9 +676,10 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         foreach (var layer in _criticLayers)
         {
             var p = layer.GetParameters();
-            var clipped = new Vector<T>(p.Length);
-            for (int i = 0; i < p.Length; i++) clipped[i] = NumOps.FromDouble(Math.Max(-c, Math.Min(c, NumOps.ToDouble(p[i]))));
-            layer.SetParameters(clipped);
+            // Math.Max(-c, Math.Min(c, x)): NaN passes through both comparisons unchanged.
+            var values = SafetyTensorOps<T>.AsTensor(p);
+            var clipped = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(values, c), c, SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(values, -c), -c, values));
+            layer.SetParameters(clipped.ToVector());
         }
     }
 
@@ -680,8 +695,9 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         double perspective = _options.PerspectiveJitter * Ramp(step, _options.PerspectiveRampSteps);
         double color = Ramp(step, _options.ColorRampSteps);
 
-        var grid = new Tensor<T>(new[] { b, s, s, 2 });
-        for (int n = 0; n < b; n++) WriteHomographyGrid(grid, n, s, perspective, rng);
+        var grids = new Tensor<T>[b];
+        for (int n = 0; n < b; n++) grids[n] = HomographyGrid(s, perspective, rng);
+        var grid = Engine.TensorStack(grids, 0);
 
         var blur = BlurKernel(rng);
 
@@ -729,22 +745,22 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
 
     // Output corners (+-1, +-1) map to source corners jittered by up to 2 * jitter in normalized units; the grid holds
     // the source coordinate of every output pixel (align_corners = false centres).
-    private void WriteHomographyGrid(Tensor<T> grid, int n, int s, double jitter, Random rng)
+    private Tensor<T> HomographyGrid(int s, double jitter, Random rng)
     {
         var dst = new[] { (-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0) };
         var src = dst.Select(p => (p.Item1 + 2 * jitter * (2 * rng.NextDouble() - 1), p.Item2 + 2 * jitter * (2 * rng.NextDouble() - 1))).ToArray();
         var h = Homography(dst, src);
-        for (int y = 0; y < s; y++)
-        {
-            double v = (2.0 * y + 1) / s - 1;
-            for (int x = 0; x < s; x++)
-            {
-                double u = (2.0 * x + 1) / s - 1;
-                double w = h[6] * u + h[7] * v + 1.0;
-                grid[n, y, x, 0] = NumOps.FromDouble((h[0] * u + h[1] * v + h[2]) / w);
-                grid[n, y, x, 1] = NumOps.FromDouble((h[3] * u + h[4] * v + h[5]) / w);
-            }
-        }
+        using var noGrad = new NoGradScope<T>();
+        // Pixel centres (2i + 1) / s - 1: u varies along x (columns), v along y (rows).
+        var centres = SafetyTensorOps<T>.Affine(SafetyTensorOps<T>.Range(s), 2.0 / s, 1.0 / s - 1);
+        var u = Engine.Reshape(centres, new[] { 1, s });
+        var v = Engine.Reshape(centres, new[] { s, 1 });
+        Tensor<T> Plane(double a, double b, double c)
+            => Engine.TensorAddScalar(Engine.TensorAdd(Engine.TensorMultiplyScalar(u, NumOps.FromDouble(a)), Engine.TensorMultiplyScalar(v, NumOps.FromDouble(b))), NumOps.FromDouble(c));
+        var w = Plane(h[6], h[7], 1.0);
+        var gx = Engine.TensorDivide(Plane(h[0], h[1], h[2]), w);
+        var gy = Engine.TensorDivide(Plane(h[3], h[4], h[5]), w);
+        return Engine.TensorStack(new[] { gx, gy }, 2);
     }
 
     // The 8-parameter homography taking each from-point to its to-point (Gaussian elimination with pivoting).
@@ -781,40 +797,43 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     // [3, 1, k, k]: identity, a Gaussian (sigma in [1, 3]) or a motion line (length 3..7), as in the reference code.
     private Tensor<T> BlurKernel(Random rng)
     {
-        var k = new double[BlurSize, BlurSize];
+        using var noGrad = new NoGradScope<T>();
+        Tensor<T> k;
         double pick = rng.NextDouble();
         int c0 = BlurSize / 2;
         if (pick < _options.BlurProbability)
         {
             double sigma = 1.0 + 2.0 * rng.NextDouble();
-            for (int y = 0; y < BlurSize; y++)
-                for (int x = 0; x < BlurSize; x++)
-                    k[y, x] = Math.Exp(-((y - c0) * (y - c0) + (x - c0) * (x - c0)) / (2 * sigma * sigma));
-        }
-        else if (pick < 2 * _options.BlurProbability)
-        {
-            int length = 3 + rng.Next(BlurSize - 2);
-            double angle = Math.PI * rng.NextDouble();
-            for (int i = 0; i < length; i++)
-            {
-                double t = i - (length - 1) / 2.0;
-                int x = (int)Math.Round(c0 + t * Math.Cos(angle)), y = (int)Math.Round(c0 + t * Math.Sin(angle));
-                k[y, x] += 1.0;
-            }
+            var offsets = Engine.TensorAddScalar(SafetyTensorOps<T>.Range(BlurSize), NumOps.FromDouble(-c0));
+            var squared = Engine.TensorSquare(offsets);
+            var distance = Engine.TensorAdd(Engine.Reshape(squared, new[] { BlurSize, 1 }), Engine.Reshape(squared, new[] { 1, BlurSize }));
+            k = Engine.TensorExp(Engine.TensorDivideScalar(Engine.TensorNegate(distance), NumOps.FromDouble(2 * sigma * sigma)));
         }
         else
         {
-            k[c0, c0] = 1.0;
+            // A motion line (or the identity): whole-number hit counts, looked up as T.
+            var counts = new int[BlurSize * BlurSize];
+            if (pick < 2 * _options.BlurProbability)
+            {
+                int length = 3 + rng.Next(BlurSize - 2);
+                double angle = Math.PI * rng.NextDouble();
+                for (int i = 0; i < length; i++)
+                {
+                    double t = i - (length - 1) / 2.0;
+                    int x = (int)Math.Round(c0 + t * Math.Cos(angle)), y = (int)Math.Round(c0 + t * Math.Sin(angle));
+                    counts[y * BlurSize + x]++;
+                }
+            }
+            else
+            {
+                counts[c0 * BlurSize + c0] = 1;
+            }
+
+            k = Engine.TensorTake(SafetyTensorOps<T>.Range(BlurSize + 1), new Tensor<int>(new[] { BlurSize, BlurSize }, new Vector<int>(counts)));
         }
 
-        double sum = 0;
-        foreach (double v in k) sum += v;
-        var kernel = new Tensor<T>(new[] { 3, 1, BlurSize, BlurSize });
-        for (int c = 0; c < 3; c++)
-            for (int y = 0; y < BlurSize; y++)
-                for (int x = 0; x < BlurSize; x++)
-                    kernel[c, 0, y, x] = NumOps.FromDouble(k[y, x] / sum);
-        return kernel;
+        var normalized = Engine.TensorDivideScalar(k, Engine.TensorSum(k));
+        return Engine.TensorBroadcastTo(Engine.Reshape(normalized, new[] { 1, 1, BlurSize, BlurSize }), new[] { 3, 1, BlurSize, BlurSize }).Contiguous();
     }
 
     private static readonly int[] LuminanceTable =
@@ -836,20 +855,23 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     {
         double scale = quality < 50 ? 5000.0 / quality : 200.0 - 2.0 * quality;
         int blocksPerChannel = (s / 8) * (s / 8);
-        var q = new Tensor<T>(new[] { b * 3 * blocksPerChannel, 64 });
-        for (int n = 0; n < b; n++)
-            for (int c = 0; c < 3; c++)
+        // The steps are whole numbers, worked out in double as before and then looked up as T.
+        var steps = new int[3 * 64];
+        int largest = 1;
+        for (int c = 0; c < 3; c++)
+        {
+            var table = c == 0 ? LuminanceTable : ChrominanceTable;
+            for (int k = 0; k < 64; k++)
             {
-                var table = c == 0 ? LuminanceTable : ChrominanceTable;
-                for (int blk = 0; blk < blocksPerChannel; blk++)
-                {
-                    int row = (n * 3 + c) * blocksPerChannel + blk;
-                    for (int k = 0; k < 64; k++)
-                        q[row, k] = NumOps.FromDouble(Math.Max(1.0, Math.Floor((table[k] * scale + 50) / 100)));
-                }
+                steps[c * 64 + k] = (int)Math.Max(1.0, Math.Floor((table[k] * scale + 50) / 100));
+                largest = Math.Max(largest, steps[c * 64 + k]);
             }
+        }
 
-        return q;
+        using var noGrad = new NoGradScope<T>();
+        var perChannel = Engine.TensorTake(SafetyTensorOps<T>.Range(largest + 1), new Tensor<int>(new[] { 1, 3, 1, 64 }, new Vector<int>(steps)));
+        var q = Engine.TensorBroadcastTo(perChannel, new[] { b, 3, blocksPerChannel, 64 }).Contiguous();
+        return Engine.Reshape(q, new[] { b * 3 * blocksPerChannel, 64 });
     }
 
     // JPEG in YCbCr on 8x8 blocks: DCT, divide by the quantization step, round, multiply back, inverse DCT. Training
@@ -892,10 +914,12 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         offset[0, 0, 0, 0] = NumOps.FromDouble(lumaOffset);
         var offsets = Engine.TensorBroadcastTo(offset, new[] { b, 3, s, s });
         if (after) x = Engine.TensorSubtract(x, offsets);
-        var kernel = new Tensor<T>(new[] { 3, 3, 1, 1 });
-        for (int c = 0; c < 3; c++)
-            for (int k = 0; k < 3; k++)
-                kernel[c, k, 0, 0] = NumOps.FromDouble(m[c, k]);
+        var kernel = new Tensor<T>(new[] { 3, 3, 1, 1 }, new Vector<T>(new[]
+        {
+            NumOps.FromDouble(m[0, 0]), NumOps.FromDouble(m[0, 1]), NumOps.FromDouble(m[0, 2]),
+            NumOps.FromDouble(m[1, 0]), NumOps.FromDouble(m[1, 1]), NumOps.FromDouble(m[1, 2]),
+            NumOps.FromDouble(m[2, 0]), NumOps.FromDouble(m[2, 1]), NumOps.FromDouble(m[2, 2])
+        }));
         var y = Engine.Conv2D(x, kernel);
         return after ? y : Engine.TensorAdd(y, offsets);
     }
@@ -903,19 +927,15 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     // Orthonormal 2D DCT-II on a flattened 8x8 block: coefficients = block . D, D[(y, x), (v, u)] = c(v) c(u) cos cos.
     private Tensor<T> DctMatrix()
     {
-        var d = new Tensor<T>(new[] { 64, 64 });
-        for (int y = 0; y < 8; y++)
-            for (int x = 0; x < 8; x++)
-                for (int v = 0; v < 8; v++)
-                    for (int u = 0; u < 8; u++)
-                    {
-                        double cv = v == 0 ? Math.Sqrt(1.0 / 8) : Math.Sqrt(2.0 / 8);
-                        double cu = u == 0 ? Math.Sqrt(1.0 / 8) : Math.Sqrt(2.0 / 8);
-                        double value = cv * cu * Math.Cos((2 * y + 1) * v * Math.PI / 16) * Math.Cos((2 * x + 1) * u * Math.PI / 16);
-                        d[y * 8 + x, v * 8 + u] = NumOps.FromDouble(value);
-                    }
-
-        return d;
+        // D = A kron A with the 1D basis A[y, v] = c(v) cos((2y + 1) v pi / 16), so D[(y, x), (v, u)] = A[y, v] A[x, u].
+        using var noGrad = new NoGradScope<T>();
+        var index = SafetyTensorOps<T>.Range(8);
+        var rows = Engine.Reshape(SafetyTensorOps<T>.Affine(index, 2.0, 1.0), new[] { 8, 1 });
+        var frequencies = Engine.Reshape(index, new[] { 1, 8 });
+        var basis = Engine.TensorCos(Engine.TensorMultiplyScalar(Engine.TensorMultiply(rows, frequencies), NumOps.FromDouble(Math.PI / 16)));
+        var scale = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(frequencies, 0.5), Math.Sqrt(1.0 / 8), Math.Sqrt(2.0 / 8));
+        var a = Engine.TensorMultiply(basis, scale);
+        return Engine.TensorKron(a, a);
     }
 
     private static double Gaussian(Random rng)

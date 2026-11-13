@@ -205,16 +205,18 @@ public sealed class AugmentedLagrangianSolver<T>
             ValidateObjectiveGradient(point, finalGradient);
 
             double gradientNorm = 0.0;
-            for (int i = 0; i < finalGradient.Length; i++)
+            if (finalGradient.Length > 0)
             {
-                double component = Math.Abs(NumOps.ToDouble(finalGradient[i]));
-                if (double.IsNaN(component) || double.IsInfinity(component))
+                var components = SolverTensorOps<T>.AsTensor(finalGradient);
+                if (SolverTensorOps<T>.First(SolverTensorOps<T>.NonFinite(components)) is not null)
                 {
                     return Report(
                         point, objectiveValue, null, null, null, null,
                         LinearProgramStatus.IterationLimit, 1);
                 }
-                gradientNorm = Math.Max(gradientNorm, component);
+
+                gradientNorm = Math.Max(
+                    gradientNorm, NumOps.ToDouble(SolverTensorOps<T>.Engine.TensorMaxValue(SolverTensorOps<T>.Engine.TensorAbs(components))));
             }
 
             var status = gradientNorm <= _options.StationarityTolerance
@@ -317,8 +319,8 @@ public sealed class AugmentedLagrangianSolver<T>
             var (value, gradient) = problem.Objective(point);
             ValidateObjectiveGradient(point, gradient);
 
-            var result = new Vector<T>(gradient.Length);
-            for (int i = 0; i < gradient.Length; i++) result[i] = gradient[i];
+            var engine = SolverTensorOps<T>.Engine;
+            var result = SolverTensorOps<T>.AsTensor(gradient);
 
             if (problem.EqualityConstraints is not null && equalityMultipliers.Length > 0)
             {
@@ -326,21 +328,19 @@ public sealed class AugmentedLagrangianSolver<T>
                 ValidateConstraintBlock(
                     "equality", point, values, jacobian, equalityMultipliers.Length);
 
-                for (int i = 0; i < equalityMultipliers.Length; i++)
-                {
-                    T violation = values[i];
+                var multipliers = SolverTensorOps<T>.AsTensor(equalityMultipliers);
+                var violation = SolverTensorOps<T>.AsTensor(values);
 
-                    // lambda_i * h_i + (rho/2) * h_i^2
-                    value = NumOps.Add(value, NumOps.Multiply(equalityMultipliers[i], violation));
-                    value = NumOps.Add(value, NumOps.Multiply(
-                        NumOps.Multiply(half, penalty), NumOps.Multiply(violation, violation)));
+                // lambda_i * h_i + (rho/2) * h_i^2
+                var terms = engine.TensorAdd(
+                    engine.TensorMultiply(multipliers, violation),
+                    engine.TensorMultiplyScalar(engine.TensorMultiply(violation, violation), NumOps.Multiply(half, penalty)));
+                value = NumOps.Add(value, engine.TensorSum(terms));
 
-                    // (lambda_i + rho * h_i) * grad h_i
-                    T weight = NumOps.Add(
-                        equalityMultipliers[i], NumOps.Multiply(penalty, violation));
-
-                    AccumulateRow(result, jacobian, i, weight);
-                }
+                // (lambda_i + rho * h_i) * grad h_i
+                var weights = engine.TensorAdd(multipliers, engine.TensorMultiplyScalar(violation, penalty));
+                result = engine.TensorAdd(
+                    result, SolverTensorOps<T>.TransposedMatVec(SolverTensorOps<T>.AsTensor(jacobian), weights));
             }
 
             if (problem.InequalityConstraints is not null && inequalityMultipliers.Length > 0)
@@ -350,50 +350,28 @@ public sealed class AugmentedLagrangianSolver<T>
                     "inequality", point, values, jacobian, inequalityMultipliers.Length);
 
                 T twicePenalty = NumOps.Multiply(NumOps.FromDouble(2.0), penalty);
+                var multipliers = SolverTensorOps<T>.AsTensor(inequalityMultipliers);
+                var shifted = engine.TensorAdd(
+                    multipliers, engine.TensorMultiplyScalar(SolverTensorOps<T>.AsTensor(values), penalty));
 
-                for (int j = 0; j < inequalityMultipliers.Length; j++)
-                {
-                    T shifted = NumOps.Add(
-                        inequalityMultipliers[j], NumOps.Multiply(penalty, values[j]));
+                // A constraint with room to spare drives the shift negative, where the max
+                // clamps it to zero: it then contributes nothing and does not bend the
+                // objective away from what it would otherwise do. NaN fails the test and clamps too.
+                var active = SolverTensorOps<T>.PositivePart(shifted);
 
-                    // A constraint with room to spare drives the shift negative, where the max
-                    // clamps it to zero: it then contributes nothing and does not bend the
-                    // objective away from what it would otherwise do.
-                    T active = NumOps.GreaterThan(shifted, NumOps.Zero) ? shifted : NumOps.Zero;
+                var contributions = engine.TensorDivideScalar(
+                    engine.TensorSubtract(
+                        engine.TensorMultiply(active, active),
+                        engine.TensorMultiply(multipliers, multipliers)),
+                    twicePenalty);
 
-                    T contribution = NumOps.Divide(
-                        NumOps.Subtract(
-                            NumOps.Multiply(active, active),
-                            NumOps.Multiply(inequalityMultipliers[j], inequalityMultipliers[j])),
-                        twicePenalty);
-
-                    value = NumOps.Add(value, contribution);
-
-                    AccumulateRow(result, jacobian, j, active);
-                }
+                value = NumOps.Add(value, engine.TensorSum(contributions));
+                result = engine.TensorAdd(
+                    result, SolverTensorOps<T>.TransposedMatVec(SolverTensorOps<T>.AsTensor(jacobian), active));
             }
 
-            return (value, result);
+            return (value, result.ToVector());
         };
-    }
-
-    /// <summary>
-    /// Adds <c>weight</c> times row <paramref name="row"/> of a Jacobian into an accumulating
-    /// gradient.
-    /// </summary>
-    private static void AccumulateRow(Vector<T> target, Matrix<T> jacobian, int row, T weight)
-    {
-        if (jacobian.Columns != target.Length)
-        {
-            throw new ArgumentException(
-                $"A constraint Jacobian has {jacobian.Columns} columns, but the objective gradient " +
-                $"has {target.Length} entries. Both must equal the number of variables.");
-        }
-
-        for (int c = 0; c < target.Length; c++)
-        {
-            target[c] = NumOps.Add(target[c], NumOps.Multiply(weight, jacobian[row, c]));
-        }
     }
 
     /// <summary>
@@ -416,25 +394,21 @@ public sealed class AugmentedLagrangianSolver<T>
         Vector<T>? inequalityValues,
         T penalty)
     {
-        if (equalityValues is not null)
+        var engine = SolverTensorOps<T>.Engine;
+        if (equalityValues is not null && equalityMultipliers.Length > 0)
         {
-            for (int i = 0; i < equalityMultipliers.Length; i++)
-            {
-                equalityMultipliers[i] = NumOps.Add(
-                    equalityMultipliers[i], NumOps.Multiply(penalty, equalityValues[i]));
-            }
+            var updated = engine.TensorAdd(
+                SolverTensorOps<T>.AsTensor(equalityMultipliers),
+                engine.TensorMultiplyScalar(SolverTensorOps<T>.AsTensor(equalityValues), penalty));
+            updated.AsSpan().CopyTo(equalityMultipliers.AsWritableSpan());
         }
 
-        if (inequalityValues is not null)
+        if (inequalityValues is not null && inequalityMultipliers.Length > 0)
         {
-            for (int j = 0; j < inequalityMultipliers.Length; j++)
-            {
-                T updated = NumOps.Add(
-                    inequalityMultipliers[j], NumOps.Multiply(penalty, inequalityValues[j]));
-
-                inequalityMultipliers[j] =
-                    NumOps.GreaterThan(updated, NumOps.Zero) ? updated : NumOps.Zero;
-            }
+            var updated = engine.TensorAdd(
+                SolverTensorOps<T>.AsTensor(inequalityMultipliers),
+                engine.TensorMultiplyScalar(SolverTensorOps<T>.AsTensor(inequalityValues), penalty));
+            SolverTensorOps<T>.PositivePart(updated).AsSpan().CopyTo(inequalityMultipliers.AsWritableSpan());
         }
     }
 
@@ -444,22 +418,22 @@ public sealed class AugmentedLagrangianSolver<T>
     /// </summary>
     private static double Violation(Vector<T>? equalityValues, Vector<T>? inequalityValues)
     {
+        // Math.Max carries a NaN through to the end, so any NaN value makes the whole violation NaN.
         double worst = 0.0;
+        var engine = SolverTensorOps<T>.Engine;
 
-        if (equalityValues is not null)
+        if (equalityValues is not null && equalityValues.Length > 0)
         {
-            for (int i = 0; i < equalityValues.Length; i++)
-            {
-                worst = Math.Max(worst, Math.Abs(NumOps.ToDouble(equalityValues[i])));
-            }
+            var magnitudes = engine.TensorAbs(SolverTensorOps<T>.AsTensor(equalityValues));
+            if (SolverTensorOps<T>.First(SolverTensorOps<T>.NaN(magnitudes)) is not null) return double.NaN;
+            worst = Math.Max(worst, NumOps.ToDouble(engine.TensorMaxValue(magnitudes)));
         }
 
-        if (inequalityValues is not null)
+        if (inequalityValues is not null && inequalityValues.Length > 0)
         {
-            for (int j = 0; j < inequalityValues.Length; j++)
-            {
-                worst = Math.Max(worst, NumOps.ToDouble(inequalityValues[j]));
-            }
+            var values = SolverTensorOps<T>.AsTensor(inequalityValues);
+            if (SolverTensorOps<T>.First(SolverTensorOps<T>.NaN(values)) is not null) return double.NaN;
+            worst = Math.Max(worst, NumOps.ToDouble(engine.TensorMaxValue(values)));
         }
 
         return worst;

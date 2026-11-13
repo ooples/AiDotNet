@@ -34,44 +34,41 @@ public static class SceneBoundsEstimator
         }
 
         // Pose centroid — the natural scene center under uniform view distribution.
-        double cx = 0, cy = 0, cz = 0;
+        var engine = AiDotNetEngine.Current;
+        var cameraRows = new Tensor<T>[viewList.Count];
         for (int i = 0; i < viewList.Count; i++)
         {
-            cx += numOps.ToDouble(viewList[i].CameraPosition[0]);
-            cy += numOps.ToDouble(viewList[i].CameraPosition[1]);
-            cz += numOps.ToDouble(viewList[i].CameraPosition[2]);
+            cameraRows[i] = Tensor<T>.FromVector(viewList[i].CameraPosition.GetSubVector(0, 3));
         }
-        cx /= viewList.Count; cy /= viewList.Count; cz /= viewList.Count;
+
+        // The bounds are measured in double, as SceneBounds stores them: squared offsets overflow float (2e19)
+        // and Half long before the bounds themselves do.
+        var cameras = engine.TensorStack(cameraRows, 0).Cast<double>();
+        var centroid = engine.TensorDivideScalar(engine.ReduceSum(cameras, new[] { 0 }, true), (double)viewList.Count);
+        var offsets = engine.TensorSubtract(cameras, engine.TensorBroadcastTo(centroid, cameras.Shape.ToArray()));
+        var distances = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(offsets), new[] { 1 }, false));
+        var isNan = engine.TensorIsNan(distances);
 
         // Farthest-camera distance from centroid — the radius that comfortably contains all views.
-        double maxDist = 0;
-        for (int i = 0; i < viewList.Count; i++)
-        {
-            double dx = numOps.ToDouble(viewList[i].CameraPosition[0]) - cx;
-            double dy = numOps.ToDouble(viewList[i].CameraPosition[1]) - cy;
-            double dz = numOps.ToDouble(viewList[i].CameraPosition[2]) - cz;
-            double d = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-            if (d > maxDist) maxDist = d;
-        }
+        // The running "d > best" scan seeded with 0 skips NaN distances; distances are never negative, so
+        // the maximum with NaN replaced by 0 is that scan's result.
+        var forMax = engine.TensorWhere(isNan, engine.TensorZerosLike(distances), distances);
+        double maxDist = engine.TensorMaxValue(forMax);
         double radius = maxDist * (1.0 + margin);
 
         // Near = smallest camera-to-centroid distance minus half-radius (surface hits before
         // reaching centroid). Far = camera-to-far-side-of-bbox from the most distant camera.
-        double minDist = double.PositiveInfinity;
-        for (int i = 0; i < viewList.Count; i++)
-        {
-            double dx = numOps.ToDouble(viewList[i].CameraPosition[0]) - cx;
-            double dy = numOps.ToDouble(viewList[i].CameraPosition[1]) - cy;
-            double dz = numOps.ToDouble(viewList[i].CameraPosition[2]) - cz;
-            double d = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-            if (d < minDist) minDist = d;
-        }
+        // NaN distances are skipped; when every distance is NaN the scan never moved off +infinity.
+        var forMin = engine.TensorWhere(isNan, engine.TensorFullLike(distances, double.PositiveInfinity), distances);
+        double minDist = engine.TensorMinValue(forMin);
 
-        double near = Math.Max(0.1, minDist - radius);
-        double far  = maxDist + radius;
+        // Math.Max(0.1, value) semantics: a NaN value propagates.
+        double nearCandidate = minDist - radius;
+        double near = double.IsNaN(nearCandidate) || nearCandidate > 0.1 ? nearCandidate : 0.1;
+        double far = maxDist + radius;
 
         return new SceneBounds(
-            center: (cx, cy, cz),
+            center: (centroid[0, 0], centroid[0, 1], centroid[0, 2]),
             radius: radius,
             near: near,
             far: far);

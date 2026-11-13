@@ -64,17 +64,13 @@ public sealed class LinearAssignmentSolver<T>
                 "The cost matrix must have at least one row and one column.", nameof(cost));
         }
 
-        for (int i = 0; i < cost.Rows; i++)
+        var nonFinite = SolverTensorOps<T>.First(SolverTensorOps<T>.NonFinite(SolverTensorOps<T>.AsTensor(cost)));
+        if (nonFinite is not null)
         {
-            for (int j = 0; j < cost.Columns; j++)
-            {
-                double value = NumOps.ToDouble(cost[i, j]);
-                if (double.IsNaN(value) || double.IsInfinity(value))
-                {
-                    throw new ArgumentException(
-                        $"Cost at ({i}, {j}) must be finite, but was {value}.", nameof(cost));
-                }
-            }
+            int i = nonFinite[0], j = nonFinite[1];
+            double value = NumOps.ToDouble(cost[i, j]);
+            throw new ArgumentException(
+                $"Cost at ({i}, {j}) must be finite, but was {value}.", nameof(cost));
         }
 
         int rowCount = cost.Rows;
@@ -238,13 +234,20 @@ public sealed class LinearAssignmentSolver<T>
         if (cost is null) throw new ArgumentNullException(nameof(cost));
         if (assignment is null) throw new ArgumentNullException(nameof(assignment));
 
-        T total = NumOps.Zero;
-        for (int i = 0; i < assignment.Length; i++)
+        // Only the matched costs are gathered (copying the whole matrix to a tensor would cost rows * columns); an
+        // index outside the matrix fails exactly as the matrix indexer does.
+        var columns = assignment.ToArray();
+        var data = cost.AsSpan();
+        var matched = new List<T>(columns.Length);
+        for (int i = 0; i < columns.Length; i++)
         {
-            int column = assignment[i];
-            if (column >= 0) total = NumOps.Add(total, cost[i, column]);
+            int column = columns[i];
+            if (column < 0) continue;
+            if (i >= cost.Rows || column >= cost.Columns) throw new IndexOutOfRangeException("Invalid matrix indices.");
+            matched.Add(data[i * cost.Columns + column]);
         }
 
-        return total;
+        if (matched.Count == 0) return NumOps.Zero;
+        return SolverTensorOps<T>.Engine.TensorSum(new Tensor<T>(matched.ToArray(), new[] { matched.Count }));
     }
 }
