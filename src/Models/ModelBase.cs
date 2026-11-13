@@ -537,9 +537,12 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         writer.Write(ModelSerializationMagic);
         writer.Write(GetType().FullName ?? GetType().Name);
         writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+
+        // The payload stores each parameter as a double. Convert the whole vector at once: the former
+        // per-element Convert.ToDouble threw for Half, which is not IConvertible.
+        foreach (double value in ParametersAsPayload(parameters))
         {
-            writer.Write(Convert.ToDouble(parameters[i]));
+            writer.Write(value);
         }
 
         // Whatever the model declared that the parameter vector does not carry: a retained training
@@ -549,6 +552,14 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         writer.Flush();
         return stream.ToArray();
     }
+
+    /// <summary>The parameter vector as the doubles the serialization payload stores.</summary>
+    private static double[] ParametersAsPayload(Vector<T> parameters) =>
+        parameters.Length == 0 ? Array.Empty<double>() : Tensor<T>.FromVector(parameters).Cast<double>().ToArray();
+
+    /// <summary>The parameter vector restored from the doubles the serialization payload stores.</summary>
+    private static Vector<T> ParametersFromPayload(double[] payload) =>
+        payload.Length == 0 ? new Vector<T>(0) : new Tensor<double>(payload, new[] { payload.Length }).Cast<T>().ToVector();
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
@@ -581,10 +592,14 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
+        var payload = new double[count];
         for (int i = 0; i < count; i++)
         {
-            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            payload[i] = reader.ReadDouble();
         }
+
+        // Convert the whole payload to T at once, then fill the parameter vector.
+        ParametersFromPayload(payload).AsSpan().CopyTo(parameters.AsWritableSpan());
 
         // Restore STRUCTURE before pouring the flat parameter vector into it. A fitted tree can have
         // one constant in its constructor-created shell and two after its declared node graph is

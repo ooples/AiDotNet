@@ -239,7 +239,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// that aim to reduce model complexity.
     /// </para>
     /// </remarks>
-    public int Complexity => Coefficients.Count(c => !NumOps.Equals(c, NumOps.Zero));
+    public int Complexity => Engine.TensorCountNonzero(Tensor<T>.FromVector(Coefficients));
 
     /// <summary>
     /// Determines whether a specific feature is used by the model.
@@ -320,30 +320,19 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         var predictions = PredictInternal(input);
 
         // Compute loss gradient w.r.t. predictions: ∂L/∂y_pred
-        var predictionGradient = loss.ComputeGradient(predictions, target);
+        var predictionGradient = Tensor<T>.FromVector(loss.ComputeGradient(predictions, target));
 
-        // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
-        // Pre-extract columns from input for Engine.DotProduct
-        var gradients = new Vector<T>(Coefficients.Length + 1);
-        for (int j = 0; j < Coefficients.Length; j++)
-        {
-            var col = new Vector<T>(input.Rows);
-            for (int i = 0; i < input.Rows; i++)
-            {
-                col[i] = input[i, j];
-            }
-            // gradient[j] = (1/n) * X[:,j] · predictionGradient
-            gradients[j] = NumOps.Divide(Engine.DotProduct(col, predictionGradient), NumOps.FromDouble(input.Rows));
-        }
-        T interceptGradient = NumOps.Zero;
-        for (int i = 0; i < predictionGradient.Length; i++)
-        {
-            interceptGradient = NumOps.Add(interceptGradient, predictionGradient[i]);
-        }
-        gradients[Coefficients.Length] = NumOps.Divide(
-            interceptGradient, NumOps.FromDouble(input.Rows));
-
-        return gradients;
+        // ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred and ∂L/∂intercept = (1/n) * sum(∂L/∂y_pred)
+        T sampleCount = NumOps.FromDouble(input.Rows);
+        var weightGradient = Engine.Reshape(
+            Engine.TensorMatMul(
+                Engine.TensorTranspose(Tensor<T>.FromMatrix(input)),
+                Engine.Reshape(predictionGradient, new[] { input.Rows, 1 })),
+            new[] { Coefficients.Length });
+        var interceptGradient = new Tensor<T>(new[] { 1 });
+        Engine.TensorFill(interceptGradient, Engine.TensorSum(predictionGradient));
+        var gradients = Engine.TensorConcatenate(new[] { weightGradient, interceptGradient }, 0);
+        return Engine.TensorDivideScalar(gradients, sampleCount).ToVector();
     }
 
     /// <summary>
@@ -376,12 +365,13 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
                 nameof(gradients));
         }
 
-        // Apply gradient descent: coefficients = coefficients - learningRate * gradients
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            T update = NumOps.Multiply(learningRate, gradients[i]);
-            Coefficients[i] = NumOps.Subtract(Coefficients[i], update);
-        }
+        // Apply gradient descent: coefficients = coefficients - learningRate * gradients. The coefficient vector is
+        // updated in place because the model (and any caller holding it) owns that instance.
+        var gradientTensor = Tensor<T>.FromVector(gradients);
+        var weightGradient = Engine.TensorSlice(gradientTensor, new[] { 0 }, new[] { Coefficients.Length });
+        var updated = Engine.TensorSubtract(
+            Tensor<T>.FromVector(Coefficients), Engine.TensorMultiplyScalar(weightGradient, learningRate));
+        updated.ToVector().AsSpan().CopyTo(Coefficients.AsWritableSpan());
         Intercept = NumOps.Subtract(
             Intercept, NumOps.Multiply(learningRate, gradients[Coefficients.Length]));
 
@@ -493,34 +483,14 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             // centered data, then recover the intercept from the feature and target means. Besides being
             // algebraically equivalent to augmenting X with a column of ones, centering keeps a uniform
             // target translation entirely in the intercept and improves the normal equation's conditioning.
-            var featureMeans = new Vector<T>(X.Columns);
-            T targetMean = NumOps.Zero;
-            for (int row = 0; row < X.Rows; row++)
-            {
-                targetMean = NumOps.Add(targetMean, y[row]);
-                for (int column = 0; column < X.Columns; column++)
-                {
-                    featureMeans[column] = NumOps.Add(featureMeans[column], X[row, column]);
-                }
-            }
+            var shape = new[] { X.Rows, X.Columns };
+            var features = Tensor<T>.FromMatrix(X);
+            var targets = Tensor<T>.FromVector(y);
+            var featureMeans = Engine.ReduceMean(features, new[] { 0 }, true);
+            T targetMean = Engine.TensorMean(targets);
 
-            T sampleCount = NumOps.FromDouble(X.Rows);
-            targetMean = NumOps.Divide(targetMean, sampleCount);
-            for (int column = 0; column < X.Columns; column++)
-            {
-                featureMeans[column] = NumOps.Divide(featureMeans[column], sampleCount);
-            }
-
-            var centeredX = new Matrix<T>(X.Rows, X.Columns);
-            var centeredY = new Vector<T>(y.Length);
-            for (int row = 0; row < X.Rows; row++)
-            {
-                centeredY[row] = NumOps.Subtract(y[row], targetMean);
-                for (int column = 0; column < X.Columns; column++)
-                {
-                    centeredX[row, column] = NumOps.Subtract(X[row, column], featureMeans[column]);
-                }
-            }
+            var centeredX = Engine.TensorSubtract(features, Engine.TensorBroadcastTo(featureMeans, shape)).ToMatrix();
+            var centeredY = Engine.TensorSubtractScalar(targets, targetMean).ToVector();
 
             Matrix<T> XTranspose = centeredX.Transpose();
             Matrix<T> XTX = XTranspose * centeredX;
@@ -540,17 +510,11 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
                 newCoefficients = SolveMinimumNorm(centeredX, centeredY);
             }
 
-            // Update the coefficients
-            for (int i = 0; i < FeatureCount; i++)
-            {
-                Coefficients[i] = newCoefficients[i];
-            }
-            Intercept = targetMean;
-            for (int column = 0; column < FeatureCount; column++)
-            {
-                Intercept = NumOps.Subtract(
-                    Intercept, NumOps.Multiply(featureMeans[column], newCoefficients[column]));
-            }
+            // Update the coefficients in place, then intercept = mean(y) - mean(X) · coefficients.
+            newCoefficients.AsSpan().Slice(0, FeatureCount).CopyTo(Coefficients.AsWritableSpan());
+            var means = Engine.Reshape(featureMeans, new[] { FeatureCount });
+            var slopes = Engine.TensorSlice(Tensor<T>.FromVector(newCoefficients), new[] { 0 }, new[] { FeatureCount });
+            Intercept = NumOps.Subtract(targetMean, Engine.TensorSum(Engine.TensorMultiply(means, slopes)));
 
             // Invalidate cached feature importance
             _cachedFeatureImportance = null;
@@ -564,31 +528,36 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     private Vector<T> SolveMinimumNorm(Matrix<T> matrix, Vector<T> target)
     {
         var svd = new SvdDecomposition<T>(matrix);
-        T sigmaMax = NumOps.Zero;
-        for (int i = 0; i < svd.S.Length; i++)
+        var singular = Tensor<T>.FromVector(svd.S);
+        int rank = svd.S.Length;
+        if (rank == 0)
         {
-            if (NumOps.GreaterThan(svd.S[i], sigmaMax))
-            {
-                sigmaMax = svd.S[i];
-            }
+            return new Vector<T>(matrix.Columns);
+        }
+
+        T sigmaMax = NumOps.Zero;
+        T largest = Engine.TensorMaxValue(singular);
+        if (NumOps.GreaterThan(largest, sigmaMax))
+        {
+            sigmaMax = largest;
         }
 
         T tolerance = NumOps.Multiply(
             NumOps.FromDouble(Math.Max(matrix.Rows, matrix.Columns) * PseudoInverseTolerance),
             sigmaMax);
-        var solution = new Vector<T>(matrix.Columns);
-        for (int i = 0; i < svd.S.Length; i++)
-        {
-            if (!NumOps.GreaterThan(svd.S[i], tolerance))
-            {
-                continue;
-            }
 
-            T component = NumOps.Divide(svd.U.GetColumn(i).DotProduct(target), svd.S[i]);
-            solution = solution.Add(svd.Vt.GetRow(i).Multiply(component));
-        }
-
-        return solution;
+        // x = sum over kept singular triplets of (u_i · y / s_i) v_i, i.e. V_k diag(1 / s_k) U_k^T y, where a
+        // singular value is kept only when it exceeds the tolerance.
+        var u = Engine.TensorSlice(Tensor<T>.FromMatrix(svd.U), new[] { 0, 0 }, new[] { svd.U.Rows, rank });
+        var vt = Engine.TensorSlice(Tensor<T>.FromMatrix(svd.Vt), new[] { 0, 0 }, new[] { rank, svd.Vt.Columns });
+        var projections = Engine.Reshape(
+            Engine.TensorMatMul(Engine.TensorTranspose(u), Engine.Reshape(Tensor<T>.FromVector(target), new[] { target.Length, 1 })),
+            new[] { rank });
+        var kept = Engine.TensorGreaterThan(singular, tolerance);
+        var safeSingular = Engine.TensorWhere(kept, singular, Engine.TensorOnesLike(singular));
+        var components = Engine.TensorWhere(kept, Engine.TensorDivide(projections, safeSingular), Engine.TensorZerosLike(singular));
+        var solution = Engine.TensorMatMul(Engine.Reshape(components, new[] { 1, rank }), vt);
+        return Engine.Reshape(solution, new[] { svd.Vt.Columns }).ToVector();
     }
 
     /// <summary>
@@ -632,13 +601,15 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             throw new ArgumentException($"Input matrix has {input.Columns} columns, but the model expects {FeatureCount} features.", nameof(input));
         }
 
-        Vector<T> predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            predictions[i] = Evaluate(input.GetRow(i));
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // prediction = X · coefficients + intercept, for every row at once.
+        var weights = Engine.Reshape(Tensor<T>.FromVector(Coefficients), new[] { FeatureCount, 1 });
+        var predictions = Engine.Reshape(Engine.TensorMatMul(Tensor<T>.FromMatrix(input), weights), new[] { input.Rows });
+        return Engine.TensorAddScalar(predictions, Intercept).ToVector();
     }
 
     /// <summary>
@@ -686,7 +657,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         T max = Coefficients.Max();
         T min = Coefficients.Min();
 
-        int nonZeroCount = Coefficients.Count(c => !NumOps.Equals(c, NumOps.Zero));
+        int nonZeroCount = Engine.TensorCountNonzero(Tensor<T>.FromVector(Coefficients));
 
         return new ModelMetadata<T>
         {
@@ -923,10 +894,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         if (parameters.Length == FeatureCount + 1)
         {
             var coefficients = new Vector<T>(FeatureCount);
-            for (int i = 0; i < FeatureCount; i++)
-            {
-                coefficients[i] = parameters[i];
-            }
+            parameters.AsSpan().Slice(0, FeatureCount).CopyTo(coefficients.AsWritableSpan());
 
             return new VectorModel<T>(coefficients)
             {
@@ -964,13 +932,22 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// </remarks>
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
-        for (int i = 0; i < Coefficients.Length; i++)
+        // Evaluated on enumeration, like the former iterator, so it reflects the coefficients at that moment.
+        foreach (int index in NonZeroCoefficientIndices())
         {
-            if (!NumOps.Equals(Coefficients[i], NumOps.Zero))
-            {
-                yield return i;
-            }
+            yield return index;
         }
+    }
+
+    /// <summary>Indices of the non-zero coefficients, in ascending order.</summary>
+    private int[] NonZeroCoefficientIndices()
+    {
+        if (Coefficients.Length == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        return Engine.TensorNonzero(Tensor<T>.FromVector(Coefficients)).ToArray();
     }
 
     /// <inheritdoc />
@@ -982,6 +959,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         var indices = featureIndices.ToList();
 
         // Validate indices
+        var active = new bool[FeatureCount];
         foreach (var index in indices)
         {
             if (index < 0 || index >= FeatureCount)
@@ -989,17 +967,16 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
                 throw new ArgumentOutOfRangeException(nameof(featureIndices),
                     $"Feature index {index} is out of range. Must be between 0 and {FeatureCount - 1}.");
             }
+
+            active[index] = true;
         }
 
-        // Since Coefficients is read-only, we need to modify the underlying data
-        // Set non-active features to zero
-        for (int i = 0; i < FeatureCount; i++)
+        // Zero out the coefficients of inactive features, in place (the model owns this vector).
+        if (FeatureCount > 0)
         {
-            if (!indices.Contains(i))
-            {
-                // Zero out the coefficient for inactive features
-                Coefficients[i] = NumOps.Zero;
-            }
+            var coefficients = Tensor<T>.FromVector(Coefficients);
+            var masked = Engine.TensorWhere(active, coefficients, Engine.TensorZerosLike(coefficients));
+            masked.ToVector().AsSpan().CopyTo(Coefficients.AsWritableSpan());
         }
 
         // Invalidate cached feature importance
@@ -1036,11 +1013,13 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             return new Dictionary<string, T>(_cachedFeatureImportance);
         }
 
-        var importance = new Dictionary<string, T>();
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            importance.Add($"Feature_{i}", NumOps.Abs(Coefficients[i]));
-        }
+        // Importance of a linear model's feature is the magnitude of its coefficient.
+        T[] magnitudes = Coefficients.Length == 0
+            ? Array.Empty<T>()
+            : Engine.TensorAbs(Tensor<T>.FromVector(Coefficients)).ToArray();
+        var importance = magnitudes
+            .Select((magnitude, i) => new KeyValuePair<string, T>($"Feature_{i}", magnitude))
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
         _cachedFeatureImportance = importance;
         return new Dictionary<string, T>(importance);
     }
@@ -1113,118 +1092,40 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         }
 
         // Validate feature indices
-        for (int i = 0; i < featureIndices.Length; i++)
+        int[] features = featureIndices.ToArray();
+        foreach (int feature in features)
         {
-            if (featureIndices[i] < 0 || featureIndices[i] >= FeatureCount)
+            if (feature < 0 || feature >= FeatureCount)
             {
                 throw new ArgumentOutOfRangeException(nameof(featureIndices),
-                    $"Feature index {featureIndices[i]} is out of range. Must be between 0 and {FeatureCount - 1}.");
+                    $"Feature index {feature} is out of range. Must be between 0 and {FeatureCount - 1}.");
             }
         }
 
         // For a linear model (VectorModel), partial dependence is simply the coefficient
         // times the grid values for each feature, since the model is additive.
         // PD(x_j) = coefficient_j * x_j (for a linear model with no intercept)
-
+        //
+        // Each feature's grid spans [-1, 1] (no training data is retained); a one-point grid is its start, -1.
+        var grid = Engine.TensorLinspace(NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0), gridResolution);
         var gridValues = new Dictionary<int, Vector<T>>();
-        var pdpMatrix = new List<Vector<T>>();
-
-        // For VectorModel, we compute partial dependence for one feature at a time
-        // since the model is linear and additive
-        if (featureIndices.Length == 1)
+        foreach (int feature in features)
         {
-            int featureIdx = featureIndices[0];
-
-            // Generate grid values for the feature
-            // Using a range from -1 to 1 as a default since we don't have training data
-            T minVal = NumOps.FromDouble(-1.0);
-            T maxVal = NumOps.FromDouble(1.0);
-
-            Vector<T> gridVals = new Vector<T>(gridResolution);
-            for (int i = 0; i < gridResolution; i++)
-            {
-                T ratio = NumOps.FromDouble((double)i / (gridResolution - 1));
-                T range = NumOps.Subtract(maxVal, minVal);
-                gridVals[i] = NumOps.Add(minVal, NumOps.Multiply(range, ratio));
-            }
-
-            gridValues[featureIdx] = gridVals;
-
-            // For a linear model, partial dependence is simply coefficient * feature_value
-            Vector<T> pdValues = new Vector<T>(gridResolution);
-            for (int i = 0; i < gridResolution; i++)
-            {
-                pdValues[i] = NumOps.Multiply(Coefficients[featureIdx], gridVals[i]);
-            }
-
-            pdpMatrix.Add(pdValues);
-        }
-        else
-        {
-            // For multiple features, compute the interaction effect
-            // For a linear model without interaction terms, this is just the sum
-            // of individual feature effects
-
-            // Generate grid for each feature
-            var grids = new List<Vector<T>>();
-            foreach (int featureIdx in featureIndices)
-            {
-                T minVal = NumOps.FromDouble(-1.0);
-                T maxVal = NumOps.FromDouble(1.0);
-
-                Vector<T> gridVals = new Vector<T>(gridResolution);
-                for (int i = 0; i < gridResolution; i++)
-                {
-                    T ratio = NumOps.FromDouble((double)i / (gridResolution - 1));
-                    T range = NumOps.Subtract(maxVal, minVal);
-                    gridVals[i] = NumOps.Add(minVal, NumOps.Multiply(range, ratio));
-                }
-
-                gridValues[featureIdx] = gridVals;
-                grids.Add(gridVals);
-            }
-
-            // Compute partial dependence for each combination
-            // For a 2D case with gridResolution=20, we'd have 20x20=400 points
-            int totalPoints = 1;
-            for (int i = 0; i < featureIndices.Length; i++)
-            {
-                totalPoints *= gridResolution;
-            }
-
-            // Generate all combinations and compute PD values
-            Vector<T> pdValues = new Vector<T>(totalPoints);
-            int pointIdx = 0;
-
-            // Generate combinations recursively
-            var currentPoint = new T[featureIndices.Length];
-            ComputePDCombinations(featureIndices, grids, 0, currentPoint, pdValues, ref pointIdx);
-
-            pdpMatrix.Add(pdValues);
+            gridValues[feature] = grid.ToVector();
         }
 
-        // Create the result matrix
-        Matrix<T> pdMatrix;
-        if (pdpMatrix.Count == 1)
-        {
-            // Single row for 1D or single vector for multi-feature
-            pdMatrix = new Matrix<T>(1, pdpMatrix[0].Length);
-            for (int j = 0; j < pdpMatrix[0].Length; j++)
-            {
-                pdMatrix[0, j] = pdpMatrix[0][j];
-            }
-        }
-        else
-        {
-            pdMatrix = new Matrix<T>(pdpMatrix.Count, pdpMatrix[0].Length);
-            for (int i = 0; i < pdpMatrix.Count; i++)
-            {
-                for (int j = 0; j < pdpMatrix[i].Length; j++)
-                {
-                    pdMatrix[i, j] = pdpMatrix[i][j];
-                }
-            }
-        }
+        // Every combination of grid points, the last feature varying fastest; the PD value of a combination is
+        // sum_i coefficient_{feature_i} * x_i.
+        var featureTensor = new Tensor<int>(features, new[] { features.Length });
+        var coefficients = Engine.TensorTake(Tensor<T>.FromVector(Coefficients), featureTensor);
+        var combinations = features.Length == 1
+            ? Engine.Reshape(grid, new[] { gridResolution, 1 })
+            : Engine.TensorCartesianProd(Enumerable.Repeat(grid, features.Length).ToArray());
+        int totalPoints = combinations.Shape[0];
+        var pdValues = Engine.TensorMatMul(combinations, Engine.Reshape(coefficients, new[] { features.Length, 1 }));
+
+        // Create the result matrix: a single row of PD values.
+        Matrix<T> pdMatrix = Engine.Reshape(pdValues, new[] { 1, totalPoints }).ToMatrix();
 
         return new PartialDependenceData<T>
         {
@@ -1234,34 +1135,6 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             GridResolution = gridResolution,
             IceCurves = new List<Matrix<T>>()
         };
-    }
-
-    /// <summary>
-    /// Helper method to recursively compute partial dependence combinations.
-    /// </summary>
-    private void ComputePDCombinations(Vector<int> featureIndices, List<Vector<T>> grids,
-        int depth, T[] currentPoint, Vector<T> pdValues, ref int pointIdx)
-    {
-        if (depth == featureIndices.Length)
-        {
-            // Compute PD value for this combination
-            T pdValue = NumOps.Zero;
-            for (int i = 0; i < featureIndices.Length; i++)
-            {
-                int featureIdx = featureIndices[i];
-                pdValue = NumOps.Add(pdValue, NumOps.Multiply(Coefficients[featureIdx], currentPoint[i]));
-            }
-            pdValues[pointIdx++] = pdValue;
-            return;
-        }
-
-        // Recurse through grid values for this feature
-        Vector<T> currentGrid = grids[depth];
-        for (int i = 0; i < currentGrid.Length; i++)
-        {
-            currentPoint[depth] = currentGrid[i];
-            ComputePDCombinations(featureIndices, grids, depth + 1, currentPoint, pdValues, ref pointIdx);
-        }
     }
 
     /// <summary>
