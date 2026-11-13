@@ -63,9 +63,9 @@ internal static class LayerAliasGraph
                 {
                     if (map.TryGetValue(layer, out var replacement)) list[i] = replacement;
                 }
-                else if (IsHelper(item))
+                else if (item is not null && IsHelper(item))
                 {
-                    Walk(item!, map, visited);
+                    Walk(item, map, visited);
                 }
             }
 
@@ -89,9 +89,9 @@ internal static class LayerAliasGraph
 
                     field.SetValue(node, replacement);
                 }
-                else if (value is IList && HoldsReferences(value.GetType()) || IsHelper(value))
+                else if (value is not null && ((value is IList && HoldsReferences(value.GetType())) || IsHelper(value)))
                 {
-                    Walk(value!, map, visited);
+                    Walk(value, map, visited);
                 }
             }
         }
