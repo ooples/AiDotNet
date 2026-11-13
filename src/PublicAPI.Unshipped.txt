@@ -23310,3 +23310,182 @@ AiDotNet.AutoML.NAS.PCDARTS<T>.SearchOptions.get -> AiDotNet.AutoML.NAS.PCDARTSO
 override AiDotNet.MetaLearning.Algorithms.MANNAlgorithm<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 override AiDotNet.MetaLearning.Algorithms.PMFAlgorithm<T, TInput, TOutput>.ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput) -> T
 override AiDotNet.MetaLearning.Algorithms.PMFAlgorithm<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.KurtosisSelector<T>.KurtosisValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.KurtosisSelector<T>.KurtosisValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.SkewnessSelector<T>.SkewnessValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.SkewnessSelector<T>.SkewnessValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.CoefOfVariationSelector<T>.CVValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.CoefOfVariationSelector<T>.CVValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Moment.BimodalitySelector<T>.BimodalityValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Moment.BimodalitySelector<T>.BimodalityValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Range.IQRSelector<T>.IQRValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Range.IQRSelector<T>.IQRValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Range.MADSelector<T>.MADValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Range.MADSelector<T>.MADValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Range.PercentileRangeSelector<T>.RangeValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Range.PercentileRangeSelector<T>.RangeValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileDispersionSelector<T>.QCDValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileDispersionSelector<T>.QCDValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileRatioSelector<T>.RatioValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Quantile.QuantileRatioSelector<T>.RatioValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Morphological.ErosionDilationSelector<T>.MorphologicalScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Morphological.ErosionDilationSelector<T>.MorphologicalScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Morphological.GranulometrySelector<T>.GranulometryScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Morphological.GranulometrySelector<T>.GranulometryScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.NLP.TfIdfFS<T>.TfIdfScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.NLP.TfIdfFS<T>.TfIdfScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LaplacianScoreSelector<T>.LaplacianScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LaplacianScoreSelector<T>.LaplacianScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapSelector<T>.ManifoldScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapSelector<T>.ManifoldScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapBasedSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.IsomapBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LocalLinearityScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LocalLinearityScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.LLEBasedSelector(int nFeaturesToSelect = 10, int nNeighbors = 10, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.LLEBasedSelector(int nFeaturesToSelect = 10, int nNeighbors = 10, int[]? columnIndices = null, double regularization = 0.001) -> void
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LLESelector(int nFeaturesToSelect = 10, int nNeighbors = 5, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.LLESelector(int nFeaturesToSelect = 10, int nNeighbors = 5, int[]? columnIndices = null, double regularization = 0.001) -> void
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLEBasedSelector<T>.Regularization.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Manifold.LLESelector<T>.Regularization.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.PCAVarianceSelector<T>.VarianceContributions.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.PCAVarianceSelector<T>.VarianceContributions.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.SVDBasedSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.SVDBasedSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.FactorAnalysisSelector<T>.Communalities.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.FactorAnalysisSelector<T>.Communalities.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Projection.RandomProjectionSelector<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Projection.RandomProjectionSelector<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.HSICSelector<T>.HSICScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.HSICSelector<T>.HSICScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.MMDBasedSelector<T>.MMDScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.MMDBasedSelector<T>.MMDScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelFisherSelector<T>.FisherScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelFisherSelector<T>.FisherScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.RBFKernelSelector<T>.KernelScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.RBFKernelSelector<T>.KernelScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.PolynomialKernelSelector<T>.KernelScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.PolynomialKernelSelector<T>.KernelScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelPCASelector<T>.FeatureImportances.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Kernel.KernelPCASelector<T>.FeatureImportances.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.KendallTauSelector<T>.TauScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.KendallTauSelector<T>.TauScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.DistanceCorrelationSelector<T>.DCorValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.DistanceCorrelationSelector<T>.DCorValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.DistanceCorrelationSelector<T>.DcorScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.DistanceCorrelationSelector<T>.DcorScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Redundancy.MinimalRedundancySelector<T>.MRMRScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Redundancy.MinimalRedundancySelector<T>.MRMRScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Redundancy.CorrelationClusterSelector<T>.ClusterRepresentativeScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Redundancy.CorrelationClusterSelector<T>.ClusterRepresentativeScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapper<T>.EmbeddedImportance.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapper<T>.EmbeddedImportance.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapper<T>.WrapperScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.EmbeddedWrapper<T>.WrapperScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.FilterWrapper<T>.FilterScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.FilterWrapper<T>.FilterScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.FilterWrapper<T>.WrapperScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.FilterWrapper<T>.WrapperScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.FisherReliefHybrid<T>.FisherScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.FisherReliefHybrid<T>.FisherScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.FisherReliefHybrid<T>.HybridScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.FisherReliefHybrid<T>.HybridScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.FisherReliefHybrid<T>.ReliefScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.FisherReliefHybrid<T>.ReliefScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.MICorrelationHybrid<T>.CorrelationScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.MICorrelationHybrid<T>.CorrelationScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.MICorrelationHybrid<T>.HybridScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.MICorrelationHybrid<T>.HybridScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Hybrid.MICorrelationHybrid<T>.MIScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Hybrid.MICorrelationHybrid<T>.MIScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Image.SaliencySelector<T>.SaliencyScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Image.SaliencySelector<T>.SaliencyScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.ClassWeights.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.ClassWeights.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Incremental.AdaptiveFeatureSelector<T>.PerformanceScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Incremental.AdaptiveFeatureSelector<T>.PerformanceScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Incremental.StreamingFeatureSelector<T>.CorrelationScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Incremental.StreamingFeatureSelector<T>.CorrelationScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Information.ConditionalEntropySelector<T>.ConditionalEntropies.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Information.ConditionalEntropySelector<T>.ConditionalEntropies.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Information.InteractionInformationSelector<T>.InteractionScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Information.InteractionInformationSelector<T>.InteractionScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Interaction.InteractionStrengthSelector<T>.InteractionScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Interaction.InteractionStrengthSelector<T>.InteractionScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Interaction.SynergySelector<T>.SynergyScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Interaction.SynergySelector<T>.SynergyScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.MultiLabel.MLMI<T>.MutualInformation.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.MultiLabel.MLMI<T>.MutualInformation.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.MultiLabel.MultiLabelMutualInformation<T>.MIScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.MultiLabel.MultiLabelMutualInformation<T>.MIScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.MultiLabel.MultiLabelReliefF<T>.FeatureWeights.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.MultiLabel.MultiLabelReliefF<T>.FeatureWeights.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.MultiLabel.ReliefMLC<T>.FeatureWeights.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.MultiLabel.ReliefMLC<T>.FeatureWeights.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Multivariate.CMIMSelector<T>.CMIMScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Multivariate.CMIMSelector<T>.CMIMScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Multivariate.JointMISelector<T>.JMIScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Multivariate.JointMISelector<T>.JMIScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Neural.AttentionFlowSelector<T>.AttentionScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Neural.AttentionFlowSelector<T>.AttentionScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Neural.GradCAMSelector<T>.ActivationWeights.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Neural.GradCAMSelector<T>.ActivationWeights.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Neural.ScoreCAMSelector<T>.ScoreWeights.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Neural.ScoreCAMSelector<T>.ScoreWeights.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.HilbertSchmidtSelector<T>.HSICValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.HilbertSchmidtSelector<T>.HSICValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MutualInformationSelector<T>.MIValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MutualInformationSelector<T>.MIValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.AlphaInvesting<T>.PValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Online.AlphaInvesting<T>.PValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.AlphaInvesting<T>.TestAlphas.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Online.AlphaInvesting<T>.TestAlphas.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector<T>.AggregatedScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector<T>.AggregatedScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Regression.ElasticNetSelector<T>.Coefficients.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Regression.ElasticNetSelector<T>.Coefficients.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.ClassWeightedFS(int nFeaturesToSelect = 10, string! weightingStrategy = "balanced", int[]? columnIndices = null) -> void
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.WeightingStrategy.get -> string!
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector<T>.AggregationMethod.get -> string!
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector<T>.FederatedFSSelector(int nFeaturesToSelect = 10, int nClients = 5, string! aggregationMethod = "weighted_average", int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.ClassWeightedFS(int nFeaturesToSelect = 10, AiDotNet.Enums.ClassWeightingStrategy weightingStrategy = AiDotNet.Enums.ClassWeightingStrategy.Balanced, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Imbalanced.ClassWeightedFS<T>.WeightingStrategy.get -> AiDotNet.Enums.ClassWeightingStrategy
+AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector<T>.FederatedFSSelector(int nFeaturesToSelect = 10, int nClients = 5, AiDotNet.Enums.FederatedScoreAggregation aggregationMethod = AiDotNet.Enums.FederatedScoreAggregation.WeightedAverage, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Privacy.FederatedFSSelector<T>.AggregationMethod.get -> AiDotNet.Enums.FederatedScoreAggregation
+AiDotNet.Enums.ClassWeightingStrategy
+AiDotNet.Enums.ClassWeightingStrategy.Balanced = 0 -> AiDotNet.Enums.ClassWeightingStrategy
+AiDotNet.Enums.ClassWeightingStrategy.Sqrt = 1 -> AiDotNet.Enums.ClassWeightingStrategy
+AiDotNet.Enums.ClassWeightingStrategy.Log = 2 -> AiDotNet.Enums.ClassWeightingStrategy
+AiDotNet.Enums.FederatedScoreAggregation
+AiDotNet.Enums.FederatedScoreAggregation.WeightedAverage = 0 -> AiDotNet.Enums.FederatedScoreAggregation
+AiDotNet.Enums.FederatedScoreAggregation.Median = 1 -> AiDotNet.Enums.FederatedScoreAggregation
+AiDotNet.Enums.FederatedScoreAggregation.TrimmedMean = 2 -> AiDotNet.Enums.FederatedScoreAggregation
+AiDotNet.Enums.FederatedScoreAggregation.Mean = 3 -> AiDotNet.Enums.FederatedScoreAggregation
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.MICScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.MICScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.Alpha.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Information.MaximalInformationCoefficientSelector<T>.C.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MICValues.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MICValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MaxBins.get -> int
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MaximalInformationCoefficientSelector(int nFeaturesToSelect = 10, int maxBins = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.MaximalInformationCoefficientSelector(int nFeaturesToSelect = 10, double alpha = 0.6, double c = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.Alpha.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Nonlinear.MaximalInformationCoefficientSelector<T>.C.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MICScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MICScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MaxBins.get -> int
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MaximalInformationSelector(int nFeaturesToSelect = 10, int maxBins = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.MaximalInformationSelector(int nFeaturesToSelect = 10, double alpha = 0.6, double c = 15, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.Alpha.get -> double
+AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<T>.C.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.Epsilon.get -> double
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.FeatureScores.get -> double[]?
+AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.FeatureScores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.OSFS(int nFeaturesToSelect = 10, double alpha = 0.05, double epsilon = 0.01, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.OSFS(int nFeaturesToSelect = 10, double alpha = 0.05, int maxConditioningSetSize = 3, int[]? columnIndices = null) -> void
+AiDotNet.Preprocessing.FeatureSelection.Online.OSFS<T>.MaxConditioningSetSize.get -> int
