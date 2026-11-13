@@ -112,7 +112,8 @@ public class OuteTTSComponentTests
         foreach (var c in Reference()["sampling"]!)
         {
             var ids = c["ids"]!.Select(v => (int)v).ToArray();
-            var processed = OuteTTSSampler.Process(Values(c["scores"]!), ids, 1.1, 64, 0.4, 40, 0.9, 0.05);
+            var scores = Values(c["scores"]!);
+            var processed = OuteTTSSampler<double>.Process(new Tensor<double>(scores, new[] { scores.Length }), ids, 1.1, 64, 0.4, 40, 0.9, 0.05).ToArray();
             var expected = c["processed"]!.Select(v => v.Type == JTokenType.Null ? double.NegativeInfinity : (double)v).ToArray();
             Assert.Equal(expected.Select(double.IsNegativeInfinity), processed.Select(double.IsNegativeInfinity));
             Close(expected.Select(v => double.IsNegativeInfinity(v) ? 0 : v).ToArray(), processed.Select(v => double.IsNegativeInfinity(v) ? 0 : v).ToArray(), "processed");

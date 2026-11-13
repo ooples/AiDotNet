@@ -326,17 +326,15 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
             var logits = lm.Forward(lm.Embed(Row(prompt)), null, null, cache, lastLogitsOnly: true).Logits!;
             while (generated.Count < o.MaxNewTokens)
             {
-                var values = logits.ToArray();
-                var scores = new double[values.Length];
-                for (int i = 0; i < scores.Length; i++) scores[i] = NumOps.ToDouble(values[i]);
-                if (o.ConstrainToAudioTokens) OrpheusTokens.MaskToSlot(scores, generated.Count % OrpheusTokens.CodesPerFrame);
+                var scores = Engine.Reshape(logits, new[] { logits.Length });
+                if (o.ConstrainToAudioTokens) scores = OrpheusTokens.MaskToSlot(scores, generated.Count % OrpheusTokens.CodesPerFrame);
                 int next;
                 if (o.Temperature > 0)
-                    next = OuteTTSSampler.Sample(OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, o.Temperature, 0, o.TopP, 0), random);
+                    next = OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, o.Temperature, 0, o.TopP, 0), random);
                 else
                 {
-                    var processed = OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, 1.0, 0, 1.0, 0);
-                    next = Array.IndexOf(processed, processed.Max());
+                    var processed = OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, 1.0, 0, 1.0, 0);
+                    next = OuteTTSSampler<T>.Greedy(processed);
                 }
                 if (next == OrpheusTokens.EndOfSpeech || next == OrpheusTokens.EndOfText) break;
                 ids.Add(next);
@@ -656,10 +654,10 @@ internal static class OrpheusTokens
 
     /// <summary>Removes every token but the codes of <paramref name="slot"/> (and, at a frame boundary, the end of
     /// speech).</summary>
-    public static void MaskToSlot(double[] scores, int slot)
+    public static Tensor<T> MaskToSlot<T>(Tensor<T> scores, int slot)
     {
         int first = AudioStart + slot * CodebookSize;
-        for (int i = 0; i < scores.Length; i++)
-            if ((i < first || i >= first + CodebookSize) && !(slot == 0 && i == EndOfSpeech)) scores[i] = double.NegativeInfinity;
+        return TtsSampling<T>.Forbid(scores,
+            Enumerable.Range(0, scores.Length).Where(i => (i < first || i >= first + CodebookSize) && !(slot == 0 && i == EndOfSpeech)));
     }
 }

@@ -352,15 +352,13 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
             var logits = lm.Forward(lm.Embed(Row(prompt)), null, null, cache, lastLogitsOnly: true).Logits!;
             while (ids.Count < o.MaxLength)
             {
-                var values = logits.ToArray();
-                var scores = new double[values.Length];
-                for (int i = 0; i < scores.Length; i++) scores[i] = NumOps.ToDouble(values[i]);
-                if (o.ConstrainToSpeechTokens) LlasaTokens.MaskToSpeech(scores);
+                var scores = Engine.Reshape(logits, new[] { logits.Length });
+                if (o.ConstrainToSpeechTokens) scores = LlasaTokens.MaskToSpeech(scores);
                 int next;
                 if (o.Temperature > 0)
-                    next = OuteTTSSampler.Sample(OuteTTSSampler.Process(scores, ids, 1.0, 0, o.Temperature, 0, o.TopP, 0), random);
+                    next = OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, 1.0, 0, o.Temperature, 0, o.TopP, 0), random);
                 else
-                    next = Array.IndexOf(scores, scores.Max());
+                    next = OuteTTSSampler<T>.Greedy(scores);
                 if (next == LlasaTokens.SpeechGenerationEnd) break;
                 ids.Add(next);
                 generated.Add(next);
@@ -657,9 +655,6 @@ internal static class LlasaTokens
         tokens.Where(t => t >= FirstSpeechToken && t < FirstSpeechToken + CodebookSize).Select(t => t - FirstSpeechToken).ToList();
 
     /// <summary>Removes every token but the speech tokens and the end of speech.</summary>
-    public static void MaskToSpeech(double[] scores)
-    {
-        for (int i = 0; i < scores.Length; i++)
-            if ((i < FirstSpeechToken || i >= FirstSpeechToken + CodebookSize) && i != SpeechGenerationEnd) scores[i] = double.NegativeInfinity;
-    }
+    public static Tensor<T> MaskToSpeech<T>(Tensor<T> scores) => TtsSampling<T>.Forbid(scores,
+        Enumerable.Range(0, scores.Length).Where(i => (i < FirstSpeechToken || i >= FirstSpeechToken + CodebookSize) && i != SpeechGenerationEnd));
 }

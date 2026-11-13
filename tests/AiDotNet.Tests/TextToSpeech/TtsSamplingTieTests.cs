@@ -114,4 +114,26 @@ public class TtsSamplingTieTests
         Assert.Equal(0, NucleusSampling<double>.Greedy(logits));
         Assert.Equal(5, NucleusSampling<double>.Greedy(logits, id => id >= 5));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(19)]
+    [InlineData(31)]
+    public void OuteTtsTopP_RemovesTheLowestIndicesAmongTiedScores(int j)
+    {
+        // 64 equal scores, top-p 0.5: the stable ascending pass removes indices 0..31; the draw lands on 32 + j.
+        var logits = new Tensor<double>(Enumerable.Repeat(0.25, Ties).ToArray(), new[] { Ties });
+        var processed = OuteTTSSampler<double>.Process(logits, Array.Empty<int>(), 1.0, 0, 1.0, 0, 0.5, 0).ToArray();
+        Assert.Equal(Enumerable.Range(0, Ties).Select(i => i < Ties / 2).ToArray(), processed.Select(double.IsNegativeInfinity).ToArray());
+        var scores = new Tensor<double>(processed, new[] { Ties });
+        Assert.Equal(Ties / 2 + j, OuteTTSSampler<double>.Sample(scores, new FixedRandom(Middle(j, Ties / 2))));
+    }
+
+    [Fact]
+    public void OuteTtsGreedy_TakesTheFirstOfTiedScores()
+    {
+        var scores = new double[Ties];
+        scores[9] = scores[40] = 3;
+        Assert.Equal(9, OuteTTSSampler<double>.Greedy(new Tensor<double>(scores, new[] { Ties })));
+    }
 }
