@@ -249,6 +249,28 @@ public class VideoWarpAndMaskReferenceTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task WarpRejectsAFlowThatDoesNotMatchTheFeatureGrid()
+    {
+        // A [1, 2, 3, 2] flow (H and W swapped) against a [1, 1, 2, 3] feature has the right element count per plane
+        // but the wrong grid; it used to be sampled as if it matched.
+        await Task.Yield();
+        var model = new RAFT<double>(Arch());
+        var feature = new Tensor<double>(new double[6], new[] { 1, 1, 2, 3 });
+        var flow = new Tensor<double>(new double[12], new[] { 1, 2, 3, 2 });
+
+        Assert.Throws<ArgumentException>(() => model.WarpByFlow(feature, flow));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task VideoClipRejectsATextWidthThatDoesNotSplitAcrossTwelveHeads()
+    {
+        // BERT's 12 heads: width 32 would give heads of 2 with 8 channels unattended; 24 splits evenly.
+        await Task.Yield();
+        Assert.Throws<ArgumentException>(() => new VideoCLIPVideoOptions { HiddenDimension = 32 }.Validate());
+        new VideoCLIPVideoOptions { HiddenDimension = 24, HiddenDim = 24 }.Validate();
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task MaskedPsnrIsComputedInDouble()
     {
         // The masked error 3e38 - (-3e38) = 6e38 overflows float; in double MSE = 3.6e77 over the one masked
