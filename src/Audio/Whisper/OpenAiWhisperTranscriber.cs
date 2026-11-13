@@ -231,7 +231,7 @@ internal sealed class OpenAiWhisperTranscriber<T>
         var filters = mels == 80 ? Filters.Value.Mel80 : Filters.Value.Mel128;
         var mel = engine.TensorMatMul(filters, engine.TensorTranspose(power));
         T floor = NumOps.Divide(NumOps.Divide(NumOps.FromDouble(1e-10), scale), scale);
-        T offset = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Log10(scale));
+        T offset = NumOps.Multiply(NumOps.FromDouble(2.0 / Math.Log(10.0)), NumOps.Log(scale));
         var log = engine.TensorAddScalar(engine.TensorLog10(engine.TensorMax(mel, floor)), offset);
         T max = engine.TensorMaxValue(log);
         var clipped = engine.TensorMax(log, NumOps.Subtract(max, NumOps.FromDouble(8.0)));

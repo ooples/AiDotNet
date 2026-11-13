@@ -426,6 +426,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             var e = Engine.TensorExp(Engine.TensorAddScalar(logits, NumOps.Negate(Engine.TensorMaxValue(logits))));
             return Engine.TensorDivideScalar(e, Engine.TensorSum(e));
         }
+        T keep = NumOps.Subtract(NumOps.One, gamma);
         for (int i = 0; i < n; i++)
         {
             var row = Engine.TensorSlice(pooled, new[] { i, 0 }, new[] { 1, h });
@@ -433,7 +434,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             if (styleCache is not null)
             {
                 var q = Probabilities(styleCache, row);
-                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, NumOps.Subtract(NumOps.One, gamma)), Engine.TensorMultiplyScalar(q, gamma));
+                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, keep), Engine.TensorMultiplyScalar(q, gamma));
             }
             p = TtsSampling<T>.Fill(p, startMask, NumOps.Zero);
             observeDistribution?.Invoke(p);
