@@ -812,7 +812,6 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         var a = aVec[0];
         var b = bVec[0];
 
