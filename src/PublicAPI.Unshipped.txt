@@ -22963,3 +22963,11 @@ AiDotNet.Models.Options.AutoAttackOptions<T>.FabEta.get -> double
 AiDotNet.Models.Options.AutoAttackOptions<T>.FabEta.set -> void
 AiDotNet.Models.Options.AutoAttackOptions<T>.FabBeta.get -> double
 AiDotNet.Models.Options.AutoAttackOptions<T>.FabBeta.set -> void
+*REMOVED*AiDotNet.Models.CertifiedPrediction<T>.Confidence.get -> double
+*REMOVED*AiDotNet.Models.CertifiedPrediction<T>.LowerBound.get -> double
+*REMOVED*AiDotNet.Models.CertifiedPrediction<T>.UpperBound.get -> double
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.CertificationMethod.get -> string!
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.CertificationNormType.get -> string!
+*REMOVED*AiDotNet.Models.Options.CertifiedDefenseOptions<T>.CertificationMethod.get -> string!
+*REMOVED*AiDotNet.Models.Options.CertifiedDefenseOptions<T>.NormType.get -> string!
+*REMOVED*static AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>.WithCertification(string! certificationMethod = "RandomizedSmoothing") -> AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>!

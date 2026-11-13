@@ -76,6 +76,15 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// CERTIFY of Cohen et al. (2019): n0 = <see cref="CertifiedDefenseOptions{T}.SelectionSamples"/> noisy
+    /// samples choose the top class c_A; n = <see cref="CertifiedDefenseOptions{T}.NumSamples"/> fresh samples
+    /// count how often c_A wins, and the one-sided Clopper-Pearson bound at level alpha = 1 - confidence gives
+    /// p_A_lower. The prediction is certified with radius sigma * Phi^-1(p_A_lower) when p_A_lower is at least
+    /// 1/2; otherwise CERTIFY abstains, reported as <see cref="CertifiedPrediction{T}.IsCertified"/> = false.
+    /// </para>
+    /// </remarks>
     public CertifiedPrediction<T> CertifyPrediction(TInput input, IFullModel<T, TInput, TOutput> model)
     {
         if (input == null)
@@ -89,64 +98,136 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
         }
 
         var sigma = NumOps.FromDouble(options.NoiseSigma);
-
-        // Convert input to vector for noise operations
         var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
 
-        // Sample predictions with Gaussian noise
-        var classCounts = new Dictionary<int, int>();
+        // Selection and estimation use separate samples, so choosing c_A does not bias the estimate of p_A.
+        var selectionCounts = SampleClassCounts(vectorInput, input, model, sigma, options.SelectionSamples);
+        int topClass = RankByCount(selectionCounts).FirstOrDefault();
+        var estimationCounts = SampleClassCounts(vectorInput, input, model, sigma, options.NumSamples);
+        int topCount = estimationCounts.TryGetValue(topClass, out int observed) ? observed : 0;
 
-        for (int i = 0; i < options.NumSamples; i++)
-        {
-            var noisyVector = AddGaussianNoise(vectorInput, sigma);
-            var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(noisyVector, input);
-            var output = model.Predict(noisyInput);
-            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
-            var sampledClass = ArgMax(outputVector);
-
-            if (!classCounts.ContainsKey(sampledClass))
-            {
-                classCounts[sampledClass] = 0;
-            }
-            classCounts[sampledClass]++;
-        }
-
-        // Find the most frequently predicted class
-        var topClassLabel = -1;
-        var topCount = -1;
-        foreach (var kv in classCounts)
-        {
-            if (kv.Value > topCount)
-            {
-                topClassLabel = kv.Key;
-                topCount = kv.Value;
-            }
-        }
-
-        // Compute certified radius using the lower confidence bound on pA
-        // Per Cohen et al. (2019), we must use the lower bound to provide guaranteed certification:
-        // R = σ * Φ⁻¹(pA_lower) where pA_lower is the Clopper-Pearson lower bound
-        // Using the point estimate pA would overestimate the certified radius
-        var pA = (double)topCount / options.NumSamples;
-        var pA_lower = ComputeLowerBound(pA, options.NumSamples, options.ConfidenceLevel);
-        var pA_upper = ComputeUpperBound(pA, options.NumSamples, options.ConfidenceLevel);
-        var certifiedRadius = ComputeCertifiedRadius(pA_lower, sigma);
+        T confidence = NumOps.FromDouble(options.ConfidenceLevel);
+        T lowerBound = StatisticsHelper<T>.CalculateClopperPearsonLowerBound(topCount, options.NumSamples, confidence);
+        T upperBound = StatisticsHelper<T>.CalculateClopperPearsonInterval(topCount, options.NumSamples, confidence).Upper;
+        T half = NumOps.FromDouble(0.5);
+        bool certified = NumOps.GreaterThanOrEquals(lowerBound, half);
+        T certifiedRadius = certified ? ComputeCertifiedRadius(lowerBound, sigma) : NumOps.Zero;
 
         var result = new CertifiedPrediction<T>
         {
-            PredictedClass = topClassLabel,
-            CertifiedRadius = NumOps.FromDouble(certifiedRadius),
-            IsCertified = certifiedRadius > 0,
-            Confidence = pA,
-            LowerBound = pA_lower,
-            UpperBound = pA_upper
+            PredictedClass = topClass,
+            CertifiedRadius = certifiedRadius,
+            IsCertified = certified,
+            Confidence = NumOps.Divide(NumOps.FromDouble(topCount), NumOps.FromDouble(options.NumSamples)),
+            LowerBound = lowerBound,
+            UpperBound = upperBound
         };
 
         result.CertificationDetails["SampleCount"] = options.NumSamples;
+        result.CertificationDetails["SelectionSampleCount"] = options.SelectionSamples;
         result.CertificationDetails["Sigma"] = options.NoiseSigma;
         result.CertificationDetails["TopClassCount"] = topCount;
+        result.CertificationDetails["Abstained"] = !certified;
 
         return result;
+    }
+
+    /// <summary>
+    /// PREDICT of Cohen et al. (2019): the smoothed classifier's class, or null when it abstains.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Draws <see cref="CertifiedDefenseOptions{T}.NumSamples"/> noisy samples, takes the two most frequent
+    /// classes with counts n_A and n_B, and returns c_A only if the two-sided binomial test of n_A out of
+    /// n_A + n_B against 1/2 has a p-value of at most alpha = 1 - confidence. The returned class then differs
+    /// from the smoothed classifier's class with probability at most alpha.
+    /// </para>
+    /// <para><b>For Beginners:</b> If the vote between the top two classes is too close to call, the method
+    /// says "I don't know" (null) instead of guessing.</para>
+    /// </remarks>
+    /// <param name="input">The input to classify.</param>
+    /// <param name="model">The base classifier.</param>
+    /// <returns>The predicted class, or null to abstain.</returns>
+    public int? PredictWithAbstention(TInput input, IFullModel<T, TInput, TOutput> model)
+    {
+        if (input == null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        if (model == null)
+        {
+            throw new ArgumentNullException(nameof(model));
+        }
+
+        var sigma = NumOps.FromDouble(options.NoiseSigma);
+        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
+        var counts = SampleClassCounts(vectorInput, input, model, sigma, options.NumSamples);
+        var ranked = RankByCount(counts);
+        if (ranked.Count == 0)
+        {
+            return null;
+        }
+
+        int topCount = counts[ranked[0]];
+        int runnerUpCount = ranked.Count > 1 ? counts[ranked[1]] : 0;
+        T pValue = TwoSidedBinomialPValue(topCount, topCount + runnerUpCount);
+        T alpha = NumOps.FromDouble(1.0 - options.ConfidenceLevel);
+        return NumOps.LessThanOrEquals(pValue, alpha) ? ranked[0] : null;
+    }
+
+    /// <summary>
+    /// The two-sided binomial test p-value of k successes in n trials against p = 1/2 (scipy binom_test),
+    /// for k at least n / 2: min(1, 2 P(X >= k)), with P(X >= k) = I_{1/2}(k, n - k + 1).
+    /// </summary>
+    internal static T TwoSidedBinomialPValue(int successes, int trials)
+    {
+        if (trials <= 0 || successes <= 0)
+        {
+            return NumOps.One;
+        }
+
+        T half = NumOps.FromDouble(0.5);
+        T upperTail = StatisticsHelper<T>.CalculateBetaCDF(
+            half,
+            NumOps.FromDouble(successes),
+            NumOps.FromDouble(trials - successes + 1));
+        T twoSided = NumOps.Multiply(NumOps.FromDouble(2.0), upperTail);
+        return NumOps.LessThan(twoSided, NumOps.One) ? twoSided : NumOps.One;
+    }
+
+    /// <summary>
+    /// Classifies <paramref name="count"/> Gaussian-noise samples x + N(0, sigma^2 I) and counts each class.
+    /// </summary>
+    private Dictionary<int, int> SampleClassCounts(
+        Vector<T> vectorInput,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> model,
+        T sigma,
+        int count)
+    {
+        var counts = new Dictionary<int, int>();
+        for (int i = 0; i < count; i++)
+        {
+            int sampledClass = ClassifyNoisy(vectorInput, referenceInput, model, sigma);
+            counts[sampledClass] = counts.TryGetValue(sampledClass, out int seen) ? seen + 1 : 1;
+        }
+
+        return counts;
+    }
+
+    private int ClassifyNoisy(Vector<T> vectorInput, TInput referenceInput, IFullModel<T, TInput, TOutput> model, T sigma)
+    {
+        var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(AddGaussianNoise(vectorInput, sigma), referenceInput);
+        return ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(noisyInput)));
+    }
+
+    /// <summary>
+    /// Classes by decreasing count; ties go to the smaller class index (numpy argmax).
+    /// </summary>
+    private static List<int> RankByCount(Dictionary<int, int> counts)
+    {
+        return counts.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).Select(kv => kv.Key).ToList();
     }
 
     /// <inheritdoc/>
@@ -200,60 +281,41 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
             throw new ArgumentException("Number of labels must match number of test samples.", nameof(labels));
         }
 
-        var metrics = new CertifiedAccuracyMetrics<T>();
         int cleanCorrect = 0;
         int certified = 0;
-        var certifiedRadii = new List<double>();
+        var radii = new List<T>();
+        int certifiedCount = 0;
 
         for (int i = 0; i < testData.Length; i++)
         {
-            var input = testData[i];
-            var label = labels[i];
-            var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(label);
-            var trueClass = ArgMax(labelVector);
-
-            // Clean accuracy
-            var cleanOutput = model.Predict(input);
-            var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
-            var cleanPrediction = ArgMax(cleanOutputVector);
-            if (cleanPrediction == trueClass)
-            {
-                cleanCorrect++;
-            }
-
-            // Certified prediction
-            var certResult = CertifyPrediction(input, model);
-
-            if (certResult.PredictedClass == trueClass && NumOps.GreaterThanOrEquals(certResult.CertifiedRadius, radius))
-            {
-                certified++;
-            }
-
-            if (certResult.IsCertified)
-            {
-                certifiedRadii.Add(NumOps.ToDouble(certResult.CertifiedRadius));
-            }
+            var (clean, certifiedAtRadius, result) = EvaluateOne(testData[i], labels[i], model, radius);
+            cleanCorrect += clean ? 1 : 0;
+            certified += certifiedAtRadius ? 1 : 0;
+            certifiedCount += result.IsCertified ? 1 : 0;
+            radii.Add(result.IsCertified ? result.CertifiedRadius : NumOps.Zero);
         }
 
-        metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
-        metrics.CertifiedAccuracy = (double)certified / testData.Length;
-        metrics.CertificationRadius = radius;
-        metrics.CertificationRate = (double)certifiedRadii.Count / testData.Length;
+        return CertificationMath<T>.Summarize(cleanCorrect, certified, certifiedCount, radius, radii);
+    }
 
-        if (certifiedRadii.Count > 0)
-        {
-            metrics.AverageCertifiedRadius = NumOps.FromDouble(certifiedRadii.Average());
-            certifiedRadii.Sort();
-
-            // Proper median calculation: for even-sized lists, average the two middle elements
-            var count = certifiedRadii.Count;
-            var mid = count / 2;
-            metrics.MedianCertifiedRadius = count % 2 == 0
-                ? NumOps.FromDouble((certifiedRadii[mid - 1] + certifiedRadii[mid]) / 2.0) // Even: average two middle
-                : NumOps.FromDouble(certifiedRadii[mid]); // Odd: middle element
-        }
-
-        return metrics;
+    /// <summary>
+    /// Clean correctness and certified correctness at <paramref name="radius"/> for one input. An abstained
+    /// prediction is never certified correct (Cohen et al. 2019, Sec. 4: certified accuracy counts inputs
+    /// that CERTIFY classifies correctly with a radius of at least r).
+    /// </summary>
+    private (bool Clean, bool Certified, CertifiedPrediction<T> Result) EvaluateOne(
+        TInput input,
+        TOutput label,
+        IFullModel<T, TInput, TOutput> model,
+        T radius)
+    {
+        int trueClass = ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(label));
+        bool clean = ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(input))) == trueClass;
+        var result = CertifyPrediction(input, model);
+        bool certifiedCorrect = result.IsCertified
+            && result.PredictedClass == trueClass
+            && NumOps.GreaterThanOrEquals(result.CertifiedRadius, radius);
+        return (clean, certifiedCorrect, result);
     }
 
     /// <inheritdoc/>
@@ -305,74 +367,30 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
 
     private Vector<T> AddGaussianNoise(Vector<T> input, T sigma)
     {
-        // Generate Gaussian noise using Engine
+        // x + N(0, sigma^2 I), as in Cohen et al. (2019). The sample is not clipped: clipping would smooth a
+        // different base classifier than the one the radius is reported for.
         var noise = Engine.GenerateGaussianNoise<T>(
             input.Length,
             NumOps.Zero,
             sigma,
             random.Next());
 
-        // Add noise to input: noisy = input + noise
-        var noisy = Engine.Add<T>(input, noise);
-
-        // Clip to valid range [0, 1]
-        return Engine.Clamp<T>(noisy, NumOps.Zero, NumOps.One);
+        return Engine.Add<T>(input, noise);
     }
 
-    private double ComputeCertifiedRadius(double pA, T sigma)
+    /// <summary>
+    /// The certified L2 radius sigma * Phi^-1(p_A_lower) (Cohen et al. 2019, Theorem 1 with p_B = 1 - p_A).
+    /// </summary>
+    private static T ComputeCertifiedRadius(T lowerBound, T sigma)
     {
-        // Radius formula: σ * Φ^(-1)(pA)
-        // where Φ^(-1) is the inverse normal CDF
-
-        if (pA <= 0.5)
+        if (!NumOps.GreaterThan(lowerBound, NumOps.FromDouble(0.5)))
         {
-            return 0.0; // No certification possible
+            return NumOps.Zero;
         }
 
-        var sigmaValue = NumOps.ToDouble(sigma);
-        var radius = sigmaValue * InverseNormalCDF(pA);
-        return Math.Max(radius, 0.0);
+        var radius = NumOps.Multiply(sigma, StatisticsHelper<T>.CalculateInverseNormalCDF(lowerBound));
+        return NumOps.GreaterThan(radius, NumOps.Zero) ? radius : NumOps.Zero;
     }
 
-    private double InverseNormalCDF(double p)
-    {
-        // Delegate to the centralized StatisticsHelper implementation
-        // for consistency across the codebase
-        return NumOps.ToDouble(StatisticsHelper<T>.CalculateInverseNormalCDF(NumOps.FromDouble(p)));
-    }
-
-    private double ComputeLowerBound(double pA, int n, double confidence)
-    {
-        // Use exact Clopper-Pearson confidence interval via Beta distribution
-        // This provides guaranteed coverage, unlike the normal approximation
-        int successes = (int)Math.Round(pA * n);
-        var interval = StatisticsHelper<T>.CalculateClopperPearsonInterval(successes, n, NumOps.FromDouble(confidence));
-        return NumOps.ToDouble(interval.Lower);
-    }
-
-    private double ComputeUpperBound(double pA, int n, double confidence)
-    {
-        // Use exact Clopper-Pearson confidence interval via Beta distribution
-        // This provides guaranteed coverage, unlike the normal approximation
-        int successes = (int)Math.Round(pA * n);
-        var interval = StatisticsHelper<T>.CalculateClopperPearsonInterval(successes, n, NumOps.FromDouble(confidence));
-        return NumOps.ToDouble(interval.Upper);
-    }
-
-    private static int ArgMax(Vector<T> vector)
-    {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
-    }
+    private static int ArgMax(Vector<T> vector) => CertificationMath<T>.ArgMax(vector);
 }

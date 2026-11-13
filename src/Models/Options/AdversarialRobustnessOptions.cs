@@ -208,8 +208,8 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the certification method to use.
     /// </summary>
-    /// <value>"RandomizedSmoothing", "IBP", or "CROWN"</value>
-    public string CertificationMethod { get; set; } = "RandomizedSmoothing";
+    /// <value>Defaults to <see cref="CertifiedDefenseMethod.RandomizedSmoothing"/>.</value>
+    public CertifiedDefenseMethod CertificationMethod { get; set; } = CertifiedDefenseMethod.RandomizedSmoothing;
 
     /// <summary>
     /// Gets or sets the number of samples for randomized smoothing.
@@ -234,7 +234,7 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the norm type for certification.
     /// </summary>
-    public string CertificationNormType { get; set; } = "L2";
+    public AdversarialNormType CertificationNormType { get; set; } = AdversarialNormType.L2;
 
     // ========================================================================
     // CONTENT MODERATION OPTIONS (for LLMs)
