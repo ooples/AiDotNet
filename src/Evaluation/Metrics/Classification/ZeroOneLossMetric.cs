@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -42,12 +43,15 @@ public class ZeroOneLossMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int incorrect = 0;
-        for (int i = 0; i < predictions.Length; i++)
+        // Compare the rounded labels (round half to even, as Math.Round)
+        var engine = AiDotNetEngine.Current;
+        int incorrect;
+        using (new NoGradScope<T>())
         {
-            int pred = (int)Math.Round(NumOps.ToDouble(predictions[i]));
-            int actual = (int)Math.Round(NumOps.ToDouble(actuals[i]));
-            if (pred != actual) incorrect++;
+            var rounded = EvaluationTensorOps<T>.PairEqualMask(
+                engine.TensorRound(EvaluationTensorOps<T>.ToTensor(predictions)),
+                engine.TensorRound(EvaluationTensorOps<T>.ToTensor(actuals)));
+            incorrect = predictions.Length - EvaluationTensorOps<T>.Count(rounded);
         }
 
         return NumOps.FromDouble((double)incorrect / predictions.Length);
@@ -73,18 +77,17 @@ public class ZeroOneLossMetric<T> : IClassificationMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

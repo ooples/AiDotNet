@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Calibration;
 
@@ -48,6 +49,12 @@ public class ProbabilityCalibrator<T>
     private List<(T x, T y)>? _isotonicPoints;
 
     /// <summary>
+    /// The isotonic fit's (score, fitted value) points, one per calibration sample in fit order (scores ascending,
+    /// NaN first, ties in input order); null before an isotonic fit.
+    /// </summary>
+    internal IReadOnlyList<(T x, T y)>? IsotonicPoints => _isotonicPoints;
+
+    /// <summary>
     /// Temperature parameter for temperature scaling.
     /// </summary>
     private T _temperature;
@@ -62,7 +69,7 @@ public class ProbabilityCalibrator<T>
     /// <summary>
     /// Histogram bin edges and probabilities.
     /// </summary>
-    private T[]? _binEdges;
+    private double[]? _binEdges;
     private T[]? _binProbabilities;
 
     /// <summary>
@@ -231,199 +238,84 @@ public class ProbabilityCalibrator<T>
     /// <returns>ECE value (lower is better, 0 is perfect calibration).</returns>
     public double ComputeECE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        int n = scores.Length;
-        T ece = NumOps.Zero;
-
-        for (int b = 0; b < numBins; b++)
-        {
-            T lower = NumOps.FromDouble((double)b / numBins);
-            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
-
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, n)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
-                .ToList();
-
-            if (binIndices.Count > 0)
-            {
-                T sumProb = NumOps.Zero;
-                T sumAcc = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sumProb = NumOps.Add(sumProb, scores[i]);
-                    sumAcc = NumOps.Add(sumAcc, labels[i]);
-                }
-                T count = NumOps.FromDouble(binIndices.Count);
-                T avgProb = NumOps.Divide(sumProb, count);
-                T avgAcc = NumOps.Divide(sumAcc, count);
-                T binWeight = NumOps.Divide(count, NumOps.FromDouble(n));
-
-                ece = NumOps.Add(ece, NumOps.Multiply(binWeight, NumOps.Abs(NumOps.Subtract(avgProb, avgAcc))));
-            }
-        }
-
-        return NumOps.ToDouble(ece);
+        if (numBins <= 0) return 0;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (counts, probabilities, frequencies) = BinAverages(Tensor<T>.FromVector(scores), Tensor<T>.FromVector(labels), numBins);
+        var gaps = engine.TensorAbs(engine.TensorSubtract(probabilities, frequencies));
+        return scores.Length == 0 ? 0 : engine.TensorSum(engine.TensorMultiply(counts, gaps)) / scores.Length;
     }
 
-    /// <summary>
-    /// Computes the Maximum Calibration Error (MCE).
-    /// </summary>
+    /// <summary>Computes the largest absolute calibration error among non-empty bins.</summary>
     public double ComputeMCE(Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        int n = scores.Length;
-        T mce = NumOps.Zero;
-
-        for (int b = 0; b < numBins; b++)
-        {
-            T lower = NumOps.FromDouble((double)b / numBins);
-            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
-
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, n)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
-                .ToList();
-
-            if (binIndices.Count > 0)
-            {
-                T sumProb = NumOps.Zero;
-                T sumAcc = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sumProb = NumOps.Add(sumProb, scores[i]);
-                    sumAcc = NumOps.Add(sumAcc, labels[i]);
-                }
-                T count = NumOps.FromDouble(binIndices.Count);
-                T avgProb = NumOps.Divide(sumProb, count);
-                T avgAcc = NumOps.Divide(sumAcc, count);
-                T absError = NumOps.Abs(NumOps.Subtract(avgProb, avgAcc));
-
-                if (NumOps.GreaterThan(absError, mce))
-                {
-                    mce = absError;
-                }
-            }
-        }
-
-        return NumOps.ToDouble(mce);
+        if (numBins <= 0) return 0;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (counts, probabilities, frequencies) = BinAverages(Tensor<T>.FromVector(scores), Tensor<T>.FromVector(labels), numBins);
+        var gaps = engine.TensorAbs(engine.TensorSubtract(probabilities, frequencies));
+        var valid = engine.TensorMultiply(engine.TensorGreaterThan(counts, 0.0),
+            EvaluationTensorOps<double>.Not(EvaluationTensorOps<double>.NanMask(gaps)));
+        return engine.TensorMaxValue(engine.TensorWhere(valid, gaps, engine.TensorZerosLike(gaps)));
     }
 
-    /// <summary>
-    /// Computes the Brier Score.
-    /// </summary>
-    /// <param name="scores">Predicted probabilities.</param>
-    /// <param name="labels">True binary labels.</param>
-    /// <returns>Brier score (lower is better, 0 is perfect).</returns>
+    /// <summary>Computes the mean squared difference between scores and labels.</summary>
     public double ComputeBrierScore(Vector<T> scores, Vector<T> labels)
     {
-        T brier = NumOps.Zero;
-        for (int i = 0; i < scores.Length; i++)
-        {
-            T diff = NumOps.Subtract(scores[i], labels[i]);
-            brier = NumOps.Add(brier, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.ToDouble(NumOps.Divide(brier, NumOps.FromDouble(scores.Length)));
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var predicted = Tensor<T>.FromVector(scores).Cast<double>();
+        var actual = engine.TensorNarrow(Tensor<T>.FromVector(labels).Cast<double>(), 0, 0, scores.Length);
+        return engine.TensorSumOfSquares(engine.TensorSubtract(predicted, actual)) / scores.Length;
     }
 
-    /// <summary>
-    /// Gets a reliability diagram (calibration curve data).
-    /// </summary>
-    /// <param name="scores">Predicted probabilities.</param>
-    /// <param name="labels">True binary labels.</param>
-    /// <param name="numBins">Number of bins.</param>
-    /// <returns>Tuple of (meanPredicted, fractionPositives, binCounts).</returns>
+    /// <summary>Returns mean predictions, positive fractions and exact counts per uniform bin.</summary>
     public (T[] meanPredicted, T[] fractionPositives, int[] binCounts) GetReliabilityDiagram(
         Vector<T> scores, Vector<T> labels, int numBins = 10)
     {
-        int n = scores.Length;
-        var meanPredicted = new T[numBins];
-        var fractionPositives = new T[numBins];
-        var binCounts = new int[numBins];
-
-        for (int b = 0; b < numBins; b++)
-        {
-            T lower = NumOps.FromDouble((double)b / numBins);
-            T upper = NumOps.FromDouble((double)(b + 1) / numBins);
-
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, n)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], lower) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], upper) : NumOps.LessThan(scores[i], upper)))
-                .ToList();
-
-            binCounts[b] = binIndices.Count;
-
-            if (binIndices.Count > 0)
-            {
-                T sumPred = NumOps.Zero;
-                T sumLabel = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sumPred = NumOps.Add(sumPred, scores[i]);
-                    sumLabel = NumOps.Add(sumLabel, labels[i]);
-                }
-                T count = NumOps.FromDouble(binIndices.Count);
-                meanPredicted[b] = NumOps.Divide(sumPred, count);
-                fractionPositives[b] = NumOps.Divide(sumLabel, count);
-            }
-            else
-            {
-                meanPredicted[b] = NumOps.Divide(NumOps.Add(lower, upper), NumOps.FromDouble(2));
-                fractionPositives[b] = NumOps.Zero;
-            }
-        }
-
-        return (meanPredicted, fractionPositives, binCounts);
+        if (numBins <= 0) return (new T[numBins], new T[numBins], new int[numBins]);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (counts, probabilities, frequencies) = BinAverages(Tensor<T>.FromVector(scores), Tensor<T>.FromVector(labels), numBins);
+        var midpoint = engine.TensorDivideScalar(engine.TensorAddScalar(engine.TensorArange<double>(0, numBins), 0.5), numBins);
+        var nonEmpty = engine.TensorGreaterThan(counts, 0.0);
+        return (engine.TensorWhere(nonEmpty, probabilities, midpoint).Cast<T>().ToArray(),
+            frequencies.Cast<T>().ToArray(), counts.Cast<int>().ToArray());
     }
+
+    private static (Tensor<double> Counts, Tensor<double> MeanScores, Tensor<double> MeanLabels) BinAverages(
+        Tensor<T> scores, Tensor<T> labels, int numBins)
+        => EvaluationBinOps.Averages(scores.Cast<double>(), labels.Cast<double>(), numBins);
+
 
     #region Platt Scaling
 
     private void FitPlattScaling(T[] scores, T[] labels)
     {
         int n = scores.Length;
-        int numPositive = labels.Count(l => NumOps.ToDouble(l) > 0.5);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var scoreTensor = new Tensor<T>(scores, new[] { n }).Cast<double>();
+        var isPositive = engine.TensorGreaterThan(new Tensor<T>(labels, new[] { labels.Length }).Cast<double>(), 0.5);
+        int numPositive = EvaluationTensorOps<double>.Count(isPositive);
         int numNegative = n - numPositive;
 
         // Target values with smoothing
         double hiTarget = (numPositive + 1.0) / (numPositive + 2.0);
         double loTarget = 1.0 / (numNegative + 2.0);
 
-        var targets = labels.Select(l => NumOps.ToDouble(l) > 0.5 ? hiTarget : loTarget).ToArray();
+        var targets = engine.TensorAdd(
+            engine.TensorMultiplyScalar(isPositive, hiTarget),
+            engine.TensorMultiplyScalar(EvaluationTensorOps<double>.Not(isPositive), loTarget));
 
         // Initialize A and B
         double A = 0;
-        double B = Math.Log((numNegative + 1.0) / (numPositive + 1.0));
+        double B = Math.Log((numPositive + 1.0) / (numNegative + 1.0));
 
-        // Newton-Raphson optimization (internal computation in double for numerical stability)
+        // Newton-Raphson optimization: the sums run over the samples in double, the 2x2 step on the scalar sums
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
-            double g1 = 0, g2 = 0, h11 = 0, h22 = 0, h21 = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                double si = NumOps.ToDouble(scores[i]);
-                double fApB = si * A + B;
-                double p, q;
-
-                if (fApB >= 0)
-                {
-                    p = Math.Exp(-fApB) / (1 + Math.Exp(-fApB));
-                    q = 1 / (1 + Math.Exp(-fApB));
-                }
-                else
-                {
-                    p = 1 / (1 + Math.Exp(fApB));
-                    q = Math.Exp(fApB) / (1 + Math.Exp(fApB));
-                }
-
-                double d2 = p * q;
-                double d1 = targets[i] - p;
-
-                g1 += si * d1;
-                g2 += d1;
-                h11 += si * si * d2;
-                h22 += d2;
-                h21 += si * d2;
-            }
+            var (g1, g2, h11, h22, h21) = PlattNewtonSums(scoreTensor, targets, A, B);
 
             // Regularization
             h11 += _options.Regularization;
@@ -450,31 +342,41 @@ public class ProbabilityCalibrator<T>
         _plattB = NumOps.FromDouble(B);
     }
 
+    // Gradient and Hessian sums of the Platt log-likelihood at (A, B): with f = s A + B, p = sigmoid(f),
+    // q = sigmoid(-f), d1 = t - p and d2 = p q.
+    private static (double G1, double G2, double H11, double H22, double H21) PlattNewtonSums(
+        Tensor<double> scores, Tensor<double> targets, double a, double b)
+    {
+        var engine = AiDotNetEngine.Current;
+        var fApB = engine.TensorAddScalar(engine.TensorMultiplyScalar(scores, a), b);
+        var p = engine.TensorSigmoid(fApB);
+        var q = engine.TensorSigmoid(engine.TensorNegate(fApB));
+        var d2 = engine.TensorMultiply(p, q);
+        var d1 = engine.TensorSubtract(targets, p);
+        var scaledD2 = engine.TensorMultiply(scores, d2);
+
+        return (engine.TensorSum(engine.TensorMultiply(scores, d1)),
+            engine.TensorSum(d1),
+            engine.TensorSum(engine.TensorMultiply(scores, scaledD2)),
+            engine.TensorSum(d2),
+            engine.TensorSum(scaledD2));
+    }
+
     private T[] TransformPlattScaling(T[] scores)
     {
-        double A = NumOps.ToDouble(_plattA);
-        double B = NumOps.ToDouble(_plattB);
-
-        return scores.Select(s =>
-        {
-            double fApB = NumOps.ToDouble(s) * A + B;
-            if (fApB >= 0)
-            {
-                return NumOps.FromDouble(1 / (1 + Math.Exp(-fApB)));
-            }
-            else
-            {
-                double exp = Math.Exp(fApB);
-                return NumOps.FromDouble(exp / (1 + exp));
-            }
-        }).ToArray();
+        // p = 1 / (1 + exp(-(s A + B))), the stable sigmoid on both signs of s A + B
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var fApB = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(new Tensor<T>(scores, new[] { scores.Length }).Cast<double>(), NumOps.ToDouble(_plattA)), NumOps.ToDouble(_plattB));
+        return engine.TensorSigmoid(fApB).Cast<T>().ToArray();
     }
 
     #endregion
 
     #region Isotonic Regression
 
-    private void FitIsotonicRegression(T[] scores, T[] labels)
+    internal void FitIsotonicRegression(T[] scores, T[] labels)
     {
         // Pool Adjacent Violators Algorithm (PAVA) - uses double internally for numerical stability
         var sorted = scores.Zip(labels, (s, l) => (score: s, label: NumOps.ToDouble(l)))
@@ -529,34 +431,73 @@ public class ProbabilityCalibrator<T>
             return scores;
         }
 
-        return scores.Select(s =>
+        int m = _isotonicPoints.Count;
+        var pointX = new T[m];
+        var pointY = new T[m];
+        for (int i = 0; i < m; i++)
         {
-            // Binary search for nearest point
-            int lo = 0, hi = _isotonicPoints.Count - 1;
+            pointX[i] = _isotonicPoints[i].x;
+            pointY[i] = _isotonicPoints[i].y;
+        }
 
-            if (NumOps.LessThanOrEquals(s, _isotonicPoints[lo].x)) return _isotonicPoints[lo].y;
-            if (NumOps.GreaterThanOrEquals(s, _isotonicPoints[hi].x)) return _isotonicPoints[hi].y;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        int count = scores.Length;
+        var shape = new[] { count };
+        var s = new Tensor<T>(scores, shape);
+        var x = new Tensor<T>(pointX, new[] { m });
+        var y = new Tensor<T>(pointY, new[] { m });
+        var firstY = engine.TensorBroadcastTo(engine.TensorNarrow(y, 0, 0, 1), shape);
 
-            while (lo < hi - 1)
-            {
-                int mid = (lo + hi) / 2;
-                if (NumOps.LessThanOrEquals(_isotonicPoints[mid].x, s))
-                    lo = mid;
-                else
-                    hi = mid;
-            }
+        // A single point maps every score (NaN included) to its value
+        if (m == 1) return firstY.ToArray();
 
-            // Linear interpolation
-            T x1 = _isotonicPoints[lo].x;
-            T x2 = _isotonicPoints[hi].x;
-            T y1 = _isotonicPoints[lo].y;
-            T y2 = _isotonicPoints[hi].y;
+        // Bracketing points: hi is the first point with x > s (the binary search's upper end), clamped to
+        // [1, m - 1]; a NaN score keeps the search's initial bracket (0, 1).
+        var nanScore = EvaluationTensorOps<T>.NanMask(s);
+        var nanIndex = nanScore.Cast<int>();
+        var hi = engine.TensorClamp(engine.TensorSearchSorted(x, s, true), 1, m - 1);
+        hi = engine.TensorAdd(engine.TensorSubtract(hi, engine.TensorMultiply(nanIndex, hi)), nanIndex);
+        var lo = engine.TensorSubtractScalar(hi, 1);
 
-            T diff = NumOps.Subtract(x2, x1);
-            if (NumOps.LessThan(NumOps.Abs(diff), NumOps.FromDouble(1e-10))) return y1;
+        // Linear interpolation (or the lower value when the bracket has zero width)
+        var x1 = engine.TensorGather(x, lo, 0);
+        var x2 = engine.TensorGather(x, hi, 0);
+        var y1 = engine.TensorGather(y, lo, 0);
+        var y2 = engine.TensorGather(y, hi, 0);
+        Tensor<T> flat, interpolated;
+        if (typeof(T) == typeof(decimal))
+        {
+            // Preserve decimal differences that would disappear when absolute coordinates are cast to double.
+            var diff = engine.TensorSubtract(x2, x1);
+            flat = engine.TensorLessThan(engine.TensorAbs(diff), NumOps.FromDouble(1e-10));
+            var safeDiff = engine.TensorWhere(flat, engine.TensorOnesLike(diff), diff);
+            interpolated = engine.TensorAdd(y1, engine.TensorDivide(
+                engine.TensorMultiply(engine.TensorSubtract(s, x1), engine.TensorSubtract(y2, y1)), safeDiff));
+        }
+        else
+        {
+            var wideX1 = x1.Cast<double>();
+            var wideY1 = y1.Cast<double>();
+            var diff = engine.TensorSubtract(x2.Cast<double>(), wideX1);
+            var wideFlat = engine.TensorLessThan(engine.TensorAbs(diff), 1e-10);
+            var safeDiff = engine.TensorWhere(wideFlat, engine.TensorOnesLike(diff), diff);
+            interpolated = engine.TensorAdd(wideY1, engine.TensorDivide(
+                engine.TensorMultiply(engine.TensorSubtract(s.Cast<double>(), wideX1),
+                    engine.TensorSubtract(y2.Cast<double>(), wideY1)), safeDiff)).Cast<T>();
+            flat = wideFlat.Cast<T>();
+        }
+        var inner = engine.TensorWhere(flat, y1, interpolated);
 
-            return NumOps.Add(y1, NumOps.Divide(NumOps.Multiply(NumOps.Subtract(s, x1), NumOps.Subtract(y2, y1)), diff));
-        }).ToArray();
+        // Scores at or below the first point take its value, then scores at or above the last point take the last value
+        var finite = EvaluationTensorOps<T>.Not(nanScore);
+        var firstX = engine.TensorBroadcastTo(engine.TensorNarrow(x, 0, 0, 1), shape);
+        var lastX = engine.TensorBroadcastTo(engine.TensorNarrow(x, 0, m - 1, 1), shape);
+        var lastY = engine.TensorBroadcastTo(engine.TensorNarrow(y, 0, m - 1, 1), shape);
+        var atOrBelowFirst = EvaluationTensorOps<T>.And(finite, EvaluationTensorOps<T>.Not(engine.TensorGreaterThan(s, firstX)));
+        var atOrAboveLast = EvaluationTensorOps<T>.And(finite, EvaluationTensorOps<T>.Not(engine.TensorLessThan(s, lastX)));
+
+        return engine.TensorWhere(atOrBelowFirst, firstY, engine.TensorWhere(atOrAboveLast, lastY, inner)).ToArray();
     }
 
     #endregion
@@ -569,13 +510,9 @@ public class ProbabilityCalibrator<T>
         // If scores are already probabilities, convert to logits first
         // Internal computation in double for numerical stability (exp, log)
 
-        var logits = scores.Select(s =>
-        {
-            double p = Math.Max(1e-10, Math.Min(1 - 1e-10, NumOps.ToDouble(s)));
-            return Math.Log(p / (1 - p));
-        }).ToArray();
-
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
+        using var noGrad = new NoGradScope<T>();
+        var logits = TemperatureLogits(scores);
+        var labelTensor = new Tensor<T>(labels, new[] { labels.Length }).Cast<double>();
 
         // Optimize temperature to minimize cross-entropy
         double temp = 1.0;
@@ -583,19 +520,9 @@ public class ProbabilityCalibrator<T>
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
-            double gradient = 0;
-
-            for (int i = 0; i < logits.Length; i++)
-            {
-                double scaledLogit = logits[i] / temp;
-                double p = 1 / (1 + Math.Exp(-scaledLogit));
-
-                // Gradient of cross-entropy w.r.t. T:
-                // dL/dT = -(p - y) * logit / T²
-                gradient += -(p - labelsDouble[i]) * logits[i] / (temp * temp);
-            }
-
-            gradient /= logits.Length;
+            // Gradient of cross-entropy w.r.t. T:
+            // dL/dT = -(p - y) * logit / T², averaged over the samples
+            double gradient = TemperatureGradient(logits, labelTensor, temp);
 
             if (Math.Abs(gradient) < _options.Tolerance)
             {
@@ -609,17 +536,27 @@ public class ProbabilityCalibrator<T>
         _temperature = NumOps.FromDouble(temp);
     }
 
+    // Scores clamped to [1e-10, 1 - 1e-10] (NaN stays NaN) and mapped to logits.
+    private static Tensor<double> TemperatureLogits(T[] scores)
+    {
+        var clamped = EvaluationTensorOps<double>.ClampPreservingNaN(
+            new Tensor<T>(scores, new[] { scores.Length }).Cast<double>(), 1e-10, 1 - 1e-10);
+        return EvaluationTensorOps<double>.Logit(clamped);
+    }
+
+    private static double TemperatureGradient(Tensor<double> logits, Tensor<double> labels, double temp)
+    {
+        var engine = AiDotNetEngine.Current;
+        var p = engine.TensorSigmoid(engine.TensorDivideScalar(logits, temp));
+        double sum = engine.TensorSum(engine.TensorMultiply(engine.TensorSubtract(labels, p), logits));
+        return sum / (temp * temp) / logits.Length;
+    }
+
     private T[] TransformTemperatureScaling(T[] scores)
     {
-        double temp = NumOps.ToDouble(_temperature);
-
-        return scores.Select(s =>
-        {
-            double p = Math.Max(1e-10, Math.Min(1 - 1e-10, NumOps.ToDouble(s)));
-            double logit = Math.Log(p / (1 - p));
-            double scaledLogit = logit / temp;
-            return NumOps.FromDouble(1 / (1 + Math.Exp(-scaledLogit)));
-        }).ToArray();
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        return engine.TensorSigmoid(engine.TensorDivideScalar(TemperatureLogits(scores), NumOps.ToDouble(_temperature))).Cast<T>().ToArray();
     }
 
     #endregion
@@ -633,36 +570,17 @@ public class ProbabilityCalibrator<T>
         // Internal computation in double for numerical stability (exp, log)
 
         int n = scores.Length;
-        var features = new double[n, 3];
+        using var noGrad = new NoGradScope<T>();
+        var (logit, logScore) = BetaFeatures(scores);
+        var labelTensor = new Tensor<T>(labels, new[] { labels.Length }).Cast<double>();
 
-        for (int i = 0; i < n; i++)
-        {
-            double s = Math.Max(1e-6, Math.Min(1 - 1e-6, NumOps.ToDouble(scores[i])));
-            features[i, 0] = Math.Log(s / (1 - s));  // logit
-            features[i, 1] = Math.Log(s);             // log(s)
-            features[i, 2] = 1;                       // intercept
-        }
-
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
-
-        // Logistic regression
+        // Logistic regression on (logit, log(s), 1)
         double[] w = [0, 0, 0];
         double lr = _options.LearningRate;
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
-            double[] grad = [0, 0, 0];
-
-            for (int i = 0; i < n; i++)
-            {
-                double z = w[0] * features[i, 0] + w[1] * features[i, 1] + w[2] * features[i, 2];
-                double p = 1 / (1 + Math.Exp(-z));
-
-                for (int j = 0; j < 3; j++)
-                {
-                    grad[j] += (p - labelsDouble[i]) * features[i, j];
-                }
-            }
+            double[] grad = BetaGradient(logit, logScore, labelTensor, w);
 
             double maxGrad = grad.Max(Math.Abs);
             if (maxGrad < _options.Tolerance) break;
@@ -678,18 +596,40 @@ public class ProbabilityCalibrator<T>
         _betaC = NumOps.FromDouble(w[2]);
     }
 
+    // Scores clamped to [1e-6, 1 - 1e-6] (NaN stays NaN): the logit and log(s) features.
+    private static (Tensor<double> Logit, Tensor<double> LogScore) BetaFeatures(T[] scores)
+    {
+        var clamped = EvaluationTensorOps<double>.ClampPreservingNaN(
+            new Tensor<T>(scores, new[] { scores.Length }).Cast<double>(), 1e-6, 1 - 1e-6);
+        return (EvaluationTensorOps<double>.Logit(clamped), AiDotNetEngine.Current.TensorLog(clamped));
+    }
+
+    // Sum over samples of (sigmoid(w0 logit + w1 log s + w2) - y) times each feature (the third feature is 1).
+    private static double[] BetaGradient(Tensor<double> logit, Tensor<double> logScore, Tensor<double> labels, double[] w)
+    {
+        var engine = AiDotNetEngine.Current;
+        var z = engine.TensorAddScalar(
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(logit, w[0]),
+                engine.TensorMultiplyScalar(logScore, w[1])),
+            w[2]);
+        var error = engine.TensorSubtract(engine.TensorSigmoid(z), labels);
+        return
+        [
+            engine.TensorSum(engine.TensorMultiply(error, logit)),
+            engine.TensorSum(engine.TensorMultiply(error, logScore)),
+            engine.TensorSum(error)
+        ];
+    }
+
     private T[] TransformBetaCalibration(T[] scores)
     {
-        double a = NumOps.ToDouble(_betaA);
-        double b = NumOps.ToDouble(_betaB);
-        double c = NumOps.ToDouble(_betaC);
-
-        return scores.Select(s =>
-        {
-            double sClamped = Math.Max(1e-6, Math.Min(1 - 1e-6, NumOps.ToDouble(s)));
-            double z = a * Math.Log(sClamped / (1 - sClamped)) + b * Math.Log(sClamped) + c;
-            return NumOps.FromDouble(1 / (1 + Math.Exp(-z)));
-        }).ToArray();
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (logit, logScore) = BetaFeatures(scores);
+        var z = engine.TensorAddScalar(
+            engine.TensorAdd(engine.TensorMultiplyScalar(logit, NumOps.ToDouble(_betaA)), engine.TensorMultiplyScalar(logScore, NumOps.ToDouble(_betaB))), NumOps.ToDouble(_betaC));
+        return engine.TensorSigmoid(z).Cast<T>().ToArray();
     }
 
     #endregion
@@ -699,35 +639,22 @@ public class ProbabilityCalibrator<T>
     private void FitHistogramBinning(T[] scores, T[] labels)
     {
         int numBins = _options.NumBins;
-        _binEdges = new T[numBins + 1];
+        _binEdges = new double[numBins + 1];
         _binProbabilities = new T[numBins];
 
-        for (int i = 0; i <= numBins; i++)
-        {
-            _binEdges[i] = NumOps.FromDouble((double)i / numBins);
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var edges = engine.TensorDivideScalar(engine.TensorArange<double>(0, numBins + 1), (double)numBins);
+        _binEdges = edges.ToArray();
+        if (numBins == 0) return;
 
-        for (int b = 0; b < numBins; b++)
-        {
-            // Include scores == 1.0 in the last bin
-            var binIndices = Enumerable.Range(0, scores.Length)
-                .Where(i => NumOps.GreaterThanOrEquals(scores[i], _binEdges[b]) && (b == numBins - 1 ? NumOps.LessThanOrEquals(scores[i], _binEdges[b + 1]) : NumOps.LessThan(scores[i], _binEdges[b + 1])))
-                .ToList();
-
-            if (binIndices.Count > 0)
-            {
-                T sum = NumOps.Zero;
-                foreach (var i in binIndices)
-                {
-                    sum = NumOps.Add(sum, labels[i]);
-                }
-                _binProbabilities[b] = NumOps.Divide(sum, NumOps.FromDouble(binIndices.Count));
-            }
-            else
-            {
-                _binProbabilities[b] = NumOps.Divide(NumOps.Add(_binEdges[b], _binEdges[b + 1]), NumOps.FromDouble(2));
-            }
-        }
+        // Mean label per bin [b/numBins, (b+1)/numBins) (the last bin also holds 1.0); empty bins take the midpoint
+        var (counts, _, meanLabels) = BinAverages(
+            new Tensor<T>(scores, new[] { scores.Length }), new Tensor<T>(labels, new[] { labels.Length }), numBins);
+        var midpoints = engine.TensorDivideScalar(
+            engine.TensorAdd(engine.TensorNarrow(edges, 0, 0, numBins), engine.TensorNarrow(edges, 0, 1, numBins)),
+            2.0);
+        _binProbabilities = engine.TensorWhere(engine.TensorGreaterThan(counts, 0.0), meanLabels, midpoints).Cast<T>().ToArray();
     }
 
     private void FitBayesianBinning(T[] scores, T[] labels)
@@ -740,77 +667,34 @@ public class ProbabilityCalibrator<T>
         int maxBins = Math.Min(_options.NumBins, n);
 
         double bestBic = double.NegativeInfinity;
-        T[]? bestEdges = null;
+        double[]? bestEdges = null;
         T[]? bestProbs = null;
 
-        // Convert scores/labels to double for BIC computation
-        var scoresDouble = scores.Select(s => NumOps.ToDouble(s)).ToArray();
-        var labelsDouble = labels.Select(l => NumOps.ToDouble(l)).ToArray();
-
-        // Sort once and co-sort labels to avoid re-sorting per candidate numBins
-        var sortedIndices = Enumerable.Range(0, n).OrderBy(i => scoresDouble[i]).ToArray();
-        var sortedScores = sortedIndices.Select(i => scoresDouble[i]).ToArray();
-        var sortedLabels = sortedIndices.Select(i => labelsDouble[i]).ToArray();
-
-        for (int numBins = 2; numBins <= maxBins; numBins++)
+        if (maxBins >= 2)
         {
-            // Create equal-frequency (quantile) bin edges from pre-sorted data
-            int binSize = n / numBins;
+            var engine = AiDotNetEngine.Current;
+            using var noGrad = new NoGradScope<T>();
 
-            var edges = new double[numBins + 1];
-            edges[0] = 0.0;
-            edges[numBins] = 1.0;
-            for (int b = 1; b < numBins; b++)
+            // Sort once (NaN first, then ascending, as OrderBy on doubles) and co-sort labels; prefix sums of the
+            // sorted labels give each bin's positive count
+            var scoreTensor = new Tensor<T>(scores, new[] { n }).Cast<double>();
+            bool hasNaN = EvaluationTensorOps<double>.Count(EvaluationTensorOps<double>.NanMask(scoreTensor)) > 0;
+            var sortedScores = EvaluationTensorOps<double>.SortNaNFirst(scoreTensor);
+            var order = engine.TensorSort(scoreTensor).Indices;
+            var sortedLabels = engine.TensorGather(new Tensor<T>(labels, new[] { labels.Length }).Cast<double>(), order, 0);
+            var labelPrefix = engine.TensorConcatenate(
+                new[] { new Tensor<double>(new[] { 1 }), engine.TensorCumSum(sortedLabels, 0) }, 0);
+
+            for (int numBins = 2; numBins <= maxBins; numBins++)
             {
-                int idx = Math.Min(b * binSize, n - 1);
-                edges[b] = sortedScores[idx];
-            }
+                var (bic, edges, probs) = ScoreQuantileBinning(sortedScores, labelPrefix, numBins, hasNaN);
 
-            // Compute bin statistics using sorted data with binary search for bin boundaries
-            double logLikelihood = 0;
-            var probs = new double[numBins];
-
-            // Use sorted order to partition samples into bins in O(n) total
-            int sampleIdx = 0;
-            for (int b = 0; b < numBins; b++)
-            {
-                int count = 0;
-                double positiveCount = 0;
-                double upperEdge = edges[b + 1];
-                bool isLastBin = b == numBins - 1;
-
-                while (sampleIdx < n)
+                if (bic > bestBic)
                 {
-                    double score = sortedScores[sampleIdx];
-                    bool inBin = isLastBin ? score <= upperEdge : score < upperEdge;
-                    if (!inBin) break;
-                    count++;
-                    positiveCount += sortedLabels[sampleIdx];
-                    sampleIdx++;
+                    bestBic = bic;
+                    bestEdges = edges;
+                    bestProbs = probs;
                 }
-
-                if (count == 0)
-                {
-                    probs[b] = (edges[b] + edges[b + 1]) / 2.0;
-                    continue;
-                }
-
-                double p = positiveCount / count;
-                p = Math.Max(1e-10, Math.Min(1 - 1e-10, p));
-                probs[b] = p;
-
-                // Binomial log-likelihood for this bin
-                logLikelihood += positiveCount * Math.Log(p) + (count - positiveCount) * Math.Log(1 - p);
-            }
-
-            // BIC = log-likelihood - (k/2) * log(n), where k = numBins (one parameter per bin)
-            double bic = logLikelihood - (numBins / 2.0) * Math.Log(n);
-
-            if (bic > bestBic)
-            {
-                bestBic = bic;
-                bestEdges = edges.Select(e => NumOps.FromDouble(e)).ToArray();
-                bestProbs = probs.Select(p => NumOps.FromDouble(p)).ToArray();
             }
         }
 
@@ -826,24 +710,101 @@ public class ProbabilityCalibrator<T>
         }
     }
 
-    private T[] TransformHistogramBinning(T[] scores)
+    // One BBQ candidate: equal-frequency edges [0, s[b * (n / numBins)] for b = 1..numBins-1, 1] over the sorted
+    // scores, bins filled in sorted order (score < upper edge, the last bin score <= 1), bin probability
+    // positives / count clamped to [1e-10, 1 - 1e-10] (empty bins: the edge midpoint), and
+    // BIC = binomial log-likelihood - numBins / 2 * ln n. A NaN score sorts first and stops the partition, so every
+    // bin is then empty.
+    private static (double Bic, double[] Edges, T[] Probs) ScoreQuantileBinning(
+        Tensor<double> sortedScores, Tensor<double> labelPrefix, int numBins, bool hasNaN)
     {
-        if (_binEdges == null || _binProbabilities == null)
+        var engine = AiDotNetEngine.Current;
+        int n = sortedScores.Length;
+        int binSize = n / numBins;
+
+        var innerIndices = new int[numBins - 1];
+        for (int b = 1; b < numBins; b++)
+            innerIndices[b - 1] = Math.Min(b * binSize, n - 1);
+
+        var edges = engine.TensorConcatenate(new[]
         {
-            return scores;
+            new Tensor<double>(new[] { 0.0 }, new[] { 1 }),
+            engine.TensorGather(sortedScores, new Tensor<int>(innerIndices, new[] { numBins - 1 }), 0),
+            new Tensor<double>(new[] { 1.0 }, new[] { 1 })
+        }, 0);
+        var lowerEdges = engine.TensorNarrow(edges, 0, 0, numBins);
+        var upperEdges = engine.TensorNarrow(edges, 0, 1, numBins);
+
+        Tensor<int> ends;
+        if (hasNaN)
+        {
+            ends = new Tensor<int>(new[] { numBins });
+        }
+        else
+        {
+            // Bin b ends at the first sorted score >= its upper edge (the last bin at the first score > 1); the
+            // partition never moves backwards
+            var belowUpper = engine.TensorSearchSorted(sortedScores, engine.TensorNarrow(upperEdges, 0, 0, numBins - 1), false);
+            var atMostOne = engine.TensorSearchSorted(sortedScores, engine.TensorNarrow(upperEdges, 0, numBins - 1, 1), true);
+            ends = engine.TensorCumMax(engine.TensorConcatenate(new[] { belowUpper, atMostOne }, 0), 0);
         }
 
-        return scores.Select(s =>
+        var starts = engine.TensorConcatenate(new[] { new Tensor<int>(new[] { 1 }), engine.TensorNarrow(ends, 0, 0, numBins - 1) }, 0);
+        var counts = engine.TensorSubtract(ends, starts).Cast<double>();
+        var positives = engine.TensorSubtract(engine.TensorGather(labelPrefix, ends, 0), engine.TensorGather(labelPrefix, starts, 0));
+        var negatives = engine.TensorSubtract(counts, positives);
+        var nonEmpty = engine.TensorGreaterThan(counts, 0.0);
+
+        var p = EvaluationTensorOps<double>.ClampPreservingNaN(
+            engine.TensorDivide(positives, engine.TensorMax(counts, 1.0)), 1e-10, 1 - 1e-10);
+        var midpoints = engine.TensorDivideScalar(engine.TensorAdd(lowerEdges, upperEdges), 2.0);
+        var probs = engine.TensorWhere(nonEmpty, p, midpoints);
+
+        // Binomial log-likelihood of the non-empty bins
+        var logLikelihoods = engine.TensorAdd(
+            engine.TensorMultiply(positives, engine.TensorLog(p)),
+            engine.TensorMultiply(negatives, engine.TensorLog(engine.TensorSubtract(engine.TensorOnesLike(p), p))));
+        double logLikelihood = engine.TensorSum(
+            engine.TensorWhere(nonEmpty, logLikelihoods, engine.TensorZerosLike(logLikelihoods)));
+
+        // BIC = log-likelihood - (k/2) * log(n), where k = numBins (one parameter per bin)
+        double bic = logLikelihood - (numBins / 2.0) * Math.Log(n);
+        return (bic, edges.ToArray(), probs.Cast<T>().ToArray());
+    }
+
+    private T[] TransformHistogramBinning(T[] scores)
+    {
+        if (_binEdges == null || _binProbabilities == null) return scores;
+        if (scores.Length == 0) return [];
+        int numBins = _binProbabilities.Length;
+        if (numBins == 0) throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var allScores = new Tensor<T>(scores, new[] { scores.Length }).Cast<double>();
+        var binEdges = _binEdges;
+        var binProbabilities = new Tensor<T>(_binProbabilities, new[] { numBins }).Cast<double>().ToArray();
+        var result = new T[scores.Length];
+        for (int start = 0; start < scores.Length; start += EvaluationBinOps.SampleBlockSize)
         {
-            for (int b = 0; b < _binProbabilities.Length; b++)
+            int length = Math.Min(EvaluationBinOps.SampleBlockSize, scores.Length - start);
+            var sample = engine.TensorNarrow(allScores, 0, start, length);
+            var valid = EvaluationTensorOps<double>.Not(EvaluationTensorOps<double>.NanMask(sample));
+            var matched = engine.TensorZerosLike(sample);
+            var picked = engine.TensorFullLike(sample, binProbabilities[numBins - 1]);
+            for (int bin = 0; bin < numBins; bin++)
             {
-                if (NumOps.GreaterThanOrEquals(s, _binEdges[b]) && NumOps.LessThan(s, _binEdges[b + 1]))
-                {
-                    return _binProbabilities[b];
-                }
+                double lower = binEdges[bin];
+                double upper = binEdges[bin + 1];
+                if (double.IsNaN(lower) || double.IsNaN(upper)) continue;
+                var match = engine.TensorMultiply(valid, engine.TensorMultiply(
+                    engine.TensorGreaterEqual(sample, engine.TensorFullLike(sample, lower)), engine.TensorLessThan(sample, upper)));
+                var first = engine.TensorMultiply(match, engine.TensorEquals(matched, 0.0));
+                picked = engine.TensorWhere(first, engine.TensorFullLike(sample, binProbabilities[bin]), picked);
+                matched = engine.TensorMax(matched, match);
             }
-            return _binProbabilities[^1];
-        }).ToArray();
+            picked.Cast<T>().AsSpan().CopyTo(result.AsSpan(start, length));
+        }
+        return result;
     }
 
     #endregion
@@ -874,7 +835,8 @@ public class ProbabilityCalibrator<T>
         // p0: assuming test point label = 0, p1: assuming test point label = 1
         // Final calibrated probability = p1 / (1 - p0 + p1)
         var savedIsotonicPoints = _isotonicPoints;
-        var calibrated = new T[scores.Length];
+        var lowerFits = new T[scores.Length];
+        var upperFits = new T[scores.Length];
         T zero = NumOps.Zero;
         T one = NumOps.One;
 
@@ -886,18 +848,13 @@ public class ProbabilityCalibrator<T>
                 var scores0 = _vennCalibrationScores.Append(scores[i]).ToArray();
                 var labels0 = _vennCalibrationLabels.Append(zero).ToArray();
                 FitIsotonicRegression(scores0, labels0);
-                T p0 = TransformIsotonicRegression([scores[i]])[0];
+                lowerFits[i] = TransformIsotonicRegression([scores[i]])[0];
 
                 // Augment calibration set with test point labeled 1
                 var scores1 = _vennCalibrationScores.Append(scores[i]).ToArray();
                 var labels1 = _vennCalibrationLabels.Append(one).ToArray();
                 FitIsotonicRegression(scores1, labels1);
-                T p1 = TransformIsotonicRegression([scores[i]])[0];
-
-                // Combine to get point estimate
-                T denom = NumOps.Add(NumOps.Subtract(one, p0), p1);
-                double denomDouble = NumOps.ToDouble(denom);
-                calibrated[i] = denomDouble > 1e-10 ? NumOps.Divide(p1, denom) : NumOps.FromDouble(0.5);
+                upperFits[i] = TransformIsotonicRegression([scores[i]])[0];
             }
         }
         finally
@@ -905,6 +862,17 @@ public class ProbabilityCalibrator<T>
             // Always restore the original isotonic state
             _isotonicPoints = savedIsotonicPoints;
         }
+
+        // Combine to get point estimate: p1 / (1 - p0 + p1), or 0.5 when the denominator is not above 1e-10
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var shape = new[] { scores.Length };
+        var p0 = new Tensor<T>(lowerFits, shape);
+        var p1 = new Tensor<T>(upperFits, shape);
+        var denom = engine.TensorAdd(engine.TensorSubtract(engine.TensorOnesLike(p0), p0), p1);
+        var half = engine.TensorAddScalar(engine.TensorZerosLike(p0), NumOps.FromDouble(0.5));
+        var calibrated = engine.TensorWhere(
+            engine.TensorGreaterThan(denom, NumOps.FromDouble(1e-10)), engine.TensorDivide(p1, denom), half).ToArray();
 
         return calibrated;
     }

@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -49,33 +50,29 @@ public class HingeLossMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalLoss = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            // Predictions should be raw decision function values (continuous scores)
-            // Actuals are class labels (0/1 or -1/+1)
-            double pred = NumOps.ToDouble(predictions[i]);
-            double actual = NumOps.ToDouble(actuals[i]);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var one = engine.TensorOnesLike(pred);
 
-            // If actual is 0/1 encoded, convert to -1/+1
-            double y = actual <= 0.5 ? -1.0 : 1.0;
+        // Predictions should be raw decision function values (continuous scores); actuals are class labels
+        // (0/1 or -1/+1). A 0/1-encoded actual maps to -1/+1: y = actual <= 0.5 ? -1 : 1.
+        var negative = engine.TensorLessEqual(actual, engine.TensorFullLike(actual, 0.5));
+        var y = engine.TensorSubtract(one, engine.TensorMultiplyScalar(negative, 2.0));
 
-            // Use raw prediction score directly - this is the proper hinge loss
-            // The prediction should be a decision function output (e.g., signed distance from hyperplane)
-            // If predictions are already in [-1, 1], they work directly
-            // If predictions are in [0, 1] probability space, convert to [-1, 1]
-            double yHat = pred;
-            if (pred >= 0.0 && pred <= 1.0)
-            {
-                // Likely probability output - convert to signed margin space
-                yHat = 2.0 * pred - 1.0;
-            }
+        // Predictions in [0, 1] are likely probabilities and are moved to signed margin space (2 * pred - 1);
+        // other scores are used as they are.
+        var inUnitRange = engine.TensorMultiply(
+            engine.TensorGreaterEqual(pred, engine.TensorZerosLike(pred)),
+            engine.TensorLessEqual(pred, one));
+        var yHat = engine.TensorWhere(inUnitRange, engine.TensorSubtract(engine.TensorMultiplyScalar(pred, 2.0), one), pred);
 
-            // Hinge loss: max(0, 1 - y * yHat)
-            totalLoss += Math.Max(0.0, 1.0 - y * yHat);
-        }
+        // Hinge loss: max(0, 1 - y * yHat). Math.Max propagates NaN, the engine max does not.
+        var margin = engine.TensorSubtract(one, engine.TensorMultiply(y, yHat));
+        if (EvaluationTensorOps<double>.Count(EvaluationTensorOps<double>.NanMask(margin)) > 0) return NumOps.FromDouble(double.NaN);
 
-        return NumOps.FromDouble(totalLoss / predictions.Length);
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorMax(margin, 0.0)));
     }
 
     /// <inheritdoc />
@@ -98,18 +95,17 @@ public class HingeLossMetric<T> : IClassificationMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

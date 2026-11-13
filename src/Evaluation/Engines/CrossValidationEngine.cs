@@ -4,6 +4,7 @@ using AiDotNet.Evaluation.Options;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Engines;
 
@@ -166,6 +167,25 @@ public class CrossValidationEngine<T>
         return AggregateResults(strategy, foldResults);
     }
 
+    private static (double Mean, double Std, double Margin) Summarize(List<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        int count = values.Count;
+        var tensor = new Tensor<T>(values.ToArray(), new[] { count }).Cast<double>();
+        double mean = engine.TensorMean(tensor);
+        double variance = count > 1
+            ? engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean)) / (count - 1)
+            : 0;
+        double std = Math.Sqrt(variance);
+
+        // Use the Student-t quantile with one degree of freedom lost to the sample mean.
+        double tValue = count > 1
+            ? new AiDotNet.Distributions.StudentTDistribution<double>(count - 1.0).InverseCdf(0.975)
+            : 0;
+        return (mean, std, std * (tValue / Math.Sqrt(count)));
+    }
+
     private CrossValidationResult<T> AggregateResults(
         ICrossValidationStrategy<T> strategy,
         List<FoldResult<T>> foldResults)
@@ -180,41 +200,29 @@ public class CrossValidationEngine<T>
 
         foreach (var metricName in allMetricNames)
         {
-            var values = new List<double>();
+            var values = new List<T>();
 
             foreach (var fold in foldResults)
             {
                 var metric = fold.Metrics[metricName];
                 if (metric != null)
-                    values.Add(NumOps.ToDouble(metric.Value));
+                    values.Add(metric.Value);
             }
 
             if (values.Count == 0) continue;
 
-            // Calculate mean and std
-            double mean = values.Average();
-            double variance = values.Count > 1
-                ? values.Sum(v => (v - mean) * (v - mean)) / (values.Count - 1)
-                : 0;
-            double std = Math.Sqrt(variance);
+            // Calculate mean, std and the 95% CI margin
+            var (mean, std, margin) = Summarize(values);
 
             // Get direction from first available metric
             var sampleMetric = foldResults.First().Metrics[metricName];
             var direction = sampleMetric?.Direction ?? MetricDirection.HigherIsBetter;
 
-            // Calculate 95% CI using t-distribution approximation
-            double tValue = 1.96; // Approximate for large n
-            if (values.Count < 30)
-            {
-                // Simple approximation for small samples
-                tValue = 2.0 + (4.0 / values.Count);
-            }
-            double margin = tValue * std / Math.Sqrt(values.Count);
-
+            var report = new Tensor<double>(new[] { mean, mean - margin, mean + margin, std }, new[] { 4 }).Cast<T>().ToArray();
             var aggregated = new MetricWithCI<T>(
-                NumOps.FromDouble(mean),
-                NumOps.FromDouble(mean - margin),
-                NumOps.FromDouble(mean + margin),
+                report[0],
+                report[1],
+                report[2],
                 0.95,
                 ConfidenceIntervalMethod.NormalApproximation,
                 metricName,
@@ -222,7 +230,7 @@ public class CrossValidationEngine<T>
             {
                 Category = sampleMetric?.Category ?? "Unknown",
                 Description = sampleMetric?.Description,
-                StandardDeviation = NumOps.FromDouble(std)
+                StandardDeviation = report[3]
             };
 
             aggregatedMetrics.Add(aggregated);

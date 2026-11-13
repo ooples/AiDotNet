@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -52,71 +53,30 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
         var groupSizes = groups.Select(g => g.Length).ToArray();
         int N = groupSizes.Sum();
 
-        // Pool all observations and compute ranks
-        var pooled = new List<(double value, int groupIdx, int sampleIdx)>();
-        for (int g = 0; g < k; g++)
-        {
-            for (int i = 0; i < groups[g].Length; i++)
-            {
-                pooled.Add((NumOps.ToDouble(groups[g][i]), g, i));
-            }
-        }
-
-        // Sort and assign ranks (handle ties by average rank)
-        var sorted = pooled.OrderBy(x => x.value).ToList();
-        var ranks = new double[N];
-
-        int idx = 0;
-        while (idx < N)
-        {
-            int start = idx;
-            double value = sorted[start].value;
-
-            // Find all tied values
-            while (idx < N && Math.Abs(sorted[idx].value - value) < 1e-10)
-                idx++;
-
-            // Assign average rank to all tied values
-            double avgRank = (start + 1 + idx) / 2.0;
-            for (int i = start; i < idx; i++)
-            {
-                int originalIdx = pooled.IndexOf(sorted[i]);
-                ranks[originalIdx] = avgRank;
-            }
-        }
+        // Pool all observations and compute ranks (tied values share their average rank)
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolNativeGroups(groups);
+        var (ranks, tieSizes) = EvaluationTensorOps<T>.MidRanksWithTies(pooled);
 
         // Compute rank sums for each group
-        var rankSums = new double[k];
-        int currentIdx = 0;
-        for (int g = 0; g < k; g++)
-        {
-            for (int i = 0; i < groups[g].Length; i++)
-            {
-                rankSums[g] += ranks[currentIdx];
-                currentIdx++;
-            }
-        }
+        var rankSums = EvaluationTensorOps<double>.GroupSums(ranks, groupIndex, k);
 
         // Compute H statistic
-        double sumRankSquaredOverN = 0;
-        for (int g = 0; g < k; g++)
-        {
-            sumRankSquaredOverN += (rankSums[g] * rankSums[g]) / groupSizes[g];
-        }
-
+        double sumRankSquaredOverN = engine.TensorSum(engine.TensorDivide(engine.TensorSquare(rankSums), sizes));
         double H = (12.0 / ((double)N * (N + 1))) * sumRankSquaredOverN - 3.0 * (N + 1);
 
-        // Tie correction
-        var tieGroups = sorted.GroupBy(x => x.value).Where(g => g.Count() > 1).Select(g => g.Count()).ToList();
-        if (tieGroups.Count > 0)
+        // Tie correction: sum of t^3 - t over the groups of t equal values (singletons add 0)
+        // Each tie of size t contributes t copies of t^2 - 1, totaling t^3 - t.
+        double tieSum = engine.TensorSum(engine.TensorSquare(tieSizes.Cast<double>())) - N;
+        if (tieSum > 0)
         {
-            double tieCorrection = 1 - tieGroups.Sum(t => (double)t * t * t - t) / ((double)N * N * N - N);
-            if (tieCorrection > 1e-10)
-                H /= tieCorrection;
+            double tieCorrection = 1 - tieSum / ((double)N * N * N - N);
+            if (tieCorrection > 1e-10) H /= tieCorrection;
         }
 
         int df = k - 1;
-        double pValue = 1 - ChiSquareCDF(H, df);
+        double pValue = ChiSquareSurvival(H, df);
 
         // Compute median for each group
         var medians = groups.Select(g => Median(g)).ToArray();
@@ -141,112 +101,121 @@ public class KruskalWallisTest<T> : IMultipleComparisonTest<T>
     public Dictionary<(int, int), double> DunnPostHoc(T[][] groups)
     {
         int k = groups.Length;
+        if (k < 2) throw new ArgumentException("Need at least 2 groups for Dunn's test.", nameof(groups));
+        if (groups.Any(group => group.Length == 0))
+            throw new ArgumentException("Each group must contain at least one observation.", nameof(groups));
         int N = groups.Sum(g => g.Length);
         var results = new Dictionary<(int, int), double>();
 
         // Pool and rank (same as main test)
-        var pooled = new List<(double value, int groupIdx)>();
-        for (int g = 0; g < k; g++)
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var (pooled, groupIndex, sizes) = EvaluationTensorOps<T>.PoolNativeGroups(groups);
+        var (ranks, tieSizes) = EvaluationTensorOps<T>.MidRanksWithTies(pooled);
+
+        double tieSum = engine.TensorSum(engine.TensorSquare(tieSizes.Cast<double>())) - N;
+        double variance = Math.Max(0, (double)N * (N + 1) / 12.0 - tieSum / (12.0 * (N - 1)));
+        if (variance == 0)
         {
-            foreach (var val in groups[g])
-                pooled.Add((NumOps.ToDouble(val), g));
+            for (int i = 0; i < k; i++)
+                for (int j = i + 1; j < k; j++) results[(i, j)] = 1.0;
+            return results;
         }
 
-        var sorted = pooled.OrderBy(x => x.value).ToList();
-        var ranks = new double[N];
-        int idx = 0;
-        int rankIdx = 0;
-        while (idx < N)
-        {
-            int start = idx;
-            double value = sorted[start].value;
-            while (idx < N && Math.Abs(sorted[idx].value - value) < 1e-10)
-                idx++;
-            double avgRank = (start + 1 + idx) / 2.0;
-            for (int i = start; i < idx; i++)
-                ranks[rankIdx++] = avgRank;
-        }
+        // Compute mean ranks per group: each observation's rank goes to its own group
+        var meanRanks = engine.TensorDivide(EvaluationTensorOps<double>.GroupSums(ranks, groupIndex, k), sizes);
 
-        // Compute mean ranks per group
-        var meanRanks = new double[k];
-        var groupSizes = new int[k];
-        rankIdx = 0;
-        for (int g = 0; g < k; g++)
-        {
-            groupSizes[g] = groups[g].Length;
-            for (int i = 0; i < groupSizes[g]; i++)
-            {
-                meanRanks[g] += ranks[rankIdx++];
-            }
-            meanRanks[g] /= groupSizes[g];
-        }
+        // Pairwise comparisons use Dunn's tie-corrected rank variance.
+        var shape = new[] { k, k };
+        var column = new[] { k, 1 };
+        var row = new[] { 1, k };
+        var rankGap = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(meanRanks, column), shape),
+            engine.TensorBroadcastTo(engine.Reshape(meanRanks, row), shape)));
+        var inverseSizes = engine.TensorReciprocal(sizes);
+        var inverseSizeSum = engine.TensorAdd(
+            engine.TensorBroadcastTo(engine.Reshape(inverseSizes, column), shape),
+            engine.TensorBroadcastTo(engine.Reshape(inverseSizes, row), shape));
+        var standardError = engine.TensorSqrt(engine.TensorMultiplyScalar(inverseSizeSum, variance));
+        var z = engine.TensorDivide(rankGap, standardError);
+        var pValues = engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(z)), 2.0);
 
-        // Pairwise comparisons
-        for (int i = 0; i < k - 1; i++)
+        int cell = 0;
+        foreach (double pValue in pValues)
         {
-            for (int j = i + 1; j < k; j++)
-            {
-                double z = Math.Abs(meanRanks[i] - meanRanks[j]) /
-                          Math.Sqrt(((double)N * (N + 1) / 12.0) * (1.0 / groupSizes[i] + 1.0 / groupSizes[j]));
-                double pValue = 2 * (1 - NormalCDF(z));
-                results[(i, j)] = pValue;
-            }
+            int i = cell / k, j = cell % k;
+            if (i < j) results[(i, j)] = pValue;
+            cell++;
         }
 
         return results;
     }
 
-    private double Median(T[] values)
+    private static double Median(T[] values)
     {
-        var sorted = values.Select(v => NumOps.ToDouble(v)).OrderBy(x => x).ToArray();
-        int n = sorted.Length;
+        int n = values.Length;
         if (n == 0) return 0;
-        return n % 2 == 0 ? (sorted[n / 2 - 1] + sorted[n / 2]) / 2 : sorted[n / 2];
+        var (lower, upper) = EvaluationTensorOps<double>.OrderStatistics(
+            new Tensor<T>(values, new[] { n }).Cast<double>(), (n - 1) / 2, n / 2);
+        return n % 2 == 0 ? (lower + upper) / 2 : upper;
     }
 
-    private double NormalCDF(double z)
+    private static double ChiSquareSurvival(double statistic, int degreesOfFreedom)
     {
-        double t = 1.0 / (1.0 + 0.2316419 * Math.Abs(z));
-        double d = 0.3989423 * Math.Exp(-z * z / 2);
-        double prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-        return z > 0 ? 1 - prob : prob;
-    }
-
-    private double ChiSquareCDF(double x, int df)
-    {
-        if (x <= 0) return 0;
-        double a = df / 2.0;
-        double x2 = x / 2.0;
-        return LowerIncompleteGamma(a, x2) / GammaFunction(a);
-    }
-
-    private double LowerIncompleteGamma(double a, double x)
-    {
-        if (x <= 0) return 0;
-        double sum = 1.0 / a;
-        double term = 1.0 / a;
-        for (int n = 1; n < 100; n++)
+        if (degreesOfFreedom <= 0) throw new ArgumentOutOfRangeException(nameof(degreesOfFreedom));
+        if (double.IsNaN(statistic)) return double.NaN;
+        if (statistic <= 0) return 1;
+        if (double.IsPositiveInfinity(statistic)) return 0;
+        double shape = degreesOfFreedom / 2.0, x = statistic / 2.0;
+        double logScale = shape * Math.Log(x) - x - LogGamma(shape);
+        const double epsilon = 2e-15, tiny = 1e-300;
+        const int maxIterations = 100000;
+        if (x < shape + 1)
         {
-            term *= x / (a + n);
-            sum += term;
-            if (Math.Abs(term) < 1e-10 * Math.Abs(sum)) break;
+            // The lower-tail series converges here; subtraction is safe while that tail is small.
+            double sum = 1 / shape, term = sum;
+            for (int n = 1; n <= maxIterations; n++)
+            {
+                term *= x / (shape + n);
+                sum += term;
+                if (Math.Abs(term) <= epsilon * Math.Abs(sum))
+                    return Math.Max(0, Math.Min(1, 1 - Math.Exp(logScale) * sum));
+            }
         }
-        return Math.Exp(-x + a * Math.Log(x)) * sum;
+        else
+        {
+            // Evaluate the upper tail directly with a continued fraction, avoiding 1 - CDF cancellation.
+            double b = x + 1 - shape, c = 1 / tiny, d = 1 / b, fraction = d;
+            for (int n = 1; n <= maxIterations; n++)
+            {
+                double numerator = -n * (n - shape);
+                b += 2;
+                d = numerator * d + b;
+                if (Math.Abs(d) < tiny) d = d < 0 ? -tiny : tiny;
+                c = b + numerator / c;
+                if (Math.Abs(c) < tiny) c = c < 0 ? -tiny : tiny;
+                d = 1 / d;
+                double change = d * c;
+                fraction *= change;
+                if (Math.Abs(change - 1) <= epsilon)
+                    return Math.Max(0, Math.Min(1, Math.Exp(logScale) * fraction));
+            }
+        }
+        throw new ArithmeticException("The chi-square tail calculation did not converge.");
     }
 
-    private double GammaFunction(double x)
+    private static double LogGamma(double value)
     {
-        double[] c = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-            -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double sum = 1.000000000190015;
-        for (int j = 0; j < 6; j++)
+        // Lanczos approximation, evaluated in log space so large degrees of freedom stay finite.
+        double[] coefficients =
         {
-            y += 1;
-            sum += c[j] / y;
-        }
-        return Math.Exp(-tmp + Math.Log(2.5066282746310005 * sum / x));
+            676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059,
+            12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7
+        };
+        double z = value - 1, sum = 0.99999999999980993;
+        for (int i = 0; i < coefficients.Length; i++) sum += coefficients[i] / (z + i + 1);
+        double t = z + 7.5;
+        return 0.9189385332046727 + (z + 0.5) * Math.Log(t) - t + Math.Log(sum);
     }
+
 }

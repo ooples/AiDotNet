@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -61,26 +62,19 @@ public class HuberLossMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalLoss = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            double error = Math.Abs(actual - pred);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double delta = _delta;
+        var error = engine.TensorAbs(engine.TensorSubtract(actual, pred));
 
-            if (error <= _delta)
-            {
-                // Quadratic region
-                totalLoss += 0.5 * error * error;
-            }
-            else
-            {
-                // Linear region
-                totalLoss += _delta * (error - 0.5 * _delta);
-            }
-        }
+        // Quadratic region 0.5 * e^2 where e <= delta, linear region delta * (e - 0.5 * delta) elsewhere (NaN included)
+        var quadratic = engine.TensorMultiplyScalar(engine.TensorSquare(error), 0.5);
+        var linear = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(error, 0.5 * _delta), delta);
+        var inQuadratic = engine.TensorLessEqual(error, engine.TensorFullLike(error, delta));
 
-        return NumOps.FromDouble(totalLoss / predictions.Length);
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorWhere(inQuadratic, quadratic, linear)));
     }
 
     /// <inheritdoc />
@@ -103,18 +97,17 @@ public class HuberLossMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

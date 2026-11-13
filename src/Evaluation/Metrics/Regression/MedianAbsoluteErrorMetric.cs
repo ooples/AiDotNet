@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -46,19 +47,14 @@ public class MedianAbsoluteErrorMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        var errors = new double[predictions.Length];
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            errors[i] = Math.Abs(NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(predictions[i]));
-        }
-
-        Array.Sort(errors);
-        int n = errors.Length;
-        double median = n % 2 == 1
-            ? errors[n / 2]
-            : (errors[n / 2 - 1] + errors[n / 2]) / 2.0;
-
-        return NumOps.FromDouble(median);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var errors = engine.TensorAbs(engine.TensorSubtract(actual, pred));
+        int count = errors.Length;
+        var (lower, upper) = EvaluationTensorOps<double>.OrderStatistics(errors, (count - 1) / 2, count / 2);
+        return NumOps.FromDouble(count % 2 == 1 ? upper : (lower + upper) / 2.0);
     }
 
     /// <inheritdoc />
@@ -81,18 +77,17 @@ public class MedianAbsoluteErrorMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

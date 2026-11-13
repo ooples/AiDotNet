@@ -95,27 +95,31 @@ public class RecallMetric<T> : IClassificationMetric<T>
             return NumOps.Zero;
         }
 
+        var predictionTensor = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actualTensor = EvaluationTensorOps<T>.ToTensor(actuals);
+
         if (_averaging == AveragingMethod.Binary || _averaging == AveragingMethod.None)
         {
-            return ComputeBinaryRecall(predictions, actuals, _positiveLabel);
+            return ComputeBinaryRecall(predictionTensor, actualTensor, _positiveLabel);
         }
 
         // Get unique classes from both predictions and actuals
-        var classes = GetUniqueClasses(predictions, actuals);
+        var classes = EvaluationTensorOps<T>.UniqueLabels(predictionTensor, actualTensor);
 
         if (_averaging == AveragingMethod.Micro)
         {
-            return ComputeMicroRecall(predictions, actuals, classes);
+            return ComputeMicroRecall(predictionTensor, actualTensor, classes);
         }
 
         // Macro or Weighted averaging
         double sumRecall = 0;
         double sumWeights = 0;
 
-        foreach (var cls in classes)
+        foreach (T cls in classes)
         {
-            var recall = NumOps.ToDouble(ComputeBinaryRecall(predictions, actuals, NumOps.FromDouble(cls)));
-            int classCount = CountClass(actuals, cls);
+            var counts = EvaluationTensorOps<T>.LabelCounts(predictionTensor, actualTensor, cls);
+            double recall = RecallFromCounts(counts.TruePositives, counts.ActualPositives);
+            int classCount = counts.ActualPositives;
 
             if (_averaging == AveragingMethod.Macro)
             {
@@ -132,75 +136,28 @@ public class RecallMetric<T> : IClassificationMetric<T>
         return sumWeights > 0 ? NumOps.FromDouble(sumRecall / sumWeights) : NumOps.Zero;
     }
 
-    private T ComputeBinaryRecall(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, T positiveLabel)
+    private static T ComputeBinaryRecall(Tensor<T> predictions, Tensor<T> actuals, T positiveLabel)
     {
-        int truePositives = 0;
-        int actualPositives = 0;
-        double positiveLabelValue = NumOps.ToDouble(positiveLabel);
-
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            if (NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0)
-            {
-                actualPositives++;
-                if (NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0)
-                {
-                    truePositives++;
-                }
-            }
-        }
-
-        return actualPositives > 0 ? NumOps.FromDouble((double)truePositives / actualPositives) : NumOps.Zero;
+        var counts = EvaluationTensorOps<T>.LabelCounts(predictions, actuals, positiveLabel);
+        return NumOps.FromDouble(RecallFromCounts(counts.TruePositives, counts.ActualPositives));
     }
 
-    private T ComputeMicroRecall(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, HashSet<double> classes)
+    private static double RecallFromCounts(int truePositives, int actualPositives)
+        => actualPositives > 0 ? (double)truePositives / actualPositives : 0;
+
+    private static T ComputeMicroRecall(Tensor<T> predictions, Tensor<T> actuals, Tensor<T> classes)
     {
         int totalTruePositives = 0;
         int totalActualPositives = 0;
 
-        foreach (var cls in classes)
+        foreach (T cls in classes)
         {
-            for (int i = 0; i < actuals.Length; i++)
-            {
-                if (NumOps.Compare(actuals[i], NumOps.FromDouble(cls)) == 0)
-                {
-                    totalActualPositives++;
-                    if (NumOps.Compare(predictions[i], NumOps.FromDouble(cls)) == 0)
-                    {
-                        totalTruePositives++;
-                    }
-                }
-            }
+            var counts = EvaluationTensorOps<T>.LabelCounts(predictions, actuals, cls);
+            totalActualPositives += counts.ActualPositives;
+            totalTruePositives += counts.TruePositives;
         }
 
         return totalActualPositives > 0 ? NumOps.FromDouble((double)totalTruePositives / totalActualPositives) : NumOps.Zero;
-    }
-
-    private static HashSet<double> GetUniqueClasses(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
-    {
-        var classes = new HashSet<double>();
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            classes.Add(NumOps.ToDouble(predictions[i]));
-        }
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            classes.Add(NumOps.ToDouble(actuals[i]));
-        }
-        return classes;
-    }
-
-    private static int CountClass(ReadOnlySpan<T> values, double cls)
-    {
-        int count = 0;
-        for (int i = 0; i < values.Length; i++)
-        {
-            if (NumOps.Compare(values[i], NumOps.FromDouble(cls)) == 0)
-            {
-                count++;
-            }
-        }
-        return count;
     }
 
     /// <inheritdoc/>
@@ -240,7 +197,7 @@ public class RecallMetric<T> : IClassificationMetric<T>
             ? RandomHelper.CreateSeededRandom(randomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var bootstrapValues = new double[bootstrapSamples];
+        var bootstrapValues = new List<T>(bootstrapSamples);
         var predArray = predictions.ToArray();
         var actualArray = actuals.ToArray();
 
@@ -256,10 +213,8 @@ public class RecallMetric<T> : IClassificationMetric<T>
                 sampledActual[i] = actualArray[idx];
             }
 
-            bootstrapValues[b] = NumOps.ToDouble(Compute(sampledPred, sampledActual));
+            bootstrapValues.Add(Compute(sampledPred, sampledActual));
         }
-
-        Array.Sort(bootstrapValues);
 
         double alpha = 1 - confidenceLevel;
         int lowerIdx = (int)Math.Floor(alpha / 2 * bootstrapSamples);
@@ -268,6 +223,6 @@ public class RecallMetric<T> : IClassificationMetric<T>
         lowerIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, lowerIdx));
         upperIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, upperIdx));
 
-        return (NumOps.FromDouble(bootstrapValues[lowerIdx]), NumOps.FromDouble(bootstrapValues[upperIdx]));
+        return EvaluationTensorOps<T>.OrderStatistics(bootstrapValues, lowerIdx, upperIdx);
     }
 }

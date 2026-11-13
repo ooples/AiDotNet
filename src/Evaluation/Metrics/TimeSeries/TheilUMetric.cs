@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.TimeSeries;
 
@@ -49,25 +50,14 @@ public class TheilUMetric<T> : ITimeSeriesMetric<T>
 
         int n = predictions.Length;
 
-        // Numerator: Sum of squared forecast errors
-        double sumSquaredError = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double error = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(actuals[i]);
-            sumSquaredError += error * error;
-        }
-
-        // Denominator: Sum of squared actual changes (naive no-change forecast error)
-        double sumSquaredChange = 0;
-        for (int i = 1; i < n; i++)
-        {
-            double change = NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(actuals[i - 1]);
-            sumSquaredChange += change * change;
-        }
-
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double sumSquaredError = engine.TensorSumOfSquares(engine.TensorSubtract(pred, actual));
+        double sumSquaredChange = engine.TensorSumOfSquares(engine.TensorDiff(actual, 1, 0));
         if (sumSquaredChange < 1e-10)
             return sumSquaredError < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
-
         return NumOps.FromDouble(Math.Sqrt(sumSquaredError / sumSquaredChange));
     }
 }

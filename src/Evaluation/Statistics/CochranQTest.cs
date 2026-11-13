@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -57,37 +58,24 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
         }
 
         // Convert to binary success/failure matrix
-        // X[i,j] = 1 if classifier j is correct on sample i, 0 otherwise
-        var X = new int[n, k];
-        for (int i = 0; i < n; i++)
-        {
-            bool actualPositive = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
-            for (int j = 0; j < k; j++)
-            {
-                bool predPositive = NumOps.GreaterThanOrEquals(predictions[j][i], NumOps.FromDouble(0.5));
-                X[i, j] = (predPositive == actualPositive) ? 1 : 0;
-            }
-        }
+        // X[j, i] = 1 if classifier j is correct on sample i, 0 otherwise
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var half = NumOps.FromDouble(0.5);
+        var predicted = EvaluationTensorOps<T>.GreaterOrEqualMask(EvaluationTensorOps<T>.StackRows(predictions, n), half);
+        var actualPositive = EvaluationTensorOps<T>.GreaterOrEqualMask(new Tensor<T>(actuals, new[] { n }), half);
+        var X = EvaluationTensorOps<T>.PairEqualMask(
+            predicted, engine.TensorBroadcastTo(engine.Reshape(actualPositive, new[] { 1, n }), new[] { k, n })).Cast<double>();
 
-        // Compute row and column totals
-        var rowTotals = new int[n];
-        var colTotals = new int[k];
-        int grandTotal = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                rowTotals[i] += X[i, j];
-                colTotals[j] += X[i, j];
-                grandTotal += X[i, j];
-            }
-        }
+        // Row (sample) and column (classifier) totals
+        var rowTotals = engine.ReduceSum(X, new[] { 0 }, false);
+        var colTotals = engine.ReduceSum(X, new[] { 1 }, false);
+        int grandTotal = EvaluationTensorOps<double>.Count(X);
 
         // Cochran's Q statistic
-        double sumColSquares = colTotals.Sum(c => (double)c * c);
-        double sumRowSquares = rowTotals.Sum(r => (double)r * r);
-        double sumRowTotals = rowTotals.Sum();
+        double sumColSquares = engine.TensorSumOfSquares(colTotals);
+        double sumRowSquares = engine.TensorSumOfSquares(rowTotals);
+        double sumRowTotals = grandTotal;
 
         double numerator = (k - 1) * (k * sumColSquares - (double)grandTotal * grandTotal);
         double denominator = k * sumRowTotals - sumRowSquares;
@@ -110,7 +98,7 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
         double pValue = 1 - ChiSquareCDF(Q, df);
 
         // Compute accuracy for each classifier
-        var accuracies = colTotals.Select(c => (double)c / n).ToArray();
+        var accuracies = engine.TensorDivideScalar(colTotals, (double)n);
 
         return new StatisticalTestResult<T>
         {

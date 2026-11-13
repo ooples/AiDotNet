@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -43,16 +44,14 @@ public class MaxErrorMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double maxError = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            double error = Math.Abs(actual - pred);
-            if (error > maxError) maxError = error;
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var error = engine.TensorAbs(engine.TensorSubtract(actual, pred));
 
-        return NumOps.FromDouble(maxError);
+        // The running maximum started at 0 and skipped NaN errors (error > maxError is false for NaN).
+        return engine.TensorMaxValue(engine.TensorWhere(engine.TensorIsNan(error), engine.TensorZerosLike(error), error));
     }
 
     /// <inheritdoc />
@@ -75,18 +74,17 @@ public class MaxErrorMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

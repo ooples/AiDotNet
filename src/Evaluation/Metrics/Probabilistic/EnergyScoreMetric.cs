@@ -1,6 +1,7 @@
 using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Probabilistic;
 
@@ -74,26 +75,42 @@ internal class EnergyScoreMetric<T> : IRegressionMetric<T>
                 throw new ArgumentException("All ensemble samples must have the same dimension as observation.");
         }
 
-        // E||X - y||
-        double term1 = 0;
+        if (d == 0) return NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var members = new Tensor<double>[m];
         for (int i = 0; i < m; i++)
-        {
-            term1 += EuclideanNorm(ensembleSamples[i], observation);
-        }
-        term1 /= m;
+            members[i] = new Tensor<T>(ensembleSamples[i], [d]).Cast<double>();
+        var ensemble = engine.TensorStack(members, 0);
+        var obs = new Tensor<T>(observation, [1, d]).Cast<double>();
 
-        // 0.5 * E||X - X'|| — only compute j > i and multiply by 2
-        double term2 = 0;
+        // Bound temporary feature grids to 2 MiB, or one row when the feature vector is wider.
+        int blockSize = Math.Max(1, 262144 / d);
+        double observationDistances = 0, pairDistances = 0;
+        for (int start = 0; start < m;)
+        {
+            int count = Math.Min(blockSize, m - start);
+            var block = engine.TensorSlice(ensemble, [start, 0], [count, d]);
+            var difference = engine.TensorSubtract(block, engine.TensorBroadcastTo(obs, [count, d]));
+            observationDistances += engine.TensorSum(engine.TensorSqrt(
+                engine.ReduceSum(engine.TensorSquare(difference), [1], false)));
+            start += count;
+        }
         for (int i = 0; i < m; i++)
         {
-            for (int j = i + 1; j < m; j++)
+            var left = engine.TensorSlice(ensemble, [i, 0], [1, d]);
+            for (int start = i + 1; start < m;)
             {
-                term2 += 2 * EuclideanNorm(ensembleSamples[i], ensembleSamples[j]);
+                int count = Math.Min(blockSize, m - start);
+                var right = engine.TensorSlice(ensemble, [start, 0], [count, d]);
+                var difference = engine.TensorSubtract(right, engine.TensorBroadcastTo(left, [count, d]));
+                pairDistances += engine.TensorSum(engine.TensorSqrt(
+                    engine.ReduceSum(engine.TensorSquare(difference), [1], false)));
+                start += count;
             }
         }
-        term2 = 0.5 * term2 / (m * m);
-
-        return NumOps.FromDouble(term1 - term2);
+        // Each unordered pair represents both ordered pairs in 0.5 E||X-X'||.
+        return NumOps.FromDouble(observationDistances / m - pairDistances / ((double)m * m));
     }
 
     /// <inheritdoc/>
@@ -105,14 +122,11 @@ internal class EnergyScoreMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double sum = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double diff = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(actuals[i]);
-            sum += Math.Abs(diff);
-        }
-
-        return NumOps.FromDouble(sum / predictions.Length);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(pred, actual))));
     }
 
     /// <inheritdoc/>
@@ -134,7 +148,7 @@ internal class EnergyScoreMetric<T> : IRegressionMetric<T>
         }
         if (bootstrapSamples < 2)
             throw new ArgumentOutOfRangeException(nameof(bootstrapSamples), "Bootstrap samples must be at least 2.");
-        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+        if (!(confidenceLevel > 0 && confidenceLevel < 1))
             throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must be between 0 and 1 (exclusive).");
 
         var value = Compute(predictions, actuals);
@@ -142,228 +156,114 @@ internal class EnergyScoreMetric<T> : IRegressionMetric<T>
         return new MetricWithCI<T>(value, lower, upper, confidenceLevel, ciMethod, Name, Direction);
     }
 
-    private double EuclideanNorm(T[] a, T[] b)
-    {
-        double sum = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
-    }
-
     private (T, T) BootstrapCI(ReadOnlySpan<T> pred, ReadOnlySpan<T> actual,
         ConfidenceIntervalMethod ciMethod, int samples, double conf, int? seed)
     {
-        int n = pred.Length;
-        if (n == 0) return (NumOps.Zero, NumOps.Zero);
-
+        if (pred.Length == 0) return (NumOps.Zero, NumOps.Zero);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        using var noDoubleGrad = new NoGradScope<double>();
+        var errors = engine.TensorAbs(engine.TensorSubtract(
+            EvaluationTensorOps<T>.ToTensor(pred).Cast<double>(), EvaluationTensorOps<T>.ToTensor(actual).Cast<double>()));
+        double theta = engine.TensorMean(errors);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var predArr = pred.ToArray();
-        var actArr = actual.ToArray();
-        double thetaHat = NumOps.ToDouble(Compute(predArr, actArr));
-
-        // Generate bootstrap samples
         var bootstrapValues = new double[samples];
         for (int b = 0; b < samples; b++)
-        {
-            var sp = new T[n];
-            var sa = new T[n];
-            for (int i = 0; i < n; i++)
-            {
-                int idx = random.Next(n);
-                sp[i] = predArr[idx];
-                sa[i] = actArr[idx];
-            }
-            bootstrapValues[b] = NumOps.ToDouble(Compute(sp, sa));
-        }
-
+            bootstrapValues[b] = engine.TensorMean(Resample(errors, random));
+        var bootstrap = new Tensor<double>(bootstrapValues, [samples]);
         double alpha = 1 - conf;
-
-        return ciMethod switch
+        var (lower, upper) = ciMethod switch
         {
-            ConfidenceIntervalMethod.PercentileBootstrap => PercentileInterval(bootstrapValues, alpha),
-            ConfidenceIntervalMethod.BasicBootstrap => BasicInterval(bootstrapValues, thetaHat, alpha),
-            ConfidenceIntervalMethod.BCaBootstrap => BCaInterval(bootstrapValues, thetaHat, predArr, actArr, alpha),
-            ConfidenceIntervalMethod.StudentizedBootstrap => StudentizedInterval(bootstrapValues, thetaHat, predArr, actArr, random, alpha),
-            _ => PercentileInterval(bootstrapValues, alpha),
+            ConfidenceIntervalMethod.PercentileBootstrap => PercentileInterval(bootstrap, alpha),
+            ConfidenceIntervalMethod.BasicBootstrap => BasicInterval(bootstrap, theta, alpha),
+            ConfidenceIntervalMethod.BCaBootstrap => BCaInterval(bootstrap, theta, errors, alpha),
+            ConfidenceIntervalMethod.StudentizedBootstrap => StudentizedInterval(bootstrap, theta, errors, random, alpha),
+            _ => throw new NotSupportedException()
         };
+        return (NumOps.FromDouble(lower), NumOps.FromDouble(upper));
     }
 
-    private static (T, T) PercentileInterval(double[] bootstrapValues, double alpha)
+    private static Tensor<double> Resample(Tensor<double> values, Random random)
     {
-        Array.Sort(bootstrapValues);
-        int lo = Math.Max(0, (int)(alpha / 2 * bootstrapValues.Length));
-        int hi = Math.Min(bootstrapValues.Length - 1, (int)((1 - alpha / 2) * bootstrapValues.Length) - 1);
-        hi = Math.Max(hi, lo + 1);
-        hi = Math.Min(hi, bootstrapValues.Length - 1);
-        return (NumOps.FromDouble(bootstrapValues[lo]), NumOps.FromDouble(bootstrapValues[hi]));
+        var indices = new int[values.Length];
+        for (int i = 0; i < indices.Length; i++) indices[i] = random.Next(values.Length);
+        return AiDotNetEngine.Current.TensorIndexSelect(values, new Tensor<int>(indices, [indices.Length]), 0);
     }
 
-    private static (T, T) BasicInterval(double[] bootstrapValues, double thetaHat, double alpha)
+    private static (double, double) PercentileInterval(Tensor<double> values, double alpha)
     {
-        Array.Sort(bootstrapValues);
-        int lo = Math.Max(0, (int)(alpha / 2 * bootstrapValues.Length));
-        int hi = Math.Min(bootstrapValues.Length - 1, (int)((1 - alpha / 2) * bootstrapValues.Length) - 1);
-        hi = Math.Max(hi, lo + 1);
-        hi = Math.Min(hi, bootstrapValues.Length - 1);
-        double lower = 2 * thetaHat - bootstrapValues[hi];
-        double upper = 2 * thetaHat - bootstrapValues[lo];
-        return (NumOps.FromDouble(Math.Max(0, lower)), NumOps.FromDouble(upper));
+        int lo = Math.Max(0, (int)(alpha / 2 * values.Length));
+        int hi = Math.Min(values.Length - 1, (int)((1 - alpha / 2) * values.Length) - 1);
+        hi = Math.Min(Math.Max(hi, lo + 1), values.Length - 1);
+        return EvaluationTensorOps<double>.OrderStatistics(values, lo, hi);
     }
 
-    private (T, T) BCaInterval(double[] bootstrapValues, double thetaHat,
-        T[] predArr, T[] actArr, double alpha)
+    private static (double, double) BasicInterval(Tensor<double> values, double theta, double alpha)
     {
-        int B = bootstrapValues.Length;
-        int n = predArr.Length;
-
-        // Bias correction z0: proportion of bootstrap values < thetaHat
-        int countBelow = 0;
-        for (int i = 0; i < B; i++)
-        {
-            if (bootstrapValues[i] < thetaHat) countBelow++;
-        }
-        double z0 = NormalQuantile(Math.Max(1e-10, Math.Min(1 - 1e-10, (double)countBelow / B)));
-
-        // Acceleration via jackknife
-        var jackValues = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            var jp = new T[n - 1];
-            var ja = new T[n - 1];
-            int idx = 0;
-            for (int j = 0; j < n; j++)
-            {
-                if (j == i) continue;
-                jp[idx] = predArr[j];
-                ja[idx] = actArr[j];
-                idx++;
-            }
-            jackValues[i] = NumOps.ToDouble(Compute(jp, ja));
-        }
-
-        double jackMean = 0;
-        for (int i = 0; i < n; i++) jackMean += jackValues[i];
-        jackMean /= n;
-
-        double numSum = 0, denSum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = jackMean - jackValues[i];
-            numSum += diff * diff * diff;
-            denSum += diff * diff;
-        }
-
-        double acc = denSum > 1e-30 ? numSum / (6 * Math.Pow(denSum, 1.5)) : 0;
-
-        // Adjusted percentiles
-        double zAlphaLo = NormalQuantile(alpha / 2);
-        double zAlphaHi = NormalQuantile(1 - alpha / 2);
-
-        double adjLo = z0 + (z0 + zAlphaLo) / (1 - acc * (z0 + zAlphaLo));
-        double adjHi = z0 + (z0 + zAlphaHi) / (1 - acc * (z0 + zAlphaHi));
-
-        double pLo = NormalCdf(adjLo);
-        double pHi = NormalCdf(adjHi);
-
-        Array.Sort(bootstrapValues);
-        int idxLo = Math.Max(0, Math.Min(B - 1, (int)(pLo * B)));
-        int idxHi = Math.Max(0, Math.Min(B - 1, (int)(pHi * B)));
-        idxHi = Math.Max(idxHi, idxLo + 1);
-        idxHi = Math.Min(idxHi, B - 1);
-
-        return (NumOps.FromDouble(bootstrapValues[idxLo]), NumOps.FromDouble(bootstrapValues[idxHi]));
+        var (lo, hi) = PercentileInterval(values, alpha);
+        return (Math.Max(0, 2 * theta - hi), Math.Max(0, 2 * theta - lo));
     }
 
-    private (T, T) StudentizedInterval(double[] bootstrapValues, double thetaHat,
-        T[] predArr, T[] actArr, Random random, double alpha)
+    private static Tensor<double> Jackknife(Tensor<double> errors)
     {
-        int B = bootstrapValues.Length;
-        int n = predArr.Length;
-
-        // Estimate standard error of thetaHat via jackknife
-        var jackValues = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            var jp = new T[n - 1];
-            var ja = new T[n - 1];
-            int idx = 0;
-            for (int j = 0; j < n; j++)
-            {
-                if (j == i) continue;
-                jp[idx] = predArr[j];
-                ja[idx] = actArr[j];
-                idx++;
-            }
-            jackValues[i] = NumOps.ToDouble(Compute(jp, ja));
-        }
-
-        double jackMean = 0;
-        for (int i = 0; i < n; i++) jackMean += jackValues[i];
-        jackMean /= n;
-
-        double jackVar = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double d = jackValues[i] - jackMean;
-            jackVar += d * d;
-        }
-        double seHat = Math.Sqrt((n - 1.0) / n * jackVar);
-        if (seHat < 1e-30) seHat = 1e-30;
-
-        // For each bootstrap sample, compute t-statistic using inner bootstrap SE
-        int innerB = Math.Max(25, B / 10);
-        var tStats = new double[B];
-        for (int b = 0; b < B; b++)
-        {
-            var sp = new T[n];
-            var sa = new T[n];
-            for (int i = 0; i < n; i++)
-            {
-                int idx = random.Next(n);
-                sp[i] = predArr[idx];
-                sa[i] = actArr[idx];
-            }
-            double thetaStar = NumOps.ToDouble(Compute(sp, sa));
-
-            // Estimate SE via inner bootstrap
-            double innerSum = 0;
-            double innerSumSq = 0;
-            for (int ib = 0; ib < innerB; ib++)
-            {
-                var ip = new T[n];
-                var ia = new T[n];
-                for (int i = 0; i < n; i++)
-                {
-                    int idx = random.Next(n);
-                    ip[i] = sp[idx];
-                    ia[i] = sa[idx];
-                }
-                double innerVal = NumOps.ToDouble(Compute(ip, ia));
-                innerSum += innerVal;
-                innerSumSq += innerVal * innerVal;
-            }
-
-            double innerMean = innerSum / innerB;
-            double innerVar = innerSumSq / innerB - innerMean * innerMean;
-            double seStar = Math.Sqrt(Math.Max(0, innerVar));
-            if (seStar < 1e-30) seStar = 1e-30;
-
-            tStats[b] = (thetaStar - thetaHat) / seStar;
-        }
-
-        Array.Sort(tStats);
-        int lo = Math.Max(0, (int)(alpha / 2 * B));
-        int hi = Math.Min(B - 1, (int)((1 - alpha / 2) * B) - 1);
-        hi = Math.Max(hi, lo + 1);
-        hi = Math.Min(hi, B - 1);
-
-        double lower = thetaHat - tStats[hi] * seHat;
-        double upper = thetaHat - tStats[lo] * seHat;
-        return (NumOps.FromDouble(Math.Max(0, lower)), NumOps.FromDouble(upper));
+        int n = errors.Length;
+        if (n < 2) return new Tensor<double>([n]);
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorDivideScalar(engine.TensorSubtract(
+            Tensor<double>.CreateDefault([n], engine.TensorSum(errors)), errors), n - 1.0);
     }
+
+    private static (double, double) BCaInterval(Tensor<double> values, double theta, Tensor<double> errors, double alpha)
+    {
+        var engine = AiDotNetEngine.Current;
+        int countBelow = EvaluationTensorOps<double>.Count(engine.TensorLessThan(values, theta));
+        double z0 = NormalQuantile(Math.Max(1e-10, Math.Min(1 - 1e-10, (double)countBelow / values.Length)));
+        var jack = Jackknife(errors);
+        var difference = engine.TensorNegate(engine.TensorSubtractScalar(jack, engine.TensorMean(jack)));
+        double scale = engine.TensorMaxValue(engine.TensorAbs(difference));
+        double acceleration = 0;
+        if (scale > 0 && !double.IsInfinity(scale))
+        {
+            var normalized = engine.TensorDivideScalar(difference, scale);
+            double numerator = engine.TensorSum(engine.TensorMultiply(engine.TensorSquare(normalized), normalized));
+            double denominator = engine.TensorSumOfSquares(normalized);
+            acceleration = numerator / (6 * Math.Pow(denominator, 1.5));
+        }
+        double zLo = NormalQuantile(alpha / 2), zHi = NormalQuantile(1 - alpha / 2);
+        double pLo = NormalCdf(z0 + (z0 + zLo) / (1 - acceleration * (z0 + zLo)));
+        double pHi = NormalCdf(z0 + (z0 + zHi) / (1 - acceleration * (z0 + zHi)));
+        int lo = Math.Max(0, Math.Min(values.Length - 1, (int)(pLo * values.Length)));
+        int hi = Math.Max(0, Math.Min(values.Length - 1, (int)(pHi * values.Length)));
+        hi = Math.Min(Math.Max(hi, lo + 1), values.Length - 1);
+        return EvaluationTensorOps<double>.OrderStatistics(values, lo, hi);
+    }
+
+    private static (double, double) StudentizedInterval(Tensor<double> bootstrapValues, double theta,
+        Tensor<double> errors, Random random, double alpha)
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = bootstrapValues.Length, n = errors.Length;
+        var jack = Jackknife(errors);
+        double jackVariance = engine.TensorSumOfSquares(engine.TensorSubtractScalar(jack, engine.TensorMean(jack)));
+        double seHat = Math.Max(1e-30, Math.Sqrt((n - 1.0) / n * jackVariance));
+        int innerCount = Math.Max(25, count / 10);
+        var tStatistics = new double[count];
+        for (int b = 0; b < count; b++)
+        {
+            var outer = Resample(errors, random);
+            double star = engine.TensorMean(outer);
+            var innerValues = new double[innerCount];
+            for (int ib = 0; ib < innerCount; ib++)
+                innerValues[ib] = engine.TensorMean(Resample(outer, random));
+            var inner = new Tensor<double>(innerValues, [innerCount]);
+            var centered = engine.TensorSubtractScalar(inner, engine.TensorMean(inner));
+            double seStar = Math.Max(1e-30, Math.Sqrt(engine.TensorMean(engine.TensorSquare(centered))));
+            tStatistics[b] = (star - theta) / seStar;
+        }
+        var (lo, hi) = PercentileInterval(new Tensor<double>(tStatistics, [count]), alpha);
+        return (Math.Max(0, theta - hi * seHat), Math.Max(0, theta - lo * seHat));
+    }
+
 
     /// <summary>
     /// Standard normal quantile (inverse CDF) using rational approximation (Abramowitz and Stegun).

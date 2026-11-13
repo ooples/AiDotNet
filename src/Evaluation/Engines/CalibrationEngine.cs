@@ -3,6 +3,7 @@ using AiDotNet.Evaluation.Options;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Engines;
 
@@ -53,62 +54,46 @@ public class CalibrationEngine<T>
 
         int n = probabilities.Length;
         var bins = new List<CalibrationBin<T>>();
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var probs = new Tensor<T>(probabilities, new[] { n }).Cast<double>();
+        var actualTensor = new Tensor<T>(actuals, new[] { n });
 
-        // Create bins
-        for (int i = 0; i < numBins; i++)
+        double ece = 0;
+        double mce = 0;
+        if (n > 0 && numBins > 0)
         {
-            double binStart = (double)i / numBins;
-            double binEnd = (double)(i + 1) / numBins;
+            // Create bins: bin i holds i/numBins <= p < (i+1)/numBins (the last bin also holds p == 1)
+            var positive = EvaluationTensorOps<T>.GreaterOrEqualMask(actualTensor, NumOps.FromDouble(0.5)).Cast<double>();
+            var (counts, meanProbs, frequencies) = EvaluationBinOps.Averages(probs, positive, numBins);
+            var gaps = engine.TensorAbs(engine.TensorSubtract(meanProbs, frequencies));
 
-            var binProbs = new List<double>();
-            var binActuals = new List<int>();
+            // Calculate Expected Calibration Error (ECE) and Maximum Calibration Error (MCE)
+            ece = engine.TensorSum(engine.TensorMultiply(counts, gaps)) / n;
+            mce = engine.TensorMaxValue(gaps);
 
-            for (int j = 0; j < n; j++)
+            var countValues = counts.Cast<int>().ToArray();
+            var meanValues = meanProbs.Cast<T>().ToArray();
+            var frequencyValues = frequencies.Cast<T>().ToArray();
+            for (int i = 0; i < numBins; i++)
             {
-                double prob = NumOps.ToDouble(probabilities[j]);
-                if (prob >= binStart && (prob < binEnd || (i == numBins - 1 && prob <= binEnd)))
+                if (countValues[i] > 0)
                 {
-                    binProbs.Add(prob);
-                    binActuals.Add(NumOps.GreaterThanOrEquals(actuals[j], NumOps.FromDouble(0.5)) ? 1 : 0);
+                    bins.Add(new CalibrationBin<T>
+                    {
+                        BinStart = (double)i / numBins,
+                        BinEnd = (double)(i + 1) / numBins,
+                        MeanPredictedProbability = meanValues[i],
+                        ObservedFrequency = frequencyValues[i],
+                        SampleCount = countValues[i]
+                    });
                 }
             }
-
-            if (binProbs.Count > 0)
-            {
-                bins.Add(new CalibrationBin<T>
-                {
-                    BinStart = binStart,
-                    BinEnd = binEnd,
-                    MeanPredictedProbability = NumOps.FromDouble(binProbs.Average()),
-                    ObservedFrequency = NumOps.FromDouble(binActuals.Average()),
-                    SampleCount = binProbs.Count
-                });
-            }
         }
-
-        // Calculate Expected Calibration Error (ECE)
-        double ece = 0;
-        foreach (var bin in bins)
-        {
-            double weight = (double)bin.SampleCount / n;
-            double diff = Math.Abs(NumOps.ToDouble(bin.MeanPredictedProbability) - NumOps.ToDouble(bin.ObservedFrequency));
-            ece += weight * diff;
-        }
-
-        // Calculate Maximum Calibration Error (MCE)
-        double mce = bins.Count > 0
-            ? bins.Max(b => Math.Abs(NumOps.ToDouble(b.MeanPredictedProbability) - NumOps.ToDouble(b.ObservedFrequency)))
-            : 0;
 
         // Calculate Brier Score
-        double brier = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double prob = NumOps.ToDouble(probabilities[i]);
-            double actual = NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0;
-            brier += (prob - actual) * (prob - actual);
-        }
-        brier /= n;
+        var actualIsOne = EvaluationTensorOps<T>.EqualMask(actualTensor, NumOps.One);
+        double brier = engine.TensorSumOfSquares(engine.TensorSubtract(probs, actualIsOne.Cast<double>())) / n;
 
         return new CalibrationResult<T>
         {
@@ -131,104 +116,76 @@ public class CalibrationEngine<T>
     {
         int n = probabilities.Length;
 
-        // Convert to double arrays
-        var probs = new double[n];
-        var targets = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            probs[i] = NumOps.ToDouble(probabilities[i]);
-            targets[i] = NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0;
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var probs = new Tensor<T>(probabilities, new[] { n }).Cast<double>();
+        var targets = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(actuals, new[] { n }), NumOps.One).Cast<double>();
 
         // Fit sigmoid: P_calibrated = 1 / (1 + exp(A * P_uncalibrated + B))
-        // Using simple gradient descent
-        double a = 1.0, b = 0.0;
-        double learningRate = 0.1;
+        // Using simple gradient descent; A and B are one-element tensors broadcast over the samples
+        var shape = new[] { n };
+        var a = new Tensor<double>(new[] { 1.0 }, new[] { 1 });
+        var b = new Tensor<double>(new[] { 1 });
+        const double learningRate = 0.1;
+        double count = n;
         int maxIterations = 1000;
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            double gradA = 0, gradB = 0;
+            var z = engine.TensorAdd(
+                engine.TensorMultiply(probs, engine.TensorBroadcastTo(a, shape)), engine.TensorBroadcastTo(b, shape));
+            var error = engine.TensorSubtract(engine.TensorSigmoid(z), targets);
 
-            for (int i = 0; i < n; i++)
-            {
-                double z = a * probs[i] + b;
-                double sigmoid = 1.0 / (1.0 + Math.Exp(-z));
-                double error = sigmoid - targets[i];
+            var gradA = engine.ReduceSum(engine.TensorMultiply(error, probs), new[] { 0 }, true);
+            var gradB = engine.ReduceSum(error, new[] { 0 }, true);
 
-                gradA += error * probs[i];
-                gradB += error;
-            }
-
-            a -= learningRate * gradA / n;
-            b -= learningRate * gradB / n;
+            a = engine.TensorSubtract(a, engine.TensorDivideScalar(engine.TensorMultiplyScalar(gradA, learningRate), count));
+            b = engine.TensorSubtract(b, engine.TensorDivideScalar(engine.TensorMultiplyScalar(gradB, learningRate), count));
         }
 
         // Apply calibration
-        var calibrated = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            double z = a * probs[i] + b;
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-z));
-            calibrated[i] = NumOps.FromDouble(sigmoid);
-        }
+        var calibrated = engine.TensorSigmoid(engine.TensorAdd(
+            engine.TensorMultiply(probs, engine.TensorBroadcastTo(a, shape)), engine.TensorBroadcastTo(b, shape))).Cast<T>().ToArray();
 
-        return (calibrated, a, b);
+        return (calibrated, a[0], b[0]);
     }
 
     /// <summary>
     /// Applies isotonic regression calibration.
     /// </summary>
+    /// <remarks>
+    /// Fits the least-squares non-decreasing sequence to the 0/1 labels (actual == 1) ordered by probability, using
+    /// the pool-adjacent-violators fit shared with <see cref="Calibration.ProbabilityCalibrator{T}"/>, and returns the
+    /// fitted value of each sample in input order (scikit-learn's <c>IsotonicRegression().fit_transform</c> for
+    /// distinct probabilities).
+    /// </remarks>
     public T[] IsotonicCalibration(T[] probabilities, T[] actuals)
     {
         int n = probabilities.Length;
+        if (actuals.Length < n)
+            throw new IndexOutOfRangeException("Index was outside the bounds of the array.");
+        if (n == 0) return [];
 
-        // Sort by predicted probability
-        var indexed = new (double prob, double actual, int idx)[n];
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var labels = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(actuals, new[] { actuals.Length }), NumOps.One).ToArray();
+
+        var calibrator = new Calibration.ProbabilityCalibrator<T>();
+        calibrator.FitIsotonicRegression(probabilities, labels);
+        var points = calibrator.IsotonicPoints;
+        if (points is null || points.Count != n)
+            throw new InvalidOperationException("Isotonic fit did not produce one point per sample.");
+
+        // The fit's points are in sorted order (NaN first, ties in input order); scatter them back to input order
+        var fitted = new T[n];
         for (int i = 0; i < n; i++)
         {
-            indexed[i] = (NumOps.ToDouble(probabilities[i]), NumOps.Compare(actuals[i], NumOps.One) == 0 ? 1 : 0, i);
-        }
-        Array.Sort(indexed, (a, b) => a.prob.CompareTo(b.prob));
-
-        // Pool Adjacent Violators Algorithm (PAVA)
-        var calibratedValues = new double[n];
-        var weights = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            calibratedValues[i] = indexed[i].actual;
-            weights[i] = 1;
+            fitted[i] = points[i].y;
         }
 
-        // PAVA: merge adjacent violators
-        bool changed = true;
-        while (changed)
-        {
-            changed = false;
-            for (int i = 0; i < n - 1; i++)
-            {
-                if (calibratedValues[i] > calibratedValues[i + 1])
-                {
-                    // Merge
-                    double newValue = (calibratedValues[i] * weights[i] + calibratedValues[i + 1] * weights[i + 1])
-                                     / (weights[i] + weights[i + 1]);
-                    calibratedValues[i] = newValue;
-                    calibratedValues[i + 1] = newValue;
-                    weights[i] = weights[i] + weights[i + 1];
-                    weights[i + 1] = weights[i];
-                    changed = true;
-                }
-            }
-        }
-
-        // Map back to original indices
-        var result = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            result[indexed[i].idx] = NumOps.FromDouble(calibratedValues[i]);
-        }
-
-        return result;
+        var order = EvaluationTensorOps<T>.ArgsortNaNFirst(new Tensor<T>(probabilities, new[] { n }));
+        var inverse = engine.TensorArgsort(order);
+        return engine.TensorGather(new Tensor<T>(fitted, new[] { n }), inverse, 0).ToArray();
     }
 }
 

@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -48,39 +49,22 @@ public class PearsonCorrelationMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length < 2) return NumOps.Zero;
 
-        int n = predictions.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
 
-        // Compute means
-        double sumPred = 0, sumActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            sumPred += NumOps.ToDouble(predictions[i]);
-            sumActual += NumOps.ToDouble(actuals[i]);
-        }
-        double meanPred = sumPred / n;
-        double meanActual = sumActual / n;
-
-        // Compute covariance and standard deviations
-        double covariance = 0;
-        double varPred = 0;
-        double varActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diffPred = NumOps.ToDouble(predictions[i]) - meanPred;
-            double diffActual = NumOps.ToDouble(actuals[i]) - meanActual;
-            covariance += diffPred * diffActual;
-            varPred += diffPred * diffPred;
-            varActual += diffActual * diffActual;
-        }
-
-        double stdPred = Math.Sqrt(varPred);
-        double stdActual = Math.Sqrt(varActual);
+        // Covariance and standard deviations around the means
+        var diffPred = engine.TensorSubtractScalar(pred, engine.TensorMean(pred));
+        var diffActual = engine.TensorSubtractScalar(actual, engine.TensorMean(actual));
+        double covariance = engine.TensorSum(engine.TensorMultiply(diffPred, diffActual));
+        double stdPred = Math.Sqrt(engine.TensorSumOfSquares(diffPred));
+        double stdActual = Math.Sqrt(engine.TensorSumOfSquares(diffActual));
 
         if (stdPred < 1e-10 || stdActual < 1e-10)
             return NumOps.Zero;
 
-        double r = covariance / (stdPred * stdActual);
-        return NumOps.FromDouble(r);
+        return NumOps.FromDouble(covariance / (stdPred * stdActual));
     }
 
     /// <inheritdoc />
@@ -103,18 +87,17 @@ public class PearsonCorrelationMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n < 2) return (NumOps.FromDouble(-1), NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

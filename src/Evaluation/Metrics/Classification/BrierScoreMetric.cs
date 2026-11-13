@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -64,34 +65,21 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
 
     private T ComputeBinaryBrier(ReadOnlySpan<T> probs, ReadOnlySpan<T> actuals)
     {
-        int n = probs.Length;
-        double sum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double p = NumOps.ToDouble(probs[i]);
-            double y = NumOps.ToDouble(actuals[i]);
-            double diff = p - y;
-            sum += diff * diff;
-        }
-        return NumOps.FromDouble(sum / n);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var diff = engine.TensorSubtract(EvaluationTensorOps<T>.ToTensor(probs).Cast<double>(), EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>());
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorSquare(diff)));
     }
 
     private T ComputeMultiClassBrier(ReadOnlySpan<T> probs, ReadOnlySpan<T> actuals, int numClasses)
     {
+        // Mean over the n * numClasses cells of (p - y)^2 with y the one-hot rounded true class.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
         int n = actuals.Length;
-        double sum = 0;
-        for (int i = 0; i < n; i++)
-        {
-            int trueClass = (int)Math.Round(NumOps.ToDouble(actuals[i]));
-            for (int c = 0; c < numClasses; c++)
-            {
-                double p = NumOps.ToDouble(probs[i * numClasses + c]);
-                double y = (c == trueClass) ? 1.0 : 0.0;
-                double diff = p - y;
-                sum += diff * diff;
-            }
-        }
-        return NumOps.FromDouble(sum / ((double)n * numClasses));
+        var probMatrix = engine.Reshape(EvaluationTensorOps<T>.ToTensor(probs).Cast<double>(), new[] { n, numClasses });
+        var oneHot = EvaluationTensorOps<T>.RoundedOneHot(EvaluationTensorOps<T>.ToTensor(actuals), numClasses).Cast<double>();
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(probMatrix, oneHot))));
     }
 
     /// <inheritdoc />
@@ -115,7 +103,7 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
         int n = actuals.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var probArr = probs.ToArray();
         var actArr = actuals.ToArray();
         int probsPerSample = numClasses == 2 ? 1 : numClasses;
@@ -131,12 +119,11 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
                 for (int c = 0; c < probsPerSample; c++)
                     sp[i * probsPerSample + c] = probArr[idx * probsPerSample + c];
             }
-            values[b] = NumOps.ToDouble(Compute(sp, sa, numClasses));
+            values.Add(Compute(sp, sa, numClasses));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

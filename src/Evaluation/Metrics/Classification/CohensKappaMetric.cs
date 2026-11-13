@@ -54,38 +54,20 @@ public class CohensKappaMetric<T> : IClassificationMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        var classes = new HashSet<double>();
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            classes.Add(NumOps.ToDouble(actuals[i]));
-            classes.Add(NumOps.ToDouble(predictions[i]));
-        }
-
-        var classList = classes.ToList();
-        int k = classList.Count;
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var classes = EvaluationTensorOps<T>.UniqueLabels(actual, pred);
         int n = predictions.Length;
 
-        // Build confusion matrix
-        var cm = new int[k, k];
-        for (int i = 0; i < n; i++)
-        {
-            int predIdx = classList.IndexOf(NumOps.ToDouble(predictions[i]));
-            int actualIdx = classList.IndexOf(NumOps.ToDouble(actuals[i]));
-            if (predIdx >= 0 && actualIdx >= 0) cm[actualIdx, predIdx]++;
-        }
+        // Observed agreement: the trace of the confusion matrix
+        double po = (double)EvaluationTensorOps<T>.Count(EvaluationTensorOps<T>.PairEqualMask(pred, actual)) / n;
 
-        // Observed agreement
-        double po = 0;
-        for (int i = 0; i < k; i++) po += cm[i, i];
-        po /= n;
-
-        // Expected agreement
+        // Expected agreement: sum over classes of (row total / n) * (column total / n)
         double pe = 0;
-        for (int c = 0; c < k; c++)
+        foreach (T cls in classes)
         {
-            double rowSum = 0, colSum = 0;
-            for (int j = 0; j < k; j++) { rowSum += cm[c, j]; colSum += cm[j, c]; }
-            pe += (rowSum / n) * (colSum / n);
+            var counts = EvaluationTensorOps<T>.LabelCounts(pred, actual, cls);
+            pe += ((double)counts.ActualPositives / n) * ((double)counts.PredictedPositives / n);
         }
 
         if (Math.Abs(1 - pe) < 1e-10) return NumOps.One;
@@ -112,19 +94,18 @@ public class CohensKappaMetric<T> : IClassificationMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.FromDouble(-1), NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray();
         var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }
