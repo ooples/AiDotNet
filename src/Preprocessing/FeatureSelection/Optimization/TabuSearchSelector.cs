@@ -93,7 +93,9 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         // Tabu list: the iteration until which each feature may not be swapped in or out
         // (kept in int: iteration numbers in T stop being exact past 2048 for Half)
         var tabuUntil = new int[p];
-        var importances = new Tensor<T>(new[] { p });
+        // Importance totals are accumulated in double: a running total in a narrow T such as Half stops growing at
+        // 2048 (2048 + 1 rounds back to 2048), which flattened the normalized importances over long runs.
+        var importances = new Tensor<double>(new[] { p });
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
@@ -117,17 +119,17 @@ public class TabuSearchSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             }
 
             // Track feature importance
-            importances = engine.TensorAdd(importances, PopulationSearchOps.Scale(current, currentScore));
+            importances = engine.TensorAdd(
+                importances, PopulationSearchOps.Scale(current.Cast<double>(), currentScore.Cast<double>()));
         }
 
         _selectedIndices = PreprocessingTensorOps.MaskPositions(best);
 
         // Normalize feature importances
-        var zero = new Tensor<T>(new[] { 1 });
-        var maxImportance = ParetoOps.Max(importances);
-        if (PopulationSearchOps.Greater(maxImportance, zero))
-            importances = engine.TensorDivide(importances, engine.TensorBroadcastTo(maxImportance, new[] { p }));
-        _featureImportances = importances.ToVector();
+        double maxImportance = engine.TensorMaxValue(importances);
+        if (maxImportance > 0)
+            importances = engine.TensorDivideScalar(importances, maxImportance);
+        _featureImportances = importances.Cast<T>().ToVector();
 
         IsFitted = true;
     }

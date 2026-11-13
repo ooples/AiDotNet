@@ -304,4 +304,73 @@ public class FeatureSelectionHelperRoundThreeTests
         Assert.Equal(0.088349, (double)step[0], 3);
         Assert.Equal(0.0, (double)step[1]);
     }
+
+    // Eight rows with y = i + 1: column 0 is y (|r| = 1), column 1 is y + 3 s and column 2 is s, where
+    // s = (1, -1, -1, 1, 1, -1, -1, 1) is orthogonal to the centred y (|r| = sqrt(42 / 114) and 0).
+    private static (Matrix<T> Data, Vector<T> Target) ImportanceProblem<T>(int columns)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        double[] s = { 1, -1, -1, 1, 1, -1, -1, 1 };
+        var data = new Matrix<T>(8, columns);
+        var target = new Vector<T>(8);
+        for (int i = 0; i < 8; i++)
+        {
+            double y = i + 1;
+            target[i] = ops.FromDouble(y);
+            double[] row = { y, y + 3 * s[i], s[i] };
+            for (int j = 0; j < columns; j++)
+                data[i, j] = ops.FromDouble(row[j]);
+        }
+
+        return (data, target);
+    }
+
+    // Tabu search over columns {0, 1, 2} (scores 1, 0.607, 0) with two features and tenure 1 cycles between
+    // {0, 2} and {0, 1}, so over 6000 iterations the importance totals are about 3910, 2410 and 1500 and the
+    // normalized importances about 1, 0.62 and 0.38, as the double fit gives. Accumulated in Half the totals
+    // stopped at 2048, 2048 and 1024 (2048 + 1 and 1024 + 0.5 round back), giving 1, 1 and 0.5.
+    [Fact(Timeout = 120000)]
+    public async Task TabuSearchImportances_Half_AccumulatePast2048()
+    {
+        await Task.CompletedTask;
+        var (dataD, targetD) = ImportanceProblem<double>(3);
+        var reference = new AiDotNet.Preprocessing.FeatureSelection.Optimization.TabuSearchSelector<double>(
+            nFeaturesToSelect: 2, tabuTenure: 1, nIterations: 6000, randomState: 3);
+        reference.Fit(dataD, targetD);
+        var (dataH, targetH) = ImportanceProblem<Half>(3);
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Optimization.TabuSearchSelector<Half>(
+            nFeaturesToSelect: 2, tabuTenure: 1, nIterations: 6000, randomState: 3);
+        selector.Fit(dataH, targetH);
+
+        Assert.NotNull(reference.FeatureImportances);
+        Assert.NotNull(selector.FeatureImportances);
+        Assert.InRange(reference.FeatureImportances[2], 0.1, 0.45);
+        for (int j = 0; j < 3; j++)
+            Assert.Equal(reference.FeatureImportances[j], (double)selector.FeatureImportances[j], 5e-3);
+    }
+
+    // Simulated annealing over columns {0, 1} (scores 1 and 0.607) starts from both features and, at a temperature
+    // of 1e-3, only moves downhill: with seed 4 the thirteenth step drops feature 1, after which {0} is kept. Over
+    // 6000 iterations feature 0's total is about 5997 and feature 1's about 10.4 (normalized 0.0017), as the double
+    // fit gives. Accumulated in Half feature 0's total stopped at 2048, which tripled feature 1's importance.
+    [Fact(Timeout = 120000)]
+    public async Task SimulatedAnnealingImportances_Half_AccumulatePast2048()
+    {
+        await Task.CompletedTask;
+        var (dataD, targetD) = ImportanceProblem<double>(2);
+        var reference = new AiDotNet.Preprocessing.FeatureSelection.Optimization.SimulatedAnnealingSelector<double>(
+            2, 1e-3, 0.95, 6000, 4);
+        reference.Fit(dataD, targetD);
+        var (dataH, targetH) = ImportanceProblem<Half>(2);
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Optimization.SimulatedAnnealingSelector<Half>(
+            2, 1e-3, 0.95, 6000, 4);
+        selector.Fit(dataH, targetH);
+
+        Assert.NotNull(reference.FeatureImportances);
+        Assert.NotNull(selector.FeatureImportances);
+        Assert.Equal(1.0, reference.FeatureImportances[0]);
+        Assert.InRange(reference.FeatureImportances[1], 1e-4, 3e-3);
+        Assert.Equal(1.0, (double)selector.FeatureImportances[0], 1e-3);
+        Assert.Equal(reference.FeatureImportances[1], (double)selector.FeatureImportances[1], 2e-4);
+    }
 }

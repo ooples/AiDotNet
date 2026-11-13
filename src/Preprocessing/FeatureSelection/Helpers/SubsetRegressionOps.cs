@@ -38,7 +38,7 @@ internal static class SubsetRegressionOps
         var gram = engine.TensorAdd(
             engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<T>(k), ops.FromDouble(ridge)));
         var rhs = engine.TensorMatMul(transposed, engine.Reshape(y, new[] { n, 1 }));
-        return engine.Reshape(LinalgDispatch<T>.Solve(gram, rhs), new[] { k });
+        return engine.Reshape(PreprocessingTensorOps.Solve(gram, rhs), new[] { k });
     }
 
     /// <summary>The predictions D c of a design [n, k] and coefficients [k] ([n]).</summary>

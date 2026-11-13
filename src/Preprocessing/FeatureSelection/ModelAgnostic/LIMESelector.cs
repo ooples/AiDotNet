@@ -236,7 +236,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var gram = engine.TensorAdd(
             engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<T>(p + 1), NumOps.FromDouble(1e-6)));
         var rhs = engine.TensorMatMul(transposed, engine.Reshape(predictions, new[] { count, 1 }));
-        var coefficients = engine.Reshape(LinalgDispatch<T>.Solve(gram, rhs), new[] { p + 1 });
+        var coefficients = engine.Reshape(PreprocessingTensorOps.Solve(gram, rhs), new[] { p + 1 });
         return engine.TensorSlice(coefficients, new[] { 1 }, new[] { p });
     }
 

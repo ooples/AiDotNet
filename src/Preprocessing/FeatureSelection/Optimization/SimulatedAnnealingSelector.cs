@@ -95,7 +95,9 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
         var best = current;
         var bestEnergy = currentEnergy;
 
-        var importances = new Tensor<T>(new[] { p });
+        // Importance totals are accumulated in double: a running total in a narrow T such as Half stops growing at
+        // 2048 (2048 + 1 rounds back to 2048), which flattened the normalized importances over long runs.
+        var importances = new Tensor<double>(new[] { p });
         var temperature = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(_initialTemperature));
         T cooling = NumOps.FromDouble(_coolingRate);
         var zero = new Tensor<T>(new[] { 1 });
@@ -148,7 +150,8 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
             }
 
             // Track feature importance
-            importances = engine.TensorSubtract(importances, PopulationSearchOps.Scale(current, currentEnergy));
+            importances = engine.TensorSubtract(
+                importances, PopulationSearchOps.Scale(current.Cast<double>(), currentEnergy.Cast<double>()));
 
             // Cool down
             temperature = engine.TensorMultiplyScalar(temperature, cooling);
@@ -157,10 +160,10 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
         _selectedIndices = PreprocessingTensorOps.MaskPositions(best);
 
         // Normalize feature importances
-        var maxImportance = ParetoOps.Max(importances);
-        if (PopulationSearchOps.Greater(maxImportance, zero))
-            importances = engine.TensorDivide(importances, engine.TensorBroadcastTo(maxImportance, new[] { p }));
-        _featureImportances = importances.ToVector();
+        double maxImportance = engine.TensorMaxValue(importances);
+        if (maxImportance > 0)
+            importances = engine.TensorDivideScalar(importances, maxImportance);
+        _featureImportances = importances.Cast<T>().ToVector();
 
         IsFitted = true;
     }
