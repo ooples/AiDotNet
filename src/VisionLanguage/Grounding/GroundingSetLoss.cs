@@ -41,7 +41,17 @@ internal sealed class GroundingSetLoss<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     // The reference's epsilon inside the focal matching cost's logarithms.
-    private const double CostEpsilon = 1e-8;
+    private const double ReferenceCostEpsilon = 1e-8;
+
+    // Half's smallest normal value, 2^-14.
+    private const double HalfSmallestNormal = 6.103515625e-5;
+
+    /// <summary>
+    /// The epsilon inside the matching cost's logarithms: the reference's 1e-8, or, for a type that rounds 1e-8 to zero
+    /// (Half), its smallest normal value, so a saturated sigmoid still gives a finite cost the assignment can use.
+    /// </summary>
+    internal static double CostEpsilon(INumericOperations<T> numOps)
+        => numOps.ToDouble(numOps.FromDouble(ReferenceCostEpsilon)) > 0 ? ReferenceCostEpsilon : HalfSmallestNormal;
 
     private readonly IEngine _engine;
 
@@ -139,7 +149,7 @@ internal sealed class GroundingSetLoss<T>
         {
             var p = _engine.TensorSigmoid(logits);
             var oneMinusP = _engine.ScalarMinusTensor(NumOps.One, p);
-            var eps = NumOps.FromDouble(CostEpsilon);
+            var eps = NumOps.FromDouble(CostEpsilon(NumOps));
             var gamma = NumOps.FromDouble(FocalGamma);
             var negative = _engine.TensorMultiplyScalar(_engine.TensorMultiply(_engine.TensorPow(p, gamma),
                 _engine.TensorNegate(_engine.TensorLog(_engine.TensorAddScalar(oneMinusP, eps)))), NumOps.FromDouble(1 - FocalAlpha));
