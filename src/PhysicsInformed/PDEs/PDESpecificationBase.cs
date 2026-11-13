@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.PDEs
@@ -171,6 +172,47 @@ namespace AiDotNet.PhysicsInformed.PDEs
             throw new NotSupportedException(
                 $"PDE '{Name}' does not implement a tape-differentiable residual. Override ComputeTapeResidual with " +
                 "engine operations so a PINN can train on it.");
+        }
+
+        /// <summary>
+        /// Evaluates <see cref="ComputeTapeResidual"/> at one point: the point-wise residual the scalar API returns.
+        /// </summary>
+        /// <param name="inputs">The point's coordinates.</param>
+        /// <param name="outputs">The solution values at the point.</param>
+        /// <param name="derivatives">The point's derivatives ([out, in], [out, in, in], ...).</param>
+        /// <returns>The residual at the point.</returns>
+        /// <remarks>
+        /// A PDE that implements its residual once, batched, gets the point-wise residual from it, so the two can
+        /// never disagree.
+        /// </remarks>
+        protected T EvaluatePointResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var engine = TapeEngine;
+            var batch = new PDEDerivatives<T>
+            {
+                FirstDerivatives = AddBatchAxis(engine, derivatives.FirstDerivatives),
+                SecondDerivatives = AddBatchAxis(engine, derivatives.SecondDerivatives),
+                ThirdDerivatives = AddBatchAxis(engine, derivatives.ThirdDerivatives),
+                HigherDerivatives = derivatives.HigherDerivatives
+            };
+
+            var pointInputs = engine.Reshape(Tensor<T>.FromVector(inputs), new[] { 1, inputs.Length });
+            var pointOutputs = engine.Reshape(Tensor<T>.FromVector(outputs), new[] { 1, outputs.Length });
+            var residual = ComputeTapeResidual(pointInputs, pointOutputs, batch);
+            return residual.Length > 0 ? residual.AsSpan()[0] : NumOps.Zero;
+        }
+
+        private static Tensor<T>? AddBatchAxis(IEngine engine, Tensor<T>? pointTensor)
+        {
+            if (pointTensor is null)
+            {
+                return null;
+            }
+
+            var shape = new int[pointTensor.Rank + 1];
+            shape[0] = 1;
+            pointTensor.Shape.ToArray().CopyTo(shape, 1);
+            return engine.Reshape(pointTensor, shape);
         }
 
         /// <summary>The engine the tape residual helpers use.</summary>

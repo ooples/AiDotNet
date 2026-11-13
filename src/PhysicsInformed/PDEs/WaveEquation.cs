@@ -74,29 +74,38 @@ namespace AiDotNet.PhysicsInformed.PDEs
         /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
-            var secondDerivs = derivatives.SecondDerivatives;
-            if (secondDerivs is null)
+            if (derivatives.SecondDerivatives is null)
             {
                 throw new ArgumentException("Wave equation requires second derivatives.");
             }
 
-            // For 1D wave equation: inputs = [x, t], outputs = [u]
-            // PDE: ∂²u/∂t² - c² * ∂²u/∂x² = 0
-            // For 2D: ∂²u/∂t² - c² * (∂²u/∂x² + ∂²u/∂y²) = 0
+            return EvaluatePointResidual(inputs, outputs, derivatives);
+        }
 
-            int timeIndex = _spatialDimension; // Time is always the last input dimension
-            T d2udt2 = secondDerivs[0, timeIndex, timeIndex]; // ∂²u/∂t²
-
-            // Compute spatial Laplacian: ∇²u
-            T laplacian = NumOps.Zero;
-            for (int i = 0; i < _spatialDimension; i++)
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The residual is u_tt - c^2 * laplacian(u), with time the last input coordinate. It is zero on every
+        /// d'Alembert solution f(x - ct) + g(x + ct).
+        /// </remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            if (derivatives.SecondDerivatives is null)
             {
-                laplacian = NumOps.Add(laplacian, secondDerivs[0, i, i]); // ∂²u/∂xi²
+                throw new ArgumentException("Wave equation requires second derivatives.");
+            }
+
+            var engine = TapeEngine;
+            int timeIndex = _spatialDimension;
+            var laplacian = D2(derivatives, 0, 0, 0);
+            for (int i = 1; i < _spatialDimension; i++)
+            {
+                laplacian = engine.TensorAdd(laplacian, D2(derivatives, 0, i, i));
             }
 
             T c2 = NumOps.Multiply(_waveSpeed, _waveSpeed);
-            T residual = NumOps.Subtract(d2udt2, NumOps.Multiply(c2, laplacian));
-            return residual;
+            return engine.TensorSubtract(
+                D2(derivatives, 0, timeIndex, timeIndex),
+                engine.TensorMultiplyScalar(laplacian, c2));
         }
 
         /// <inheritdoc/>
@@ -107,16 +116,15 @@ namespace AiDotNet.PhysicsInformed.PDEs
                 throw new ArgumentException("Wave equation requires second derivatives.");
             }
 
+            // dR/du_ii = -c^2 for the spatial coordinates and dR/du_tt = 1: a diagonal over the inputs.
+            var engine = TapeEngine;
             var gradient = CreateGradient();
-            int timeIndex = _spatialDimension;
+            int inputDim = InputDimension;
             T c2 = NumOps.Multiply(_waveSpeed, _waveSpeed);
-
-            gradient.SecondDerivatives[0, timeIndex, timeIndex] = NumOps.One;
-            for (int i = 0; i < _spatialDimension; i++)
-            {
-                gradient.SecondDerivatives[0, i, i] = NumOps.Negate(c2);
-            }
-
+            var diagonal = Tensor<T>.CreateDefault(new[] { 1, inputDim }, NumOps.Negate(c2));
+            diagonal[0, _spatialDimension] = NumOps.One;
+            var hessianGradient = engine.TensorMultiply(engine.TensorEye<T>(inputDim), diagonal);
+            hessianGradient.AsSpan().CopyTo(gradient.SecondDerivatives.AsWritableSpan());
             return gradient;
         }
 

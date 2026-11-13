@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -226,22 +227,14 @@ namespace AiDotNet.PhysicsInformed
 
             if (_initialCondition != null && _initialCondition.IsAtInitialTime(inputs))
             {
-                var spatialInputs = new Vector<T>(inputs.Length - 1);
-                for (int si = 0; si < spatialInputs.Length; si++)
-                    spatialInputs[si] = inputs[si];
+                var spatialInputs = SpatialPart(inputs);
                 var expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
                 int count = Math.Min(predictions.Length, expectedValues.Length);
 
                 if (count > 0)
                 {
-                    // Vectorized initial condition loss
-                    // Slice to matching length if needed
-                    var predSlice = count == predictions.Length ? predictions : new Vector<T>(count);
-                    var expSlice = count == expectedValues.Length ? expectedValues : new Vector<T>(count);
-                    if (count < predictions.Length)
-                        for (int si = 0; si < count; si++) predSlice[si] = predictions[si];
-                    if (count < expectedValues.Length)
-                        for (int si = 0; si < count; si++) expSlice[si] = expectedValues[si];
+                    var predSlice = Leading(predictions, count);
+                    var expSlice = Leading(expectedValues, count);
 
                     var error = (Vector<T>)Engine.Subtract(predSlice, expSlice);
                     T sumSquaredError = VectorHelper.DotProduct(error, error);
@@ -250,15 +243,10 @@ namespace AiDotNet.PhysicsInformed
                     var weightedGrad = (Vector<T>)Engine.Multiply(grad, _initialWeight);
 
                     // Accumulate into output gradients (may need to add only to first 'count' elements)
-                    if (count == gradients.OutputGradients.Length)
-                    {
-                        gradients.OutputGradients = (Vector<T>)Engine.Add(gradients.OutputGradients, weightedGrad);
-                    }
-                    else
-                    {
-                        for (int si = 0; si < count; si++)
-                            gradients.OutputGradients[si] = NumOps.Add(gradients.OutputGradients[si], weightedGrad[si]);
-                    }
+                    var padded = count == gradients.OutputGradients.Length
+                        ? weightedGrad
+                        : Vector<T>.Concatenate(weightedGrad, new Vector<T>(gradients.OutputGradients.Length - count));
+                    gradients.OutputGradients = (Vector<T>)Engine.Add(gradients.OutputGradients, padded);
 
                     T initialLoss = NumOps.Divide(sumSquaredError, NumOps.FromDouble(count));
                     totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(_initialWeight, initialLoss));
@@ -304,6 +292,15 @@ namespace AiDotNet.PhysicsInformed
                 derivatives);
         }
 
+        /// <summary>
+        /// The residual's gradient with respect to the outputs and derivatives, for a residual with no analytic
+        /// gradient.
+        /// </summary>
+        /// <remarks>
+        /// The residual is a black-box scalar callback, so its gradient is the central difference of the callback
+        /// along each coordinate direction, one callback pair per entry. The directions are the rows of a scaled
+        /// identity, so the perturbed points are built with engine operations rather than written entry by entry.
+        /// </remarks>
         private PDEResidualGradient<T> ComputeResidualGradientFallback(
             Func<Vector<T>, Vector<T>, PDEDerivatives<T>, T> residualFunction,
             Vector<T> inputs,
@@ -317,147 +314,125 @@ namespace AiDotNet.PhysicsInformed
             T eps = NumOps.FromDouble(1e-4);
             T invTwoEps = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), eps));
 
-            var outputCopy = new Vector<T>(predictions);
+            var outputGradient = CentralDifference(
+                Tensor<T>.FromVector(predictions),
+                perturbed => residualFunction(inputs, perturbed.ToVector(), derivatives),
+                eps,
+                invTwoEps);
+            CopyInto(outputGradient, gradient.OutputGradients);
 
-            for (int i = 0; i < outputDim; i++)
+            if (derivatives.FirstDerivatives is not null)
             {
-                T original = outputCopy[i];
-                outputCopy[i] = NumOps.Add(original, eps);
-                T plus = residualFunction(inputs, outputCopy, derivatives);
-                outputCopy[i] = NumOps.Subtract(original, eps);
-                T minus = residualFunction(inputs, outputCopy, derivatives);
-                outputCopy[i] = original;
-                gradient.OutputGradients[i] = NumOps.Multiply(NumOps.Subtract(plus, minus), invTwoEps);
+                var result = CentralDifference(
+                    derivatives.FirstDerivatives,
+                    perturbed => residualFunction(inputs, predictions, WithFirst(derivatives, perturbed)),
+                    eps,
+                    invTwoEps);
+                CopyInto(result, gradient.FirstDerivatives);
             }
 
-            if (derivatives.FirstDerivatives != null)
+            if (derivatives.SecondDerivatives is not null)
             {
-                var derivativesCopy = CloneDerivatives(derivatives);
-                for (int outIdx = 0; outIdx < outputDim; outIdx++)
-                {
-                    for (int dim = 0; dim < inputDim; dim++)
-                    {
-                        T original = (derivativesCopy.FirstDerivatives ?? throw new InvalidOperationException("FirstDerivatives has not been initialized."))[outIdx, dim];
-                        derivativesCopy.FirstDerivatives[outIdx, dim] = NumOps.Add(original, eps);
-                        T plus = residualFunction(inputs, predictions, derivativesCopy);
-                        derivativesCopy.FirstDerivatives[outIdx, dim] = NumOps.Subtract(original, eps);
-                        T minus = residualFunction(inputs, predictions, derivativesCopy);
-                        derivativesCopy.FirstDerivatives[outIdx, dim] = original;
-                        gradient.FirstDerivatives[outIdx, dim] = NumOps.Multiply(NumOps.Subtract(plus, minus), invTwoEps);
-                    }
-                }
-            }
-
-            if (derivatives.SecondDerivatives != null)
-            {
-                var derivativesCopy = CloneDerivatives(derivatives);
-                for (int outIdx = 0; outIdx < outputDim; outIdx++)
-                {
-                    for (int row = 0; row < inputDim; row++)
-                    {
-                        for (int col = 0; col < inputDim; col++)
-                        {
-                            T original = (derivativesCopy.SecondDerivatives ?? throw new InvalidOperationException("SecondDerivatives has not been initialized."))[outIdx, row, col];
-                            derivativesCopy.SecondDerivatives[outIdx, row, col] = NumOps.Add(original, eps);
-                            T plus = residualFunction(inputs, predictions, derivativesCopy);
-                            derivativesCopy.SecondDerivatives[outIdx, row, col] = NumOps.Subtract(original, eps);
-                            T minus = residualFunction(inputs, predictions, derivativesCopy);
-                            derivativesCopy.SecondDerivatives[outIdx, row, col] = original;
-                            gradient.SecondDerivatives[outIdx, row, col] = NumOps.Multiply(NumOps.Subtract(plus, minus), invTwoEps);
-                        }
-                    }
-                }
+                var result = CentralDifference(
+                    derivatives.SecondDerivatives,
+                    perturbed => residualFunction(inputs, predictions, WithSecond(derivatives, perturbed)),
+                    eps,
+                    invTwoEps);
+                CopyInto(result, gradient.SecondDerivatives);
             }
 
             return gradient;
         }
 
-        private static PDEDerivatives<T> CloneDerivatives(PDEDerivatives<T> source)
+        /// <summary>
+        /// Central differences of <paramref name="function"/> along every coordinate direction of
+        /// <paramref name="point"/>; the result has the point's shape.
+        /// </summary>
+        private Tensor<T> CentralDifference(Tensor<T> point, Func<Tensor<T>, T> function, T eps, T invTwoEps)
         {
-            var clone = new PDEDerivatives<T>();
-            if (source.FirstDerivatives != null)
+            int count = point.Length;
+            var shape = point.Shape.ToArray();
+            var directions = Engine.TensorMultiplyScalar(Engine.TensorEye<T>(count), eps);
+            var flat = Engine.Reshape(point, new[] { count });
+            var plusValues = new List<T>(count);
+            var minusValues = new List<T>(count);
+            for (int i = 0; i < count; i++)
             {
-                var first = new T[source.FirstDerivatives.GetLength(0), source.FirstDerivatives.GetLength(1)];
-                Array.Copy(source.FirstDerivatives, first, source.FirstDerivatives.Length);
-                clone.FirstDerivatives = first;
+                var direction = Engine.Reshape(
+                    Engine.TensorSlice(directions, new[] { i, 0 }, new[] { 1, count }), new[] { count });
+                plusValues.Add(function(Engine.Reshape(Engine.TensorAdd(flat, direction), shape)));
+                minusValues.Add(function(Engine.Reshape(Engine.TensorSubtract(flat, direction), shape)));
             }
 
-            if (source.SecondDerivatives != null)
+            var difference = Engine.TensorSubtract(
+                Tensor<T>.FromVector(Vector<T>.FromList(plusValues), shape),
+                Tensor<T>.FromVector(Vector<T>.FromList(minusValues), shape));
+            return Engine.TensorMultiplyScalar(difference, invTwoEps);
+        }
+
+        private static PDEDerivatives<T> WithFirst(PDEDerivatives<T> source, Tensor<T> first) => new PDEDerivatives<T>
+        {
+            FirstDerivatives = first,
+            SecondDerivatives = source.SecondDerivatives,
+            ThirdDerivatives = source.ThirdDerivatives,
+            HigherDerivatives = source.HigherDerivatives
+        };
+
+        private static PDEDerivatives<T> WithSecond(PDEDerivatives<T> source, Tensor<T> second) => new PDEDerivatives<T>
+        {
+            FirstDerivatives = source.FirstDerivatives,
+            SecondDerivatives = second,
+            ThirdDerivatives = source.ThirdDerivatives,
+            HigherDerivatives = source.HigherDerivatives
+        };
+
+        private static void CopyInto(Tensor<T> source, Vector<T> destination)
+        {
+            if (source.Length != destination.Length)
             {
-                var second = new T[source.SecondDerivatives.GetLength(0), source.SecondDerivatives.GetLength(1), source.SecondDerivatives.GetLength(2)];
-                Array.Copy(source.SecondDerivatives, second, source.SecondDerivatives.Length);
-                clone.SecondDerivatives = second;
+                throw new InvalidOperationException(
+                    $"Output gradient has {source.Length} entries; expected {destination.Length}.");
             }
 
-            if (source.HigherDerivatives != null)
+            source.AsSpan().CopyTo(destination.AsWritableSpan());
+        }
+
+        private static void CopyInto(Tensor<T> source, Tensor<T> destination)
+        {
+            if (source.Length != destination.Length)
             {
-                var higher = new T[source.HigherDerivatives.GetLength(0), source.HigherDerivatives.GetLength(1), source.HigherDerivatives.GetLength(2), source.HigherDerivatives.GetLength(3)];
-                Array.Copy(source.HigherDerivatives, higher, source.HigherDerivatives.Length);
-                clone.HigherDerivatives = higher;
+                throw new InvalidOperationException(
+                    $"Derivative gradient has {source.Length} entries; expected {destination.Length}.");
             }
 
-            return clone;
+            source.AsSpan().CopyTo(destination.AsWritableSpan());
         }
 
         private void AccumulateResidualGradient(PhysicsLossGradient<T> target, PDEResidualGradient<T> source, T scale)
         {
-            // Vectorized: target.OutputGrad += scale * source.OutputGrad
-            var scaledGrad = (Vector<T>)Engine.Multiply(source.OutputGradients, scale);
-            target.OutputGradients = (Vector<T>)Engine.Add(target.OutputGradients, scaledGrad);
-
-            for (int outIdx = 0; outIdx < source.FirstDerivatives.GetLength(0); outIdx++)
-            {
-                for (int dim = 0; dim < source.FirstDerivatives.GetLength(1); dim++)
-                {
-                    target.FirstDerivatives[outIdx, dim] = NumOps.Add(
-                        target.FirstDerivatives[outIdx, dim],
-                        NumOps.Multiply(scale, source.FirstDerivatives[outIdx, dim]));
-                }
-            }
-
-            for (int outIdx = 0; outIdx < source.SecondDerivatives.GetLength(0); outIdx++)
-            {
-                for (int row = 0; row < source.SecondDerivatives.GetLength(1); row++)
-                {
-                    for (int col = 0; col < source.SecondDerivatives.GetLength(2); col++)
-                    {
-                        target.SecondDerivatives[outIdx, row, col] = NumOps.Add(
-                            target.SecondDerivatives[outIdx, row, col],
-                            NumOps.Multiply(scale, source.SecondDerivatives[outIdx, row, col]));
-                    }
-                }
-            }
+            target.OutputGradients = (Vector<T>)Engine.Add(
+                target.OutputGradients, (Vector<T>)Engine.Multiply(source.OutputGradients, scale));
+            target.FirstDerivatives = Engine.TensorAdd(
+                target.FirstDerivatives, Engine.TensorMultiplyScalar(source.FirstDerivatives, scale));
+            target.SecondDerivatives = Engine.TensorAdd(
+                target.SecondDerivatives, Engine.TensorMultiplyScalar(source.SecondDerivatives, scale));
         }
 
         private void AccumulateScaledGradients(PhysicsLossGradient<T> target, PhysicsLossGradient<T> source, T scale)
         {
-            // Vectorized: target.OutputGrad += scale * source.OutputGrad
-            var scaledGrad = (Vector<T>)Engine.Multiply(source.OutputGradients, scale);
-            target.OutputGradients = (Vector<T>)Engine.Add(target.OutputGradients, scaledGrad);
-
-            for (int outIdx = 0; outIdx < source.FirstDerivatives.GetLength(0); outIdx++)
-            {
-                for (int dim = 0; dim < source.FirstDerivatives.GetLength(1); dim++)
-                {
-                    target.FirstDerivatives[outIdx, dim] = NumOps.Add(
-                        target.FirstDerivatives[outIdx, dim],
-                        NumOps.Multiply(scale, source.FirstDerivatives[outIdx, dim]));
-                }
-            }
-
-            for (int outIdx = 0; outIdx < source.SecondDerivatives.GetLength(0); outIdx++)
-            {
-                for (int row = 0; row < source.SecondDerivatives.GetLength(1); row++)
-                {
-                    for (int col = 0; col < source.SecondDerivatives.GetLength(2); col++)
-                    {
-                        target.SecondDerivatives[outIdx, row, col] = NumOps.Add(
-                            target.SecondDerivatives[outIdx, row, col],
-                            NumOps.Multiply(scale, source.SecondDerivatives[outIdx, row, col]));
-                    }
-                }
-            }
+            target.OutputGradients = (Vector<T>)Engine.Add(
+                target.OutputGradients, (Vector<T>)Engine.Multiply(source.OutputGradients, scale));
+            target.FirstDerivatives = Engine.TensorAdd(
+                target.FirstDerivatives, Engine.TensorMultiplyScalar(source.FirstDerivatives, scale));
+            target.SecondDerivatives = Engine.TensorAdd(
+                target.SecondDerivatives, Engine.TensorMultiplyScalar(source.SecondDerivatives, scale));
         }
+
+        /// <summary>The spatial coordinates of a space-time point: every input but the last (time).</summary>
+        private static Vector<T> SpatialPart(Vector<T> inputs) => inputs.GetSubVector(0, inputs.Length - 1);
+
+        private static Vector<T> Leading(Vector<T> values, int count)
+            => count == values.Length ? values : values.GetSubVector(0, count);
 
         /// <summary>
         /// Computes the data fitting loss (Mean Squared Error).
@@ -530,9 +505,7 @@ namespace AiDotNet.PhysicsInformed
             }
 
             // Extract spatial coordinates (all except the last which is time)
-            var spatialInputs = new Vector<T>(inputs.Length - 1);
-            for (int si = 0; si < spatialInputs.Length; si++)
-                spatialInputs[si] = inputs[si];
+            var spatialInputs = SpatialPart(inputs);
 
             var expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
 
@@ -542,13 +515,8 @@ namespace AiDotNet.PhysicsInformed
                 return NumOps.Zero;
             }
 
-            // Vectorized MSE for initial condition
-            var predSlice = count == predictions.Length ? predictions : new Vector<T>(count);
-            var expSlice = count == expectedValues.Length ? expectedValues : new Vector<T>(count);
-            if (count < predictions.Length)
-                for (int si = 0; si < count; si++) predSlice[si] = predictions[si];
-            if (count < expectedValues.Length)
-                for (int si = 0; si < count; si++) expSlice[si] = expectedValues[si];
+            var predSlice = Leading(predictions, count);
+            var expSlice = Leading(expectedValues, count);
 
             var error = (Vector<T>)Engine.Subtract(predSlice, expSlice);
             T sumSquaredError = VectorHelper.DotProduct(error, error);
@@ -566,47 +534,41 @@ namespace AiDotNet.PhysicsInformed
             return NumOps.Divide(sumSquaredError, NumOps.FromDouble(predicted.Length));
         }
 
-        /// <summary>
-        /// Optional collocation coordinates for PDE residual evaluation.
-        /// Set before calling ComputeTapeLoss if PDE residual loss is needed.
-        /// </summary>
-        private Tensor<T>? _collocationCoordinates;
-
-        /// <summary>
-        /// Sets the collocation points where the PDE residual will be evaluated.
-        /// </summary>
-        public void SetCollocationCoordinates(Tensor<T> coordinates)
-        {
-            _collocationCoordinates = coordinates ?? throw new ArgumentNullException(nameof(coordinates));
-        }
-
         /// <inheritdoc />
         /// <remarks>
-        /// Computes composite PINN loss:
-        /// L = data_weight * MSE(predicted, target)
-        ///   + pde_weight * mean(residual^2)  (if PDE spec and collocation points provided)
-        /// The PDE residual is computed via PDESpecificationBase.ComputeTapeResidual using engine ops.
+        /// The weighted data term, data_weight * MSE(predicted, target). The PDE term needs the network's input
+        /// derivatives, which a prediction alone does not carry; a PINN adds it with
+        /// <see cref="ComputeTapePdeLoss"/>.
         /// </remarks>
         public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
         {
-            // Data loss: MSE(predicted, target)
             var diff = Engine.TensorSubtract(predicted, target);
             var sq = Engine.TensorMultiply(diff, diff);
             var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
             var dataLoss = Engine.ReduceMean(sq, allAxes, keepDims: false);
-            var totalLoss = Engine.TensorMultiplyScalar(dataLoss, _dataWeight);
+            return Engine.TensorMultiplyScalar(dataLoss, _dataWeight);
+        }
 
-            // PDE residual loss (if spec and coordinates provided)
-            if (_pdeSpecification is PDEs.PDESpecificationBase<T> tapeSpec && _collocationCoordinates is not null)
+        /// <summary>
+        /// The weighted PDE term pde_weight * mean(f^2) over a batch of collocation points, on the gradient tape.
+        /// </summary>
+        /// <param name="inputs">The collocation points [N, InputDimension].</param>
+        /// <param name="outputs">The network outputs there [N, OutputDimension].</param>
+        /// <param name="derivatives">The batched input derivatives of the outputs.</param>
+        /// <returns>A scalar loss tensor.</returns>
+        /// <remarks>This is MSE_f of Raissi et al. (2019), Eq. 4, weighted by the PDE weight.</remarks>
+        public Tensor<T> ComputeTapePdeLoss(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            if (_pdeSpecification is not PDEs.PDESpecificationBase<T> tapeSpec)
             {
-                var residual = tapeSpec.ComputeTapeResidual(predicted, _collocationCoordinates, Engine);
-                var resSq = Engine.TensorMultiply(residual, residual);
-                var resAxes = Enumerable.Range(0, resSq.Shape.Length).ToArray();
-                var pdeLoss = Engine.ReduceMean(resSq, resAxes, keepDims: false);
-                totalLoss = Engine.TensorAdd(totalLoss, Engine.TensorMultiplyScalar(pdeLoss, _pdeWeight));
+                throw new NotSupportedException(
+                    "The PDE term on the gradient tape needs a PDESpecificationBase residual (ComputeTapeResidual).");
             }
 
-            return totalLoss;
+            var residual = tapeSpec.ComputeTapeResidual(inputs, outputs, derivatives);
+            var squared = Engine.TensorMultiply(residual, residual);
+            var axes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            return Engine.TensorMultiplyScalar(Engine.ReduceMean(squared, axes, keepDims: false), _pdeWeight);
         }
     }
 
@@ -630,8 +592,8 @@ namespace AiDotNet.PhysicsInformed
 
             Loss = numOps.Zero;
             OutputGradients = new Vector<T>(outputDimension);
-            FirstDerivatives = new T[outputDimension, inputDimension];
-            SecondDerivatives = new T[outputDimension, inputDimension, inputDimension];
+            FirstDerivatives = new Tensor<T>(new[] { outputDimension, inputDimension });
+            SecondDerivatives = new Tensor<T>(new[] { outputDimension, inputDimension, inputDimension });
         }
 
         /// <summary>
@@ -645,13 +607,13 @@ namespace AiDotNet.PhysicsInformed
         public Vector<T> OutputGradients { get; set; }
 
         /// <summary>
-        /// Gradient of loss with respect to first derivatives.
+        /// Gradient of loss with respect to first derivatives, shape [output_dim, input_dim].
         /// </summary>
-        public T[,] FirstDerivatives { get; }
+        public Tensor<T> FirstDerivatives { get; set; }
 
         /// <summary>
-        /// Gradient of loss with respect to second derivatives.
+        /// Gradient of loss with respect to second derivatives, shape [output_dim, input_dim, input_dim].
         /// </summary>
-        public T[,,] SecondDerivatives { get; }
+        public Tensor<T> SecondDerivatives { get; set; }
     }
 }
