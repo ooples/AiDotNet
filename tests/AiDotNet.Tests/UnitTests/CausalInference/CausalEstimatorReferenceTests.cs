@@ -228,4 +228,44 @@ public class CausalEstimatorReferenceTests
 
         Assert.Equal(6.0, learner.PredictTreatmentEffect(x).Average(), 4);
     }
+
+    [Fact]
+    public void CausalForest_SplitsBetweenAdjacentDoubles()
+    {
+        // Feature values a = 1 + 2^-52 and b = 1 + 2^-51 are adjacent doubles: (a + b) / 2 rounds to b, which puts
+        // every row on the left and leaves no split, so every effect was 0. The threshold must fall back to a.
+        // Rows at a have effect +10 and rows at b effect -10.
+        double a = 1.0 + Math.Pow(2, -52), b = 1.0 + Math.Pow(2, -51);
+        var x = new Matrix<double>(N, 1);
+        var t = new Vector<int>(N);
+        var y = new Vector<double>(N);
+        for (int i = 0; i < N; i++)
+        {
+            bool low = i < N / 2;
+            x[i, 0] = low ? a : b;
+            t[i] = i % 2;
+            y[i] = (low ? 10.0 : -10.0) * t[i];
+        }
+
+        var forest = new CausalForest<double>(numTrees: 1, maxDepth: 1, minSamplesLeaf: 1, maxFeatures: 1,
+            honest: false, seed: 3, sampleFraction: 1.0);
+        forest.Fit(x, t, y);
+        var effects = forest.PredictTreatmentEffect(x);
+
+        for (int i = 0; i < N; i++) Assert.Equal(i < N / 2 ? 10.0 : -10.0, effects[i], 9);
+    }
+
+    [Theory]
+    [InlineData(typeof(SLearner<double>))]
+    [InlineData(typeof(TLearner<double>))]
+    [InlineData(typeof(XLearner<double>))]
+    public void MetaLearners_RemovedIterationConstructor_IsACompileError(Type learner)
+    {
+        // new TLearner<double>(100) used to bind 100 to lambda; the guard constructor must be an error, not a warning.
+        var constructor = learner.GetConstructor(new[] { typeof(int) });
+        Assert.NotNull(constructor);
+        var obsolete = Attribute.GetCustomAttribute(constructor, typeof(ObsoleteAttribute)) as ObsoleteAttribute;
+        Assert.NotNull(obsolete);
+        Assert.True(obsolete.IsError);
+    }
 }
