@@ -88,15 +88,23 @@ internal static class SelfSupervisedLearningPretrainer
             return 0.0;
         }
 
-        // Mean over features of the unbiased per-feature standard deviation across the batch
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var engine = AiDotNetEngine.Current;
-        var matrix = repr.Contiguous().Reshape(rows, k);
-        var centered = engine.TensorSubtract(matrix, engine.ReduceMean(matrix, new[] { 0 }, keepDims: true));
-        var variance = engine.TensorDivideScalar(
-            engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, keepDims: false), numOps.FromDouble(rows - 1));
+        return FeatureStdDev(repr.Contiguous().Reshape(rows, k));
+    }
 
-        return numOps.ToDouble(engine.TensorMean(engine.TensorSqrt(variance)));
+    /// <summary>
+    /// Mean over features of the unbiased per-feature standard deviation of a [rows, k] matrix, computed in
+    /// double as master did: in Half the squared deviations overflow past 65504.
+    /// </summary>
+    internal static double FeatureStdDev<T>(Tensor<T> matrix)
+    {
+        int rows = matrix.Shape[0];
+        var engine = AiDotNetEngine.Current;
+        var values = matrix.Cast<double>();
+        var centered = engine.TensorSubtract(values, engine.ReduceMean(values, new[] { 0 }, keepDims: true));
+        var variance = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false), (double)(rows - 1));
+
+        return engine.TensorMean(engine.TensorSqrt(variance));
     }
 
     private static double LinearProbeR2<T>(ISelfSupervisedLearningMethod<T> method, Tensor<T> data, Vector<T> targets, INumericOperations<T> numOps)
@@ -110,35 +118,44 @@ internal static class SelfSupervisedLearningPretrainer
             return 0.0;
         }
 
-        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return RidgeR2(features.Contiguous().Reshape(n, k), targets.AsTensor().Reshape(targets.Length, 1));
+    }
+
+    /// <summary>
+    /// R² of a ridge fit (λ = 1e-3, with a bias column) of the first n targets on [n, k] features. Fitted
+    /// in double as master did: in Half the normal equations FᵀF overflow past 65504.
+    /// </summary>
+    internal static double RidgeR2<T>(Tensor<T> features, Tensor<T> targets)
+    {
+        int n = features.Shape[0];
+        int k = features.Shape[1];
         var engine = AiDotNetEngine.Current;
 
         // Design matrix with a bias column: F[n, k+1].
         int p = k + 1;
-        var ones = engine.TensorAddScalar(new Tensor<T>(new[] { n, 1 }), numOps.One);
-        var f = engine.TensorConcatenate(new[] { features.Contiguous().Reshape(n, k), ones }, 1);
-        var y = engine.TensorSlice(targets.AsTensor(), new[] { 0 }, new[] { n }).Reshape(n, 1);
+        var ones = engine.TensorAddScalar(new Tensor<double>(new[] { n, 1 }), 1.0);
+        var f = engine.TensorConcatenate(new[] { features.Cast<double>(), ones }, 1);
+        var y = engine.TensorSlice(targets.Cast<double>(), new[] { 0, 0 }, new[] { n, 1 });
 
         // Ridge normal equations: (FᵀF + λI) w = Fᵀy, solved by LU with partial pivoting.
         const double lambda = 1e-3;
         var fT = engine.TensorTranspose(f);
         var ata = engine.TensorAdd(
-            engine.TensorMatMul(fT, f), engine.TensorMultiplyScalar(engine.TensorEye<T>(p), numOps.FromDouble(lambda)));
+            engine.TensorMatMul(fT, f), engine.TensorMultiplyScalar(engine.TensorEye<double>(p), lambda));
         var aty = engine.TensorMatMul(fT, y);
 
-        var (w, info) = LinalgDispatch<T>.SolveEx(ata, aty);
+        var (w, info) = LinalgDispatch<double>.SolveEx(ata, aty);
         if (engine.TensorCountNonzero(info) != 0)
         {
             return 0.0;
         }
 
-        var meanY = engine.TensorMean(y);
-        var pred = engine.TensorMatMul(f, w);
-        var ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, pred));
-        var ssTot = engine.TensorSumOfSquares(engine.TensorAddScalar(y, numOps.Negate(meanY)));
+        double meanY = engine.TensorMean(y);
+        var residual = engine.TensorSubtract(y, engine.TensorMatMul(f, w));
+        var deviation = engine.TensorAddScalar(y, -meanY);
+        double ssRes = engine.TensorSum(engine.TensorMultiply(residual, residual));
+        double ssTot = engine.TensorSum(engine.TensorMultiply(deviation, deviation));
 
-        return numOps.GreaterThan(ssTot, numOps.Zero)
-            ? 1.0 - numOps.ToDouble(numOps.Divide(ssRes, ssTot))
-            : 0.0;
+        return ssTot > 0 ? 1.0 - (ssRes / ssTot) : 0.0;
     }
 }

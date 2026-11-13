@@ -90,4 +90,34 @@ public class SelfSupervisedHalfPrecisionTests
         Assert.Equal(2.0 / 3.0, (double)(matrix?[1, 1000] ?? Half.NaN), 3);
         Assert.Equal(1.0 / 3.0, (double)(matrix?[1, 1001] ?? Half.NaN), 3);
     }
+
+    [Fact]
+    public void PretrainerFeatureStdDev_Half_SquaresBeyondHalfRange()
+    {
+        // Rows 300 and -300: unbiased variance (90000 + 90000) / 1, std 424.26. Each square overflows in Half.
+        var matrix = new Tensor<Half>(new[] { 2, 1 });
+        matrix[0, 0] = (Half)300.0f;
+        matrix[1, 0] = (Half)(-300.0f);
+
+        double std = AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningPretrainer.FeatureStdDev(matrix);
+
+        Assert.Equal(Math.Sqrt(180000.0), std, 6);
+    }
+
+    [Fact]
+    public void PretrainerRidgeR2_Half_NormalEquationsBeyondHalfRange()
+    {
+        // y = 2x + 1 on x = 100..400 fits almost exactly (ridge 1e-3). FᵀF holds Σx² = 300000, past Half's 65504.
+        var features = new Tensor<Half>(new[] { 4, 1 });
+        var targets = new Tensor<Half>(new[] { 4, 1 });
+        for (int i = 0; i < 4; i++)
+        {
+            features[i, 0] = (Half)(100.0f * (i + 1));
+            targets[i, 0] = (Half)(200.0f * (i + 1) + 1.0f);
+        }
+
+        double r2 = AiDotNet.SelfSupervisedLearning.SelfSupervisedLearningPretrainer.RidgeR2(features, targets);
+
+        Assert.InRange(r2, 0.999, 1.0);
+    }
 }
