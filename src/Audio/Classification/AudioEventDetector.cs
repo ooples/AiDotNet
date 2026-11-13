@@ -745,29 +745,15 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
         var output = OnnxEncoder.Run(input);
 
-        // Apply sigmoid to get probabilities (multi-label)
-        var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
-        {
-            double logit = NumOps.ToDouble(output[i]);
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
-        }
-
-        return scores;
+        // Apply sigmoid to get probabilities (multi-label); labels past the output score zero
+        return AudioEventDetectionOps.SigmoidScores(Engine, output, ClassLabels.Count);
     }
 
     private T[] ClassifyWithNative(Tensor<T> melSpec)
     {
         // One 96 x 64 patch per 960 ms window; PredictCore already applies the per-label sigmoid, so these are the
         // presence probabilities.
-        var output = Predict(Patch(melSpec));
-        var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
-        {
-            scores[i] = output[i];
-        }
-
-        return scores;
+        return AudioEventDetectionOps.HeadScores(Engine, Predict(Patch(melSpec)), ClassLabels.Count);
     }
 
     /// <summary>
