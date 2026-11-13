@@ -221,7 +221,7 @@ internal static class SelectorTensorOps
         int p = x.Shape[1];
         var xt = engine.TensorTranspose(x);
         var gram = engine.TensorAdd(engine.TensorMatMul(xt, x), engine.TensorMultiplyScalar(engine.TensorEye<T>(p), alpha));
-        return engine.Reshape(LinalgDispatch<T>.Solve(gram, engine.TensorMatMul(xt, y)), new[] { p });
+        return engine.Reshape(PreprocessingTensorOps.Solve(gram, engine.TensorMatMul(xt, y)), new[] { p });
     }
 
     /// <summary>
