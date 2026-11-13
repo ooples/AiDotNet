@@ -66,13 +66,26 @@ public class LoRAMergeReferenceTests
         return name switch
         {
             "Standard" => new StandardLoRAAdapter<double>(CreateBaseLayer(InputSize, OutputSize), Rank, 2.0 * Rank),
-            "PiSSA" => new PiSSAAdapter<double>(CreateBaseLayer(InputSize, OutputSize), Rank, 2.0 * Rank),
+            "PiSSA" => CreatePiSSA(),
             "ReLoRA" => new ReLoRAAdapter<double>(CreateBaseLayer(InputSize, OutputSize), Rank, 2.0 * Rank),
             "LoKr" => new LoKrAdapter<double>(CreateBaseLayer(InputSize, OutputSize), Rank, 2.0 * Rank),
             // MoRA needs a square layer; a rank below the width exercises the compress/decompress layout
             "MoRA" => new MoRAAdapter<double>(CreateBaseLayer(OutputSize, OutputSize), Rank, 1.0),
             _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown adapter")
         };
+    }
+
+    private static PiSSAAdapter<double> CreatePiSSA()
+    {
+        var baseLayer = CreateBaseLayer(InputSize, OutputSize);
+        var adapter = new PiSSAAdapter<double>(baseLayer, Rank, 2.0 * Rank);
+        var weights = new Matrix<double>(OutputSize, InputSize);
+        var parameters = baseLayer.GetParameters();
+        for (int o = 0; o < OutputSize; o++)
+            for (int i = 0; i < InputSize; i++)
+                weights[o, i] = parameters[i * OutputSize + o];
+        adapter.InitializeFromSVD(weights);
+        return adapter;
     }
 
     [Theory(Timeout = 120000)]

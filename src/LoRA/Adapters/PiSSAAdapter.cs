@@ -410,6 +410,10 @@ public partial class PiSSAAdapter<T> : LoRAAdapterBase<T>
         // [outputSize, inputSize] residual, matching the forward pass (input * W_residual^T + input * A * B).
         Matrix<T> mergedWeights = Engine.MatrixAdd(_residualWeights, Engine.MatrixTranspose(loraWeights));
 
+        // The residual is output-major; DenseLayer's flat weights are input-major.
+        if (_baseLayer is DenseLayer<T>)
+            mergedWeights = Engine.MatrixTranspose(mergedWeights);
+
         // Create parameters vector: [merged weights (row-major), biases unchanged]
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = outputSize * inputSize;

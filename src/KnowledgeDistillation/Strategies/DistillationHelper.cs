@@ -86,7 +86,7 @@ internal static class DistillationHelper<T>
         if (trueLabelsBatch != null)
         {
             Matrix<T> studentProbs = SoftmaxRows(studentBatchOutput, 1.0);
-            Vector<T> hardLosses = CrossEntropyRows(studentProbs, trueLabelsBatch);
+            Vector<T> hardLosses = CrossEntropyRows(trueLabelsBatch, studentProbs);
             losses = Engine.Add(
                 Engine.Multiply(hardLosses, NumOps.FromDouble(alpha)),
                 Engine.Multiply(losses, NumOps.FromDouble(1.0 - alpha)));

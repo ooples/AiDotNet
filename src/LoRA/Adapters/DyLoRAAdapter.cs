@@ -433,23 +433,24 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
                     // through the same tape when it is not frozen. The loss differentiated is
                     // 0.5 * ||output - target||², whose output gradient is (output - target)
                     // (simplified - assumes MSE loss); the supplied loss function is still
-                    // evaluated per sample, as before (nothing reads an epoch total).
-                    TapeTrainingStep<T>.Step(
-                        new ITrainableLayer<T>[] { this },
-                        inputs[i],
-                        targets[i],
-                        learningRate,
-                        sample => Forward(sample),
-                        (output, target) =>
+                    // evaluated per sample. Apply SGD while the tape's gradient buffers are alive.
+                    TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                        () => TapeTrainingStep<T>.CollectParameters(
+                            _freezeBaseLayer
+                                ? new ILayer<T>[] { _loraLayer }
+                                : new ILayer<T>[] { _baseLayer, _loraLayer }, structureVersion: -1),
+                        () =>
                         {
+                            var output = Forward(inputs[i]);
+                            var target = targets[i];
                             _ = lossFunction(output, target);
                             var diff = Engine.TensorSubtract(output, Engine.Reshape(target, output.Shape.ToArray()));
                             var squared = Engine.Reshape(Engine.TensorMultiply(diff, diff), [diff.Length]);
                             return Engine.TensorMultiplyScalar(
                                 Engine.ReduceSum(squared, [0], keepDims: true), NumOps.FromDouble(0.5));
-                        });
+                        },
+                        learningRate);
                 }
-
             }
         }
         finally

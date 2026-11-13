@@ -148,7 +148,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
         if (trueLabels != null)
         {
             var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
-            var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
+            var hardLoss = DistillationHelper<T>.CrossEntropy(trueLabels, studentProbs);
 
             var alphaT = NumOps.FromDouble(Alpha);
             var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);

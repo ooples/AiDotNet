@@ -15,6 +15,44 @@ public class DistillationGradientReferenceTests
 {
     private const double Step = 1e-5;
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SupervisedLoss_UsesLabelsAsCrossEntropyWeights(bool softLabels)
+    {
+        var student = Deterministic(3, 4, 0.8);
+        var teacher = Deterministic(3, 4, 2.1);
+        var labels = new Matrix<double>(3, 4);
+        for (int r = 0; r < labels.Rows; r++)
+        {
+            for (int c = 0; c < labels.Columns; c++)
+            {
+                labels[r, c] = softLabels ? (c == r ? 0.7 : 0.1) : (c == r ? 1.0 : 0.0);
+            }
+        }
+
+        double expected = 0;
+        for (int r = 0; r < student.Rows; r++)
+        {
+            double sum = 0;
+            for (int c = 0; c < student.Columns; c++) sum += Math.Exp(student[r, c]);
+            for (int c = 0; c < student.Columns; c++)
+                expected -= labels[r, c] * Math.Log(Math.Exp(student[r, c]) / sum);
+        }
+        expected /= student.Rows;
+
+        var shared = new SimilarityPreservingStrategy<double>(similarityWeight: 0, alpha: 1);
+        var curriculum = new EasyToHardCurriculumStrategy<double>(alpha: 1);
+        var adaptive = new ConfidenceBasedAdaptiveStrategy<double>(alpha: 1);
+        Assert.Equal(expected, shared.ComputeLoss(student, teacher, labels), 8);
+        Assert.Equal(expected, curriculum.ComputeLoss(student, teacher, labels), 8);
+        Assert.Equal(expected, adaptive.ComputeLoss(student, teacher, labels), 8);
+        AssertClose(FiniteDifference(student, s => shared.ComputeLoss(s, teacher, labels)),
+            shared.ComputeGradient(student, teacher, labels));
+        AssertClose(FiniteDifference(student, s => curriculum.ComputeLoss(s, teacher, labels)),
+            curriculum.ComputeGradient(student, teacher, labels));
+    }
+
     private static Matrix<double> Deterministic(int rows, int cols, double seed, double scale = 1.0, double offset = 0.0)
     {
         var m = new Matrix<double>(rows, cols);

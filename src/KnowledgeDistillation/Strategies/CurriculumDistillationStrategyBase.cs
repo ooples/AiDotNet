@@ -142,7 +142,7 @@ public abstract class CurriculumDistillationStrategyBase<T>
         if (trueLabelsBatch != null)
         {
             var studentProbs = DistillationHelper<T>.SoftmaxRows(studentBatchOutput, temperature: 1.0);
-            var hardLosses = DistillationHelper<T>.CrossEntropyRows(studentProbs, trueLabelsBatch);
+            var hardLosses = DistillationHelper<T>.CrossEntropyRows(trueLabelsBatch, studentProbs);
 
             var alphaT = NumOps.FromDouble(Alpha);
             var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
