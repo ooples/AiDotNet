@@ -105,14 +105,10 @@ internal sealed class MinMoCore<T>
         Tensor<T> encoded;
         if (LargeEncoder is not null)
         {
-            var samples = new double[wave.Length];
-            for (int i = 0; i < samples.Length; i++) samples[i] = Ops.ToDouble(wave.GetFlat(i));
-            var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(samples, Options.LargeEncoderMels);
-            int mels = mel.GetLength(0), frames = Math.Min(mel.GetLength(1), 3000);
+            var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(wave, Options.LargeEncoderMels);
+            int mels = mel.Shape[0], frames = Math.Min(mel.Shape[1], 3000);
             if (frames < 2) throw new ArgumentException("The recording is too short for the voice encoder.", nameof(audio));
-            var melTensor = new Tensor<T>(new[] { mels, frames });
-            for (int m = 0; m < mels; m++)
-                for (int f = 0; f < frames; f++) melTensor[m, f] = Ops.FromDouble(mel[m, f]);
+            var melTensor = _engine.TensorSlice(mel, new[] { 0, 0 }, new[] { mels, frames }).Contiguous();
             var states = LargeEncoder.Encode(melTensor);
             encoded = _engine.Reshape(states, new[] { states.Shape[1], states.Shape[2] });
         }

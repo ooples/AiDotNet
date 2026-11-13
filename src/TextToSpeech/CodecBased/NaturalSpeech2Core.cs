@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.Latest;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
@@ -48,6 +49,7 @@ internal sealed class NaturalSpeech2Core<T>
     private readonly IEngine _engine;
     private readonly Ns2Configuration _c;
     private double[] _pitchBins;
+    private Tensor<T> _pitchBoundaries;
 
     public NaturalSpeech2Core(IEngine engine, Ns2Configuration c, Random random, List<LayerBase<T>> priorLayers, List<LayerBase<T>> promptLayers,
         List<LayerBase<T>> denoiserLayers)
@@ -66,6 +68,7 @@ internal sealed class NaturalSpeech2Core<T>
         _pitchBins = new double[c.PitchBins - 1];
         for (int i = 0; i < _pitchBins.Length; i++)
             _pitchBins[i] = Math.Exp(Math.Log(c.PitchMin) + (Math.Log(c.PitchMax) - Math.Log(c.PitchMin)) * i / Math.Max(1, _pitchBins.Length - 1));
+        _pitchBoundaries = Boundaries(_pitchBins);
 
         if (c.Latent != h) PromptProjection = Ns2Ops.Linear(engine, promptLayers, random, c.Latent, h, Ns2Ops.Normal(random, h * c.Latent, 0.02));
         PromptEncoder = new Ns2TransformerEncoder<T>(engine, promptLayers, random, 0, h, c.Heads, c.EncoderFilter, c.EncoderKernel, c.PromptLayers,
@@ -91,18 +94,13 @@ internal sealed class NaturalSpeech2Core<T>
     /// <summary>The pitch bucket boundaries (Hz).</summary>
     public IReadOnlyList<double> PitchBins => _pitchBins;
 
-    /// <summary><c>torch.bucketize(pitch, bins)</c>: the number of boundaries strictly below the value.</summary>
-    public int PitchToken(double pitch)
-    {
-        int lo = 0, hi = _pitchBins.Length;
-        while (lo < hi)
-        {
-            int mid = (lo + hi) / 2;
-            if (_pitchBins[mid] < pitch) lo = mid + 1;
-            else hi = mid;
-        }
-        return lo;
-    }
+    /// <summary><c>torch.bucketize(pitch, bins)</c> (right = False): per frame, the number of boundaries strictly
+    /// below the pitch (Hz).</summary>
+    public Tensor<int> PitchTokens(Tensor<T> pitch) =>
+        _engine.TensorSearchSorted(_pitchBoundaries, _engine.Reshape(pitch, new[] { pitch.Length }), false);
+
+    private static Tensor<T> Boundaries(double[] bins) =>
+        new Tensor<double>(bins, new[] { bins.Length }).Cast<T>();
 
     /// <summary>
     /// The speech prompt (§3.3): the prompt's latent <c>[1, latent, T′]</c> projected to the hidden width and encoded to rows
@@ -129,26 +127,27 @@ internal sealed class NaturalSpeech2Core<T>
     /// <summary>dur_pred_round: clamp(round(exp(x) − 1), min 0), rounding half to even as torch.round does.</summary>
     public static int[] RoundDurations(Tensor<T> logDurations)
     {
-        var durations = new int[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++)
-            durations[i] = Math.Max(0, (int)Math.Round(Math.Exp(NumOps.ToDouble(logDurations.GetFlat(i))) - 1, MidpointRounding.ToEven));
-        return durations;
+        var engine = AiDotNetEngine.Current;
+        var counts = engine.TensorRound(engine.TensorSubtractScalar(engine.TensorExp(logDurations), NumOps.One));
+        return engine.TensorMax(counts, NumOps.Zero).Cast<int>().ToArray();
     }
 
     /// <summary>
     /// The prior's condition (§3.2): the hidden rows expanded by <paramref name="durations"/> (the length regulator), the
     /// predicted log-pitch <c>[T]</c>, and c = expanded + the embedding of the ground-truth pitch's bucket, or of the
-    /// predicted pitch's when <paramref name="pitch"/> is null.
+    /// predicted pitch's when <paramref name="pitch"/> (Hz, <c>[T]</c>) is null.
     /// </summary>
-    public (Tensor<T> Condition, Tensor<T> LogPitch) Condition(Tensor<T> hidden, IReadOnlyList<int> durations, IReadOnlyList<double>? pitch,
+    public (Tensor<T> Condition, Tensor<T> LogPitch) Condition(Tensor<T> hidden, IReadOnlyList<int> durations, Tensor<T>? pitch,
         Tensor<T> prompt, bool training, Random? random)
     {
         var expanded = Expand(hidden, durations);
         var logPitch = PitchPredictor.Forward(expanded, prompt, training, random);
-        var tokens = new int[expanded.Shape[0]];
-        for (int f = 0; f < tokens.Length; f++)
-            tokens[f] = PitchToken(pitch is not null ? pitch[f] : Math.Exp(NumOps.ToDouble(logPitch[f])));
-        return (_engine.TensorAdd(expanded, PitchEmbedding.Forward(IndexTtsOps.Ids<T>(tokens))), logPitch);
+        if (pitch is not null && pitch.Length != expanded.Shape[0])
+            throw new ArgumentException($"Expected {expanded.Shape[0]} pitch frames, got {pitch.Length}.", nameof(pitch));
+        Tensor<int> tokens;
+        using (new NoGradScope<T>())
+            tokens = PitchTokens(pitch ?? _engine.TensorExp(logPitch));
+        return (_engine.TensorAdd(expanded, PitchEmbedding.Forward(tokens.Cast<T>())), logPitch);
     }
 
     /// <summary>Rows <c>[n, d]</c> repeated by integer durations to <c>[Σd, d]</c> (the length regulator).</summary>
@@ -165,6 +164,7 @@ internal sealed class NaturalSpeech2Core<T>
     {
         if (bins.Length != _pitchBins.Length) throw new ArgumentException($"Expected {_pitchBins.Length} pitch bins, got {bins.Length}.");
         _pitchBins = (double[])bins.Clone();
+        _pitchBoundaries = Boundaries(_pitchBins);
     }
 
     /// <summary>Loads Amphion's <c>NaturalSpeech2</c> state dict (all but the codec's quantizer).</summary>

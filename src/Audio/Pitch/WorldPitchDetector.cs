@@ -23,6 +23,7 @@
 // -----------------------------------------------------------------------------
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using EnginePadMode = AiDotNet.Tensors.Engines.PadMode;
 
 namespace AiDotNet.Audio.Pitch;
 
@@ -56,6 +57,18 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
     private const double SafeGuardMinimum = 0.000000000001;
     private const double Log2 = 0.69314718055994529;
     private const double MaximumValue = 100000.0;
+
+    // The smallest positive normal Half, 2^-14: Half cannot hold WORLD's 1e-12 safeguard, which rounds to 0.
+    private const double HalfSmallestNormal = 6.103515625e-05;
+
+    // Power-of-two pre-scale of the F0 deviations DIO squares (exact in binary floating point, so float and double results
+    // are unchanged, while Half's squares stay below 65504).
+    private const double DeviationScale = 1.0 / 1024.0;
+
+    // Elements per batched refinement or filtering block, to bound memory on long recordings.
+    private const int BlockElements = 1 << 20;
+
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
     private readonly double _channelsInOctave;
     private readonly int _speed;
@@ -93,54 +106,46 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         _refineWithStoneMask = refineWithStoneMask;
     }
 
+    private static IEngine E => AiDotNetEngine.Current;
+
     /// <summary>
     /// Estimates the F0 contour of <paramref name="audio"/> with one value per <paramref name="framePeriodMs"/>,
     /// starting at time 0 (PyWorld's <c>dio</c>, then <c>stonemask</c> when enabled).
     /// </summary>
-    /// <returns>F0 in Hz per frame (0 where unvoiced) and each frame's time in seconds.</returns>
-    public (double[] F0, double[] TemporalPositions) EstimateF0(Tensor<T> audio, double framePeriodMs)
+    /// <returns>F0 in Hz per frame (0 where unvoiced) and each frame's time in seconds, both <c>[frames]</c>.</returns>
+    public (Tensor<T> F0, Tensor<T> TemporalPositions) EstimateF0(Tensor<T> audio, double framePeriodMs)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
-        var span = audio.AsSpan();
-        var x = new double[span.Length];
-        for (int i = 0; i < x.Length; i++) x[i] = NumOps.ToDouble(span[i]);
-        return EstimateF0(x, framePeriodMs);
-    }
-
-    /// <inheritdoc cref="EstimateF0(Tensor{T}, double)"/>
-    public (double[] F0, double[] TemporalPositions) EstimateF0(double[] x, double framePeriodMs)
-    {
-        if (x is null) throw new ArgumentNullException(nameof(x));
         if (framePeriodMs <= 0) throw new ArgumentOutOfRangeException(nameof(framePeriodMs));
-        if (x.Length < 2) throw new ArgumentException("DIO needs at least two samples.", nameof(x));
+        if (audio.Length < 2) throw new ArgumentException("DIO needs at least two samples.", nameof(audio));
 
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var x = Flat(audio);
         int f0Length = GetSamplesForDio(SampleRate, x.Length, framePeriodMs);
-        var temporalPositions = new double[f0Length];
-        var f0 = new double[f0Length];
-        DioGeneralBody(x, SampleRate, framePeriodMs, MinPitch, MaxPitch, _channelsInOctave, _speed,
-            _allowedRange, temporalPositions, f0);
+        var temporalPositions = Positions(f0Length, framePeriodMs);
+        var f0 = DioGeneralBody(x, SampleRate, framePeriodMs, MinPitch, MaxPitch, _channelsInOctave, _speed,
+            _allowedRange, temporalPositions);
         if (!_refineWithStoneMask) return (f0, temporalPositions);
-
-        var refined = new double[f0Length];
-        for (int i = 0; i < f0Length; i++)
-            refined[i] = GetRefinedF0(x, SampleRate, temporalPositions[i], f0[i]);
-        return (refined, temporalPositions);
+        return (StoneMaskCore(x, SampleRate, f0, temporalPositions), temporalPositions);
     }
 
     /// <inheritdoc/>
     public override IReadOnlyList<PitchFrame<T>> ExtractDetailedPitchContour(Tensor<T> audio, int hopSizeMs = 10)
     {
-        var (f0, times) = EstimateF0(audio, hopSizeMs);
-        var frames = new PitchFrame<T>[f0.Length];
-        for (int i = 0; i < f0.Length; i++)
+        var (f0, _) = EstimateF0(audio, hopSizeMs);
+        var voiced = E.TensorGreaterThan(f0, Ops.Zero);
+        var pitch = f0.ToArray();
+        var confidence = voiced.ToArray();
+        var isVoiced = voiced.Cast<int>().ToArray();
+        var frames = new PitchFrame<T>[pitch.Length];
+        for (int i = 0; i < frames.Length; i++)
         {
-            bool voiced = f0[i] > 0;
             frames[i] = new PitchFrame<T>
             {
-                Time = times[i],
-                Pitch = NumOps.FromDouble(f0[i]),
-                Confidence = NumOps.FromDouble(voiced ? 1.0 : 0.0),
-                IsVoiced = voiced
+                Time = i * (double)hopSizeMs / 1000.0,
+                Pitch = pitch[i],
+                Confidence = confidence[i],
+                IsVoiced = isVoiced[i] != 0
             };
         }
         return frames;
@@ -148,14 +153,33 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
 
     /// <inheritdoc/>
     /// <remarks>DIO is an utterance-level method; a single frame is analysed as a short utterance and the
-    /// median of its voiced estimates is returned.</remarks>
+    /// median of its voiced estimates is returned, with the voiced fraction as the confidence.</remarks>
+    public override (T Pitch, T Confidence)? DetectPitchWithConfidence(Tensor<T> audioFrame)
+    {
+        if (audioFrame is null) throw new ArgumentNullException(nameof(audioFrame));
+        return DetectFramePitch(Flat(audioFrame));
+    }
+
+    /// <inheritdoc/>
     protected override (double Pitch, double Confidence)? DetectPitchInternal(double[] frame)
+    {
+        if (frame is null) throw new ArgumentNullException(nameof(frame));
+        // The base class hands decoded double samples over; they are cast to T once.
+        var result = DetectFramePitch(new Tensor<double>(new[] { frame.Length }, new Vector<double>((double[])frame.Clone())).Cast<T>());
+        if (!result.HasValue) return null;
+        return (Ops.ToDouble(result.Value.Pitch), Ops.ToDouble(result.Value.Confidence));
+    }
+
+    private (T Pitch, T Confidence)? DetectFramePitch(Tensor<T> frame)
     {
         double framePeriodMs = 1000.0 * frame.Length / SampleRate / 4.0;
         var (f0, _) = EstimateF0(frame, Math.Max(1.0, framePeriodMs));
-        var voiced = f0.Where(v => v > 0).OrderBy(v => v).ToArray();
-        if (voiced.Length == 0) return null;
-        return (voiced[voiced.Length / 2], (double)voiced.Length / f0.Length);
+        int voicedCount = E.TensorCountNonzero(E.TensorGreaterThan(f0, Ops.Zero));
+        if (voicedCount == 0) return null;
+        // F0 is 0 where unvoiced and positive elsewhere, so the voiced values are the top of the ascending sort.
+        var (sorted, _) = E.TensorSort(f0, 0, false);
+        int unvoiced = f0.Length - voicedCount;
+        return (sorted[unvoiced + voicedCount / 2], Ops.FromDouble((double)voicedCount / f0.Length));
     }
 
     #region DIO (dio.cpp)
@@ -164,10 +188,11 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
     public static int GetSamplesForDio(int fs, int xLength, double framePeriod)
         => (int)(1000.0 * xLength / fs / framePeriod) + 1;
 
-    private void DioGeneralBody(double[] x, int fs, double framePeriod, double f0Floor, double f0Ceil,
-        double channelsInOctave, int speed, double allowedRange, double[] temporalPositions, double[] f0)
+    private static Tensor<T> DioGeneralBody(Tensor<T> x, int fs, double framePeriod, double f0Floor, double f0Ceil,
+        double channelsInOctave, int speed, double allowedRange, Tensor<T> temporalPositions)
     {
         int xLength = x.Length;
+        int f0Length = temporalPositions.Length;
         int numberOfBands = 1 + (int)(Math.Log(f0Ceil / f0Floor) / Log2 * channelsInOctave);
         var boundaryF0List = new double[numberOfBands];
         for (int i = 0; i < numberOfBands; i++)
@@ -181,376 +206,436 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
 
         var (ySpecRe, ySpecIm) = GetSpectrumForEstimation(x, yLength, actualFs, fftSize, decimationRatio);
 
-        int f0Length = f0.Length;
-        var f0Candidates = new double[numberOfBands][];
-        var f0Scores = new double[numberOfBands][];
-        for (int i = 0; i < f0Length; i++) temporalPositions[i] = i * framePeriod / 1000.0;
-
+        // Per band, the candidate and its score (the deviation of the four interval estimates over the candidate);
+        // the best band per frame is the first with the smallest score, as WORLD's strict '>' scan keeps it.
+        var candidates = new Tensor<T>[numberOfBands];
+        Tensor<T> bestF0Contour = Zeros(f0Length);
+        Tensor<T> bestScore = Zeros(f0Length);
+        var guard = Guard(SafeGuardMinimum);
         for (int i = 0; i < numberOfBands; i++)
         {
-            var candidate = new double[f0Length];
-            var score = new double[f0Length];
-            GetF0CandidateFromRawEvent(boundaryF0List[i], actualFs, ySpecRe, ySpecIm, yLength, fftSize, f0Floor,
-                f0Ceil, temporalPositions, f0Length, score, candidate);
-            f0Candidates[i] = new double[f0Length];
-            f0Scores[i] = new double[f0Length];
-            for (int j = 0; j < f0Length; j++)
+            var (score, candidate) = GetF0CandidateFromRawEvent(boundaryF0List[i], actualFs, ySpecRe, ySpecIm,
+                yLength, fftSize, f0Floor, f0Ceil, temporalPositions);
+            var bandScore = E.TensorDivide(score, E.TensorAddScalar(candidate, guard));
+            candidates[i] = candidate;
+            if (i == 0)
             {
-                f0Scores[i][j] = score[j] / (candidate[j] + SafeGuardMinimum);
-                f0Candidates[i][j] = candidate[j];
+                bestF0Contour = candidate;
+                bestScore = bandScore;
+                continue;
             }
+            var better = E.TensorGreaterThan(bestScore, bandScore);
+            bestF0Contour = E.TensorWhere(better, candidate, bestF0Contour);
+            bestScore = E.TensorWhere(better, bandScore, bestScore);
         }
 
-        var bestF0Contour = new double[f0Length];
-        for (int i = 0; i < f0Length; i++)
-        {
-            double tmp = f0Scores[0][i];
-            bestF0Contour[i] = f0Candidates[0][i];
-            for (int j = 1; j < numberOfBands; j++)
-            {
-                if (tmp > f0Scores[j][i])
-                {
-                    tmp = f0Scores[j][i];
-                    bestF0Contour[i] = f0Candidates[j][i];
-                }
-            }
-        }
-
-        FixF0Contour(framePeriod, numberOfBands, f0Candidates, bestF0Contour, f0Length, f0Floor, allowedRange, f0);
+        var candidatesByFrame = E.TensorTranspose(E.TensorStack(candidates, 0));    // [frames, bands]
+        return FixF0Contour(framePeriod, candidatesByFrame, bestF0Contour, f0Length, f0Floor, allowedRange);
     }
 
-    private (double[] Re, double[] Im) GetSpectrumForEstimation(double[] x, int yLength, double actualFs,
+    // The mean-removed (decimated) signal's spectrum through DIO's low-cut filter, bins 0 … fftSize/2.
+    private static (Tensor<T> Re, Tensor<T> Im) GetSpectrumForEstimation(Tensor<T> x, int yLength, double actualFs,
         int fftSize, int decimationRatio)
     {
-        int xLength = x.Length;
-        var y = new double[fftSize];
-        if (decimationRatio != 1)
-            Decimate(x, xLength, decimationRatio, y);
-        else
-            for (int i = 0; i < xLength; i++) y[i] = x[i];
-
-        double meanY = 0.0;
-        for (int i = 0; i < yLength; i++) meanY += y[i];
-        meanY /= yLength;
-        for (int i = 0; i < yLength; i++) y[i] -= meanY;
-        for (int i = yLength; i < fftSize; i++) y[i] = 0.0;
-
-        var (specRe, specIm) = ForwardFft(y);
+        // WORLD fills y from a zeroed buffer of fftSize: the decimated (or copied) samples, and zeros after them up to
+        // yLength, all of which enter the mean.
+        var source = decimationRatio != 1 ? Decimate(x, decimationRatio) : x;
+        var y = source.Length >= yLength ? Slice(source, 0, yLength) : Pad(source, 0, yLength - source.Length);
+        y = E.TensorSubtractScalar(y, ScaledMean(y));
+        var (specRe, specIm) = Fft(Pad(y, 0, fftSize - yLength));
 
         int cutoffInSample = MatlabRound(actualFs / CutOff);
-        DesignLowCutFilter(cutoffInSample * 2 + 1, fftSize, y);
-        var (filtRe, filtIm) = ForwardFft(y);
+        var (filtRe, filtIm) = Fft(DesignLowCutFilter(cutoffInSample * 2 + 1, fftSize));
 
-        for (int i = 0; i <= fftSize / 2; i++)
-        {
-            double tmp = specRe[i] * filtRe[i] - specIm[i] * filtIm[i];
-            specIm[i] = specRe[i] * filtIm[i] + specIm[i] * filtRe[i];
-            specRe[i] = tmp;
-        }
-        return (specRe, specIm);
+        int bins = fftSize / 2 + 1;
+        return ComplexMultiply(Slice(specRe, 0, bins), Slice(specIm, 0, bins), Slice(filtRe, 0, bins), Slice(filtIm, 0, bins));
     }
 
-    private static void DesignLowCutFilter(int n, int fftSize, double[] lowCutFilter)
+    // WORLD's DesignLowCutFilter, step by step on the fftSize buffer: the normalized negative Hann window, its first half
+    // copied to the end, everything shifted left by half the window, and 1 added at index 0.
+    private static Tensor<T> DesignLowCutFilter(int n, int fftSize)
     {
-        for (int i = 1; i <= n; i++)
-            lowCutFilter[i - 1] = 0.5 - 0.5 * Math.Cos(i * 2.0 * Math.PI / (n + 1));
-        for (int i = n; i < fftSize; i++) lowCutFilter[i] = 0.0;
-        double sumOfAmplitude = 0.0;
-        for (int i = 0; i < n; i++) sumOfAmplitude += lowCutFilter[i];
-        for (int i = 0; i < n; i++) lowCutFilter[i] = -lowCutFilter[i] / sumOfAmplitude;
-        for (int i = 0; i < (n - 1) / 2; i++)
-            lowCutFilter[fftSize - (n - 1) / 2 + i] = lowCutFilter[i];
-        for (int i = 0; i < n; i++) lowCutFilter[i] = lowCutFilter[i + (n - 1) / 2];
-        lowCutFilter[0] += 1.0;
+        var window = E.TensorAddScalar(E.TensorMultiplyScalar(E.TensorCos(E.TensorDivideScalar(
+            E.TensorMultiplyScalar(E.TensorMultiplyScalar(Range(1, n), C(2.0)), C(Math.PI)), C(n + 1.0))), C(-0.5)), C(0.5));
+        var filter = Pad(E.TensorDivideScalar(E.TensorNegate(window), E.TensorSum(window)), 0, fftSize - n);
+        int half = (n - 1) / 2;
+        if (half > 0) filter = E.TensorSetSlice(filter, Slice(filter, 0, half), new[] { fftSize - half });
+        filter = Cat(Slice(filter, half, n), Slice(filter, n, fftSize - n));
+        return E.TensorSetSlice(filter, E.TensorAddScalar(Slice(filter, 0, 1), Ops.One), new[] { 0 });
     }
 
-    private void FixF0Contour(double framePeriod, int numberOfCandidates, double[][] f0Candidates,
-        double[] bestF0Contour, int f0Length, double f0Floor, double allowedRange, double[] fixedF0Contour)
+    private static Tensor<T> FixF0Contour(double framePeriod, Tensor<T> candidatesByFrame, Tensor<T> bestF0Contour,
+        int f0Length, double f0Floor, double allowedRange)
     {
         int voiceRangeMinimum = (int)(0.5 + 1000.0 / framePeriod / f0Floor) * 2 + 1;
-        if (f0Length <= voiceRangeMinimum) return;
-
-        var f0Tmp1 = new double[f0Length];
-        var f0Tmp2 = new double[f0Length];
+        if (f0Length <= voiceRangeMinimum) return Zeros(f0Length);
 
         // FixStep1: eliminate unnatural jumps.
-        var f0Base = new double[f0Length];
-        for (int i = voiceRangeMinimum; i < f0Length - voiceRangeMinimum; i++) f0Base[i] = bestF0Contour[i];
-        for (int i = voiceRangeMinimum; i < f0Length; i++)
-            f0Tmp1[i] = Math.Abs((f0Base[i] - f0Base[i - 1]) / (SafeGuardMinimum + f0Base[i])) < allowedRange
-                ? f0Base[i] : 0.0;
+        int inner = f0Length - 2 * voiceRangeMinimum;
+        var f0Base = inner > 0 ? Pad(Slice(bestF0Contour, voiceRangeMinimum, inner), voiceRangeMinimum, voiceRangeMinimum)
+            : Zeros(f0Length);
+        var previous = Pad(Slice(f0Base, 0, f0Length - 1), 1, 0);
+        var jump = E.TensorAbs(E.TensorDivide(E.TensorSubtract(f0Base, previous),
+            E.TensorAddScalar(f0Base, Guard(SafeGuardMinimum))));
+        var f0Tmp1 = E.TensorWhere(E.TensorLessThan(jump, C(allowedRange)), f0Base, Zeros(f0Length));
+        f0Tmp1 = Pad(Slice(f0Tmp1, voiceRangeMinimum, f0Length - voiceRangeMinimum), voiceRangeMinimum, 0);
 
-        // FixStep2: eliminate suspected F0 at the start and end of voiced sections.
-        Array.Copy(f0Tmp1, f0Tmp2, f0Length);
+        // FixStep2: eliminate suspected F0 at the start and end of voiced sections (a zero anywhere in the window).
         int center = (voiceRangeMinimum - 1) / 2;
-        for (int i = center; i < f0Length - center; i++)
-        {
-            for (int j = -center; j <= center; j++)
-            {
-                if (f0Tmp1[i + j] == 0)
-                {
-                    f0Tmp2[i] = 0.0;
-                    break;
-                }
-            }
-        }
+        int middle = f0Length - 2 * center;
+        var zerosSoFar = E.TensorCumSum(PadInt(E.TensorEquals(f0Tmp1, Ops.Zero).Cast<int>(), 1, 0), 0);
+        var windowZeros = E.TensorSubtract(SliceInt(zerosSoFar, 2 * center + 1, middle), SliceInt(zerosSoFar, 0, middle));
+        var hasZero = E.TensorGreaterThan(windowZeros, 0).Cast<T>();
+        var f0Tmp2 = Cat(Slice(f0Tmp1, 0, center),
+            E.TensorWhere(hasZero, Zeros(middle), Slice(f0Tmp1, center, middle)),
+            Slice(f0Tmp1, f0Length - center, center));
 
-        var positiveIndex = new int[f0Length];
-        var negativeIndex = new int[f0Length];
-        int positiveCount = 0, negativeCount = 0;
-        for (int i = 1; i < f0Length; i++)
-        {
-            if (f0Tmp2[i] == 0 && f0Tmp2[i - 1] != 0)
-                negativeIndex[negativeCount++] = i - 1;
-            else if (f0Tmp2[i - 1] == 0 && f0Tmp2[i] != 0)
-                positiveIndex[positiveCount++] = i;
-        }
+        // Section ends (voiced to unvoiced) and starts (unvoiced to voiced).
+        var voiced = E.TensorNotEquals(f0Tmp2, Ops.Zero).Cast<int>();
+        var change = E.TensorSubtract(SliceInt(voiced, 1, f0Length - 1), SliceInt(voiced, 0, f0Length - 1));
+        int[] negativeIndex = E.TensorNonzero(E.TensorEquals(change, -1)).ToArray();
+        int[] positiveIndex = E.TensorAddScalar(E.TensorNonzero(E.TensorEquals(change, 1)), 1).ToArray();
 
-        // FixStep3: extend voiced sections forward.
-        Array.Copy(f0Tmp2, f0Tmp1, f0Length);
-        for (int i = 0; i < negativeCount; i++)
+        // FixStep3: extend voiced sections forward. Each frame's choice depends on the two before it, so the extension is
+        // a scan over frames; each step picks the nearest band candidate with engine ops.
+        var extended = f0Tmp2.Clone();
+        for (int i = 0; i < negativeIndex.Length; i++)
         {
-            int limit = i == negativeCount - 1 ? f0Length - 1 : negativeIndex[i + 1];
+            int limit = i == negativeIndex.Length - 1 ? f0Length - 1 : negativeIndex[i + 1];
             for (int j = negativeIndex[i]; j < limit; j++)
-            {
-                f0Tmp1[j + 1] = SelectBestF0(f0Tmp1[j], f0Tmp1[j - 1], f0Candidates, numberOfCandidates, j + 1,
-                    allowedRange);
-                if (f0Tmp1[j + 1] == 0) break;
-            }
+                if (!ExtendVoicing(extended, candidatesByFrame, j + 1, j, j - 1, allowedRange)) break;
         }
 
         // FixStep4: extend voiced sections backward.
-        Array.Copy(f0Tmp1, fixedF0Contour, f0Length);
-        for (int i = positiveCount - 1; i >= 0; i--)
+        var fixedF0Contour = extended.Clone();
+        for (int i = positiveIndex.Length - 1; i >= 0; i--)
         {
             int limit = i == 0 ? 1 : positiveIndex[i - 1];
             for (int j = positiveIndex[i]; j > limit; j--)
-            {
-                fixedF0Contour[j - 1] = SelectBestF0(fixedF0Contour[j], fixedF0Contour[j + 1], f0Candidates,
-                    numberOfCandidates, j - 1, allowedRange);
-                if (fixedF0Contour[j - 1] == 0) break;
-            }
+                if (!ExtendVoicing(fixedF0Contour, candidatesByFrame, j - 1, j, j + 1, allowedRange)) break;
         }
+        return fixedF0Contour;
     }
 
-    private static double SelectBestF0(double currentF0, double pastF0, double[][] f0Candidates,
-        int numberOfCandidates, int targetIndex, double allowedRange)
+    // One step of FixStep3/4 (WORLD SelectBestF0): the band candidate nearest the linear extrapolation of the contour,
+    // or 0 when it is further than the allowed range. Writes the target frame; returns whether it is voiced.
+    private static bool ExtendVoicing(Tensor<T> contour, Tensor<T> candidatesByFrame, int target, int current, int past,
+        double allowedRange)
     {
-        double referenceF0 = (currentF0 * 3.0 - pastF0) / 2.0;
-        double minimumError = Math.Abs(referenceF0 - f0Candidates[0][targetIndex]);
-        double bestF0 = f0Candidates[0][targetIndex];
-        for (int i = 1; i < numberOfCandidates; i++)
-        {
-            double currentError = Math.Abs(referenceF0 - f0Candidates[i][targetIndex]);
-            if (currentError < minimumError)
-            {
-                minimumError = currentError;
-                bestF0 = f0Candidates[i][targetIndex];
-            }
-        }
-        if (Math.Abs(1.0 - bestF0 / referenceF0) > allowedRange) return 0.0;
-        return bestF0;
+        T referenceF0 = Ops.Divide(Ops.Subtract(Ops.Multiply(contour[current], C(3.0)), contour[past]), C(2.0));
+        var row = Row(candidatesByFrame, target);
+        var error = E.TensorAbs(E.TensorSubtractScalar(row, referenceF0));
+        int best = FirstIndexOf(error, E.TensorMinValue(error));
+        T bestF0 = row[best];
+        if (Ops.GreaterThan(Ops.Abs(Ops.Subtract(Ops.One, Ops.Divide(bestF0, referenceF0))), C(allowedRange)))
+            bestF0 = Ops.Zero;
+        contour[target] = bestF0;
+        return !Ops.Equals(bestF0, Ops.Zero);
     }
 
-    private void GetF0CandidateFromRawEvent(double boundaryF0, double fs, double[] ySpecRe, double[] ySpecIm,
-        int yLength, int fftSize, double f0Floor, double f0Ceil, double[] temporalPositions, int f0Length,
-        double[] f0Score, double[] f0Candidate)
+    private static (Tensor<T> Score, Tensor<T> Candidate) GetF0CandidateFromRawEvent(double boundaryF0, double fs,
+        Tensor<T> ySpecRe, Tensor<T> ySpecIm, int yLength, int fftSize, double f0Floor, double f0Ceil,
+        Tensor<T> temporalPositions)
     {
-        var filteredSignal = GetFilteredSignal(MatlabRound(fs / boundaryF0 / 2.0), fftSize, ySpecRe, ySpecIm,
-            yLength);
+        int f0Length = temporalPositions.Length;
+        var filteredSignal = GetFilteredSignal(MatlabRound(fs / boundaryF0 / 2.0), fftSize, ySpecRe, ySpecIm, yLength);
+        var sets = FourIntervalContours(filteredSignal, fs, temporalPositions);
+        if (sets is null)
+            return (Tensor<T>.CreateDefault(new[] { f0Length }, C(MaximumValue)), Zeros(f0Length));
 
-        var negLoc = new double[yLength]; var negInt = new double[yLength];
-        var posLoc = new double[yLength]; var posInt = new double[yLength];
-        var peakLoc = new double[yLength]; var peakInt = new double[yLength];
-        var dipLoc = new double[yLength]; var dipInt = new double[yLength];
+        var candidate = E.TensorDivideScalar(E.TensorAdd(E.TensorAdd(E.TensorAdd(sets[0], sets[1]), sets[2]), sets[3]), C(4.0));
+        Tensor<T> Deviation(Tensor<T> set) => E.TensorSquare(E.TensorMultiplyScalar(E.TensorSubtract(set, candidate), C(DeviationScale)));
+        var score = E.TensorMultiplyScalar(E.TensorSqrt(E.TensorDivideScalar(E.TensorAdd(E.TensorAdd(E.TensorAdd(
+            Deviation(sets[0]), Deviation(sets[1])), Deviation(sets[2])), Deviation(sets[3])), C(3.0))), C(1.0 / DeviationScale));
 
-        int numberOfNegatives = ZeroCrossingEngine(filteredSignal, yLength, fs, negLoc, negInt);
-        for (int i = 0; i < yLength; i++) filteredSignal[i] = -filteredSignal[i];
-        int numberOfPositives = ZeroCrossingEngine(filteredSignal, yLength, fs, posLoc, posInt);
-        for (int i = 0; i < yLength - 1; i++) filteredSignal[i] = filteredSignal[i] - filteredSignal[i + 1];
-        int numberOfPeaks = ZeroCrossingEngine(filteredSignal, yLength - 1, fs, peakLoc, peakInt);
-        for (int i = 0; i < yLength - 1; i++) filteredSignal[i] = -filteredSignal[i];
-        int numberOfDips = ZeroCrossingEngine(filteredSignal, yLength - 1, fs, dipLoc, dipInt);
-
-        if (CheckEvent(numberOfNegatives - 2) * CheckEvent(numberOfPositives - 2)
-            * CheckEvent(numberOfPeaks - 2) * CheckEvent(numberOfDips - 2) == 0)
-        {
-            for (int i = 0; i < f0Length; i++)
-            {
-                f0Score[i] = MaximumValue;
-                f0Candidate[i] = 0.0;
-            }
-            return;
-        }
-
-        var set0 = new double[f0Length]; var set1 = new double[f0Length];
-        var set2 = new double[f0Length]; var set3 = new double[f0Length];
-        Interp1(negLoc, negInt, numberOfNegatives, temporalPositions, f0Length, set0);
-        Interp1(posLoc, posInt, numberOfPositives, temporalPositions, f0Length, set1);
-        Interp1(peakLoc, peakInt, numberOfPeaks, temporalPositions, f0Length, set2);
-        Interp1(dipLoc, dipInt, numberOfDips, temporalPositions, f0Length, set3);
-
-        for (int i = 0; i < f0Length; i++)
-        {
-            f0Candidate[i] = (set0[i] + set1[i] + set2[i] + set3[i]) / 4.0;
-            f0Score[i] = Math.Sqrt(((set0[i] - f0Candidate[i]) * (set0[i] - f0Candidate[i])
-                + (set1[i] - f0Candidate[i]) * (set1[i] - f0Candidate[i])
-                + (set2[i] - f0Candidate[i]) * (set2[i] - f0Candidate[i])
-                + (set3[i] - f0Candidate[i]) * (set3[i] - f0Candidate[i])) / 3.0);
-            if (f0Candidate[i] > boundaryF0 || f0Candidate[i] < boundaryF0 / 2.0
-                || f0Candidate[i] > f0Ceil || f0Candidate[i] < f0Floor)
-            {
-                f0Candidate[i] = 0.0;
-                f0Score[i] = MaximumValue;
-            }
-        }
+        var outOfRange = OutOfRange(candidate, boundaryF0 / 2.0, boundaryF0, f0Floor, f0Ceil);
+        return (E.TensorWhere(outOfRange, Tensor<T>.CreateDefault(new[] { f0Length }, C(MaximumValue)), score),
+            E.TensorWhere(outOfRange, Zeros(f0Length), candidate));
     }
 
-    private static int CheckEvent(int x) => x > 0 ? 1 : 0;
+    // 1 where the candidate is above either upper bound or below either lower bound (NaN compares false, as in WORLD).
+    private static Tensor<T> OutOfRange(Tensor<T> candidate, double lower, double upper, double f0Floor, double f0Ceil)
+    {
+        var one = Tensor<T>.CreateDefault(candidate._shape, Ops.One);
+        var outside = E.TensorWhere(E.TensorGreaterThan(candidate, C(upper)), one, E.TensorLessThan(candidate, C(lower)));
+        outside = E.TensorWhere(E.TensorGreaterThan(candidate, C(f0Ceil)), one, outside);
+        return E.TensorWhere(E.TensorLessThan(candidate, C(f0Floor)), one, outside);
+    }
 
-    private double[] GetFilteredSignal(int halfAverageLength, int fftSize, double[] ySpecRe, double[] ySpecIm,
+    // The signal through DIO's Nuttall low-pass of length 4·halfAverageLength, delay compensated.
+    private static Tensor<T> GetFilteredSignal(int halfAverageLength, int fftSize, Tensor<T> ySpecRe, Tensor<T> ySpecIm,
         int yLength)
     {
-        var lowPassFilter = new double[fftSize];
-        NuttallWindow(halfAverageLength * 4, lowPassFilter);
-        for (int i = halfAverageLength * 4; i < fftSize; i++) lowPassFilter[i] = 0.0;
-
-        var (lpRe, lpIm) = ForwardFft(lowPassFilter);
-
-        // Convolution in the frequency domain. WORLD writes the conjugate-side copy into the same array as it
-        // goes, so its last two iterations overwrite bins N/2-1 and N/2, which the inverse transform reads. The
-        // sequence is kept as WORLD has it; its effect is below the 1e-6 test tolerance because the Nuttall
-        // low-pass spectrum is effectively zero that close to Nyquist (verified by removing it: still matches).
-        double tmp = ySpecRe[0] * lpRe[0] - ySpecIm[0] * lpIm[0];
-        lpIm[0] = ySpecRe[0] * lpIm[0] + ySpecIm[0] * lpRe[0];
-        lpRe[0] = tmp;
-        for (int i = 1; i <= fftSize / 2; i++)
-        {
-            tmp = ySpecRe[i] * lpRe[i] - ySpecIm[i] * lpIm[i];
-            lpIm[i] = ySpecRe[i] * lpIm[i] + ySpecIm[i] * lpRe[i];
-            lpRe[i] = tmp;
-            lpRe[fftSize - i - 1] = lpRe[i];
-            lpIm[fftSize - i - 1] = lpIm[i];
-        }
-
-        var filteredSignal = InverseRealFft(lpRe, lpIm, fftSize);
-
-        int indexBias = halfAverageLength * 2;
-        for (int i = 0; i < yLength; i++) filteredSignal[i] = filteredSignal[i + indexBias];
-        return filteredSignal;
+        int length = halfAverageLength * 4;
+        var (lpRe, lpIm) = Fft(Pad(NuttallWindow(length), 0, fftSize - length));
+        var (re, im) = ConvolveHalfSpectrum(ySpecRe, ySpecIm, lpRe, lpIm, fftSize);
+        return Slice(InverseRealFft(re, im, fftSize), halfAverageLength * 2, yLength);
     }
 
-    private static int ZeroCrossingEngine(double[] filteredSignal, int yLength, double fs,
-        double[] intervalLocations, double[] intervals)
+    /// <summary>
+    /// WORLD's frequency-domain convolution (dio.cpp and harvest.cpp GetFilteredSignal): bins 0 … fftSize/2 of the
+    /// signal's spectrum times the filter's. WORLD writes each product to bin fftSize − i − 1 as well while it goes, and at
+    /// i = fftSize/2 − 1 that is bin fftSize/2, which the next iteration multiplies by the signal again; the inverse
+    /// transform then reads both bins fftSize/2 − 1 and fftSize/2 as Y[N/2]·Y[N/2−1]·F[N/2−1].
+    /// </summary>
+    internal static (Tensor<T> Re, Tensor<T> Im) ConvolveHalfSpectrum(Tensor<T> ySpecRe, Tensor<T> ySpecIm,
+        Tensor<T> filterRe, Tensor<T> filterIm, int fftSize)
     {
-        var negativeGoingPoints = new int[yLength];
-        for (int i = 0; i < yLength - 1; i++)
-            negativeGoingPoints[i] = 0.0 < filteredSignal[i] && filteredSignal[i + 1] <= 0.0 ? i + 1 : 0;
-        negativeGoingPoints[yLength - 1] = 0;
+        int half = fftSize / 2;
+        var (pRe, pIm) = ComplexMultiply(ySpecRe, ySpecIm, Slice(filterRe, 0, half + 1), Slice(filterIm, 0, half + 1));
+        var (qRe, qIm) = ComplexMultiply(Slice(ySpecRe, half, 1), Slice(ySpecIm, half, 1), Slice(pRe, half - 1, 1), Slice(pIm, half - 1, 1));
+        return (Cat(Slice(pRe, 0, half - 1), qRe, qRe), Cat(Slice(pIm, 0, half - 1), qIm, qIm));
+    }
 
-        var edges = new int[yLength];
-        int count = 0;
-        for (int i = 0; i < yLength; i++)
-            if (negativeGoingPoints[i] > 0) edges[count++] = negativeGoingPoints[i];
-        if (count < 2) return 0;
-
-        var fineEdges = new double[count];
-        for (int i = 0; i < count; i++)
-            fineEdges[i] = edges[i] - filteredSignal[edges[i] - 1]
-                / (filteredSignal[edges[i]] - filteredSignal[edges[i] - 1]);
-
-        for (int i = 0; i < count - 1; i++)
+    // GetFourZeroCrossingIntervals, each interpolated to the frame times; null when any has fewer than three intervals.
+    private static Tensor<T>[]? FourIntervalContours(Tensor<T> filtered, double fs, Tensor<T> temporalPositions)
+    {
+        int length = filtered.Length;
+        var negated = E.TensorNegate(filtered);
+        var difference = E.TensorSubtract(Slice(negated, 0, length - 1), Slice(negated, 1, length - 1));
+        var series = new[]
         {
-            intervals[i] = fs / (fineEdges[i + 1] - fineEdges[i]);
-            intervalLocations[i] = (fineEdges[i] + fineEdges[i + 1]) / 2.0 / fs;
-        }
-        return count - 1;
+            ZeroCrossingEngine(filtered, fs),
+            ZeroCrossingEngine(negated, fs),
+            ZeroCrossingEngine(difference, fs),
+            ZeroCrossingEngine(E.TensorNegate(difference), fs),
+        };
+        for (int k = 0; k < series.Length; k++)
+            if (series[k].Count <= 2) return null;
+        var sets = new Tensor<T>[series.Length];
+        for (int k = 0; k < series.Length; k++)
+            sets[k] = Interp1(series[k].Locations, series[k].Intervals, series[k].Count, temporalPositions);
+        return sets;
+    }
+
+    // Negative-going zero crossings, refined linearly between samples; the interval between consecutive crossings as a
+    // frequency and its midpoint in seconds. Count is the number of intervals (0 with fewer than two crossings).
+    private static (Tensor<T> Locations, Tensor<T> Intervals, int Count) ZeroCrossingEngine(Tensor<T> signal, double fs)
+    {
+        int length = signal.Length;
+        var none = (Zeros(1), Zeros(1), 0);
+        if (length < 2) return none;
+        var current = Slice(signal, 0, length - 1);
+        var next = Slice(signal, 1, length - 1);
+        var one = Tensor<T>.CreateDefault(current._shape, Ops.One);
+        var notPositive = E.TensorWhere(E.TensorLessThan(next, Ops.Zero), one, E.TensorEquals(next, Ops.Zero));
+        var crossing = E.TensorWhere(E.TensorGreaterThan(current, Ops.Zero), notPositive, Zeros(length - 1));
+        var before = E.TensorNonzero(crossing);
+        int count = before.Shape[0];
+        if (count < 2) return none;
+        before = E.Reshape(before, new[] { count });
+        var edges = E.TensorAddScalar(before, 1);
+        var atBefore = E.TensorIndexSelect(signal, before, 0);
+        var atEdge = E.TensorIndexSelect(signal, edges, 0);
+        var fineEdges = E.TensorSubtract(edges.Cast<T>(), E.TensorDivide(atBefore, E.TensorSubtract(atEdge, atBefore)));
+        var lower = Slice(fineEdges, 0, count - 1);
+        var upper = Slice(fineEdges, 1, count - 1);
+        var intervals = Over(fs, E.TensorSubtract(upper, lower));
+        var locations = E.TensorDivideScalar(E.TensorDivideScalar(E.TensorAdd(lower, upper), C(2.0)), C(fs));
+        return (locations, intervals, count - 1);
     }
 
     #endregion
 
     #region StoneMask (stonemask.cpp)
 
-    private double GetRefinedF0(double[] x, int fs, double currentPosition, double initialF0)
+    /// <summary>StoneMask's refinement (PyWorld's <c>stonemask</c>) of an F0 contour at its frames' times.</summary>
+    /// <returns>The refined F0, <c>[frames]</c>.</returns>
+    public Tensor<T> StoneMask(Tensor<T> x, Tensor<T> f0, Tensor<T> temporalPositions)
     {
-        if (initialF0 <= FloorF0StoneMask || initialF0 > fs / 12.0) return 0.0;
-
-        int halfWindowLength = (int)(1.5 * fs / initialF0 + 1.0);
-        double windowLengthInTime = (2.0 * halfWindowLength + 1.0) / fs;
-        int baseTimeLength = halfWindowLength * 2 + 1;
-        var baseTime = new double[baseTimeLength];
-        for (int i = 0; i < baseTimeLength; i++) baseTime[i] = (double)(-halfWindowLength + i) / fs;
-        int fftSize = (int)Math.Pow(2.0, 2.0 + (int)(Math.Log(halfWindowLength * 2.0 + 1.0) / Log2));
-
-        double meanF0 = GetMeanF0(x, fs, currentPosition, initialF0, fftSize, windowLengthInTime, baseTime);
-        if (Math.Abs(meanF0 - initialF0) > initialF0 * 0.2) meanF0 = initialF0;
-        return meanF0;
+        if (x is null) throw new ArgumentNullException(nameof(x));
+        if (f0 is null) throw new ArgumentNullException(nameof(f0));
+        if (temporalPositions is null) throw new ArgumentNullException(nameof(temporalPositions));
+        if (f0.Length != temporalPositions.Length) throw new ArgumentException("Each F0 value needs its time.", nameof(temporalPositions));
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return StoneMaskCore(Flat(x), SampleRate, Flat(f0), Flat(temporalPositions));
     }
 
-    private double GetMeanF0(double[] x, int fs, double currentPosition, double initialF0, int fftSize,
-        double windowLengthInTime, double[] baseTime)
+    // GetRefinedF0 for every frame: frames whose F0 is outside (40 Hz, fs/12] give 0; the rest are refined in blocks of
+    // equal FFT size, then put back in frame order.
+    private static Tensor<T> StoneMaskCore(Tensor<T> x, int fs, Tensor<T> f0, Tensor<T> temporalPositions)
     {
-        int baseTimeLength = baseTime.Length;
-        var indexRaw = new int[baseTimeLength];
-        for (int i = 0; i < baseTimeLength; i++) indexRaw[i] = MatlabRound((currentPosition + baseTime[i]) * fs);
+        int frames = f0.Length;
+        var one = Tensor<T>.CreateDefault(f0._shape, Ops.One);
+        var tooHigh = E.TensorWhere(E.TensorGreaterThan(f0, C(fs / 12.0)), Zeros(frames), one);
+        var valid = E.TensorWhere(E.TensorGreaterThan(f0, C(FloorF0StoneMask)), tooHigh, Zeros(frames));
+        int[] validFrames = E.TensorNonzero(valid).ToArray();
+        if (validFrames.Length == 0) return Zeros(frames);
 
-        var mainWindow = new double[baseTimeLength];
-        for (int i = 0; i < baseTimeLength; i++)
+        var validIndex = IntTensor(validFrames);
+        var initialF0 = E.TensorIndexSelect(f0, validIndex, 0);
+        var positions = E.TensorIndexSelect(temporalPositions, validIndex, 0);
+        int[] halfWindow = E.TensorFloor(E.TensorAddScalar(Over(1.5 * fs, initialF0), Ops.One)).Cast<int>().ToArray();
+
+        var order = new List<int>();
+        var refined = new List<Tensor<T>>();
+        foreach (var block in RefinementBlocks(halfWindow))
         {
-            double tmp = (indexRaw[i] - 1.0) / fs - currentPosition;
-            mainWindow[i] = 0.42 + 0.5 * Math.Cos(2.0 * Math.PI * tmp / windowLengthInTime)
-                + 0.08 * Math.Cos(4.0 * Math.PI * tmp / windowLengthInTime);
+            var pairs = IntTensor(block.Pairs);
+            var blockF0 = E.TensorIndexSelect(initialF0, pairs, 0);
+            var (power, numeratorI) = InstantaneousSpectra(x, fs, E.TensorIndexSelect(positions, pairs, 0),
+                block.HalfWindow, block.FftSize, RefinementWindow.StoneMask);
+            var guard = Guard(SafeGuardMinimum / block.FftSize);
+            var tentative = FixF0(power, numeratorI, block.FftSize, fs, blockF0, 2, guard);
+            // GetMeanF0 gives 0 when the two-harmonic estimate is not in (0, 2·F0]; GetRefinedF0 then keeps the input F0.
+            var none = Zeros(block.Pairs.Length);
+            var ok = E.TensorWhere(E.TensorGreaterThan(tentative, Ops.Zero),
+                E.TensorWhere(E.TensorGreaterThan(tentative, E.TensorMultiplyScalar(blockF0, C(2.0))), none,
+                    Tensor<T>.CreateDefault(none._shape, Ops.One)), none);
+            var mean = E.TensorWhere(ok, FixF0(power, numeratorI, block.FftSize, fs, E.TensorWhere(ok, tentative, blockF0), 6, guard), none);
+            var far = E.TensorGreaterThan(E.TensorAbs(E.TensorSubtract(mean, blockF0)), E.TensorMultiplyScalar(blockF0, C(0.2)));
+            refined.Add(E.TensorWhere(far, blockF0, mean));
+            foreach (int pair in block.Pairs) order.Add(validFrames[pair]);
         }
-
-        var diffWindow = new double[baseTimeLength];
-        diffWindow[0] = -mainWindow[1] / 2.0;
-        for (int i = 1; i < baseTimeLength - 1; i++) diffWindow[i] = -(mainWindow[i + 1] - mainWindow[i - 1]) / 2.0;
-        diffWindow[baseTimeLength - 1] = mainWindow[baseTimeLength - 2] / 2.0;
-
-        int xLength = x.Length;
-        var waveform = new double[fftSize];
-        for (int i = 0; i < baseTimeLength; i++)
-        {
-            int index = Math.Max(0, Math.Min(xLength - 1, indexRaw[i] - 1));
-            waveform[i] = x[index] * mainWindow[i];
-        }
-        var (mainRe, mainIm) = ForwardFft(waveform);
-        for (int i = 0; i < baseTimeLength; i++)
-        {
-            int index = Math.Max(0, Math.Min(xLength - 1, indexRaw[i] - 1));
-            waveform[i] = x[index] * diffWindow[i];
-        }
-        for (int i = baseTimeLength; i < fftSize; i++) waveform[i] = 0.0;
-        var (diffRe, diffIm) = ForwardFft(waveform);
-
-        var powerSpectrum = new double[fftSize / 2 + 1];
-        var numeratorI = new double[fftSize / 2 + 1];
-        for (int j = 0; j <= fftSize / 2; j++)
-        {
-            numeratorI[j] = mainRe[j] * diffIm[j] - mainIm[j] * diffRe[j];
-            powerSpectrum[j] = mainRe[j] * mainRe[j] + mainIm[j] * mainIm[j];
-        }
-
-        double tentativeF0 = FixF0(powerSpectrum, numeratorI, fftSize, fs, initialF0, 2);
-        if (tentativeF0 <= 0.0 || tentativeF0 > initialF0 * 2) return 0.0;
-        return FixF0(powerSpectrum, numeratorI, fftSize, fs, tentativeF0, 6);
+        return E.TensorIndexPut(Zeros(frames), new[] { IntTensor(order.ToArray()) }, Cat(refined.ToArray()), false);
     }
 
-    private static double FixF0(double[] powerSpectrum, double[] numeratorI, int fftSize, int fs, double initialF0,
-        int numberOfHarmonics)
+    // WORLD FixF0 (StoneMask's): the amplitude-weighted mean of the first harmonics' instantaneous frequencies over
+    // harmonic number. power and numeratorI are [pairs, fftSize/2 + 1], f0 is [pairs].
+    private static Tensor<T> FixF0(Tensor<T> power, Tensor<T> numeratorI, int fftSize, double fs, Tensor<T> f0,
+        int numberOfHarmonics, T guard)
     {
-        double numerator = 0.0, denominator = 0.0;
-        for (int i = 0; i < numberOfHarmonics; i++)
-        {
-            int index = Math.Min(MatlabRound(initialF0 * fftSize / fs * (i + 1)), fftSize / 2);
-            double instantaneousFrequency = powerSpectrum[index] == 0.0 ? 0.0
-                : (double)index * fs / fftSize + numeratorI[index] / powerSpectrum[index] * fs / 2.0 / Math.PI;
-            double amplitude = Math.Sqrt(powerSpectrum[index]);
-            numerator += amplitude * instantaneousFrequency;
-            denominator += amplitude * (i + 1);
-        }
-        return numerator / (denominator + SafeGuardMinimum);
+        var (harmonic, instantaneous, amplitude) = Harmonics(power, numeratorI, fftSize, fs, f0, numberOfHarmonics);
+        var numerator = E.ReduceSum(E.TensorMultiply(amplitude, instantaneous), new[] { 1 }, false);
+        var denominator = E.ReduceSum(E.TensorMultiply(amplitude, harmonic), new[] { 1 }, false);
+        return E.TensorDivide(numerator, E.TensorAddScalar(denominator, guard));
     }
+
+    // Per pair and harmonic k = 1 … H: k, and the instantaneous frequency (0 where the power is 0) and amplitude of bin
+    // round(f0·N/fs·k), at most N/2 (StoneMask's min; Harvest's harmonics below Nyquist never reach it, and the bins of
+    // the harmonics Harvest does not use are only read, never counted).
+    private static (Tensor<T> Harmonic, Tensor<T> Instantaneous, Tensor<T> Amplitude) Harmonics(
+        Tensor<T> power, Tensor<T> numeratorI, int fftSize, double fs, Tensor<T> f0, int numberOfHarmonics)
+    {
+        int pairs = f0.Length;
+        var shape = new[] { pairs, numberOfHarmonics };
+        var harmonic = E.TensorBroadcastTo(E.Reshape(Range(1, numberOfHarmonics), new[] { 1, numberOfHarmonics }), shape);
+        var perPair = E.TensorBroadcastTo(E.Reshape(f0, new[] { pairs, 1 }), shape);
+        var bin = MatlabRound(E.TensorMultiply(E.TensorDivideScalar(E.TensorMultiplyScalar(perPair, C(fftSize)), C(fs)), harmonic));
+        var index = E.TensorClamp(bin.Cast<int>(), 0, fftSize / 2);
+        var p = E.TensorTakeAlongDim(power, index, 1);
+        var q = E.TensorTakeAlongDim(numeratorI, index, 1);
+        var frequency = E.TensorAdd(
+            E.TensorDivideScalar(E.TensorMultiplyScalar(index.Cast<T>(), C(fs)), C(fftSize)),
+            E.TensorDivideScalar(E.TensorDivideScalar(E.TensorMultiplyScalar(E.TensorDivide(q, p), C(fs)), C(2.0)), C(Math.PI)));
+        var instantaneous = E.TensorWhere(E.TensorEquals(p, Ops.Zero), new Tensor<T>(shape), frequency);
+        return (harmonic, instantaneous, E.TensorSqrt(p));
+    }
+
+    #endregion
+
+    #region Instantaneous-frequency spectra (stonemask.cpp GetMeanF0, harvest.cpp GetMeanF0)
+
+    /// <summary>How the analysis window's sample positions are derived.</summary>
+    private enum RefinementWindow
+    {
+        /// <summary>StoneMask: each sample index rounded from its own time.</summary>
+        StoneMask,
+        /// <summary>Harvest: the first index rounded (with WORLD's +0.001), the rest consecutive.</summary>
+        Harvest,
+    }
+
+    private sealed class RefinementBlock
+    {
+        public RefinementBlock(int fftSize, int[] pairs, int[] halfWindow)
+        {
+            FftSize = fftSize;
+            Pairs = pairs;
+            HalfWindow = halfWindow;
+        }
+
+        public int FftSize { get; }
+        public int[] Pairs { get; }
+        public int[] HalfWindow { get; }
+    }
+
+    // Groups the pairs by WORLD's FFT size 2^(2 + floor(log2(2h + 1))) and splits each group into bounded blocks.
+    private static IEnumerable<RefinementBlock> RefinementBlocks(int[] halfWindow)
+    {
+        var groups = new SortedDictionary<int, List<int>>();
+        for (int p = 0; p < halfWindow.Length; p++)
+        {
+            int fftSize = (int)Math.Pow(2.0, 2.0 + (int)(Math.Log(halfWindow[p] * 2.0 + 1.0) / Log2));
+            if (!groups.TryGetValue(fftSize, out var members)) groups[fftSize] = members = new List<int>();
+            members.Add(p);
+        }
+        foreach (var group in groups)
+        {
+            int blockSize = Math.Max(1, BlockElements / group.Key);
+            for (int start = 0; start < group.Value.Count; start += blockSize)
+            {
+                var pairs = group.Value.GetRange(start, Math.Min(blockSize, group.Value.Count - start)).ToArray();
+                var half = new int[pairs.Length];
+                for (int i = 0; i < pairs.Length; i++) half[i] = halfWindow[pairs[i]];
+                yield return new RefinementBlock(group.Key, pairs, half);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The windowed spectra GetMeanF0 reads, for a block of pairs sharing one FFT size: the power spectrum of the
+    /// Blackman-windowed waveform and the cross term with its time-derivative window, bins 0 … fftSize/2. Both spectra are
+    /// scaled by 1/fftSize (a power of two, so float and double ratios are unchanged and Half does not overflow).
+    /// </summary>
+    private static (Tensor<T> Power, Tensor<T> NumeratorI) InstantaneousSpectra(Tensor<T> x, double fs,
+        Tensor<T> positions, int[] halfWindow, int fftSize, RefinementWindow kind)
+    {
+        int pairs = halfWindow.Length;
+        var shape = new[] { pairs, fftSize };
+        var column = E.TensorBroadcastTo(E.Reshape(Range(0, fftSize), new[] { 1, fftSize }), shape);
+        var half = IntTensor(halfWindow).Cast<T>();
+        var halfB = PerPair(half, shape);
+        var position = PerPair(positions, shape);
+
+        Tensor<T> sampleIndex, windowTime;
+        if (kind == RefinementWindow.StoneMask)
+        {
+            // index_raw[i] = round((t + (i − h)/fs)·fs); the window at (index_raw − 1)/fs − t.
+            var baseTime = E.TensorDivideScalar(E.TensorSubtract(column, halfB), C(fs));
+            var indexRaw = MatlabRound(E.TensorMultiplyScalar(E.TensorAdd(position, baseTime), C(fs)));
+            sampleIndex = E.TensorSubtractScalar(indexRaw, Ops.One);
+            windowTime = E.TensorSubtract(E.TensorDivideScalar(sampleIndex, C(fs)), position);
+        }
+        else
+        {
+            // basic_index = round((t − h/fs)·fs + 0.001); sample basic_index + i − 1.
+            var basicIndex = MatlabRound(E.TensorAddScalar(E.TensorMultiplyScalar(
+                E.TensorAdd(positions, E.TensorDivideScalar(E.TensorNegate(half), C(fs))), C(fs)), C(0.001)));
+            sampleIndex = E.TensorSubtractScalar(E.TensorAdd(PerPair(basicIndex, shape), column), Ops.One);
+            windowTime = E.TensorSubtract(E.TensorDivideScalar(sampleIndex, C(fs)), position);
+        }
+
+        var clamped = E.TensorClamp(sampleIndex.Cast<int>(), 0, x.Length - 1);
+        var samples = E.Reshape(E.TensorTake(x, clamped), shape);
+        var windowLength = PerPair(E.TensorDivideScalar(E.TensorAddScalar(E.TensorMultiplyScalar(half, C(2.0)), Ops.One), C(fs)), shape);
+        var inside = E.TensorLessThan(column, E.TensorAddScalar(E.TensorMultiplyScalar(halfB, C(2.0)), Ops.One));
+        var zero = new Tensor<T>(shape);
+
+        // Blackman window 0.42 + 0.5 cos(2πτ/L) + 0.08 cos(4πτ/L) and its central difference, zero past the window.
+        var mainWindow = E.TensorAdd(
+            E.TensorAddScalar(E.TensorMultiplyScalar(E.TensorCos(E.TensorDivide(E.TensorMultiplyScalar(windowTime, C(2.0 * Math.PI)), windowLength)), C(0.5)), C(0.42)),
+            E.TensorMultiplyScalar(E.TensorCos(E.TensorDivide(E.TensorMultiplyScalar(windowTime, C(4.0 * Math.PI)), windowLength)), C(0.08)));
+        mainWindow = E.TensorWhere(inside, mainWindow, zero);
+        var nextSample = E.PadNd(E.TensorSlice(mainWindow, new[] { 0, 1 }, new[] { pairs, fftSize - 1 }), new[] { 0, 1 }, EnginePadMode.Constant, Ops.Zero);
+        var previousSample = E.PadNd(E.TensorSlice(mainWindow, new[] { 0, 0 }, new[] { pairs, fftSize - 1 }), new[] { 1, 0 }, EnginePadMode.Constant, Ops.Zero);
+        var diffWindow = E.TensorWhere(inside, E.TensorDivideScalar(E.TensorNegate(E.TensorSubtract(nextSample, previousSample)), C(2.0)), zero);
+
+        var (mainRe, mainIm) = Fft(E.TensorWhere(inside, E.TensorMultiply(samples, mainWindow), zero));
+        var (diffRe, diffIm) = Fft(E.TensorWhere(inside, E.TensorMultiply(samples, diffWindow), zero));
+        int bins = fftSize / 2 + 1;
+        var scale = C(1.0 / fftSize);
+        Tensor<T> Bins(Tensor<T> spectrum) => E.TensorMultiplyScalar(E.TensorSlice(spectrum, new[] { 0, 0 }, new[] { pairs, bins }), scale);
+        mainRe = Bins(mainRe);
+        mainIm = Bins(mainIm);
+        diffRe = Bins(diffRe);
+        diffIm = Bins(diffIm);
+        var numeratorI = E.TensorSubtract(E.TensorMultiply(mainRe, diffIm), E.TensorMultiply(mainIm, diffRe));
+        var power = E.TensorAdd(E.TensorMultiply(mainRe, mainRe), E.TensorMultiply(mainIm, mainIm));
+        return (power, numeratorI);
+    }
+
+    private static Tensor<T> PerPair(Tensor<T> values, int[] shape)
+        => E.TensorBroadcastTo(E.Reshape(values, new[] { shape[0], 1 }), shape);
 
     #endregion
 
@@ -566,52 +651,37 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
     /// resampled near 8 kHz, refines each candidate by instantaneous frequency and links the contour across frames; it
     /// is the extractor CosyVoice's HiFT training reads its F0 targets from.
     /// </summary>
-    /// <remarks>Ported line for line from WORLD's <c>harvest.cpp</c> (as PyWorld 0.3.5 bundles it), keeping its
-    /// quirks: the 1 ms basic contour sampled at the requested period, and <c>ExtendSub</c>'s mean F0 carried from one
-    /// voiced section to the next.</remarks>
-    /// <returns>F0 in Hz per frame (0 where unvoiced) and each frame's time in seconds.</returns>
-    public (double[] F0, double[] TemporalPositions) Harvest(double[] x, double framePeriodMs)
+    /// <remarks>Follows WORLD's <c>harvest.cpp</c> (as PyWorld 0.3.5 bundles it), keeping its quirks: the 1 ms basic
+    /// contour sampled at the requested period, the in-place spectrum convolution, and <c>ExtendSub</c>'s mean F0 carried
+    /// from one voiced section to the next.</remarks>
+    /// <returns>F0 in Hz per frame (0 where unvoiced) and each frame's time in seconds, both <c>[frames]</c>.</returns>
+    public (Tensor<T> F0, Tensor<T> TemporalPositions) Harvest(Tensor<T> x, double framePeriodMs)
     {
         if (x is null) throw new ArgumentNullException(nameof(x));
         if (framePeriodMs <= 0) throw new ArgumentOutOfRangeException(nameof(framePeriodMs));
         if (x.Length < 2) throw new ArgumentException("Harvest needs at least two samples.", nameof(x));
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var signal = Flat(x);
         int fs = SampleRate;
         int dimensionRatio = MatlabRound(fs / 8000.0);
         const double channelsInOctave = 40;
 
-        int basicLength = GetSamplesForHarvest(fs, x.Length, 1);
-        var basicF0 = new double[basicLength];
-        var basicPositions = new double[basicLength];
-        HarvestGeneralBody(x, fs, 1, MinPitch, MaxPitch, channelsInOctave, dimensionRatio, basicPositions, basicF0);
+        int basicLength = GetSamplesForHarvest(fs, signal.Length, 1);
+        var basicPositions = Positions(basicLength, 1.0);
+        var basicF0 = HarvestGeneralBody(signal, fs, MinPitch, MaxPitch, channelsInOctave, dimensionRatio, basicPositions);
         if (framePeriodMs == 1.0) return (basicF0, basicPositions);
 
-        int f0Length = GetSamplesForHarvest(fs, x.Length, framePeriodMs);
-        var positions = new double[f0Length];
-        var f0 = new double[f0Length];
-        for (int i = 0; i < f0Length; i++)
-        {
-            positions[i] = i * framePeriodMs / 1000.0;
-            f0[i] = basicF0[Math.Min(basicLength - 1, MatlabRound(positions[i] * 1000.0))];
-        }
-        return (f0, positions);
+        int f0Length = GetSamplesForHarvest(fs, signal.Length, framePeriodMs);
+        var pick = new int[f0Length];
+        for (int i = 0; i < f0Length; i++) pick[i] = Math.Min(basicLength - 1, MatlabRound(i * framePeriodMs / 1000.0 * 1000.0));
+        return (E.TensorIndexSelect(basicF0, IntTensor(pick), 0), Positions(f0Length, framePeriodMs));
     }
 
-    /// <summary>StoneMask's refinement (PyWorld's <c>stonemask</c>) of an F0 contour at its frames' times.</summary>
-    public double[] StoneMask(double[] x, double[] f0, double[] temporalPositions)
-    {
-        if (x is null) throw new ArgumentNullException(nameof(x));
-        if (f0 is null) throw new ArgumentNullException(nameof(f0));
-        if (temporalPositions is null) throw new ArgumentNullException(nameof(temporalPositions));
-        if (f0.Length != temporalPositions.Length) throw new ArgumentException("Each F0 value needs its time.", nameof(temporalPositions));
-        var refined = new double[f0.Length];
-        for (int i = 0; i < f0.Length; i++) refined[i] = GetRefinedF0(x, SampleRate, temporalPositions[i], f0[i]);
-        return refined;
-    }
-
-    private void HarvestGeneralBody(double[] x, int fs, int framePeriod, double f0Floor, double f0Ceil,
-        double channelsInOctave, int speed, double[] temporalPositions, double[] f0)
+    private static Tensor<T> HarvestGeneralBody(Tensor<T> x, int fs, double f0Floor, double f0Ceil,
+        double channelsInOctave, int speed, Tensor<T> temporalPositions)
     {
         int xLength = x.Length;
+        int f0Length = temporalPositions.Length;
         double adjustedF0Floor = f0Floor * 0.9;
         double adjustedF0Ceil = f0Ceil * 1.1;
         int numberOfChannels = 1 + (int)(Math.Log(adjustedF0Ceil / adjustedF0Floor) / Log2 * channelsInOctave);
@@ -624,444 +694,437 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         double actualFs = (double)fs / decimationRatio;
         int fftSize = GetSuitableFftSize(yLength + 5 + 2 * (int)(2.0 * actualFs / boundaryF0List[0]));
 
-        var y = new double[fftSize];
-        var (ySpecRe, ySpecIm) = HarvestWaveformAndSpectrum(x, xLength, yLength, fftSize, decimationRatio, y);
+        var (y, ySpecRe, ySpecIm) = HarvestWaveformAndSpectrum(x, yLength, fftSize, decimationRatio);
 
-        int f0Length = GetSamplesForHarvest(fs, xLength, framePeriod);
-        for (int i = 0; i < f0Length; i++)
-        {
-            temporalPositions[i] = (double)i * framePeriod / 1000.0;
-            f0[i] = 0.0;
-        }
-
-        const int overlapParameter = 7;
-        int maxCandidates = MatlabRound(numberOfChannels / 10.0) * overlapParameter;
-        var f0Candidates = new double[f0Length][];
-        var f0Scores = new double[f0Length][];
-        for (int i = 0; i < f0Length; i++)
-        {
-            f0Candidates[i] = new double[maxCandidates];
-            f0Scores[i] = new double[maxCandidates];
-        }
-
-        var rawF0Candidates = new double[numberOfChannels][];
+        var raw = new Tensor<T>[numberOfChannels];
         for (int i = 0; i < numberOfChannels; i++)
-        {
-            rawF0Candidates[i] = new double[f0Length];
-            HarvestF0CandidateFromRawEvent(boundaryF0List[i], actualFs, ySpecRe, ySpecIm, yLength, fftSize, f0Floor, f0Ceil,
-                temporalPositions, f0Length, rawF0Candidates[i]);
-        }
-        int numberOfCandidates = DetectOfficialF0Candidates(rawF0Candidates, numberOfChannels, f0Length, maxCandidates, f0Candidates);
-        OverlapF0Candidates(f0Length, numberOfCandidates, f0Candidates);
-        numberOfCandidates *= overlapParameter;
+            raw[i] = HarvestF0CandidateFromRawEvent(boundaryF0List[i], actualFs, ySpecRe, ySpecIm, yLength, fftSize,
+                f0Floor, f0Ceil, temporalPositions);
+        var rawByFrame = E.TensorTranspose(E.TensorStack(raw, 0));                         // [frames, channels]
 
-        for (int i = 0; i < f0Length; i++)
-            for (int j = 0; j < numberOfCandidates; j++)
-            {
-                var (refined, score) = HarvestRefinedF0(y, yLength, actualFs, temporalPositions[i], f0Candidates[i][j], f0Floor, f0Ceil);
-                f0Candidates[i][j] = refined;
-                f0Scores[i][j] = score;
-            }
-        RemoveUnreliableCandidates(f0Length, numberOfCandidates, f0Candidates, f0Scores);
+        var (official, numberOfCandidates) = DetectOfficialF0Candidates(rawByFrame, numberOfChannels, f0Length);
+        if (numberOfCandidates == 0) return Zeros(f0Length);
+        var f0Candidates = OverlapF0Candidates(official, f0Length, numberOfCandidates);
+        int candidates = numberOfCandidates * 7;
 
-        var bestF0Contour = new double[f0Length];
-        HarvestFixF0Contour(f0Candidates, f0Scores, f0Length, numberOfCandidates, bestF0Contour);
-        SmoothF0Contour(bestF0Contour, f0Length, f0);
+        var shape = new[] { f0Length, candidates };
+        var (refined, scores) = HarvestRefinedF0(y, actualFs,
+            E.Reshape(f0Candidates, new[] { f0Length * candidates }),
+            E.Reshape(PerPair(temporalPositions, shape), new[] { f0Length * candidates }), f0Floor, f0Ceil);
+        f0Candidates = E.Reshape(refined, shape);
+        var f0Scores = E.Reshape(scores, shape);
+        (f0Candidates, f0Scores) = RemoveUnreliableCandidates(f0Candidates, f0Scores, f0Length, candidates);
+
+        var bestF0Contour = HarvestFixF0Contour(f0Candidates, f0Scores, f0Length, candidates);
+        return SmoothF0Contour(bestF0Contour);
     }
 
     // GetWaveformAndSpectrum (with its Sub): the signal decimated after edge extension, its mean removed, its spectrum.
-    private (double[] Re, double[] Im) HarvestWaveformAndSpectrum(double[] x, int xLength, int yLength, int fftSize,
-        int decimationRatio, double[] y)
+    private static (Tensor<T> Y, Tensor<T> Re, Tensor<T> Im) HarvestWaveformAndSpectrum(Tensor<T> x, int yLength,
+        int fftSize, int decimationRatio)
     {
+        Tensor<T> y;
         if (decimationRatio == 1)
         {
-            for (int i = 0; i < xLength; i++) y[i] = x[i];
+            y = x;
         }
         else
         {
             int lag = (int)(Math.Ceiling(140.0 / decimationRatio) * decimationRatio);
-            int newXLength = xLength + lag * 2;
-            var newY = new double[newXLength];
-            var newX = new double[newXLength];
-            for (int i = 0; i < lag; i++) newX[i] = x[0];
-            for (int i = lag; i < lag + xLength; i++) newX[i] = x[i - lag];
-            for (int i = lag + xLength; i < newXLength; i++) newX[i] = x[xLength - 1];
-            Decimate(newX, newXLength, decimationRatio, newY);
-            for (int i = 0; i < yLength; i++) y[i] = newY[lag / decimationRatio + i];
+            int xLength = x.Length;
+            var extended = Cat(E.TensorTile(Slice(x, 0, 1), new[] { lag }), x, E.TensorTile(Slice(x, xLength - 1, 1), new[] { lag }));
+            y = Slice(Decimate(extended, decimationRatio), lag / decimationRatio, yLength);
         }
-
-        double meanY = 0.0;
-        for (int i = 0; i < yLength; i++) meanY += y[i];
-        meanY /= yLength;
-        for (int i = 0; i < yLength; i++) y[i] -= meanY;
-        for (int i = yLength; i < fftSize; i++) y[i] = 0.0;
-        return ForwardFft(y);
+        y = E.TensorSubtractScalar(y, ScaledMean(y));
+        var (re, im) = Fft(Pad(y, 0, fftSize - yLength));
+        int bins = fftSize / 2 + 1;
+        return (y, Slice(re, 0, bins), Slice(im, 0, bins));
     }
 
-    // GetFilteredSignal: the signal through a Nuttall-windowed cosine band-pass at boundaryF0, delay compensated.
-    private double[] HarvestFilteredSignal(double boundaryF0, int fftSize, double fs, double[] ySpecRe, double[] ySpecIm,
-        int yLength)
+    /// <summary>
+    /// Harvest's GetFilteredSignal: the signal through a Nuttall-windowed cosine band-pass at <paramref name="boundaryF0"/>,
+    /// convolved as WORLD does (<see cref="ConvolveHalfSpectrum"/>) and delay compensated.
+    /// </summary>
+    internal static Tensor<T> HarvestFilteredSignal(double boundaryF0, int fftSize, double fs, Tensor<T> ySpecRe,
+        Tensor<T> ySpecIm, int yLength)
     {
         int filterLengthHalf = MatlabRound(fs / boundaryF0 * 2.0);
-        var bandPassFilter = new double[fftSize];
-        NuttallWindow(filterLengthHalf * 2 + 1, bandPassFilter);
-        for (int i = -filterLengthHalf; i <= filterLengthHalf; i++)
-            bandPassFilter[i + filterLengthHalf] *= Math.Cos(2 * Math.PI * boundaryF0 * i / fs);
-
-        var (re, im) = ForwardFft(bandPassFilter);
-        // The convolution; c2r reads bins 0 … fft/2 only, so the reference's mirrored upper half does not matter.
-        for (int i = 0; i <= fftSize / 2; i++)
-        {
-            double tmp = ySpecRe[i] * re[i] - ySpecIm[i] * im[i];
-            im[i] = ySpecRe[i] * im[i] + ySpecIm[i] * re[i];
-            re[i] = tmp;
-        }
-        var filtered = InverseRealFft(re, im, fftSize);
-        int indexBias = filterLengthHalf + 1;
-        for (int i = 0; i < yLength; i++) filtered[i] = filtered[i + indexBias];
-        return filtered;
+        int length = filterLengthHalf * 2 + 1;
+        var carrier = E.TensorCos(E.TensorDivideScalar(
+            E.TensorMultiplyScalar(Range(-filterLengthHalf, length), C(2 * Math.PI * boundaryF0)), C(fs)));
+        var bandPass = Pad(E.TensorMultiply(NuttallWindow(length), carrier), 0, fftSize - length);
+        var (re, im) = Fft(bandPass);
+        var (convolvedRe, convolvedIm) = ConvolveHalfSpectrum(ySpecRe, ySpecIm, re, im, fftSize);
+        return Slice(InverseRealFft(convolvedRe, convolvedIm, fftSize), filterLengthHalf + 1, yLength);
     }
 
     // GetF0CandidateFromRawEvent: the four zero-crossing interval series, interpolated to the frames and averaged.
-    private void HarvestF0CandidateFromRawEvent(double boundaryF0, double fs, double[] ySpecRe, double[] ySpecIm, int yLength,
-        int fftSize, double f0Floor, double f0Ceil, double[] temporalPositions, int f0Length, double[] f0Candidate)
+    private static Tensor<T> HarvestF0CandidateFromRawEvent(double boundaryF0, double fs, Tensor<T> ySpecRe,
+        Tensor<T> ySpecIm, int yLength, int fftSize, double f0Floor, double f0Ceil, Tensor<T> temporalPositions)
     {
+        int f0Length = temporalPositions.Length;
         var filtered = HarvestFilteredSignal(boundaryF0, fftSize, fs, ySpecRe, ySpecIm, yLength);
-        var locations = new double[4][];
-        var intervals = new double[4][];
-        var counts = new int[4];
-        for (int k = 0; k < 4; k++)
-        {
-            locations[k] = new double[yLength];
-            intervals[k] = new double[yLength];
-        }
-        // GetFourZeroCrossingIntervals: negative-going, positive-going, peaks and dips, each by the same engine.
-        counts[0] = ZeroCrossingEngine(filtered, yLength, fs, locations[0], intervals[0]);
-        for (int i = 0; i < yLength; i++) filtered[i] = -filtered[i];
-        counts[1] = ZeroCrossingEngine(filtered, yLength, fs, locations[1], intervals[1]);
-        for (int i = 0; i < yLength - 1; i++) filtered[i] = filtered[i] - filtered[i + 1];
-        counts[2] = ZeroCrossingEngine(filtered, yLength - 1, fs, locations[2], intervals[2]);
-        for (int i = 0; i < yLength - 1; i++) filtered[i] = -filtered[i];
-        counts[3] = ZeroCrossingEngine(filtered, yLength - 1, fs, locations[3], intervals[3]);
-
-        if (CheckEvent(counts[0] - 2) * CheckEvent(counts[1] - 2) * CheckEvent(counts[2] - 2) * CheckEvent(counts[3] - 2) == 0)
-        {
-            for (int i = 0; i < f0Length; i++) f0Candidate[i] = 0.0;
-            return;
-        }
-        var interpolated = new double[4][];
-        for (int k = 0; k < 4; k++)
-        {
-            interpolated[k] = new double[f0Length];
-            Interp1(locations[k], intervals[k], counts[k], temporalPositions, f0Length, interpolated[k]);
-        }
-        double upper = boundaryF0 * 1.1, lower = boundaryF0 * 0.9;
-        for (int i = 0; i < f0Length; i++)
-        {
-            f0Candidate[i] = (interpolated[0][i] + interpolated[1][i] + interpolated[2][i] + interpolated[3][i]) / 4.0;
-            if (f0Candidate[i] > upper || f0Candidate[i] < lower || f0Candidate[i] > f0Ceil || f0Candidate[i] < f0Floor)
-                f0Candidate[i] = 0.0;
-        }
+        var sets = FourIntervalContours(filtered, fs, temporalPositions);
+        if (sets is null) return Zeros(f0Length);
+        var candidate = E.TensorDivideScalar(E.TensorAdd(E.TensorAdd(E.TensorAdd(sets[0], sets[1]), sets[2]), sets[3]), C(4.0));
+        var outOfRange = OutOfRange(candidate, boundaryF0 * 0.9, boundaryF0 * 1.1, f0Floor, f0Ceil);
+        return E.TensorWhere(outOfRange, Zeros(f0Length), candidate);
     }
 
-    // DetectOfficialF0Candidates (with Sub1, Sub2): per frame, the mean of each run of at least 10 voiced bands.
-    private static int DetectOfficialF0Candidates(double[][] rawF0Candidates, int numberOfChannels, int f0Length,
-        int maxCandidates, double[][] f0Candidates)
+    // DetectOfficialF0Candidates (with Sub1, Sub2): per frame, the mean of each run of at least 10 voiced channels
+    // (the first and last channel counted unvoiced), in channel order. Returns [frames, max runs] and that maximum.
+    private static (Tensor<T> Candidates, int Count) DetectOfficialF0Candidates(Tensor<T> rawByFrame, int numberOfChannels,
+        int f0Length)
     {
-        int numberOfCandidates = 0;
-        var vuv = new int[numberOfChannels];
-        var st = new int[numberOfChannels];
-        var ed = new int[numberOfChannels];
-        for (int i = 0; i < f0Length; i++)
-        {
-            for (int j = 0; j < numberOfChannels; j++) vuv[j] = rawF0Candidates[j][i] > 0 ? 1 : 0;
-            vuv[0] = vuv[numberOfChannels - 1] = 0;
-            int numberOfVoicedSections = 0;
-            for (int j = 1; j < numberOfChannels; j++)
-            {
-                int tmp = vuv[j] - vuv[j - 1];
-                if (tmp == 1) st[numberOfVoicedSections] = j;
-                if (tmp == -1) ed[numberOfVoicedSections++] = j;
-            }
+        var vuv = E.TensorGreaterThan(rawByFrame, Ops.Zero).Cast<int>();
+        vuv = E.PadNd(E.TensorSlice(vuv, new[] { 0, 1 }, new[] { f0Length, numberOfChannels - 2 }), new[] { 1, 1 },
+            EnginePadMode.Constant, 0);
+        var change = E.TensorSubtract(E.TensorSlice(vuv, new[] { 0, 1 }, new[] { f0Length, numberOfChannels - 1 }),
+            E.TensorSlice(vuv, new[] { 0, 0 }, new[] { f0Length, numberOfChannels - 1 }));
+        // Row-major (frame, channel) order: within a frame each run's start precedes its end, so the k-th start and the
+        // k-th end bound the same run.
+        int[] starts = E.TensorNonzero(E.TensorEquals(change, 1)).ToArray();
+        int[] ends = E.TensorNonzero(E.TensorEquals(change, -1)).ToArray();
 
-            int count = 0;
-            for (int s = 0; s < numberOfVoicedSections; s++)
+        var frame = new List<int>();
+        var first = new List<int>();
+        var last = new List<int>();
+        var rank = new List<int>();
+        int count = 0, currentFrame = -1, maximum = 0;
+        for (int s = 0; s < starts.Length / 2; s++)
+        {
+            int st = starts[2 * s + 1] + 1, ed = ends[2 * s + 1] + 1;
+            if (ed - st < 10) continue;
+            int f = starts[2 * s];
+            if (f != currentFrame)
             {
-                if (ed[s] - st[s] < 10) continue;
-                double tmpF0 = 0.0;
-                for (int j = st[s]; j < ed[s]; j++) tmpF0 += rawF0Candidates[j][i];
-                tmpF0 /= ed[s] - st[s];
-                f0Candidates[i][count++] = tmpF0;
+                currentFrame = f;
+                count = 0;
             }
-            for (int s = count; s < maxCandidates; s++) f0Candidates[i][s] = 0.0;
-            numberOfCandidates = Math.Max(numberOfCandidates, count);
+            frame.Add(f);
+            first.Add(st);
+            last.Add(ed);
+            rank.Add(count++);
+            maximum = Math.Max(maximum, count);
         }
-        return numberOfCandidates;
+        if (maximum == 0) return (Zeros(1), 0);
+
+        int runs = frame.Count;
+        var shape = new[] { runs, numberOfChannels };
+        var rows = E.TensorIndexSelect(rawByFrame, IntTensor(frame.ToArray()), 0);
+        var channel = E.TensorBroadcastTo(E.Reshape(IntRange(0, numberOfChannels), new[] { 1, numberOfChannels }), shape);
+        var lower = E.TensorBroadcastTo(E.Reshape(IntTensor(first.ToArray()), new[] { runs, 1 }), shape);
+        var upper = E.TensorBroadcastTo(E.Reshape(IntTensor(last.ToArray()), new[] { runs, 1 }), shape);
+        var zero = new Tensor<int>(shape);
+        var inRun = E.TensorWhere(E.TensorGreaterThan(lower, channel), zero,
+            E.TensorWhere(E.TensorGreaterThan(upper, channel), Tensor<int>.CreateDefault(shape, 1), zero)).Cast<T>();
+        // The sum is pre-scaled by 2^-8 (exact) so that Half does not overflow on 150 channels of Hz.
+        var sums = E.ReduceSum(E.TensorWhere(inRun, E.TensorMultiplyScalar(rows, C(1.0 / 256.0)), new Tensor<T>(shape)), new[] { 1 }, false);
+        var lengths = E.TensorSubtract(IntTensor(last.ToArray()), IntTensor(first.ToArray())).Cast<T>();
+        var means = E.TensorDivide(E.TensorMultiplyScalar(sums, C(256.0)), lengths);
+        var candidates = E.TensorIndexPut(new Tensor<T>(new[] { f0Length, maximum }),
+            new[] { IntTensor(frame.ToArray()), IntTensor(rank.ToArray()) }, means, false);
+        return (candidates, maximum);
     }
 
-    // OverlapF0Candidates: each frame also takes the candidates of the three frames on either side.
-    private static void OverlapF0Candidates(int f0Length, int numberOfCandidates, double[][] f0Candidates)
+    // OverlapF0Candidates: each frame also takes the candidates of the three frames before and after it.
+    private static Tensor<T> OverlapF0Candidates(Tensor<T> candidates, int f0Length, int numberOfCandidates)
     {
         const int n = 3;
+        var blocks = new Tensor<T>[2 * n + 1];
+        blocks[0] = candidates;
         for (int i = 1; i <= n; i++)
-            for (int j = 0; j < numberOfCandidates; j++)
+        {
+            if (f0Length <= i)
             {
-                for (int k = i; k < f0Length; k++)
-                    f0Candidates[k][j + numberOfCandidates * i] = f0Candidates[k - i][j];
-                for (int k = 0; k < f0Length - i; k++)
-                    f0Candidates[k][j + numberOfCandidates * (i + n)] = f0Candidates[k + i][j];
+                blocks[i] = blocks[i + n] = new Tensor<T>(new[] { f0Length, numberOfCandidates });
+                continue;
             }
+            var earlier = E.TensorSlice(candidates, new[] { 0, 0 }, new[] { f0Length - i, numberOfCandidates });
+            var later = E.TensorSlice(candidates, new[] { i, 0 }, new[] { f0Length - i, numberOfCandidates });
+            blocks[i] = E.PadNd(earlier, new[] { 0, 0, i, 0 }, EnginePadMode.Constant, Ops.Zero);
+            blocks[i + n] = E.PadNd(later, new[] { 0, 0, 0, i }, EnginePadMode.Constant, Ops.Zero);
+        }
+        return E.Concat(blocks, 1);
     }
 
-    // GetRefinedF0 (Harvest's): instantaneous-frequency refinement of a candidate, and its reliability score.
-    private (double F0, double Score) HarvestRefinedF0(double[] x, int xLength, double fs, double currentPosition,
-        double currentF0, double f0Floor, double f0Ceil)
+    // GetRefinedF0 (Harvest's) for every candidate: instantaneous-frequency refinement and its reliability score; (0, 0)
+    // for a non-positive candidate or a refinement outside the floor/ceiling or scoring under 2.5.
+    private static (Tensor<T> F0, Tensor<T> Score) HarvestRefinedF0(Tensor<T> y, double fs, Tensor<T> f0, Tensor<T> positions,
+        double f0Floor, double f0Ceil)
     {
-        if (currentF0 <= 0.0) return (0.0, 0.0);
+        int count = f0.Length;
+        int[] validPairs = E.TensorNonzero(E.TensorGreaterThan(f0, Ops.Zero)).ToArray();
+        if (validPairs.Length == 0) return (Zeros(count), Zeros(count));
+        var validIndex = IntTensor(validPairs);
+        var currentF0 = E.TensorIndexSelect(f0, validIndex, 0);
+        var currentPositions = E.TensorIndexSelect(positions, validIndex, 0);
+        int[] halfWindow = E.TensorFloor(E.TensorAddScalar(Over(1.5 * fs, currentF0), Ops.One)).Cast<int>().ToArray();
 
-        int halfWindowLength = (int)(1.5 * fs / currentF0 + 1.0);
-        double windowLengthInTime = (2.0 * halfWindowLength + 1.0) / fs;
-        int baseTimeLength = halfWindowLength * 2 + 1;
-        var baseTime = new double[baseTimeLength];
-        for (int i = 0; i < baseTimeLength; i++) baseTime[i] = (-halfWindowLength + i) / fs;
-        int fftSize = (int)Math.Pow(2.0, 2.0 + (int)(Math.Log(halfWindowLength * 2.0 + 1.0) / Log2));
-
-        // GetMeanF0 with GetBaseIndex, GetMainWindow, GetDiffWindow and GetSpectra.
-        int basicIndex = MatlabRound((currentPosition + baseTime[0]) * fs + 0.001);
-        var mainWindow = new double[baseTimeLength];
-        for (int i = 0; i < baseTimeLength; i++)
+        var order = new List<int>();
+        var refinedF0 = new List<Tensor<T>>();
+        var refinedScore = new List<Tensor<T>>();
+        foreach (var block in RefinementBlocks(halfWindow))
         {
-            double tmp = (basicIndex + i - 1.0) / fs - currentPosition;
-            mainWindow[i] = 0.42 + 0.5 * Math.Cos(2.0 * Math.PI * tmp / windowLengthInTime)
-                + 0.08 * Math.Cos(4.0 * Math.PI * tmp / windowLengthInTime);
-        }
-        var diffWindow = new double[baseTimeLength];
-        diffWindow[0] = -mainWindow[1] / 2.0;
-        for (int i = 1; i < baseTimeLength - 1; i++) diffWindow[i] = -(mainWindow[i + 1] - mainWindow[i - 1]) / 2.0;
-        diffWindow[baseTimeLength - 1] = mainWindow[baseTimeLength - 2] / 2.0;
+            var pairs = IntTensor(block.Pairs);
+            var blockF0 = E.TensorIndexSelect(currentF0, pairs, 0);
+            var (power, numeratorI) = InstantaneousSpectra(y, fs, E.TensorIndexSelect(currentPositions, pairs, 0),
+                block.HalfWindow, block.FftSize, RefinementWindow.Harvest);
 
-        var waveform = new double[fftSize];
-        for (int i = 0; i < baseTimeLength; i++)
-            waveform[i] = x[Math.Max(0, Math.Min(xLength - 1, basicIndex + i - 1))] * mainWindow[i];
-        var (mainRe, mainIm) = ForwardFft(waveform);
-        for (int i = 0; i < baseTimeLength; i++)
-            waveform[i] = x[Math.Max(0, Math.Min(xLength - 1, basicIndex + i - 1))] * diffWindow[i];
-        var (diffRe, diffIm) = ForwardFft(waveform);
+            // FixF0 (Harvest's): up to six harmonics below Nyquist; the weighted harmonic mean and the inverse of the
+            // mean relative deviation of each harmonic's frequency over its number from the candidate.
+            const int maximumHarmonics = 6;
+            var harmonicsUsed = E.TensorMin(E.TensorFloor(Over(fs / 2.0, blockF0)), C(maximumHarmonics));
+            var (harmonic, instantaneous, amplitude) = Harmonics(power, numeratorI, block.FftSize, fs, blockF0,
+                maximumHarmonics);
+            var shape = new[] { block.Pairs.Length, maximumHarmonics };
+            var used = E.TensorWhere(E.TensorGreaterThan(harmonic, PerPair(harmonicsUsed, shape)), new Tensor<T>(shape),
+                Tensor<T>.CreateDefault(shape, Ops.One));
+            var zero = new Tensor<T>(shape);
+            var perPairF0 = PerPair(blockF0, shape);
+            var numerator = E.ReduceSum(E.TensorWhere(used, E.TensorMultiply(amplitude, instantaneous), zero), new[] { 1 }, false);
+            var denominator = E.ReduceSum(E.TensorWhere(used, E.TensorMultiply(amplitude, harmonic), zero), new[] { 1 }, false);
+            var deviation = E.TensorAbs(E.TensorDivide(E.TensorSubtract(E.TensorDivide(instantaneous, harmonic), perPairF0), perPairF0));
+            var score = E.ReduceSum(E.TensorWhere(used, deviation, zero), new[] { 1 }, false);
 
-        var powerSpectrum = new double[fftSize / 2 + 1];
-        var numeratorI = new double[fftSize / 2 + 1];
-        for (int j = 0; j <= fftSize / 2; j++)
-        {
-            numeratorI[j] = mainRe[j] * diffIm[j] - mainIm[j] * diffRe[j];
-            powerSpectrum[j] = mainRe[j] * mainRe[j] + mainIm[j] * mainIm[j];
+            var refined = E.TensorDivide(numerator, E.TensorAddScalar(denominator, Guard(SafeGuardMinimum / block.FftSize)));
+            var reliability = Over(1.0, E.TensorAddScalar(E.TensorDivide(score, harmonicsUsed), Guard(SafeGuardMinimum)));
+            var one = Tensor<T>.CreateDefault(refined._shape, Ops.One);
+            var rejected = E.TensorWhere(E.TensorLessThan(refined, C(f0Floor)), one,
+                E.TensorWhere(E.TensorGreaterThan(refined, C(f0Ceil)), one, E.TensorLessThan(reliability, C(2.5))));
+            var none = Zeros(block.Pairs.Length);
+            refinedF0.Add(E.TensorWhere(rejected, none, refined));
+            refinedScore.Add(E.TensorWhere(rejected, none, reliability));
+            foreach (int pair in block.Pairs) order.Add(validPairs[pair]);
         }
-
-        // FixF0 (Harvest's): the amplitude-weighted harmonic frequencies, and the inverse of their mean deviation.
-        int numberOfHarmonics = Math.Min((int)(fs / 2.0 / currentF0), 6);
-        double numerator = 0.0, denominator = 0.0, score = 0.0;
-        for (int i = 0; i < numberOfHarmonics; i++)
-        {
-            int index = MatlabRound(currentF0 * fftSize / fs * (i + 1));
-            double instantaneousFrequency = powerSpectrum[index] == 0.0 ? 0.0
-                : (double)index * fs / fftSize + numeratorI[index] / powerSpectrum[index] * fs / 2.0 / Math.PI;
-            double amplitude = Math.Sqrt(powerSpectrum[index]);
-            numerator += amplitude * instantaneousFrequency;
-            denominator += amplitude * (i + 1.0);
-            score += Math.Abs((instantaneousFrequency / (i + 1.0) - currentF0) / currentF0);
-        }
-        double refinedF0 = numerator / (denominator + SafeGuardMinimum);
-        double refinedScore = 1.0 / (score / numberOfHarmonics + SafeGuardMinimum);
-        if (refinedF0 < f0Floor || refinedF0 > f0Ceil || refinedScore < 2.5) return (0.0, 0.0);
-        return (refinedF0, refinedScore);
+        var index = new[] { IntTensor(order.ToArray()) };
+        return (E.TensorIndexPut(Zeros(count), index, Cat(refinedF0.ToArray()), false),
+            E.TensorIndexPut(Zeros(count), index, Cat(refinedScore.ToArray()), false));
     }
 
-    // SelectBestF0 (Harvest's): the candidate nearest the reference within the allowed relative error.
-    private static double HarvestSelectBestF0(double referenceF0, double[] f0Candidates, int numberOfCandidates,
-        double allowedRange, out double bestError)
+    // RemoveUnreliableCandidates: a candidate with no candidate within 5 % in the frame before or after (judged on the
+    // candidates as they were before any removal) is dropped with its score.
+    private static (Tensor<T> Candidates, Tensor<T> Scores) RemoveUnreliableCandidates(Tensor<T> f0Candidates,
+        Tensor<T> f0Scores, int f0Length, int numberOfCandidates)
     {
-        double bestF0 = 0.0;
-        bestError = allowedRange;
-        for (int i = 0; i < numberOfCandidates; i++)
+        if (f0Length < 3) return (f0Candidates, f0Scores);
+        int c = numberOfCandidates;
+        int rowsPerBlock = Math.Max(1, BlockElements / (c * c));
+        var candidateParts = new List<Tensor<T>> { E.TensorSlice(f0Candidates, new[] { 0, 0 }, new[] { 1, c }) };
+        var scoreParts = new List<Tensor<T>> { E.TensorSlice(f0Scores, new[] { 0, 0 }, new[] { 1, c }) };
+        for (int start = 1; start < f0Length - 1; start += rowsPerBlock)
         {
-            double tmp = Math.Abs(referenceF0 - f0Candidates[i]) / referenceF0;
-            if (tmp > bestError) continue;
-            bestF0 = f0Candidates[i];
-            bestError = tmp;
-        }
-        return bestF0;
-    }
-
-    // RemoveUnreliableCandidates: a candidate with no close candidate in the frame before or after is dropped.
-    private static void RemoveUnreliableCandidates(int f0Length, int numberOfCandidates, double[][] f0Candidates, double[][] f0Scores)
-    {
-        var tmp = new double[f0Length][];
-        for (int i = 0; i < f0Length; i++)
-        {
-            tmp[i] = new double[numberOfCandidates];
-            Array.Copy(f0Candidates[i], tmp[i], numberOfCandidates);
-        }
-        for (int i = 1; i < f0Length - 1; i++)
-            for (int j = 0; j < numberOfCandidates; j++)
+            int rows = Math.Min(rowsPerBlock, f0Length - 1 - start);
+            var reference = E.TensorSlice(f0Candidates, new[] { start, 0 }, new[] { rows, c });
+            var cube = new[] { rows, c, c };
+            var referenceB = E.TensorBroadcastTo(E.Reshape(reference, new[] { rows, c, 1 }), cube);
+            Tensor<T> NearestError(int neighbourStart)
             {
-                double referenceF0 = f0Candidates[i][j];
-                if (referenceF0 == 0) continue;
-                HarvestSelectBestF0(referenceF0, tmp[i + 1], numberOfCandidates, 1.0, out double error1);
-                HarvestSelectBestF0(referenceF0, tmp[i - 1], numberOfCandidates, 1.0, out double error2);
-                if (Math.Min(error1, error2) <= 0.05) continue;
-                f0Candidates[i][j] = 0;
-                f0Scores[i][j] = 0;
+                var neighbour = E.TensorSlice(f0Candidates, new[] { neighbourStart, 0 }, new[] { rows, c });
+                var neighbourB = E.TensorBroadcastTo(E.Reshape(neighbour, new[] { rows, 1, c }), cube);
+                var error = E.TensorDivide(E.TensorAbs(E.TensorSubtract(referenceB, neighbourB)), referenceB);
+                return E.TensorMin(E.TensorNegate(E.ReduceMax(E.TensorNegate(error), new[] { 2 }, false)), Ops.One);
             }
+            var nearest = E.TensorMin(NearestError(start + 1), NearestError(start - 1));
+            var zero = new Tensor<T>(reference._shape);
+            var drop = E.TensorWhere(E.TensorEquals(reference, Ops.Zero), zero, E.TensorGreaterThan(nearest, C(0.05)));
+            candidateParts.Add(E.TensorWhere(drop, zero, reference));
+            scoreParts.Add(E.TensorWhere(drop, zero, E.TensorSlice(f0Scores, new[] { start, 0 }, new[] { rows, c })));
+        }
+        candidateParts.Add(E.TensorSlice(f0Candidates, new[] { f0Length - 1, 0 }, new[] { 1, c }));
+        scoreParts.Add(E.TensorSlice(f0Scores, new[] { f0Length - 1, 0 }, new[] { 1, c }));
+        return (E.Concat(candidateParts, 0), E.Concat(scoreParts, 0));
     }
 
     // FixF0Contour: the best-scoring candidate per frame, then the four fixing steps.
-    private static void HarvestFixF0Contour(double[][] f0Candidates, double[][] f0Scores, int f0Length, int numberOfCandidates,
-        double[] bestF0Contour)
+    private static Tensor<T> HarvestFixF0Contour(Tensor<T> f0Candidates, Tensor<T> f0Scores, int f0Length, int numberOfCandidates)
     {
-        var contour1 = new double[f0Length];
-        var contour2 = new double[f0Length];
-        // SearchF0Base.
-        for (int i = 0; i < f0Length; i++)
+        // SearchF0Base: the first candidate with the highest positive score (WORLD's strict '>' from 0).
+        var contour = Zeros(f0Length);
+        var best = Zeros(f0Length);
+        for (int j = 0; j < numberOfCandidates; j++)
         {
-            double best = 0.0;
-            contour1[i] = 0.0;
-            for (int j = 0; j < numberOfCandidates; j++)
-                if (f0Scores[i][j] > best)
-                {
-                    contour1[i] = f0Candidates[i][j];
-                    best = f0Scores[i][j];
-                }
+            var candidate = Column(f0Candidates, j);
+            var score = Column(f0Scores, j);
+            var better = E.TensorGreaterThan(score, best);
+            contour = E.TensorWhere(better, candidate, contour);
+            best = E.TensorWhere(better, score, best);
         }
         // These parameters are optimized by speech databases.
-        HarvestFixStep1(contour1, f0Length, 0.008, contour2);
-        HarvestFixStep2(contour2, f0Length, 6, contour1);
-        HarvestFixStep3(contour1, f0Length, numberOfCandidates, f0Candidates, 0.18, f0Scores, contour2);
-        HarvestFixStep4(contour2, f0Length, 9, bestF0Contour);
+        var step1 = HarvestFixStep1(contour, 0.008);
+        var step2 = HarvestFixStep2(step1, 6);
+        var step3 = HarvestFixStep3(step2, f0Candidates, f0Scores, numberOfCandidates, 0.18);
+        return HarvestFixStep4(step3, 9);
     }
 
     // Step 1: a rapid change of the contour is replaced by 0.
-    private static void HarvestFixStep1(double[] f0Base, int f0Length, double allowedRange, double[] f0Step1)
+    private static Tensor<T> HarvestFixStep1(Tensor<T> f0Base, double allowedRange)
     {
-        for (int i = 0; i < f0Length; i++) f0Step1[i] = 0.0;
-        for (int i = 2; i < f0Length; i++)
-        {
-            if (f0Base[i] == 0.0) continue;
-            double referenceF0 = f0Base[i - 1] * 2 - f0Base[i - 2];
-            f0Step1[i] = Math.Abs((f0Base[i] - referenceF0) / referenceF0) > allowedRange
-                && Math.Abs(f0Base[i] - f0Base[i - 1]) / f0Base[i - 1] > allowedRange ? 0.0 : f0Base[i];
-        }
+        int n = f0Base.Length;
+        if (n < 3) return Zeros(n);
+        var current = Slice(f0Base, 2, n - 2);
+        var previous = Slice(f0Base, 1, n - 2);
+        var reference = E.TensorSubtract(E.TensorMultiplyScalar(previous, C(2.0)), Slice(f0Base, 0, n - 2));
+        var range = C(allowedRange);
+        var zero = Zeros(n - 2);
+        var extrapolationJump = E.TensorGreaterThan(E.TensorAbs(E.TensorDivide(E.TensorSubtract(current, reference), reference)), range);
+        var stepJump = E.TensorGreaterThan(E.TensorDivide(E.TensorAbs(E.TensorSubtract(current, previous)), previous), range);
+        var kept = E.TensorWhere(extrapolationJump, E.TensorWhere(stepJump, zero, current), current);
+        return Pad(E.TensorWhere(E.TensorEquals(current, Ops.Zero), zero, kept), 2, 0);
     }
 
-    // GetBoundaryList: the first and last frame of each voiced section (the ends treated as unvoiced).
-    private static int HarvestBoundaryList(double[] f0, int f0Length, int[] boundaryList)
+    // GetBoundaryList: the first and last frame of each voiced section, the ends of the contour counted unvoiced.
+    private static int[] HarvestBoundaryList(Tensor<T> f0)
     {
-        int numberOfBoundaries = 0;
-        var vuv = new int[f0Length];
-        for (int i = 0; i < f0Length; i++) vuv[i] = f0[i] > 0 ? 1 : 0;
-        vuv[0] = vuv[f0Length - 1] = 0;
-        for (int i = 1; i < f0Length; i++)
-            if (vuv[i] - vuv[i - 1] != 0)
-            {
-                boundaryList[numberOfBoundaries] = i - numberOfBoundaries % 2;
-                numberOfBoundaries++;
-            }
-        return numberOfBoundaries;
+        int n = f0.Length;
+        if (n < 3) return new int[0];
+        var vuv = PadInt(SliceInt(E.TensorGreaterThan(f0, Ops.Zero).Cast<int>(), 1, n - 2), 1, 1);
+        var change = E.TensorSubtract(SliceInt(vuv, 1, n - 1), SliceInt(vuv, 0, n - 1));
+        int[] positions = E.TensorNonzero(E.TensorNotEquals(change, 0)).ToArray();
+        var boundaries = new int[positions.Length];
+        for (int k = 0; k < positions.Length; k++) boundaries[k] = positions[k] + 1 - k % 2;
+        return boundaries;
+    }
+
+    // 1 inside the given sections (inclusive bounds), as a [length] mask of T.
+    private static Tensor<T> SectionMask(int length, IReadOnlyList<(int Start, int End)> sections)
+    {
+        var marker = new int[length + 1];
+        foreach (var (start, end) in sections)
+        {
+            marker[start]++;
+            marker[end + 1]--;
+        }
+        var running = E.TensorCumSum(new Tensor<int>(marker, new[] { length + 1 }), 0);
+        return E.TensorGreaterThan(SliceInt(running, 0, length), 0).Cast<T>();
     }
 
     // Step 2: voiced sections shorter than voiceRangeMinimum frames are removed.
-    private static void HarvestFixStep2(double[] f0Step1, int f0Length, int voiceRangeMinimum, double[] f0Step2)
+    private static Tensor<T> HarvestFixStep2(Tensor<T> f0Step1, int voiceRangeMinimum)
     {
-        Array.Copy(f0Step1, f0Step2, f0Length);
-        var boundaryList = new int[f0Length];
-        int numberOfBoundaries = HarvestBoundaryList(f0Step1, f0Length, boundaryList);
-        for (int i = 0; i < numberOfBoundaries / 2; i++)
+        int[] boundaries = HarvestBoundaryList(f0Step1);
+        var shortSections = new List<(int, int)>();
+        for (int i = 0; i < boundaries.Length / 2; i++)
+            if (boundaries[i * 2 + 1] - boundaries[i * 2] < voiceRangeMinimum)
+                shortSections.Add((boundaries[i * 2], boundaries[i * 2 + 1]));
+        if (shortSections.Count == 0) return f0Step1;
+        return E.TensorWhere(SectionMask(f0Step1.Length, shortSections), Zeros(f0Step1.Length), f0Step1);
+    }
+
+    // Step 3: voiced sections are extended by the continuity of the contour, kept when long enough for their mean F0, and
+    // merged by their candidates' scores.
+    private static Tensor<T> HarvestFixStep3(Tensor<T> f0Step2, Tensor<T> f0Candidates, Tensor<T> f0Scores,
+        int numberOfCandidates, double allowedRange)
+    {
+        int f0Length = f0Step2.Length;
+        int[] boundaryList = HarvestBoundaryList(f0Step2);
+        int sections = boundaryList.Length / 2;
+        // GetMultiChannelF0: each voiced section in a channel of its own.
+        var multiChannelF0 = new Tensor<T>[sections];
+        for (int i = 0; i < sections; i++)
         {
-            if (boundaryList[i * 2 + 1] - boundaryList[i * 2] >= voiceRangeMinimum) continue;
-            for (int j = boundaryList[i * 2]; j <= boundaryList[i * 2 + 1]; j++) f0Step2[j] = 0.0;
+            int st = boundaryList[i * 2], ed = boundaryList[i * 2 + 1];
+            multiChannelF0[i] = Pad(Slice(f0Step2, st, ed - st + 1), st, f0Length - ed - 1);
         }
+
+        int numberOfChannels = HarvestExtend(multiChannelF0, sections, f0Length, boundaryList, f0Candidates, allowedRange);
+        if (numberOfChannels == 0) return f0Step2;
+        return HarvestMergeF0(multiChannelF0, boundaryList, numberOfChannels, f0Candidates, f0Scores);
     }
 
-    // GetMultiChannelF0: each voiced section in a channel of its own.
-    private static void HarvestMultiChannelF0(double[] f0, int f0Length, int[] boundaryList, int numberOfBoundaries,
-        double[][] multiChannelF0)
-    {
-        for (int i = 0; i < numberOfBoundaries / 2; i++)
-        {
-            for (int j = 0; j < boundaryList[i * 2]; j++) multiChannelF0[i][j] = 0.0;
-            for (int j = boundaryList[i * 2]; j <= boundaryList[i * 2 + 1]; j++) multiChannelF0[i][j] = f0[j];
-            for (int j = boundaryList[i * 2 + 1] + 1; j < f0Length; j++) multiChannelF0[i][j] = 0.0;
-        }
-    }
-
-    // ExtendF0: extends a section from origin by following the nearest candidates until four frames find none.
-    private static int HarvestExtendF0(int origin, int lastPoint, int shift, double[][] f0Candidates, int numberOfCandidates,
-        double allowedRange, double[] extendedF0)
-    {
-        const int threshold = 4;
-        double tmpF0 = extendedF0[origin];
-        int shiftedOrigin = origin;
-        int distance = Math.Abs(lastPoint - origin);
-        int count = 0;
-        for (int i = 0; i <= distance; i++)
-        {
-            int index = origin + shift * i;
-            extendedF0[index + shift] = HarvestSelectBestF0(tmpF0, f0Candidates[index + shift], numberOfCandidates, allowedRange, out _);
-            if (extendedF0[index + shift] == 0.0)
-            {
-                count++;
-            }
-            else
-            {
-                tmpF0 = extendedF0[index + shift];
-                count = 0;
-                shiftedOrigin = index + shift;
-            }
-            if (count == threshold) break;
-        }
-        return shiftedOrigin;
-    }
-
-    // Swap: exchanges two channels' contours and boundaries.
-    private static void HarvestSwap(int index1, int index2, double[][] f0, int[] boundary)
-    {
-        (f0[index1], f0[index2]) = (f0[index2], f0[index1]);
-        (boundary[index1 * 2], boundary[index2 * 2]) = (boundary[index2 * 2], boundary[index1 * 2]);
-        (boundary[index1 * 2 + 1], boundary[index2 * 2 + 1]) = (boundary[index2 * 2 + 1], boundary[index1 * 2 + 1]);
-    }
-
-    // Extend, with ExtendSub: every section extended both ways, then only those long enough for their mean F0 kept.
-    // FixStep3 passes the same arrays as input and output, and that aliasing is kept.
-    private static int HarvestExtend(double[][] multiChannelF0, int numberOfSections, int f0Length, int[] boundaryList,
-        double[][] f0Candidates, int numberOfCandidates, double allowedRange, double[][] extendedF0, int[] shiftedBoundaryList)
+    // Extend, with ExtendSub: every section extended both ways, then only those long enough for their mean F0 kept (moved
+    // to the front). WORLD passes the same channel and boundary arrays as input and output, and that aliasing is kept.
+    private static int HarvestExtend(Tensor<T>[] multiChannelF0, int numberOfSections, int f0Length, int[] boundaryList,
+        Tensor<T> f0Candidates, double allowedRange)
     {
         const int threshold = 100;
         for (int i = 0; i < numberOfSections; i++)
         {
-            shiftedBoundaryList[i * 2 + 1] = HarvestExtendF0(boundaryList[i * 2 + 1],
-                Math.Min(f0Length - 2, boundaryList[i * 2 + 1] + threshold), 1, f0Candidates, numberOfCandidates, allowedRange,
-                extendedF0[i]);
-            shiftedBoundaryList[i * 2] = HarvestExtendF0(boundaryList[i * 2], Math.Max(1, boundaryList[i * 2] - threshold), -1,
-                f0Candidates, numberOfCandidates, allowedRange, extendedF0[i]);
+            boundaryList[i * 2 + 1] = HarvestExtendF0(boundaryList[i * 2 + 1],
+                Math.Min(f0Length - 2, boundaryList[i * 2 + 1] + threshold), 1, f0Candidates, allowedRange, multiChannelF0[i]);
+            boundaryList[i * 2] = HarvestExtendF0(boundaryList[i * 2], Math.Max(1, boundaryList[i * 2] - threshold), -1,
+                f0Candidates, allowedRange, multiChannelF0[i]);
         }
 
-        const double meanThreshold = 2200.0;
         int count = 0;
         // The reference never resets the mean between sections.
-        double meanF0 = 0.0;
+        T meanF0 = Ops.Zero;
         for (int i = 0; i < numberOfSections; i++)
         {
-            int st = shiftedBoundaryList[i * 2];
-            int ed = shiftedBoundaryList[i * 2 + 1];
-            for (int j = st; j < ed; j++) meanF0 += multiChannelF0[i][j];
-            meanF0 /= ed - st;
-            if (meanThreshold / meanF0 < ed - st) HarvestSwap(count++, i, extendedF0, shiftedBoundaryList);
+            if (!LongEnoughForMean(multiChannelF0[i], boundaryList[i * 2], boundaryList[i * 2 + 1], ref meanF0)) continue;
+            (multiChannelF0[count], multiChannelF0[i]) = (multiChannelF0[i], multiChannelF0[count]);
+            (boundaryList[count * 2], boundaryList[i * 2]) = (boundaryList[i * 2], boundaryList[count * 2]);
+            (boundaryList[count * 2 + 1], boundaryList[i * 2 + 1]) = (boundaryList[i * 2 + 1], boundaryList[count * 2 + 1]);
+            count++;
         }
         return count;
     }
 
-    // MergeF0 with MakeSortedOrder, SearchScore and MergeF0Sub: overlapping channels merged by their candidates' scores.
-    private static void HarvestMergeF0(double[][] multiChannelF0, int[] boundaryList, int numberOfChannels, int f0Length,
-        double[][] f0Candidates, double[][] f0Scores, int numberOfCandidates, double[] mergedF0)
+    // ExtendSub's test for one section: the carried mean F0 accumulates the section's values over [st, ed) and is divided
+    // by its length; the section is kept when 2200 / mean is below that length.
+    private static bool LongEnoughForMean(Tensor<T> channel, int st, int ed, ref T meanF0)
     {
+        const double meanThreshold = 2200.0;
+        T sum = ed > st ? E.TensorSum(Slice(channel, st, ed - st)) : Ops.Zero;
+        meanF0 = Ops.Divide(Ops.Add(meanF0, sum), C(ed - st));
+        return Ops.LessThan(Ops.Divide(C(meanThreshold), meanF0), C(ed - st));
+    }
+
+    // ExtendF0: extends a section from origin by following the nearest candidates until four frames in a row find none.
+    // Each frame's choice depends on the last voiced value, so this is a scan over frames.
+    private static int HarvestExtendF0(int origin, int lastPoint, int shift, Tensor<T> f0Candidates, double allowedRange,
+        Tensor<T> extendedF0)
+    {
+        const int threshold = 4;
+        T referenceF0 = extendedF0[origin];
+        int shiftedOrigin = origin;
+        int distance = Math.Abs(lastPoint - origin);
+        int misses = 0;
+        for (int i = 0; i <= distance; i++)
+        {
+            int target = origin + shift * i + shift;
+            if (HarvestExtendStep(extendedF0, f0Candidates, target, ref referenceF0, allowedRange))
+            {
+                misses = 0;
+                shiftedOrigin = target;
+            }
+            else
+            {
+                misses++;
+            }
+            if (misses == threshold) break;
+        }
+        return shiftedOrigin;
+    }
+
+    // One ExtendF0 step: the target frame takes the candidate nearest the reference (SelectBestF0); a voiced pick becomes
+    // the new reference.
+    private static bool HarvestExtendStep(Tensor<T> extendedF0, Tensor<T> f0Candidates, int target, ref T referenceF0,
+        double allowedRange)
+    {
+        T best = HarvestSelectBestF0(referenceF0, Row(f0Candidates, target), allowedRange);
+        extendedF0[target] = best;
+        if (Ops.Equals(best, Ops.Zero)) return false;
+        referenceF0 = best;
+        return true;
+    }
+
+    // SelectBestF0 (Harvest's): the candidate with the smallest relative error from the reference, within the allowed
+    // range; WORLD's '>' scan keeps the last of equal errors. 0 when none is within range.
+    private static T HarvestSelectBestF0(T referenceF0, Tensor<T> candidates, double allowedRange)
+    {
+        var error = E.TensorDivideScalar(E.TensorAbs(E.TensorSubtractScalar(candidates, referenceF0)), referenceF0);
+        T minimum = E.TensorMinValue(error);
+        if (!Ops.LessThanOrEquals(minimum, C(allowedRange))) return Ops.Zero;
+        int[] at = E.TensorNonzero(E.TensorEquals(error, minimum)).ToArray();
+        return at.Length == 0 ? Ops.Zero : candidates[at[at.Length - 1]];
+    }
+
+    // MergeF0 with MakeSortedOrder, SearchScore and MergeF0Sub: overlapping channels merged by their candidates' scores.
+    private static Tensor<T> HarvestMergeF0(Tensor<T>[] multiChannelF0, int[] boundaryList, int numberOfChannels,
+        Tensor<T> f0Candidates, Tensor<T> f0Scores)
+    {
+        // MakeSortedOrder, exactly as WORLD swaps.
         var order = new int[numberOfChannels];
         for (int i = 0; i < numberOfChannels; i++) order[i] = i;
         for (int i = 1; i < numberOfChannels; i++)
@@ -1071,130 +1134,125 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
                 else break;
             }
 
-        for (int i = 0; i < f0Length; i++) mergedF0[i] = multiChannelF0[0][i];
+        var mergedF0 = multiChannelF0[0].Clone();
         for (int i = 1; i < numberOfChannels; i++)
         {
-            if (boundaryList[order[i] * 2] - boundaryList[1] > 0)
+            int channel = order[i];
+            int st = boundaryList[channel * 2], ed = boundaryList[channel * 2 + 1];
+            if (st - boundaryList[1] > 0)
             {
-                for (int j = boundaryList[order[i] * 2]; j <= boundaryList[order[i] * 2 + 1]; j++)
-                    mergedF0[j] = multiChannelF0[order[i]][j];
-                boundaryList[0] = boundaryList[order[i] * 2];
-                boundaryList[1] = boundaryList[order[i] * 2 + 1];
+                mergedF0 = CopyRange(mergedF0, multiChannelF0[channel], st, ed);
+                boundaryList[0] = st;
+                boundaryList[1] = ed;
             }
             else
             {
-                boundaryList[1] = HarvestMergeF0Sub(mergedF0, boundaryList[0], boundaryList[1], multiChannelF0[order[i]],
-                    boundaryList[order[i] * 2], boundaryList[order[i] * 2 + 1], f0Candidates, f0Scores, numberOfCandidates, mergedF0);
+                (mergedF0, boundaryList[1]) = HarvestMergeF0Sub(mergedF0, boundaryList[0], boundaryList[1],
+                    multiChannelF0[channel], st, ed, f0Candidates, f0Scores);
             }
         }
+        return mergedF0;
     }
 
-    private static double HarvestSearchScore(double f0, double[] f0Candidates, double[] f0Scores, int numberOfCandidates)
+    private static (Tensor<T> Merged, int End) HarvestMergeF0Sub(Tensor<T> f01, int st1, int ed1, Tensor<T> f02, int st2,
+        int ed2, Tensor<T> f0Candidates, Tensor<T> f0Scores)
     {
-        double score = 0.0;
-        for (int i = 0; i < numberOfCandidates; i++)
-            if (f0 == f0Candidates[i] && score < f0Scores[i]) score = f0Scores[i];
-        return score;
+        if (st1 <= st2 && ed1 >= ed2) return (f01, ed1);
+        bool firstScoresHigher = ed1 >= st2
+            && Ops.GreaterThan(SearchScoreSum(f01, st2, ed1, f0Candidates, f0Scores), SearchScoreSum(f02, st2, ed1, f0Candidates, f0Scores));
+        return (CopyRange(f01, f02, firstScoresHigher ? ed1 : st2, ed2), ed2);
     }
 
-    private static int HarvestMergeF0Sub(double[] f01, int st1, int ed1, double[] f02, int st2, int ed2, double[][] f0Candidates,
-        double[][] f0Scores, int numberOfCandidates, double[] mergedF0)
+    // Σ over frames st … ed of SearchScore: the highest score among the frame's candidates equal to the contour, or 0.
+    private static T SearchScoreSum(Tensor<T> f0, int st, int ed, Tensor<T> f0Candidates, Tensor<T> f0Scores)
     {
-        if (st1 <= st2 && ed1 >= ed2) return ed1;
-        double score1 = 0.0, score2 = 0.0;
-        for (int i = st2; i <= ed1; i++)
-        {
-            score1 += HarvestSearchScore(f01[i], f0Candidates[i], f0Scores[i], numberOfCandidates);
-            score2 += HarvestSearchScore(f02[i], f0Candidates[i], f0Scores[i], numberOfCandidates);
-        }
-        if (score1 > score2)
-            for (int i = ed1; i <= ed2; i++) mergedF0[i] = f02[i];
-        else
-            for (int i = st2; i <= ed2; i++) mergedF0[i] = f02[i];
-        return ed2;
+        int rows = ed - st + 1, c = f0Candidates.Shape[1];
+        var shape = new[] { rows, c };
+        var candidates = E.TensorSlice(f0Candidates, new[] { st, 0 }, shape);
+        var scores = E.TensorSlice(f0Scores, new[] { st, 0 }, shape);
+        var contour = PerPair(Slice(f0, st, rows), shape);
+        var matching = E.TensorWhere(E.TensorEquals(candidates, contour), scores, new Tensor<T>(shape));
+        return E.TensorSum(E.TensorMax(E.ReduceMax(matching, new[] { 1 }, false), Ops.Zero));
     }
 
-    // Step 3: voiced sections are extended by the continuity of the contour.
-    private static void HarvestFixStep3(double[] f0Step2, int f0Length, int numberOfCandidates, double[][] f0Candidates,
-        double allowedRange, double[][] f0Scores, double[] f0Step3)
-    {
-        Array.Copy(f0Step2, f0Step3, f0Length);
-        var boundaryList = new int[f0Length];
-        int numberOfBoundaries = HarvestBoundaryList(f0Step2, f0Length, boundaryList);
-        var multiChannelF0 = new double[numberOfBoundaries / 2][];
-        for (int i = 0; i < numberOfBoundaries / 2; i++) multiChannelF0[i] = new double[f0Length];
-        HarvestMultiChannelF0(f0Step2, f0Length, boundaryList, numberOfBoundaries, multiChannelF0);
+    // destination with frames from … to (inclusive) taken from source; unchanged when the range is empty.
+    private static Tensor<T> CopyRange(Tensor<T> destination, Tensor<T> source, int from, int to)
+        => to < from ? destination : E.TensorSetSlice(destination, Slice(source, from, to - from + 1), new[] { from });
 
-        int numberOfChannels = HarvestExtend(multiChannelF0, numberOfBoundaries / 2, f0Length, boundaryList, f0Candidates,
-            numberOfCandidates, allowedRange, multiChannelF0, boundaryList);
-        if (numberOfChannels != 0)
-            HarvestMergeF0(multiChannelF0, boundaryList, numberOfChannels, f0Length, f0Candidates, f0Scores, numberOfCandidates, f0Step3);
-    }
-
-    // Step 4: F0 in a short unvoiced gap is interpolated across it.
-    private static void HarvestFixStep4(double[] f0Step3, int f0Length, int threshold, double[] f0Step4)
+    // Step 4: F0 in a short unvoiced gap is interpolated across it, from one past the last voiced value to one below the
+    // next (WORLD's ±1).
+    private static Tensor<T> HarvestFixStep4(Tensor<T> f0Step3, int threshold)
     {
-        Array.Copy(f0Step3, f0Step4, f0Length);
-        var boundaryList = new int[f0Length];
-        int numberOfBoundaries = HarvestBoundaryList(f0Step3, f0Length, boundaryList);
-        for (int i = 0; i < numberOfBoundaries / 2 - 1; i++)
+        int[] boundaryList = HarvestBoundaryList(f0Step3);
+        var gapFrames = new List<int>();
+        var gapIds = new List<int>();
+        var steps = new List<int>();
+        var ends = new List<int>();
+        var starts = new List<int>();
+        var spans = new List<int>();
+        for (int i = 0; i < boundaryList.Length / 2 - 1; i++)
         {
             int distance = boundaryList[(i + 1) * 2] - boundaryList[i * 2 + 1] - 1;
             if (distance >= threshold) continue;
-            double tmp0 = f0Step3[boundaryList[i * 2 + 1]] + 1;
-            double tmp1 = f0Step3[boundaryList[(i + 1) * 2]] - 1;
-            double coefficient = (tmp1 - tmp0) / (distance + 1.0);
+            int gap = ends.Count;
+            ends.Add(boundaryList[i * 2 + 1]);
+            starts.Add(boundaryList[(i + 1) * 2]);
+            spans.Add(distance + 1);
             int count = 1;
-            for (int j = boundaryList[i * 2 + 1] + 1; j <= boundaryList[(i + 1) * 2] - 1; j++) f0Step4[j] = tmp0 + coefficient * count++;
+            for (int j = boundaryList[i * 2 + 1] + 1; j <= boundaryList[(i + 1) * 2] - 1; j++)
+            {
+                gapFrames.Add(j);
+                gapIds.Add(gap);
+                steps.Add(count++);
+            }
         }
+        if (gapFrames.Count == 0) return f0Step3;
+        var tmp0 = E.TensorAddScalar(E.TensorIndexSelect(f0Step3, IntTensor(ends.ToArray()), 0), Ops.One);
+        var tmp1 = E.TensorSubtractScalar(E.TensorIndexSelect(f0Step3, IntTensor(starts.ToArray()), 0), Ops.One);
+        var coefficient = E.TensorDivide(E.TensorSubtract(tmp1, tmp0), IntTensor(spans.ToArray()).Cast<T>());
+        var ids = IntTensor(gapIds.ToArray());
+        var values = E.TensorAdd(E.TensorIndexSelect(tmp0, ids, 0),
+            E.TensorMultiply(E.TensorIndexSelect(coefficient, ids, 0), IntTensor(steps.ToArray()).Cast<T>()));
+        return E.TensorIndexPut(f0Step3.Clone(), new[] { IntTensor(gapFrames.ToArray()) }, values, false);
     }
 
-    // FilteringF0: a zero-lag (forward-backward) second-order Butterworth filter over one section.
-    private static void HarvestFilteringF0(double[] a, double[] b, double[] x, int xLength, int st, int ed, double[] y)
-    {
-        var tmpX = new double[xLength];
-        for (int i = 0; i < st; i++) x[i] = x[st];
-        for (int i = ed + 1; i < xLength; i++) x[i] = x[ed];
-
-        double w0 = 0.0, w1 = 0.0;
-        for (int i = 0; i < xLength; i++)
-        {
-            double wt = x[i] + a[0] * w0 + a[1] * w1;
-            tmpX[xLength - i - 1] = b[0] * wt + b[1] * w0 + b[0] * w1;
-            w1 = w0;
-            w0 = wt;
-        }
-        w0 = w1 = 0.0;
-        for (int i = 0; i < xLength; i++)
-        {
-            double wt = tmpX[i] + a[0] * w0 + a[1] * w1;
-            y[xLength - i - 1] = b[0] * wt + b[1] * w0 + b[0] * w1;
-            w1 = w0;
-            w0 = wt;
-        }
-    }
-
-    // SmoothF0Contour: each voiced section through the zero-lag filter, padded by 300 frames of zeros.
-    private static void SmoothF0Contour(double[] f0, int f0Length, double[] smoothedF0)
+    // SmoothF0Contour: each voiced section, held constant outside its bounds over the contour padded by 300 frames of
+    // zeros, through the zero-lag (forward-backward) second-order Butterworth filter; frames outside every section are 0.
+    private static Tensor<T> SmoothF0Contour(Tensor<T> f0)
     {
         double[] b = { 0.0078202080334971724, 0.015640416066994345 };
         double[] a = { 1.7347257688092754, -0.76600660094326412 };
         const int lag = 300;
-        int newF0Length = f0Length + lag * 2;
-        var f0Contour = new double[newF0Length];
-        for (int i = lag; i < lag + f0Length; i++) f0Contour[i] = f0[i - lag];
+        int f0Length = f0.Length;
+        int length = f0Length + lag * 2;
+        var f0Contour = Pad(f0, lag, lag);
+        int[] boundaryList = HarvestBoundaryList(f0Contour);
+        int sections = boundaryList.Length / 2;
+        if (sections == 0) return Zeros(f0Length);
 
-        var boundaryList = new int[newF0Length];
-        int numberOfBoundaries = HarvestBoundaryList(f0Contour, newF0Length, boundaryList);
-        var multiChannelF0 = new double[numberOfBoundaries / 2][];
-        for (int i = 0; i < numberOfBoundaries / 2; i++) multiChannelF0[i] = new double[newF0Length];
-        HarvestMultiChannelF0(f0Contour, newF0Length, boundaryList, numberOfBoundaries, multiChannelF0);
-
-        for (int i = 0; i < numberOfBoundaries / 2; i++)
+        var frames = new List<int>();
+        var values = new List<Tensor<T>>();
+        int perBlock = Math.Max(1, BlockElements / length);
+        for (int first = 0; first < sections; first += perBlock)
         {
-            HarvestFilteringF0(a, b, multiChannelF0[i], newF0Length, boundaryList[i * 2], boundaryList[i * 2 + 1], f0Contour);
-            for (int j = boundaryList[i * 2]; j <= boundaryList[i * 2 + 1]; j++) smoothedF0[j - lag] = f0Contour[j];
+            int count = Math.Min(perBlock, sections - first);
+            var index = new int[count * length];
+            var picks = new List<int>();
+            for (int s = 0; s < count; s++)
+            {
+                int st = boundaryList[(first + s) * 2], ed = boundaryList[(first + s) * 2 + 1];
+                for (int j = 0; j < length; j++) index[s * length + j] = Math.Min(Math.Max(j, st), ed);
+                for (int j = st; j <= ed; j++)
+                {
+                    picks.Add(s * length + j);
+                    frames.Add(j - lag);
+                }
+            }
+            var rows = E.Reshape(E.TensorTake(f0Contour, new Tensor<int>(index, new[] { count * length })), new[] { count, length });
+            var filtered = ZeroPhase(rows, new[] { b[0], b[1], b[0] }, new[] { -a[0], -a[1] });
+            values.Add(E.TensorTake(E.Reshape(filtered, new[] { count * length }), IntTensor(picks.ToArray())));
         }
+        return E.TensorIndexPut(Zeros(f0Length), new[] { IntTensor(frames.ToArray()) }, Cat(values.ToArray()), false);
     }
 
     #endregion
@@ -1203,80 +1261,59 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
 
     private static int MatlabRound(double x) => x > 0 ? (int)(x + 0.5) : (int)(x - 0.5);
 
+    // matlab_round on every element: floor(x + 0.5) above 0, −floor(0.5 − x) otherwise (C's truncation of x ∓ 0.5).
+    private static Tensor<T> MatlabRound(Tensor<T> x)
+        => E.TensorWhere(E.TensorGreaterThan(x, Ops.Zero),
+            E.TensorFloor(E.TensorAddScalar(x, C(0.5))),
+            E.TensorNegate(E.TensorFloor(E.TensorAddScalar(E.TensorNegate(x), C(0.5)))));
+
     private static int GetSuitableFftSize(int sample)
         => (int)Math.Pow(2.0, (int)(Math.Log(sample) / Log2) + 1.0);
 
-    private static void NuttallWindow(int yLength, double[] y)
+    private static Tensor<T> NuttallWindow(int length)
     {
-        for (int i = 0; i < yLength; i++)
-        {
-            double tmp = i / (yLength - 1.0);
-            y[i] = 0.355768 - 0.487396 * Math.Cos(2.0 * Math.PI * tmp) + 0.144232 * Math.Cos(4.0 * Math.PI * tmp)
-                - 0.012604 * Math.Cos(6.0 * Math.PI * tmp);
-        }
+        var t = E.TensorDivideScalar(Range(0, length), C(length - 1.0));
+        Tensor<T> Cosine(double multiple) => E.TensorCos(E.TensorMultiplyScalar(t, C(multiple * Math.PI)));
+        var window = E.TensorAddScalar(E.TensorMultiplyScalar(Cosine(2.0), C(-0.487396)), C(0.355768));
+        window = E.TensorAdd(window, E.TensorMultiplyScalar(Cosine(4.0), C(0.144232)));
+        return E.TensorSubtract(window, E.TensorMultiplyScalar(Cosine(6.0), C(0.012604)));
     }
 
-    private static void Interp1(double[] x, double[] y, int xLength, double[] xi, int xiLength, double[] yi)
+    // interp1 with WORLD's histc: each query takes the segment k = clamp(#{x ≤ xi}, 1, n − 1) and interpolates linearly.
+    private static Tensor<T> Interp1(Tensor<T> x, Tensor<T> y, int xLength, Tensor<T> xi)
     {
-        var h = new double[xLength - 1];
-        var k = new int[xiLength];
-        for (int i = 0; i < xLength - 1; i++) h[i] = x[i + 1] - x[i];
-        Histc(x, xLength, xi, xiLength, k);
-        for (int i = 0; i < xiLength; i++)
-        {
-            double s = (xi[i] - x[k[i] - 1]) / h[k[i] - 1];
-            yi[i] = y[k[i] - 1] + s * (y[k[i]] - y[k[i] - 1]);
-        }
+        var k = E.TensorClamp(E.TensorSearchSorted(x, xi, true), 1, xLength - 1);
+        var previous = E.TensorAddScalar(k, -1);
+        var x0 = E.TensorIndexSelect(x, previous, 0);
+        var y0 = E.TensorIndexSelect(y, previous, 0);
+        var s = E.TensorDivide(E.TensorSubtract(xi, x0), E.TensorSubtract(E.TensorIndexSelect(x, k, 0), x0));
+        return E.TensorAdd(y0, E.TensorMultiply(s, E.TensorSubtract(E.TensorIndexSelect(y, k, 0), y0)));
     }
 
-    private static void Histc(double[] x, int xLength, double[] edges, int edgesLength, int[] index)
-    {
-        int count = 1;
-        int i = 0;
-        for (; i < edgesLength; i++)
-        {
-            index[i] = 1;
-            if (edges[i] >= x[0]) break;
-        }
-        for (; i < edgesLength; i++)
-        {
-            if (edges[i] < x[count])
-            {
-                index[i] = count;
-            }
-            else
-            {
-                index[i--] = count++;
-            }
-            if (count == xLength) break;
-        }
-        count--;
-        for (i++; i < edgesLength; i++) index[i] = count;
-    }
-
-    private static void Decimate(double[] x, int xLength, int r, double[] y)
+    // decimate: 9 samples of odd reflection each side, the order-3 low-pass forward and backward, every r-th sample from
+    // nbeg (all the samples WORLD writes, which can run past (n − 1)/r + 1).
+    private static Tensor<T> Decimate(Tensor<T> x, int r)
     {
         const int nFact = 9;
-        var tmp1 = new double[xLength + nFact * 2];
-        var tmp2 = new double[xLength + nFact * 2];
+        int xLength = x.Length;
+        var front = E.TensorSubtract(E.TensorTile(E.TensorMultiplyScalar(Slice(x, 0, 1), C(2.0)), new[] { nFact }),
+            E.TensorFlip(Slice(x, 1, nFact), new[] { 0 }));
+        var back = E.TensorSubtract(E.TensorTile(E.TensorMultiplyScalar(Slice(x, xLength - 1, 1), C(2.0)), new[] { nFact }),
+            E.TensorFlip(Slice(x, xLength - 1 - nFact, nFact), new[] { 0 }));
+        var padded = E.Reshape(Cat(front, x, back), new[] { 1, xLength + 2 * nFact });
 
-        for (int i = 0; i < nFact; i++) tmp1[i] = 2 * x[0] - x[nFact - i];
-        for (int i = nFact; i < nFact + xLength; i++) tmp1[i] = x[i - nFact];
-        for (int i = nFact + xLength; i < 2 * nFact + xLength; i++)
-            tmp1[i] = 2 * x[xLength - 1] - x[xLength - 2 - (i - (nFact + xLength))];
-
-        FilterForDecimate(tmp1, 2 * nFact + xLength, r, tmp2);
-        for (int i = 0; i < 2 * nFact + xLength; i++) tmp1[i] = tmp2[2 * nFact + xLength - i - 1];
-        FilterForDecimate(tmp1, 2 * nFact + xLength, r, tmp2);
-        for (int i = 0; i < 2 * nFact + xLength; i++) tmp1[i] = tmp2[2 * nFact + xLength - i - 1];
+        var (numerator, denominator) = DecimationFilter(r);
+        var filtered = E.Reshape(ZeroPhase(padded, numerator, denominator), new[] { xLength + 2 * nFact });
 
         int nout = (xLength - 1) / r + 1;
         int nbeg = r - r * nout + xLength;
-        int count = 0;
-        for (int i = nbeg; i < xLength + nFact; i += r) y[count++] = tmp1[i + nFact - 1];
+        var picks = new List<int>();
+        for (int i = nbeg; i < xLength + nFact; i += r) picks.Add(i + nFact - 1);
+        return E.TensorIndexSelect(filtered, IntTensor(picks.ToArray()), 0);
     }
 
-    private static void FilterForDecimate(double[] x, int xLength, int r, double[] y)
+    // FilterForDecimate's order-3 IIR as (b0, b1, b1, b0) over 1 − a0 z⁻¹ − a1 z⁻² − a2 z⁻³.
+    private static (double[] Numerator, double[] DenominatorTail) DecimationFilter(int r)
     {
         double a0, a1, a2, b0, b1;
         switch (r)
@@ -1294,55 +1331,191 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
             case 2: a0 = 0.041156734567757189; a1 = -0.42599112459189636; a2 = 0.041037215479961225; b0 = 0.16797464681802227; b1 = 0.50392394045406674; break;
             default: a0 = 0; a1 = 0; a2 = 0; b0 = 0; b1 = 0; break;
         }
-
-        double w0 = 0.0, w1 = 0.0, w2 = 0.0;
-        for (int i = 0; i < xLength; i++)
-        {
-            double wt = x[i] + a0 * w0 + a1 * w1 + a2 * w2;
-            y[i] = b0 * wt + b1 * w0 + b1 * w1 + b0 * w2;
-            w2 = w1;
-            w1 = w0;
-            w0 = wt;
-        }
+        return (new[] { b0, b1, b1, b0 }, new[] { -a0, -a1, -a2 });
     }
+
+    // The filter forward, the result reversed, forward again and reversed back (WORLD's FilteringF0 and decimate), over
+    // each row of x [rows, n].
+    private static Tensor<T> ZeroPhase(Tensor<T> x, double[] numerator, double[] denominatorTail)
+    {
+        var once = E.TensorFlip(LinearFilter(x, numerator, denominatorTail), new[] { 1 });
+        return E.TensorFlip(LinearFilter(once, numerator, denominatorTail), new[] { 1 });
+    }
+
+    /// <summary>
+    /// A causal IIR with zero initial state over each row of <paramref name="x"/> [rows, n]: the zeros Σ b_k x[t − k], then
+    /// the poles of 1 + d1 z⁻¹ + … through the engine's diagonal-pole scan, a real pole as one state and a conjugate pair as
+    /// two. The poles are the roots of the fixed coefficient polynomial, computed once.
+    /// </summary>
+    private static Tensor<T> LinearFilter(Tensor<T> x, double[] numerator, double[] denominatorTail)
+    {
+        int rows = x.Shape[0], n = x.Shape[1];
+        Tensor<T> zeros = E.TensorMultiplyScalar(x, C(numerator[0]));
+        for (int k = 1; k < numerator.Length && k < n; k++)
+        {
+            if (numerator[k] == 0.0) continue;
+            var delayed = E.PadNd(E.TensorSlice(x, new[] { 0, 0 }, new[] { rows, n - k }), new[] { k, 0 }, EnginePadMode.Constant, Ops.Zero);
+            zeros = E.TensorAdd(zeros, E.TensorMultiplyScalar(delayed, C(numerator[k])));
+        }
+
+        double c1, c0;
+        if (denominatorTail.Length == 3)
+        {
+            // z³ + d1 z² + d2 z + d3: its real root by bisection (the poles lie inside the unit circle, so the cubic is
+            // negative at −1.5 and positive at 1.5), then the quadratic factor z² + c1 z + c0.
+            double d1 = denominatorTail[0], d2 = denominatorTail[1], d3 = denominatorTail[2];
+            double lo = -1.5, hi = 1.5;
+            for (int iteration = 0; iteration < 200; iteration++)
+            {
+                double mid = 0.5 * (lo + hi);
+                if (((mid + d1) * mid + d2) * mid + d3 < 0) lo = mid; else hi = mid;
+            }
+            double realPole = 0.5 * (lo + hi);
+            zeros = PoleScan(zeros, new[] { realPole }, new[] { 0.0 }, new[] { 1.0 }, new[] { 0.0 });
+            c1 = d1 + realPole;
+            c0 = d2 + realPole * c1;
+        }
+        else
+        {
+            c1 = denominatorTail[0];
+            c0 = denominatorTail[1];
+        }
+
+        double discriminant = c1 * c1 - 4 * c0;
+        if (discriminant < -1e-9 * Math.Max(1.0, c1 * c1))
+        {
+            double re = -c1 / 2, im = Math.Sqrt(-discriminant) / 2;
+            // 1 / ((1 − p z⁻¹)(1 − p̄ z⁻¹)) = r / (1 − p z⁻¹) + r̄ / (1 − p̄ z⁻¹), r = p / (p − p̄) = ½ − i·re / (2 im).
+            return PoleScan(zeros, new[] { re, re }, new[] { im, -im }, new[] { 0.5, 0.5 }, new[] { -re / (2 * im), re / (2 * im) });
+        }
+        double root = Math.Sqrt(Math.Max(discriminant, 0.0)) / 2;
+        var first = PoleScan(zeros, new[] { -c1 / 2 + root }, new[] { 0.0 }, new[] { 1.0 }, new[] { 0.0 });
+        return PoleScan(first, new[] { -c1 / 2 - root }, new[] { 0.0 }, new[] { 1.0 }, new[] { 0.0 });
+    }
+
+    // y[t] = Σ_s Re(C_s h_s[t]), h_s[t] = A_s h_s[t − 1] + u[t], over each row of u [rows, n].
+    private static Tensor<T> PoleScan(Tensor<T> u, double[] transitionRe, double[] transitionIm, double[] outputRe,
+        double[] outputIm)
+    {
+        int rows = u.Shape[0], n = u.Shape[1], states = transitionRe.Length;
+        var ones = new double[states];
+        for (int s = 0; s < states; s++) ones[s] = 1.0;
+        var output = E.ComplexDiagonalSsmScanForward(
+            E.Reshape(u, new[] { rows, n, 1, 1 }),
+            Constant(transitionRe, new[] { 1, states }),
+            Constant(transitionIm, new[] { 1, states }),
+            Constant(ones, new[] { 1, states, 1 }),
+            Constant(new double[states], new[] { 1, states, 1 }),
+            Constant(outputRe, new[] { 1, 1, states }),
+            Constant(outputIm, new[] { 1, 1, states }),
+            new Tensor<T>(new[] { 1, 1 }));
+        return E.Reshape(output, new[] { rows, n });
+    }
+
+    // A fixed table of filter constants, converted to T once.
+    private static Tensor<T> Constant(double[] values, int[] shape)
+        => new Tensor<double>(shape, new Vector<double>((double[])values.Clone())).Cast<T>();
 
     #endregion
 
-    #region FFT
+    #region Tensor helpers
 
-    /// <summary>Unnormalized forward DFT of a real signal (FFTW / WORLD r2c convention); all N bins returned.</summary>
-    private (double[] Re, double[] Im) ForwardFft(double[] signal)
+    private static T C(double value) => Ops.FromDouble(value);
+
+    // epsilon as a T, raised to Half's smallest normal value where Half would round it to 0.
+    private static T Guard(double epsilon)
+        => Ops.FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+
+    private static Tensor<T> Flat(Tensor<T> x) => E.Reshape(x, new[] { x.Length });
+
+    private static Tensor<T> Zeros(int length) => new Tensor<T>(new[] { length });
+
+    private static Tensor<T> Range(int start, int count) => E.TensorArange<T>(start, start + count, 1);
+
+    // i · period / 1000 for i = 0 … count − 1: each frame's time in seconds.
+    private static Tensor<T> Positions(int count, double framePeriodMs)
+        => E.TensorDivideScalar(E.TensorMultiplyScalar(Range(0, count), C(framePeriodMs)), C(1000.0));
+
+    private static Tensor<int> IntTensor(int[] values) => new Tensor<int>(values, new[] { values.Length });
+
+    private static Tensor<int> IntRange(int start, int count)
     {
-        int n = signal.Length;
-        var re = new Tensor<double>(new[] { n }, new Vector<double>((double[])signal.Clone()));
-        var im = new Tensor<double>(new[] { n });
-        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.FFT(re, im, out var outRe, out var outIm);
-        return (outRe.AsSpan().ToArray(), outIm.AsSpan().ToArray());
+        var values = new int[count];
+        for (int i = 0; i < count; i++) values[i] = start + i;
+        return IntTensor(values);
+    }
+
+    private static Tensor<T> Slice(Tensor<T> x, int start, int length)
+        => length <= 0 ? Zeros(0) : E.TensorSlice(x, new[] { start }, new[] { length });
+
+    private static Tensor<int> SliceInt(Tensor<int> x, int start, int length) => E.TensorSlice(x, new[] { start }, new[] { length });
+
+    private static Tensor<T> Pad(Tensor<T> x, int before, int after)
+        => before == 0 && after == 0 ? x : E.PadNd(x, new[] { before, after }, EnginePadMode.Constant, Ops.Zero);
+
+    private static Tensor<int> PadInt(Tensor<int> x, int before, int after)
+        => E.PadNd(x, new[] { before, after }, EnginePadMode.Constant, 0);
+
+    private static Tensor<T> Cat(params Tensor<T>[] parts)
+    {
+        var nonEmpty = new List<Tensor<T>>();
+        foreach (var part in parts) if (part.Length > 0) nonEmpty.Add(part);
+        return nonEmpty.Count == 1 ? nonEmpty[0] : E.Concat(nonEmpty, 0);
+    }
+
+    private static Tensor<T> Row(Tensor<T> matrix, int row)
+    {
+        int columns = matrix.Shape[1];
+        return E.Reshape(E.TensorSlice(matrix, new[] { row, 0 }, new[] { 1, columns }), new[] { columns });
+    }
+
+    private static Tensor<T> Column(Tensor<T> matrix, int column)
+    {
+        int rows = matrix.Shape[0];
+        return E.Reshape(E.TensorSlice(matrix, new[] { 0, column }, new[] { rows, 1 }), new[] { rows });
+    }
+
+    // value / t elementwise.
+    private static Tensor<T> Over(double value, Tensor<T> t) => E.TensorDivide(Tensor<T>.CreateDefault(t._shape, C(value)), t);
+
+    // The first index at which values equals target (0 when none does, as WORLD's scan then keeps its first entry).
+    private static int FirstIndexOf(Tensor<T> values, T target)
+    {
+        int[] at = E.TensorNonzero(E.TensorEquals(values, target)).ToArray();
+        return at.Length == 0 ? 0 : at[0];
+    }
+
+    // The mean, summed with a power-of-two pre-scale (exact) so that Half does not overflow on long signals.
+    private static T ScaledMean(Tensor<T> y)
+    {
+        double scale = Math.Pow(2.0, Math.Ceiling(Math.Log(Math.Max(1, y.Length), 2.0)));
+        return Ops.Multiply(E.TensorMean(E.TensorMultiplyScalar(y, C(1.0 / scale))), C(scale));
+    }
+
+    private static (Tensor<T> Re, Tensor<T> Im) ComplexMultiply(Tensor<T> aRe, Tensor<T> aIm, Tensor<T> bRe, Tensor<T> bIm)
+        => (E.TensorSubtract(E.TensorMultiply(aRe, bRe), E.TensorMultiply(aIm, bIm)),
+            E.TensorAdd(E.TensorMultiply(aRe, bIm), E.TensorMultiply(aIm, bRe)));
+
+    /// <summary>Unnormalized forward DFT of a real signal (FFTW / WORLD r2c convention) along the last axis; all N bins.</summary>
+    private static (Tensor<T> Re, Tensor<T> Im) Fft(Tensor<T> signal)
+    {
+        E.FFT(signal, new Tensor<T>(signal._shape), out var re, out var im);
+        return (re, im);
     }
 
     /// <summary>
     /// Unnormalized inverse of a real signal's spectrum (FFTW / WORLD c2r convention): only bins 0..N/2 are read,
     /// the imaginary parts of the DC and Nyquist bins are ignored, and the result is not divided by N.
     /// </summary>
-    private static double[] InverseRealFft(double[] re, double[] im, int n)
+    private static Tensor<T> InverseRealFft(Tensor<T> re, Tensor<T> im, int n)
     {
-        var fullRe = new double[n];
-        var fullIm = new double[n];
-        fullRe[0] = re[0];
-        fullRe[n / 2] = re[n / 2];
-        for (int k = 1; k < n / 2; k++)
-        {
-            fullRe[k] = re[k];
-            fullIm[k] = im[k];
-            fullRe[n - k] = re[k];
-            fullIm[n - k] = -im[k];
-        }
-        var tRe = new Tensor<double>(new[] { n }, new Vector<double>(fullRe));
-        var tIm = new Tensor<double>(new[] { n }, new Vector<double>(fullIm));
-        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.IFFT(tRe, tIm, out var outRe, out _);
-        var result = outRe.AsSpan().ToArray();
-        for (int i = 0; i < n; i++) result[i] *= n;
-        return result;
+        int half = n / 2;
+        var innerRe = Slice(re, 1, half - 1);
+        var innerIm = Slice(im, 1, half - 1);
+        var fullRe = Cat(Slice(re, 0, half + 1), E.TensorFlip(innerRe, new[] { 0 }));
+        var fullIm = Cat(Zeros(1), innerIm, Zeros(1), E.TensorNegate(E.TensorFlip(innerIm, new[] { 0 })));
+        E.IFFT(fullRe, fullIm, out var outRe, out _);
+        return E.TensorMultiplyScalar(outRe, C(n));
     }
 
     #endregion

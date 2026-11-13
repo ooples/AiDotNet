@@ -62,7 +62,7 @@ public class MegaTtsModelReferenceTests
                 Assert.True(Math.Abs(e[i] - actual[i]) <= tolerance * Math.Max(1, Math.Abs(e[i])), $"{what}[{i}]: {e[i]} vs {actual[i]}");
         }
         using var _ = new NoGradScope<double>();
-        Close(f["features"]!, model.MelOf(Doubles(f["wave"]!)), "features");
+        Close(f["features"]!, model.MelOf(new Tensor<double>(new[] { f["wave"]!.Count() }, new Vector<double>(Doubles(f["wave"]!)))), "features");
 
         var phones = NatSpeechFrontEnd.Encode(f["phones"]!.Select(v => (string)v!), model.Vocabulary);
         var durations = f["durations"]!.Select(v => (int)v).ToArray();

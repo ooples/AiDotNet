@@ -134,7 +134,8 @@ public static class PitchWaveletTransform
         double mean = sum.Average();
         double variance = sum.Select(v => (v - mean) * (v - mean)).Average();
         double std = Math.Sqrt(variance);
-        for (int t = 0; t < n; t++) sum[t] = (sum[t] - mean) / std;
+        // Zero deviation (a constant contour or one frame) standardizes to 0 rather than 0/0 = NaN.
+        for (int t = 0; t < n; t++) sum[t] = std > 0 ? (sum[t] - mean) / std : 0.0;
         return sum;
     }
 
@@ -148,6 +149,137 @@ public static class PitchWaveletTransform
         var f0 = new double[standardized.Length];
         for (int t = 0; t < f0.Length; t++) f0[t] = Math.Exp(standardized[t] * logF0Std + logF0Mean);
         return f0;
+    }
+
+    /// <summary>
+    /// <see cref="ContinuousLogF0(double[])"/> on a tensor contour <c>[frames]</c> with engine operations: each frame
+    /// reads the voiced frame at its position clamped to the first and last voiced frame, or interpolates linearly
+    /// between the voiced frames around it.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the contour.</typeparam>
+    /// <remarks>The interpolation product (r − l)(j − i<sub>l</sub>) is scaled by a power of two before it is formed
+    /// and back after the division: exact in binary floating point, and a half-precision product cannot overflow.</remarks>
+    internal static (Tensor<T> Unvoiced, Tensor<T> ContinuousLogF0) ContinuousLogF0<T>(Tensor<T> f0)
+    {
+        if (f0 is null) throw new ArgumentNullException(nameof(f0));
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(f0, new[] { f0.Length });
+        var unvoiced = engine.TensorEquals(flat, MathHelper.GetNumericOperations<T>().Zero);
+        if (engine.TensorCountNonzero(flat) == 0) return (unvoiced, flat.Clone());
+        return (unvoiced, engine.TensorLog(FillUnvoiced(flat)));
+    }
+
+    /// <summary>
+    /// The F0 contour <c>[frames]</c> with unvoiced (0) frames filled: before the first and after the last voiced frame
+    /// by the nearest voiced value, in between by linear interpolation of the voiced frames around them; returned
+    /// unchanged when no frame is voiced.
+    /// </summary>
+    internal static Tensor<T> FillUnvoiced<T>(Tensor<T> f0)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = f0.Length;
+        var flat = engine.Reshape(f0, new[] { n });
+        var nonzero = engine.TensorNonzero(flat);
+        int count = nonzero.Shape[0];
+        if (count == 0) return flat.Clone();
+        var voiced = engine.Reshape(nonzero, new[] { count });
+        int[] voicedFrames = voiced.ToArray();
+
+        var position = engine.TensorClamp(engine.TensorArange<int>(0, n, 1), voicedFrames[0], voicedFrames[count - 1]);
+        var atPosition = engine.TensorIndexSelect(flat, position, 0);
+        if (count == 1) return atPosition;
+
+        var upper = engine.TensorClamp(engine.TensorSearchSorted(voiced, position, true), 1, count - 1);
+        var lower = engine.TensorAddScalar(upper, -1);
+        var left = engine.TensorIndexSelect(voiced, lower, 0);
+        var right = engine.TensorIndexSelect(voiced, upper, 0);
+        var voicedValues = engine.TensorIndexSelect(flat, voiced, 0);
+        // The interpolation runs in double and is narrowed once: frame offsets beyond 65504 do not fit a half-precision
+        // T, and neither does the power-of-two scale that kept their product in range.
+        var leftValue = TensorCopyHelper.CastLogical<T, double>(engine.TensorIndexSelect(voicedValues, lower, 0));
+        var rightValue = TensorCopyHelper.CastLogical<T, double>(engine.TensorIndexSelect(voicedValues, upper, 0));
+        var step = engine.TensorDivide(
+            engine.TensorMultiply(engine.TensorSubtract(rightValue, leftValue), engine.TensorSubtract(position, left).Cast<double>()),
+            engine.TensorSubtract(right, left).Cast<double>());
+        var interpolated = engine.TensorAdd(leftValue, step).Cast<T>();
+        // Voiced positions (every frame outside the voiced span reads one) keep their value exactly.
+        return engine.TensorWhere(engine.TensorNotEquals(atPosition, ops.Zero), atPosition, interpolated);
+    }
+
+    /// <summary>
+    /// <see cref="Forward(double[])"/> on a tensor signal <c>[time]</c> with engine operations, returned as
+    /// <c>[time, scale]</c>: one FFT of the zero-padded signal, the ten scales' wavelet spectra as one
+    /// <c>[scale, n]</c> product, and one batched inverse FFT.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the signal.</typeparam>
+    internal static Tensor<T> Forward<T>(Tensor<T> signal)
+    {
+        if (signal is null) throw new ArgumentNullException(nameof(signal));
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n0 = signal.Length;
+        if (n0 == 0) return new Tensor<T>(new[] { 0, ScaleCount });
+        int n = 1;
+        while (n < n0) n <<= 1;
+        var re = engine.Reshape(signal, new[] { n0 });
+        if (n > n0) re = engine.PadNd(re, new[] { 0, n - n0 }, AiDotNet.Tensors.Engines.PadMode.Constant, ops.Zero);
+        engine.FFT(re, new Tensor<T>(new[] { n }), out var sigRe, out var sigIm);
+        var factor = new Tensor<double>(WaveletFactors(n), new[] { ScaleCount, n }).Cast<T>();
+        var waveRe = engine.TensorMultiply(engine.TensorBroadcastTo(engine.Reshape(sigRe, new[] { 1, n }), new[] { ScaleCount, n }), factor);
+        var waveIm = engine.TensorMultiply(engine.TensorBroadcastTo(engine.Reshape(sigIm, new[] { 1, n }), new[] { ScaleCount, n }), factor);
+        engine.IFFT(waveRe, waveIm, out var outRe, out _);
+        return engine.TensorTranspose(engine.TensorSlice(outRe, new[] { 0, 0 }, new[] { ScaleCount, n0 }));
+    }
+
+    /// <summary>
+    /// <see cref="ToF0(double[,], double, double)"/> on a tensor spectrogram <c>[time, scale]</c>: the weighted scale
+    /// sum, standardized over time, then <c>exp(z σ + μ)</c>, <c>[time]</c>.
+    /// </summary>
+    /// <typeparam name="T">The numeric type of the spectrogram.</typeparam>
+    internal static Tensor<T> ToF0<T>(Tensor<T> spectrogram, T logF0Mean, T logF0Std)
+    {
+        if (spectrogram is null) throw new ArgumentNullException(nameof(spectrogram));
+        if (spectrogram.Rank != 2) throw new ArgumentException("Expected a [time, scale] spectrogram.", nameof(spectrogram));
+        var engine = AiDotNetEngine.Current;
+        int n = spectrogram.Shape[0], scales = spectrogram.Shape[1];
+        if (n == 0) return new Tensor<T>(new[] { 0 });
+        var weights = new double[scales];
+        for (int i = 0; i < scales; i++) weights[i] = Math.Pow(i + 1 + 2.5, -2.5);
+        var sum = engine.Reshape(engine.TensorMatMul(spectrogram, new Tensor<double>(weights, new[] { scales, 1 }).Cast<T>()), new[] { n });
+        var centred = engine.TensorSubtractScalar(sum, engine.TensorMean(sum));
+        var ops = MathHelper.GetNumericOperations<T>();
+        var std = ops.Sqrt(engine.TensorMean(engine.TensorMultiply(centred, centred)));
+        // A constant contour (or a single frame) has zero deviation: its standardized value is 0, so every frame maps
+        // to exp(logF0Mean) instead of 0/0 = NaN.
+        var standardized = ops.GreaterThan(std, ops.Zero)
+            ? engine.TensorDivideScalar(centred, std)
+            : engine.TensorZerosLike(centred);
+        return engine.TensorExp(engine.TensorAddScalar(engine.TensorMultiplyScalar(standardized, logF0Std), logF0Mean));
+    }
+
+    // norm · ψ(s_j ω_k) of every scale j and FFT bin k, [scale, n] (the per-bin factor of Forward).
+    private static double[] WaveletFactors(int n)
+    {
+        double gamma25 = 1.329340388179137; // Gamma(2.5) = 3 sqrt(pi) / 4
+        double flambda = 2 * Math.PI / Math.Sqrt(2.5);
+        double s0 = 2 * SamplingInterval;
+        var factors = new double[ScaleCount * n];
+        for (int j = 0; j < ScaleCount; j++)
+        {
+            double sj = s0 * Math.Pow(2, j * ScaleSpacing);
+            double freq = 1 / (flambda * sj);
+            sj = 1 / (flambda * freq);
+            double norm = Math.Sqrt(sj * (2 * Math.PI / (n * SamplingInterval)) * n);
+            for (int k = 0; k < n; k++)
+            {
+                int signedK = k <= (n - 1) / 2 ? k : k - n;
+                double omega = 2 * Math.PI * signedK / (n * SamplingInterval);
+                double f = sj * omega;
+                factors[j * n + k] = norm * (f * f * Math.Exp(-0.5 * f * f) / Math.Sqrt(gamma25));
+            }
+        }
+        return factors;
     }
 
     private static (double[] Re, double[] Im) Fft(double[] re, double[] im, bool inverse)

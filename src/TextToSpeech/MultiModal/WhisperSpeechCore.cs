@@ -175,9 +175,7 @@ internal sealed class WhisperSpeechCore<T>
         int frames = 2 * _o.WhisperAudioContext, samples = frames * OpenAiWhisperTranscriber<T>.HopLength;
         if (wave16k.Length > samples) throw new ArgumentException($"The recording is longer than the {samples / 16000.0:0.##} s window.");
         var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(wave16k, _o.WhisperMels, samples - wave16k.Length);
-        var tensor = new Tensor<T>(new[] { _o.WhisperMels, frames });
-        for (int m = 0; m < _o.WhisperMels; m++)
-            for (int t = 0; t < frames; t++) tensor[m, t] = NumOps.FromDouble(mel[m, t]);
+        var tensor = _engine.TensorSlice(mel, new[] { 0, 0 }, new[] { _o.WhisperMels, frames }).Contiguous();
         var mask = new bool[_o.WhisperAudioContext];
         for (int i = 0; i < Math.Min(mask.Length, wave16k.Length / 320); i++) mask[i] = true;
         return (tensor, mask);
@@ -193,10 +191,8 @@ internal sealed class WhisperSpeechCore<T>
         if (wave16k.Length <= OpenAiWhisperTranscriber<T>.FftSize / 2)
             wave16k = wave16k.Concat(new double[OpenAiWhisperTranscriber<T>.FftSize / 2 + 1 - wave16k.Length]).ToArray();
         var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(wave16k, _o.WhisperMels);
-        int frames = Math.Min(mel.GetLength(1), window);
-        var tensor = new Tensor<T>(new[] { _o.WhisperMels, frames });
-        for (int m = 0; m < _o.WhisperMels; m++)
-            for (int t = 0; t < frames; t++) tensor[m, t] = NumOps.FromDouble(mel[m, t]);
+        int frames = Math.Min(mel.Shape[1], window);
+        var tensor = _engine.TensorSlice(mel, new[] { 0, 0 }, new[] { _o.WhisperMels, frames }).Contiguous();
         using var scope = new NoGradScope<T>();
         return Tokenizer.EncodeMel(tensor);
     }

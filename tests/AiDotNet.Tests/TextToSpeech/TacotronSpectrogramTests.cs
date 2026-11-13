@@ -83,20 +83,39 @@ public class TacotronSpectrogramTests
         var spec = new TacotronSpectrogram();
         var x = Signal();
 
-        var magnitude = spec.Magnitude(x);
-        Assert.Equal((int)reference["frames"]!, magnitude.GetLength(0));
+        var magnitude = spec.Magnitude(new Tensor<double>(new[] { x.Length }, new Vector<double>(x)));
+        Assert.Equal((int)reference["frames"]!, magnitude.Shape[0]);
 
-        var energy = spec.Energy(magnitude);
+        var energy = spec.Energy(magnitude).ToArray();
         var expectedEnergy = reference["energy"]!.Select(v => (double)v).ToArray();
         for (int f = 0; f < expectedEnergy.Length; f++)
             Assert.True(Math.Abs(expectedEnergy[f] - energy[f]) <= 1e-7 * Math.Max(1, expectedEnergy[f]),
                 $"energy[{f}]: librosa {expectedEnergy[f]:R}, port {energy[f]:R}.");
 
-        var mel = spec.LogMel(magnitude);
+        var mel = spec.LogMelOfMagnitude(magnitude);
         var expectedMel = reference["mel_first_frames"]!.Select(r => r.Select(v => (double)v).ToArray()).ToArray();
         for (int f = 0; f < expectedMel.Length; f++)
             for (int m = 0; m < expectedMel[f].Length; m++)
                 Assert.True(Math.Abs(expectedMel[f][m] - mel[f, m]) <= 1e-6,
                     $"log-mel[{f},{m}]: librosa {expectedMel[f][m]:R}, port {mel[f, m]:R}.");
+    }
+
+    /// <summary>
+    /// With an odd FFT size the centred STFT pads ⌊n_fft/2⌋ on each side, so a signal of 4 hops has
+    /// 1 + (1024 + 2·511 − 1023) / 256 = 4 frames (librosa <c>stft(n_fft=1023, hop_length=256, center=True)</c>), not
+    /// 1 + 1024/256 = 5 — the count 1 + n/hop holds only for an even FFT size, and reading a fifth frame ran past the
+    /// padded signal.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task OddFftSize_FrameCountMatchesLibrosa()
+    {
+        await Task.Yield();
+        var spec = new TacotronSpectrogram(fftSize: 1023, hopLength: 256, windowLength: 1023);
+        const int samples = 1024;
+        Assert.Equal(4, spec.FrameCount(samples));
+        var audio = new Tensor<double>(new[] { samples });
+        for (int i = 0; i < samples; i++) audio[i] = Math.Sin(0.05 * i);
+        var magnitude = spec.Magnitude(audio);
+        Assert.Equal(new[] { 4, 1023 / 2 + 1 }, magnitude.Shape.ToArray());
     }
 }
