@@ -554,10 +554,13 @@ public static class ValidationHelper<T>
 
         // Smithson & Verkuilen (2006), eq. 4: shrink the whole sample toward 0.5 by one half-observation,
         // which lifts 0 and 1 off the boundary while preserving the ordering and very nearly the spacing.
+        // Written as y + (0.5 - y) / n, the same value, so no intermediate grows with n: y(n - 1) and n
+        // themselves overflow a narrow T such as Half past 65504.
         int n = y.Length;
-        var compressed = engine.TensorDivideScalar(
-            engine.TensorAddScalar(engine.TensorMultiplyScalar(values, _numOps.FromDouble(n - 1)), _numOps.FromDouble(0.5)),
-            _numOps.FromDouble(n)).ToVector();
+        var compressed = engine.TensorAdd(
+            values,
+            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(_numOps.FromDouble(0.5), values), _numOps.FromDouble(1.0 / n)))
+            .ToVector();
 
         return compressed;
     }

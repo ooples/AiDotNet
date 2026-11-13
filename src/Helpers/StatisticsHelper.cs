@@ -745,7 +745,9 @@ public static class StatisticsHelper<T>
         var matches = Engine.TensorEquals(
             Engine.TensorBroadcastTo(values.Reshape(new[] { samples, 1 }), grid),
             Engine.TensorBroadcastTo(categories.Reshape(new[] { 1, categoryCount }), grid));
-        return Engine.ReduceSum(matches, new[] { 0 }, false);
+
+        // Counted in int: a sum of 0/1 entries in a narrow T such as Half stops growing at 2048.
+        return Engine.ReduceSum(matches.Cast<int>(), new[] { 0 }, false).Cast<T>();
     }
 
     /// <summary>Sum of (observed - expected)^2 / expected over the entries whose expected count is positive.</summary>
@@ -4141,9 +4143,10 @@ public static class StatisticsHelper<T>
         var actualIsClass = OneHot(actualIds, classIds);
         var predictedIsClass = OneHot(predictedIds, classIds);
         var sampleAxis = new[] { 0 };
-        var tp = Engine.ReduceSum(And(actualIsClass, predictedIsClass), sampleAxis, false);
-        var precisionDen = Engine.ReduceSum(predictedIsClass, sampleAxis, false);
-        var recallDen = Engine.ReduceSum(actualIsClass, sampleAxis, false);
+        // Counted in int: a sum of 0/1 entries in a narrow T such as Half stops growing at 2048.
+        var tp = Engine.ReduceSum(And(actualIsClass, predictedIsClass).Cast<int>(), sampleAxis, false).Cast<T>();
+        var precisionDen = Engine.ReduceSum(predictedIsClass.Cast<int>(), sampleAxis, false).Cast<T>();
+        var recallDen = Engine.ReduceSum(actualIsClass.Cast<int>(), sampleAxis, false).Cast<T>();
 
         var precision = SafeRatio(tp, precisionDen);
         var recall = SafeRatio(tp, recallDen);
@@ -5287,10 +5290,12 @@ public static class StatisticsHelper<T>
         // starting from (recall 0, precision 1).
         int n = sortedPairs.Count;
         var isPositive = Engine.TensorGreaterThan(AsTensor(sortedPairs.Select(pair => pair.Actual)), _numOps.Zero);
-        var truePositives = Engine.TensorCumSum(isPositive, 0);
-        var falsePositives = Engine.TensorCumSum(Not(isPositive), 0);
-        var recall = Engine.TensorDivideScalar(truePositives, totalPositives);
-        var precision = Engine.TensorDivide(truePositives, Engine.TensorAdd(truePositives, falsePositives));
+        // Running counts in int and their ratios in double: a 0/1 running sum in a narrow T such as Half
+        // stops growing at 2048.
+        var truePositives = Engine.TensorCumSum(isPositive.Cast<int>(), 0).Cast<double>();
+        var seen = Engine.TensorArange<double>(1, n + 1, 1);
+        var recall = Engine.TensorDivideScalar(truePositives, (double)Engine.TensorCountNonzero(isPositive)).Cast<T>();
+        var precision = Engine.TensorDivide(truePositives, seen).Cast<T>();
 
         var prevRecall = Engine.TensorConcatenate(new[] { Tensor<T>.FromScalar(_numOps.Zero).Reshape(new[] { 1 }), Engine.TensorNarrow(recall, 0, 0, n - 1) }, 0);
         var prevPrecision = Engine.TensorConcatenate(new[] { Tensor<T>.FromScalar(_numOps.One).Reshape(new[] { 1 }), Engine.TensorNarrow(precision, 0, 0, n - 1) }, 0);
@@ -5398,28 +5403,31 @@ public static class StatisticsHelper<T>
         var actualNegative = Not(actualPositive);
         int positives = Engine.TensorCountNonzero(actualPositive);
         int negatives = samples - positives;
-        var positiveColumn = actualPositive.Reshape(new[] { samples, 1 });
-        var negativeColumn = actualNegative.Reshape(new[] { samples, 1 });
+        var positiveRow = actualPositive.Cast<int>().Reshape(new[] { 1, samples });
+        var negativeRow = actualNegative.Cast<int>().Reshape(new[] { 1, samples });
 
+        // Counts are taken in int and rates in double: a 0/1 sum in a narrow T such as Half stops growing at 2048.
         int blockRows = Math.Max(1, (1 << 22) / samples);
-        var truePositiveBlocks = new List<Tensor<T>>();
-        var falsePositiveBlocks = new List<Tensor<T>>();
+        var truePositiveBlocks = new List<Tensor<int>>();
+        var falsePositiveBlocks = new List<Tensor<int>>();
         for (int start = 0; start < thresholdCount; start += blockRows)
         {
             int rows = Math.Min(blockRows, thresholdCount - start);
             var grid = new[] { rows, samples };
             var predictedGrid = Engine.TensorBroadcastTo(predicted.Reshape(new[] { 1, samples }), grid);
             var thresholdGrid = Engine.TensorBroadcastTo(Engine.TensorNarrow(thresholds, 0, start, rows).Reshape(new[] { rows, 1 }), grid);
-            var predictedPositive = Engine.TensorGreaterEqual(predictedGrid, thresholdGrid);
-            truePositiveBlocks.Add(Engine.TensorMatMul(predictedPositive, positiveColumn));
-            falsePositiveBlocks.Add(Engine.TensorMatMul(predictedPositive, negativeColumn));
+            var predictedPositive = Engine.TensorGreaterEqual(predictedGrid, thresholdGrid).Cast<int>();
+            truePositiveBlocks.Add(Engine.ReduceSum(
+                Engine.TensorMultiply(predictedPositive, Engine.TensorBroadcastTo(positiveRow, grid)), new[] { 1 }, false));
+            falsePositiveBlocks.Add(Engine.ReduceSum(
+                Engine.TensorMultiply(predictedPositive, Engine.TensorBroadcastTo(negativeRow, grid)), new[] { 1 }, false));
         }
 
         var shape = new[] { thresholdCount };
-        var truePositives = Engine.TensorConcatenate(truePositiveBlocks.ToArray(), 0).Reshape(shape);
-        var falsePositives = Engine.TensorConcatenate(falsePositiveBlocks.ToArray(), 0).Reshape(shape);
-        var fpr = negatives == 0 ? new Tensor<T>(shape) : Engine.TensorDivideScalar(falsePositives, _numOps.FromDouble(negatives));
-        var tpr = positives == 0 ? new Tensor<T>(shape) : Engine.TensorDivideScalar(truePositives, _numOps.FromDouble(positives));
+        var truePositives = Engine.TensorConcatenate(truePositiveBlocks.ToArray(), 0).Reshape(shape).Cast<double>();
+        var falsePositives = Engine.TensorConcatenate(falsePositiveBlocks.ToArray(), 0).Reshape(shape).Cast<double>();
+        var fpr = negatives == 0 ? new Tensor<T>(shape) : Engine.TensorDivideScalar(falsePositives, (double)negatives).Cast<T>();
+        var tpr = positives == 0 ? new Tensor<T>(shape) : Engine.TensorDivideScalar(truePositives, (double)positives).Cast<T>();
         return (fpr, tpr);
     }
 
@@ -6822,8 +6830,10 @@ public static class StatisticsHelper<T>
         {
             // Precision at each relevant rank: (relevant items so far) / (rank + 1).
             var relevant = Engine.TensorGreaterThan(AsTensor(sortedPairs.Select(pair => pair.Actual)), _numOps.Zero);
-            var precisionAtRank = Engine.TensorDivide(Engine.TensorCumSum(relevant, 0),
-                Engine.TensorArange<T>(1, sortedPairs.Count + 1, 1));
+            // Running count in int and ratio in double: a 0/1 running sum or a rank in a narrow T such as
+            // Half stops being exact at 2048.
+            var precisionAtRank = Engine.TensorDivide(Engine.TensorCumSum(relevant.Cast<int>(), 0).Cast<double>(),
+                Engine.TensorArange<double>(1, sortedPairs.Count + 1, 1)).Cast<T>();
             sum = Engine.TensorSum(Engine.TensorMultiply(relevant, precisionAtRank));
             relevantCount = Count(relevant);
         }
@@ -7012,7 +7022,12 @@ public static class StatisticsHelper<T>
         var gaussianCrps = Engine.TensorMultiply(sigma, bracket);
 
         // A (near-)deterministic forecast (sigma < 1e-10) reduces to the absolute error.
-        var degenerate = Engine.TensorLessThan(sigma, _numOps.FromDouble(1e-10));
+        // In a narrow T such as Half 1e-10 rounds to 0, where "sigma < 0" would miss sigma = 0 and its 0 * inf
+        // NaN, so there the test is sigma <= 0.
+        T degenerateBelow = _numOps.FromDouble(1e-10);
+        var degenerate = _numOps.GreaterThan(degenerateBelow, _numOps.Zero)
+            ? Engine.TensorLessThan(sigma, degenerateBelow)
+            : Engine.TensorLessEqual(sigma, _numOps.Zero);
         var totalCrps = Engine.TensorSum(Engine.TensorWhere(degenerate, Engine.TensorAbs(error), gaussianCrps));
 
         return _numOps.Divide(totalCrps, _numOps.FromDouble(n));
