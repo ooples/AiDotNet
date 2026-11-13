@@ -70,7 +70,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     {
         _options = new CertifiedDefenseOptions<T>
         {
-            CertificationMethod = "IBP"
+            CertificationMethod = CertifiedDefenseMethod.IntervalBoundPropagation
         };
     }
 
@@ -82,7 +82,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     {
         Guard.NotNull(options);
         _options = options;
-        _options.CertificationMethod = "IBP";
+        _options.CertificationMethod = CertifiedDefenseMethod.IntervalBoundPropagation;
     }
 
     /// <inheritdoc/>
@@ -106,36 +106,36 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         // Get the perturbation radius from options
         T epsilon = NumOps.FromDouble(_options.NoiseSigma); // Reusing NoiseSigma as perturbation radius
 
-        // Compute interval bounds through the network
-        var (lowerBounds, upperBounds) = ComputeOutputBounds(vectorInput, input, model, epsilon);
-
         // Get the clean prediction
         var cleanOutput = model.Predict(input);
         var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
         int predictedClass = GetPredictedClass(cleanOutputVector);
 
-        // Check if the prediction is certifiably robust
-        bool isCertified = CheckCertification(lowerBounds, upperBounds, predictedClass);
+        // Bound the network over the ball and check the margins of the predicted class
+        var bounds = ComputeOutputBounds(vectorInput, input, model, epsilon, predictedClass);
 
         // Compute the certified radius
         T certifiedRadius = ComputeCertifiedRadiusInternal(vectorInput, input, model, predictedClass);
 
-        // Compute confidence as the margin between the predicted class and runner-up
-        double confidence = ComputeConfidence(lowerBounds, upperBounds, predictedClass);
-
-        // Get scalar bounds for the predicted class
-        double lowerBound = NumOps.ToDouble(lowerBounds[predictedClass]);
-        double upperBound = NumOps.ToDouble(upperBounds[predictedClass]);
-
-        return new CertifiedPrediction<T>
+        var result = new CertifiedPrediction<T>
         {
             PredictedClass = predictedClass,
-            IsCertified = isCertified,
+            IsCertified = bounds.Certified,
             CertifiedRadius = certifiedRadius,
-            Confidence = confidence,
-            LowerBound = lowerBound,
-            UpperBound = upperBound
+            Confidence = ComputeConfidence(bounds.MinimumMargin),
+            LowerBound = bounds.Lower.AsSpan()[predictedClass],
+            UpperBound = bounds.Upper.AsSpan()[predictedClass]
         };
+
+        result.CertificationDetails["Method"] = CertifiedDefenseMethod.IntervalBoundPropagation;
+        result.CertificationDetails["NormType"] = _options.NormType;
+        if (bounds.MinimumMargin is { } marginLowerBound)
+        {
+            result.CertificationDetails["MarginLowerBound"] = marginLowerBound;
+        }
+
+        result.CertificationDetails["Sound"] = bounds.Sound;
+        return result;
     }
 
     /// <inheritdoc/>
@@ -216,49 +216,21 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
             throw new ArgumentException("Number of samples must match number of labels.");
         }
 
-        int totalSamples = testData.Length;
-        int correctPredictions = 0;
-        int certifiedCorrect = 0;
-        T totalCertifiedRadius = NumOps.Zero;
-
-        for (int i = 0; i < totalSamples; i++)
+        int cleanCorrect = 0, certifiedCorrect = 0, certifiedCount = 0;
+        var radii = new List<T>();
+        for (int i = 0; i < testData.Length; i++)
         {
-            var input = testData[i];
-            var label = labels[i];
-            var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(label);
-            var trueClass = GetPredictedClass(labelVector);
-
-            var certification = CertifyPrediction(input, model);
-
-            // Check if prediction is correct
-            if (certification.PredictedClass == trueClass)
-            {
-                correctPredictions++;
-
-                // Check if certified at the given radius
-                if (certification.IsCertified &&
-                    NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius))
-                {
-                    certifiedCorrect++;
-                }
-            }
-
-            totalCertifiedRadius = NumOps.Add(totalCertifiedRadius, certification.CertifiedRadius);
+            var trueClass = GetPredictedClass(ConversionsHelper.ConvertToVector<T, TOutput>(labels[i]));
+            var certification = CertifyPrediction(testData[i], model);
+            bool correct = certification.PredictedClass == trueClass;
+            cleanCorrect += correct ? 1 : 0;
+            certifiedCount += certification.IsCertified ? 1 : 0;
+            certifiedCorrect += correct && certification.IsCertified
+                && NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius) ? 1 : 0;
+            radii.Add(certification.IsCertified ? certification.CertifiedRadius : NumOps.Zero);
         }
 
-        double cleanAccuracy = (double)correctPredictions / totalSamples;
-        double certifiedAccuracy = (double)certifiedCorrect / totalSamples;
-        T averageRadius = NumOps.Divide(totalCertifiedRadius, NumOps.FromDouble(totalSamples));
-        double certificationRate = (double)certifiedCorrect / Math.Max(1, correctPredictions);
-
-        return new CertifiedAccuracyMetrics<T>
-        {
-            CleanAccuracy = cleanAccuracy,
-            CertifiedAccuracy = certifiedAccuracy,
-            CertificationRadius = radius,
-            AverageCertifiedRadius = averageRadius,
-            CertificationRate = certificationRate
-        };
+        return CertificationMath<T>.Summarize(cleanCorrect, certifiedCorrect, certifiedCount, radius, radii);
     }
 
     /// <inheritdoc/>
@@ -272,7 +244,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     {
         _options = new CertifiedDefenseOptions<T>
         {
-            CertificationMethod = "IBP"
+            CertificationMethod = CertifiedDefenseMethod.IntervalBoundPropagation
         };
     }
 
@@ -323,7 +295,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
                 UseTightBounds = deserialized.UseTightBounds,
                 BatchSize = deserialized.BatchSize,
                 Seed = deserialized.RandomSeed,
-                CertificationMethod = "IBP"
+                CertificationMethod = CertifiedDefenseMethod.IntervalBoundPropagation
             };
         }
     }
@@ -368,266 +340,83 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     }
 
     /// <summary>
-    /// Computes interval bounds for the neural network output.
+    /// The outcome of bounding the network at one radius.
     /// </summary>
-    /// <param name="vectorInput">The input as a vector.</param>
-    /// <param name="referenceInput">The original input for type conversion.</param>
-    /// <param name="model">The model to analyze.</param>
-    /// <param name="epsilon">The perturbation radius.</param>
-    /// <returns>Tuple of lower and upper bound vectors.</returns>
-    private (Vector<T> lower, Vector<T> upper) ComputeOutputBounds(
+    private readonly struct BoundResult
+    {
+        public BoundResult(Vector<T> lower, Vector<T> upper, T minimumMargin, bool certified, bool sound)
+        {
+            Lower = lower;
+            Upper = upper;
+            MinimumMargin = minimumMargin;
+            Certified = certified;
+            Sound = sound;
+        }
+
+        /// <summary>Lower bounds of every network output.</summary>
+        public Vector<T> Lower { get; }
+
+        /// <summary>Upper bounds of every network output.</summary>
+        public Vector<T> Upper { get; }
+
+        /// <summary>Lower bound of min over j != y of z_y - z_j.</summary>
+        public T MinimumMargin { get; }
+
+        public bool Certified { get; }
+
+        /// <summary>True for layer-wise IBP bounds; false for the sampled (empirical, not sound) fallback.</summary>
+        public bool Sound { get; }
+    }
+
+    /// <summary>
+    /// Bounds the network over the perturbation ball and decides whether class <paramref name="predictedClass"/>
+    /// is certified.
+    /// </summary>
+    /// <remarks>
+    /// With layer access this is IBP as in Gowal et al. (2018): the first affine layer is bounded exactly over
+    /// the ball (epsilon times the dual norm of each weight row), later layers by center/radius interval
+    /// arithmetic, and the margin specification z_y - z_j is merged into the last affine layer (their Eq. 6) so
+    /// the margins are bounded directly instead of from separate logit intervals. Without layer access the
+    /// bounds come from sampling, which is empirical and reported as not sound.
+    /// </remarks>
+    private BoundResult ComputeOutputBounds(
         Vector<T> vectorInput,
         TInput referenceInput,
         IFullModel<T, TInput, TOutput> model,
-        T epsilon)
+        T epsilon,
+        int predictedClass)
     {
-        // Initialize input bounds: [x - ε, x + ε] using vectorized operations
-        var inputLower = Engine.Subtract<T>(vectorInput, Engine.Fill<T>(vectorInput.Length, epsilon));
-        var inputUpper = Engine.Add<T>(vectorInput, Engine.Fill<T>(vectorInput.Length, epsilon));
-
-        // Try to get layer-wise access if available
-        if (model is INeuralNetworkModel<T> nnModel)
+        var network = BoundNetwork<T>.FromModel(model, vectorInput.Length);
+        int outputs = network?.OutputLength(vectorInput.Length) ?? 0;
+        if (network is not null && predictedClass < outputs)
         {
-            var architecture = nnModel.GetArchitecture();
-            if (architecture.Layers != null && architecture.Layers.Count > 0)
-            {
-                return PropagateIntervalBounds(inputLower, inputUpper, architecture.Layers);
-            }
+            var x = vectorInput.AsTensor();
+            var norm = _options.NormType;
+            var margins = network.IntervalMargins(x, epsilon, norm, predictedClass, out var topLogitLower);
+            var (lower, upper) = network.IntervalBounds(x, epsilon, norm, network.Operations.Count);
+            T minimumMargin = Engine.TensorMinValue(margins);
+            bool certified = NumOps.GreaterThan(minimumMargin, NumOps.Zero)
+                && NumOps.GreaterThan(topLogitLower.GetFlat(0), NumOps.Zero);
+            return new BoundResult(lower.ToVector(), upper.ToVector(), minimumMargin, certified, true);
         }
 
-        // Fallback: Use sampling-based approximation
-        return ApproximateBoundsWithSampling(vectorInput, referenceInput, model, epsilon);
-    }
-
-    /// <summary>
-    /// Propagates interval bounds through the network layers.
-    /// </summary>
-    /// <param name="lower">Lower bound of input interval.</param>
-    /// <param name="upper">Upper bound of input interval.</param>
-    /// <param name="layers">The network layers.</param>
-    /// <returns>Tuple of output lower and upper bounds.</returns>
-    private (Vector<T> lower, Vector<T> upper) PropagateIntervalBounds(
-        Vector<T> lower,
-        Vector<T> upper,
-        List<ILayer<T>> layers)
-    {
-        var currentLower = lower;
-        var currentUpper = upper;
-
-        foreach (var layer in layers)
-        {
-            // Get layer parameters
-            var weights = layer.GetWeights();
-            var biases = layer.GetBiases();
-            var activationTypes = layer.GetActivationTypes().ToList();
-
-            // Propagate through linear transformation
-            if (weights != null)
-            {
-                (currentLower, currentUpper) = PropagateLinearLayer(
-                    currentLower, currentUpper, weights, biases);
-            }
-
-            // Propagate through activation function
-            foreach (var activation in activationTypes)
-            {
-                (currentLower, currentUpper) = PropagateActivation(
-                    currentLower, currentUpper, activation);
-            }
-        }
-
-        return (currentLower, currentUpper);
-    }
-
-    /// <summary>
-    /// Propagates interval bounds through a linear layer.
-    /// </summary>
-    /// <remarks>
-    /// For a linear layer y = Wx + b with input interval [x_L, x_U]:
-    /// - W⁺ = max(W, 0), W⁻ = min(W, 0)
-    /// - y_L = W⁺ · x_L + W⁻ · x_U + b
-    /// - y_U = W⁺ · x_U + W⁻ · x_L + b
-    /// </remarks>
-    private (Vector<T> lower, Vector<T> upper) PropagateLinearLayer(
-        Vector<T> lower,
-        Vector<T> upper,
-        Tensor<T> weights,
-        Tensor<T>? biases)
-    {
-        // Get weight matrix dimensions
-        var shape = weights._shape;
-        if (shape.Length < 2)
-        {
-            return (lower, upper);
-        }
-
-        int outputDim = shape[0];
-        int inputDim = shape[1];
-
-        var outputLower = new Vector<T>(outputDim);
-        var outputUpper = new Vector<T>(outputDim);
-
-        // Initialize with biases if available
-        if (biases != null)
-        {
-            for (int i = 0; i < outputDim && i < biases.Length; i++)
-            {
-                outputLower[i] = biases[i];
-                outputUpper[i] = biases[i];
-            }
-        }
-
-        // Propagate through weight matrix
-        for (int i = 0; i < outputDim; i++)
-        {
-            T lowerSum = outputLower[i];
-            T upperSum = outputUpper[i];
-
-            for (int j = 0; j < Math.Min(inputDim, lower.Length); j++)
-            {
-                T w = weights[i * inputDim + j];
-
-                // W⁺ = max(W, 0), W⁻ = min(W, 0)
-                if (NumOps.GreaterThan(w, NumOps.Zero))
-                {
-                    // Positive weight: contributes W * x_L to lower, W * x_U to upper
-                    lowerSum = NumOps.Add(lowerSum, NumOps.Multiply(w, lower[j]));
-                    upperSum = NumOps.Add(upperSum, NumOps.Multiply(w, upper[j]));
-                }
-                else if (NumOps.LessThan(w, NumOps.Zero))
-                {
-                    // Negative weight: contributes W * x_U to lower, W * x_L to upper
-                    lowerSum = NumOps.Add(lowerSum, NumOps.Multiply(w, upper[j]));
-                    upperSum = NumOps.Add(upperSum, NumOps.Multiply(w, lower[j]));
-                }
-            }
-
-            outputLower[i] = lowerSum;
-            outputUpper[i] = upperSum;
-        }
-
-        return (outputLower, outputUpper);
-    }
-
-    /// <summary>
-    /// Propagates interval bounds through an activation function.
-    /// </summary>
-    private (Vector<T> lower, Vector<T> upper) PropagateActivation(
-        Vector<T> lower,
-        Vector<T> upper,
-        ActivationFunction activation)
-    {
-        var outputLower = new Vector<T>(lower.Length);
-        var outputUpper = new Vector<T>(upper.Length);
-
-        for (int i = 0; i < lower.Length; i++)
-        {
-            switch (activation)
-            {
-                case ActivationFunction.ReLU:
-                    // ReLU: max(0, x)
-                    // Lower: max(0, lower)
-                    // Upper: max(0, upper)
-                    outputLower[i] = NumOps.GreaterThan(lower[i], NumOps.Zero)
-                        ? lower[i] : NumOps.Zero;
-                    outputUpper[i] = NumOps.GreaterThan(upper[i], NumOps.Zero)
-                        ? upper[i] : NumOps.Zero;
-                    break;
-
-                case ActivationFunction.Sigmoid:
-                    // Sigmoid: 1 / (1 + e^(-x))
-                    // Monotonically increasing, so bounds preserve order
-                    outputLower[i] = ApplySigmoid(lower[i]);
-                    outputUpper[i] = ApplySigmoid(upper[i]);
-                    break;
-
-                case ActivationFunction.Tanh:
-                    // Tanh is monotonically increasing
-                    outputLower[i] = ApplyTanh(lower[i]);
-                    outputUpper[i] = ApplyTanh(upper[i]);
-                    break;
-
-                case ActivationFunction.LeakyReLU:
-                    // LeakyReLU: x if x > 0, else α*x (typically α = 0.01)
-                    T alpha = NumOps.FromDouble(0.01);
-                    outputLower[i] = PropagateLeakyReLU(lower[i], alpha);
-                    outputUpper[i] = PropagateLeakyReLU(upper[i], alpha);
-                    // Handle crossing zero - ensure proper ordering when bounds straddle zero
-                    if (NumOps.LessThan(lower[i], NumOps.Zero) &&
-                        NumOps.GreaterThan(upper[i], NumOps.Zero) &&
-                        NumOps.GreaterThan(outputLower[i], outputUpper[i]))
-                    {
-                        (outputLower[i], outputUpper[i]) = (outputUpper[i], outputLower[i]);
-                    }
-                    break;
-
-                case ActivationFunction.Softmax:
-                    // Softmax outputs are always in [0, 1] range
-                    // Use conservative bounds since proper softmax IBP requires joint computation
-                    outputLower[i] = NumOps.Zero;
-                    outputUpper[i] = NumOps.One;
-                    break;
-
-                case ActivationFunction.Linear:
-                case ActivationFunction.Identity:
-                default:
-                    // Identity function - bounds pass through unchanged
-                    outputLower[i] = lower[i];
-                    outputUpper[i] = upper[i];
-                    break;
-            }
-        }
-
-        return (outputLower, outputUpper);
-    }
-
-    /// <summary>
-    /// Applies sigmoid activation to a single value using numerically stable computation.
-    /// </summary>
-    private T ApplySigmoid(T x)
-    {
-        // Numerically stable sigmoid: avoid overflow for large |x|
-        // For x >= 0: 1/(1+exp(-x)) - exp(-x) is small, no overflow
-        // For x < 0: exp(x)/(1+exp(x)) - exp(x) is small, no overflow
-        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
-        {
-            T expNegX = NumOps.Exp(NumOps.Negate(x));
-            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
-        }
-        else
-        {
-            T expX = NumOps.Exp(x);
-            return NumOps.Divide(expX, NumOps.Add(NumOps.One, expX));
-        }
-    }
-
-    /// <summary>
-    /// Applies tanh activation to a single value using numerically stable computation.
-    /// </summary>
-    private T ApplyTanh(T x)
-    {
-        // Numerically stable tanh using identity: tanh(x) = 2*sigmoid(2x) - 1
-        T twoX = NumOps.Add(x, x);
-        T sigmoid2x = ApplySigmoid(twoX);
-        T two = NumOps.Add(NumOps.One, NumOps.One);
-        return NumOps.Subtract(NumOps.Multiply(two, sigmoid2x), NumOps.One);
-    }
-
-    /// <summary>
-    /// Applies LeakyReLU activation.
-    /// </summary>
-    private T PropagateLeakyReLU(T x, T alpha)
-    {
-        if (NumOps.GreaterThan(x, NumOps.Zero))
-        {
-            return x;
-        }
-        return NumOps.Multiply(alpha, x);
+        var (sampledLower, sampledUpper) = ApproximateBoundsWithSampling(vectorInput, referenceInput, model, epsilon);
+        T sampledMargin = ComputeMinimumMargin(sampledLower, sampledUpper, predictedClass);
+        return new BoundResult(
+            sampledLower,
+            sampledUpper,
+            sampledMargin,
+            CheckCertification(sampledLower, sampledUpper, predictedClass),
+            false);
     }
 
     /// <summary>
     /// Approximates output bounds using sampling when layer access is not available.
     /// </summary>
+    /// <remarks>
+    /// Perturbations are Gaussian draws clipped to the L-infinity ball or scaled into the L2 ball. The
+    /// resulting interval is an inner estimate of the true output range, so it can not certify soundly.
+    /// </remarks>
     private (Vector<T> lower, Vector<T> upper) ApproximateBoundsWithSampling(
         Vector<T> vectorInput,
         TInput referenceInput,
@@ -637,17 +426,10 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         // Get a clean prediction to determine output dimension
         var cleanOutput = model.Predict(referenceInput);
         var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
-        int outputDim = cleanOutputVector.Length;
-
-        var lowerBounds = new Vector<T>(outputDim);
-        var upperBounds = new Vector<T>(outputDim);
 
         // Initialize with clean output values
-        for (int i = 0; i < outputDim; i++)
-        {
-            lowerBounds[i] = cleanOutputVector[i];
-            upperBounds[i] = cleanOutputVector[i];
-        }
+        var lowerBounds = new Vector<T>(cleanOutputVector.AsSpan().ToArray());
+        var upperBounds = new Vector<T>(cleanOutputVector.AsSpan().ToArray());
 
         // Sample points to approximate bounds
         int numSamples = _options.NumSamples;
@@ -664,8 +446,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
                 epsilon,
                 random.Next());
 
-            // Clip perturbation to L-infinity ball
-            noise = Engine.Clamp<T>(noise, NumOps.Negate(epsilon), epsilon);
+            noise = ProjectToBall(noise, epsilon);
 
             // Add perturbation to input
             var perturbedVector = Engine.Add<T>(vectorInput, noise);
@@ -676,20 +457,27 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
             var perturbedOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(perturbedOutput);
 
             // Update bounds
-            for (int i = 0; i < outputDim; i++)
-            {
-                if (NumOps.LessThan(perturbedOutputVector[i], lowerBounds[i]))
-                {
-                    lowerBounds[i] = perturbedOutputVector[i];
-                }
-                if (NumOps.GreaterThan(perturbedOutputVector[i], upperBounds[i]))
-                {
-                    upperBounds[i] = perturbedOutputVector[i];
-                }
-            }
+            lowerBounds = Engine.Min<T>(lowerBounds, perturbedOutputVector);
+            upperBounds = Engine.Max<T>(upperBounds, perturbedOutputVector);
         }
 
         return (lowerBounds, upperBounds);
+    }
+
+    /// <summary>
+    /// Clips a perturbation to the L-infinity ball, or scales it into the L2 ball.
+    /// </summary>
+    private Vector<T> ProjectToBall(Vector<T> noise, T epsilon)
+    {
+        if (_options.NormType != AdversarialNormType.L2)
+        {
+            return Engine.Clamp<T>(noise, NumOps.Negate(epsilon), epsilon);
+        }
+
+        T length = Engine.Norm<T>(noise);
+        return NumOps.GreaterThan(length, epsilon)
+            ? Engine.Multiply<T>(noise, NumOps.Divide(epsilon, length))
+            : noise;
     }
 
     /// <summary>
@@ -707,19 +495,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
             throw new ArgumentException("Output vector cannot be empty.", nameof(output));
         }
 
-        int predictedClass = 0;
-        T maxValue = output[0];
-
-        for (int i = 1; i < output.Length; i++)
-        {
-            if (NumOps.GreaterThan(output[i], maxValue))
-            {
-                maxValue = output[i];
-                predictedClass = i;
-            }
-        }
-
-        return predictedClass;
+        return CertificationMath<T>.ArgMax(output);
     }
 
     /// <summary>
@@ -731,25 +507,29 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     /// </remarks>
     private bool CheckCertification(Vector<T> lowerBounds, Vector<T> upperBounds, int predictedClass)
     {
-        T predictedLower = lowerBounds[predictedClass];
+        return NumOps.GreaterThan(ComputeMinimumMargin(lowerBounds, upperBounds, predictedClass), NumOps.Zero);
+    }
 
-        for (int i = 0; i < upperBounds.Length; i++)
-        {
-            // If any other class's upper bound >= predicted class's lower bound,
-            // we cannot certify robustness
-            if (i != predictedClass &&
-                NumOps.GreaterThanOrEquals(upperBounds[i], predictedLower))
-            {
-                return false;
-            }
-        }
-
-        return true;
+    /// <summary>
+    /// min over j != y of lower(z_y) - upper(z_j), from independent output intervals; the largest value of T
+    /// when there is no other class.
+    /// </summary>
+    private T ComputeMinimumMargin(Vector<T> lowerBounds, Vector<T> upperBounds, int predictedClass)
+    {
+        var predictedLower = lowerBounds.AsSpan()[predictedClass];
+        var margins = Engine.ScalarMinusTensor(predictedLower, upperBounds.AsTensor());
+        var isPredicted = Vector<T>.CreateStandardBasis(upperBounds.Length, predictedClass).AsTensor();
+        var largest = Engine.TensorAddScalar(Engine.TensorZerosLike(margins), NumOps.MaxValue);
+        return Engine.TensorMinValue(Engine.TensorWhere(isPredicted, largest, margins));
     }
 
     /// <summary>
     /// Computes the certified radius using binary search.
     /// </summary>
+    /// <remarks>
+    /// IBP certification is monotone in the radius (the bounds of a smaller ball are nested inside those of a
+    /// larger one), so bisection over [0, 1] finds the largest certified radius to 2^-20.
+    /// </remarks>
     private T ComputeCertifiedRadiusInternal(
         Vector<T> vectorInput,
         TInput referenceInput,
@@ -757,22 +537,13 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         int predictedClass)
     {
         T minRadius = NumOps.Zero;
-        T maxRadius = NumOps.FromDouble(1.0);
-
-        // Initial check: if not certified at max radius, use binary search
-        // If certified at max radius, we could continue searching higher
-
+        T maxRadius = NumOps.One;
         int maxIterations = 20; // For binary search precision
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            T midRadius = NumOps.Divide(
-                NumOps.Add(minRadius, maxRadius),
-                NumOps.FromDouble(2.0));
-
-            var (lowerBounds, upperBounds) = ComputeOutputBounds(vectorInput, referenceInput, model, midRadius);
-
-            if (CheckCertification(lowerBounds, upperBounds, predictedClass))
+            T midRadius = Midpoint(minRadius, maxRadius);
+            if (ComputeOutputBounds(vectorInput, referenceInput, model, midRadius, predictedClass).Certified)
             {
                 // Still certified at this radius, try larger
                 minRadius = midRadius;
@@ -787,32 +558,15 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         return minRadius;
     }
 
+    private static T Midpoint(T a, T b) => NumOps.Multiply(NumOps.Add(a, b), NumOps.FromDouble(0.5));
+
     /// <summary>
-    /// Computes the confidence margin between predicted class and runner-up.
+    /// Confidence as sigmoid of the certified margin lower bound: above 0.5 exactly when certified.
     /// </summary>
-    private double ComputeConfidence(Vector<T> lowerBounds, Vector<T> upperBounds, int predictedClass)
+    private T ComputeConfidence(T minimumMargin)
     {
-        T predictedLower = lowerBounds[predictedClass];
-        T maxOtherUpper = NumOps.MinValue;
-
-        for (int i = 0; i < upperBounds.Length; i++)
-        {
-            if (i != predictedClass &&
-                NumOps.GreaterThan(upperBounds[i], maxOtherUpper))
-            {
-                maxOtherUpper = upperBounds[i];
-            }
-        }
-
-        // Confidence is the margin between predicted class lower and max other upper
-        T margin = NumOps.Subtract(predictedLower, maxOtherUpper);
-
-        // Convert to a probability-like confidence in [0, 1]
-        // Using sigmoid-like transformation
-        double marginDouble = NumOps.ToDouble(margin);
-        double confidence = 1.0 / (1.0 + Math.Exp(-marginDouble));
-
-        return confidence;
+        var margin = new Vector<T>(new[] { minimumMargin });
+        return Engine.Sigmoid<T>(margin).AsSpan()[0];
     }
 
     /// <summary>
@@ -823,7 +577,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         public double NoiseSigma { get; set; }
         public double ConfidenceLevel { get; set; }
         public int NumSamples { get; set; }
-        public string NormType { get; set; } = "L2";
+        public AdversarialNormType NormType { get; set; } = AdversarialNormType.L2;
         public bool UseTightBounds { get; set; }
         public int BatchSize { get; set; }
         public int? RandomSeed { get; set; }
