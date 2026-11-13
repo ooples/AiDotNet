@@ -106,13 +106,6 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var bestFitness = PopulationSearchOps.At(fitness, bestIdx);
         var bestNest = PopulationSearchOps.Row(nests, bestIdx);
 
-        // Mantegna's sigma for the Levy exponent beta = 1.5
-        T sigma = NumOps.FromDouble(Math.Pow(
-            Math.Exp(LogGamma(1 + LevyBeta)) * Math.Sin(Math.PI * LevyBeta / 2) /
-            (Math.Exp(LogGamma((1 + LevyBeta) / 2)) * LevyBeta * Math.Pow(2, (LevyBeta - 1) / 2)),
-            1 / LevyBeta));
-        T inverseBeta = NumOps.FromDouble(1 / LevyBeta);
-        T stepSize = NumOps.FromDouble(0.01);
         int nAbandon = (int)(_populationSize * _discoveryRate);
 
         // Main loop
@@ -121,14 +114,9 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             // Get a cuckoo by Levy flights: per dimension two Box-Muller normals u, v from four uniforms, drawn in
             // the order of the scalar draws, and the step u * sigma / |v|^(1/beta)
             int cuckooIdx = random.Next(_populationSize);
-            var draws = PopulationSearchOps.Uniform<T>(random, p, 4);
-            var u = engine.TensorMultiplyScalar(GaussianFromUniforms(draws, 0), sigma);
-            var v = GaussianFromUniforms(draws, 2);
-            var levy = engine.TensorDivide(u, engine.TensorPower(engine.TensorAbs(v), inverseBeta));
-
+            var draws = PopulationSearchOps.Uniform<double>(random, p, 4);
             var cuckoo = PopulationSearchOps.Row(nests, cuckooIdx);
-            var step = engine.TensorMultiply(
-                engine.TensorMultiplyScalar(levy, stepSize), engine.TensorSubtract(cuckoo, bestNest));
+            var step = LevyStep(draws, cuckoo, bestNest);
             var newSolution = PopulationSearchOps.Clamp01(engine.TensorAdd(cuckoo, step));
             var newFitness = PopulationSearchOps.ThresholdFitness(
                 engine.Reshape(newSolution, new[] { 1, p }), correlations, targetCount, 0.1);
@@ -178,6 +166,32 @@ public class CuckooSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     }
 
     private const double LevyBeta = 1.5;
+
+    /// <summary>Mantegna's sigma for the Levy exponent beta = 1.5.</summary>
+    private static readonly double MantegnaSigma = Math.Pow(
+        Math.Exp(LogGamma(1 + LevyBeta)) * Math.Sin(Math.PI * LevyBeta / 2) /
+        (Math.Exp(LogGamma((1 + LevyBeta) / 2)) * LevyBeta * Math.Pow(2, (LevyBeta - 1) / 2)),
+        1 / LevyBeta);
+
+    /// <summary>
+    /// The Levy step 0.01 u sigma / |v|^(1/beta) (cuckoo - best) per dimension, with u and v the Box-Muller normals
+    /// of columns 0-1 and 2-3 of <paramref name="draws"/> [p, 4]. The normals and the Levy factor are formed in
+    /// double, as master does: in Half a draw within 2^-12 of 1 rounds to 1, so ln(u1) = 0 gave v = 0 and an
+    /// infinite factor, and a dimension where the cuckoo sits on the best nest then stepped inf * 0 = NaN. A zero
+    /// difference always steps 0.
+    /// </summary>
+    internal static Tensor<T> LevyStep(Tensor<double> draws, Tensor<T> cuckoo, Tensor<T> best)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var u = engine.TensorMultiplyScalar(CuckooSearch<double>.GaussianFromUniforms(draws, 0), MantegnaSigma);
+        var v = CuckooSearch<double>.GaussianFromUniforms(draws, 2);
+        var levy = engine.TensorMultiplyScalar(
+            engine.TensorDivide(u, engine.TensorPower(engine.TensorAbs(v), 1 / LevyBeta)), 0.01).Cast<T>();
+        var difference = engine.TensorSubtract(cuckoo, best);
+        return engine.TensorWhere(
+            engine.TensorEquals(difference, ops.Zero), new Tensor<T>(new[] { cuckoo.Length }), engine.TensorMultiply(levy, difference));
+    }
 
     /// <summary>
     /// Box-Muller normals sqrt(-2 ln(u1 + 1e-10)) cos(2 pi u2) from columns <paramref name="column"/> and
