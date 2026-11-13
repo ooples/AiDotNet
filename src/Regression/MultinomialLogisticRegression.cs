@@ -227,6 +227,8 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         _coefficients = new Matrix<T>(_numClasses, numFeatures + 1);
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
+        T jitterRelative = NumOps.FromDouble(1e-8);
+        T jitterFloor = NumOps.FromDouble(1e-12);
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -244,7 +246,7 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
             // shift shared across classes, and that shift is its null space. The gradient is orthogonal to it (per
             // feature, the class residuals p - y sum to zero), so a scale-relative ridge makes the Newton system
             // solvable without changing the step in any identified direction.
-            hessian = RegressionEngineOps2.AddRelativeDiagonalJitter(hessian, NumOps.FromDouble(1e-8), NumOps.FromDouble(1e-12));
+            hessian = RegressionEngineOps2.AddRelativeDiagonalJitter(hessian, jitterRelative, jitterFloor);
 
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
