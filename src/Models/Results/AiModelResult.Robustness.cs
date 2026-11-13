@@ -147,7 +147,8 @@ public partial class AiModelResult<T, TInput, TOutput>
         // and the prediction on its adversarial example is still correct. Inputs the model already gets wrong
         // count as non-robust (they need no attack), and the attack success rate is the fraction of
         // correctly classified clean inputs that the attack flips. A failing attack propagates its exception
-        // instead of being counted as a successful defense.
+        // instead of being counted as a successful defense. The clean and the adversarial predictions both
+        // go through the configured defense, so both accuracies describe the same defended classifier.
         int cleanCorrect = 0;
         int robustCorrect = 0;
         var successfulPerturbationNorms = new List<T>();
@@ -160,7 +161,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(label);
             var trueClass = ArgMaxVector(labelVector);
 
-            var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(Predict(input));
+            var cleanOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(PredictWithDefense(input));
             if (ArgMaxVector(cleanOutputVector) != trueClass)
             {
                 continue;
@@ -170,12 +171,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
             var adversarial = attack.GenerateAdversarialExample(input, label, Model);
 
-            // Use defense preprocessing if available
-            var defendedAdversarial = HasAdversarialRobustness && AdversarialDefense != null
-                ? AdversarialDefense.PreprocessInput(adversarial)
-                : adversarial;
-
-            var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(Predict(defendedAdversarial));
+            var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(PredictWithDefense(adversarial));
             if (ArgMaxVector(advOutputVector) == trueClass)
             {
                 robustCorrect++;
@@ -185,7 +181,11 @@ public partial class AiModelResult<T, TInput, TOutput>
             // The attack succeeded: record the L2 size of the perturbation it needed.
             var inputVector = ConversionsHelper.ConvertToVector<T, TInput>(input);
             var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
-            successfulPerturbationNorms.Add(RobustnessEngine.Norm(SubtractVectors(adversarialVector, inputVector)));
+            // The engine's tensor norm accumulates in double, so a Half perturbation norm above 256 stays finite.
+            var perturbation = SubtractVectors(adversarialVector, inputVector);
+            successfulPerturbationNorms.Add(perturbation.Length == 0
+                ? _robustnessNumOps.Zero
+                : RobustnessEngine.TensorNorm(perturbation.AsTensor()).Data.Span[0]);
         }
 
         int fooled = cleanCorrect - robustCorrect;
@@ -193,7 +193,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         stats.AdversarialAccuracy = testInputs.Length > 0 ? (double)robustCorrect / testInputs.Length : 0.0;
         stats.AttackSuccessRate = cleanCorrect > 0 ? (double)fooled / cleanCorrect : 0.0;
         stats.AveragePerturbationSize = successfulPerturbationNorms.Count > 0
-            ? RobustnessEngine.Mean(new Vector<T>(successfulPerturbationNorms))
+            ? OverflowSafeReductions.Mean(new Vector<T>(successfulPerturbationNorms).AsTensor())
             : _robustnessNumOps.Zero;
         stats.RobustnessScore = (stats.CleanAccuracy + stats.AdversarialAccuracy) / 2.0;
         stats.IsEvaluated = true;
