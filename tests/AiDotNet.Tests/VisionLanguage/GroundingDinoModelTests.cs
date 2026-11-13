@@ -60,6 +60,69 @@ public class GroundingDinoModelTests
     }
 
     [Fact]
+    public void Detections_DecideBothThresholdsOnTheLogits()
+    {
+        // sigmoid(1e-17) is above 0.5, but it is exactly 0.5 once rounded to double: a threshold on the rounded
+        // probability dropped the query and its token. The official rule p > t is logit > ln(t / (1 - t)) = 0 here.
+        var prompt = GroundingDinoPrompt.Create("cat . remote control");
+        var logits = new Tensor<double>(new[] { 1, 2, 7 });
+        logits.Fill(-5.0);
+        logits[0, 0, 3] = 1e-17;
+        var boxes = new Tensor<double>(new[] { 1, 2, 4 }, new Vector<double>(new[] { 0.5, 0.5, 0.2, 0.4, 0.1, 0.1, 0.1, 0.1 }));
+        var output = new GroundingDinoOutput<double>(new[] { logits }, new[] { boxes }, logits, boxes, new bool[1, 7]);
+
+        var detections = prompt.Detections(output, 0, 0.5, 0.5);
+
+        var d = Assert.Single(detections);
+        Assert.Equal("remote", d.Phrase);
+        Assert.Equal(0.5, d.Score, 15);
+    }
+
+    private static GroundingDinoOutput<Half> HalfOutput(params (int Query, int Token, float Logit)[] peaks)
+    {
+        var logits = new Tensor<Half>(new[] { 1, 2, 7 });
+        logits.Fill((Half)(-5f));
+        foreach (var (query, token, logit) in peaks) logits[0, query, token] = (Half)logit;
+        var boxes = new Tensor<Half>(new[] { 1, 2, 4 });
+        boxes.Fill((Half)0.25f);
+        return new GroundingDinoOutput<Half>(new[] { logits }, new[] { boxes }, logits, boxes, new bool[1, 7]);
+    }
+
+    [Fact]
+    public void Strongest_RanksScoresThatTieInHalfByTheirLogits()
+    {
+        // In Half sigmoid(8.5) and sigmoid(9) both round to 1, so ranking by score alone kept the earlier query.
+        // Query 1 ("cat", logit 9) is the stronger detection and is the one a cap of one must keep.
+        var prompt = GroundingDinoPrompt.Create("cat . remote control");
+        var detections = prompt.Detections(HalfOutput((0, 3, 8.5f), (1, 1, 9f)), 0, 0.35, 0.25);
+        Assert.Equal(2, detections.Count);
+        Assert.Equal(detections[0].Score, detections[1].Score);
+
+        var strongest = GroundingDinoDetector<Half>.Strongest(detections, 1);
+
+        Assert.Equal("cat", Assert.Single(strongest).Phrase);
+    }
+
+    [Fact]
+    public void GroundedSam2Combine_GivesAPixelToTheStrongerOfTwoTiedHalfScores()
+    {
+        // Both detections score 1 in Half; the second has the larger logit, so the pixel both masks cover is its class.
+        var one = (Half)1f;
+        var weak = new GroundingDetection<Half>(default, default, one, one, one, "a") { Logit = (Half)8.5f };
+        var strong = new GroundingDetection<Half>(default, default, one, one, one, "b") { Logit = (Half)9f };
+        var both = new Tensor<Half>(new[] { 1, 2 }, new Vector<Half>(new[] { one, one }));
+        var right = new Tensor<Half>(new[] { 1, 2 }, new Vector<Half>(new[] { default(Half), one }));
+        var segments = new[] { new GroundedSegment<Half>(weak, both, one), new GroundedSegment<Half>(strong, right, one) };
+        var image = new Tensor<Half>(new[] { 3, 1, 2 });
+
+        var result = GroundedSAM2<Half>.Combine(AiDotNet.Tensors.Engines.AiDotNetEngine.Current, image, segments,
+            new[] { "a", "b" }, s => s.Detection.Phrase == "a" ? 0 : 1);
+
+        Assert.Equal(0f, (float)result.SemanticMap[0, 0]);
+        Assert.Equal(1f, (float)result.SemanticMap[0, 1]);
+    }
+
+    [Fact]
     public void GroundingRows_KeepTheModelsNumericType_WithClassesByPhrase()
     {
         var detections = new[]

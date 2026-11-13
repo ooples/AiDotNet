@@ -84,13 +84,16 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
     /// Initializes the base in ONNX (inference-only) mode. The ONNX graph must output pixel embeddings
     /// <c>[B, D, H, W]</c> with <c>D</c> equal to the text encoder's embedding dimension.
     /// </summary>
+    /// <remarks>
+    /// Only the native constructor carries optional parameters (RS0026: two new overloads may not both).
+    /// </remarks>
     protected OpenVocabSegmentationBase(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
         TextQueriedSegmentationOptions options,
-        int maxCategories = 256,
-        int maxPromptLength = 77)
+        int maxCategories,
+        int maxPromptLength)
         : base(architecture, onnxModelPath, RequireOptions(options).NumClasses)
     {
         Guard.Positive(maxCategories);
@@ -124,9 +127,11 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Scores every pixel against the CLIP text embedding of each name, takes the softmax over the
-    /// names (the per-pixel classification of CAT-Seg, SAN and SED), and labels each pixel with its
-    /// most likely name. A name's mask is the pixels it wins; its score is its mean probability there.
+    /// Scores every pixel against the CLIP text embedding of each name and labels each pixel with its
+    /// most likely name. The probabilities are the softmax over the names (SAN, Mask-Adapter,
+    /// Open-Vocabulary SAM) or each name's own sigmoid (CAT-Seg, SED; see
+    /// <c>ScoresNamesIndependently</c>). A name's mask is the pixels it wins; its score is its mean
+    /// probability there.
     /// </remarks>
     public virtual OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
     {
@@ -143,19 +148,33 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
             _queryEmbeddings = null;
         }
 
-        return BuildResult(Engine, NumOps, logits, classNames);
+        return BuildResult(Engine, NumOps, logits, classNames, ScoresNamesIndependently);
     }
 
     /// <summary>
-    /// Turns per-name logits <c>[K, H, W]</c> into the softmax/argmax segmentation result.
+    /// Whether the model scores every name with its own sigmoid rather than a softmax over the names.
     /// </summary>
     /// <remarks>
-    /// A single name cannot be classified by a softmax (it is 1 at every pixel), so it is decided per pixel
-    /// by its sigmoid instead -- in the mask where <c>cos / tau &gt; 0</c> -- and pixels outside the mask get
-    /// semantic label -1. Areas are counted in <c>int</c> and each score is the mean over its own pixels only.
+    /// CAT-Seg and SED train their per-name cost maps with binary cross-entropy and read them through a
+    /// sigmoid at inference (<c>outputs.sigmoid()</c> in both official repositories); SAN, Mask-Adapter and
+    /// Open-Vocabulary SAM classify with a softmax over the names. The labels are the argmax either way.
+    /// </remarks>
+    internal virtual bool ScoresNamesIndependently => false;
+
+    /// <summary>
+    /// Turns per-name logits <c>[K, H, W]</c> into the argmax segmentation result.
+    /// </summary>
+    /// <remarks>
+    /// Each pixel is labelled with its highest-scoring name, and a name's score is its mean probability over
+    /// the pixels it wins: the softmax over the names, or each name's own sigmoid when
+    /// <paramref name="independentSigmoid"/> is set. A single name cannot be classified by a softmax (it is
+    /// 1 at every pixel), so it is decided per pixel by its sigmoid instead -- in the mask where
+    /// <c>cos / tau &gt; 0</c> -- and pixels outside the mask get semantic label -1. Areas are counted in
+    /// <c>int</c> and each score is the mean over its own pixels only.
     /// </remarks>
     internal static OpenVocabSegmentationResult<T> BuildResult(
-        IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, IReadOnlyList<string> classNames)
+        IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, IReadOnlyList<string> classNames,
+        bool independentSigmoid = false)
     {
         int numText = classNames.Count;
         if (numText == 1)
@@ -164,7 +183,7 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
         }
 
         int pixels = logits.Shape[1] * logits.Shape[2];
-        var probs = engine.TensorSoftmax(logits, 0);
+        var probs = independentSigmoid ? engine.TensorSigmoid(logits) : engine.TensorSoftmax(logits, 0);
         var labels = engine.TensorArgMax(logits, 0);
         var masks = engine.TensorPermute(engine.TensorOneHot<T>(labels, numText), new[] { 2, 0, 1 });
 
@@ -186,14 +205,15 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
     }
 
     /// <summary>
-    /// The result for one name from its logits <c>[1, H, W]</c>: the pixels whose sigmoid exceeds 0.5,
-    /// scored by their mean probability.
+    /// The result for one name from its logits <c>[1, H, W]</c>: the pixels whose sigmoid exceeds 0.5
+    /// (decided on the logit, <c>x &gt; 0</c>, so a rounded sigmoid cannot drop them), scored by their mean
+    /// probability.
     /// </summary>
     private static OpenVocabSegmentationResult<T> BuildSingleNameResult(
         IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, string name)
     {
         var probs = engine.TensorSigmoid(logits);
-        var mask = engine.TensorGreaterThan(probs, numOps.FromDouble(0.5));
+        var mask = MaskStatistics.SigmoidGreaterThan(logits, 0.5);
         int area = MaskStatistics.CountNonZero(mask);
         T score = MaskStatistics.MaskedMean(probs, mask, area);
         var semantic = engine.TensorAddScalar(mask, numOps.Negate(numOps.One));

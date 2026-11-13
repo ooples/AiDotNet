@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 ///     options: new OMGLLaVAOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for visual question answering with segmentation
-/// var onnxModel = new OMGLLaVA&lt;double&gt;(architecture, "omgllava.onnx", textEncoder);
+/// var onnxModel = new OMGLLaVA&lt;double&gt;(architecture, "omgllava.onnx", textEncoder, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -125,7 +125,7 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model options, or <c>null</c> for the defaults.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained OMGLLaVA from ONNX for inference.
@@ -137,10 +137,10 @@ public partial class OMGLLaVA<T> : Common.ReferringSegmentationBase<T>
     public OMGLLaVA(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
-        OMGLLaVAOptions? options = null)
+        OMGLLaVAOptions? options)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, textEncoder, options ??= new OMGLLaVAOptions())
+        : base(architecture, onnxModelPath, textEncoder, options ??= new OMGLLaVAOptions(), maxTextLength: 512)
     {
         _options = options; Options = _options;
         // OMGLLaVA's own fallback input geometry is 1024x1024, not the base's 512.

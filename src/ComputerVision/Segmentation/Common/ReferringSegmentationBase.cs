@@ -45,8 +45,8 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
     /// <summary>The inverse temperature <c>1 / tau</c> that scales every cosine similarity.</summary>
     protected readonly T _logitScale;
 
-    /// <summary>The sigmoid probability a pixel must exceed to be in the mask.</summary>
-    protected readonly T _maskThreshold;
+    /// <summary>The sigmoid probability a pixel must exceed to be in the mask, kept in double so the decision is exact.</summary>
+    protected readonly double _maskThreshold;
 
     /// <summary>Normalized embeddings <c>[NumClasses, D]</c> of the closed-set vocabulary Predict/Train score against.</summary>
     private readonly Tensor<T> _vocabularyEmbeddings;
@@ -85,12 +85,15 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
     /// Initializes the base in ONNX (inference-only) mode. The ONNX graph must output pixel embeddings
     /// <c>[B, D, H, W]</c> with <c>D</c> equal to the text encoder's embedding dimension.
     /// </summary>
+    /// <remarks>
+    /// Only the native constructor carries optional parameters (RS0026: two new overloads may not both).
+    /// </remarks>
     protected ReferringSegmentationBase(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
         ReferringSegmentationOptions options,
-        int maxTextLength = 512)
+        int maxTextLength)
         : base(architecture, onnxModelPath, RequireOptions(options).NumClasses)
     {
         _maxTextLength = maxTextLength;
@@ -101,7 +104,7 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
     private static ReferringSegmentationOptions RequireOptions(ReferringSegmentationOptions options)
         => options ?? throw new ArgumentNullException(nameof(options));
 
-    private static (T LogitScale, T MaskThreshold, Tensor<T> Vocabulary) PrepareVocabulary(
+    private static (T LogitScale, double MaskThreshold, Tensor<T> Vocabulary) PrepareVocabulary(
         ITextEncoder<T> textEncoder, ReferringSegmentationOptions options)
     {
         if (textEncoder is null) throw new ArgumentNullException(nameof(textEncoder));
@@ -109,7 +112,7 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
         options.ValidateMaskThreshold();
         var numOps = MathHelper.GetNumericOperations<T>();
         return (numOps.FromDouble(1.0 / options.Temperature),
-            numOps.FromDouble(options.MaskThreshold),
+            options.MaskThreshold,
             TextEmbeddingClassifier.EncodeNormalized(textEncoder, options.ResolveClassNames()));
     }
 
@@ -150,10 +153,12 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
     /// Turns expression logits <c>[1, H, W]</c> into the mask, confidence, box and response.
     /// </summary>
     internal static ReferringSegmentationResult<T> BuildResult(
-        IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, T maskThreshold, string expression)
+        IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, double maskThreshold, string expression)
     {
         var probs = engine.TensorSigmoid(logits);
-        var mask = engine.TensorGreaterThan(probs, maskThreshold);
+        // Decided on the logit (LISA's logit > 0 at the default 0.5): a sigmoid rounded to T sits exactly on the
+        // threshold for logits near the boundary and would drop pixels that are above it.
+        var mask = MaskStatistics.SigmoidGreaterThan(logits, maskThreshold);
         // The area is counted in int (a Half sum of the mask rounds above 2048 pixels and overflows above 65504)
         // and the confidence is the mean over the mask's own pixels, so a NaN logit outside it cannot leak in.
         int area = MaskStatistics.CountNonZero(mask);

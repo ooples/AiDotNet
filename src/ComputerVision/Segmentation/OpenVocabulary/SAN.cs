@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     options: new SANOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for zero-shot segmentation
-/// var onnxModel = new SAN&lt;double&gt;(architecture, "san.onnx", textEncoder);
+/// var onnxModel = new SAN&lt;double&gt;(architecture, "san.onnx", textEncoder, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -122,7 +122,7 @@ public partial class SAN<T> : Common.OpenVocabSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model options, or <c>null</c> for the defaults.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained SAN from ONNX for inference.
@@ -134,10 +134,10 @@ public partial class SAN<T> : Common.OpenVocabSegmentationBase<T>
     public SAN(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
-        SANOptions? options = null)
+        SANOptions? options)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, textEncoder, options ??= new SANOptions())
+        : base(architecture, onnxModelPath, textEncoder, options ??= new SANOptions(), maxCategories: 256, maxPromptLength: 77)
     {
         _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;

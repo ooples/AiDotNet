@@ -53,7 +53,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     options: new MaskAdapterOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for improved boundary quality
-/// var onnxModel = new MaskAdapter&lt;double&gt;(architecture, "maskadapter.onnx", textEncoder);
+/// var onnxModel = new MaskAdapter&lt;double&gt;(architecture, "maskadapter.onnx", textEncoder, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -133,7 +133,7 @@ public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model options, or <c>null</c> for the defaults.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained MaskAdapter from ONNX for inference.
@@ -145,10 +145,10 @@ public partial class MaskAdapter<T> : Common.OpenVocabSegmentationBase<T>
     public MaskAdapter(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
-        MaskAdapterOptions? options = null)
+        MaskAdapterOptions? options)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, textEncoder, options ??= new MaskAdapterOptions())
+        : base(architecture, onnxModelPath, textEncoder, options ??= new MaskAdapterOptions(), maxCategories: 256, maxPromptLength: 77)
     {
         _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;

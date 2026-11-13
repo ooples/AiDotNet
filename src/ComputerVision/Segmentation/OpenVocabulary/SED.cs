@@ -52,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     options: new SEDOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for category-adaptive segmentation
-/// var onnxModel = new SED&lt;double&gt;(architecture, "sed.onnx", textEncoder);
+/// var onnxModel = new SED&lt;double&gt;(architecture, "sed.onnx", textEncoder, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -122,7 +122,7 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model options, or <c>null</c> for the defaults.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained SED from ONNX for inference.
@@ -134,10 +134,10 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
     public SED(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
-        SEDOptions? options = null)
+        SEDOptions? options)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, textEncoder, options ??= new SEDOptions())
+        : base(architecture, onnxModelPath, textEncoder, options ??= new SEDOptions(), maxCategories: 256, maxPromptLength: 77)
     {
         _options = options; Options = _options;
         // SED's own fallback input geometry is 640x640, not the base's 512.
@@ -242,4 +242,10 @@ public partial class SED<T> : Common.OpenVocabSegmentationBase<T>
 
     // SegmentWithText and SegmentWithPrompt come from OpenVocabSegmentationBase: they score the
     // decoder's pixel embeddings against CLIP text embeddings of the names (cosine / temperature).
+
+    /// <summary>
+    /// SED scores each name with its own sigmoid: it trains the cost map with binary cross-entropy and
+    /// reads it as <c>outputs.sigmoid()</c> at inference, so a name's score is its mean sigmoid over the pixels it wins.
+    /// </summary>
+    internal override bool ScoresNamesIndependently => true;
 }

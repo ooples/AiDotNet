@@ -233,7 +233,7 @@ public class TextQueriedSegmentationReferenceTests
         var numOps = MathHelper.GetNumericOperations<Half>();
 
         var result = ReferringSegmentationBase<Half>.BuildResult(
-            AiDotNetEngine.Current, numOps, logits, (Half)0.5f, "the road");
+            AiDotNetEngine.Current, numOps, logits, 0.5, "the road");
 
         Assert.Contains("with 90000 pixels", result.TextResponse);
         Assert.Equal(0.75, (double)(float)result.Confidence, 2e-3);
@@ -267,5 +267,140 @@ public class TextQueriedSegmentationReferenceTests
         Assert.Equal(0.8, (double)(float)logits[1, 0, 0], 2e-3);
         Assert.Equal(0.0, (double)(float)logits[0, 0, 1], Tolerance);
         Assert.Equal(0.0, (double)(float)logits[1, 0, 1], Tolerance);
+    }
+
+    [Fact]
+    public void ReferringResult_DecidesTheMaskOnTheLogit()
+    {
+        // LISA keeps logit > 0. sigmoid(1e-17) rounds to exactly 0.5 in double, so a threshold on the rounded
+        // probability dropped a pixel that is above the threshold.
+        var logits = T(new[] { 1, 1, 2 }, 1e-17, -1e-17);
+        var numOps = MathHelper.GetNumericOperations<double>();
+
+        var result = ReferringSegmentationBase<double>.BuildResult(AiDotNetEngine.Current, numOps, logits, 0.5, "the cat");
+
+        Assert.Equal(new[] { 1.0, 0.0 }, new[] { result.Masks[0, 0, 0], result.Masks[0, 0, 1] });
+        Assert.Contains("with 1 pixels", result.TextResponse);
+    }
+
+    [Fact]
+    public void ReferringResult_Half_DoesNotRoundTheThresholdIntoHalf()
+    {
+        // Threshold 0.7 is logit ln(7/3) = 0.84730. The Half logits on either side of it are 0.84717 and 0.84766;
+        // sigmoid(0.84766) = 0.700075 is above 0.7, but Half rounds it and the threshold to the same 0.70020, so a
+        // comparison of rounded probabilities dropped it.
+        var logits = H(new[] { 1, 1, 2 }, 0.84765625, 0.84716796875);
+        var numOps = MathHelper.GetNumericOperations<Half>();
+
+        var result = ReferringSegmentationBase<Half>.BuildResult(AiDotNetEngine.Current, numOps, logits, 0.7, "the road");
+
+        Assert.Equal(new[] { 1f, 0f }, new[] { (float)result.Masks[0, 0, 0], (float)result.Masks[0, 0, 1] });
+    }
+
+    [Fact]
+    public void OpenVocabularyResult_SingleName_DecidesTheMaskOnTheLogit()
+    {
+        var logits = T(new[] { 1, 1, 2 }, 1e-17, -1e-17);
+        var numOps = MathHelper.GetNumericOperations<double>();
+
+        var result = OpenVocabSegmentationBase<double>.BuildResult(AiDotNetEngine.Current, numOps, logits, new[] { "a cat" });
+
+        Assert.Equal(new[] { 1.0, 0.0 }, new[] { result.Masks[0, 0, 0], result.Masks[0, 0, 1] });
+        Assert.Equal(new[] { 0.0, -1.0 }, new[] { result.SemanticMap[0, 0], result.SemanticMap[0, 1] });
+    }
+
+    [Fact]
+    public void MaskGreaterThan_Half_CountsTheRoundedUpThresholdAsBelow()
+    {
+        // Half(0.7) = 0.70020 is above the real 0.7, so it is above the threshold; 0.69971 is not.
+        var values = H(new[] { 2 }, 0.7001953125, 0.69970703125);
+
+        var mask = MaskStatistics.GreaterThan(values, 0.7);
+
+        Assert.Equal(new[] { 1f, 0f }, new[] { (float)mask[0], (float)mask[1] });
+    }
+
+    [Fact]
+    public void OpenVocabularyResult_IndependentSigmoid_ScoresEachNameByItsOwnSigmoid()
+    {
+        // One pixel, logits (ln 3, ln 1.5): the softmax gives name 0 probability 3 / 4.5 = 2/3, its sigmoid 3/4.
+        var logits = T(new[] { 2, 1, 1 }, Math.Log(3), Math.Log(1.5));
+        var numOps = MathHelper.GetNumericOperations<double>();
+
+        var sigmoid = OpenVocabSegmentationBase<double>.BuildResult(AiDotNetEngine.Current, numOps, logits, new[] { "a", "b" }, true);
+        var softmax = OpenVocabSegmentationBase<double>.BuildResult(AiDotNetEngine.Current, numOps, logits, new[] { "a", "b" });
+
+        Assert.Equal(0.75, sigmoid.Scores[0], Tolerance);
+        Assert.Equal(2.0 / 3.0, softmax.Scores[0], Tolerance);
+        Assert.Equal(0.0, sigmoid.SemanticMap[0, 0]);
+    }
+
+    /// <summary>
+    /// The scores <c>SegmentWithText</c> must report for <paramref name="logits"/> <c>[K, H, W]</c>: each pixel goes to its
+    /// argmax name, and a name scores the mean probability (sigmoid or softmax) of the pixels it wins.
+    /// </summary>
+    private static double[] ExpectedScores(Tensor<double> logits, bool sigmoid)
+    {
+        int k = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
+        var sum = new double[k];
+        var count = new int[k];
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int best = 0;
+                double denominator = 0;
+                for (int c = 0; c < k; c++)
+                {
+                    if (logits[c, y, x] > logits[best, y, x]) best = c;
+                    denominator += Math.Exp(logits[c, y, x]);
+                }
+                double top = logits[best, y, x];
+                sum[best] += sigmoid ? 1.0 / (1.0 + Math.Exp(-top)) : Math.Exp(top) / denominator;
+                count[best]++;
+            }
+        return Enumerable.Range(0, k).Select(c => count[c] > 0 ? sum[c] / count[c] : 0.0).ToArray();
+    }
+
+    private static void AssertScoresFollowThePaper(OpenVocabSegmentationBase<double> model, bool sigmoid)
+    {
+        var image = new Tensor<double>(new[] { 3, 64, 64 });
+        var rng = RandomHelper.CreateSeededRandom(13);
+        for (int i = 0; i < image.Length; i++) image[i] = rng.NextDouble();
+
+        var logits = SegmentationTensorOps.EnsureUnbatched(model.Predict(image));
+        var result = model.SegmentWithText(image, new[] { "cat", "dog" });
+
+        var expected = ExpectedScores(logits, sigmoid);
+        Assert.Equal(expected[0], result.Scores[0], 1e-9);
+        Assert.Equal(expected[1], result.Scores[1], 1e-9);
+    }
+
+    private static DeterministicTextEncoder<double> CatDog()
+        => new DeterministicTextEncoder<double>(4).With("cat", 1, 0, 0, 0).With("dog", 0, 1, 0, 0);
+
+    [Fact(Timeout = 120000)]
+    public void CATSeg_ScoresEachNameByItsSigmoid_AsTheOfficialInference()
+    {
+        // CAT-Seg trains with binary cross-entropy and reads outputs.sigmoid(); the closed-set names equal the query
+        // names, so Predict's logits are the ones SegmentWithText classifies.
+        using var model = new CATSeg<double>(Arch(), CatDog(),
+            options: new CATSegOptions { NumClasses = 2, ClassNames = new[] { "cat", "dog" }, DropRate = 0.0, Seed = 7 });
+        AssertScoresFollowThePaper(model, sigmoid: true);
+    }
+
+    [Fact(Timeout = 120000)]
+    public void SED_ScoresEachNameByItsSigmoid_AsTheOfficialInference()
+    {
+        using var model = new SED<double>(Arch(), CatDog(),
+            options: new SEDOptions { NumClasses = 2, ClassNames = new[] { "cat", "dog" }, DropRate = 0.0, Seed = 7 });
+        AssertScoresFollowThePaper(model, sigmoid: true);
+    }
+
+    [Fact(Timeout = 120000)]
+    public void SAN_ScoresTheNamesBySoftmax()
+    {
+        using var model = new SAN<double>(Arch(), CatDog(),
+            options: new SANOptions { NumClasses = 2, ClassNames = new[] { "cat", "dog" }, DropRate = 0.0, Seed = 7 });
+        AssertScoresFollowThePaper(model, sigmoid: false);
     }
 }

@@ -54,7 +54,7 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 ///     options: new CATSegOptions { NumClasses = 150, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for novel category recognition
-/// var onnxModel = new CATSeg&lt;double&gt;(architecture, "catseg.onnx", textEncoder);
+/// var onnxModel = new CATSeg&lt;double&gt;(architecture, "catseg.onnx", textEncoder, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -141,7 +141,7 @@ public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model options, or <c>null</c> for the defaults.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained CATSeg from ONNX for inference.
@@ -153,10 +153,10 @@ public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
     public CATSeg(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
-        CATSegOptions? options = null)
+        CATSegOptions? options)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, textEncoder, options ??= new CATSegOptions())
+        : base(architecture, onnxModelPath, textEncoder, options ??= new CATSegOptions(), maxCategories: 256, maxPromptLength: 77)
     {
         _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
@@ -266,4 +266,10 @@ public partial class CATSeg<T> : Common.OpenVocabSegmentationBase<T>
 
     // SegmentWithText and SegmentWithPrompt come from OpenVocabSegmentationBase: they score the
     // decoder's pixel embeddings against CLIP text embeddings of the names (cosine / temperature).
+
+    /// <summary>
+    /// CAT-Seg scores each name with its own sigmoid: it trains the cost map with binary cross-entropy and
+    /// reads it as <c>outputs.sigmoid()</c> at inference, so a name's score is its mean sigmoid over the pixels it wins.
+    /// </summary>
+    internal override bool ScoresNamesIndependently => true;
 }

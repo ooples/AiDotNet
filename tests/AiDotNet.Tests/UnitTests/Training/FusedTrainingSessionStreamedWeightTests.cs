@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using AiDotNet.Tests.Helpers;
 
 namespace AiDotNet.Tests.UnitTests.Training;
 
@@ -87,7 +88,7 @@ public class FusedTrainingSessionStreamedWeightTests
     }
 
     private static OpenVocabSAM<float> CreateSmall(NeuralNetworkArchitecture<float> architecture)
-        => new(architecture, options: new OpenVocabSAMOptions
+        => new(architecture, new DeterministicTextEncoder<float>(), options: new OpenVocabSAMOptions
         {
             NumClasses = 5,
             ChannelDimensions = [32, 64, 128, 256],

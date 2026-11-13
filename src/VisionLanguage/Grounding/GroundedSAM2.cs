@@ -1,3 +1,4 @@
+using AiDotNet.ComputerVision.Segmentation.Common;
 using AiDotNet.ComputerVision.Segmentation.Foundation;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
@@ -204,15 +205,15 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         // The predictor's transform_boxes: pixel corners scaled to the resized image.
         var corners = Engine.TensorMultiplyScalar(new Tensor<T>(new[] { detections.Count, 4 },
             Vector<T>.FromArray(detections.SelectMany(d => new[] { d.X1, d.Y1, d.X2, d.Y2 }).ToArray())), NumOps.FromDouble(side));
-        var maskThreshold = NumOps.FromDouble(_options.MaskThreshold);
         for (int i = 0; i < detections.Count; i++)
         {
             var box = Engine.TensorSlice(corners, new[] { i, 0 }, new[] { 1, 4 });
             var (sparse, dense) = Segmenter.EncodePrompts(null, null, box, null);
             var (logits, iou, _) = Segmenter.DecodeMasks(embedding, s0, s1, positional, sparse, dense, false);
             var full = Segmenter.Postprocess(logits, height, width);
-            var mask = Engine.TensorGreaterThan(Engine.Reshape(
-                Engine.TensorSlice(full, new[] { 0, 0, 0, 0 }, new[] { 1, 1, height, width }), new[] { height, width }), maskThreshold);
+            // Thresholded exactly at the real MaskThreshold (a T-rounded threshold would move the boundary).
+            var mask = MaskStatistics.GreaterThan(Engine.Reshape(
+                Engine.TensorSlice(full, new[] { 0, 0, 0, 0 }, new[] { 1, 1, height, width }), new[] { height, width }), _options.MaskThreshold);
             segments.Add(new GroundedSegment<T>(detections[i], mask, iou.ToArray()[0]));
         }
         return segments;
@@ -228,22 +229,32 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     {
         if (classNames is null || classNames.Count == 0) throw new ArgumentException("Name at least one class.", nameof(classNames));
         var segments = Segment(image, string.Join(". ", classNames));
-        return Combine(image, segments, classNames.ToArray(), s => GroundingDinoPrompt.ClassOf(s.Detection.Phrase, classNames));
+        return Combine(Engine, image, segments, classNames.ToArray(), s => GroundingDinoPrompt.ClassOf(s.Detection.Phrase, classNames));
     }
 
     /// <summary>Segments what one prompt describes: the union of every detection's mask, as one class.</summary>
     public OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt)
-        => Combine(image, Segment(image, prompt), new[] { prompt }, _ => 0);
+        => Combine(Engine, image, Segment(image, prompt), new[] { prompt }, _ => 0);
 
-    private OpenVocabSegmentationResult<T> Combine(Tensor<T> image, IReadOnlyList<GroundedSegment<T>> segments, string[] classes,
-        Func<GroundedSegment<T>, int> classOf)
+    /// <remarks>
+    /// The segments are ranked by score, and by logit where scores tie, before the per-pixel argmax: in a narrow
+    /// <typeparamref name="T"/> every confident detection's score rounds to 1, and the first such mask would win a
+    /// pixel that a stronger later detection covers.
+    /// </remarks>
+    internal static OpenVocabSegmentationResult<T> Combine(IEngine engine, Tensor<T> image, IReadOnlyList<GroundedSegment<T>> segments,
+        string[] classes, Func<GroundedSegment<T>, int> classOf)
     {
-        var batch = GroundingDinoDetector<T>.Batched(Engine, image);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var order = Comparer<T>.Default;
+        var batch = GroundingDinoDetector<T>.Batched(engine, image);
         int height = batch.Shape[2], width = batch.Shape[3], pixels = height * width, count = classes.Length;
-        var named = segments.Select(s => (Segment: s, Class: classOf(s))).Where(s => s.Class >= 0).ToList();
+        var named = segments.Select(s => (Segment: s, Class: classOf(s))).Where(s => s.Class >= 0)
+            .OrderByDescending(s => s.Segment.Detection.Score, order)
+            .ThenByDescending(s => s.Segment.Detection.Logit, order)
+            .ToList();
         if (named.Count == 0)
         {
-            var none = Tensor<T>.CreateDefault(new[] { height, width }, NumOps.FromDouble(-1));
+            var none = Tensor<T>.CreateDefault(new[] { height, width }, numOps.FromDouble(-1));
             return new OpenVocabSegmentationResult<T>
             {
                 Masks = new Tensor<T>(new[] { count, height, width }), ClassNames = classes,
@@ -252,26 +263,26 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         }
 
         int n = named.Count;
-        var masksOf = Engine.Reshape(Engine.TensorStack(named.Select(s => s.Segment.Mask).ToArray(), 0), new[] { n, pixels });
+        var masksOf = engine.Reshape(engine.TensorStack(named.Select(s => s.Segment.Mask).ToArray(), 0), new[] { n, pixels });
         var scoreOf = new Tensor<T>(new[] { n }, Vector<T>.FromArray(named.Select(s => s.Segment.Detection.Score).ToArray()));
         var classIds = new Tensor<int>(new[] { n }, Vector<int>.FromArray(named.Select(s => s.Class).ToArray()));
-        var membership = Engine.TensorOneHot<T>(classIds, count);
+        var membership = engine.TensorOneHot<T>(classIds, count);
 
         // Per class: the union of its masks, and its best detection score (0 when it has none; scores are sigmoids).
-        var union = Engine.TensorMin(Engine.TensorMatMul(Engine.TensorTranspose(membership), masksOf), NumOps.One);
-        var scores = Engine.ReduceMax(Engine.TensorMultiply(membership,
-            Engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, count })), new[] { 0 }, false);
+        var union = engine.TensorMin(engine.TensorMatMul(engine.TensorTranspose(membership), masksOf), numOps.One);
+        var scores = engine.ReduceMax(engine.TensorMultiply(membership,
+            engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, count })), new[] { 0 }, false);
 
         // Per pixel: the class of the highest-scoring mask covering it (the first such mask on ties), or -1.
-        var covered = Engine.TensorGreaterThan(masksOf, NumOps.Zero);
-        var coverScores = Engine.TensorWhere(covered, Engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, pixels }),
-            Tensor<T>.CreateDefault(new[] { n, pixels }, NumOps.MinValue));
-        var winner = Engine.TensorArgMax(coverScores, 0);
-        var classValues = Engine.TensorIndexSelect(Engine.TensorArange<T>(0, count, 1), classIds, 0);
-        var winningClass = Engine.TensorIndexSelect(classValues, winner.Reshape(new[] { pixels }), 0);
-        var anyCover = Engine.ReduceMax(masksOf, new[] { 0 }, false);
-        var semantic = Engine.TensorWhere(Engine.TensorGreaterThan(anyCover, NumOps.Zero), winningClass,
-            Tensor<T>.CreateDefault(new[] { pixels }, NumOps.FromDouble(-1)));
+        var covered = engine.TensorGreaterThan(masksOf, numOps.Zero);
+        var coverScores = engine.TensorWhere(covered, engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, pixels }),
+            Tensor<T>.CreateDefault(new[] { n, pixels }, numOps.MinValue));
+        var winner = engine.TensorArgMax(coverScores, 0);
+        var classValues = engine.TensorIndexSelect(engine.TensorArange<T>(0, count, 1), classIds, 0);
+        var winningClass = engine.TensorIndexSelect(classValues, winner.Reshape(new[] { pixels }), 0);
+        var anyCover = engine.ReduceMax(masksOf, new[] { 0 }, false);
+        var semantic = engine.TensorWhere(engine.TensorGreaterThan(anyCover, numOps.Zero), winningClass,
+            Tensor<T>.CreateDefault(new[] { pixels }, numOps.FromDouble(-1)));
         return new OpenVocabSegmentationResult<T>
         {
             Masks = union.Reshape(new[] { count, height, width }), ClassNames = classes, Scores = scores.ToVector(),

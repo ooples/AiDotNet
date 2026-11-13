@@ -1,3 +1,4 @@
+using AiDotNet.ComputerVision.Segmentation.Common;
 using AiDotNet.Helpers;
 using AiDotNet.Tokenization.Algorithms;
 
@@ -20,7 +21,15 @@ public sealed record GroundingBox(string Phrase, double X1, double Y1, double X2
 /// <param name="Y2">Bottom edge, as a fraction of the image height.</param>
 /// <param name="Score">The highest token probability of the region's query.</param>
 /// <param name="Phrase">The caption's words whose tokens scored above the text threshold.</param>
-public sealed record GroundingDetection<T>(T X1, T Y1, T X2, T Y2, T Score, string Phrase);
+public sealed record GroundingDetection<T>(T X1, T Y1, T X2, T Y2, T Score, string Phrase)
+{
+    /// <summary>
+    /// The query's highest token logit, whose sigmoid is <see cref="Score"/>. The logit is the exact model output:
+    /// Score rounds to 1 in Half above a logit of about 8.3 (and in float above about 17), so detections are ranked
+    /// by it where their scores tie. Zero for a detection built outside the model.
+    /// </summary>
+    internal T Logit { get; init; } = MathHelper.GetNumericOperations<T>().Zero;
+}
 
 /// <summary>
 /// A caption as Grounding DINO reads it (the official <c>preprocess_caption</c>: lowercased, trimmed and ended with a
@@ -134,18 +143,22 @@ internal sealed class GroundingDinoPrompt
         var logits = output.Logits[^1];
         var boxes = output.Boxes[^1];
         int queries = logits.Shape[1], width = logits.Shape[2];
-        var probabilities = engine.TensorSigmoid(engine.Reshape(
-            engine.TensorSlice(logits, new[] { image, 0, 0 }, new[] { 1, queries, width }), new[] { queries, width }));
-        var best = engine.ReduceMax(probabilities, new[] { 1 }, false);
-        var kept = engine.TensorGreaterThan(best, ops.FromDouble(boxThreshold)).ToArray();
-        var above = engine.TensorGreaterThan(probabilities, ops.FromDouble(textThreshold)).ToArray();
+        var tokenLogits = engine.Reshape(
+            engine.TensorSlice(logits, new[] { image, 0, 0 }, new[] { 1, queries, width }), new[] { queries, width });
+        // Both thresholds are decided on the logits (sigmoid(x) > p is x > ln(p / (1 - p))): a sigmoid rounded to T
+        // lands on the threshold near the boundary and saturates at 1 for confident queries. The sigmoid is monotone,
+        // so a query's score is the sigmoid of its highest logit.
+        var bestLogit = engine.ReduceMax(tokenLogits, new[] { 1 }, false);
+        var kept = MaskStatistics.SigmoidGreaterThan(bestLogit, boxThreshold).ToArray();
+        var above = MaskStatistics.SigmoidGreaterThan(tokenLogits, textThreshold).ToArray();
 
         // (cx, cy, w, h) to corners: (cx, cy) -/+ (w, h) / 2.
         var box = engine.Reshape(engine.TensorSlice(boxes, new[] { image, 0, 0 }, new[] { 1, queries, 4 }), new[] { queries, 4 });
         var centre = engine.TensorSlice(box, new[] { 0, 0 }, new[] { queries, 2 });
         var half = engine.TensorMultiplyScalar(engine.TensorSlice(box, new[] { 0, 2 }, new[] { queries, 2 }), ops.FromDouble(0.5));
         var corners = engine.TensorConcatenate(new[] { engine.TensorSubtract(centre, half), engine.TensorAdd(centre, half) }, 1).ToArray();
-        var scores = best.ToArray();
+        var scores = engine.TensorSigmoid(bestLogit).ToArray();
+        var maxLogits = bestLogit.ToArray();
 
         var zero = ops.Zero;
         var comparer = EqualityComparer<T>.Default;
@@ -159,7 +172,7 @@ internal sealed class GroundingDinoPrompt
             for (int j = 1; j < tokens; j++)
                 if (!comparer.Equals(above[q * width + j], zero)) ids.Add(Ids[j]);
             result.Add(new GroundingDetection<T>(corners[4 * q], corners[4 * q + 1], corners[4 * q + 2], corners[4 * q + 3], scores[q],
-                Decode(ids).Replace(".", "")));
+                Decode(ids).Replace(".", "")) { Logit = maxLogits[q] });
         }
         return result;
     }

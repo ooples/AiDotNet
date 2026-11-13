@@ -53,7 +53,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 ///     options: new VideoLISAOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for temporal reasoning segmentation
-/// var onnxModel = new VideoLISA&lt;double&gt;(architecture, "videolisa.onnx", textEncoder);
+/// var onnxModel = new VideoLISA&lt;double&gt;(architecture, "videolisa.onnx", textEncoder, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -145,7 +145,7 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="textEncoder">CLIP-style text encoder whose embeddings the pixel embeddings are scored against; the decoder emits embeddings of its TextEmbeddingDimension.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="options">Model options, or <c>null</c> for the defaults.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained VideoLISA from ONNX for inference.
@@ -157,8 +157,8 @@ public partial class VideoLISA<T> : Common.ReferringSegmentationBase<T>
     public VideoLISA(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITextEncoder<T> textEncoder,
-        VideoLISAOptions? options = null)
-        : base(architecture, onnxModelPath, textEncoder, options ??= new VideoLISAOptions())
+        VideoLISAOptions? options)
+        : base(architecture, onnxModelPath, textEncoder, options ??= new VideoLISAOptions(), maxTextLength: 512)
     {
         _options = new VideoLISAOptions(options);
         ValidateOptions(_options);
