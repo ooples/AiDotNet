@@ -1,4 +1,5 @@
 #if NET5_0_OR_GREATER
+using ConfidenceIntervalMethod = AiDotNet.Evaluation.Enums.ConfidenceIntervalMethod;
 using AiDotNet.Evaluation;
 using AiDotNet.Enums;
 using AiDotNet.Evaluation.Calibration;
@@ -14,6 +15,144 @@ namespace AiDotNet.Tests.UnitTests.Evaluation;
 
 public class EvaluationNumericalMemoryTests
 {
+    [Theory]
+    [InlineData(ConfidenceIntervalMethod.PercentileBootstrap, 1)]
+    [InlineData(ConfidenceIntervalMethod.BasicBootstrap, 1)]
+    [InlineData(ConfidenceIntervalMethod.BCaBootstrap, 1)]
+    [InlineData(ConfidenceIntervalMethod.StudentizedBootstrap, 1)]
+    [InlineData(ConfidenceIntervalMethod.PercentileBootstrap, 5)]
+    [InlineData(ConfidenceIntervalMethod.BasicBootstrap, 5)]
+    [InlineData(ConfidenceIntervalMethod.BCaBootstrap, 5)]
+    [InlineData(ConfidenceIntervalMethod.StudentizedBootstrap, 5)]
+    public void HalfEnergyIntervals_ConstantAndSingletonErrorsHaveExactBounds(ConfidenceIntervalMethod method, int count)
+    {
+        var metric = new EnergyScoreMetric<Half>();
+        var result = metric.ComputeWithCI(Enumerable.Repeat((Half)40000, count).ToArray(), new Half[count],
+            method, bootstrapSamples: 16, randomSeed: 7);
+        Assert.Equal((Half)40000, result.Value);
+        Assert.Equal((Half)40000, result.LowerBound);
+        Assert.Equal((Half)40000, result.UpperBound);
+        var empty = metric.ComputeWithCI(Array.Empty<Half>(), Array.Empty<Half>(), method, bootstrapSamples: 2);
+        Assert.Equal((Half)0, empty.LowerBound);
+        Assert.Equal((Half)0, empty.UpperBound);
+    }
+
+    [Theory]
+    [InlineData(ConfidenceIntervalMethod.PercentileBootstrap)]
+    [InlineData(ConfidenceIntervalMethod.BasicBootstrap)]
+    [InlineData(ConfidenceIntervalMethod.BCaBootstrap)]
+    [InlineData(ConfidenceIntervalMethod.StudentizedBootstrap)]
+    public void HalfEnergyIntervals_MatchWideWorkingScores(ConfidenceIntervalMethod method)
+    {
+        Half[] errors = { (Half)20000, (Half)23000, (Half)26000, (Half)29000, (Half)32000 };
+        var wide = new EnergyScoreMetric<double>().ComputeWithCI(errors.Select(x => (double)x).ToArray(),
+            new double[errors.Length], method, confidenceLevel: 0.8, bootstrapSamples: 64, randomSeed: 17);
+        var actual = new EnergyScoreMetric<Half>().ComputeWithCI(errors, new Half[errors.Length], method,
+            confidenceLevel: 0.8, bootstrapSamples: 64, randomSeed: 17);
+        Assert.Equal((Half)Assert.IsType<double>(wide.LowerBound), actual.LowerBound);
+        Assert.Equal((Half)Assert.IsType<double>(wide.UpperBound), actual.UpperBound);
+        Assert.True(!Half.IsNaN(Assert.IsType<Half>(actual.LowerBound)));
+        Assert.True(!Half.IsInfinity(Assert.IsType<Half>(actual.UpperBound)));
+    }
+
+    [Theory]
+    [InlineData(ConfidenceIntervalMethod.PercentileBootstrap)]
+    [InlineData(ConfidenceIntervalMethod.BasicBootstrap)]
+    public void EnergyIntervals_MatchScalarResamplingReference(ConfidenceIntervalMethod method)
+    {
+        double[] errors = { 10010, 20030, 30000, 40090, 50070 };
+        const int samples = 41;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(31);
+        var means = new double[samples];
+        for (int b = 0; b < samples; b++)
+        {
+            double sum = 0;
+            for (int i = 0; i < errors.Length; i++) sum += errors[random.Next(errors.Length)];
+            means[b] = sum / errors.Length;
+        }
+        Array.Sort(means);
+        double low = means[4], high = means[35];
+        if (method == ConfidenceIntervalMethod.BasicBootstrap)
+            (low, high) = (Math.Max(0, 2 * errors.Average() - high), Math.Max(0, 2 * errors.Average() - low));
+        var actual = new EnergyScoreMetric<double>().ComputeWithCI(errors, new double[errors.Length], method,
+            confidenceLevel: 0.8, bootstrapSamples: samples, randomSeed: 31);
+        Assert.Equal(low, Assert.IsType<double>(actual.LowerBound), 8);
+        Assert.Equal(high, Assert.IsType<double>(actual.UpperBound), 8);
+    }
+
+    [Fact]
+    public void EnergyStudentizedInterval_MatchesScalarNestedBootstrap()
+    {
+        double[] errors = { 30000, 35000, 45000, 50000 };
+        const int count = 32, innerCount = 25;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        // The public method draws the initial outer bootstrap before its Studentized resamples.
+        for (int b = 0; b < count; b++)
+            for (int i = 0; i < errors.Length; i++) _ = random.Next(errors.Length);
+        double theta = errors.Average();
+        var jack = Enumerable.Range(0, errors.Length)
+            .Select(leave => errors.Where((_, index) => index != leave).Average()).ToArray();
+        double jackMean = jack.Average();
+        double seHat = Math.Sqrt((errors.Length - 1.0) / errors.Length * jack.Sum(x => (x - jackMean) * (x - jackMean)));
+        var t = new double[count];
+        for (int b = 0; b < count; b++)
+        {
+            var outer = Enumerable.Range(0, errors.Length).Select(_ => errors[random.Next(errors.Length)]).ToArray();
+            var inner = new double[innerCount];
+            for (int ib = 0; ib < innerCount; ib++)
+            {
+                double sum = 0;
+                for (int i = 0; i < errors.Length; i++) sum += outer[random.Next(errors.Length)];
+                inner[ib] = sum / errors.Length;
+            }
+            double mean = inner.Average();
+            double se = Math.Max(1e-30, Math.Sqrt(inner.Sum(x => (x - mean) * (x - mean)) / innerCount));
+            t[b] = (outer.Average() - theta) / se;
+        }
+        Array.Sort(t);
+        var actual = new EnergyScoreMetric<double>().ComputeWithCI(errors, new double[errors.Length],
+            ConfidenceIntervalMethod.StudentizedBootstrap, confidenceLevel: 0.8, bootstrapSamples: count, randomSeed: 42);
+        Assert.Equal(Math.Max(0, theta - t[27] * seHat), Assert.IsType<double>(actual.LowerBound), 8);
+        Assert.Equal(Math.Max(0, theta - t[3] * seHat), Assert.IsType<double>(actual.UpperBound), 8);
+    }
+
+    private sealed class EnergyBootstrapEngine : AiDotNet.Tensors.Engines.CpuEngine
+    {
+        internal int Products;
+        public override Tensor<T> TensorMultiply<T>(Tensor<T> left, Tensor<T> right)
+        {
+            Products++;
+            Assert.Equal(1, left.Shape.Length);
+            Assert.Equal(1, right.Shape.Length);
+            return base.TensorMultiply(left, right);
+        }
+    }
+
+    [Fact]
+    public void EnergyStudentizedInterval_ReducesOneInnerReplicateBatchAtATime()
+    {
+        var previous = AiDotNetEngine.Current;
+        var engine = new EnergyBootstrapEngine();
+        try
+        {
+            AiDotNetEngine.Current = engine;
+            var actual = new EnergyScoreMetric<double>().ComputeWithCI(
+                new[] { 10.0, 20, 30, 40, 50 }, new double[5], ConfidenceIntervalMethod.StudentizedBootstrap,
+                confidenceLevel: 0.8, bootstrapSamples: 64, randomSeed: 17);
+            Assert.True(Assert.IsType<double>(actual.LowerBound) <= Assert.IsType<double>(actual.UpperBound));
+            Assert.True(engine.Products > 0);
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    [Fact]
+    public void EnergyIntervals_RejectNaNConfidence()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new EnergyScoreMetric<double>().ComputeWithCI(
+            new[] { 1.0 }, new double[1], confidenceLevel: double.NaN));
+    }
+
+
     [Fact]
     public void HalfValidationSummaries_KeepLargeCountsAndSampleVarianceWide()
     {
