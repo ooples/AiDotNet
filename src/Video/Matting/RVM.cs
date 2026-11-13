@@ -41,10 +41,11 @@ namespace AiDotNet.Video.Matting;
 /// </para>
 /// <para>
 /// <b>Technical Details:</b>
-/// - MobileNetV3 backbone for efficiency
-/// - Recurrent architecture for temporal consistency
-/// - Deep guided filter for detail refinement
-/// - Multi-resolution processing
+/// - A four-stage stride-2 encoder (a ReLU6 conv stack standing in for MobileNetV3) with an LR-ASPP head
+/// - The paper's recurrent decoder: a ConvGRU at the bottleneck and in each of the three upsampling blocks, on half
+///   of the channels, carrying temporal state from frame to frame (reset with <see cref="ResetState"/>)
+/// - Output: alpha and a foreground residual added to the source frame, both clamped to [0, 1]
+/// - The deep guided filter for high-resolution refinement is not included; frames are matted at input resolution
 /// </para>
 /// <para>
 /// <b>Reference:</b> "Robust High-Resolution Video Matting with Temporal Guidance"
@@ -80,9 +81,10 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     private readonly int _imageHeight;
     private readonly int _imageWidth;
 
-    // Recurrent hidden state
+    // ConvGRU hidden states (bottleneck, 1/8, 1/4, 1/2) carried from frame to frame; null entries start at zero.
     [Scratch]
-    private Tensor<T>? _hiddenState;
+    [KeepsActivation("The ConvGRU hidden states are the recurrent input of the next frame (Lin et al. 2021); they are copied out of the engine buffers and cleared by ResetState.")]
+    private Tensor<T>?[] _recurrentState = new Tensor<T>?[RvmRecurrentNetwork<T>.StateCount];
 
     #endregion
 
@@ -246,7 +248,7 @@ public partial class RVM<T> : NeuralNetworkBase<T>
     /// </summary>
     public new void ResetState()
     {
-        _hiddenState = null;
+        _recurrentState = new Tensor<T>?[RvmRecurrentNetwork<T>.StateCount];
         base.ResetState();
     }
 
@@ -284,28 +286,55 @@ public partial class RVM<T> : NeuralNetworkBase<T>
 
     #region Inference
 
+    /// <summary>
+    /// Runs the recurrent network on a frame <c>[C, H, W]</c> or <c>[B, C, H, W]</c>, or on a clip
+    /// <c>[B, T, C, H, W]</c> frame by frame, carrying the ConvGRU states from the previous call; returns
+    /// alpha then foreground RGB in the input's layout.
+    /// </summary>
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var result = input;
+        var (output, state) = Run(input, _recurrentState);
+        _recurrentState = state;
+        return output;
+    }
 
-        // Use hidden state for temporal consistency if available
-        if (_hiddenState != null && _hiddenState._shape.SequenceEqual(input._shape))
+    /// <inheritdoc />
+    /// <remarks>Each training sample starts from a zero recurrent state and leaves the inference state alone; a clip
+    /// <c>[B, T, C, H, W]</c> is unrolled through time, as the paper trains on sequences.</remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _useNativeMode ? Run(input, null).Output : base.ForwardForTraining(input);
+
+    private (Tensor<T> Output, Tensor<T>?[] State) Run(Tensor<T> input, Tensor<T>?[]? state)
+    {
+        var network = new RvmRecurrentNetwork<T>(Engine, Layers);
+        var current = state ?? new Tensor<T>?[RvmRecurrentNetwork<T>.StateCount];
+
+        if (input.Rank == 5)
         {
-            // Blend with previous state for temporal smoothing, into a new tensor: blending in place
-            // overwrote the caller's input frame.
-            result = Engine.TensorAdd(
-                Engine.TensorMultiplyScalar(input, NumOps.FromDouble(0.9)),
-                Engine.TensorMultiplyScalar(_hiddenState, NumOps.FromDouble(0.1)));
+            int batch = input.Shape[0], frames = input.Shape[1];
+            var outputs = new Tensor<T>[frames];
+            for (int t = 0; t < frames; t++)
+            {
+                var frame = Engine.Reshape(Engine.TensorNarrow(input, 1, t, 1),
+                    [batch, input.Shape[2], input.Shape[3], input.Shape[4]]);
+                var (matte, next) = network.Forward(frame, current);
+                outputs[t] = matte;
+                current = next;
+            }
+
+            return (Engine.TensorStack(outputs, 1), Detached(current));
         }
 
-        foreach (var layer in Layers) result = layer.Forward(result);
-
-        // Update hidden state for next frame
-        _hiddenState = new Tensor<T>(result._shape);
-        result.Data.Span.CopyTo(_hiddenState.Data.Span);
-
-        return result;
+        bool batched = input.Rank == 4;
+        var source = batched ? input : Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        var (output, nextState) = network.Forward(source, current);
+        return (batched ? output : Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]]),
+            Detached(nextState));
     }
+
+    // The hidden states are kept across calls, so they are copied out of the engine's buffers.
+    private static Tensor<T>?[] Detached(IReadOnlyList<Tensor<T>?> state)
+        => state.Select(h => h?.Clone()).ToArray();
 
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
@@ -343,6 +372,9 @@ public partial class RVM<T> : NeuralNetworkBase<T>
             int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
             Layers.AddRange(LayerHelper<T>.CreateDefaultRVMLayers(ch, _imageHeight, _imageWidth, _numFeatures));
         }
+
+        // Bind once here so a custom layer list that does not follow CreateDefaultRVMLayers fails at construction.
+        _ = new RvmRecurrentNetwork<T>(Engine, Layers);
     }
 
     /// <inheritdoc />
