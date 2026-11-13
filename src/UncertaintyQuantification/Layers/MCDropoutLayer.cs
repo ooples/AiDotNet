@@ -106,28 +106,16 @@ public partial class MCDropoutLayer<T> : LayerBase<T>, IShapeContract
         if (!IsTrainingMode && !_mcMode)
             return input;
 
-        var inputVector = input.ToVector();
-        var mask = new Vector<T>(inputVector.Length);
-        var outputVector = new Vector<T>(inputVector.Length);
+        // Inverted dropout (Srivastava et al. 2014; Gal and Ghahramani 2016): keep each unit with
+        // probability 1 - p and scale kept units by 1 / (1 - p). The mask is drawn by the engine, seeded
+        // from the layer's generator so a seeded layer stays reproducible, and applied with an engine
+        // multiply so training gradients flow through the layer (the old element loop built a fresh
+        // tensor and cut the tape).
+        var rng = _rng.Value ?? throw new InvalidOperationException("Value has not been initialized.");
+        var mask = Engine.TensorDropoutMask<T>(input._shape, NumOps.FromDouble(_dropoutRate), _scale, rng.Next());
 
-        for (int i = 0; i < inputVector.Length; i++)
-        {
-            if ((_rng.Value ?? throw new InvalidOperationException("Value has not been initialized.")).NextDouble() > _dropoutRate)
-            {
-                mask[i] = _scale;
-                outputVector[i] = NumOps.Multiply(inputVector[i], _scale);
-            }
-            else
-            {
-                mask[i] = NumOps.Zero;
-                outputVector[i] = NumOps.Zero;
-            }
-        }
-
-        _dropoutMask.Value = mask;
-
-        var outputTensor = Tensor<T>.FromVector(outputVector);
-        return input.Shape.Length > 1 ? Engine.Reshape(outputTensor, input._shape) : outputTensor;
+        _dropoutMask.Value = mask.ToVector();
+        return Engine.TensorMultiply(input, mask);
     }
 
     /// <summary>

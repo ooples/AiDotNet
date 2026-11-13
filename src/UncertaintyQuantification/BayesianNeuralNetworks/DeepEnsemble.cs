@@ -37,7 +37,6 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 public class DeepEnsemble<T> : IUncertaintyEstimator<T>
 {
     private readonly List<INeuralNetwork<T>> _models;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Gets the number of models in the ensemble.
@@ -59,7 +58,6 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
             throw new ArgumentException("Ensemble must contain at least one model", nameof(models));
 
         _models = models;
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -86,7 +84,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
         var mean = ComputeMean(predictions);
         var variance = ComputeVariance(predictions, mean);
 
-        var metrics = CreateDefaultMetrics(mean);
+        var metrics = PredictiveSampleStatistics<T>.Metrics(predictions, mean);
         return new UncertaintyPredictionResult<T, Tensor<T>>(
             methodUsed: UncertaintyQuantificationMethod.DeepEnsemble,
             prediction: mean,
@@ -111,14 +109,11 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
-        var aleatoric = new Tensor<T>(totalUncertainty._shape);
-        for (int i = 0; i < aleatoric.Length; i++)
-        {
-            aleatoric[i] = _numOps.Zero;
-        }
-
-        return aleatoric;
+        var predictions = GetAllPredictions(input);
+        var mean = ComputeMean(predictions);
+        // Expected Bernoulli variance E_s[p_s (1 - p_s)] for class-probability outputs (Kwon et al. 2020);
+        // zero for other outputs, since the network predicts no noise variance (Kendall and Gal 2017).
+        return PredictiveSampleStatistics<T>.AleatoricVariance(predictions, mean);
     }
 
     /// <summary>
@@ -133,8 +128,10 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </remarks>
     public Tensor<T> EstimateEpistemicUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
-        return totalUncertainty;
+        var predictions = GetAllPredictions(input);
+        var mean = ComputeMean(predictions);
+        // Variance of the sampled predictions around their mean (Kendall and Gal 2017; Kwon et al. 2020).
+        return ComputeVariance(predictions, mean);
     }
 
     /// <summary>
@@ -159,69 +156,12 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// <summary>
     /// Computes the mean of multiple predictions.
     /// </summary>
-    private Tensor<T> ComputeMean(List<Tensor<T>> predictions)
-    {
-        if (predictions.Count == 0)
-            throw new ArgumentException("Cannot compute mean of empty prediction list");
-
-        var sum = new Tensor<T>(predictions[0].Shape.ToArray());
-        foreach (var pred in predictions)
-        {
-            for (int i = 0; i < pred.Length; i++)
-            {
-                sum[i] = _numOps.Add(sum[i], pred[i]);
-            }
-        }
-
-        var count = _numOps.FromDouble(predictions.Count);
-        for (int i = 0; i < sum.Length; i++)
-        {
-            sum[i] = _numOps.Divide(sum[i], count);
-        }
-
-        return sum;
-    }
+    private static Tensor<T> ComputeMean(List<Tensor<T>> predictions)
+        => PredictiveSampleStatistics<T>.Mean(predictions);
 
     /// <summary>
     /// Computes the variance of multiple predictions.
     /// </summary>
-    private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
-    {
-        var variance = new Tensor<T>(mean._shape);
-
-        foreach (var pred in predictions)
-        {
-            for (int i = 0; i < pred.Length; i++)
-            {
-                var diff = _numOps.Subtract(pred[i], mean[i]);
-                variance[i] = _numOps.Add(variance[i], _numOps.Multiply(diff, diff));
-            }
-        }
-
-        var count = _numOps.FromDouble(predictions.Count);
-        for (int i = 0; i < variance.Length; i++)
-        {
-            variance[i] = _numOps.Divide(variance[i], count);
-        }
-
-        return variance;
-    }
-
-    private static IReadOnlyDictionary<string, Tensor<T>> CreateDefaultMetrics(Tensor<T> prediction)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var batch = prediction.Rank == 1 ? 1 : Math.Max(1, prediction.Length / Math.Max(1, prediction.Shape[prediction.Shape.Length - 1]));
-        var data = new Vector<T>(batch);
-        for (int i = 0; i < batch; i++)
-        {
-            data[i] = numOps.Zero;
-        }
-
-        var zeros = new Tensor<T>([batch], data);
-        return new Dictionary<string, Tensor<T>>
-        {
-            ["predictive_entropy"] = zeros,
-            ["mutual_information"] = zeros
-        };
-    }
+    private static Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
+        => PredictiveSampleStatistics<T>.Variance(predictions, mean);
 }

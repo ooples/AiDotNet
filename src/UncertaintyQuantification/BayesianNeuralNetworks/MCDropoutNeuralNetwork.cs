@@ -82,6 +82,25 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// <returns>A prediction result augmented with uncertainty information.</returns>
     public UncertaintyPredictionResult<T, Tensor<T>> PredictWithUncertainty(Tensor<T> input)
     {
+        var predictions = SamplePredictions(input);
+
+        // Compute mean and variance
+        var mean = ComputeMean(predictions);
+        var variance = ComputeVariance(predictions, mean);
+
+        var metrics = PredictiveSampleStatistics<T>.Metrics(predictions, mean);
+        return new UncertaintyPredictionResult<T, Tensor<T>>(
+            methodUsed: UncertaintyQuantificationMethod.MonteCarloDropout,
+            prediction: mean,
+            variance: variance,
+            metrics: metrics);
+    }
+
+    /// <summary>
+    /// Draws one prediction per dropout mask with Monte Carlo mode on (Gal and Ghahramani 2016).
+    /// </summary>
+    private List<Tensor<T>> SamplePredictions(Tensor<T> input)
+    {
         var predictions = new List<Tensor<T>>();
 
         // Enable Monte Carlo mode for all MC dropout layers
@@ -92,8 +111,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
             // Sample multiple predictions with different dropout patterns
             for (int i = 0; i < _numSamples; i++)
             {
-                var prediction = Predict(input);
-                predictions.Add(prediction);
+                predictions.Add(Predict(input));
             }
         }
         finally
@@ -102,16 +120,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
             EnableMCMode(false);
         }
 
-        // Compute mean and variance
-        var mean = ComputeMean(predictions);
-        var variance = ComputeVariance(predictions, mean);
-
-        var metrics = CreateDefaultMetrics(mean);
-        return new UncertaintyPredictionResult<T, Tensor<T>>(
-            methodUsed: UncertaintyQuantificationMethod.MonteCarloDropout,
-            prediction: mean,
-            variance: variance,
-            metrics: metrics);
+        return predictions;
     }
 
     /// <summary>
@@ -126,19 +135,11 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {
-        // MC Dropout primarily captures epistemic uncertainty
-        // Return a small baseline aleatoric estimate
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
-
-        var aleatoric = new Tensor<T>(totalUncertainty._shape);
-        var aleatoricFactor = NumOps.FromDouble(0.2); // Assume 20% of variance is aleatoric
-
-        for (int i = 0; i < totalUncertainty.Length; i++)
-        {
-            aleatoric[i] = NumOps.Multiply(totalUncertainty[i], aleatoricFactor);
-        }
-
-        return aleatoric;
+        var predictions = SamplePredictions(input);
+        var mean = ComputeMean(predictions);
+        // Expected Bernoulli variance E_s[p_s (1 - p_s)] for class-probability outputs (Kwon et al. 2020);
+        // zero for other outputs, since the network predicts no noise variance (Kendall and Gal 2017).
+        return PredictiveSampleStatistics<T>.AleatoricVariance(predictions, mean);
     }
 
     /// <summary>
@@ -152,17 +153,10 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// </remarks>
     public Tensor<T> EstimateEpistemicUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
-
-        var epistemic = new Tensor<T>(totalUncertainty._shape);
-        var epistemicFactor = NumOps.FromDouble(0.8); // Assume 80% of variance is epistemic
-
-        for (int i = 0; i < totalUncertainty.Length; i++)
-        {
-            epistemic[i] = NumOps.Multiply(totalUncertainty[i], epistemicFactor);
-        }
-
-        return epistemic;
+        var predictions = SamplePredictions(input);
+        var mean = ComputeMean(predictions);
+        // Variance of the sampled predictions around their mean (Kendall and Gal 2017; Kwon et al. 2020).
+        return ComputeVariance(predictions, mean);
     }
 
     /// <summary>
@@ -179,68 +173,12 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// <summary>
     /// Computes the mean of multiple predictions.
     /// </summary>
-    private Tensor<T> ComputeMean(List<Tensor<T>> predictions)
-    {
-        if (predictions.Count == 0)
-            throw new ArgumentException("Cannot compute mean of empty prediction list");
-
-        var sum = new Tensor<T>(predictions[0].Shape.ToArray());
-        foreach (var pred in predictions)
-        {
-            for (int i = 0; i < pred.Length; i++)
-            {
-                sum[i] = NumOps.Add(sum[i], pred[i]);
-            }
-        }
-
-        var count = NumOps.FromDouble(predictions.Count);
-        for (int i = 0; i < sum.Length; i++)
-        {
-            sum[i] = NumOps.Divide(sum[i], count);
-        }
-
-        return sum;
-    }
+    private static Tensor<T> ComputeMean(List<Tensor<T>> predictions)
+        => PredictiveSampleStatistics<T>.Mean(predictions);
 
     /// <summary>
     /// Computes the variance of multiple predictions.
     /// </summary>
-    private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
-    {
-        var variance = new Tensor<T>(mean._shape);
-
-        foreach (var pred in predictions)
-        {
-            for (int i = 0; i < pred.Length; i++)
-            {
-                var diff = NumOps.Subtract(pred[i], mean[i]);
-                variance[i] = NumOps.Add(variance[i], NumOps.Multiply(diff, diff));
-            }
-        }
-
-        var count = NumOps.FromDouble(predictions.Count);
-        for (int i = 0; i < variance.Length; i++)
-        {
-            variance[i] = NumOps.Divide(variance[i], count);
-        }
-
-        return variance;
-    }
-
-    private IReadOnlyDictionary<string, Tensor<T>> CreateDefaultMetrics(Tensor<T> prediction)
-    {
-        var batch = prediction.Rank == 1 ? 1 : Math.Max(1, prediction.Length / Math.Max(1, prediction.Shape[prediction.Shape.Length - 1]));
-        var data = new Vector<T>(batch);
-        for (int i = 0; i < batch; i++)
-        {
-            data[i] = NumOps.Zero;
-        }
-
-        var zeros = new Tensor<T>([batch], data);
-        return new Dictionary<string, Tensor<T>>
-        {
-            ["predictive_entropy"] = zeros,
-            ["mutual_information"] = zeros
-        };
-    }
+    private static Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
+        => PredictiveSampleStatistics<T>.Variance(predictions, mean);
 }

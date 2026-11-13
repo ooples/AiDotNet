@@ -1,3 +1,4 @@
+using AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 using AiDotNet.UncertaintyQuantification.Calibration;
 using AiDotNet.UncertaintyQuantification.ConformalPrediction;
 using Xunit;
@@ -91,5 +92,48 @@ public class UncertaintyQuantificationPaperReferenceTests
 
         ts.Calibrate(logits, labels, learningRate: 0.01, maxIterations: 1);
         Assert.Equal(1.0 - 0.01 * gradient, ts.Temperature, 10);
+    }
+
+    /// <summary>
+    /// Two MC samples [0.9, 0.1] and [0.1, 0.9]: H[mean] = ln 2, E H[p_s] = H(0.9, 0.1), BALD MI is the
+    /// difference (Houlsby et al. 2011); aleatoric E[p(1-p)] = 0.09, epistemic Var[p] = 0.16
+    /// (Kwon et al. 2020). Master reported zero entropy and MI and a fixed 30/70 split of the variance.
+    /// </summary>
+    [Fact]
+    public void PredictiveStatistics_ClassProbabilities_MatchBaldDecomposition()
+    {
+        var samples = new List<Tensor<double>>
+        {
+            new Tensor<double>([1, 2], new Vector<double>(new[] { 0.9, 0.1 })),
+            new Tensor<double>([1, 2], new Vector<double>(new[] { 0.1, 0.9 })),
+        };
+
+        var mean = PredictiveSampleStatistics<double>.Mean(samples);
+        var variance = PredictiveSampleStatistics<double>.Variance(samples, mean);
+        var aleatoric = PredictiveSampleStatistics<double>.AleatoricVariance(samples, mean);
+        var metrics = PredictiveSampleStatistics<double>.Metrics(samples, mean);
+
+        double sampleEntropy = -(0.9 * System.Math.Log(0.9) + 0.1 * System.Math.Log(0.1));
+        Assert.Equal(0.5, mean[0, 0], 12);
+        Assert.Equal(0.16, variance[0, 0], 12);
+        Assert.Equal(0.09, aleatoric[0, 1], 12);
+        Assert.Equal(System.Math.Log(2.0), metrics["predictive_entropy"][0], 12);
+        Assert.Equal(System.Math.Log(2.0) - sampleEntropy, metrics["mutual_information"][0], 12);
+    }
+
+    /// <summary>Regression outputs carry no noise head: all sample variance is epistemic, aleatoric is zero.</summary>
+    [Fact]
+    public void PredictiveStatistics_Regression_AllVarianceIsEpistemic()
+    {
+        var samples = new List<Tensor<double>>
+        {
+            new Tensor<double>([1, 1], new Vector<double>(new[] { 3.0 })),
+            new Tensor<double>([1, 1], new Vector<double>(new[] { 5.0 })),
+        };
+
+        var mean = PredictiveSampleStatistics<double>.Mean(samples);
+        Assert.Equal(4.0, mean[0, 0], 12);
+        Assert.Equal(1.0, PredictiveSampleStatistics<double>.Variance(samples, mean)[0, 0], 12);
+        Assert.Equal(0.0, PredictiveSampleStatistics<double>.AleatoricVariance(samples, mean)[0, 0], 12);
     }
 }

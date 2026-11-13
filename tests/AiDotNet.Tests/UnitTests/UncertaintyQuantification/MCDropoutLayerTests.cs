@@ -132,4 +132,34 @@ public class MCDropoutLayerTests
         layer.MonteCarloMode = false;
         Assert.False(layer.MonteCarloMode);
     }
+
+    /// <summary>
+    /// Inverted dropout must stay on the gradient tape: d(sum(out))/d(input) is the scaled keep mask
+    /// (0 or 1/(1-p)). The old element loop built a fresh tensor, so the input got no gradient at all.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public void Forward_InMonteCarloMode_KeepsGradientTape()
+    {
+        var layer = new MCDropoutLayer<double>(0.5, mcMode: true, randomSeed: 7);
+        layer.SetTrainingMode(false);
+        var input = new Tensor<double>([16], new Vector<double>(Enumerable.Range(0, 16).Select(i => 1.0 + i)));
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+
+        Tensor<double> output;
+        System.Collections.Generic.Dictionary<Tensor<double>, Tensor<double>> grads;
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>())
+        {
+            output = layer.Forward(input);
+            var loss = engine.ReduceSum(output, new[] { 0 }, keepDims: false);
+            grads = tape.ComputeGradients(loss, sources: new System.Collections.Generic.List<Tensor<double>> { input });
+        }
+
+        Assert.True(grads.TryGetValue(input, out var grad), "input received no gradient: dropout cut the tape");
+        for (int i = 0; i < input.Length; i++)
+        {
+            double keep = output[i] == 0.0 ? 0.0 : 2.0;
+            Assert.Equal(keep, grad[i], 12);
+            Assert.Equal(keep * input[i], output[i], 12);
+        }
+    }
 }
