@@ -486,7 +486,7 @@ public class ShortTimeObjectiveIntelligibility<T> where T : struct
         var correlations = engine.TensorMultiply(
             CenterAndNormalize(engine, clippedDegraded, segmentShape),
             CenterAndNormalize(engine, cleanSegments, segmentShape));
-        return _numOps.Divide(engine.TensorSum(correlations), _numOps.FromDouble(segmentShape[0] * segmentShape[1]));
+        return _numOps.Divide(engine.TensorSum(correlations), _numOps.FromDouble((double)segmentShape[0] * segmentShape[1]));
     }
 
     /// <summary>

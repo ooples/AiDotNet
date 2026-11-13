@@ -84,7 +84,7 @@ internal static class ParameterModulation
         // 1 where |raw| > threshold (NaN compares false, so NaN entries are skipped like the scalar check).
         var mask = engine.TensorGreaterThan(engine.TensorAbs(rawT), threshold);
         double count = engine.TensorSum(mask);
-        if (!(count > 0))
+        if (count <= 0)
         {
             return null;
         }

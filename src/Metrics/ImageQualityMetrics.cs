@@ -344,7 +344,7 @@ public class StructuralSimilarity<T> where T : struct
     {
         var engine = AiDotNetEngine.Current;
         var ones = engine.TensorAddScalar(new Tensor<T>(new[] { 1, 1, height, width }), _numOps.One);
-        return engine.TensorDivideScalar(ones, _numOps.FromDouble(height * width));
+        return engine.TensorDivideScalar(ones, _numOps.FromDouble((double)height * width));
     }
 }
 
