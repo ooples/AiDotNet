@@ -250,15 +250,21 @@ public abstract partial class ContentClassifierBase<T> : IContentClassifier<T>, 
             return vector;
         }
 
-        // Character frequencies; every character lands in one bin, so the counts sum to the text length.
-        var counts = new double[VectorSize];
+        // Character frequencies; every character lands in one bin, so the counts sum to the text length. They
+        // are divided in double before the cast: a count above 2048, or a length above 65504, is not exact (or
+        // is infinite) in Half.
+        var frequencies = new double[VectorSize];
         foreach (char c in text)
         {
-            counts[Math.Min((int)c, VectorSize - 1)] += 1.0;
+            frequencies[Math.Min((int)c, VectorSize - 1)] += 1.0;
         }
 
-        var frequencies = new Tensor<double>(counts, new[] { VectorSize }).Cast<T>();
-        vector = Engine.TensorDivideScalar(frequencies, NumOps.FromDouble(text.Length)).ToVector();
+        for (int i = 0; i < VectorSize; i++)
+        {
+            frequencies[i] /= text.Length;
+        }
+
+        vector = new Tensor<double>(frequencies, new[] { VectorSize }).Cast<T>().ToVector();
 
         return vector;
     }

@@ -51,6 +51,8 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
     /// <para>
     /// The FGSM attack computes:
     /// x_adv = x + epsilon * sign(gradient_x Loss(x, y_true))
+    /// With <see cref="AdversarialAttackOptions{T}.NormType"/> set to L2 it takes the L2 fast gradient step
+    /// x_adv = x + epsilon * gradient / ||gradient||_2 instead (cleverhans fast_gradient_method, norm=2).
     /// </para>
     /// <para><b>For Beginners:</b> This method:
     /// 1. Calculates how the model's error changes when you modify the input
@@ -98,10 +100,12 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
             gradient = ComputeNumericalGradient(vectorInput, vectorLabel, input, targetModel);
         }
 
-        // Apply FGSM perturbation using vectorized operations:
-        // perturbation = epsilon * sign(gradient)
-        var signedGradient = SignVector(gradient);
-        var perturbation = Engine.Multiply<T>(signedGradient, epsilon);
+        // L-infinity (FGSM): perturbation = epsilon * sign(gradient). L2 (the fast gradient method of
+        // cleverhans fast_gradient_method with norm=2): perturbation = epsilon * gradient / ||gradient||_2, so
+        // an L2 budget is not exceeded by the sign step's epsilon * sqrt(d).
+        var perturbation = Options.NormType == AdversarialNormType.L2
+            ? Engine.Multiply<T>(Engine.Divide<T>(gradient, NumOps.Add(ComputeL2Norm(gradient), DivisionGuard())), epsilon)
+            : Engine.Multiply<T>(SignVector(gradient), epsilon);
 
         // For targeted attacks, negate the perturbation (move towards target class)
         if (Options.IsTargeted)

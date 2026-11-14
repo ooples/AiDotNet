@@ -120,5 +120,10 @@ public class AdversarialAttackOptions<T> : ModelOptions
     /// Gets or sets the Adam learning rate the Carlini-Wagner attack uses in tanh space.
     /// </summary>
     /// <value>Defaults to 0.01, the paper's and torchattacks' value.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This sets how big a step the attack's optimizer takes each iteration.
+    /// Larger values move faster but can overshoot and bounce around a good solution; smaller values are
+    /// steadier but need more iterations to converge.</para>
+    /// </remarks>
     public double CWLearningRate { get; set; } = 0.01;
 }

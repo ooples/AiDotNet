@@ -184,35 +184,23 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                 cleanCorrect++;
             }
 
-            // Generate and evaluate on adversarial example
-            try
-            {
-                var adversarial = attack.GenerateAdversarialExample(input, label, model);
-                var advOutput = model.Predict(adversarial);
-                var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
-                var advPrediction = ArgMaxVector(advOutputVector);
+            // Generate and evaluate on adversarial example. A failing attack propagates its exception: counting
+            // it as a successful defense would overstate the robustness.
+            var adversarial = attack.GenerateAdversarialExample(input, label, model);
+            var advOutput = model.Predict(adversarial);
+            var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
+            var advPrediction = ArgMaxVector(advOutputVector);
 
-                if (advPrediction == trueClass)
-                {
-                    adversarialCorrect++;
-                }
-
-                // Calculate perturbation size using vectorized operations
-                var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
-                var perturbation = Engine.Subtract<T>(adversarialVector, inputVector);
-                var l2Norm = Engine.Norm<T>(perturbation);
-                perturbationSizes.Add(l2Norm);
-            }
-            catch (ArgumentException)
+            if (advPrediction == trueClass)
             {
-                // Count as defended if attack fails
                 adversarialCorrect++;
             }
-            catch (InvalidOperationException)
-            {
-                // Count as defended if attack fails
-                adversarialCorrect++;
-            }
+
+            // Calculate perturbation size using vectorized operations
+            var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
+            var perturbation = Engine.Subtract<T>(adversarialVector, inputVector);
+            var l2Norm = Engine.Norm<T>(perturbation);
+            perturbationSizes.Add(l2Norm);
         }
 
         metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
@@ -409,19 +397,24 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     /// Rows [first, first + count) of the orthonormal n-point DCT-II matrix
     /// C[k, i] = c_k cos(pi (i + 1/2) k / n), c_0 = sqrt(1/n), c_k = sqrt(2/n).
     /// </summary>
-    private Tensor<T> DctMatrix(int n, int count, int first, int columns)
+    /// <remarks>
+    /// The basis is built in double and converted to T once: in Half the angles k (i + 1/2) pi / n reach
+    /// tens of radians, where the spacing of Half is 1/64 to 1/16, so cosines computed in T were off by
+    /// several thousandths.
+    /// </remarks>
+    internal Tensor<T> DctMatrix(int n, int count, int first, int columns)
     {
-        var k = Engine.Reshape(Engine.TensorArange<T>(first, first + count, 1), new[] { count, 1 });
-        var position = Engine.Reshape(Engine.TensorArange<T>(0.5, columns + 0.5, 1), new[] { 1, columns });
-        var angles = Engine.TensorMultiplyScalar(Engine.TensorMatMul(k, position), NumOps.FromDouble(Math.PI / n));
+        var k = Engine.Reshape(Engine.TensorArange<double>(first, first + count, 1), new[] { count, 1 });
+        var position = Engine.Reshape(Engine.TensorArange<double>(0.5, columns + 0.5, 1), new[] { 1, columns });
+        var angles = Engine.TensorMultiplyScalar(Engine.TensorMatMul(k, position), Math.PI / n);
         var cosines = Engine.TensorCos(angles);
-        var scale = Engine.TensorAddScalar(new Tensor<T>(new[] { count, 1 }), NumOps.FromDouble(Math.Sqrt(2.0 / n)));
+        var scale = Engine.TensorAddScalar(new Tensor<double>(new[] { count, 1 }), Math.Sqrt(2.0 / n));
         if (first == 0)
         {
-            scale = Engine.TensorSetSlice(scale, Engine.TensorAddScalar(new Tensor<T>(new[] { 1, 1 }), NumOps.FromDouble(Math.Sqrt(1.0 / n))), new[] { 0, 0 });
+            scale = Engine.TensorSetSlice(scale, Engine.TensorAddScalar(new Tensor<double>(new[] { 1, 1 }), Math.Sqrt(1.0 / n)), new[] { 0, 0 });
         }
 
-        return Engine.TensorMultiply(cosines, Engine.TensorBroadcastTo(scale, new[] { count, columns }));
+        return Engine.TensorMultiply(cosines, Engine.TensorBroadcastTo(scale, new[] { count, columns })).Contiguous().Cast<T>();
     }
 
     /// <summary>

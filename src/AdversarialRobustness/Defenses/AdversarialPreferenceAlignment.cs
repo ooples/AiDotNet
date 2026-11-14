@@ -326,32 +326,38 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     {
         // Train a reward model that scores input-output pairs
         // Use preference data to learn which outputs are preferred
-        var outputs = feedbackData.Outputs;
-        var preferences = feedbackData.Preferences;
-
-        // Compute centroid of preferred outputs as a simple reward signal
-        var preferredSum = new Vector<T>(outputs.Columns);
-        int preferredCount = 0;
-
-        foreach (var (preferred, _) in preferences)
-        {
-            if (preferred >= 0 && preferred < outputs.Rows)
-            {
-                preferredSum = Engine.Add(preferredSum, outputs.GetRow(preferred));
-                preferredCount++;
-            }
-        }
-
-        var preferredCentroid = preferredCount > 0
-            ? Engine.Divide(preferredSum, NumOps.FromDouble(preferredCount))
-            : preferredSum;
-
-        var centroidVec = preferredCentroid;
+        var centroidVec = PreferredCentroid(feedbackData);
 
         return (input, output) =>
         {
             return VectorHelper.CosineSimilarity(output, centroidVec);
         };
+    }
+
+    /// <summary>
+    /// The centroid of the preferred outputs (zero when no preference names a valid row).
+    /// </summary>
+    /// <remarks>
+    /// Summed and divided in double and converted to T once: in Half three preferred entries of 30000 already
+    /// sum past 65504, and a count above 2048 is not exact, so a running sum in T lost the centroid.
+    /// </remarks>
+    internal static Vector<T> PreferredCentroid(AlignmentFeedbackData<T> feedbackData)
+    {
+        var outputs = feedbackData.Outputs;
+        var preferredSum = new Vector<double>(outputs.Columns);
+        int preferredCount = 0;
+
+        foreach (var (preferred, _) in feedbackData.Preferences)
+        {
+            if (preferred >= 0 && preferred < outputs.Rows)
+            {
+                preferredSum = Engine.Add(preferredSum, outputs.GetRow(preferred).AsTensor().Contiguous().Cast<double>().ToVector());
+                preferredCount++;
+            }
+        }
+
+        var centroid = preferredCount > 0 ? Engine.Divide(preferredSum, (double)preferredCount) : preferredSum;
+        return centroid.AsTensor().Cast<T>().ToVector();
     }
 
     private IPredictiveModel<T, Vector<T>, Vector<T>> AdversarialRLHFFinetune(

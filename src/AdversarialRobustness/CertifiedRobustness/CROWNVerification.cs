@@ -219,23 +219,30 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
 
         int cleanCorrect = 0, certifiedCorrect = 0, certifiedCount = 0;
         var radii = new List<T>();
-        T zero = NumOps.Zero;
         for (int i = 0; i < testData.Length; i++)
         {
             var trueClass = GetPredictedClass(ConversionsHelper.ConvertToVector<T, TOutput>(labels[i]));
             var certification = CertifyPrediction(testData[i], model);
             bool correct = certification.PredictedClass == trueClass;
             cleanCorrect += correct ? 1 : 0;
-            certifiedCount += certification.IsCertified ? 1 : 0;
+            certifiedCount += CertifiedSomewhere(certification) ? 1 : 0;
             certifiedCorrect += correct && CertifiedAt(certification, radius) ? 1 : 0;
-            radii.Add(certification.IsCertified ? certification.CertifiedRadius : zero);
+            radii.Add(certification.CertifiedRadius);
         }
 
         return CertificationMath<T>.Summarize(cleanCorrect, certifiedCorrect, certifiedCount, radius, radii);
     }
 
+    /// <summary>
+    /// Certified at the evaluation radius: the certified radius reaches it. <see cref="CertifiedPrediction{T}.IsCertified"/>
+    /// refers to the radius of the options (NoiseSigma), which need not be the evaluation radius.
+    /// </summary>
     private static bool CertifiedAt(CertifiedPrediction<T> certification, T radius) =>
-        certification.IsCertified && NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius);
+        CertifiedSomewhere(certification) && NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius);
+
+    /// <summary>Certified at some radius: the certified radius is positive.</summary>
+    private static bool CertifiedSomewhere(CertifiedPrediction<T> certification) =>
+        NumOps.GreaterThan(certification.CertifiedRadius, NumOps.Zero);
 
     /// <inheritdoc/>
     public CertifiedDefenseOptions<T> GetOptions()
@@ -384,8 +391,8 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// (adaptive ReLU lower slope, chord and tangent lines for sigmoid and tanh), with the pre-activation bounds
     /// of each hidden layer computed by CROWN itself, and the resulting linear function is bounded over the
     /// ball with the dual norm. A softmax inside the network has no element-wise relaxation, so such networks
-    /// are bounded with IBP. Without layer access the bounds come from sampling, which is empirical and
-    /// reported as not sound.
+    /// are bounded with IBP. Without layer access the bounds come from sampling, which is empirical,
+    /// reported as not sound, and never certifies.
     /// </remarks>
     private BoundResult ComputeCROWNBounds(
         Vector<T> vectorInput,
@@ -405,7 +412,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
                 ? network.CrownMargins(x, epsilon, norm, predictedClass, out topLogitLower)
                 : network.IntervalMargins(x, epsilon, norm, predictedClass, out topLogitLower);
             var (lower, upper) = network.SupportsCrown
-                ? network.CrownLogitBounds(x, epsilon, norm)
+                ? network.CrownOutputBounds(x, epsilon, norm)
                 : network.IntervalBounds(x, epsilon, norm, network.Operations.Count);
             T minimumMargin = Engine.TensorMinValue(margins);
             bool certified = NumOps.GreaterThan(minimumMargin, NumOps.Zero)
@@ -419,7 +426,9 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
             sampledLower,
             sampledUpper,
             sampledMargin,
-            CheckCertification(sampledLower, sampledUpper, predictedClass),
+            // A sampled interval is an inner estimate of the output range, not a certificate: it never certifies
+            // (and so the certified radius is 0). The bounds are kept for diagnostics only.
+            false,
             false);
     }
 
@@ -512,18 +521,6 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     }
 
     /// <summary>
-    /// Checks if the prediction is certifiably robust.
-    /// </summary>
-    /// <remarks>
-    /// A prediction is certified if the lower bound of the predicted class
-    /// is greater than the upper bound of all other classes.
-    /// </remarks>
-    private bool CheckCertification(Vector<T> lowerBounds, Vector<T> upperBounds, int predictedClass)
-    {
-        return NumOps.GreaterThan(ComputeMinimumMargin(lowerBounds, upperBounds, predictedClass), NumOps.Zero);
-    }
-
-    /// <summary>
     /// min over j != y of lower(z_y) - upper(z_j), from independent output intervals; the largest value of T
     /// when there is no other class.
     /// </summary>
@@ -537,11 +534,12 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     }
 
     /// <summary>
-    /// Computes the certified radius using binary search.
+    /// Computes the certified radius: the largest radius at which the bounds certify the prediction.
     /// </summary>
     /// <remarks>
-    /// The relaxations of a smaller ball are at least as tight, so certification is monotone in the radius and
-    /// bisection over [0, 1] finds the largest certified radius to 2^-20.
+    /// The search doubles the radius from 1 while it stays certified (inputs need not lie in [0, 1], and a wide
+    /// margin certifies beyond 1), up to 2^20, then bisects the last bracket 20 times. Only certified radii are
+    /// kept, so the result is itself certified.
     /// </remarks>
     private T ComputeCertifiedRadiusInternal(
         Vector<T> vectorInput,
@@ -549,10 +547,29 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         IFullModel<T, TInput, TOutput> model,
         int predictedClass)
     {
-        T minRadius = NumOps.Zero;
-        T maxRadius = NumOps.One;
-        int maxIterations = 20; // For binary search precision
+        const int maxDoublings = 20;
+        // The brackets 2^0 .. 2^20, converted to T once.
+        var powers = new double[maxDoublings + 1];
+        for (int d = 0; d <= maxDoublings; d++)
+        {
+            powers[d] = Math.Pow(2.0, d);
+        }
 
+        var brackets = new Tensor<double>(powers, new[] { powers.Length }).Cast<T>().ToArray();
+        T minRadius = NumOps.Zero;
+        T maxRadius = brackets[0];
+        for (int doubling = 0; doubling < maxDoublings; doubling++)
+        {
+            if (!ComputeCROWNBounds(vectorInput, referenceInput, model, maxRadius, predictedClass).Certified)
+            {
+                break;
+            }
+
+            minRadius = maxRadius;
+            maxRadius = brackets[doubling + 1];
+        }
+
+        const int maxIterations = 20; // bisection steps over the last bracket
         for (int iter = 0; iter < maxIterations; iter++)
         {
             T midRadius = Midpoint(minRadius, maxRadius);

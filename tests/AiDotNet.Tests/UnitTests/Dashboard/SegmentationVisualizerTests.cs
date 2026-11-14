@@ -198,6 +198,55 @@ public class SegmentationVisualizerTests
         Assert.Contains("2 class(es)", writer.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Every channel, row and column of a 2x2 image carries a distinct value, so any byte read in the backing
+    /// order of the permuted [H, W, 3] view instead of its logical interleaved order is caught.
+    /// </summary>
+    [Fact]
+    public async Task EncodedBmp_InterleavesEveryPixelInLogicalOrder()
+    {
+        await Task.Yield();
+        var image = new Tensor<float>([3, 2, 2]);
+        for (int c = 0; c < 3; c++)
+            for (int y = 0; y < 2; y++)
+                for (int x = 0; x < 2; x++)
+                    image[c, y, x] = 10f * (c * 4 + y * 2 + x + 1);   // R 10..40, G 50..80, B 90..120
+
+        byte[] bmp = SegmentationVisualizer.EncodeBmp(image);
+
+        // Rows bottom-up (image row 1 first), pixels B, G, R, each 6-byte row padded to 8.
+        var expected = new byte[] { 110, 70, 30, 120, 80, 40, 0, 0, 90, 50, 10, 100, 60, 20, 0, 0 };
+        Assert.Equal(expected, bmp.Skip(54).ToArray());
+    }
+
+    /// <summary>
+    /// Downsampling selects the displayed rows and columns before thresholding; the owner of each displayed
+    /// cell must still be the first instance covering it.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsciiOverlay_DownsampledCellsKeepTheirOwners()
+    {
+        await Task.Yield();
+        var masks = new Tensor<float>([2, Height, Width]);
+        for (int x = 0; x < 3; x++) masks[0, 0, x] = 1.0f;   // instance 0: row 0, columns 0..2
+        masks[1, 0, 2] = 1.0f;                                // instance 1 also covers (0, 2): instance 0 wins
+        masks[1, 0, 4] = 1.0f;                                // instance 1 alone at (0, 4)
+        var output = new SegmentationOutput<float>
+        {
+            InstanceMasks = masks,
+            NumClasses = 2,
+            ImageHeight = Height,
+            ImageWidth = Width,
+        };
+        using var writer = new StringWriter();
+
+        // maxWidth 3: columns 0, 2, 4 and (vertical step 4) row 0 only.
+        CreateResult().RenderSegmentationAscii(output, maxWidth: 3, writer: writer);
+
+        string[] lines = writer.ToString().Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Contains("001", lines);
+    }
+
     /// <summary>The HTML is self-contained and carries the legend, so it can be attached to a report.</summary>
     [Fact]
     public async Task GenerateHtmlOverlay_ProducesSelfContainedPageWithLegend()
