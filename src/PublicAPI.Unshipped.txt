@@ -22967,3 +22967,40 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.MetaLearning.Algorithms.NTMReadHead<T>.ComputeReadWeights(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! key, AiDotNet.MetaLearning.Algorithms.NTMMemory<T>! memory) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.MetaLearning.Algorithms.NTMWriteHead<T>.ComputeWriteWeights(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! key, AiDotNet.MetaLearning.Algorithms.NTMMemory<T>! memory) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.MetaLearning.Algorithms.NTMReadHead<T>.ComputeReadWeights(AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>! addressing, AiDotNet.MetaLearning.Algorithms.NTMMemory<T>! memory) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMReadHead<T>.PreviousWeights.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.MetaLearning.Algorithms.NTMReadHead<T>.Reset() -> void
+AiDotNet.MetaLearning.Algorithms.NTMWriteHead<T>.ComputeWriteWeights(AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>! addressing, AiDotNet.MetaLearning.Algorithms.NTMMemory<T>! memory) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMWriteHead<T>.PreviousWeights.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.MetaLearning.Algorithms.NTMWriteHead<T>.Reset() -> void
+AiDotNet.MetaLearning.Algorithms.NTMMemory<T>.Address(AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>! parameters, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! previousWeights) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMMemory<T>.Contents.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMMemory<T>.Read(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! readWeights) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMMemory<T>.Write(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! writeWeights, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! eraseVector, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! addVector) -> void
+AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>
+AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.NTMAddressingParameters(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! key, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! keyStrength, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gate, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! shift, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sharpening) -> void
+AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.Key.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.KeyStrength.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.Gate.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.Shift.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.Sharpening.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>.ContentOnly(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! key, int shiftRange = 1) -> AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!
+AiDotNet.MetaLearning.Algorithms.INTMController<T>.GenerateReadAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> System.Collections.Generic.List<AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!>!
+AiDotNet.MetaLearning.Algorithms.INTMController<T>.GenerateWriteAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!
+AiDotNet.MetaLearning.Algorithms.INTMController<T>.GetParameterTensors() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>.GenerateReadAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> System.Collections.Generic.List<AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!>!
+AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>.GenerateWriteAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!
+AiDotNet.MetaLearning.Algorithms.LSTMNTMController<T, TInput, TOutput>.GetParameterTensors() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>.GenerateReadAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> System.Collections.Generic.List<AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!>!
+AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>.GenerateWriteAddressing(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.MetaLearning.Algorithms.NTMAddressingParameters<T>!
+AiDotNet.MetaLearning.Algorithms.MLPNTMController<T, TInput, TOutput>.GetParameterTensors() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.ShiftRange.get -> int
+AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.ShiftRange.set -> void
+AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.PresentPreviousLabel.get -> bool
+AiDotNet.MetaLearning.Options.NTMOptions<T, TInput, TOutput>.PresentPreviousLabel.set -> void
+override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.RegisterComponents() -> void
+override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.Save(string! filePath) -> void
+override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.Load(string! filePath) -> void
+override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void

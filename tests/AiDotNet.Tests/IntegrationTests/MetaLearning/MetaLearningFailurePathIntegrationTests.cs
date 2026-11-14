@@ -666,6 +666,16 @@ public class MetaLearningFailurePathIntegrationTests
             return new Tensor<double>(new[] { _memoryWidth });
         }
 
+        public List<NTMAddressingParameters<double>> GenerateReadAddressing(Tensor<double> output)
+        {
+            return GenerateReadKeys(output).Select(key => NTMAddressingParameters<double>.ContentOnly(key)).ToList();
+        }
+
+        public NTMAddressingParameters<double> GenerateWriteAddressing(Tensor<double> output)
+        {
+            return NTMAddressingParameters<double>.ContentOnly(GenerateWriteKey(output));
+        }
+
         public Tensor<double> GenerateEraseVector(Tensor<double> output)
         {
             return new Tensor<double>(new[] { _memoryWidth });
@@ -686,6 +696,8 @@ public class MetaLearningFailurePathIntegrationTests
         }
 
         public Vector<double> GetParameters() => new Vector<double>(1);
+
+        public IReadOnlyList<Tensor<double>> GetParameterTensors() => new List<Tensor<double>>();
 
         public void SetParameters(Vector<double> parameters)
         {
