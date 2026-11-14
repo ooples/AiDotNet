@@ -301,6 +301,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     // The gradient dictionary ClipTapeGradientsAhead clipped, until the Step that consumes it.
     private Dictionary<Tensor<T>, Tensor<T>>? _gradientsClippedAhead;
 
+    // Post-clip global squared norm computed by ClipTapeGradientsAhead when no post-clip regularizer mutates gradients.
+    private double? _clippedAheadNormSq;
+
+    // Active step's pre-computed global squared norm while StepCore executes on _gradientsClippedAhead.
+    private double? _activeStepClippedAheadNormSq;
+
+    /// <summary>
+    /// Marks <paramref name="gradients"/> as already clipped for the upcoming <see cref="Step(TapeStepContext{T})"/>
+    /// call without re-running the optimizer's own clipping pass.
+    /// </summary>
+    internal void MarkGradientsClippedAhead(Dictionary<Tensor<T>, Tensor<T>> gradients, double? postClipNormSq = null)
+    {
+        _gradientsClippedAhead = gradients;
+        _clippedAheadNormSq = postClipNormSq;
+    }
+
+    /// <summary>
+    /// Gets whether this optimizer stores element-aligned per-parameter tape states in the base tape-state table
+    /// and therefore supports cross-world-size ZeRO/FSDP shard consolidation and resharding.
+    /// </summary>
+    internal virtual bool SupportsShardedTapeStateConsolidation => true;
+
     /// <summary>
     /// True while <see cref="StepCore"/> runs on gradients <see cref="ClipTapeGradientsAhead"/> already clipped (and
     /// then regularized): the step must not clip them again, or it would scale the regularization after all.
@@ -308,17 +330,60 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private protected bool GradientsClippedAhead { get; private set; }
 
     /// <summary>
+    /// Returns the post-clip global squared norm computed by <see cref="ClipTapeGradientsAhead"/> when the caller
+    /// certified no post-clip regularizer mutated the gradient dictionary before <see cref="Step(TapeStepContext{T})"/>.
+    /// Non-finite values (<c>NaN</c> / <c>+Infinity</c>) are preserved verbatim so downstream anomaly guards still fire.
+    /// </summary>
+    private protected bool TryGetClippedAheadGradNormSq(out double normSq)
+    {
+        if (GradientsClippedAhead && _activeStepClippedAheadNormSq.HasValue)
+        {
+            normSq = _activeStepClippedAheadNormSq.Value;
+            return true;
+        }
+
+        normSq = 0.0;
+        return false;
+    }
+
+    /// <summary>
     /// Applies this optimizer's clipping options to <paramref name="gradients"/> now, ahead of <see cref="Step"/>, so
     /// the caller can add the regularization after the clip; the next <see cref="Step"/> on the same dictionary then
     /// skips its own clip. See <c>TapeTrainingStepper.RegularizeAndClip</c>.
     /// </summary>
-    internal void ClipTapeGradientsAhead(IReadOnlyList<Tensor<T>> parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    internal void ClipTapeGradientsAhead(
+        IReadOnlyList<Tensor<T>> parameters,
+        Dictionary<Tensor<T>, Tensor<T>> gradients,
+        bool canReuseNormInStep = false)
     {
+        _clippedAheadNormSq = null;
         var context = new TapeStepContext<T>(parameters, gradients, NumOps.Zero);
         // A sparse embedding's rows join the dense dictionary first, so the norm counts them (as Adam's step does).
         if (GradientOptions.EnableGradientClipping)
             SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
-        ApplyConfiguredTapeGradientClipping(context);
+
+        if (GradientOptions.EnableGradientClipping
+            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm)
+        {
+            TapeClipNormThreadCache.LastPostClipNormSq = null;
+            try
+            {
+                ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+                if (canReuseNormInStep)
+                {
+                    _clippedAheadNormSq = TapeClipNormThreadCache.LastPostClipNormSq;
+                }
+            }
+            finally
+            {
+                TapeClipNormThreadCache.LastPostClipNormSq = null;
+            }
+        }
+        else
+        {
+            ApplyConfiguredTapeGradientClipping(context);
+        }
+
         _gradientsClippedAhead = gradients;
     }
 
@@ -2082,7 +2147,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 // rescaled the L2 term the first had added after it, and the flat path drifted from the model step
                 // (3e-4 after nine Adam steps) once the clip engaged. The legacy UpdateParameters path never clipped.
                 if (ctx.Gradients is Dictionary<Tensor<T>, Tensor<T>> alreadyClipped)
+                {
                     _gradientsClippedAhead = alreadyClipped;
+                    _clippedAheadNormSq = null;
+                }
                 Step(ctx);
                 // Step mutates the parameter tensors in place via tape semantics;
                 // since we passed the live parameter-chunk refs, the model is
@@ -2453,6 +2521,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         base.Reset();
         GradientCache.ClearCache();
         ClearSerializedTapeState();
+        DisposeCachedGpuGradBuffers();
 
         // Fused training keeps this optimizer's moments inside the compiled plan, and a restored checkpoint may still
         // be waiting to be imported into the next plan. A reset must clear both: release the live plan so the next
@@ -3170,8 +3239,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         // Only the dictionary ClipTapeGradientsAhead clipped counts, so a clip-ahead whose step never ran cannot leave
         // a later step unclipped.
-        GradientsClippedAhead = _gradientsClippedAhead is not null && ReferenceEquals(_gradientsClippedAhead, context.Gradients);
+        bool matchedClippedAhead = _gradientsClippedAhead is not null && ReferenceEquals(_gradientsClippedAhead, context.Gradients);
+        GradientsClippedAhead = matchedClippedAhead;
+        _activeStepClippedAheadNormSq = matchedClippedAhead ? _clippedAheadNormSq : null;
         _gradientsClippedAhead = null;
+        _clippedAheadNormSq = null;
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
@@ -3184,6 +3256,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         finally
         {
             GradientsClippedAhead = false;
+            _activeStepClippedAheadNormSq = null;
             _stepNoGrad?.Dispose();
             _stepNoGrad = null;
         }
@@ -3646,7 +3719,228 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 using var temporary = create();
                 WriteTapeTensor(writer, temporary);
             }
-            else WriteTapeTensor(writer, entry.Value.Existing!);
+            else if (entry.Value.Existing is { } existing)
+            {
+                WriteTapeTensor(writer, existing);
+            }
+        }
+    }
+
+    internal string[] GetSortedTapeStateKeyNames()
+    {
+        var fields = EnumerateTapeTensorStateFields().ToList();
+        fields.Sort(static (a, b) =>
+        {
+            int typeCmp = string.CompareOrdinal(
+                a.DeclaringType?.FullName ?? string.Empty,
+                b.DeclaringType?.FullName ?? string.Empty);
+            return typeCmp != 0 ? typeCmp : string.CompareOrdinal(a.Name, b.Name);
+        });
+
+        var names = new string[fields.Count];
+        for (int i = 0; i < fields.Count; i++)
+        {
+            names[i] = fields[i].Name;
+        }
+
+        return names;
+    }
+
+    internal Tensor<T>? TryExtractShardTapeStateTensor(
+        string stateKey,
+        Tensor<T>? ownedParamShard,
+        int expectedShardLength,
+        out bool disposeReturnedTensor)
+    {
+        disposeReturnedTensor = false;
+        if (expectedShardLength <= 0)
+        {
+            return null;
+        }
+
+        lock (_tapeStateSync)
+        {
+            foreach (var candidate in EnumerateTapeTensorStateFields())
+            {
+                if (!string.Equals(candidate.Name, stateKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (candidate.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeDict)
+                {
+                    if (ownedParamShard is not null && activeDict.TryGetValue(ownedParamShard, out var shardTensor))
+                    {
+                        return shardTensor;
+                    }
+
+                    if (activeDict.Count == 1)
+                    {
+                        foreach (var kvp in activeDict)
+                        {
+                            if (kvp.Value.Length == expectedShardLength)
+                            {
+                                return kvp.Value;
+                            }
+                        }
+                    }
+                }
+
+                break;
+            }
+
+            if (_pendingTapeTensorStates.TryGetValue(stateKey, out var pendingByIndex) &&
+                pendingByIndex.TryGetValue(0, out var pendingShard) &&
+                pendingShard.Length == expectedShardLength)
+            {
+                return pendingShard;
+            }
+
+            if (ownedParamShard is { } paramShard)
+            {
+                foreach (var item in TransientTapeTensorStates(stateKey))
+                {
+                    if (ReferenceEquals(item.Parameter, paramShard))
+                    {
+                        disposeReturnedTensor = true;
+                        return item.Create();
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    internal byte[] SerializeWithConsolidatedTapeStates(
+        IReadOnlyDictionary<string, Dictionary<int, Tensor<T>>>? consolidatedStates)
+    {
+        lock (_tapeStateSync)
+        {
+            var savedIndices = new List<KeyValuePair<Tensor<T>, int>>(_tapeParameterIndices);
+            var savedPending = new Dictionary<string, Dictionary<int, Tensor<T>>>(_pendingTapeTensorStates, StringComparer.Ordinal);
+            int savedIndexedCount = _tapeIndexedParameterCount;
+            var savedIndexedRef = _tapeIndexedParametersRef;
+
+            try
+            {
+                _tapeParameterIndices.Clear();
+                _tapeIndexedParameterCount = -1;
+                _tapeIndexedParametersRef = null;
+                _pendingTapeTensorStates.Clear();
+
+                if (consolidatedStates is not null)
+                {
+                    foreach (var kvp in consolidatedStates)
+                    {
+                        _pendingTapeTensorStates[kvp.Key] = kvp.Value;
+                    }
+                }
+
+                return Serialize();
+            }
+            finally
+            {
+                _pendingTapeTensorStates.Clear();
+                foreach (var kvp in savedPending)
+                {
+                    _pendingTapeTensorStates[kvp.Key] = kvp.Value;
+                }
+
+                _tapeParameterIndices.Clear();
+                for (int i = 0; i < savedIndices.Count; i++)
+                {
+                    var kvp = savedIndices[i];
+                    _tapeParameterIndices[kvp.Key] = kvp.Value;
+                }
+
+                _tapeIndexedParameterCount = savedIndexedCount;
+                _tapeIndexedParametersRef = savedIndexedRef;
+            }
+        }
+    }
+
+    internal void ReshardPendingTapeStatesForLocalSlice(
+        IReadOnlyList<Tensor<T>> uniqueParams,
+        int myStart,
+        int myValidLen)
+    {
+        lock (_tapeStateSync)
+        {
+            if (_pendingTapeTensorStates.Count == 0)
+            {
+                return;
+            }
+
+            if (myValidLen <= 0)
+            {
+                _pendingTapeTensorStates.Clear();
+                return;
+            }
+
+            var fieldNames = new List<string>(_pendingTapeTensorStates.Keys);
+            for (int f = 0; f < fieldNames.Count; f++)
+            {
+                string fieldName = fieldNames[f];
+                var perParamEntries = _pendingTapeTensorStates[fieldName];
+                if (perParamEntries.Count == 0)
+                {
+                    _pendingTapeTensorStates.Remove(fieldName);
+                    continue;
+                }
+
+                if (uniqueParams.Count > 1 &&
+                    perParamEntries.Count == 1 &&
+                    perParamEntries.TryGetValue(0, out var singleEntry) &&
+                    singleEntry.Length == myValidLen &&
+                    singleEntry.Length != uniqueParams[0].Length)
+                {
+                    continue;
+                }
+
+                var shardMoment = new Tensor<T>(new[] { myValidLen });
+                Span<T> dstSpan = shardMoment.AsWritableSpan();
+                int paramOffset = 0;
+                int myEnd = myStart + myValidLen;
+
+                for (int pIdx = 0; pIdx < uniqueParams.Count; pIdx++)
+                {
+                    int paramLen = uniqueParams[pIdx].Length;
+                    int paramEnd = paramOffset + paramLen;
+
+                    int overlapStart = Math.Max(paramOffset, myStart);
+                    int overlapEnd = Math.Min(paramEnd, myEnd);
+                    if (overlapEnd > overlapStart)
+                    {
+                        int count = overlapEnd - overlapStart;
+                        int dstIndex = overlapStart - myStart;
+                        int srcIndex = overlapStart - paramOffset;
+
+                        if (perParamEntries.TryGetValue(pIdx, out var paramState) && paramState is not null)
+                        {
+                            if (paramState.Length != paramLen)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Consolidated optimizer state for '{fieldName}[{pIdx}]' has length {paramState.Length}, " +
+                                    $"expected parameter length {paramLen}.");
+                            }
+
+                            paramState.AsSpan().Slice(srcIndex, count).CopyTo(dstSpan.Slice(dstIndex, count));
+                        }
+                        else
+                        {
+                            dstSpan.Slice(dstIndex, count).Clear();
+                        }
+                    }
+
+                    paramOffset = paramEnd;
+                }
+
+                _pendingTapeTensorStates[fieldName] = new Dictionary<int, Tensor<T>>(1)
+                {
+                    [0] = shardMoment
+                };
+            }
         }
     }
 
@@ -3844,6 +4138,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 }
             }
         }
+
+        DisposeCachedGpuGradBuffers();
     }
 
     private IEnumerable<FieldInfo> EnumerateTapeTensorStateFields()
@@ -3891,6 +4187,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return list;
     }
 
+    private static bool AnyGradientHasPendingGpuData(IReadOnlyList<Tensor<T>> grads)
+    {
+        for (int i = 0; i < grads.Count; i++)
+        {
+            if (grads[i] is { HasPendingGpuData: true })
+                return true;
+        }
+        return false;
+    }
+
+    private static bool AnyTapeGradientHasPendingGpuData(TapeStepContext<T> context)
+    {
+        foreach (var kvp in context.Gradients)
+        {
+            if (kvp.Value is { HasPendingGpuData: true })
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// The tensors a clip must cover: every dense gradient, and the value rows of each sparse embedding gradient the
     /// step has not yet densified. Rows that occur once are exactly the dense gradient's non-zero entries, so they
@@ -3928,6 +4244,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected static void ApplyTapeGlobalNormGradientClipping(
         TapeStepContext<T> context, double maxNorm)
     {
+        TapeClipNormThreadCache.LastPostClipNormSq = null;
+
         // Reject NaN/Inf maxNorm before computing scale — otherwise `scale =
         // maxNorm / globalNorm` becomes NaN and the for-loop below silently
         // overwrites every gradient element with NaN, distorting the next
@@ -3935,46 +4253,296 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
         var grads = ClippableGradients(context);
 
-        // GPU engine: clip_grad_norm_ on the device with no host read (PyTorch's foreach path). The host loops below
-        // read every gradient through Data.Span, a download of each device-resident gradient per step. A non-finite
-        // norm leaves the gradients unscaled on the device too.
-        if (typeof(T) == typeof(float) && AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        // GPU engine: when any gradient is pending on device, run clip_grad_norm_ on the device with no host read.
+        // When every gradient is already host-current (!HasPendingGpuData, e.g. CPU engine or post-AllReduce host
+        // unpack), compute the norm in single-thread SIMD on host without launching a GPU reduction, blocking on D2H
+        // sync, or waking PersistentParallelExecutor worker threads.
+        if (typeof(T) == typeof(float)
+            && AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            && AnyGradientHasPendingGpuData(grads))
         {
             var deviceGrads = grads.ConvertAll(g => (Tensor<float>)(object)g);
             using var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
-            if (deviceNorm is not null && deviceNorm.IsFinite) return;
+            if (deviceNorm is not null && deviceNorm.IsFinite)
+            {
+                double devSq = deviceNorm.TotalNormSquared;
+                double devNorm = Math.Sqrt(devSq);
+                if (devNorm > maxNorm && devNorm > 0.0)
+                {
+                    double devScale = maxNorm / (devNorm + 1e-6);
+                    TapeClipNormThreadCache.LastPostClipNormSq = devSq * devScale * devScale;
+                }
+                else
+                {
+                    TapeClipNormThreadCache.LastPostClipNormSq = devSq;
+                }
+                return;
+            }
         }
         var numOps = MathHelper.GetNumericOperations<T>();
-        // Host engine: one parallel SIMD pass per tensor for the norm and for the scale (FusedOptimizer helpers);
-        // the per-element loops remain for other layouts.
-        bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
 
         double globalNormSq = 0.0;
         foreach (var grad in grads)
         {
-            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(grad, out double sq)) { globalNormSq += sq; continue; }
-            var span = grad.Data.Span;
+            if (!grad.HasPendingGpuData && TrySumOfSquaresHostSimd(grad, out double sq))
+            {
+                globalNormSq += sq;
+                continue;
+            }
+            var span = (grad.IsContiguous ? grad : grad.Contiguous()).AsSpan();
             for (int i = 0; i < span.Length; i++)
             {
                 double v = numOps.ToDouble(span[i]);
                 globalNormSq += v * v;
             }
         }
-        double globalNorm = Math.Sqrt(globalNormSq);
-        if (globalNorm <= maxNorm || globalNorm == 0.0
-            || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
+        if (double.IsNaN(globalNormSq) || double.IsInfinity(globalNormSq))
+        {
+            TapeClipNormThreadCache.LastPostClipNormSq = globalNormSq;
             return;
+        }
+
+        double globalNorm = Math.Sqrt(globalNormSq);
+        if (globalNorm <= maxNorm)
+        {
+            TapeClipNormThreadCache.LastPostClipNormSq = globalNormSq;
+            return;
+        }
 
         // PyTorch's clip_grad_norm_ coefficient, the same one the network clip and the fused plan apply.
         double scale = maxNorm / (globalNorm + 1e-6);
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine =
+            typeof(T) == typeof(float) ? AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine : null;
+        IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
         foreach (var grad in grads)
         {
-            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scale)) continue;
+            if (!grad.HasPendingGpuData && TryScaleHostSimd(grad, scale))
+            {
+                if (gpuEngine is not null && gpuBackend is not null)
+                {
+                    var gf = (Tensor<float>)(object)grad;
+                    if (gf._gpuBuffer is { } syncedGpuBuf
+                        && syncedGpuBuf.Handle != IntPtr.Zero
+                        && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
+                        && syncedGpuBuf.Size >= gf.Length
+                        && gf._gpuBufferVersion == gf.Version)
+                    {
+                        using var __gpuOp = gpuEngine.EnterGpuOp();
+                        gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, (float)scale, gf.Length);
+                        gf._gpuBufferVersion = gf.Version;
+                    }
+                }
+                continue;
+            }
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
                 span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
         }
+
+        TapeClipNormThreadCache.LastPostClipNormSq = globalNormSq * scale * scale;
     }
+
+    internal static bool TrySumOfSquaresHostSimd(Tensor<T> tensor, out double sumOfSquares)
+    {
+        if (tensor.HasPendingGpuData || !tensor.IsContiguous)
+        {
+            sumOfSquares = 0.0;
+            return false;
+        }
+
+        if ((object)tensor is Tensor<float> tf)
+        {
+            ReadOnlySpan<float> span = tf.AsSpan();
+            if (span.Length == 0)
+            {
+                sumOfSquares = 0.0;
+                return true;
+            }
+#if !AIDN_LEGACY_TFM
+            float sumF = System.Numerics.Tensors.TensorPrimitives.SumOfSquares(span);
+            if (!float.IsInfinity(sumF))
+            {
+                sumOfSquares = sumF;
+                return true;
+            }
+#endif
+            sumOfSquares = ComputeSumOfSquaresFloatWideSimd(span);
+            return true;
+        }
+
+        if ((object)tensor is Tensor<double> td)
+        {
+            ReadOnlySpan<double> span = td.AsSpan();
+            if (span.Length == 0)
+            {
+                sumOfSquares = 0.0;
+                return true;
+            }
+#if !AIDN_LEGACY_TFM
+            sumOfSquares = System.Numerics.Tensors.TensorPrimitives.SumOfSquares(span);
+#else
+            sumOfSquares = ComputeSumOfSquaresDoubleSimdLegacy(span);
+#endif
+            return true;
+        }
+
+        sumOfSquares = 0.0;
+        return false;
+    }
+
+    internal static bool TryScaleHostSimd(Tensor<T> tensor, double scale)
+    {
+        if (tensor.HasPendingGpuData || !tensor.IsContiguous)
+        {
+            return false;
+        }
+
+        if ((object)tensor is Tensor<float> tf)
+        {
+            if (tf.Length == 0)
+            {
+                return true;
+            }
+
+            Span<float> span = tf.AsWritableSpan();
+            ScaleFloatWideSimd(span, scale);
+            tf.IncrementVersion();
+            return true;
+        }
+
+        if ((object)tensor is Tensor<double> td)
+        {
+            if (td.Length == 0)
+            {
+                return true;
+            }
+
+            Span<double> span = td.AsWritableSpan();
+#if !AIDN_LEGACY_TFM
+            System.Numerics.Tensors.TensorPrimitives.Multiply(span, scale, span);
+#else
+            ScaleDoubleSimdLegacy(span, scale);
+#endif
+            td.IncrementVersion();
+            return true;
+        }
+
+        return false;
+    }
+
+    private static double ComputeSumOfSquaresFloatWideSimd(ReadOnlySpan<float> span)
+    {
+        int length = span.Length;
+        int i = 0;
+        double sum = 0.0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<float>.Count)
+        {
+            int width = System.Numerics.Vector<float>.Count;
+            int simdLen = length - (length % width);
+            var vecs = System.Runtime.InteropServices.MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(span.Slice(0, simdLen));
+            var accLo = System.Numerics.Vector<double>.Zero;
+            var accHi = System.Numerics.Vector<double>.Zero;
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                System.Numerics.Vector.Widen(vecs[v], out var lo, out var hi);
+                accLo += lo * lo;
+                accHi += hi * hi;
+            }
+
+            var totalVec = accLo + accHi;
+            sum += System.Numerics.Vector.Dot(totalVec, System.Numerics.Vector<double>.One);
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            double val = span[i];
+            sum += val * val;
+        }
+
+        return sum;
+    }
+
+    private static void ScaleFloatWideSimd(Span<float> span, double scale)
+    {
+        int length = span.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<float>.Count)
+        {
+            int width = System.Numerics.Vector<float>.Count;
+            int simdLen = length - (length % width);
+            var vecs = System.Runtime.InteropServices.MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(span.Slice(0, simdLen));
+            var factor = new System.Numerics.Vector<double>(scale);
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                System.Numerics.Vector.Widen(vecs[v], out var lo, out var hi);
+                vecs[v] = System.Numerics.Vector.Narrow(lo * factor, hi * factor);
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            span[i] = (float)(span[i] * scale);
+        }
+    }
+
+#if AIDN_LEGACY_TFM
+    private static double ComputeSumOfSquaresDoubleSimdLegacy(ReadOnlySpan<double> span)
+    {
+        int length = span.Length;
+        int i = 0;
+        double sum = 0.0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<double>.Count)
+        {
+            int width = System.Numerics.Vector<double>.Count;
+            int simdLen = length - (length % width);
+            var vecs = System.Runtime.InteropServices.MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(span.Slice(0, simdLen));
+            var acc = System.Numerics.Vector<double>.Zero;
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                var dv = vecs[v];
+                acc += dv * dv;
+            }
+
+            sum += System.Numerics.Vector.Dot(acc, System.Numerics.Vector<double>.One);
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            double val = span[i];
+            sum += val * val;
+        }
+
+        return sum;
+    }
+
+    private static void ScaleDoubleSimdLegacy(Span<double> span, double scale)
+    {
+        int length = span.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<double>.Count)
+        {
+            int width = System.Numerics.Vector<double>.Count;
+            int simdLen = length - (length % width);
+            var vecs = System.Runtime.InteropServices.MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(span.Slice(0, simdLen));
+            var factor = new System.Numerics.Vector<double>(scale);
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                vecs[v] *= factor;
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            span[i] *= scale;
+        }
+    }
+#endif
 
     /// <summary>
     /// PyTorch <c>clip_grad_value_</c>-style element-wise clamp across
@@ -4016,26 +4584,25 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
     {
-        // GPU engine: one device sum of squares over every gradient and one scalar read (PyTorch's GradScaler also
-        // reads its found-inf flag once per step). A finite sum proves every element finite. A non-finite one is
-        // confirmed by the exact element scan below (a backend that accumulates in float can overflow on finite
-        // gradients); that scan used to run, downloading every device-resident gradient, on every step.
-        if (DeviceTapeGradients(context) is { } deviceGrads)
+        // GPU engine: when any gradient is pending on device, run one device sum of squares over every gradient and
+        // read one scalar back. When all gradients are already host-current (!HasPendingGpuData), check them in SIMD
+        // on host without launching a GPU kernel or forcing a D2H sync.
+        if (AnyTapeGradientHasPendingGpuData(context) && DeviceTapeGradients(context) is { } deviceGrads)
         {
             using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(deviceGrads);
             if (deviceSum is not null && deviceSum.IsFinite) return false;
         }
 
-        bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
             if (grad is null) continue;
-            // A double sum of squares is non-finite exactly when an element is NaN/Inf: one parallel SIMD pass.
-            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(grad, out double sq))
+            // When host backing is already current, a double sum of squares is finite whenever all elements are finite
+            // (and for float, squares never overflow double so non-finite iff an element is NaN/Inf).
+            if (!grad.HasPendingGpuData && TrySumOfSquaresHostSimd(grad, out double sq))
             {
-                if (double.IsNaN(sq) || double.IsInfinity(sq)) return true;
-                continue;
+                if (!double.IsNaN(sq) && !double.IsInfinity(sq)) continue;
+                if (typeof(T) == typeof(float) || double.IsNaN(sq)) return true;
             }
             if (grad.Length == 0) continue;
             using var finiteMask = AiDotNetEngine.Current.TensorIsFinite(grad);
@@ -4193,6 +4760,494 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _gpuState?.Dispose();
         _gpuState = null;
         _gpuStateInitialized = false;
+        DisposeCachedGpuBuffersCore();
+    }
+
+    private readonly Dictionary<Tensor<T>, (IGpuBuffer Buffer, IDirectGpuBackend Backend)> _cachedGpuGradBuffers =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly object _cachedGpuGradBuffersLock = new();
+
+    private protected virtual void DisposeCachedGpuBuffersCore()
+    {
+        DisposeCachedGpuGradBuffers();
+    }
+
+    private protected void DisposeCachedGpuGradBuffers()
+    {
+        lock (_cachedGpuGradBuffersLock)
+        {
+            foreach (var entry in _cachedGpuGradBuffers.Values)
+            {
+                entry.Buffer?.Dispose();
+            }
+            _cachedGpuGradBuffers.Clear();
+        }
+    }
+
+    private static float[] GetExactHostFloatArray(Tensor<float> tensor)
+    {
+        if (tensor.IsContiguous && tensor._storageOffset == 0)
+        {
+            if (tensor.HasPendingGpuData)
+            {
+                _ = tensor.AsSpan();
+            }
+
+            var backing = tensor.GetBackingArrayForCacheLookupUnsafe();
+            if (backing is not null && backing.Length == tensor.Length)
+            {
+                return backing;
+            }
+        }
+
+        return tensor.GetFlattenedData();
+    }
+
+    private static AiDotNet.Tensors.Engines.Gpu.GpuSyncPoint CreateGpuWriteSyncPoint(IDirectGpuBackend backend)
+        => backend is AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend asyncBackend
+            ? asyncBackend.CreateSyncPoint()
+            : AiDotNet.Tensors.Engines.Gpu.GpuSyncPoint.CreateComplete();
+
+    private protected Tensor<T> GetOrCreateShapedOptimizerStateTensor(
+        ConcurrentDictionary<Tensor<T>, Tensor<T>> stateTable,
+        Tensor<T> param,
+        bool createStateOnDevice)
+    {
+        if (stateTable.TryGetValue(param, out var existing))
+        {
+            if (existing._shape.SequenceEqual(param._shape))
+            {
+                return existing;
+            }
+
+            if (existing.Length == param.Length)
+            {
+                var reshaped = new Tensor<T>(param._shape);
+                existing.AsSpan().CopyTo(reshaped.AsWritableSpan());
+                if (existing._ownsGpuBuffer)
+                {
+                    existing._gpuBuffer?.Dispose();
+                    existing._ownsGpuBuffer = false;
+                }
+
+                stateTable[param] = reshaped;
+                return reshaped;
+            }
+
+            if (existing._ownsGpuBuffer)
+            {
+                existing._gpuBuffer?.Dispose();
+                existing._ownsGpuBuffer = false;
+            }
+        }
+
+        var created = CreateOptimizerStateTensor(param._shape, createStateOnDevice);
+        stateTable[param] = created;
+        return created;
+    }
+
+    private static void MarkGpuTensorUpdated(IDirectGpuBackend backend, Tensor<float> tensor)
+    {
+        tensor.MarkModified(CreateGpuWriteSyncPoint(backend));
+        tensor._gpuBufferVersion = tensor.Version;
+    }
+
+    private static void CommitGpuParameterUpdated(
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngine,
+        IDirectGpuBackend gpuBackend,
+        Tensor<float> pf,
+        IGpuBuffer buffer)
+    {
+        if (pf._gpuBuffer is not null ||
+            (pf.OffloadDevicePointer == IntPtr.Zero && pf.GetBackingArrayForCacheLookupUnsafe() is not null))
+        {
+            gpuEngine.CommitParameterUpdatedOnDevice(pf, buffer, gpuBackend, CreateGpuWriteSyncPoint(gpuBackend));
+        }
+        else
+        {
+            MarkGpuTensorUpdated(gpuBackend, pf);
+        }
+    }
+
+    private static IGpuBuffer EnsureGpuMomentResident(
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngine,
+        IDirectGpuBackend gpuBackend,
+        Tensor<float> moment)
+    {
+        if (moment._gpuBuffer is not null
+            && moment._gpuBuffer.Handle != IntPtr.Zero
+            && (moment._gpuBackend is null || ReferenceEquals(moment._gpuBackend, gpuBackend))
+            && moment._gpuBuffer.Size >= moment.Length
+            && (moment.HasPendingGpuData || moment._gpuBufferVersion == moment.Version))
+        {
+            var existing = moment.TryGetGpuBuffer();
+            if (existing is not null)
+            {
+                return existing;
+            }
+        }
+        else if (moment._gpuBuffer is null && moment.OffloadDevicePointer != IntPtr.Zero)
+        {
+            var offload = moment.TryGetGpuBuffer();
+            if (offload is not null && offload.Size >= moment.Length)
+            {
+                return offload;
+            }
+        }
+
+        moment.EnsureOwnedForDeviceWrite();
+        float[] hostData = GetExactHostFloatArray(moment);
+        var previousOwned = moment._ownsGpuBuffer ? moment._gpuBuffer : null;
+        var allocated = gpuBackend.AllocateBuffer(hostData);
+        moment._ownsGpuBuffer = true;
+        gpuEngine.BindResidentBuffer(moment, allocated, gpuBackend);
+        if (previousOwned is { } prevBuf && !ReferenceEquals(prevBuf, allocated))
+        {
+            prevBuf.Dispose();
+        }
+
+        return allocated;
+    }
+
+    private protected IGpuBuffer ResolveOrUploadGpuGradientBuffer(
+        IDirectGpuBackend gpuBackend,
+        Tensor<T> paramKey,
+        Tensor<float> gf)
+    {
+        if (gf._gpuBuffer is not null
+            && gf._gpuBuffer.Handle != IntPtr.Zero
+            && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
+            && gf._gpuBuffer.Size >= gf.Length
+            && (gf.HasPendingGpuData || gf._gpuBufferVersion == gf.Version))
+        {
+            var existing = gf.TryGetGpuBuffer();
+            if (existing is not null)
+            {
+                return existing;
+            }
+        }
+        else if (gf._gpuBuffer is null && gf.OffloadDevicePointer != IntPtr.Zero)
+        {
+            var offload = gf.TryGetGpuBuffer();
+            if (offload is not null && offload.Size >= gf.Length)
+            {
+                return offload;
+            }
+        }
+
+        float[] gHost = GetExactHostFloatArray(gf);
+        lock (_cachedGpuGradBuffersLock)
+        {
+            if (_cachedGpuGradBuffers.TryGetValue(paramKey, out var cached)
+                && ReferenceEquals(cached.Backend, gpuBackend)
+                && cached.Buffer.Handle != IntPtr.Zero
+                && cached.Buffer.Size == gHost.Length)
+            {
+                gpuBackend.UploadBufferInPlace(gHost, cached.Buffer);
+                return cached.Buffer;
+            }
+
+            cached.Buffer?.Dispose();
+            var allocated = gpuBackend.AllocateBuffer(gHost);
+            _cachedGpuGradBuffers[paramKey] = (allocated, gpuBackend);
+            return allocated;
+        }
+    }
+
+    private protected bool TryExecuteGpuAdamOrAdamWStep(
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngine,
+        IDirectGpuBackend gpuBackend,
+        Tensor<T> paramKey,
+        Tensor<float> pf,
+        Tensor<float> gf,
+        Tensor<float> mf,
+        Tensor<float> vf,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        int step,
+        bool decoupledWeightDecay)
+    {
+        if (pf.Length != gf.Length || mf.Length != pf.Length || vf.Length != pf.Length || step < 1)
+        {
+            return false;
+        }
+
+        if (pf.Length == 0)
+        {
+            return true;
+        }
+
+        using var __gpuOp = gpuEngine.EnterGpuOp();
+        try
+        {
+            var mBuf = EnsureGpuMomentResident(gpuEngine, gpuBackend, mf);
+            var vBuf = EnsureGpuMomentResident(gpuEngine, gpuBackend, vf);
+            var gBuf = ResolveOrUploadGpuGradientBuffer(gpuBackend, paramKey, gf);
+
+            pf.EnsureOwnedForDeviceWrite();
+            if (AiDotNet.Tensors.Engines.DirectGpuTensorEngine.IsFlatParameterView(pf))
+            {
+                var flatViewBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
+                if (flatViewBuf is not null)
+                {
+                    if (decoupledWeightDecay)
+                        gpuBackend.AdamWUpdate(flatViewBuf, gBuf, mBuf, vBuf, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                    else
+                        gpuBackend.AdamUpdate(flatViewBuf, gBuf, mBuf, vBuf, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                    MarkGpuTensorUpdated(gpuBackend, mf);
+                    MarkGpuTensorUpdated(gpuBackend, vf);
+                    CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, flatViewBuf);
+                    if (decoupledWeightDecay) GpuLaunchProbe.OnAdamWDispatch();
+                    return true;
+                }
+
+                if (gpuEngine.TryStageFlatParameter(pf) is { } staged)
+                {
+                    using (staged)
+                    {
+                        if (decoupledWeightDecay)
+                            gpuBackend.AdamWUpdate(staged.Staged, gBuf, mBuf, vBuf, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                        else
+                            gpuBackend.AdamUpdate(staged.Staged, gBuf, mBuf, vBuf, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                        gpuBackend.Copy(staged.Staged, 0, staged.FlatBuffer, staged.Offset, pf.Length);
+                    }
+                    MarkGpuTensorUpdated(gpuBackend, mf);
+                    MarkGpuTensorUpdated(gpuBackend, vf);
+                    CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, staged.FlatBuffer);
+                    if (decoupledWeightDecay) GpuLaunchProbe.OnAdamWDispatch();
+                    return true;
+                }
+
+                return false;
+            }
+
+            var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
+            {
+                pBuf = pf.TryGetGpuBuffer();
+            }
+
+            if (pBuf is null)
+            {
+                return false;
+            }
+
+            if (decoupledWeightDecay)
+                gpuBackend.AdamWUpdate(pBuf, gBuf, mBuf, vBuf, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+            else
+                gpuBackend.AdamUpdate(pBuf, gBuf, mBuf, vBuf, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+
+            MarkGpuTensorUpdated(gpuBackend, mf);
+            MarkGpuTensorUpdated(gpuBackend, vf);
+            CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, pBuf);
+            if (decoupledWeightDecay) GpuLaunchProbe.OnAdamWDispatch();
+            return true;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private protected bool TryExecuteGpuAdamBf16Step(
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngine,
+        IDirectGpuBackend gpuBackend,
+        Tensor<T> paramKey,
+        Tensor<float> pf,
+        Tensor<float> gf,
+        IGpuBuffer? mBf16,
+        IGpuBuffer? vBf16,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        int step,
+        bool decoupledWeightDecay)
+    {
+        if (mBf16 is null || vBf16 is null || pf.Length != gf.Length || step < 1)
+        {
+            return false;
+        }
+
+        if (pf.Length == 0)
+        {
+            return true;
+        }
+
+        using var __gpuOp = gpuEngine.EnterGpuOp();
+        if (gpuBackend is not ICompressedMomentGpuOptimizerBackend cb)
+        {
+            return false;
+        }
+
+        try
+        {
+            var gBuf = ResolveOrUploadGpuGradientBuffer(gpuBackend, paramKey, gf);
+            pf.EnsureOwnedForDeviceWrite();
+
+            if (AiDotNet.Tensors.Engines.DirectGpuTensorEngine.IsFlatParameterView(pf))
+            {
+                var flatViewBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
+                if (flatViewBuf is not null)
+                {
+                    if (decoupledWeightDecay)
+                        cb.AdamWUpdateBf16(flatViewBuf, gBuf, mBf16, vBf16, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                    else
+                        cb.AdamUpdateBf16(flatViewBuf, gBuf, mBf16, vBf16, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                    CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, flatViewBuf);
+                    return true;
+                }
+
+                if (gpuEngine.TryStageFlatParameter(pf) is { } staged)
+                {
+                    using (staged)
+                    {
+                        if (decoupledWeightDecay)
+                            cb.AdamWUpdateBf16(staged.Staged, gBuf, mBf16, vBf16, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                        else
+                            cb.AdamUpdateBf16(staged.Staged, gBuf, mBf16, vBf16, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+                        gpuBackend.Copy(staged.Staged, 0, staged.FlatBuffer, staged.Offset, pf.Length);
+                    }
+                    CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, staged.FlatBuffer);
+                    return true;
+                }
+
+                return false;
+            }
+
+            var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
+            {
+                pBuf = pf.TryGetGpuBuffer();
+            }
+
+            if (pBuf is null)
+            {
+                return false;
+            }
+
+            if (decoupledWeightDecay)
+                cb.AdamWUpdateBf16(pBuf, gBuf, mBf16, vBf16, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+            else
+                cb.AdamUpdateBf16(pBuf, gBuf, mBf16, vBf16, learningRate, beta1, beta2, epsilon, weightDecay, step, pf.Length);
+
+            CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, pBuf);
+            return true;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private protected bool TryExecuteGpuAdam8BitStep(
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngine,
+        IDirectGpuBackend gpuBackend,
+        Tensor<T> paramKey,
+        Tensor<float> pf,
+        Tensor<float> gf,
+        IGpuBuffer? mQ,
+        IGpuBuffer? vQ,
+        IGpuBuffer? mScales,
+        IGpuBuffer? vScales,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float biasCorrection1,
+        float biasCorrection2,
+        int blockSize,
+        float weightDecay,
+        bool decoupledWeightDecay)
+    {
+        if (mQ is null || vQ is null || mScales is null || vScales is null
+            || pf.Length != gf.Length || blockSize <= 0)
+        {
+            return false;
+        }
+
+        if (pf.Length == 0)
+        {
+            return true;
+        }
+
+        using var __gpuOp = gpuEngine.EnterGpuOp();
+        var db = gpuBackend as IAdam8BitWeightDecayBackend;
+        var cb = gpuBackend as ICompressedMomentGpuOptimizerBackend;
+        if (db is null && (Math.Abs(weightDecay) > 0f || cb is null))
+        {
+            return false;
+        }
+
+        try
+        {
+            int nb = AiDotNet.Tensors.Engines.Gpu.HostCompressedMomentAdam.BlockCount(pf.Length, blockSize);
+            var gBuf = ResolveOrUploadGpuGradientBuffer(gpuBackend, paramKey, gf);
+            pf.EnsureOwnedForDeviceWrite();
+
+            if (AiDotNet.Tensors.Engines.DirectGpuTensorEngine.IsFlatParameterView(pf))
+            {
+                var flatViewBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
+                if (flatViewBuf is not null)
+                {
+                    if (db is not null)
+                        db.Adam8BitUpdate(flatViewBuf, gBuf, mQ, vQ, mScales, vScales, learningRate, beta1, beta2, epsilon, 1f - beta1, 1f - beta2, biasCorrection1, biasCorrection2, blockSize, pf.Length, nb, weightDecay, decoupledWeightDecay);
+                    else if (cb is not null)
+                        cb.Adam8BitUpdate(flatViewBuf, gBuf, mQ, vQ, mScales, vScales, learningRate, beta1, beta2, epsilon, 1f - beta1, 1f - beta2, biasCorrection1, biasCorrection2, blockSize, pf.Length, nb);
+                    else
+                        return false;
+                    CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, flatViewBuf);
+                    return true;
+                }
+
+                if (gpuEngine.TryStageFlatParameter(pf) is { } staged)
+                {
+                    using (staged)
+                    {
+                        if (db is not null)
+                            db.Adam8BitUpdate(staged.Staged, gBuf, mQ, vQ, mScales, vScales, learningRate, beta1, beta2, epsilon, 1f - beta1, 1f - beta2, biasCorrection1, biasCorrection2, blockSize, pf.Length, nb, weightDecay, decoupledWeightDecay);
+                        else if (cb is not null)
+                            cb.Adam8BitUpdate(staged.Staged, gBuf, mQ, vQ, mScales, vScales, learningRate, beta1, beta2, epsilon, 1f - beta1, 1f - beta2, biasCorrection1, biasCorrection2, blockSize, pf.Length, nb);
+                        else
+                            return false;
+                        gpuBackend.Copy(staged.Staged, 0, staged.FlatBuffer, staged.Offset, pf.Length);
+                    }
+                    CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, staged.FlatBuffer);
+                    return true;
+                }
+
+                return false;
+            }
+
+            var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
+            {
+                pBuf = pf.TryGetGpuBuffer();
+            }
+
+            if (pBuf is null)
+            {
+                return false;
+            }
+
+            if (db is not null)
+                db.Adam8BitUpdate(pBuf, gBuf, mQ, vQ, mScales, vScales, learningRate, beta1, beta2, epsilon, 1f - beta1, 1f - beta2, biasCorrection1, biasCorrection2, blockSize, pf.Length, nb, weightDecay, decoupledWeightDecay);
+            else if (cb is not null)
+                cb.Adam8BitUpdate(pBuf, gBuf, mQ, vQ, mScales, vScales, learningRate, beta1, beta2, epsilon, 1f - beta1, 1f - beta2, biasCorrection1, biasCorrection2, blockSize, pf.Length, nb);
+            else
+                return false;
+
+            CommitGpuParameterUpdated(gpuEngine, gpuBackend, pf, pBuf);
+            return true;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
     }
 
     #endregion
@@ -4849,4 +5904,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return bestPoint;
     }
 
+}
+
+internal static class TapeClipNormThreadCache
+{
+    [ThreadStatic]
+    internal static double? LastPostClipNormSq;
 }

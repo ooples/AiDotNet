@@ -636,6 +636,9 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
             }
         }
 
+        DistributedCoordinator?.EnsureInitialParametersSynchronized(
+            CollectModelTrainableTensors(),
+            InvalidateLayerWeightCaches);
         using var tape = new GradientTape<T>();
         var (mean, logVar) = EncoderForward(input);
         var z = Reparameterize(mean, logVar);
