@@ -231,8 +231,7 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var network = _network ?? throw new InvalidOperationException("Pre-training runs on the native SPIRAL network.");
         var teacher = EnsureTeacher(features);
         int frames = features.GetLength(0), bins = features.GetLength(1), stride = network.TotalStride;
-        int most = Math.Max(0, Math.Min(_options.MaxTeacherPaddingUnits, frames / 2 / stride));
-        int left = random.Next(most + 1), right = random.Next(most + 1);
+        var (left, right) = TeacherPadding(random);
         // The padded frames hold the mask embedding, as the reference's RandomShift fills them.
         var embedding = MaskEmbedding(bins);
         var padded = new double[frames + (left + right) * stride, bins];
@@ -245,6 +244,15 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         var kept = Engine.TensorSlice(projected, new[] { left, 0 }, new[] { length, projected.Shape[1] });
         // A constant copy: the teacher receives no gradient (it moves only by Equation 1).
         return new Tensor<T>(kept._shape, new Vector<T>(kept.ToArray()));
+    }
+
+    // The padding units drawn for each end of the teacher's input: uniform on [0, MaxTeacherPaddingUnits] at each end,
+    // whatever the utterance's length. The reference's RandomShift (dist 'uniform', truncate False) applies max_ratio only
+    // to negative shifts, which SPIRAL never draws, so a short utterance can be padded by more than half its length.
+    internal (int Left, int Right) TeacherPadding(Random random)
+    {
+        int most = Math.Max(0, _options.MaxTeacherPaddingUnits);
+        return (random.Next(most + 1), random.Next(most + 1));
     }
 
     // Adaptive SpecAugment (section 3.3): a proportion of the time steps start masks of TimeMaskLength frames filled with
