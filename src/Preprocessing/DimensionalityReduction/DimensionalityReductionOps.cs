@@ -519,7 +519,7 @@ internal static class DimensionalityReductionOps
     /// <summary>
     /// Modified Gram-Schmidt on the columns of every [k, c] matrix of an [n, k, c] batch, returning the first
     /// min(k, c) orthonormal columns as [n, k, min(k, c)]. A column whose residual norm is at most
-    /// <paramref name="tolerance"/> is replaced by the unit vector e_j when <paramref name="unitFallback"/> is set,
+    /// <paramref name="tolerance"/> is replaced by a unit vector orthogonal to the earlier columns when <paramref name="unitFallback"/> is set,
     /// otherwise its (negligible) residual is kept unnormalized.
     /// </summary>
     internal static Tensor<T> OrthonormalizeColumnsEach<T>(Tensor<T> a, bool unitFallback, double tolerance = 1e-10)
@@ -528,6 +528,7 @@ internal static class DimensionalityReductionOps
         int k = a.Shape[1];
         int count = Math.Min(k, a.Shape[2]);
         var tol = Tolerance<T>(tolerance);
+        T zero = MathHelper.GetNumericOperations<T>().Zero;
         var basis = engine.Reshape(Identity<T>(k), new[] { 1, k, k });
         var columns = new Tensor<T>[count];
         for (int j = 0; j < count; j++)
@@ -543,10 +544,42 @@ internal static class DimensionalityReductionOps
             var keep = engine.TensorGreaterThan(norm, tol);
             var drop = engine.TensorSubtract(engine.TensorOnesLike(keep), keep);
             var unit = engine.TensorDivide(v, engine.TensorAdd(norm, drop));
-            var fallback = unitFallback ? engine.TensorNarrow(basis, 2, j, 1) : v;
+            var fallback = v;
+            if (unitFallback)
+            {
+                bool anyDropped = Above(engine.TensorSum(drop), zero);
+                fallback = anyDropped && j > 0
+                    ? OrthogonalCompletion(columns, j, basis)
+                    : engine.TensorNarrow(basis, 2, j, 1);
+            }
+
             columns[j] = engine.TensorAdd(engine.TensorMultiply(unit, keep), engine.TensorMultiply(fallback, drop));
         }
 
         return count == 0 ? new Tensor<T>(new[] { a.Shape[0], k, 0 }) : engine.TensorConcatenate(columns, 2);
+    }
+
+    /// <summary>
+    /// For every matrix of the batch, a unit vector orthogonal to the first <paramref name="count"/> orthonormal
+    /// columns ([n, k, 1] each, count &lt; k): the unit vector e_i with the largest residual after projecting those
+    /// columns out, normalised. This is what a Householder QR puts in a column whose input is linearly dependent on
+    /// the earlier ones. A plain e_j is not orthogonal to them, so a "null space" built from it no longer annihilates
+    /// the earlier columns (the constant and the tangent coordinates in Hessian LLE).
+    /// </summary>
+    private static Tensor<T> OrthogonalCompletion<T>(Tensor<T>[] columns, int count, Tensor<T> basis)
+    {
+        var engine = Engine;
+        int k = basis.Shape[1];
+        var previous = count == 1 ? columns[0] : engine.TensorConcatenate(columns.Take(count).ToArray(), 2);
+        int n = previous.Shape[0];
+
+        // residual[i] = I - Q Q^T is a projector, so the squared norm of its column c is its diagonal entry c
+        var residual = engine.TensorSubtract(basis, BatchMatMulTranspose(previous, previous));
+        var diagonal = engine.ReduceSum(engine.TensorMultiply(residual, basis), new[] { 2 }, false);
+        var pick = engine.TensorNarrow(AnomalyTensorOps.StableSortRows(diagonal, descending: true).Order, 1, 0, 1);
+        var index = engine.TensorTile(engine.Reshape(pick, new[] { n, 1, 1 }), new[] { 1, k, 1 });
+        var column = engine.TensorTakeAlongDim(residual, index, 2);
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(column), new[] { 1 }, true));
+        return engine.TensorDivide(column, norm);
     }
 }
