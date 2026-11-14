@@ -162,8 +162,21 @@ public static class VectorExtensions
         // Ascending and stable: equal values keep their original order. The engine's argsort is not documented as
         // stable, so sort the tie-free composite key (rank of the value, original index) instead.
         var values = Tensor<T>.FromVector(vector);
-        var (sorted, _) = Eng.TensorSort(values, 0, false);
-        var rank = Eng.TensorSearchSorted(sorted, values).Cast<long>();
+
+        // NaN is ranked separately, after every number (numpy and torch order): a binary search over a sorted
+        // sequence that contains NaN is not defined, and gave the NaNs the rank of the smallest value, which
+        // interleaved them with the finite values.
+        var nanMask = Eng.TensorNotEquals(values, values);
+        bool hasNaN = Eng.TensorCountNonzero(nanMask) > 0;
+        var ranked = hasNaN ? Eng.TensorWhere(nanMask, Eng.TensorZerosLike(values), values) : values;
+        var (sorted, _) = Eng.TensorSort(ranked, 0, false);
+        var rank = Eng.TensorSearchSorted(sorted, ranked).Cast<long>();
+        if (hasNaN)
+        {
+            var isNaN = nanMask.Cast<long>();
+            var isNumber = Eng.TensorSubtract(Eng.TensorOnesLike(isNaN), isNaN);
+            rank = Eng.TensorAdd(Eng.TensorMultiply(rank, isNumber), Eng.TensorMultiplyScalar(isNaN, (long)n));
+        }
         var key = Eng.TensorAdd(Eng.TensorMultiplyScalar(rank, (long)n), Eng.TensorArange<long>(0, n));
         return Eng.TensorArgsort(key, 0, false).ToArray();
     }
@@ -1255,9 +1268,11 @@ public static class VectorExtensions
             return numOps.Equals(scale, numOps.Zero) ? numOps.Zero : scale;
         }
 
-        T scaledSum = Eng.TensorSum(Eng.TensorSquare(Eng.TensorDivideScalar(deviations, scale)));
-        T variance = numOps.Divide(scaledSum, numOps.FromDouble(n - 1));
-        return numOps.Multiply(scale, numOps.Sqrt(variance));
+        // The engine norm of the scaled deviations is at most sqrt(n), and sqrt(n - 1) is formed before it is
+        // converted: the sum of the scaled squares can reach n, and n - 1 itself, which both leave the range of
+        // Half above 65504 elements although the standard deviation does not.
+        T scaledNorm = Eng.TensorNorm(Eng.TensorDivideScalar(deviations, scale))[0];
+        return numOps.Multiply(scale, numOps.Divide(scaledNorm, numOps.FromDouble(Math.Sqrt(n - 1))));
     }
 
     /// <summary>
@@ -1347,8 +1362,10 @@ public static class VectorExtensions
             return numOps.Equals(scale, numOps.Zero) ? numOps.Zero : scale;
         }
 
-        T scaledSum = Eng.TensorSum(Eng.TensorSquare(Eng.TensorDivideScalar(differences, scale)));
-        return numOps.Multiply(scale, numOps.Sqrt(scaledSum));
+        // The engine norm of the scaled differences is at most sqrt(n); their sum of squares can reach n, which
+        // leaves the range of Half above 65504 elements although the distance does not.
+        T scaledNorm = Eng.TensorNorm(Eng.TensorDivideScalar(differences, scale))[0];
+        return numOps.Multiply(scale, scaledNorm);
     }
 
     /// <summary>
