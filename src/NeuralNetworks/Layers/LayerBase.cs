@@ -4064,14 +4064,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// It is false whenever no eager manual backward will read the caches —
     /// during graph capture (<see cref="IsCapturing"/>), under a recording
     /// <see cref="GradientTape{T}"/> (unless <see cref="KeepActivationCacheUnderTape"/>),
-    /// in eval mode (<see cref="IsTrainingMode"/> is false), or inside an
+    /// while a compiled training plan is being traced (the plan differentiates its recorded graph and never calls a
+    /// layer's manual backward), in eval mode (<see cref="IsTrainingMode"/> is false), or inside an
     /// <see cref="InferenceMode"/> scope — so the redundant reference is dropped and the
     /// inference caching allocator can safely recycle the buffer (issue #1668).
+    /// <para>
+    /// A layer that picks its forward by this flag (attention keeps its weights for a manual backward, or runs the
+    /// fused kernel) must not take the caching branch inside a compiled trace: grouped-query attention did, and its
+    /// compiled step materialized the [B, H, S, S] weights and uploaded a causal mask every step (4874 ms/step against
+    /// 186.5 eager on a 16-layer, 256-wide model).
+    /// </para>
     /// </summary>
     protected bool ShouldCacheForBackward
         => IsTrainingMode
         && !IsCapturing
         && !InferenceMode.IsActive
+        && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace
         && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
 
     /// <summary>
