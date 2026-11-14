@@ -1,0 +1,54 @@
+name: Website alert
+
+# Turns a website workflow result into a GitHub issue, so a red run can't sit unnoticed (the
+# deploy failed from June to November 2026 without anyone seeing it).
+#   failure: open the "Website health" issue, or comment on it if it is already open.
+#   success: close the open issue with a comment, if there is one.
+
+on:
+  workflow_call:
+    inputs:
+      result:
+        description: failure or success
+        required: true
+        type: string
+      source:
+        description: Name of the workflow reporting
+        required: true
+        type: string
+
+permissions:
+  issues: write
+
+jobs:
+  issue:
+    name: Update the website-health issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ inputs.result }}
+          SOURCE: ${{ inputs.source }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ASSIGNEE: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          label=website-health
+          gh label create "$label" --color B60205 --description "aidotnet.dev deploy or health check failing" 2>/dev/null || true
+          open=$(gh issue list --label "$label" --state open --json number --jq '.[0].number // empty')
+          if [ "$RESULT" = failure ]; then
+            body="**$SOURCE** failed: $RUN_URL"
+            if [ -n "$open" ]; then
+              gh issue comment "$open" --body "$body"
+            else
+              gh issue create --label "$label" --assignee "$ASSIGNEE" \
+                --title "Website health: aidotnet.dev check failing" \
+                --body "$body
+
+          This issue stays open while deploys or the nightly health check fail, and closes itself on the next fully green nightly run."
+            fi
+          elif [ -n "$open" ]; then
+            gh issue close "$open" --comment "**$SOURCE** passed: $RUN_URL"
+          fi
