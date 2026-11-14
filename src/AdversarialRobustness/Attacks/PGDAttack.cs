@@ -135,14 +135,16 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
     /// </summary>
     /// <remarks>
     /// L-infinity steps by stepSize * sign(gradient); L2 steps by stepSize * gradient / ||gradient||_2,
-    /// so each L2 step has length stepSize instead of stepSize * sqrt(d).
+    /// so each L2 step has length stepSize instead of stepSize * sqrt(d). The gradient is divided by the
+    /// guarded norm before it is scaled: in Half stepSize / (0 + 1e-7) is infinite, which turned a zero
+    /// gradient into the step 0 * infinity = NaN.
     /// </remarks>
     private Vector<T> SteepestAscentStep(Vector<T> gradient, T stepSize)
     {
         if (Options.NormType == AdversarialNormType.L2)
         {
-            var scale = NumOps.Divide(stepSize, NumOps.Add(ComputeL2Norm(gradient), DivisionGuard()));
-            return Engine.Multiply<T>(gradient, scale);
+            var direction = Engine.Divide<T>(gradient, NumOps.Add(ComputeL2Norm(gradient), DivisionGuard()));
+            return Engine.Multiply<T>(direction, stepSize);
         }
 
         return Engine.Multiply<T>(SignVector(gradient), stepSize);

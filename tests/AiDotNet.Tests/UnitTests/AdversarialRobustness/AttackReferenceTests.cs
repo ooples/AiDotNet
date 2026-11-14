@@ -506,6 +506,58 @@ public class AttackReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task HalfPgdL2_ZeroGradientTakesAZeroStep()
+    {
+        await Task.Yield();
+
+        // A constant model has a zero gradient, so L2 PGD without a random start must return x. In Half the
+        // step scale stepSize / (0 + 1e-7) was infinite and the step 0 * infinity = NaN.
+        var model = new HalfLinearLogitModel(new LinearLogitModel(new double[2, 4], new double[] { 0.1, -0.2 }));
+        var x = new[] { 0.5, 0.25, 0.75, 0.5 };
+        var attack = new PGDAttack<Half, Vector<Half>, Vector<Half>>(new AdversarialAttackOptions<Half>
+        {
+            Epsilon = 0.5,
+            StepSize = 0.1,
+            Iterations = 3,
+            NormType = AdversarialNormType.L2,
+            UseRandomStart = false
+        });
+
+        var adversarial = attack.GenerateAdversarialExample(HalfVector(x), HalfVector(1.0, 0.0), model);
+
+        Assert.Equal(x, adversarial.ToArray().Select(v => (double)v).ToArray());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Fgsm_L2TakesTheNormalizedGradientStep()
+    {
+        await Task.Yield();
+
+        // cleverhans fast_gradient_method(norm=2): delta = eps * g / ||g||_2, so ||delta||_2 = eps along the
+        // MSE gradient. The sign step ignored the norm and moved every coordinate by eps (||delta||_2 = 2 eps).
+        var model = SteepModel();
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var label = OneHot(0, 2);
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>
+        {
+            Epsilon = 0.1,
+            NormType = AdversarialNormType.L2
+        });
+
+        var delta = Delta(attack.GenerateAdversarialExample(new Vector<double>(x), label, model), x);
+
+        var z = model.Logits(x);
+        var gradient = Enumerable.Range(0, model.Inputs)
+            .Select(i => Enumerable.Range(0, model.Classes).Sum(c => 2.0 / model.Classes * model.Weight(c, i) * (z[c] - label[c])))
+            .ToArray();
+        double norm = Math.Sqrt(gradient.Sum(g => g * g));
+        for (int i = 0; i < model.Inputs; i++)
+        {
+            Assert.Equal(0.1 * gradient[i] / norm, delta[i], 6);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task HalfCW_AdamStaysBoundedWhenTheSquaredGradientUnderflows()
     {
         // Pixel 2 barely matters (|g| ~ 1e-3): (1 - beta2) g^2 ~ 1e-9 underflows to 0 in Half, and so does the
