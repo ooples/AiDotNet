@@ -990,8 +990,8 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         bool safe = true;
         bool anyFinite = false;
         var engine = AiDotNetEngine.Current;
-        var nonFinite = engine.TensorWhere(
-            engine.TensorIsFinite(data), engine.TensorZerosLike(data), engine.TensorOnesLike(data));
+        // Not TensorIsFinite, which throws InvalidCastException on a Half tensor
+        var nonFinite = TensorFiniteness.NonFiniteMask(data);
         if (engine.TensorCountNonzero(nonFinite) > 0)
         {
             double v = NumOps.ToDouble(data.GetFlat(TieBreakArgMax.FirstMaxIndex(nonFinite)));

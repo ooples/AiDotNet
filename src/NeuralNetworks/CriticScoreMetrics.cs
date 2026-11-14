@@ -36,7 +36,9 @@ internal static class CriticScoreMetrics
         var isNaN = engine.TensorIsNan(scores);
         int nanCount = engine.TensorCountNonzero(engine.TensorWhere(isNaN, engine.TensorOnesLike(scores), zeros));
 
-        T scale = engine.TensorMaxValue(engine.TensorWhere(engine.TensorIsFinite(scores), engine.TensorAbs(scores), zeros));
+        // Not TensorIsFinite: it throws InvalidCastException on Half, the type this scaling exists for
+        T scale = engine.TensorMaxValue(
+            engine.TensorWhere(TensorFiniteness.NonFiniteMask(scores), zeros, engine.TensorAbs(scores)));
         if (!ops.GreaterThan(scale, ops.Zero))
         {
             scale = ops.One;
