@@ -226,7 +226,8 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         {
             var (encoded, taps) = RunBackbone(x);
             var semantic = SemanticCrossEntropy(Decode(encoded), labels);
-            if (gold.Count == 0) return semantic;
+            // An image without instances still trains the RPN and the cascade classifiers on background; the head
+            // omits the positive-only box and mask terms.
             return Engine.TensorAdd(semantic, head.Loss(Fpn(taps), h, w, gold, goldClasses, goldMasks, random));
         });
     }
@@ -280,9 +281,10 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         var logProbabilities = Engine.TensorTranspose(
             Engine.Reshape(Engine.TensorLogSoftmax(logits, 1), new[] { k, n }));                          // [n, K]
         int count = Math.Max(1, Engine.TensorSum(labelled));
-        return Engine.TensorMultiplyScalar(
-            Engine.TensorNegate(Engine.ReduceSum(Engine.TensorMultiply(target, logProbabilities), null)),
-            NumOps.FromDouble(1.0 / count));
+        // The sum and the division by the count run in float for Half and BFloat16 (WideMean): summed in Half, the
+        // cross-entropy of a large labelled map stalls or overflows before it is divided.
+        return Engine.TensorNegate(
+            Common.MaskSetPredictionLoss.WideMean(Engine.TensorMultiply(target, logProbabilities), count));
     }
 
     #endregion
