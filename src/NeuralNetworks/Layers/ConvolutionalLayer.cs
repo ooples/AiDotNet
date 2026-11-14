@@ -448,6 +448,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     {
         if (a.Length != b.Length) return false;
         var comparer = EqualityComparer<T>.Default;
+        // Both probe results are fresh contiguous tensors: compare their storage in one pass (one device download
+        // each) rather than through the element indexer, which made this probe ~10% of VGG-11's first epoch.
+        if (a.IsContiguous && b.IsContiguous)
+        {
+            var sa = a.AsSpan();
+            var sb = b.AsSpan();
+            for (int i = 0; i < sa.Length; i++)
+                if (!comparer.Equals(sa[i], sb[i])) return false;
+            return true;
+        }
         for (int i = 0; i < a.Length; i++)
             if (!comparer.Equals(a[i], b[i])) return false;
         return true;
