@@ -96,7 +96,7 @@ public class RetrievalPaperReferenceTests
 
     /// <summary>
     /// Okapi BM25 (Robertson and Zaragoza 2009, Eq. 3.15) with k1 = 1.5, b = 0.75 and the Lucene idf
-    /// ln(1 + (N - df + 0.5) / (df + 0.5)) on "a b", "a a c", "c" for query "c": N = 3, df = 2, avgdl = 5/3,
+    /// ln(1 + (N - df + 0.5) / (df + 0.5)) on "a b", "a a c", "c" for query "c": N = 3, df = 2, avgdl = (2 + 3 + 1) / 3 = 2,
     /// idf = ln(1 + 1.5 / 2.5). The idf without the 1 + is ln(0.6) &lt; 0 here, which scored both documents
     /// containing "c" below "a b" (score 0); they must rank first.
     /// </summary>
@@ -110,7 +110,7 @@ public class RetrievalPaperReferenceTests
 
         Assert.Equal(new[] { "d2", "d1", "d0" }, ranked.Select(d => d.Id).ToArray());
         double idf = Math.Log(1.0 + 1.5 / 2.5);
-        double avgdl = 5.0 / 3.0;
+        double avgdl = (2.0 + 3.0 + 1.0) / 3.0;
         double Term(double tf, double dl) => idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * dl / avgdl));
         Assert.Equal(Term(1, 3), results["d1"], Tolerance);
         Assert.Equal(Term(1, 1), results["d2"], Tolerance);
