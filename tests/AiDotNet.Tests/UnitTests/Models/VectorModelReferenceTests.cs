@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -88,26 +89,34 @@ public class VectorModelReferenceTests
     }
 
     [Fact]
-    public void Train_Half_SingularValueAtHalfPrecision_IsTruncated()
+    public void Train_Half_SingularValueBelowHalfPrecision_IsTruncated()
     {
-        // The second column equals the first up to 2^-8 in two rows, so X^T X is singular in Half and training
-        // takes the SVD path. X's singular values are 2.83 and 2.76e-3; the second is about one Half epsilon
-        // relative to the first, below the numpy/LAPACK cutoff max(m, n) * eps * sigma_max = 0.011. Truncating it
-        // gives the rank-1 minimum-norm fit (0.998, 1.000). A 1e-12 tolerance rounded to 0 in Half and kept it.
-        const double d = 1.0 / 256;
+        // X = [diag(1, 1e-4); -diag(1, 1e-4)] has orthogonal, already-centred columns, so its singular values are
+        // known exactly: sqrt(2) and sqrt(2) * 1e-4. X^T X = diag(2, 2e-8) is singular in Half (2e-8 rounds to
+        // 0), so training takes the SVD path. The numpy/LAPACK cutoff max(m, n) * eps * sigma_max = 4 * 2^-10 *
+        // sqrt(2) = 5.5e-3 drops sigma_2, so the fit is the rank-1 minimum-norm solution (1, 0). A 1e-12
+        // tolerance rounds to 0 in Half and keeps sigma_2, which fits y = x1 + x2 exactly as (1, 1).
         var x = new Matrix<Half>(new[,]
         {
-            { (Half)1, (Half)1 },
-            { (Half)(-1), (Half)(-1) },
-            { (Half)1, (Half)(1 + d) },
-            { (Half)(-1), (Half)(-1 - d) }
+            { (Half)1, (Half)0 },
+            { (Half)0, (Half)1e-4 },
+            { (Half)(-1), (Half)0 },
+            { (Half)0, (Half)(-1e-4) }
         });
-        var y = new Vector<Half>(new[] { (Half)2, (Half)(-2), (Half)2, (Half)(-2) });
+        var y = new Vector<Half>(new[] { (Half)1, (Half)1e-4, (Half)(-1), (Half)(-1e-4) });
+
+        // Precondition: the engine resolves sigma_2 as non-zero and below the cutoff, so the result depends
+        // only on the tolerance, not on SVD rounding.
+        var singular = new SvdDecomposition<Half>(x).S;
+        double sigma1 = Math.Max((double)singular[0], (double)singular[1]);
+        double sigma2 = Math.Min((double)singular[0], (double)singular[1]);
+        Assert.True(sigma2 > 0, "sigma_2 must be non-zero for the fixture to discriminate.");
+        Assert.True(sigma2 < 4 * (1.0 / 1024) * sigma1, "sigma_2 must be below the eps(T) cutoff.");
 
         using var model = new VectorModel<Half>(new Vector<Half>(2));
         model.Train(x, y);
 
-        Assert.Equal(0.998, (double)model.Coefficients[0], 0.02);
-        Assert.Equal(1.0, (double)model.Coefficients[1], 0.02);
+        Assert.Equal(1.0, (double)model.Coefficients[0], 1e-2);
+        Assert.Equal(0.0, (double)model.Coefficients[1], 1e-2);
     }
 }
