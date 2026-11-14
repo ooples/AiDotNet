@@ -2486,6 +2486,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 _distributedConfiguration);
             distNeuralNet.DistributedCoordinator = distCoordinator;
         }
+        else if (distBackend is { WorldSize: > 1 })
+        {
+            // Only neural networks have a gradient coordinator. Any other model would have each rank
+            // apply its own shard's gradients with no reduction, so the ranks would end with different
+            // parameters while the run reports itself as distributed.
+            throw new NotSupportedException(
+                $"Distributed streaming training across {distBackend.WorldSize} ranks requires a neural-network model " +
+                $"(NeuralNetworkBase<{typeof(T).Name}>); '{_model.GetType().Name}' has no cross-rank gradient synchronization. " +
+                "Train it on a single rank, or use a neural-network model.");
+        }
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -2640,10 +2650,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // store their statistics, so a resumed run would otherwise fit them on the first batch AFTER the skip and
             // scale every later batch differently from the run it resumes. Refit on that same batch (same epoch-0 seed)
             // before skipping ahead. With no Seed the shuffle is not reproducible, so no run could match exactly.
+            //
+            // Distributed runs (WorldSize > 1) ALWAYS fit here, on the raw (unsliced) loader's first batch, so that
+            // every rank — in the initial run and in every resume — derives identical feature/target statistics.
+            // Fitting inside the loop would use each rank's own local slice: ranks would scale inputs differently
+            // while sharing one set of averaged weights, and a resume could not reproduce a rank's original fit.
+            // Without a Seed the shuffle differs per rank, so the shared fit batch is read unshuffled.
+            bool multiRankStreaming = distBackend is { WorldSize: > 1 };
             bool resumedPastFirstBatch = startEpoch > 0 || resumeSkipBatches > 0 || resumeSkipSamples > 0;
             bool targetPipelineUnfitted = _targetPipeline is { IsFitted: false };
-            bool anyPipelineUnfitted = !pipelineFitted || targetPipelineUnfitted;
-            if (resumedPastFirstBatch && anyPipelineUnfitted)
+            bool anyPipelineUnfitted = (_preprocessingPipeline is not null && !pipelineFitted) || targetPipelineUnfitted;
+            if ((resumedPastFirstBatch || multiRankStreaming) && anyPipelineUnfitted)
             {
                 if (!rawLoader.IsLoaded)
                 {
@@ -2651,7 +2668,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
 
                 int? firstEpochSeed = streamingOptions?.Seed;
-                await foreach (var (fitInputs, fitOutputs) in rawLoader.GetBatchesAsync(shuffle: true, seed: firstEpochSeed, cancellationToken: cancellationToken))
+                bool shuffleFitBatch = !multiRankStreaming || firstEpochSeed is not null;
+                await foreach (var (fitInputs, fitOutputs) in rawLoader.GetBatchesAsync(shuffle: shuffleFitBatch, seed: firstEpochSeed, cancellationToken: cancellationToken))
                 {
                     if (fitInputs.Length == 0) continue;
                     FitStreamingPipelines(fitInputs, fitOutputs);
@@ -2818,6 +2836,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                                 epochLoss = numOps.Add(epochLoss, lastLoss);
                                 epochBatches++;
                             }
+                            else if (distCoordinator is not null
+                                && nn is NeuralNetworks.NeuralNetworkBase<T> heterogeneousDistNn)
+                            {
+                                // Heterogeneous shapes under distributed training: every rank must issue
+                                // exactly one coordinated update per loader batch. A per-sample loop would
+                                // run one collective sequence per LOCAL sample, so ranks holding different
+                                // sample counts (or ranks whose slice happened to stack) would desynchronize.
+                                // Accumulate the samples as micro-batches of a single coordinated step.
+                                var heterogeneousMicroBatches = new List<(Tensor<T> Input, Tensor<T> Target)>(inputArray.Length);
+                                for (int i = 0; i < inputArray.Length; i++)
+                                {
+                                    heterogeneousMicroBatches.Add((inputArray[i], outputArray[i]));
+                                }
+
+                                ExecuteAccumulatedStreamingStep(heterogeneousDistNn, heterogeneousMicroBatches, gboTrain);
+                                epochLoss = AddLossScalars(epochLoss, nn.GetLastLoss());
+                                epochBatches++;
+                            }
                             else
                             {
                                 // Heterogeneous shapes — process each sample
@@ -2963,18 +2999,23 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     DateTime.UtcNow - streamingStart,
                     cancellationToken,
                     out var epochStopReason);
-                if (!continueTraining)
-                {
-                    streamingEarlyStopTriggered = true;
-                    streamingStopReason ??= epochStopReason;
-                    break;
-                }
+                // Check for early stopping if configured. Evaluated on every rank BEFORE the reduction below so a
+                // multi-rank world takes one shared decision.
+                bool optimizerEarlyStop = continueTraining && _optimizer is not null && _optimizer.ShouldEarlyStop();
+                bool localStop = !continueTraining || optimizerEarlyStop;
 
-                // Check for early stopping if configured
-                if (_optimizer is not null && _optimizer.ShouldEarlyStop())
+                // Callbacks, monitors, cancellation and optimizer early-stopping are all rank-local signals. If one
+                // rank left the epoch loop alone it would enter final validation / checkpoint collectives while its
+                // peers start the next epoch's gradient collectives, and the world would deadlock or mis-pair.
+                bool globalStop = ReduceStreamingStopDecision(distBackend, localStop);
+                if (globalStop)
                 {
                     streamingEarlyStopTriggered = true;
-                    streamingStopReason ??= $"optimizer early-stopping criterion met at epoch {epoch}";
+                    streamingStopReason ??= !continueTraining
+                        ? epochStopReason
+                        : optimizerEarlyStop
+                            ? $"optimizer early-stopping criterion met at epoch {epoch}"
+                            : $"a peer rank requested stop at epoch {epoch}";
                     break;
                 }
             }

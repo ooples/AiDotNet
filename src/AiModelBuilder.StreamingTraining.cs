@@ -194,9 +194,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             _model.Predict((TInput)(object)dummyInput);
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
         {
-            // Best-effort lazy shape resolution; any genuine shape mismatch will surface on the first real training batch.
+            // Best-effort lazy shape resolution; a genuine shape mismatch surfaces again on the first
+            // real training batch. Record the cause so a failed initialization is not invisible.
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] {neuralNet.GetType().Name}: lazy-layer warmup with sample shape [{string.Join(", ", sampleShape)}] failed " +
+                $"({ex.GetType().Name}: {ex.Message}); continuing, the first training batch will initialize the layers.");
         }
         finally
         {
@@ -1023,6 +1027,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private static double ConvertToDoubleScalar(T value)
     {
         return MathHelper.GetNumericOperations<T>().ToDouble(value);
+    }
+
+    /// <summary>
+    /// Turns a rank-local stop request into a world-wide decision: any rank asking to stop stops every rank.
+    /// Single-process runs return <paramref name="localStop"/> unchanged.
+    /// </summary>
+    private static bool ReduceStreamingStopDecision(
+        DistributedTraining.ICommunicationBackend<T>? distBackend,
+        bool localStop)
+    {
+        if (distBackend is null || distBackend.WorldSize <= 1)
+        {
+            return localStop;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var stopFlag = new Vector<T>(1);
+        stopFlag.AsWritableSpan()[0] = numOps.FromDouble(localStop ? 1.0 : 0.0);
+        distBackend.AllReduce(stopFlag, DistributedTraining.ReductionOperation.Max);
+        return numOps.ToDouble(stopFlag.AsSpan()[0]) > 0.0;
     }
 
     private static T AddLossScalars(T a, T b)
