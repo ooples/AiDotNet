@@ -176,7 +176,7 @@ public class SpecializedKernelBenchmarks
     [Params(100, 500)]
     public int NumRFFFeatures { get; set; }
 
-    private double[][] _gridCoordinates = null!;
+    private Vector<double>[] _gridCoordinates = null!;
     private GridKernel<double> _gridKernel = null!;
     private RFFKernel<double> _rffKernel = null!;
     private CosineKernel<double> _cosineKernel = null!;
@@ -191,7 +191,7 @@ public class SpecializedKernelBenchmarks
         // Initialize 2D grid coordinates
         var gridX = Enumerable.Range(0, GridSize).Select(i => (double)i).ToArray();
         var gridY = Enumerable.Range(0, GridSize).Select(i => (double)i).ToArray();
-        _gridCoordinates = new[] { gridX, gridY };
+        _gridCoordinates = new[] { new Vector<double>(gridX), new Vector<double>(gridY) };
 
         // Initialize kernels
         _gridKernel = GridKernel<double>.WithRBF(_gridCoordinates, lengthscales: new[] { 1.0, 1.0 });
