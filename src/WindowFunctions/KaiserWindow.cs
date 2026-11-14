@@ -7,7 +7,7 @@ namespace AiDotNet.WindowFunctions;
 /// <para>
 /// The Kaiser window is a flexible window function based on the modified Bessel function of the first kind.
 /// It is defined by the equation:
-/// w(n) = I0(ßv(1-(2n/(N-1))²))/I0(ß)
+/// w(n) = I0(beta * sqrt(1 - (2n/(N-1) - 1)^2)) / I0(beta)
 /// where n is the sample index, N is the window size, I0 is the modified Bessel function of the first kind
 /// of order zero, and ß (beta) is a parameter that controls the trade-off between the main lobe width
 /// and side lobe amplitude.
@@ -137,7 +137,10 @@ public class KaiserWindow<T> : IWindowFunction<T>
         Tensor<T> x = WindowFunctionHelper.SymmetricCoordinate<T>(windowSize);
         Tensor<T> radicand = engine.TensorClamp(engine.ScalarMinusTensor(_numOps.One, engine.TensorSquare(x)), _numOps.Zero, _numOps.One);
         Tensor<T> bessel = engine.TensorI0(engine.TensorMultiplyScalar(engine.TensorSqrt(radicand), _beta));
-        return engine.TensorDivideScalar(bessel, MathHelper.BesselI0(_beta)).ToVector();
+        // I0(beta) goes through the same engine series as the numerator. MathHelper.BesselI0 divides each
+        // series term by an extra i!, so I0(5) came out as 12.7 instead of 27.24.
+        Tensor<T> peak = engine.TensorI0(Tensor<T>.CreateDefault(new[] { 1 }, _beta));
+        return engine.TensorDivide(bessel, engine.TensorBroadcastTo(peak, bessel._shape)).ToVector();
     }
 
     /// <summary>
