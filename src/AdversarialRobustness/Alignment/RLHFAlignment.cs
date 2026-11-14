@@ -465,7 +465,9 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         if (NumOps.LessThan(Engine.TensorMinValue(finite), NumOps.One)) return false;
         var magnitudes = Engine.TensorAbs(outputTensor);
         double absMax = NumOps.ToDouble(Engine.TensorMaxValue(magnitudes));
-        double sumAbs = NumOps.ToDouble(Engine.TensorSum(magnitudes));
+        // Summed in double: in Half four magnitudes of 32768 already sum past 65504, and an infinite sum let a
+        // saturated output pass the engagement check below.
+        double sumAbs = Engine.TensorSum(magnitudes.Cast<double>());
         if (sumAbs == 0.0) return false;
 
         // Input-conditioned engagement: an output uncorrelated with the input
