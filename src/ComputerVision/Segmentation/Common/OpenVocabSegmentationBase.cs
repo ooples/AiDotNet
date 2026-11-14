@@ -96,12 +96,22 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
         int maxPromptLength)
         : base(architecture, onnxModelPath, RequireOptions(options).NumClasses)
     {
-        Guard.Positive(maxCategories);
-        Guard.Positive(maxPromptLength);
-        _maxCategories = maxCategories;
-        _maxPromptLength = maxPromptLength;
-        _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
-        (_logitScale, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
+        try
+        {
+            Guard.Positive(maxCategories);
+            Guard.Positive(maxPromptLength);
+            _maxCategories = maxCategories;
+            _maxPromptLength = maxPromptLength;
+            _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+            (_logitScale, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
+        }
+        catch
+        {
+            // The base already opened the ONNX session; a failed constructor leaves the caller nothing to dispose.
+            _onnxSession?.Dispose();
+            _onnxSession = null;
+            throw;
+        }
     }
 
     private static TextQueriedSegmentationOptions RequireOptions(TextQueriedSegmentationOptions options)
@@ -123,6 +133,23 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
     /// </summary>
     protected Tensor<T> ClassifyPixels(Tensor<T> pixelEmbeddings)
         => TextEmbeddingClassifier.Classify(pixelEmbeddings, _queryEmbeddings ?? _vocabularyEmbeddings, _logitScale);
+
+    /// <summary>
+    /// The training forward: the base layer walk (seed wiring, checkpointing and weight streaming included)
+    /// followed by <see cref="ClassifyPixels"/>, so training fits the same per-name logits that Predict returns
+    /// rather than the pixel embeddings the layers end with.
+    /// </summary>
+    /// <remarks>
+    /// Overriding this keeps the public input unchanged before the forward, which these models already do:
+    /// they override PredictCore, so the base would skip the public-input preparation either way.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ClassifyPixels(base.ForwardForTraining(input));
+
+    /// <summary>
+    /// The GPU-resident forward: the base layer walk followed by <see cref="ClassifyPixels"/>, the same output
+    /// as Forward and Predict instead of the decoder's pixel embeddings.
+    /// </summary>
+    public override Tensor<T> ForwardGpu(Tensor<T> input) => ClassifyPixels(base.ForwardGpu(input));
 
     /// <inheritdoc/>
     /// <remarks>

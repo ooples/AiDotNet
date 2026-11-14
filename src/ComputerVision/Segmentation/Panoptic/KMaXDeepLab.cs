@@ -236,7 +236,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         bool hasBatch = input.Rank == 4;
         var batched = hasBatch ? input : AddBatchDimension(input);
         var target = hasBatch ? expected : Engine.Reshape(expected, new[] { 1 }.Concat(expected.Shape.ToArray()).ToArray());
-        var decoded = Decode(batched);
+        var decoded = Decode(batched, includeSemantic: _lossSettings.SemanticWeight > 0);
         int b = batched.Shape[0], h = decoded.Height, w = decoded.Width;
         var segments = Common.MaskSetPredictionLoss.SemanticSegments(target, _numClasses, b, h, w);
         var settings = _lossSettings;
@@ -394,7 +394,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     private (Tensor<T> ClassLogits, Tensor<T> MaskLogits, int Height, int Width) Heads(Tensor<T> batched)
     {
-        var decoded = Decode(batched);
+        var decoded = Decode(batched, includeSemantic: false); // inference never reads the auxiliary semantic head
         var final = decoded.Predictions[decoded.Predictions.Count - 1];
         return (final.ClassLogits,
             ToInputResolution(final.MaskLogits, final.Height, final.Width, decoded.Height, decoded.Width),
@@ -430,13 +430,21 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// stride-8 and stride-4 backbone stages, as deeplab2's kMaX-DeepLab does (its <c>feature_semantic</c> is the
     /// backbone's <c>stage5</c>). In ONNX mode the graph's final heads are the only prediction.
     /// </para>
+    /// <para>
+    /// The decoded image's size is always the input's: a graph whose masks are at a stride keeps that size on its
+    /// prediction, so <see cref="Heads"/> upsamples the masks to the stride-1 output the contract declares.
+    /// </para>
     /// </remarks>
-    private DecodedImage Decode(Tensor<T> batched)
+    /// <param name="batched">The batched image <c>[B, C, H, W]</c>.</param>
+    /// <param name="includeSemantic">Whether to run the auxiliary semantic decoder; only its loss reads it.</param>
+    private DecodedImage Decode(Tensor<T> batched, bool includeSemantic)
     {
         if (!_useNativeMode)
         {
             var (classLogits, maskLogits, h, w) = OnnxHeads(batched);
-            return new DecodedImage(new[] { new Common.KMaXPrediction<T>(classLogits, maskLogits, null, h, w) }, null, h, w);
+            return new DecodedImage(
+                new[] { new Common.KMaXPrediction<T>(classLogits, maskLogits, null, h, w) }, null,
+                batched.Shape[2], batched.Shape[3]);
         }
 
         int b = batched.Shape[0], height = batched.Shape[2], width = batched.Shape[3];
@@ -463,7 +471,9 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         var predictions = Common.KMaXTransformerDecoder.Run(
             Layers, DecoderStart, _decoderShape, decoderScales, _kMeansIterations,
             finest.Features, finest.Height, finest.Width, _numClusters);
-        var semanticLogits = Common.PanopticDeepLabSemanticDecoder.Run(Layers, SemanticDecoderStart, _semanticShape, stages); // [B, K, h4, w4]
+        var semanticLogits = includeSemantic
+            ? Common.PanopticDeepLabSemanticDecoder.Run(Layers, SemanticDecoderStart, _semanticShape, stages) // [B, K, h4, w4]
+            : null;
         return new DecodedImage(predictions, semanticLogits, height, width);
     }
 
@@ -534,6 +544,18 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         var (classLogits, maskLogits, h, w) = Heads(input);
         var scores = SemanticScores(classLogits, maskLogits, h, w);
         if (!hasBatch) scores = RemoveBatchDimension(scores); return scores;
+    }
+
+    /// <summary>
+    /// The training forward for a caller-supplied loss: the same semantic scores <see cref="Forward"/> returns (the
+    /// layers are not a sequential chain, so the base layer walk would train a different tensor). The layer seeds
+    /// are wired first, as the base does. The set-prediction objective reads the decoder directly instead.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        EnsureLayerRandomSeedsWired();
+        return Forward(input);
     }
 
     /// <inheritdoc />
@@ -631,8 +653,9 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (batched.Shape[0] != 1) throw new ArgumentException("SegmentPanoptic takes a single image.", nameof(image));
         using var noGrad = new NoGradScope<T>();
         var (classLogits, maskLogits, h, w) = Heads(batched);
-        var classProbabilities = Engine.Reshape(Engine.TensorSoftmax(classLogits, 2), new[] { _numClusters, _numClasses + 1 });
-        var maskProbabilities = Engine.Reshape(Engine.TensorSoftmax(maskLogits, 1), new[] { _numClusters, h, w });
+        int clusters = classLogits.Shape[1]; // an ONNX graph may decode a different query count than the options
+        var classProbabilities = Engine.Reshape(Engine.TensorSoftmax(classLogits, 2), new[] { clusters, _numClasses + 1 });
+        var maskProbabilities = Engine.Reshape(Engine.TensorSoftmax(maskLogits, 1), new[] { clusters, h, w });
         var settings = new Common.KMaXPanopticSettings(
             _options.ClassThresholdThing, _options.ClassThresholdStuff, _options.PixelConfidenceThreshold,
             _options.OverlapThreshold, _options.ReorderClassWeight, _options.ReorderMaskWeight);

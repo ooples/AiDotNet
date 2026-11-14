@@ -23140,3 +23140,8 @@ AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.TrainPanoptic(AiDotNet.Ten
 override AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.ResolveLazyLayerShapes() -> void
 override AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.RegisterComponents() -> void
 override AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
+override AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.ForwardGpu(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ForwardGpu(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
