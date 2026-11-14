@@ -648,6 +648,8 @@ jobs:
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
           COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # A stacked pull request selected for what it adds to master; narrowing against its base would drop that.
+          MAP_LINEAGE_REF: ${{ needs.select-shards.outputs.map_lineage_ref }}
           # The routing select-shards planned, so a narrowed matrix sends the same share to the self-hosted runners.
           SELF_HOSTED_SHARDS: ${{ needs.select-shards.outputs.self_hosted_shards || '0' }}
           SELF_HOSTED_LABEL: ${{ needs.select-shards.outputs.self_hosted_label }}
@@ -860,6 +862,9 @@ jobs:
       requires_sweeps: ${{ steps.select.outputs.requires_sweeps }}
       requires_shapes: ${{ steps.select.outputs.requires_shapes }}
       escalated: ${{ steps.select.outputs.escalated }}
+      # Set only when a stacked pull request fell back to master's map; the Build job's test-level
+      # selection then keeps this selection whole (Select-AffectedTests.ps1).
+      map_lineage_ref: ${{ steps.map.outputs.lineage_ref }}
       # JSON boolean. Every expensive job consumes it through fromJSON; false is the deliberate
       # non-runtime path, while absent/malformed output prevents those jobs from being authorized.
       requires_validation: ${{ steps.select.outputs.requires_validation }}

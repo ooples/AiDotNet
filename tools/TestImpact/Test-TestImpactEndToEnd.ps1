@@ -505,6 +505,39 @@ try {
         Assert-True ([int] $stacked.map.changedByThisChange -eq 2) `
             "a stacked selection must cover exactly the two paths the stack adds to master, not master's own commits: $($stacked.map.changedByThisChange)"
 
+        # Through the Build consumer: Select-AffectedTests diffs the merge commit against its first
+        # parent (the base branch), which never sees the base branch's Beta test, and TypeImpact would
+        # drop Beta while Alpha kept the narrowed matrix nonempty. With the lineage set it must keep
+        # the shard selection whole.
+        $affectedScript = Join-Path $PSScriptRoot 'Select-AffectedTests.ps1'
+        $affectedOutput = Join-Path $fixture 'stacked-affected-output.txt'
+        $affectedSummary = Join-Path $fixture 'stacked-affected-summary.md'
+        $affectedNames = 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY', 'GITHUB_EVENT_NAME', 'REQUIRES_SHARDS', 'DELTA_MODE',
+            'COLLECT_COVERAGE_EVERYWHERE', 'SELECTED_MATRIX', 'PR_HEAD_SHA', 'MAP_LINEAGE_REF'
+        $affectedSaved = @{}
+        foreach ($name in $affectedNames) { $affectedSaved[$name] = [Environment]::GetEnvironmentVariable($name) }
+        try {
+            $env:GITHUB_OUTPUT = $affectedOutput
+            $env:GITHUB_STEP_SUMMARY = $affectedSummary
+            $env:GITHUB_EVENT_NAME = 'pull_request'
+            $env:REQUIRES_SHARDS = 'true'
+            $env:DELTA_MODE = ''
+            $env:COLLECT_COVERAGE_EVERYWHERE = ''
+            $env:SELECTED_MATRIX = (@($stacked.shards | ForEach-Object { @{ name = [string] $_ } }) | ConvertTo-Json -Compress -AsArray)
+            $env:PR_HEAD_SHA = $stackHeadSha
+            $env:MAP_LINEAGE_REF = 'origin/master'
+            & pwsh -NoProfile -File $affectedScript -Repository $fixture | Out-Null
+            $affectedExit = $LASTEXITCODE
+        }
+        finally {
+            foreach ($name in $affectedNames) { [Environment]::SetEnvironmentVariable($name, $affectedSaved[$name]) }
+        }
+        Assert-True ($affectedExit -eq 0) "test-level selection for a stacked pull request failed (exit $affectedExit)"
+        $affectedRecorded = if (Test-Path -LiteralPath $affectedOutput) { Get-Content -LiteralPath $affectedOutput -Raw } else { '' }
+        $affectedReason = if (Test-Path -LiteralPath $affectedSummary) { Get-Content -LiteralPath $affectedSummary -Raw } else { '' }
+        Assert-True ($affectedRecorded -match 'impact_mode=passthrough' -and $affectedReason -match "map of 'origin/master'") `
+            "test-level selection narrowed a stacked pull request's lineage selection against its base branch only: $affectedReason"
+
         # Master moves on after the stack was cut: the merge base stays where the stack left
         # master, so master's later commits are not charged to the stack.
         Invoke-Git checkout --quiet --detach $masterSha
