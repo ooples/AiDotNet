@@ -6,6 +6,7 @@ using AiDotNet.FederatedLearning.Privacy.Accounting;
 using AiDotNet.FederatedLearning.Selection;
 using AiDotNet.FederatedLearning.ServerOptimizers;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
 using System.Threading.Tasks;
@@ -586,7 +587,7 @@ public class FederatedLearningIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ShamirSecretSharing_SplitAndCombine_ReconstructsSecret()
     {
-        // Test with internal static class via reflection or through ThresholdSecureAggregation
+        // Test with internal static class via reflection or through SecureAggregation
         var secret = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
         int threshold = 3;
         int numShares = 5;
@@ -598,7 +599,7 @@ public class FederatedLearningIntegrationTests
         }
 
         // Use reflection to access internal class
-        var shamirType = typeof(ThresholdSecureAggregation<double>).Assembly
+        var shamirType = typeof(SecureAggregation<double>).Assembly
             .GetType("AiDotNet.FederatedLearning.Cryptography.ShamirSecretSharing");
 
         // Skip if internal type is not available (may be refactored or renamed)
@@ -855,13 +856,12 @@ public class FederatedLearningIntegrationTests
     #region Secure Aggregation
 
     [Fact(Timeout = 120000)]
-    public async Task SecureAggregationVector_MaskAndAggregate_PreservesSum()
+    public async Task SecureAggregation_MaskAndAggregate_PreservesWeightedAverage()
     {
+        await Task.Yield();
         var parameterCount = 5;
-        var secureAgg = new SecureAggregationVector<double>(parameterCount, randomSeed: 42);
-
-        var clientIds = new List<int> { 0, 1, 2 };
-        secureAgg.GeneratePairwiseSecrets(clientIds);
+        using var secureAgg = new SecureAggregation<double>(parameterCount);
+        secureAgg.InitializeRound(new List<int> { 0, 1, 2 });
 
         var clientUpdates = new Dictionary<int, Vector<double>>
         {
@@ -870,103 +870,77 @@ public class FederatedLearningIntegrationTests
             [2] = new Vector<double>(new[] { 3.0, 4.0, 5.0, 6.0, 7.0 })
         };
 
-        var clientWeights = new Dictionary<int, double>
-        {
-            [0] = 1.0,
-            [1] = 1.0,
-            [2] = 1.0
-        };
+        // Each client pre-weights its update by its share of the total weight.
+        var clientWeights = new Dictionary<int, double> { [0] = 0.25, [1] = 0.25, [2] = 0.5 };
+        var maskedUpdates = clientUpdates
+            .Select(kvp => secureAgg.MaskUpdate(kvp.Key, kvp.Value, clientWeights[kvp.Key]))
+            .ToList();
 
-        // Mask updates
-        var maskedUpdates = new Dictionary<int, Vector<double>>();
-        foreach (var kvp in clientUpdates)
-        {
-            maskedUpdates[kvp.Key] = secureAgg.MaskUpdate(kvp.Key, kvp.Value, clientWeights[kvp.Key]);
-        }
-
-        // Aggregate securely
-        var aggregated = secureAgg.AggregateSecurely(maskedUpdates, clientWeights);
-
-        // Expected: average of all updates
-        var expectedAverage = new[] { 2.0, 3.0, 4.0, 5.0, 6.0 };
+        var aggregated = secureAgg.AggregateWeightedAverage(maskedUpdates, clientWeights);
 
         Assert.Equal(parameterCount, aggregated.Length);
         for (int i = 0; i < parameterCount; i++)
         {
-            Assert.Equal(expectedAverage[i], aggregated[i], Tolerance);
+            double expected = 0.25 * clientUpdates[0][i] + 0.25 * clientUpdates[1][i] + 0.5 * clientUpdates[2][i];
+            Assert.Equal(expected, aggregated[i]);
         }
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SecureAggregationVector_ClearSecrets_RemovesSensitiveData()
+    public async Task SecureAggregation_ClearSecrets_EndsTheRound()
     {
-        var secureAgg = new SecureAggregationVector<double>(10, randomSeed: 42);
-
-        var clientIds = new List<int> { 0, 1 };
-        secureAgg.GeneratePairwiseSecrets(clientIds);
+        await Task.Yield();
+        using var secureAgg = new SecureAggregation<double>(10);
+        secureAgg.InitializeRound(new List<int> { 0, 1 });
+        Assert.Equal(2, secureAgg.ClientIds.Count);
 
         secureAgg.ClearSecrets();
 
-        // After clearing, secrets should be gone (no exception thrown)
-        // This is mainly a coverage test
-        Assert.True(true);
+        Assert.Empty(secureAgg.ClientIds);
+        Assert.Throws<InvalidOperationException>(() => secureAgg.MaskUpdate(0, new Vector<double>(10)));
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ThresholdSecureAggregationVector_InitializeRound_SetsParameters()
+    public async Task SecureAggregation_InitializeRound_UsesTheConfiguredThreshold()
     {
-        var parameterCount = 5;
-        var secureAgg = new ThresholdSecureAggregationVector<double>(parameterCount, randomSeed: 42);
+        await Task.Yield();
+        using var secureAgg = new SecureAggregation<double>(5, new SecureAggregationOptions
+        {
+            Mode = SecureAggregationMode.ThresholdDropoutResilient,
+            ReconstructionThreshold = 3
+        });
 
-        var clientIds = new List<int> { 0, 1, 2, 3, 4 };
+        secureAgg.InitializeRound(new List<int> { 0, 1, 2, 3, 4 });
 
-        secureAgg.InitializeRound(
-            clientIds,
-            minimumUploaderCount: 3,
-            reconstructionThreshold: 2,
-            maxDropoutFraction: 0.3);
-
-        Assert.Equal(3, secureAgg.MinimumUploaderCount);
-        Assert.Equal(2, secureAgg.ReconstructionThreshold);
+        Assert.Equal(3, secureAgg.Threshold);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ThresholdSecureAggregationVector_MaskAndAggregate_ToleratesDropouts()
+    public async Task SecureAggregation_MaskAndAggregate_ToleratesDropouts()
     {
+        await Task.Yield();
         var parameterCount = 3;
-        var secureAgg = new ThresholdSecureAggregationVector<double>(parameterCount, randomSeed: 42);
-
-        var clientIds = new List<int> { 0, 1, 2, 3, 4 };
-
-        secureAgg.InitializeRound(
-            clientIds,
-            minimumUploaderCount: 3,
-            reconstructionThreshold: 3,
-            maxDropoutFraction: 0.4);
-
-        var clientWeights = new Dictionary<int, double>
+        using var secureAgg = new SecureAggregation<double>(parameterCount, new SecureAggregationOptions
         {
-            [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0
+            Mode = SecureAggregationMode.ThresholdDropoutResilient,
+            ReconstructionThreshold = 3
+        });
+        secureAgg.InitializeRound(new List<int> { 0, 1, 2, 3, 4 });
+
+        // Clients 3 and 4 drop after sharing keys; the server reconstructs their pairwise masks.
+        var maskedUpdates = new List<SecureAggregationMaskedInput>
+        {
+            secureAgg.MaskUpdate(0, new Vector<double>(new[] { 1.0, 1.0, 1.0 })),
+            secureAgg.MaskUpdate(1, new Vector<double>(new[] { 2.0, 2.0, 2.0 })),
+            secureAgg.MaskUpdate(2, new Vector<double>(new[] { 3.0, 3.0, 3.0 }))
         };
 
-        // Only 3 clients upload (clients 0, 1, 2 - simulating dropouts of 3, 4)
-        var maskedUpdates = new Dictionary<int, Vector<double>>
-        {
-            [0] = secureAgg.MaskUpdate(0, new Vector<double>(new[] { 1.0, 1.0, 1.0 }), 1.0),
-            [1] = secureAgg.MaskUpdate(1, new Vector<double>(new[] { 2.0, 2.0, 2.0 }), 1.0),
-            [2] = secureAgg.MaskUpdate(2, new Vector<double>(new[] { 3.0, 3.0, 3.0 }), 1.0)
-        };
+        var sum = secureAgg.AggregateSum(maskedUpdates);
 
-        var uploaderWeights = new Dictionary<int, double>
-        {
-            [0] = 1.0, [1] = 1.0, [2] = 1.0
-        };
-
-        var aggregated = secureAgg.AggregateSecurely(maskedUpdates, uploaderWeights);
-
-        Assert.Equal(parameterCount, aggregated.Length);
-        // Average of [1,1,1], [2,2,2], [3,3,3] = [2,2,2]
-        Assert.Equal(2.0, aggregated[0], Tolerance);
+        Assert.Equal(parameterCount, sum.Length);
+        Assert.Equal(6.0, sum[0]);
+        Assert.Equal(6.0, sum[1]);
+        Assert.Equal(6.0, sum[2]);
     }
 
     #endregion
