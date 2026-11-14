@@ -519,13 +519,16 @@ public class FederatedHalfPrecisionReferenceTests
     {
         await Task.Yield();
 
-        var gossip = new SegmentedGossipProtocol<Half>(numSegments: 1);
+        // The protocol needs at least 2 segments. With 2 segments over 2 parameters the first round averages
+        // coordinate 0 only: (60000 + 60000) / 2 = 60000, whose sum 120000 overflows Half; coordinate 1 is kept.
+        var gossip = new SegmentedGossipProtocol<Half>(numSegments: 2);
 
         var updated = gossip.GossipExchange(
-            new Dictionary<string, Half[]> { ["w"] = new[] { (Half)60000.0 } },
-            new Dictionary<string, Half[]> { ["w"] = new[] { (Half)60000.0 } });
+            new Dictionary<string, Half[]> { ["w"] = new[] { (Half)60000.0, (Half)1.0 } },
+            new Dictionary<string, Half[]> { ["w"] = new[] { (Half)60000.0, (Half)3.0 } });
 
         AssertClose(60000, (double)updated["w"][0], HalfRelTol);
+        Assert.Equal(1.0, (double)updated["w"][1]);
     }
 
     [Fact(Timeout = 60000)]
