@@ -266,10 +266,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
         // property of a Siamese metric. A concatenation head learns α·h1 + β·h2,
         // an asymmetric function that no longer measures a distance.
         var diff = (Vector<T>)Engine.Subtract(embedding1, embedding2);
-        var l1 = new Vector<T>(diff.Length);
-        for (int i = 0; i < diff.Length; i++)
-            l1[i] = NumOps.Abs(diff[i]);
-        return l1;
+        return Engine.Abs(diff);
     }
 
     /// <summary>
@@ -313,47 +310,30 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
             return NumOps.Zero;
         }
 
-        T totalLoss = NumOps.Zero;
         T half = NumOps.FromDouble(0.5);
+        int pairCount = _cachedEmbeddingPairs.Count;
+        int dim = _cachedEmbeddingPairs[0].embedding1.Length;
 
-        // Compute contrastive loss for each cached pair
-        foreach (var (embedding1, embedding2, label) in _cachedEmbeddingPairs)
-        {
-            // Compute Euclidean distance using vectorized operations
-            var diff = (Vector<T>)Engine.Subtract(embedding1, embedding2);
-            T distanceSquared = Engine.DotProduct(diff, diff);
-            T distance = NumOps.Sqrt(distanceSquared);
+        // All cached pairs at once: D^2 = |e1 - e2|^2 per pair. Similar pairs (label > 0.5) cost
+        // 0.5 * D^2, dissimilar ones 0.5 * max(0, margin - D)^2.
+        var first = Engine.TensorConcatenate(
+            _cachedEmbeddingPairs.Select(p => Tensor<T>.FromVector(p.embedding1, new[] { 1, dim })).ToArray(), 0);
+        var second = Engine.TensorConcatenate(
+            _cachedEmbeddingPairs.Select(p => Tensor<T>.FromVector(p.embedding2, new[] { 1, dim })).ToArray(), 0);
+        var labels = Tensor<T>.FromVector(new Vector<T>(_cachedEmbeddingPairs.Select(p => p.label)), new[] { pairCount });
 
-            // Compute contrastive loss based on label
-            // For similar pairs (label close to 1): minimize distance
-            // For dissimilar pairs (label close to 0): maximize distance up to margin
-            T one = NumOps.FromDouble(1.0);
-            T zero = NumOps.Zero;
+        var diff = Engine.TensorSubtract(first, second);
+        var distanceSquared = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, false);
+        var distance = Engine.TensorSqrt(distanceSquared);
+        var marginMinusDistance = Engine.TensorSubtract(
+            Engine.TensorAddScalar(new Tensor<T>(new[] { pairCount }), ContrastiveMargin), distance);
+        var clamped = Engine.TensorWhere(
+            Engine.TensorGreaterThan(marginMinusDistance, NumOps.Zero), marginMinusDistance, new Tensor<T>(new[] { pairCount }));
+        var pairLoss = Engine.TensorMultiplyScalar(
+            Engine.TensorWhere(Engine.TensorGreaterThan(labels, half), distanceSquared, Engine.TensorMultiply(clamped, clamped)),
+            half);
+        T totalLoss = Engine.TensorSum(pairLoss);
 
-            // Check if similar (label close to 1) or dissimilar (label close to 0)
-            // Using threshold of 0.5 to classify
-            bool isSimilar = NumOps.GreaterThan(label, half);
-
-            T pairLoss;
-            if (isSimilar)
-            {
-                // Similar: loss = 0.5 * D²
-                pairLoss = NumOps.Multiply(half, distanceSquared);
-            }
-            else
-            {
-                // Dissimilar: loss = 0.5 * max(0, margin - D)²
-                T marginMinusDistance = NumOps.Subtract(ContrastiveMargin, distance);
-                // Clamp to max(0, marginMinusDistance)
-                T clamped = NumOps.GreaterThan(marginMinusDistance, zero) ? marginMinusDistance : zero;
-                T clampedSquared = NumOps.Multiply(clamped, clamped);
-                pairLoss = NumOps.Multiply(half, clampedSquared);
-            }
-
-            totalLoss = NumOps.Add(totalLoss, pairLoss);
-        }
-
-        // Average over all pairs
         T averageLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_cachedEmbeddingPairs.Count));
 
         _lastContrastiveLoss = averageLoss;
@@ -493,7 +473,7 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
             return Accelerate(input, () =>
             {
                 int batchSize = input.Shape[0];
-                var output = TensorAllocator.Rent<T>(new[] { batchSize, 1 });
+                var scores = new List<Tensor<T>>(batchSize);
 
                 // Process each pair in the batch
                 for (int b = 0; b < batchSize; b++)
@@ -508,10 +488,15 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
 
                     // Combine embeddings and compute similarity
                     var combinedEmbedding = CombineEmbeddings(embedding1, embedding2);
-                    var similarityScore = _outputLayer.Forward(Tensor<T>.FromVector(combinedEmbedding)).ToVector();
-
-                    output[b, 0] = similarityScore[0];
+                    var similarityScore = _outputLayer.Forward(Tensor<T>.FromVector(combinedEmbedding));
+                    scores.Add(Engine.TensorSlice(
+                        Engine.Reshape(similarityScore, new[] { similarityScore.Length }), new[] { 0 }, new[] { 1 }));
                 }
+
+                // One similarity score per pair, as a [batchSize, 1] column.
+                var output = batchSize == 0
+                    ? new Tensor<T>(new[] { 0, 1 })
+                    : Engine.Reshape(Engine.TensorConcatenate(scores.ToArray(), 0), new[] { batchSize, 1 });
 
                 return output;
             });
