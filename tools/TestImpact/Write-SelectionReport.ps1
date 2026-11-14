@@ -5,8 +5,9 @@ Renders the shard-selection decision as a readable report: the job summary and a
 .DESCRIPTION
 Select-Shards.ps1 decides which test shards a change needs and writes selection.json. This turns that decision
 into something a person can act on: why the full matrix ran (every blocking file and rule), what coverage alone
-would have selected, every changed file's classification and the shards it reached, and every selected shard
-with all of its reasons. With -TypeImpactPlanFile (the Build job's type-impact-plan.json) it adds the test-level
+would have selected, every changed file's classification and the shards it reached, every selected shard
+with all of its reasons, and the changed members no shard executes ("untested code changed"), for which nothing
+was selected. With -TypeImpactPlanFile (the Build job's type-impact-plan.json) it adds the test-level
 narrowing: which test classes each shard runs, and why the type-level plan could not resolve when it did not.
 
 It never influences the matrix: it only reads the decision files. Missing or malformed input is reported, not fatal.
@@ -99,6 +100,9 @@ function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool]
                elseif ($null -ne $shardsProperty) { @($shardsProperty.Value | Where-Object { $_ }) })
     $routes = @(Get-Prop $Selection 'routes' | Where-Object { $_ } | ForEach-Object { Split-Route ([string] $_) } | Where-Object { $_ })
     $files = @(Get-Prop $Selection 'files' | Where-Object { $_ })
+    # Changed members no shard executes (Select-Shards.ps1, Get-UncoveredRangeDecision): no shard was selected for
+    # them, so the report is the only place they surface.
+    $untested = @(Get-Prop $Selection 'untested' | Where-Object { $_ })
 
     $shards = foreach ($group in ($routes | Group-Object Shard | Sort-Object Name)) {
         $why = @($group.Group.Why)
@@ -159,6 +163,9 @@ function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool]
         packageRouting = Get-Prop $Selection 'packageRouting'
         escalations = @($escalations)
         files = $files
+        untested = $untested
+        newTypePaths = @(Get-Prop $Selection 'newTypePaths' | Where-Object { $_ })
+        preciseFallbacks = Get-Prop $Selection 'preciseFallbacks'
         shards = @($shards)
         structural = @($structuralCounts)
         wouldSelect = $would
@@ -235,6 +242,21 @@ function ConvertTo-SelectionMarkdown($Report) {
             [void] $sb.AppendLine("| ``$(Format-Cell $f.path)`` | $($f.category) | $($f.outcome) | $(@($f.shards).Count) | $(Format-Cell $f.why) |")
         }
         if ($files.Count -gt $MaxRows) { [void] $sb.AppendLine("| ... $($files.Count - $MaxRows) more in the selection-report artifact | | | | |") }
+    }
+
+    $untested = @($Report.untested)
+    if ($untested.Count -gt 0) {
+        [void] $sb.AppendLine(); [void] $sb.AppendLine("#### Untested code changed ($($untested.Count))"); [void] $sb.AppendLine()
+        [void] $sb.AppendLine('No shard in the coverage map executes these members, so no shard was selected for them. A test that reaches one only through reflection or generated code would not have run.')
+        [void] $sb.AppendLine()
+        [void] $sb.AppendLine('| File | Member | Changed lines (map numbering) |'); [void] $sb.AppendLine('| --- | --- | --- |')
+        foreach ($u in @($untested | Select-Object -First $MaxRows)) {
+            [void] $sb.AppendLine("| ``$(Format-Cell ([string] $u.path))`` | ``$(Format-Cell ([string] $u.member))`` | $(Format-Cell ([string] $u.lines)) |")
+        }
+        if ($untested.Count -gt $MaxRows) { [void] $sb.AppendLine("| ... $($untested.Count - $MaxRows) more in the selection-report artifact | | |") }
+    }
+    if ($Report.preciseFallbacks -and ([string] $Report.preciseFallbacks) -notmatch '^on') {
+        [void] $sb.AppendLine(); [void] $sb.AppendLine("Precise fallbacks: $(Format-Cell ([string] $Report.preciseFallbacks)).")
     }
 
     if (@($Report.structural).Count -gt 0) {
@@ -349,7 +371,16 @@ if ($SelfTest) {
         packageRouting = [pscustomobject]@{ impact = 'BuildOnly'; why = 'every changed package reaches only projects no shard executes'
             packages = @([pscustomobject]@{ name = 'TorchSharp'; from = '0.105.0'; to = '0.106.0'; reach = 'build-only'; why = 'AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj' }) } }
     $packageMd = ConvertTo-SelectionMarkdown (New-SelectionReport $packageFixture 5 0 $false '' $null)
+    $untestedFixture = [pscustomobject]@{ escalate = $false; reasons = @(); shards = @('Always'); wouldSelect = @('Always'); routes = @('Always <= is always run')
+        files = @([pscustomobject]@{ path = 'src/A.cs'; category = 'MapCandidate'; outcome = 'routed'; shards = @(); why = '0 shard(s) execute its changed lines; lines 9-9 are in a member no shard executes (untested code changed)' })
+        untested = @([pscustomobject]@{ path = 'src/A.cs'; member = 'A.Unused'; lines = '9-9'; memberLines = '7-11' })
+        newTypePaths = @('src/B.cs'); preciseFallbacks = 'off (TEST_IMPACT_PRECISE_FALLBACKS)' }
+    $untestedReport = New-SelectionReport $untestedFixture 5 1 $false '' $null
+    $untestedMd = ConvertTo-SelectionMarkdown $untestedReport
     $checks = @(
+        (Check 'untested code changed lists the file, the member and its changed lines' ($untestedMd -match '#### Untested code changed \(1\)' -and $untestedMd -match '\| `src/A\.cs` \| `A\.Unused` \| 9-9 \|')),
+        (Check 'the report JSON carries untested and newTypePaths' (@($untestedReport.untested).Count -eq 1 -and (@($untestedReport.newTypePaths) -join ',') -ceq 'src/B.cs')),
+        (Check 'precise fallbacks that are off are named; a report with nothing untested has no such section' (($untestedMd -match 'Precise fallbacks: off') -and ($md -notmatch 'Untested code changed') -and ($md -notmatch 'Precise fallbacks'))),
         (Check 'a failed-map fallback names the map used, its age and the failed runs' ($fallbackMd -match 'map run `100`, built 2026-09-21T04:00:00Z \(1\.5 day\(s\) old\)\. \*\*Fallback:\*\* newer map run\(s\) `400`, `300` failed' -and $fallbackMd -match 'allowed up to 14 day')),
         (Check 'a map used without a fallback is named without a fallback notice' ($plainMd -match 'map run `100`' -and $plainMd -notmatch 'Fallback')),
         (Check 'an expired fallback says why no map is usable' ($expiredMd -match 'map run `400` failed without an audit decision and the last certified map is older than 14 day')),

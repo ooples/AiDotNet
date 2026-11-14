@@ -1084,6 +1084,10 @@ jobs:
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
           # Set only when a stacked pull request fell back to master's map (Download the shard map).
           MAP_LINEAGE_REF: ${{ steps.map.outputs.lineage_ref }}
+          # Kill switch for the selector's precise fallbacks (Select-Shards.ps1, .NOTES). Unset leaves them
+          # on; set the repository variable to 'off' to select every shard executing a file for a changed
+          # range no shard executes, as before, without reverting anything.
+          TEST_IMPACT_PRECISE_FALLBACKS: ${{ vars.TEST_IMPACT_PRECISE_FALLBACKS }}
           # Self-hosted runner routing (Get-SelfHostedShardPlan): a JSON configuration and a token that can
           # read the repository's runners, both repository secrets. Fork pull requests get neither, so
           # their code never runs on a self-hosted machine.

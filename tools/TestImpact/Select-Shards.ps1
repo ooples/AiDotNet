@@ -53,6 +53,13 @@
 
 .PARAMETER SelfTest
     Runs the built-in adversarial checks and exits.
+
+.NOTES
+    Environment: TEST_IMPACT_PRECISE_FALLBACKS. A changed range no shard executes is selected by what
+    it changed (nothing for comments and spacing, the enclosing member for a body, the enclosing type
+    for a declaration) instead of by every shard that executes the file. Setting the variable to 0,
+    false, off, no or disabled restores the file-wide rule; unset, or any other value, leaves the
+    precise rules on. The Select shards job passes the repository variable of the same name.
 #>
 [CmdletBinding(DefaultParameterSetName = 'Select')]
 param(
@@ -1031,6 +1038,42 @@ function ConvertTo-DiffHunks {
     return $hunks
 }
 
+function ConvertTo-OldSideRange {
+    # One hunk's old side as a start/end pair; a pure insertion is the two old lines it sits between.
+    param([Parameter(Mandatory)] [int[]] $Hunk)
+    if ($Hunk[1] -gt 0) { return , ([int[]] @($Hunk[0], ($Hunk[0] + $Hunk[1] - 1))) }
+    return , ([int[]] @([Math]::Max(1, $Hunk[0]), [Math]::Max(1, $Hunk[0] + 1)))
+}
+
+function New-ChangeDetail {
+    <#
+        What the precise fallbacks need about one C# file's change, beside its flat range list: each
+        hunk's old AND new side (the new side is otherwise dropped), the map-numbered ranges that
+        hunk became, the revision the old side is numbered in (Base), the map's own revision, and
+        the hunks from the map to Base. Swept marks a file whose ranges also carry everything the
+        base branch changed since the map, which no hunk of this change accounts for.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $Base,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Hunks,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $MapHunks,
+        [string] $MapRevision = $Base,
+        [bool] $Swept
+    )
+    return [pscustomobject]@{
+        Base        = $Base
+        MapRevision = $MapRevision
+        MapHunks    = $MapHunks
+        Swept       = $Swept
+        Hunks    = @(foreach ($hunk in $Hunks) {
+            [pscustomobject]@{
+                Hunk = [int[]] $hunk
+                Map  = [int[]] (Convert-RangesThroughHunks -Ranges (ConvertTo-OldSideRange -Hunk $hunk) -Hunks $MapHunks)
+            }
+        })
+    }
+}
+
 function ConvertTo-ChangedRanges {
     <#
         The OLD side of each zero-context hunk as flat start/end pairs. A pure insertion has no old
@@ -1047,16 +1090,7 @@ function ConvertTo-ChangedRanges {
     $hunks = ConvertTo-DiffHunks -DiffLines $DiffLines
     foreach ($path in $hunks.Keys) {
         $ranges = [System.Collections.Generic.List[int]]::new()
-        foreach ($hunk in $hunks[$path]) {
-            if ($hunk[1] -gt 0) {
-                [void] $ranges.Add($hunk[0])
-                [void] $ranges.Add($hunk[0] + $hunk[1] - 1)
-            }
-            else {
-                [void] $ranges.Add([Math]::Max(1, $hunk[0]))
-                [void] $ranges.Add([Math]::Max(1, $hunk[0] + 1))
-            }
-        }
+        foreach ($hunk in $hunks[$path]) { $ranges.AddRange([int[]] (ConvertTo-OldSideRange -Hunk $hunk)) }
         $changed[$path] = $ranges
     }
 
@@ -1179,11 +1213,14 @@ function Get-ScopedChangedRanges {
         The change from Base to HEAD, for exactly Paths, in the map commit's line numbers: the
         change's own old-side ranges, carried back through map -> Base. Base may be a commit or a
         tree (post-merge delta reuse compares against a rebuilt tree).
+
+        Detail, when given, receives a New-ChangeDetail record per changed C# file.
     #>
     param(
         [Parameter(Mandatory)] [string] $MapSha,
         [Parameter(Mandatory)] [string] $Base,
-        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths,
+        [hashtable] $Detail
     )
 
     $changed = @{}
@@ -1194,6 +1231,7 @@ function Get-ScopedChangedRanges {
     $mapDiff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $MapSha $Base -- @Paths)
     if ($LASTEXITCODE -ne 0) { throw "git diff from the map commit '$MapSha' to '$Base' failed" }
     $mapHunks = ConvertTo-DiffHunks -DiffLines $mapDiff
+    $ownHunks = if ($null -ne $Detail) { ConvertTo-DiffHunks -DiffLines $changeDiff } else { @{} }
 
     $sweep = [System.Collections.Generic.List[string]]::new()
     foreach ($path in $ownRanges.Keys) {
@@ -1202,7 +1240,11 @@ function Get-ScopedChangedRanges {
         $hunks = @()
         if ($mapHunks.ContainsKey($path)) { $hunks = @($mapHunks[$path]) }
         $changed[$path] = [System.Collections.Generic.List[int]]::new([int[]] (Convert-RangesThroughHunks -Ranges $ranges -Hunks $hunks))
-        if (Test-RangesTouchIntroducedLines -Ranges $ranges -Hunks $hunks) { [void] $sweep.Add($path) }
+        $swept = Test-RangesTouchIntroducedLines -Ranges $ranges -Hunks $hunks
+        if ($swept) { [void] $sweep.Add($path) }
+        if ($ownHunks.ContainsKey($path) -and ([string] $path).EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase)) {
+            $Detail[$path] = New-ChangeDetail -Base $Base -MapRevision $MapSha -Hunks @($ownHunks[$path]) -MapHunks $hunks -Swept $swept
+        }
     }
 
     # Where the change reaches lines the base branch introduced since the map, their mapped origin
@@ -1219,12 +1261,21 @@ function Get-ScopedChangedRanges {
     return $changed
 }
 function Get-ChangedRanges {
-    param([string] $MapSha)
+    # Detail, when given, receives a New-ChangeDetail record per changed C# file (the map is the base).
+    param([string] $MapSha, [hashtable] $Detail)
 
     $changedFiles = @(& git -c core.quotepath=false diff --no-renames --name-only $MapSha HEAD --)
     if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from '$MapSha' failed" }
     $diff = @(& git -c core.quotepath=false diff --no-renames --no-ext-diff -U0 $MapSha HEAD --)
     if ($LASTEXITCODE -ne 0) { throw "git diff from '$MapSha' failed" }
+    if ($null -ne $Detail) {
+        $hunks = ConvertTo-DiffHunks -DiffLines $diff
+        foreach ($path in $hunks.Keys) {
+            if (([string] $path).EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase)) {
+                $Detail[$path] = New-ChangeDetail -Base $MapSha -Hunks @($hunks[$path]) -MapHunks @() -Swept $false
+            }
+        }
+    }
     return ConvertTo-ChangedRanges -DiffLines $diff -ChangedFiles $changedFiles
 }
 
@@ -1269,6 +1320,587 @@ function Get-DirectoryOwners {
         }
     }
     return $null
+}
+
+# ------------------------------------------- precise fallbacks: C# member spans
+
+# Kill switch for the precise fallbacks below. Unset or anything else leaves them on; '0', 'false',
+# 'off', 'no' or 'disabled' restores the two file-wide rules exactly as they were (every shard that
+# executes the file for a changed range no shard executes), with no member index consulted at all.
+# The Select shards job passes the repository variable TEST_IMPACT_PRECISE_FALLBACKS through, so
+# it can be turned off from the repository settings without a revert.
+function Test-PreciseFallbacksEnabled {
+    return ([string] $env:TEST_IMPACT_PRECISE_FALLBACKS) -notmatch '^\s*(0|false|off|no|disabled)\s*$'
+}
+
+$script:CSharpSyntaxAvailable = $null
+$script:CSharpSyntaxProblem = ''
+
+function Initialize-CSharpSyntax {
+    <#
+        Loads the C# parser PowerShell itself ships (Add-Type compiles with it, so every pwsh has
+        Microsoft.CodeAnalysis.CSharp beside it, built for the runtime that pwsh runs on). Parsing
+        only: no SDK, no build, no restore, and nothing the Select shards job does not already have.
+        The SDK's own copy is built for the SDK's runtime, which an older pwsh cannot load.
+
+        Any failure leaves the parser unavailable, and every caller then keeps the file-wide rule.
+    #>
+    if ($null -ne $script:CSharpSyntaxAvailable) { return $script:CSharpSyntaxAvailable }
+    $script:CSharpSyntaxAvailable = $false
+    try {
+        if (-not ('Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree' -as [type])) {
+            foreach ($name in @('Microsoft.CodeAnalysis.dll', 'Microsoft.CodeAnalysis.CSharp.dll')) {
+                [void] [System.Reflection.Assembly]::LoadFrom((Join-Path $PSHOME $name))
+            }
+        }
+        # A known answer, so an API that loads but does not behave as this code expects is also a failure.
+        $script:CSharpSyntaxAvailable = $true
+        $probe = Get-CSharpSyntaxModel -Text "class Probe`n{`n    void Run() { }`n}"
+        $ok = $null -ne $probe
+        if ($ok) {
+            $side = Get-CSharpChangeSide -Model $probe -StartLine 3 -Count 1
+            $ok = $null -eq $side.Blocker -and $side.Tokens.Count -eq 6 -and
+                (Get-CSharpTokenContext -Token $side.Tokens[4]).Level -ceq 'Member' -and
+                (Get-CSharpTokenContext -Token $side.Tokens[1]).Level -ceq 'Type'
+        }
+        if (-not $ok) { throw 'the parser did not classify a known method body' }
+    }
+    catch {
+        $script:CSharpSyntaxAvailable = $false
+        $script:CSharpSyntaxProblem = $_.Exception.Message
+    }
+    return $script:CSharpSyntaxAvailable
+}
+
+function Get-CSharpSyntaxModel {
+    <#
+        A parsed file, or $null when it cannot be trusted: no parser, no text, any syntax error, or
+        a line break the parser counts and git does not (a bare carriage return or a Unicode line
+        separator), which would shift every line number after it.
+
+        No preprocessor symbols are defined, so code inside '#if SYMBOL' is disabled text; a change
+        there is never classified (Get-CSharpChangeSide reports it as a blocker).
+    #>
+    param([AllowNull()] $Text)
+
+    if ($null -eq $Text -or -not (Initialize-CSharpSyntax)) { return $null }
+    $source = [string] $Text
+    if ($source.IndexOfAny([char[]] @([char] 0x0D, [char] 0x85, [char] 0x2028, [char] 0x2029)) -ge 0) { return $null }
+    try {
+        $options = [Microsoft.CodeAnalysis.CSharp.CSharpParseOptions]::Default.WithLanguageVersion(
+            [Microsoft.CodeAnalysis.CSharp.LanguageVersion]::Preview)
+        # Every argument is passed: PowerShell does not bind these overloads with their optional ones left out.
+        $none = [System.Threading.CancellationToken]::None
+        $text = [Microsoft.CodeAnalysis.Text.SourceText]::From(
+            $source, [System.Text.Encoding] $null, [Microsoft.CodeAnalysis.Text.SourceHashAlgorithm]::Sha1)
+        $tree = [Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree]::ParseText($text, $options, '', $none)
+        $root = $tree.GetCompilationUnitRoot($none)
+        foreach ($diagnostic in $root.GetDiagnostics()) {
+            if ($diagnostic.Severity -eq [Microsoft.CodeAnalysis.DiagnosticSeverity]::Error) { return $null }
+        }
+        return [pscustomobject]@{ Root = $root; Lines = $text.Lines; Members = $null; Types = $null }
+    }
+    catch { return $null }
+}
+
+function Get-CSharpNodeLines {
+    # First and last line (1-based) of a declaration, attributes included, leading comments not.
+    param([Parameter(Mandatory)] $Model, [Parameter(Mandatory)] $Node)
+    $span = $Node.Span
+    return [int[]] @(
+        ($Model.Lines.GetLineFromPosition($span.Start).LineNumber + 1),
+        ($Model.Lines.GetLineFromPosition([Math]::Max($span.Start, $span.End - 1)).LineNumber + 1))
+}
+
+function Get-CSharpTypeKey {
+    # Namespace and containing types with generic arity: the identity of a type across two versions of a file.
+    param([Parameter(Mandatory)] $Node)
+    $parts = [System.Collections.Generic.List[string]]::new()
+    for ($current = $Node; $null -ne $current; $current = $current.Parent) {
+        if ($current -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax]) {
+            $arity = 0
+            if ($current -is [Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax] -and $null -ne $current.TypeParameterList) {
+                $arity = $current.TypeParameterList.Parameters.Count
+            }
+            $parts.Insert(0, "$($current.Identifier.Text)``$arity")
+        }
+        elseif ($current -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseNamespaceDeclarationSyntax]) {
+            $parts.Insert(0, ($current.Name.ToString() -replace '\s', ''))
+        }
+    }
+    return $parts -join '/'
+}
+
+function Get-CSharpBodyStart {
+    # Where a member's executable part begins: its block, its '=>' body or its accessor list.
+    param([Parameter(Mandatory)] $Member)
+    if ($Member -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseMethodDeclarationSyntax]) {
+        if ($null -ne $Member.Body) { return $Member.Body.SpanStart }
+        if ($null -ne $Member.ExpressionBody) { return $Member.ExpressionBody.SpanStart }
+    }
+    elseif ($Member -is [Microsoft.CodeAnalysis.CSharp.Syntax.BasePropertyDeclarationSyntax]) {
+        if ($null -ne $Member.AccessorList) { return $Member.AccessorList.SpanStart }
+        if (($Member -is [Microsoft.CodeAnalysis.CSharp.Syntax.PropertyDeclarationSyntax] -or
+             $Member -is [Microsoft.CodeAnalysis.CSharp.Syntax.IndexerDeclarationSyntax]) -and $null -ne $Member.ExpressionBody) {
+            return $Member.ExpressionBody.SpanStart
+        }
+    }
+    return $Member.Span.End
+}
+
+function Get-CSharpMemberKey {
+    <#
+        The identity of a member across two versions of a file: its type and its whole declaration
+        header (modifiers, return type, name, parameters, constraints), comments and spacing aside.
+        A member whose header changed has no counterpart, which is intended: a changed signature or
+        modifier is decided at type level, never by the member's own span.
+    #>
+    param([Parameter(Mandatory)] $Member)
+    $bodyStart = Get-CSharpBodyStart -Member $Member
+    $skipUntil = $Member.SpanStart
+    foreach ($list in $Member.AttributeLists) { $skipUntil = [Math]::Max($skipUntil, $list.Span.End) }
+    $header = [System.Text.StringBuilder]::new()
+    foreach ($token in $Member.DescendantTokens($null, $false)) {
+        if ($token.SpanStart -ge $bodyStart) { break }
+        if ($token.SpanStart -lt $skipUntil) { continue }
+        [void] $header.Append($token.Text).Append(' ')
+    }
+    return "$(Get-CSharpTypeKey -Node $Member.Parent)::$($header.ToString())"
+}
+
+function Get-CSharpMemberLabel {
+    param([Parameter(Mandatory)] $Node)
+    $typeNames = [System.Collections.Generic.List[string]]::new()
+    for ($current = $Node; $null -ne $current; $current = $current.Parent) {
+        if ($current -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax]) { $typeNames.Insert(0, $current.Identifier.Text) }
+    }
+    if ($Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax]) { return $typeNames -join '.' }
+    $name = if ($Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax] -or
+                $Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.PropertyDeclarationSyntax] -or
+                $Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.EventDeclarationSyntax]) { $Node.Identifier.Text }
+            elseif ($Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.ConstructorDeclarationSyntax]) { 'constructor' }
+            elseif ($Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.DestructorDeclarationSyntax]) { 'finalizer' }
+            elseif ($Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.IndexerDeclarationSyntax]) { 'this[]' }
+            elseif ($Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.OperatorDeclarationSyntax]) { "operator $($Node.OperatorToken.Text)" }
+            elseif ($Node -is [Microsoft.CodeAnalysis.CSharp.Syntax.ConversionOperatorDeclarationSyntax]) { "operator $($Node.Type.ToString())" }
+            else { 'member' }
+    return (@($typeNames) + @($name)) -join '.'
+}
+
+function Initialize-CSharpDeclarationIndex {
+    # Every type and member of the file by key. A key two declarations share resolves to neither.
+    param([Parameter(Mandatory)] $Model)
+    if ($null -ne $Model.Members) { return }
+    $members = @{}
+    $types = @{}
+    $pending = [System.Collections.Generic.Stack[object]]::new()
+    $pending.Push($Model.Root)
+    while ($pending.Count -gt 0) {
+        $node = $pending.Pop()
+        $isType = $node -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax]
+        if ($isType) {
+            $key = Get-CSharpTypeKey -Node $node
+            if (-not $types.ContainsKey($key)) { $types[$key] = [System.Collections.Generic.List[object]]::new() }
+            [void] $types[$key].Add($node)
+        }
+        if ($node -is [Microsoft.CodeAnalysis.CSharp.Syntax.CompilationUnitSyntax] -or
+            $node -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseNamespaceDeclarationSyntax] -or
+            $node -is [Microsoft.CodeAnalysis.CSharp.Syntax.TypeDeclarationSyntax]) {
+            foreach ($child in $node.Members) {
+                if ($child -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax] -or
+                    $child -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseNamespaceDeclarationSyntax]) {
+                    $pending.Push($child)
+                }
+                elseif ($isType -and ($child -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseMethodDeclarationSyntax] -or
+                                      $child -is [Microsoft.CodeAnalysis.CSharp.Syntax.BasePropertyDeclarationSyntax])) {
+                    $key = Get-CSharpMemberKey -Member $child
+                    if (-not $members.ContainsKey($key)) { $members[$key] = [System.Collections.Generic.List[object]]::new() }
+                    [void] $members[$key].Add($child)
+                }
+            }
+        }
+    }
+    $Model.Members = $members
+    $Model.Types = $types
+}
+
+function Get-CSharpTokenContext {
+    <#
+        What one changed token can affect, as the narrowest level that is certainly wide enough:
+
+          Member  inside the body of a method, constructor, finalizer, operator, or of a property,
+                  indexer or event accessor (local functions and lambdas belong to the member that
+                  contains them). Only code that runs the member can observe it.
+          Type    anywhere else in a type: a member's signature, modifiers, attributes, parameter
+                  list or constructor initializer, a field or event field, a property or field
+                  initializer, an auto-property, the type's own header (attributes, base list,
+                  constraints, primary constructor). An added 'override' or a changed signature
+                  changes what existing callers bind to with no changed caller line, and an
+                  initializer runs in the constructors, so the whole type is the unit.
+          File    everything else, and everything whose reach no span in this file bounds: usings,
+                  namespace and assembly level constructs, delegates and types outside a type,
+                  constants and enum members (their values are compiled into the callers), and
+                  anything in a partial type, whose other parts are in other files.
+    #>
+    param([Parameter(Mandatory)] $Token)
+
+    $member = $null
+    for ($node = $Token.Parent; $null -ne $node; $node = $node.Parent) {
+        if ($node -is [Microsoft.CodeAnalysis.CSharp.Syntax.MemberDeclarationSyntax]) { $member = $node; break }
+    }
+    function New-Context([string] $Level, [string] $Why, $Member = $null, $Type = $null) {
+        return [pscustomobject]@{ Level = $Level; Why = $Why; Member = $Member; Type = $Type }
+    }
+    if ($null -eq $member) { return New-Context 'File' 'a using, an assembly attribute or another file-level construct changed' }
+
+    $outermost = $null
+    $partial = $false
+    for ($node = $member; $null -ne $node; $node = $node.Parent) {
+        if ($node -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax]) {
+            $outermost = $node
+            foreach ($modifier in $node.Modifiers) { if ($modifier.Text -ceq 'partial') { $partial = $true } }
+        }
+    }
+    if ($null -eq $outermost) { return New-Context 'File' 'a namespace-level construct changed' }
+
+    $inBody = $false
+    if ($member -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseMethodDeclarationSyntax]) {
+        $inBody = ($null -ne $member.Body -and $member.Body.Span.Contains($Token.Span)) -or
+                  ($null -ne $member.ExpressionBody -and $member.ExpressionBody.Span.Contains($Token.Span))
+    }
+    elseif ($member -is [Microsoft.CodeAnalysis.CSharp.Syntax.BasePropertyDeclarationSyntax]) {
+        if (($member -is [Microsoft.CodeAnalysis.CSharp.Syntax.PropertyDeclarationSyntax] -or
+             $member -is [Microsoft.CodeAnalysis.CSharp.Syntax.IndexerDeclarationSyntax]) -and
+            $null -ne $member.ExpressionBody -and $member.ExpressionBody.Span.Contains($Token.Span)) {
+            $inBody = $true
+        }
+        for ($node = $Token.Parent; -not $inBody -and $null -ne $node -and -not [object]::ReferenceEquals($node, $member); $node = $node.Parent) {
+            if ($node -is [Microsoft.CodeAnalysis.CSharp.Syntax.AccessorDeclarationSyntax]) {
+                $inBody = ($null -ne $node.Body -and $node.Body.Span.Contains($Token.Span)) -or
+                          ($null -ne $node.ExpressionBody -and $node.ExpressionBody.Span.Contains($Token.Span))
+                break
+            }
+        }
+    }
+    elseif ($member -is [Microsoft.CodeAnalysis.CSharp.Syntax.EnumMemberDeclarationSyntax]) {
+        return New-Context 'File' 'an enum member changed, and its value is compiled into the code that uses it'
+    }
+    elseif ($member -is [Microsoft.CodeAnalysis.CSharp.Syntax.BaseFieldDeclarationSyntax]) {
+        foreach ($modifier in $member.Modifiers) {
+            if ($modifier.Text -ceq 'const') { return New-Context 'File' 'a constant changed, and its value is compiled into the code that uses it' }
+        }
+    }
+    elseif ($member -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.BaseTypeDeclarationSyntax] -and
+            $member -isnot [Microsoft.CodeAnalysis.CSharp.Syntax.DelegateDeclarationSyntax]) {
+        return New-Context 'File' 'a construct the member index does not classify changed'
+    }
+
+    if ($inBody) {
+        # 'No shard executes it' is only evidence for code the coverage run instruments.
+        for ($node = $member; $null -ne $node; $node = $node.Parent) {
+            if ($node -is [Microsoft.CodeAnalysis.CSharp.Syntax.MemberDeclarationSyntax] -and
+                $node.AttributeLists.ToString() -match 'ExcludeFromCodeCoverage|GeneratedCode|CompilerGenerated|DebuggerNonUserCode') {
+                return New-Context 'File' 'the member is excluded from coverage, so its executed lines are unknown'
+            }
+        }
+        return New-Context 'Member' 'a member body changed' $member $outermost
+    }
+    if ($partial) { return New-Context 'File' 'a declaration in a partial type changed, and the type has parts in other files' }
+    return New-Context 'Type' 'a declaration changed (signature, modifier, attribute, field, initializer or type header)' $null $outermost
+}
+
+function Get-CSharpChangeSide {
+    <#
+        One side of a hunk: the tokens on its lines, each with a kind-and-text key for comparing the
+        two sides, and a blocker when the lines hold something whose effect is not a token's:
+        a preprocessor directive, code a directive disables, or an XML documentation comment (the
+        repository's source generators read those, so they are not inert).
+    #>
+    param([Parameter(Mandatory)] $Model, [Parameter(Mandatory)] [int] $StartLine, [Parameter(Mandatory)] [int] $Count)
+
+    $side = [pscustomobject]@{
+        Tokens = [System.Collections.Generic.List[object]]::new(); Blocker = $null
+        Keys = [System.Collections.Generic.List[string]]::new()
+    }
+    if ($Count -le 0) { return $side }
+    $endLine = $StartLine + $Count - 1
+    if ($StartLine -lt 1 -or $endLine -gt $Model.Lines.Count) {
+        $side.Blocker = 'the changed lines are outside the parsed file'
+        return $side
+    }
+    $from = $Model.Lines[$StartLine - 1].Start
+    $to = $Model.Lines[$endLine - 1].EndIncludingLineBreak
+    $span = [Microsoft.CodeAnalysis.Text.TextSpan]::FromBounds($from, $to)
+
+    $directive = [int] [Microsoft.CodeAnalysis.CSharp.SyntaxKind]::DisabledTextTrivia
+    $skipped = [int] [Microsoft.CodeAnalysis.CSharp.SyntaxKind]::SkippedTokensTrivia
+    $documentation = @(
+        [int] [Microsoft.CodeAnalysis.CSharp.SyntaxKind]::SingleLineDocumentationCommentTrivia,
+        [int] [Microsoft.CodeAnalysis.CSharp.SyntaxKind]::MultiLineDocumentationCommentTrivia)
+    foreach ($trivia in $Model.Root.DescendantTrivia($span, $null, $false)) {
+        if ($trivia.Span.End -le $from -or $trivia.SpanStart -ge $to) { continue }
+        if ($trivia.IsDirective) { $side.Blocker = 'a preprocessor directive changed'; return $side }
+        if ($trivia.RawKind -eq $directive) { $side.Blocker = 'code a preprocessor directive disables changed'; return $side }
+        if ($trivia.RawKind -eq $skipped) { $side.Blocker = 'tokens the parser skipped changed'; return $side }
+        if ($documentation -contains $trivia.RawKind) {
+            $side.Blocker = 'an XML documentation comment changed, and source generators read those'
+            return $side
+        }
+    }
+
+    foreach ($token in $Model.Root.DescendantTokens($span, $null, $false)) {
+        if ($token.Span.Length -eq 0 -or $token.Span.End -le $from -or $token.SpanStart -ge $to) { continue }
+        [void] $side.Tokens.Add($token)
+        [void] $side.Keys.Add("$($token.RawKind):$($token.Text)")
+    }
+    return $side
+}
+
+function Get-CSharpTokenContexts {
+    # The distinct contexts of Tokens[From..To], one per member or type they sit in.
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] $Tokens, [int] $From, [int] $To)
+    $items = [System.Collections.Generic.List[object]]::new()
+    $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $lastParent = $null
+    $context = $null
+    for ($i = $From; $i -le $To; $i++) {
+        $token = $Tokens[$i]
+        # Consecutive tokens usually share a parent node, and so a context.
+        if ($null -eq $lastParent -or -not [object]::ReferenceEquals($lastParent, $token.Parent)) {
+            $lastParent = $token.Parent
+            $context = Get-CSharpTokenContext -Token $token
+        }
+        $anchor = if ($null -ne $context.Member) { $context.Member.SpanStart } elseif ($null -ne $context.Type) { $context.Type.SpanStart } else { -1 }
+        if ($seen.Add("$($context.Level):$anchor")) { [void] $items.Add($context) }
+    }
+    return , $items
+}
+
+function Resolve-UncoveredChangeScope {
+    <#
+        Decides how far one changed hunk that no shard executes can reach, from the file before the
+        change (BaseModel) and after it (HeadModel). Hunk is { oldStart, oldCount, newStart, newCount }.
+
+        Returns Level and, for Member and Type, the declarations to select by, each with its node
+        in the file BEFORE the change, so the caller can find the same declaration in the map's
+        version of the file:
+
+          Inert   both sides hold the same tokens, so only comments or spacing changed.
+          Member  every changed token is in a member body, and each such member exists unchanged in
+                  signature before the change.
+          Type    anything declared in a type; the spans are the outermost enclosing types.
+          File    everything else, including every case this function cannot decide. The caller
+                  then applies the file-wide rule, so an unknown never selects less than before.
+    #>
+    param(
+        [AllowNull()] $BaseModel,
+        [AllowNull()] $HeadModel,
+        [Parameter(Mandatory)] [int[]] $Hunk
+    )
+
+    function New-Scope([string] $Level, [string] $Why, $Spans = @()) {
+        return [pscustomobject]@{ Level = $Level; Why = $Why; Spans = @($Spans) }
+    }
+    try {
+        if ($null -eq $BaseModel -or $null -eq $HeadModel) {
+            return New-Scope 'File' 'the file could not be parsed before or after the change'
+        }
+        $old = Get-CSharpChangeSide -Model $BaseModel -StartLine $Hunk[0] -Count $Hunk[1]
+        $new = Get-CSharpChangeSide -Model $HeadModel -StartLine $Hunk[2] -Count $Hunk[3]
+        foreach ($side in @($old, $new)) { if ($side.Blocker) { return New-Scope 'File' $side.Blocker } }
+
+        # A diff is by line, so a changed line also carries tokens that did not change (the
+        # signature of a one-line member whose body changed). The tokens the two sides share at
+        # the start and at the end are not the change; what is left between them is.
+        $prefix = 0
+        $limit = [Math]::Min($old.Keys.Count, $new.Keys.Count)
+        while ($prefix -lt $limit -and $old.Keys[$prefix] -ceq $new.Keys[$prefix]) { $prefix++ }
+        $suffix = 0
+        while ($suffix -lt $limit - $prefix -and
+               $old.Keys[$old.Keys.Count - 1 - $suffix] -ceq $new.Keys[$new.Keys.Count - 1 - $suffix]) { $suffix++ }
+        $oldItems = Get-CSharpTokenContexts -Tokens $old.Tokens -From $prefix -To ($old.Tokens.Count - 1 - $suffix)
+        $newItems = Get-CSharpTokenContexts -Tokens $new.Tokens -From $prefix -To ($new.Tokens.Count - 1 - $suffix)
+        if ($oldItems.Count -eq 0 -and $newItems.Count -eq 0) {
+            return New-Scope 'Inert' 'only comments or whitespace changed'
+        }
+
+        $all = @(@($oldItems) + @($newItems))
+        $file = @($all | Where-Object { $_.Level -ceq 'File' } | Select-Object -First 1)
+        if ($file.Count -gt 0) { return New-Scope 'File' $file[0].Why }
+
+        Initialize-CSharpDeclarationIndex -Model $BaseModel
+        $typeLevel = @($all | Where-Object { $_.Level -ceq 'Type' }).Count -gt 0
+        $members = [System.Collections.Generic.List[object]]::new()
+        if (-not $typeLevel) {
+            foreach ($item in $oldItems) { [void] $members.Add($item.Member) }
+            foreach ($item in $newItems) {
+                $match = $BaseModel.Members[(Get-CSharpMemberKey -Member $item.Member)]
+                # A member with no single counterpart before the change is new, renamed or re-signed:
+                # an added override or overload changes existing callers, so the type is the unit.
+                if ($null -eq $match -or $match.Count -ne 1) { $typeLevel = $true; break }
+                [void] $members.Add($match[0])
+            }
+        }
+        if (-not $typeLevel) {
+            $spans = @(foreach ($member in ($members | Sort-Object { $_.SpanStart } -Unique)) {
+                $lines = Get-CSharpNodeLines -Model $BaseModel -Node $member
+                [pscustomobject]@{ Label = Get-CSharpMemberLabel -Node $member; Start = $lines[0]; End = $lines[1]; Node = $member }
+            })
+            return New-Scope 'Member' 'a member body changed' $spans
+        }
+
+        $types = [System.Collections.Generic.List[object]]::new()
+        foreach ($item in $oldItems) { [void] $types.Add($item.Type) }
+        foreach ($item in $newItems) {
+            $match = $BaseModel.Types[(Get-CSharpTypeKey -Node $item.Type)]
+            if ($null -eq $match -or $match.Count -ne 1) {
+                return New-Scope 'File' 'the change adds or renames a type, which has no lines before the change'
+            }
+            [void] $types.Add($match[0])
+        }
+        foreach ($type in $types) {
+            foreach ($modifier in $type.Modifiers) {
+                if ($modifier.Text -ceq 'partial') {
+                    return New-Scope 'File' 'a declaration in a partial type changed, and the type has parts in other files'
+                }
+            }
+        }
+        $why = @($all | Where-Object { $_.Level -ceq 'Type' } | Select-Object -First 1)
+        $spans = @(foreach ($type in ($types | Sort-Object { $_.SpanStart } -Unique)) {
+            $lines = Get-CSharpNodeLines -Model $BaseModel -Node $type
+            [pscustomobject]@{ Label = Get-CSharpMemberLabel -Node $type; Start = $lines[0]; End = $lines[1]; Node = $type }
+        })
+        return New-Scope 'Type' $(if ($why.Count -gt 0) { $why[0].Why } else { 'the change adds, renames or re-signs a member' }) $spans
+    }
+    catch {
+        return New-Scope 'File' "the member index failed ($($_.Exception.Message))"
+    }
+}
+
+function Get-UncoveredRangeDecision {
+    <#
+        How one changed range that no shard executes is selected for. Rule is:
+
+          Inert    nothing: only comments or whitespace changed.
+          Precise  the shards whose executed lines overlap each span in Spans (a member or a type,
+                   in the map's line numbers). A member no shard executes has no shards; the caller
+                   reports it as untested instead of fanning out.
+          File     the file-wide rule the caller applied before this existed. Every doubt lands
+                   here: no parser, a parse error, a change the index does not classify, lines the
+                   base branch also changed since the map, a declaration the map's version of the
+                   file does not have, a type no shard executes, any exception.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [object[]] $Range,
+        [Parameter(Mandatory)] $Detail,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Occurrences,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $KnownShards,
+        [Parameter(Mandatory)] [scriptblock] $ReadSource,
+        [Parameter(Mandatory)] [hashtable] $Models
+    )
+
+    function New-Decision([string] $Rule, [string] $Why, $Spans = @()) {
+        return [pscustomobject]@{ Rule = $Rule; Why = $Why; Spans = @($Spans) }
+    }
+    try {
+        if ($Detail.Swept) { return New-Decision 'File' 'the base branch changed the same lines since the map was built' }
+        $owners = @($Detail.Hunks | Where-Object {
+            $carried = $_.Map
+            $found = $false
+            for ($i = 0; $i + 1 -lt $carried.Count; $i += 2) {
+                if ($carried[$i] -eq [int] $Range[0] -and $carried[$i + 1] -eq [int] $Range[1]) { $found = $true }
+            }
+            $found
+        })
+        if ($owners.Count -eq 0) { return New-Decision 'File' 'the changed lines do not correspond to a hunk of this change' }
+
+        # The file before the change, after it, and as the map measured it. The map's version is the
+        # one before the change unless the base branch has edited the file since the map.
+        $revisions = [ordered]@{ base = [string] $Detail.Base; head = 'HEAD' }
+        $behindBase = @($Detail.MapHunks).Count -gt 0
+        if ($behindBase) { $revisions['map'] = [string] $Detail.MapRevision }
+        foreach ($side in $revisions.Keys) {
+            $key = "$side`n$Path"
+            if (-not $Models.ContainsKey($key)) {
+                $Models[$key] = Get-CSharpSyntaxModel -Text (& $ReadSource $revisions[$side] $Path)
+            }
+        }
+        $baseModel = $Models["base`n$Path"]
+        $mapModel = if ($behindBase) { $Models["map`n$Path"] } else { $baseModel }
+        if ($null -eq $mapModel) { return New-Decision 'File' "the map's version of the file could not be parsed" }
+
+        $spans = [System.Collections.Generic.List[object]]::new()
+        foreach ($owner in $owners) {
+            $scope = Resolve-UncoveredChangeScope -BaseModel $baseModel -HeadModel $Models["head`n$Path"] -Hunk $owner.Hunk
+            if ($scope.Level -ceq 'File') { return New-Decision 'File' $scope.Why }
+            if ($scope.Level -ceq 'Inert') { continue }
+            foreach ($span in $scope.Spans) {
+                # The map's line numbers are those of the map's version. The declaration is found
+                # there by name, not by carrying its lines back: the base branch may have edited or
+                # moved it since, and a name survives both where a line number does not.
+                $carried = [int[]] @($span.Start, $span.End)
+                if ($behindBase) {
+                    Initialize-CSharpDeclarationIndex -Model $mapModel
+                    if ($scope.Level -ceq 'Member') {
+                        $match = $mapModel.Members[(Get-CSharpMemberKey -Member $span.Node)]
+                        if ($null -eq $match -or $match.Count -ne 1) {
+                            return New-Decision 'File' "the base branch added or re-signed $($span.Label) since the map was built"
+                        }
+                    }
+                    else {
+                        $typeKey = Get-CSharpTypeKey -Node $span.Node
+                        $match = $mapModel.Types[$typeKey]
+                        if ($null -eq $match -or $match.Count -ne 1) {
+                            return New-Decision 'File' "the base branch added or renamed $($span.Label) since the map was built"
+                        }
+                        # A member the type gained since the map may be code moved in from another type
+                        # of the file, whose executed lines the map holds outside this type's span.
+                        Initialize-CSharpDeclarationIndex -Model $baseModel
+                        foreach ($memberKey in $baseModel.Members.Keys) {
+                            if (($memberKey.StartsWith("${typeKey}::", [StringComparison]::Ordinal) -or
+                                 $memberKey.StartsWith("${typeKey}/", [StringComparison]::Ordinal)) -and
+                                -not $mapModel.Members.ContainsKey($memberKey)) {
+                                return New-Decision 'File' "the base branch added a member to $($span.Label) since the map was built"
+                            }
+                        }
+                    }
+                    $carried = Get-CSharpNodeLines -Model $mapModel -Node $match[0]
+                }
+                # Several hunks of one member or type share its span, and so its shards.
+                $shardsKey = "shards`n$Path`n$($carried[0])-$($carried[1])"
+                if (-not $Models.ContainsKey($shardsKey)) {
+                    $found = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+                    foreach ($occurrence in $Occurrences) {
+                        $executed = @($occurrence.r)
+                        for ($i = 0; $i + 1 -lt $executed.Count; $i += 2) {
+                            if ([int] $executed[$i] -le $carried[1] -and [int] $executed[$i + 1] -ge $carried[0]) {
+                                [void] $found.Add([string] $KnownShards[[int] $occurrence.s])
+                                break
+                            }
+                        }
+                    }
+                    $Models[$shardsKey] = $found
+                }
+                $shards = $Models[$shardsKey]
+                # A member nothing executes is untested code. A type nothing executes is not the same
+                # claim: a field, attribute or base list is read by reflection and by generated code
+                # without one of the type's own lines running, so the file's shards still run.
+                if ($shards.Count -eq 0 -and $scope.Level -ceq 'Type') {
+                    return New-Decision 'File' "no shard executes any line of $($span.Label)"
+                }
+                [void] $spans.Add([pscustomobject]@{
+                    Label = $span.Label; Level = $scope.Level; Shards = @($shards)
+                    Start = $carried[0]; End = $carried[1]
+                })
+            }
+        }
+        if ($spans.Count -eq 0) { return New-Decision 'Inert' 'only comments or whitespace changed' }
+        return New-Decision 'Precise' '' $spans
+    }
+    catch {
+        return New-Decision 'File' "the member index failed ($($_.Exception.Message))"
+    }
 }
 
 function Format-LineRanges {
@@ -1427,6 +2059,13 @@ function Select-ImpactedShards {
         TestRoutes carries the precomputed routing for test sources the coverage map cannot index;
         see Get-TestFileRoutes. Every selected shard is recorded in Routes with the reason it was
         selected, so a log reader can see why a shard runs without re-deriving it.
+
+        ChangeDetail (New-ChangeDetail records by path) and ReadSource ({ param($revision, $path) }
+        returning a file's text, or $null) enable the precise fallbacks for a changed range no
+        shard executes; see Get-UncoveredRangeDecision. Without either, or with PreciseFallbacks
+        off, such a range selects every shard that executes the file, as it always did. Untested
+        lists the changed members no shard executes, and NewSourcePaths the unmapped C# sources
+        routed to their directory's owners.
     #>
     param(
         [Parameter(Mandatory)] $Map,
@@ -1436,7 +2075,10 @@ function Select-ImpactedShards {
         [hashtable] $TestRoutes = @{},
         [switch] $AuditUnchangedMap,
         [string[]] $ReviewedControlPaths = @(),
-        [string[]] $RequiredShards = @()
+        [string[]] $RequiredShards = @(),
+        [hashtable] $ChangeDetail = @{},
+        [scriptblock] $ReadSource = $null,
+        [bool] $PreciseFallbacks = (Test-PreciseFallbacksEnabled)
     )
 
     # Indexed shards whose manifest definition changed since the map was measured: their index
@@ -1450,6 +2092,11 @@ function Select-ImpactedShards {
     # One record per pull-request path, written where it is decided, so the selection report shows the decision
     # itself (category, outcome, shards, reason) instead of reconstructing it from the flat route strings.
     $files = [System.Collections.Generic.List[object]]::new()
+    # One record per member, however many of its ranges changed.
+    $untested = [ordered]@{}
+    $newSourcePaths = [System.Collections.Generic.List[string]]::new()
+    $syntaxModels = @{}
+    $precise = $PreciseFallbacks -and $null -ne $ReadSource -and $ChangeDetail.Count -gt 0
     function Add-FileDecision([string] $Path, [string] $Category, [string] $Outcome, [string[]] $Shards, [string] $Why) {
         [void] $files.Add([pscustomobject]@{
             path = $Path; category = $Category; outcome = $Outcome; shards = @($Shards | Where-Object { $_ }); why = $Why
@@ -1657,6 +2304,7 @@ function Select-ImpactedShards {
                 [void] $routes.Add("$shard <= executes mapped files in $($directoryOwners.Directory), beside the unmapped source $path")
             }
             Add-FileDecision $path 'MapCandidate' 'routed' @($directoryOwners.Shards) "unmapped source; routed to the shards executing $($directoryOwners.Directory)"
+            [void] $newSourcePaths.Add([string] $path)
             continue
         }
 
@@ -1698,24 +2346,91 @@ function Select-ImpactedShards {
             [void] $routes.Add("$shardName <= executes changed lines $(Format-LineRanges $hitsByShard[$shardName]) of $path")
         }
 
-        # A changed range no shard executes is routed to every shard that executes ANY line of the
-        # same file. Most such ranges are not dead code: they are declarations coverage never
-        # records (fields, attributes, braces between methods) or the insertion point of new code,
-        # whose effect reaches tests only through the file's executed members. This is the
-        # heuristic the nightly miss audit exists to check.
+        # A changed range no shard executes is not dead code as a rule: it is a declaration coverage
+        # never records (a field, an attribute, a brace between methods), a comment, or the
+        # insertion point of new code. Each is first selected by what it changed - nothing for
+        # comments and spacing, the enclosing member for a body, the enclosing type for a
+        # declaration (Get-UncoveredRangeDecision) - and whatever that cannot decide is routed to
+        # every shard that executes ANY line of the same file, the rule that applied to all of
+        # them before. This is the heuristic the nightly miss audit exists to check.
         $uncovered = [System.Collections.Generic.List[object]]::new()
         for ($h = 0; $h + 1 -lt $hunks.Count; $h += 2) {
             if (-not $covered[[int] ($h / 2)]) { [void] $uncovered.Add(@($hunks[$h], $hunks[$h + 1])) }
         }
-        if ($uncovered.Count -gt 0) {
+        $fileRule = [System.Collections.Generic.List[object]]::new()
+        $fileRuleWhy = ''
+        $inertRanges = [System.Collections.Generic.List[object]]::new()
+        $untestedRanges = [System.Collections.Generic.List[object]]::new()
+        $spanRanges = [System.Collections.Generic.List[object]]::new()
+        $spanShards = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+        $spanRoutes = [ordered]@{}
+        $decideByMember = $precise -and $ChangeDetail.ContainsKey($path) -and
+            ([string] $path).EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase)
+        $decidedRanges = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($range in $uncovered) {
+            $decision = $null
+            if ($decideByMember) {
+                # Several hunks can carry back to the same map lines; one decision covers them all.
+                if (-not $decidedRanges.Add("$($range[0]),$($range[1])")) { continue }
+                $decision = Get-UncoveredRangeDecision -Path $path -Range $range -Detail $ChangeDetail[$path] `
+                    -Occurrences @($entry.Value) -KnownShards @($Map.knownShards) -ReadSource $ReadSource -Models $syntaxModels
+            }
+            if ($null -eq $decision -or $decision.Rule -ceq 'File') {
+                [void] $fileRule.Add($range)
+                if ($null -ne $decision -and -not $fileRuleWhy) { $fileRuleWhy = [string] $decision.Why }
+                # One range under the file-wide rule already runs every shard executing the file, so
+                # nothing a later range decides can add to or take from the selection.
+                $decideByMember = $false
+                continue
+            }
+            if ($decision.Rule -ceq 'Inert') {
+                [void] $inertRanges.Add($range)
+                continue
+            }
+            $reached = $false
+            foreach ($span in $decision.Spans) {
+                if (@($span.Shards).Count -eq 0) {
+                    $untestedKey = "$path`n$($span.Label)`n$($span.Start)-$($span.End)"
+                    if ($untested.Contains($untestedKey)) {
+                        $untested[$untestedKey].lines += ", $(Format-LineRanges @(, $range))"
+                    }
+                    else {
+                        $untested[$untestedKey] = [pscustomobject]@{
+                            path = [string] $path; member = [string] $span.Label
+                            lines = Format-LineRanges @(, $range); memberLines = "$($span.Start)-$($span.End)"
+                        }
+                    }
+                    continue
+                }
+                $reached = $true
+                foreach ($shardName in $span.Shards) {
+                    [void] $selected.Add($shardName)
+                    [void] $spanShards.Add($shardName)
+                    $routeKey = "$shardName <= executes $($span.Label) (lines $($span.Start)-$($span.End)) of $path"
+                    if (-not $spanRoutes.Contains($routeKey)) { $spanRoutes[$routeKey] = [System.Collections.Generic.List[object]]::new() }
+                    [void] $spanRoutes[$routeKey].Add($range)
+                }
+            }
+            if ($reached) { [void] $spanRanges.Add($range) } else { [void] $untestedRanges.Add($range) }
+        }
+        foreach ($routeKey in $spanRoutes.Keys) {
+            [void] $routes.Add("$routeKey, which holds changed lines $(Format-LineRanges $spanRoutes[$routeKey]) that no shard executes")
+        }
+        if ($fileRule.Count -gt 0) {
             foreach ($shardName in $fileOwners) {
                 [void] $selected.Add($shardName)
-                [void] $routes.Add("$shardName <= executes $path, whose changed lines $(Format-LineRanges $uncovered) no shard executes")
+                [void] $routes.Add("$shardName <= executes $path, whose changed lines $(Format-LineRanges $fileRule) no shard executes")
             }
         }
-        $fileShards = @(@($hitsByShard.Keys) + @(if ($uncovered.Count -gt 0) { @($fileOwners) }) | Sort-Object -Unique)
+        $fileShards = @(@($hitsByShard.Keys) + @($spanShards) + @(if ($fileRule.Count -gt 0) { @($fileOwners) }) | Sort-Object -Unique)
         $fileWhy = "$($hitsByShard.Count) shard(s) execute its changed lines" +
-            $(if ($uncovered.Count -gt 0) { "; lines $(Format-LineRanges $uncovered) run in no shard, so every $($fileOwners.Count) shard(s) executing the file run" } else { '' })
+            $(if ($fileRule.Count -gt 0) {
+                "; lines $(Format-LineRanges $fileRule) run in no shard, so every $($fileOwners.Count) shard(s) executing the file run" +
+                $(if ($fileRuleWhy) { " ($fileRuleWhy)" } else { '' })
+            } else { '' }) +
+            $(if ($spanRanges.Count -gt 0) { "; lines $(Format-LineRanges $spanRanges) run in no shard and select the $($spanShards.Count) shard(s) executing their enclosing member or type" } else { '' }) +
+            $(if ($untestedRanges.Count -gt 0) { "; lines $(Format-LineRanges $untestedRanges) are in a member no shard executes (untested code changed)" } else { '' }) +
+            $(if ($inertRanges.Count -gt 0) { "; lines $(Format-LineRanges $inertRanges) changed only comments or whitespace" } else { '' })
         Add-FileDecision $path 'MapCandidate' 'routed' $fileShards $fileWhy
     }
 
@@ -1731,6 +2446,8 @@ function Select-ImpactedShards {
         Shards             = @($selected | Sort-Object)
         Routes             = @($routes)
         Files              = @($files)
+        Untested           = @($untested.Values)
+        NewSourcePaths     = @($newSourcePaths)
     }
 }
 
@@ -2515,6 +3232,26 @@ function Get-GitFileText {
         if ($LASTEXITCODE -eq 0) { return ($lines -join "`n") }
     }
     return $null
+}
+
+function Get-GitSourceText {
+    <#
+        A file's text at a revision for the C# parser, or $null. Read as UTF-8 whatever the console's
+        code page is: a byte-order mark read through another code page is three stray characters,
+        a syntax error on line 1 that sends the whole file back to the file-wide rule. The mark
+        itself is dropped; it is not a line, so no line number moves.
+    #>
+    param([Parameter(Mandatory)] [string] $Path, [Parameter(Mandatory)] [string] $Revision)
+    $saved = $null
+    try {
+        $saved = [Console]::OutputEncoding
+        [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+    }
+    catch { $saved = $null }
+    try { $text = Get-GitFileText -Path $Path -Revisions @($Revision) }
+    finally { if ($null -ne $saved) { try { [Console]::OutputEncoding = $saved } catch { } } }
+    if ($null -ne $text -and $text.Length -gt 0 -and $text[0] -eq [char] 0xFEFF) { $text = $text.Substring(1) }
+    return $text
 }
 
 function Find-GitReferrers {
@@ -4052,6 +4789,353 @@ var source = "class Test : RealBase { } // string contents survive"; /* AnotherF
     Assert-True (-not $r.ContainsKey('EVIL.cs')) 'added body content must never become a path'
     Assert-True (@($r['G.cs']) -contains 30) 'the following real hunk still lands on the right file'
 
+    # 17. PRECISE FALLBACKS. A changed range no shard executes used to select every shard executing the
+    #     file: on #2553 (LayerBase, NeuralNetworkBase, one new layer) 37 of 114 shards came from
+    #     nothing else. Each case below edits one construct of a fixture in which every member is
+    #     executed by its own shard and holds a line no shard executes, so a selection wider than
+    #     the rule allows names the extra shards. The hunks are real 'git diff -U0' output.
+    $preciseLines = [string[]] @(
+        'using System;',
+        'namespace Fixture',
+        '{',
+        '    /// <summary>Counts.</summary>',
+        '    public class Hub : HubBase',
+        '    {',
+        '        private int _count;',
+        '        private int _seed = 3;',
+        '        public const int Limit = 1;',
+        '        public int Auto { get; set; }',
+        '',
+        '        // Runs first.',
+        '        public Hub(int count) : base(count)',
+        '        {',
+        '            _count = count;',
+        '            if (count < 0) { _count = 0; }',
+        '        }',
+        '',
+        '        public int Value',
+        '        {',
+        '            get',
+        '            {',
+        '                if (_count < 0) { return 0; }',
+        '                return _count;',
+        '            }',
+        '        }',
+        '',
+        '        public int Twice =>',
+        '            _count < 0 ? 0',
+        '            : _count * 2;',
+        '',
+        '        public int Run(int x)',
+        '        {',
+        '            Func<int, int> next = y =>',
+        '            {',
+        '                if (y < 0) { return 0; }',
+        '                return y + 1;',
+        '            };',
+        '            int Local(int z)',
+        '            {',
+        '                if (z < 0) { return 0; }',
+        '                return z;',
+        '            }',
+        '            if (x < 0) { return -1; }',
+        '            return next(Local(x));',
+        '        }',
+        '',
+        '        public int Unused(int x)',
+        '        {',
+        '            return x;',
+        '        }',
+        '',
+        '        public static Hub operator +(Hub a, Hub b)',
+        '        {',
+        '            if (a == null) { return b; }',
+        '            return a;',
+        '        }',
+        '',
+        '        public int this[int i]',
+        '        {',
+        '            get',
+        '            {',
+        '                if (i < 0) { return 0; }',
+        '                return i;',
+        '            }',
+        '        }',
+        '#if FIXTURE_SYMBOL',
+        '        private void Disabled() { }',
+        '#endif',
+        '    }',
+        '',
+        '    public class Side',
+        '    {',
+        '        private int _side;',
+        '        public int Get() { return _side; }',
+        '    }',
+        '',
+        '    public class Idle',
+        '    {',
+        '        private int _idle;',
+        '    }',
+        '',
+        '    public enum Mode { One, Two }',
+        '}'
+    )
+    # Shard -> the lines it executes. Nothing executes Unused, Idle, or any 'if (...)' guard line.
+    $preciseOwners = [ordered]@{
+        Ctor   = @('_count = count;')
+        Access = @('return _count;')
+        Arrow  = @(': _count * 2;')
+        Run    = @('return y + 1;', 'return z;', 'return next(Local(x));')
+        Oper   = @('return a;')
+        Index  = @('return i;')
+        Side   = @('public int Get() { return _side; }')
+    }
+    $precisePath = 'src/Area/Hub.cs'
+    $hubShards = 'Access,Arrow,Ctor,Index,Oper,Run'
+    $fileShards = 'Access,Arrow,Ctor,Index,Oper,Run,Side'
+    function Get-PreciseLine([string[]] $Lines, [string] $Text) {
+        $found = @(for ($i = 0; $i -lt $Lines.Count; $i++) { if ($Lines[$i].Contains($Text)) { $i + 1 } })
+        if ($found.Count -ne 1) { throw "fixture line '$Text' matched $($found.Count) line(s)" }
+        return [int] $found[0]
+    }
+    function New-PreciseMap([string[]] $Lines) {
+        $occurrences = @(for ($s = 0; $s -lt $preciseOwners.Count; $s++) {
+            $executed = @(foreach ($text in @($preciseOwners[$s])) { $line = Get-PreciseLine $Lines $text; $line; $line })
+            @{ s = $s; r = $executed }
+        })
+        return @{
+            schemaVersion = 1; sha = '0123456789abcdef0123456789abcdef01234567'
+            knownShards = @($preciseOwners.Keys); alwaysRun = @('HeavyNoCoverage')
+            files = @{ $precisePath = $occurrences }
+        } | ConvertTo-Json -Depth 8 -Compress | ConvertFrom-Json
+    }
+    function Edit-PreciseLine([string] $Find, [string] $From, [string] $To, [string[]] $Lines = $preciseLines) {
+        $copy = [string[]] $Lines.Clone()
+        $index = (Get-PreciseLine $copy $Find) - 1
+        if (-not $copy[$index].Contains($From)) { throw "fixture line '$Find' does not contain '$From'" }
+        $copy[$index] = $copy[$index].Replace($From, $To)
+        return , $copy
+    }
+    function Add-PreciseLines([string] $Before, [string[]] $Added, [string[]] $Lines = $preciseLines) {
+        $index = (Get-PreciseLine $Lines $Before) - 1
+        return , ([string[]] (@($Lines[0..($index - 1)]) + @($Added) + @($Lines[$index..($Lines.Count - 1)])))
+    }
+    $preciseMap = New-PreciseMap $preciseLines
+    $preciseRoot = Join-Path ([IO.Path]::GetTempPath()) ("select-shards-precise-" + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $preciseRoot -Force | Out-Null
+    function Get-PreciseHunks([string[]] $Old, [string[]] $New) {
+        [IO.File]::WriteAllLines((Join-Path $preciseRoot 'old.cs'), $Old)
+        [IO.File]::WriteAllLines((Join-Path $preciseRoot 'new.cs'), $New)
+        Push-Location $preciseRoot
+        try {
+            $diff = @(& git -c core.quotepath=false diff --no-index --no-renames --no-ext-diff -U0 -- old.cs new.cs)
+            if ($LASTEXITCODE -ne 1) { throw "the fixture edit produced no diff (git exited $LASTEXITCODE)" }
+        }
+        finally { Pop-Location }
+        $parsed = ConvertTo-DiffHunks -DiffLines $diff
+        if ($parsed.Count -ne 1) { throw "the fixture diff named $($parsed.Count) file(s)" }
+        return , @(@($parsed.Values)[0])
+    }
+    function Invoke-PreciseCase {
+        # Old is the file before the change, New after it, and MapLines the file as the map measured it:
+        # Old itself unless the base branch has edited the file since the map. The coverage map is built
+        # from MapLines. Returns the selection with Indexed, the shards other than always-run.
+        param(
+            [string[]] $New, [string[]] $Old = $preciseLines, [string[]] $MapLines = $Old,
+            [bool] $Enabled = $true, [bool] $Swept = $false, [switch] $Unreadable
+        )
+        $hunks = Get-PreciseHunks $Old $New
+        $mapHunks = @()
+        if (($MapLines -join "`n") -cne ($Old -join "`n")) { $mapHunks = Get-PreciseHunks $MapLines $Old }
+        $ranges = [System.Collections.Generic.List[int]]::new()
+        foreach ($hunk in $hunks) { $ranges.AddRange([int[]] (Convert-RangesThroughHunks -Ranges (ConvertTo-OldSideRange -Hunk $hunk) -Hunks $mapHunks)) }
+        $oldText = $Old -join "`n"
+        $mapText = $MapLines -join "`n"
+        $newText = if ($Unreadable) { $null } else { $New -join "`n" }
+        $result = Select-ImpactedShards -Map (New-PreciseMap $MapLines) -Changed @{ $precisePath = $ranges } -PreciseFallbacks $Enabled `
+            -ChangeDetail @{ $precisePath = (New-ChangeDetail -Base 'base' -MapRevision 'map' -Hunks $hunks -MapHunks $mapHunks -Swept $Swept) } `
+            -ReadSource { param($revision, $path) if ($revision -ceq 'HEAD') { $newText } elseif ($revision -ceq 'map') { $mapText } else { $oldText } }.GetNewClosure()
+        $result | Add-Member -NotePropertyName Indexed -NotePropertyValue ((@($result.Shards | Where-Object { $_ -cne 'HeavyNoCoverage' }) | Sort-Object) -join ',')
+        return $result
+    }
+    try {
+        Assert-True (Initialize-CSharpSyntax) "the C# parser PowerShell ships did not load, so no precise fallback can apply: $script:CSharpSyntaxProblem"
+
+        # 17a. A body: only the shards executing that member, whatever else runs in the file.
+        foreach ($case in @(
+            @{ Kind = 'constructor'; Find = 'if (count < 0)'; Shard = 'Ctor'; Label = 'Hub.constructor' },
+            @{ Kind = 'property accessor'; Find = 'if (_count < 0)'; Shard = 'Access'; Label = 'Hub.Value' },
+            @{ Kind = 'expression-bodied property'; Find = '_count < 0 ? 0'; Shard = 'Arrow'; Label = 'Hub.Twice' },
+            @{ Kind = 'lambda'; Find = 'if (y < 0)'; Shard = 'Run'; Label = 'Hub.Run' },
+            @{ Kind = 'local function'; Find = 'if (z < 0)'; Shard = 'Run'; Label = 'Hub.Run' },
+            @{ Kind = 'method'; Find = 'if (x < 0)'; Shard = 'Run'; Label = 'Hub.Run' },
+            @{ Kind = 'operator'; Find = 'if (a == null)'; Shard = 'Oper'; Label = 'Hub.operator +' },
+            @{ Kind = 'indexer'; Find = 'if (i < 0)'; Shard = 'Index'; Label = 'Hub.this[]' }
+        )) {
+            $from = if ($case.Find.Contains('null')) { 'null' } else { '< 0' }
+            $to = if ($case.Find.Contains('null')) { 'b' } else { '< 1' }
+            $r = Invoke-PreciseCase -New (Edit-PreciseLine $case.Find $from $to)
+            Assert-True (-not $r.Escalate -and $r.Indexed -ceq $case.Shard) `
+                "an unexecuted line in a $($case.Kind) body selected '$($r.Indexed)', not only the shard executing that member ($($case.Shard))"
+            Assert-True (@($r.Routes | Where-Object { $_ -like "$($case.Shard) <= executes $([WildcardPattern]::Escape($case.Label)) (lines *) of $precisePath, which holds changed lines * that no shard executes" }).Count -eq 1) `
+                "the $($case.Kind) route did not name the member and the changed lines"
+            Assert-True ($r.Shards -contains 'HeavyNoCoverage' -and @($r.Untested).Count -eq 0) `
+                "the $($case.Kind) case dropped the always-run shard or reported tested code as untested"
+            $r = Invoke-PreciseCase -New (Edit-PreciseLine $case.Find $from $to) -Enabled $false
+            Assert-True ($r.Indexed -ceq $fileShards) "with the precise fallbacks off, the $($case.Kind) case did not select every shard executing the file"
+        }
+
+        # 17b. Comments and spacing select nothing; the always-run shard still runs, so nothing escalates.
+        foreach ($case in @(
+            @{ What = 'a comment edit'; New = (Edit-PreciseLine '// Runs first.' 'first' 'before anything else') },
+            @{ What = 'respacing a statement and adding a trailing comment'; New = (Edit-PreciseLine 'if (x < 0)' 'if (x < 0) { return -1; }' 'if (x < 0)   {  return -1;  } // guard') },
+            @{ What = 'blank lines and a comment between members'; New = (Add-PreciseLines 'public int Unused(int x)' @('', '        // Not called.', '')) },
+            @{ What = 'removing a comment'; New = [string[]] @($preciseLines | Where-Object { $_ -notlike '*// Runs first.*' }) }
+        )) {
+            $r = Invoke-PreciseCase -New $case.New
+            Assert-True (-not $r.Escalate -and $r.Indexed -ceq '' -and @($r.Untested).Count -eq 0) "$($case.What) selected '$($r.Indexed)'"
+            Assert-True (@($r.Files | Where-Object { $_.why -like '*changed only comments or whitespace*' }).Count -eq 1) "$($case.What) was not recorded as inert"
+        }
+
+        # 17c. A declaration: every shard executing the enclosing type, and no shard that only
+        #      executes another type of the same file.
+        foreach ($case in @(
+            @{ What = 'an added override'; New = (Edit-PreciseLine 'public int Unused(int x)' 'public int' 'public override int') },
+            @{ What = 'an added virtual'; New = (Edit-PreciseLine 'public int Run(int x)' 'public int' 'public virtual int') },
+            @{ What = 'an added abstract member'; New = (Add-PreciseLines 'public int Unused(int x)' @('        public abstract int Later(int x);', '')) },
+            @{ What = 'an explicit interface signature'; New = (Edit-PreciseLine 'public int Unused(int x)' 'public int Unused' 'int IHub.Unused') },
+            @{ What = 'a changed parameter list'; New = (Edit-PreciseLine 'public int Run(int x)' '(int x)' '(int x, int scale = 1)') },
+            @{ What = 'a field without an initializer'; New = (Edit-PreciseLine 'private int _count;' 'int' 'long') },
+            @{ What = 'a field initializer'; New = (Edit-PreciseLine 'private int _seed = 3;' '3' '4') },
+            @{ What = 'a property initializer'; New = (Edit-PreciseLine 'public int Auto { get; set; }' '{ get; set; }' '{ get; set; } = 2;') },
+            @{ What = 'an auto-property accessor'; New = (Edit-PreciseLine 'public int Auto { get; set; }' 'set;' 'init;') },
+            @{ What = 'an added attribute'; New = (Add-PreciseLines 'public int Run(int x)' @('        [Obsolete]')) },
+            @{ What = 'a changed base list'; New = (Edit-PreciseLine 'public class Hub : HubBase' 'HubBase' 'HubBase, IHub') },
+            @{ What = 'a constructor initializer'; New = (Edit-PreciseLine 'public Hub(int count) : base(count)' 'base(count)' 'base(count + 1)') },
+            @{ What = 'an added method'; New = (Add-PreciseLines 'public int Unused(int x)' @('        public int Added(int x)', '        {', '            return x;', '        }', '')) },
+            @{ What = 'a removed method'; New = [string[]] @($preciseLines[0..((Get-PreciseLine $preciseLines 'public int Unused(int x)') - 2)] + $preciseLines[((Get-PreciseLine $preciseLines 'public static Hub operator') - 1)..($preciseLines.Count - 1)]) }
+        )) {
+            $r = Invoke-PreciseCase -New $case.New
+            Assert-True (-not $r.Escalate -and $r.Indexed -ceq $hubShards) `
+                "$($case.What) selected '$($r.Indexed)', not exactly the shards executing the enclosing type ($hubShards)"
+        }
+        $r = Invoke-PreciseCase -New (Edit-PreciseLine 'public class Side' 'public class' 'public sealed class')
+        Assert-True ($r.Indexed -ceq 'Side') "a type declaration line selected '$($r.Indexed)', not the shards executing that type"
+        Assert-True (@($r.Routes | Where-Object { $_ -like "Side <= executes Side (lines *) of $precisePath, which holds changed lines *" }).Count -eq 1) `
+            'the type route did not name the type'
+
+        # 17d. Everything the index cannot bound keeps the file-wide rule: every shard executing the file.
+        $partialLines = Edit-PreciseLine 'public class Hub : HubBase' 'public class' 'public partial class'
+        $excludedLines = Add-PreciseLines 'public int Run(int x)' @('        [ExcludeFromCodeCoverage]')
+        foreach ($case in @(
+            @{ What = 'a using'; New = (Edit-PreciseLine 'using System;' 'System' 'System.Linq') },
+            @{ What = 'a preprocessor directive'; New = (Edit-PreciseLine '#if FIXTURE_SYMBOL' 'FIXTURE_SYMBOL' 'OTHER_SYMBOL') },
+            @{ What = 'code a directive disables'; New = (Edit-PreciseLine 'private void Disabled() { }' '{ }' '{ return; }') },
+            @{ What = 'an XML documentation comment'; New = (Edit-PreciseLine '/// <summary>Counts.</summary>' 'Counts' 'Counts things') },
+            @{ What = 'a constant'; New = (Edit-PreciseLine 'public const int Limit = 1;' '1' '2') },
+            @{ What = 'an enum member'; New = (Edit-PreciseLine 'public enum Mode { One, Two }' 'Two' 'Two, Three') },
+            @{ What = 'a type added at namespace level'; New = (Add-PreciseLines 'public class Side' @('    public class Fresh { }', '')) },
+            @{ What = 'a namespace-level delegate'; New = (Add-PreciseLines 'public class Side' @('    public delegate int Step(int x);', '')) },
+            @{ What = 'a field of a type no shard executes'; New = (Edit-PreciseLine 'private int _idle;' 'int' 'long') },
+            @{ What = 'a field of a partial type'; Old = $partialLines; New = (Edit-PreciseLine 'private int _count;' 'int' 'long' $partialLines) },
+            @{ What = 'a change that does not parse'; New = (Edit-PreciseLine 'if (x < 0)' 'return -1;' 'return -;') },
+            @{ What = 'a body excluded from coverage'; Old = $excludedLines; New = (Edit-PreciseLine 'if (x < 0)' '< 0' '< 1' $excludedLines) },
+            @{ What = 'a file that cannot be read at HEAD'; New = (Edit-PreciseLine 'if (x < 0)' '< 0' '< 1'); Unreadable = $true },
+            @{ What = "lines the base branch also changed since the map"; New = (Edit-PreciseLine 'if (x < 0)' '< 0' '< 1'); Swept = $true }
+        )) {
+            $arguments = @{ New = $case.New }
+            if ($case.ContainsKey('Old')) { $arguments['Old'] = $case.Old }
+            if ($case.ContainsKey('Unreadable')) { $arguments['Unreadable'] = $true }
+            if ($case.ContainsKey('Swept')) { $arguments['Swept'] = $true }
+            $r = Invoke-PreciseCase @arguments
+            Assert-True (-not $r.Escalate -and $r.Indexed -ceq $fileShards -and @($r.Untested).Count -eq 0) `
+                "$($case.What) selected '$($r.Indexed)', not every shard executing the file"
+            Assert-True (@($r.Routes | Where-Object { $_ -like "Side <= executes $precisePath, whose changed lines * no shard executes" }).Count -eq 1) `
+                "$($case.What) did not record the file-wide route"
+        }
+        # A partial type still bounds its own member bodies.
+        $r = Invoke-PreciseCase -Old $partialLines -New (Edit-PreciseLine 'if (x < 0)' '< 0' '< 1' $partialLines)
+        Assert-True ($r.Indexed -ceq 'Run') "a body in a partial type selected '$($r.Indexed)', not the member's shards"
+        # No parser at all: the same file-wide rule, never an empty or narrower selection.
+        $script:CSharpSyntaxAvailable = $false
+        try {
+            $r = Invoke-PreciseCase -New (Edit-PreciseLine 'if (x < 0)' '< 0' '< 1')
+            Assert-True ($r.Indexed -ceq $fileShards) "without a parser an unexecuted range selected '$($r.Indexed)', not every shard executing the file"
+        }
+        finally { $script:CSharpSyntaxAvailable = $null }
+        # No per-hunk detail (a caller that predates it): unchanged behaviour.
+        $r = Select-ImpactedShards -Map $preciseMap -Changed @{ $precisePath = @((Get-PreciseLine $preciseLines 'if (x < 0)'), (Get-PreciseLine $preciseLines 'if (x < 0)')) }
+        Assert-True ((@($r.Shards | Where-Object { $_ -cne 'HeavyNoCoverage' }) -join ',') -ceq $fileShards) 'a selection without change detail did not keep the file-wide rule'
+
+        # 17e. A member no shard executes is reported, not fanned out.
+        $r = Invoke-PreciseCase -New (Edit-PreciseLine 'return x;' 'x;' 'x + 1;')
+        Assert-True (-not $r.Escalate -and $r.Indexed -ceq '') "a change inside a member no shard executes selected '$($r.Indexed)'"
+        Assert-True (@($r.Untested).Count -eq 1 -and $r.Untested[0].path -ceq $precisePath -and $r.Untested[0].member -ceq 'Hub.Unused' -and
+            $r.Untested[0].lines -ceq "$(Get-PreciseLine $preciseLines 'return x;')-$(Get-PreciseLine $preciseLines 'return x;')") `
+            'the untested member was not reported with its path, name and changed lines'
+        Assert-True (@($r.Files | Where-Object { $_.why -like '*untested code changed*' }).Count -eq 1) 'the file decision did not say untested code changed'
+        # Two changed ranges of one untested member are one record naming both.
+        $twice = Add-PreciseLines 'return x;' @('            x = x + 0;')
+        $twice = [string[]] (@($twice[0..((Get-PreciseLine $twice 'return x;') - 1)]) + @('            // end of Unused', '            x = x + 1;') + @($twice[(Get-PreciseLine $twice 'return x;')..($twice.Count - 1)]))
+        $r = Invoke-PreciseCase -New $twice
+        Assert-True ($r.Indexed -ceq '' -and @($r.Untested).Count -eq 1 -and $r.Untested[0].member -ceq 'Hub.Unused' -and $r.Untested[0].lines -like '*-*, *-*') `
+            "two changed ranges of one untested member were reported as $(@($r.Untested).Count) record(s) with lines '$(@($r.Untested | ForEach-Object { $_.lines }) -join ' | ')'"
+        # Beside a covered change the covered one still selects, and the untested one is still reported.
+        $both = Edit-PreciseLine 'return _count;' '_count;' '_count + 1;' (Edit-PreciseLine 'return x;' 'x;' 'x + 1;')
+        $r = Invoke-PreciseCase -New $both
+        Assert-True ($r.Indexed -ceq 'Access' -and @($r.Untested).Count -eq 1) "a covered change beside an untested one selected '$($r.Indexed)' with $(@($r.Untested).Count) untested"
+
+        # 17f. A map older than the pull request's base. The declaration is found in the map's own
+        #      version of the file by name, so lines the base branch added, edits it made to the
+        #      member, and moving the member all leave the member's shard selected, and the route
+        #      reports the member's lines as the map numbers them.
+        $mapRunLine = Get-PreciseLine $preciseLines 'public int Run(int x)'
+        $unusedFrom = (Get-PreciseLine $preciseLines 'public int Unused(int x)') - 1
+        $movedUnused = [string[]] $preciseLines[$unusedFrom..($unusedFrom + 4)]
+        $withoutUnused = [string[]] @($preciseLines[0..($unusedFrom - 1)] + $preciseLines[($unusedFrom + 5)..($preciseLines.Count - 1)])
+        $addedMember = @('        public int Late(int x)', '        {', '            if (x < 9) { return 9; }', '            return x;', '        }', '')
+        foreach ($case in @(
+            @{ What = 'lines added above the type'; Base = (Add-PreciseLines 'namespace Fixture' @('// added on the base branch', '// since the map was built')) },
+            @{ What = 'an edit to the same member'; Base = (Edit-PreciseLine 'return next(Local(x));' 'Local(x))' 'Local(x)) + 0') },
+            @{ What = 'a member moved above it'; Base = (Add-PreciseLines 'public int Value' $movedUnused $withoutUnused) }
+        )) {
+            $r = Invoke-PreciseCase -MapLines $preciseLines -Old $case.Base -New (Edit-PreciseLine 'if (x < 0)' '< 0' '< 1' $case.Base)
+            Assert-True ($r.Indexed -ceq 'Run') "behind a base with $($case.What), an unexecuted line of Run selected '$($r.Indexed)'"
+            Assert-True (@($r.Routes | Where-Object { $_ -like "Run <= executes Hub.Run (lines $mapRunLine-*) of *" }).Count -eq 1) `
+                "behind a base with $($case.What), the member was not reported in the map's line numbers"
+        }
+        # A declaration behind a base that only edited a body: still the type's shards.
+        $editedBase = Edit-PreciseLine 'return next(Local(x));' 'Local(x))' 'Local(x)) + 0'
+        $r = Invoke-PreciseCase -MapLines $preciseLines -Old $editedBase -New (Edit-PreciseLine 'private int _count;' 'int' 'long' $editedBase)
+        Assert-True ($r.Indexed -ceq $hubShards) "behind a base that edited a body, a changed field selected '$($r.Indexed)', not the type's shards"
+        # What the map's version does not have keeps the file-wide rule: a member the base branch added
+        # (its body has no lines in the map), and a type that gained a member (code may have moved in).
+        $addedBase = Add-PreciseLines 'public int Unused(int x)' $addedMember
+        $r = Invoke-PreciseCase -MapLines $preciseLines -Old $addedBase -New (Edit-PreciseLine 'if (x < 9)' '< 9' '< 8' $addedBase)
+        Assert-True ($r.Indexed -ceq $fileShards) "a body the base branch added since the map selected '$($r.Indexed)', not every shard executing the file"
+        $r = Invoke-PreciseCase -MapLines $preciseLines -Old $addedBase -New (Edit-PreciseLine 'private int _count;' 'int' 'long' $addedBase)
+        Assert-True ($r.Indexed -ceq $fileShards) "a field of a type that gained a member since the map selected '$($r.Indexed)', not every shard executing the file"
+
+        # 17g. The kill switch, and a new source file's path for the type-level stage.
+        $savedSwitch = $env:TEST_IMPACT_PRECISE_FALLBACKS
+        try {
+            foreach ($value in @('0', 'false', 'OFF', 'no', ' disabled ')) {
+                $env:TEST_IMPACT_PRECISE_FALLBACKS = $value
+                Assert-True (-not (Test-PreciseFallbacksEnabled)) "TEST_IMPACT_PRECISE_FALLBACKS='$value' did not turn the precise fallbacks off"
+            }
+            foreach ($value in @('', '1', 'true', 'on')) {
+                $env:TEST_IMPACT_PRECISE_FALLBACKS = $value
+                Assert-True (Test-PreciseFallbacksEnabled) "TEST_IMPACT_PRECISE_FALLBACKS='$value' turned the precise fallbacks off"
+            }
+        }
+        finally { $env:TEST_IMPACT_PRECISE_FALLBACKS = $savedSwitch }
+        $r = Select-ImpactedShards -Map $preciseMap -Changed @{ 'src/Area/Brand.cs' = @(1, 9); $precisePath = @(1, 1) }
+        Assert-True ((@($r.NewSourcePaths) -join ',') -ceq 'src/Area/Brand.cs') 'an unmapped source routed to its directory was not reported as a new source path'
+        Assert-True ((@($r.Shards | Where-Object { $_ -cne 'HeavyNoCoverage' }) -join ',') -ceq $fileShards) 'a new source file no longer selects its directory''s owners'
+    }
+    catch { [void] $failures.Add("the precise-fallback cases could not run: $($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)") }
+    finally { Remove-Item -LiteralPath $preciseRoot -Recurse -Force -ErrorAction SilentlyContinue }
+
     if ($failures.Count -gt 0) {
         Write-Host 'Select-Shards self-test FAILED:'
         foreach ($failure in $failures) { Write-Host "  - $failure" }
@@ -4188,7 +5272,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 try {
-    $changed = Get-ChangedRanges -MapSha $mapSha
+    # Per-hunk detail for the precise fallbacks; left empty, every unexecuted range keeps the file-wide rule.
+    $preciseFallbacks = Test-PreciseFallbacksEnabled
+    $changeDetail = @{}
+    $changed = if ($preciseFallbacks) { Get-ChangedRanges -MapSha $mapSha -Detail $changeDetail } else { Get-ChangedRanges -MapSha $mapSha }
     $currentPaths = @($changed.Keys)
     $scopeToPullRequest = $false
     if (@(@($PullRequestHeadSha, $BaseSha, $DeltaFromTree) | Where-Object { $_ }).Count -gt 1) {
@@ -4231,7 +5318,12 @@ try {
     if ($scopeToPullRequest) {
         # The change's own ranges, carried back to the map's numbering. The map-to-HEAD ranges above
         # would also sweep in every edit the base branch made to the same files since the map.
-        $changed = Get-ScopedChangedRanges -MapSha $mapSha -Base $BaseSha -Paths $currentPaths
+        $changeDetail = @{}
+        $changed = if ($preciseFallbacks) {
+            Get-ScopedChangedRanges -MapSha $mapSha -Base $BaseSha -Paths $currentPaths -Detail $changeDetail
+        } else {
+            Get-ScopedChangedRanges -MapSha $mapSha -Base $BaseSha -Paths $currentPaths
+        }
     }
 
     # Test sources the map cannot index, among the paths selection will actually consider.
@@ -4310,7 +5402,29 @@ try {
     }
     $selection = Select-ImpactedShards -Map $map -Changed $changed -CurrentPaths $currentPaths `
         -ScopeToCurrentPaths:$scopeToPullRequest -TestRoutes $testRoutes `
-        -AuditUnchangedMap:$AuditUnchangedMap -ReviewedControlPaths $reviewed.Paths -RequiredShards $reviewed.Shards
+        -AuditUnchangedMap:$AuditUnchangedMap -ReviewedControlPaths $reviewed.Paths -RequiredShards $reviewed.Shards `
+        -ChangeDetail $changeDetail -PreciseFallbacks $preciseFallbacks `
+        -ReadSource { param($revision, $path) Get-GitSourceText -Path $path -Revision $revision }
+
+    # Report-only: the changed members no shard executes, and the sources this change adds. A new
+    # type's residual consumers are generated tests and reflection inventories, which only the
+    # Build job's type-level selection can see; newTypePaths names the files for it.
+    $untestedMembers = @(if ($selection.PSObject.Properties['Untested']) { @($selection.Untested) })
+    $newTypePaths = @(if ($selection.PSObject.Properties['NewSourcePaths']) {
+        $priorRevision = if ($BaseSha) { $BaseSha } else { $mapSha }
+        foreach ($candidate in @($selection.NewSourcePaths)) {
+            & git cat-file -e "${priorRevision}:$candidate" 2>$null
+            if ($LASTEXITCODE -ne 0) { $candidate }
+        }
+    })
+    $preciseState = if (-not $preciseFallbacks) { 'off (TEST_IMPACT_PRECISE_FALLBACKS)' }
+        elseif ($null -eq $script:CSharpSyntaxAvailable) { 'on (not needed by this change)' }
+        elseif ($script:CSharpSyntaxAvailable) { 'on' }
+        else { "unavailable, so every unexecuted range kept the file-wide rule ($script:CSharpSyntaxProblem)" }
+    Write-Host "precise fallbacks: $preciseState; $($untestedMembers.Count) changed member(s) no shard executes; $($newTypePaths.Count) new source file(s)"
+    foreach ($entry in $untestedMembers) {
+        Write-Host "  untested code changed: $($entry.member) in $($entry.path), lines $($entry.lines)"
+    }
 
     if (-not $selection.Escalate -and $selection.RequiresValidation -and $ShardManifestFile -and
         @($manifest | Where-Object { Test-InventoryWindow $_ }).Count -gt 0) {
@@ -4410,6 +5524,11 @@ try {
         # wouldSelect is what coverage selected even when an escalation overrides it with the full matrix.
         wouldSelect       = @($selection.Shards)
         files             = @(if ($selection.PSObject.Properties['Files']) { @($selection.Files) })
+        # Changed members no shard executes: nothing was selected for them, so they are named instead.
+        untested          = $untestedMembers
+        # C# sources this change adds, for the type-level selection in the Build job.
+        newTypePaths      = $newTypePaths
+        preciseFallbacks  = $preciseState
         packageRouting    = $packageRouting
         map               = [pscustomobject]@{
             sha = $mapSha; changedSinceMap = $changedSinceMapCount; changedByThisChange = @($currentPaths).Count
