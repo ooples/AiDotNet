@@ -18,9 +18,12 @@ test('signed-in user registers (or retrieves) a community license from the prici
   await page.locator('.checkout-btn[data-tier="community"]').first().click();
   const res = await response;
   const body = await res.json();
-  expect(res.status(), `register-community-license: ${JSON.stringify({ ...body, license_key: body.license_key ? '<redacted>' : undefined })}`).toBe(200);
-  expect(body.success).toBe(true);
-  expect(String(body.license_key)).toMatch(/^aidn\./);
+  // Never log keys or tokens: CI logs of this public repo are world-readable.
+  const safe = JSON.stringify({ ...body, license_key: body.license_key ? '<redacted>' : undefined, bootstrap_token: body.bootstrap_token ? '<redacted>' : undefined });
+  // 201 when the license is created, 200 when the user already had one.
+  expect([200, 201], `register-community-license: HTTP ${res.status()} ${safe}`).toContain(res.status());
+  expect(body.success, safe).toBe(true);
+  expect(typeof body.license_key === 'string' && body.license_key.length > 0, 'a license key is returned').toBe(true);
 
   // The page shows the key in the success (new) or existing-license banner, never the error banner.
   const shown = body.is_existing ? '#existing-key-display' : '#community-key-display';

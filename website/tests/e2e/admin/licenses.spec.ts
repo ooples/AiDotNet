@@ -21,7 +21,7 @@ test.describe('Admin — licenses', () => {
     // a new product without updating the options regresses admin filter
     // UX silently.
     const productOptions = await page.locator('#filter-product option').allTextContents();
-    expect(productOptions).toEqual(['All Products', 'AiDotNet', 'Harmonic Engine']);
+    expect(productOptions).toEqual(['All Products', 'AiDotNet', 'Harmonic Engine', 'Token Optimizer']);
 
     const tierOptions = await page.locator('#filter-tier option').allTextContents();
     expect(tierOptions).toEqual(['All Tiers', 'Community', 'Professional', 'Enterprise']);
