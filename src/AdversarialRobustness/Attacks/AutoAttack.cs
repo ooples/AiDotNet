@@ -771,7 +771,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
         T residual = NumOps.Subtract(b, Engine.DotProduct<T>(w, point));
         T b0 = Engine.DotProduct<T>(w, d);
 
-        var order = new Tensor<int>(ascending.Reverse().ToArray(), new[] { n });
+        var order = new Tensor<int>(Enumerable.Reverse(ascending).ToArray(), new[] { n });
         var ws = Engine.TensorGather(w.AsTensor(), order, 0);
         var bs2 = Engine.TensorNegate(Engine.TensorMultiply(ws, Engine.TensorGather(d.AsTensor(), order, 0)));
         var s = Engine.TensorCumSum(Engine.TensorAbs(ws), 0).ToVector();
