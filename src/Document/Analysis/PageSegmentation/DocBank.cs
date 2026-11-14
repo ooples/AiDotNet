@@ -455,6 +455,13 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     /// </summary>
     public LayoutLM<T> TokenClassifier => _tokenClassifier ??= CreateTokenClassifier();
 
+    /// <summary>
+    /// How a model being restored (a clone, or a load) builds the token classifier its saved state carries.
+    /// LayoutLM has no parameterless constructor, so without this factory restoring a DocBank whose token
+    /// classifier had been built threw instead of copying it; the state generator picks the factory up by its type.
+    /// </summary>
+    private Func<LayoutLM<T>> TokenClassifierFactory => CreateTokenClassifier;
+
     private LayoutLM<T> CreateTokenClassifier()
     {
         var options = _options.TokenClassifierOptions ?? new LayoutLMOptions();
@@ -478,7 +485,13 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
             throw new ArgumentNullException(nameof(packedTokens));
         if (packedTokens.Rank != 2 || packedTokens.Shape[1] != 5)
             throw new ArgumentException("DocBank token classification expects packed [seq, 5] (tokenId, x0, y0, x1, y1) rows.", nameof(packedTokens));
-        return TokenPredictions(TokenClassifier.Predict(packedTokens));
+        // Labelling is inference: put the classifier's layers in evaluation mode explicitly. Predict only does so
+        // when the model's own flag says it is training, and a classifier restored into a clone carries the
+        // flag as "not training" while its freshly built dropout layers still are, which made a cloned
+        // DocBank label the same tokens differently on every call.
+        var classifier = TokenClassifier;
+        classifier.SetTrainingMode(false);
+        return TokenPredictions(classifier.Predict(packedTokens));
     }
 
     /// <summary>Per-token label (softmax argmax over the <see cref="TokenLabels"/> logits) and its probability.</summary>
