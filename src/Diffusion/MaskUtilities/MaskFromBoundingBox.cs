@@ -87,7 +87,6 @@ public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>A binary mask where bounding box regions are 1.</returns>
     public Tensor<T> Generate(int height, int width, (int top, int left, int bottom, int right)[] boxes)
     {
-        var engine = AiDotNetEngine.Current;
         var mask = new Tensor<T>(new[] { height, width });
 
         // Each box writes only its clipped rectangle, not a full-canvas indicator per box

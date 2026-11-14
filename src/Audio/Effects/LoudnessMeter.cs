@@ -109,7 +109,6 @@ internal static class LoudnessMeter
         var ops = MathHelper.GetNumericOperations<T>();
         var weighted = KWeighted(engine, engine.Reshape(data, new[] { data.Length }), rate, clamp: true);
         var energies = engine.ReduceMean(engine.TensorSquare(engine.TensorUnfold(weighted, 0, block, step)), new[] { 1 }, keepDims: false);
-        int count = energies.Length;
         var levels = Level(engine, ops, energies);
         var absolute = engine.TensorGreaterThan(levels, ops.FromDouble(-70.0));
         if (Count(engine, absolute) == 0) return ops.FromDouble(double.NaN);
