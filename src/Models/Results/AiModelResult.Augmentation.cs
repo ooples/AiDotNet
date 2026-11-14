@@ -275,18 +275,23 @@ public partial class AiModelResult<T, TInput, TOutput>
     {
         int count = vectors.Count;
         int length = vectors[0].Length;
-        var sorted = ResultEngine.TensorSort(StackPredictions(vectors), 0).Values;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var stacked = StackPredictions(vectors);
+        var sorted = ResultEngine.TensorSort(stacked, 0).Values;
         int mid = count / 2;
-        var upper = ResultEngine.Reshape(ResultEngine.TensorSlice(sorted, new[] { mid, 0 }, new[] { 1, length }), new[] { length });
-        if (count % 2 != 0)
+        var median = ResultEngine.Reshape(ResultEngine.TensorSlice(sorted, new[] { mid, 0 }, new[] { 1, length }), new[] { length });
+        if (count % 2 == 0)
         {
-            return upper.ToVector();
+            // The two middle values are halved before adding so their sum cannot overflow in low precision.
+            var lower = ResultEngine.Reshape(ResultEngine.TensorSlice(sorted, new[] { mid - 1, 0 }, new[] { 1, length }), new[] { length });
+            var two = numOps.FromDouble(2.0);
+            median = ResultEngine.TensorAdd(ResultEngine.TensorDivideScalar(lower, two), ResultEngine.TensorDivideScalar(median, two));
         }
 
-        // The two middle values are halved before adding so their sum cannot overflow in low precision.
-        var lower = ResultEngine.Reshape(ResultEngine.TensorSlice(sorted, new[] { mid - 1, 0 }, new[] { 1, length }), new[] { length });
-        var two = MathHelper.GetNumericOperations<T>().FromDouble(2.0);
-        return ResultEngine.TensorAdd(ResultEngine.TensorDivideScalar(lower, two), ResultEngine.TensorDivideScalar(upper, two)).ToVector();
+        // numpy.median: an element whose column holds any NaN is NaN (NaN is the only value unequal to itself).
+        var hasNaN = ResultEngine.ReduceMax(ResultEngine.TensorNotEquals(stacked, stacked), new[] { 0 }, false);
+        var nan = ResultEngine.TensorFullLike(median, numOps.FromDouble(double.NaN));
+        return ResultEngine.TensorWhere(ResultEngine.TensorGreaterThan(hasNaN, numOps.Zero), nan, median).ToVector();
     }
 
     /// <summary>
