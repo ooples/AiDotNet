@@ -1072,7 +1072,26 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Native Gloo Broadcast method is not available.");
         }
 
-        var doubleData = data is null ? Array.Empty<double>() : VectorToDoubleArray(data);
+        // Non-root ranks may pass no buffer, and the native call fills the array it is given in place, so the root's
+        // length goes first and every other rank sizes its receive buffer from it.
+        double[] doubleData;
+        if (_rank == root)
+        {
+            if (data is null)
+            {
+                throw new ArgumentNullException(nameof(data), "The broadcast root must supply the data to send.");
+            }
+
+            _broadcastDelegate(_nativeGlooContext, new double[] { data.Length }, root);
+            doubleData = VectorToDoubleArray(data);
+        }
+        else
+        {
+            var length = new double[1];
+            _broadcastDelegate(_nativeGlooContext, length, root);
+            doubleData = new double[checked((int)length[0])];
+        }
+
         _broadcastDelegate(_nativeGlooContext, doubleData, root);
         return DoubleArrayToVector(doubleData);
     }
