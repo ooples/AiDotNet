@@ -247,6 +247,64 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             Assert.False(GpuVectorScorer.CanAccelerate(metric, count: 100000, gpuThreshold: 1));
         }
 
+        /// <summary>A CPU engine whose matrix multiply fails, standing in for a GPU error mid-batch.</summary>
+        private sealed class MatMulFailingEngine : CpuEngine
+        {
+            public int MatMulCalls { get; private set; }
+
+            public override Tensor<T> TensorMatMul<T>(Tensor<T> a, Tensor<T> b)
+            {
+                MatMulCalls++;
+                throw new InvalidOperationException("simulated device failure");
+            }
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task Scorer_TryScoreBatch_EngineErrorReturnsFalse()
+        {
+            var metric = new DotProductMetric<double>();
+            var query = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+            var docs = GenerateVectors(8, 3, Seed + 7).Select(x => x.Item2).ToList();
+
+            // A working engine scores the batch, so a false below comes from the engine error alone.
+            Assert.True(GpuVectorScorer.TryScoreBatch(metric, query, docs, 1, new CpuEngine(), out var scores));
+            Assert.Equal(docs.Count, scores.Length);
+            for (int i = 0; i < docs.Count; i++)
+                Assert.Equal(metric.Calculate(query, docs[i]), scores[i], 12);
+
+            var failing = new MatMulFailingEngine();
+            Assert.False(GpuVectorScorer.TryScoreBatch(metric, query, docs, 1, failing, out var failed));
+            Assert.Equal(1, failing.MatMulCalls);
+            Assert.Empty(failed);
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task GpuFlatIndex_EngineError_UsesCpuScan()
+        {
+            var metric = new DotProductMetric<double>();
+            var data = GenerateVectors(count: 50, dim: 4, seed: Seed + 8);
+            var failing = new MatMulFailingEngine();
+            var index = new GpuFlatIndex<double>(metric, 1, failing);
+            var reference = new FlatIndex<double>(metric);
+            foreach (var (id, vec) in data)
+            {
+                index.Add(id, vec);
+                reference.Add(id, vec);
+            }
+
+            var query = data[3].Item2;
+            var result = index.Search(query, 10);
+            var expected = reference.Search(query, 10);
+
+            Assert.Equal(1, failing.MatMulCalls);
+            Assert.Equal(expected.Count, result.Count);
+            for (int i = 0; i < expected.Count; i++)
+            {
+                Assert.Equal(expected[i].Id, result[i].Id);
+                Assert.Equal(expected[i].Score, result[i].Score, 12);
+            }
+        }
+
         // ---- HNSW batched candidate scoring helper ----
 
         [Fact(Timeout = 120000)]

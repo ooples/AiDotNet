@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
@@ -39,6 +40,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
     {
         private readonly Dictionary<string, Vector<T>> _vectors;
         private readonly ISimilarityMetric<T> _metric;
+        private readonly IEngine? _scoringEngine;
 
         /// <summary>
         /// The minimum number of stored vectors before the GPU path is attempted. Below this the
@@ -58,12 +60,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
         /// <see cref="GpuVectorScorer.DefaultGpuThreshold"/>.
         /// </param>
         public GpuFlatIndex(ISimilarityMetric<T> metric, int gpuThreshold = GpuVectorScorer.DefaultGpuThreshold)
+            : this(metric, gpuThreshold, null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes an index that scores its batches on <paramref name="scoringEngine"/>, or, when it is
+        /// null, on <see cref="AiDotNetEngine.Current"/> once a GPU is detected.
+        /// </summary>
+        internal GpuFlatIndex(ISimilarityMetric<T> metric, int gpuThreshold, IEngine? scoringEngine)
         {
             Guard.NotNull(metric);
             if (gpuThreshold < 1)
                 throw new ArgumentException("GPU threshold must be positive", nameof(gpuThreshold));
 
             _metric = metric;
+            _scoringEngine = scoringEngine;
             GpuThreshold = gpuThreshold;
             _vectors = new Dictionary<string, Vector<T>>();
         }
@@ -113,7 +125,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
             var scores = new List<(string Id, T Score)>(n);
 
             // Attempt the GPU batched scoring; on any signal to fall back, use the exact CPU scan.
-            if (GpuVectorScorer.TryScoreBatch(_metric, query, vecs, GpuThreshold, out var gpuScores)
+            if (GpuVectorScorer.TryScoreBatch(_metric, query, vecs, GpuThreshold, _scoringEngine, out var gpuScores)
                 && gpuScores.Length == n)
             {
                 for (int i = 0; i < n; i++)

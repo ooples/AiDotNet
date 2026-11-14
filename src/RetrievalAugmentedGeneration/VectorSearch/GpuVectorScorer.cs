@@ -151,6 +151,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
             int gpuThreshold,
             out T[] scores)
         {
+            return TryScoreBatch(metric, query, docs, gpuThreshold, null, out scores);
+        }
+
+        /// <summary>
+        /// <see cref="TryScoreBatch{T}(ISimilarityMetric{T}, Vector{T}, IReadOnlyList{Vector{T}}, int, out T[])"/>
+        /// on a given engine. A null <paramref name="engine"/> probes for the GPU and uses
+        /// <see cref="AiDotNetEngine.Current"/>; a non-null one is used as is, without the GPU probe.
+        /// </summary>
+        internal static bool TryScoreBatch<T>(
+            ISimilarityMetric<T> metric,
+            Vector<T> query,
+            IReadOnlyList<Vector<T>> docs,
+            int gpuThreshold,
+            IEngine? engine,
+            out T[] scores)
+        {
             scores = Array.Empty<T>();
 
             if (metric == null || query == null || docs == null)
@@ -173,8 +189,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
             if (totalLong > int.MaxValue)
                 return false;
 
-            if (!IsGpuAvailable())
-                return false;
+            IEngine scoringEngine;
+            if (engine is null)
+            {
+                if (!IsGpuAvailable())
+                    return false;
+                scoringEngine = AiDotNetEngine.Current;
+            }
+            else
+            {
+                scoringEngine = engine;
+            }
 
             for (int i = 0; i < n; i++)
             {
@@ -184,7 +209,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
 
             try
             {
-                scores = ScoreOnEngine(AiDotNetEngine.Current, kind, query, docs, n, dim).ToArray();
+                scores = ScoreOnEngine(scoringEngine, kind, query, docs, n, dim).ToArray();
                 return true;
             }
             catch (Exception ex)
