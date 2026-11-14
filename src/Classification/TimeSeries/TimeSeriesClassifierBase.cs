@@ -139,18 +139,27 @@ public abstract partial class TimeSeriesClassifierBase<T> : ClassifierBase<T>, I
         // Default implementation returns one-hot encoded predictions
         var predictions = PredictSequences(sequences);
         int numSamples = sequences.Shape[0];
-        var probabilities = new Matrix<T>(numSamples, NumClasses);
-
-        for (int i = 0; i < numSamples; i++)
+        int known = ClassLabels is null ? 0 : Math.Min(NumClasses, ClassLabels.Length);
+        if (ClassLabels is null || known == 0 || numSamples == 0)
         {
-            int classIdx = GetClassIndexFromLabel(predictions[i]);
-            if (classIdx >= 0 && classIdx < NumClasses)
-            {
-                probabilities[i, classIdx] = NumOps.One;
-            }
+            return new Matrix<T>(numSamples, NumClasses);
         }
 
-        return probabilities;
+        // One-hot of the first class label equal to each prediction (GetClassIndexFromLabel's rule).
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { numSamples, known };
+        var predicted = engine.TensorBroadcastTo(
+            engine.Reshape(Tensor<T>.FromVector(predictions), new[] { numSamples, 1 }), shape);
+        var labels = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorSlice(Tensor<T>.FromVector(ClassLabels), new[] { 0 }, new[] { known }),
+                new[] { 1, known }), shape);
+        var matches = engine.TensorEquals(predicted, labels);
+        var firstMatch = engine.TensorMultiply(matches, engine.TensorEquals(engine.TensorCumSum(matches, 1), NumOps.One));
+        var probabilities = known == NumClasses
+            ? firstMatch
+            : engine.TensorConcatenate(new[] { firstMatch, new Tensor<T>(new[] { numSamples, NumClasses - known }) }, 1);
+
+        return probabilities.ToMatrix();
     }
 
     /// <summary>
@@ -230,25 +239,12 @@ public abstract partial class TimeSeriesClassifierBase<T> : ClassifierBase<T>, I
         int seqLen = sequences.Shape[1];
         int numChan = sequences.Shape.Length > 2 ? sequences.Shape[2] : 1;
 
-        int flattenedSize = seqLen * numChan;
-        var result = new Matrix<T>(numSamples, flattenedSize);
-
-        for (int s = 0; s < numSamples; s++)
-        {
-            int flatIdx = 0;
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int c = 0; c < numChan; c++)
-                {
-                    int[] indices = numChan > 1
-                        ? new[] { s, t, c }
-                        : new[] { s, t };
-                    result[s, flatIdx++] = sequences[indices];
-                }
-            }
-        }
-
-        return result;
+        // Row-major [samples, seqLen, channels] -> [samples, seqLen * channels]: index t * channels + c.
+        // A rank-3 input with a single channel reads channel 0 only, as master did.
+        var source = numChan > 1 || sequences.Shape.Length <= 2
+            ? sequences
+            : AiDotNetEngine.Current.TensorSlice(sequences, new[] { 0, 0, 0 }, new[] { numSamples, seqLen, 1 });
+        return AiDotNetEngine.Current.Reshape(source, new[] { numSamples, seqLen * numChan }).ToMatrix();
     }
 
     /// <summary>
@@ -268,20 +264,15 @@ public abstract partial class TimeSeriesClassifierBase<T> : ClassifierBase<T>, I
         }
 
         int numSamples = flattenedData.Rows;
-        var result = new Tensor<T>(new[] { numSamples, SequenceLength, NumChannels });
-
-        for (int s = 0; s < numSamples; s++)
+        int width = SequenceLength * NumChannels;
+        var engine = AiDotNetEngine.Current;
+        var flat = Tensor<T>.FromMatrix(flattenedData);
+        if (flattenedData.Columns != width)
         {
-            int flatIdx = 0;
-            for (int t = 0; t < SequenceLength; t++)
-            {
-                for (int c = 0; c < NumChannels; c++)
-                {
-                    result[new[] { s, t, c }] = flattenedData[s, flatIdx++];
-                }
-            }
+            // Master read only the leading seqLen * channels columns of each row.
+            flat = engine.TensorSlice(flat, new[] { 0, 0 }, new[] { numSamples, width });
         }
 
-        return result;
+        return engine.Reshape(flat, new[] { numSamples, SequenceLength, NumChannels });
     }
 }
