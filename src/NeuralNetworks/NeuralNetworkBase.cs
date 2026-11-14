@@ -12832,7 +12832,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         Func<IReadOnlyList<Tensor<T>>>? parameterProvider,
-        bool sessionPerOptimizer)
+        bool sessionPerOptimizer,
+        Func<Tensor<T>>? closureObjective = null)
     {
         Guard.NotNull(input);
         Guard.NotNull(target);
@@ -12897,6 +12898,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
                 : null,
+            // A closure objective is re-probed every step and replays only when nothing the plan froze has changed, so
+            // the per-step host state behind the opt-out above cannot reach it stale (see ClosureObjectiveGuard).
+            ClosureObjective = closureObjective,
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
@@ -14874,8 +14878,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         SetTrainingMode(true);
         try
         {
-            // The loss closure usually captures per-call host data (advantages, actions, a generator's samples), which
-            // a compiled plan would freeze at its first trace, so this step runs on the shared eager tape step.
+            // The loss closure usually captures per-call host data (advantages, actions, a generator's samples). It runs
+            // as a closure objective: each step re-probes it and a compiled plan replays only when the closure traces
+            // to the structure the plan was built from, after this call's data is copied in; any captured value a plan
+            // would freeze is part of that structure. A reachability probe needs the eager tape's gradients.
+            if (TapeReachabilityProbe<T>.Current is null)
+            {
+                Tensor<T> Objective() => computeLoss(ForwardForTraining(input));
+                return TrainCustomTapeStep(input, input, _ => Objective(), (loss, _) => loss, optimizer,
+                    parameterProvider: null, sessionPerOptimizer: false, closureObjective: Objective);
+            }
+
             return StepOnSharedTape(
                 () => computeLoss(ForwardForTraining(input)),
                 optimizer ?? GetOrCreateBaseOptimizer(),

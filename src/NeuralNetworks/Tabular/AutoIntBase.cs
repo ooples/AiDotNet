@@ -243,7 +243,7 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
         try
         {
             // The objective already averages over the batch; do not divide its gradients again.
-            return TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, objective, learningRate);
+            return TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, objective, learningRate, owner: this);
         }
         finally
         {
