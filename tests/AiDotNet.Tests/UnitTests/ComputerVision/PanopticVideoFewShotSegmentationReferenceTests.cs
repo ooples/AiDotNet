@@ -95,7 +95,9 @@ public class PanopticVideoFewShotSegmentationReferenceTests
         // Class: every NLL is ln 2, so the 0.1-weighted mean is ln 2; times 2.
         // BCE of query 0: (softplus(2) - 2 + softplus(-2)) / 2 = 0.126928; times 5.
         // Dice of query 0: 1 - (2 sigmoid(2) + 1) / (sigmoid(2) + sigmoid(-2) + 1 + 1) = 0.0794689; times 5.
-        AssertValues(loss, 2.4182775);
+        // 2 ln 2 + 5 * 0.1269280110 + 5 * 0.0794686152 = 2.4182774897 (not rounded to seven places: 2.4182775 sits on
+        // the six-decimal rounding boundary the comparison uses).
+        AssertValues(loss, 2.4182774897);
     }
 
     [Fact]
