@@ -258,8 +258,8 @@ public class SHAPSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         T one = ops.One;
         var rest = engine.TensorAddScalar(engine.TensorNegate(sizes), ops.FromDouble(p + 1));
         return engine.TensorSubtract(
-            engine.TensorLgamma(PreprocessingTensorOps.Filled(new[] { sizes.Length }, ops.FromDouble(p + 1))),
-            engine.TensorAdd(engine.TensorLgamma(engine.TensorAddScalar(sizes, one)), engine.TensorLgamma(rest)));
+            FilterStatisticTensorOps.LogGamma(PreprocessingTensorOps.Filled(new[] { sizes.Length }, ops.FromDouble(p + 1))),
+            engine.TensorAdd(FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(sizes, one)), FilterStatisticTensorOps.LogGamma(rest)));
     }
 
 

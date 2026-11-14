@@ -1128,10 +1128,10 @@ internal static class FeatureScoringTensorOps
         var engine = AiDotNetEngine.Current;
         T one = MathHelper.GetNumericOperations<T>().One;
         return engine.TensorSubtract(
-            engine.TensorLgamma(engine.TensorAddScalar(m, one)),
+            FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(m, one)),
             engine.TensorAdd(
-                engine.TensorLgamma(engine.TensorAddScalar(k, one)),
-                engine.TensorLgamma(engine.TensorAddScalar(engine.TensorSubtract(m, k), one))));
+                FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(k, one)),
+                FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(engine.TensorSubtract(m, k), one))));
     }
 
     /// <summary>
@@ -2543,12 +2543,12 @@ internal static class FeatureScoringTensorOps
             var zeros = new Tensor<T>(shape);
 
             // ln C(N, b_j) and the n_ij-only terms are shared by every feature
-            var lgammaN = engine.TensorLgamma(PreprocessingTensorOps.Filled(shape, totalPlusOne));
+            var lgammaN = FilterStatisticTensorOps.LogGamma(PreprocessingTensorOps.Filled(shape, totalPlusOne));
             var logChooseNb = engine.TensorSubtract(engine.TensorSubtract(lgammaN,
-                engine.TensorLgamma(engine.TensorAddScalar(b, one))),
-                engine.TensorLgamma(engine.TensorAddScalar(engine.TensorNegate(engine.TensorAddScalar(b, negatedCount)), one)));
-            var lgammaNij = engine.TensorLgamma(engine.TensorAddScalar(nij, one));
-            var lgammaBMinusNij = engine.TensorLgamma(engine.TensorAddScalar(engine.TensorSubtract(b, nij), one));
+                FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(b, one))),
+                FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(engine.TensorNegate(engine.TensorAddScalar(b, negatedCount)), one)));
+            var lgammaNij = FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(nij, one));
+            var lgammaBMinusNij = FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(engine.TensorSubtract(b, nij), one));
 
             for (int f = 0; f < p; f++)
             {
@@ -2569,10 +2569,10 @@ internal static class FeatureScoringTensorOps
                 // ln P = ln C(a, n_ij) + ln C(N - a, b - n_ij) - ln C(N, b)
                 var nMinusA = engine.TensorAddScalar(engine.TensorNegate(engine.TensorAddScalar(safeA, negatedCount)), one);
                 var logProbability = engine.TensorSubtract(engine.TensorAdd(
-                    engine.TensorSubtract(engine.TensorSubtract(engine.TensorLgamma(engine.TensorAddScalar(safeA, one)), lgammaNij),
-                        engine.TensorLgamma(engine.TensorAddScalar(engine.TensorSubtract(safeA, nij), one))),
-                    engine.TensorSubtract(engine.TensorSubtract(engine.TensorLgamma(nMinusA), lgammaBMinusNij),
-                        engine.TensorLgamma(engine.TensorAdd(engine.TensorSubtract(nMinusA, b), nij)))),
+                    engine.TensorSubtract(engine.TensorSubtract(FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(safeA, one)), lgammaNij),
+                        FilterStatisticTensorOps.LogGamma(engine.TensorAddScalar(engine.TensorSubtract(safeA, nij), one))),
+                    engine.TensorSubtract(engine.TensorSubtract(FilterStatisticTensorOps.LogGamma(nMinusA), lgammaBMinusNij),
+                        FilterStatisticTensorOps.LogGamma(engine.TensorAdd(engine.TensorSubtract(nMinusA, b), nij)))),
                     logChooseNb);
 
                 var contributions = engine.TensorWhere(valid,
