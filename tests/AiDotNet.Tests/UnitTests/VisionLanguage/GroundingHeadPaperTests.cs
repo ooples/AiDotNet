@@ -784,6 +784,23 @@ public class GroundingHeadPaperTests
     }
 
     [Fact]
+    public void SigLIP2TrainCaption_RunsBothDecoderObjectives_AndAdvancesTheTeacher()
+    {
+        // The captioning and masked-prediction losses had no production caller and the EMA teacher never moved.
+        using var model = SmallSigLIP2();
+        var image = Random(15, 3, 32, 32);
+        var caption = new[] { 3, 7, 1 };
+        Assert.Null(model.MaskedPredictionCenter);
+
+        double before = model.CaptioningLoss(image, caption).ToArray()[0];
+        for (int step = 0; step < 10; step++) model.TrainCaption(image, caption);
+        double after = model.CaptioningLoss(image, caption).ToArray()[0];
+
+        Assert.True(after < before, $"the captioning loss did not fall: {before} -> {after}");
+        Assert.NotNull(model.MaskedPredictionCenter); // The masked-prediction term ran.
+    }
+
+    [Fact]
     public void SigLIP2CaptioningLoss_ParallelPrediction_IgnoresTheReferenceTokens()
     {
         using var model = SmallSigLIP2();

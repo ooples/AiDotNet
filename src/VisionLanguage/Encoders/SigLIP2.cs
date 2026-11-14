@@ -120,6 +120,8 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
+    // The draws of TrainCaption (parallel prediction, masked patches), seeded by Options.Seed when it is set.
+    private Random? _trainingRandom;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -379,6 +381,61 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         }
 
         return Engine.TensorConcatenate(stepLogits.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// One training step of SigLIP 2's decoder objectives on an image and its caption (section 2.2-2.3): LocCa's
+    /// captioning loss weighted by <see cref="SigLIP2Options.CaptioningLossWeight"/>, teacher-forced or, for half of the
+    /// steps as LocCa does, with parallel prediction; plus the masked-prediction loss against the EMA teacher on a
+    /// random <see cref="SigLIP2Options.MimMaskRatio"/> of the patches, weighted by
+    /// <see cref="SigLIP2Options.SelfSupervisedLossWeight"/>. After the optimizer step the teacher moves toward the
+    /// student. <c>Train(image, expected)</c> trains the vision tower's output alone, which a caption cannot be.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="captionIds">The reference caption's token ids.</param>
+    public void TrainCaption(Tensor<T> image, IReadOnlyList<int> captionIds)
+    {
+        ThrowIfDisposed();
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        if (captionIds is null || captionIds.Count == 0) throw new ArgumentException("The caption has no tokens.", nameof(captionIds));
+        if (!_useNativeMode) throw new NotSupportedException("An ONNX-backed model cannot be trained.");
+        bool captioning = _options.IncludeCaptioningDecoder && _options.CaptioningLossWeight != 0;
+        bool masked = _options.SelfSupervisedLossWeight != 0 && _options.MimMaskRatio > 0;
+        if (!captioning && !masked)
+            throw new InvalidOperationException("Both decoder objectives are off: enable the captioning decoder or masked prediction.");
+
+        var rng = _trainingRandom ??= _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+        bool parallel = rng.NextDouble() < 0.5;
+        int[] maskIndices = Array.Empty<int>();
+        if (masked)
+        {
+            int totalPatches;
+            using (new Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var embedded = Layers[0].Forward(PreprocessImage(image));
+                totalPatches = embedded.Length / embedded.Shape[embedded.Rank - 1];
+            }
+            int count = Math.Max(1, Math.Min(totalPatches, (int)(totalPatches * _options.MimMaskRatio)));
+            maskIndices = Enumerable.Range(0, totalPatches).OrderBy(_ => rng.Next()).Take(count).OrderBy(i => i).ToArray();
+        }
+
+        Tensor<T> Objective(Tensor<T> x)
+        {
+            Tensor<T>? total = null;
+            if (captioning)
+                total = Engine.TensorMultiplyScalar(CaptioningLoss(x, captionIds, parallel), NumOps.FromDouble(_options.CaptioningLossWeight));
+            if (masked)
+            {
+                var term = Engine.TensorMultiplyScalar(MaskedPredictionLoss(x, maskIndices), NumOps.FromDouble(_options.SelfSupervisedLossWeight));
+                total = total is null ? term : Engine.TensorAdd(total, term);
+            }
+            return total ?? throw new InvalidOperationException("No decoder objective is enabled.");
+        }
+
+        TrainWithCustomObjective(image, image, (x, _) => Objective(x), _optimizer);
+        if (masked) UpdateTeacher();
     }
 
     /// <summary>

@@ -22967,3 +22967,4 @@ AiDotNet.VisionLanguage.Grounding.Shikra<T>.TrainGrounding(AiDotNet.Tensors.Line
 AiDotNet.VisionLanguage.Grounding.Shikra<T>.EvaluateGroundingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> T
 AiDotNet.VisionLanguage.Grounding.Ferret<T>.TrainGrounding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> void
 AiDotNet.VisionLanguage.Grounding.Ferret<T>.EvaluateGroundingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> T
+AiDotNet.VisionLanguage.Encoders.SigLIP2<T>.TrainCaption(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<int>! captionIds) -> void
