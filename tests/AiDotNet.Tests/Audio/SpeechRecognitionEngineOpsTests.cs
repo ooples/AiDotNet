@@ -82,6 +82,43 @@ public class SpeechRecognitionEngineOpsTests
     }
 
     [Fact]
+    public void PrefixBeamSearch_MatchesBruteForce_WithABeamThatHoldsEveryPrefix()
+    {
+        // 4 frames over blank + 3 symbols: at most 3 + 9 + 27 + 81 + 1 prefixes, all inside a beam of 128, so the
+        // search is exact and every merge of alignments into a prefix is exercised.
+        var probs = new double[,]
+        {
+            { 0.30, 0.30, 0.25, 0.15 },
+            { 0.40, 0.20, 0.25, 0.15 },
+            { 0.35, 0.15, 0.30, 0.20 },
+            { 0.45, 0.25, 0.10, 0.20 },
+        };
+
+        Assert.Equal(BruteForceBestPrefix(probs, 0), SpeechRecognitionEngineOps.CtcPrefixBeamSearch(LogitsFromProbabilities(probs), 128, 0));
+    }
+
+#if NET8_0_OR_GREATER
+    [Fact]
+    public void PrefixBeamSearch_WideBeam_DoesNotBuildAGroupByCandidateMatrix()
+    {
+        // Beam 64 over 80 symbols: 64 * 66 = 4224 candidates per frame reaching about as many prefixes. Merging
+        // them through a dense [prefixes, candidates] mask is 17 million entries per tensor (135 MB in double,
+        // several tensors, twice per frame); the merge itself only needs one entry per candidate.
+        var random = new Random(7);
+        var data = new double[8 * 80];
+        for (int i = 0; i < data.Length; i++) data[i] = random.NextDouble() * 4.0;
+        var logits = new Tensor<double>(data, new[] { 8, 80 });
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        var decoded = SpeechRecognitionEngineOps.CtcPrefixBeamSearch(logits, 64, 0);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.NotNull(decoded);
+        Assert.True(allocated < 256L * 1024 * 1024, $"Decoding 8 frames allocated {allocated / (1024 * 1024)} MB.");
+    }
+#endif
+
+    [Fact]
     public void FrameArgMax_SkipsNaNAndPrefersLowestIndexOnTies()
     {
         var logits = new Tensor<double>(new[] { double.NaN, 1.0, 1.0, 2.0, 2.0, 0.0 }, new[] { 2, 3 });

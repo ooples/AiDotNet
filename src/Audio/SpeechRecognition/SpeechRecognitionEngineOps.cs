@@ -186,18 +186,12 @@ internal static class SpeechRecognitionEngineOps
             var candidatePnb = engine.Concat(pnbParts, 0);
 
             // Merge candidates reaching the same prefix: log-sum-exp over each group's members.
+            // Candidates that reach no prefix (a blank among the top symbols) go to a discard slot after the groups.
             int groupCount = groupPrefixes.Count;
-            var member = new bool[groupCount * candidateCount];
-            for (int j = 0; j < candidateCount; j++)
-            {
-                if (groupOf[j] >= 0)
-                {
-                    member[groupOf[j] * candidateCount + j] = true;
-                }
-            }
+            var groupIndex = IntVector(Array.ConvertAll(groupOf, g => g >= 0 ? g : groupCount));
 
-            var groupPb = GroupLogSumExp(engine, candidatePb, member, groupCount, candidateCount, logZero);
-            var groupPnb = GroupLogSumExp(engine, candidatePnb, member, groupCount, candidateCount, logZero);
+            var groupPb = GroupLogSumExp(engine, candidatePb, groupIndex, groupCount);
+            var groupPnb = GroupLogSumExp(engine, candidatePnb, groupIndex, groupCount);
             var groupTotal = engine.TensorLogAddExp(groupPb, groupPnb);
 
             int keep = Math.Min(beamWidth, groupCount);
@@ -233,12 +227,20 @@ internal static class SpeechRecognitionEngineOps
         return group;
     }
 
-    private static Tensor<T> GroupLogSumExp<T>(IEngine engine, Tensor<T> candidates, bool[] member, int groupCount, int candidateCount, T logZero)
+    /// <summary>
+    /// log-sum-exp of the candidates of each group: log(sum_j exp(c_j - m_g)) + m_g with m_g the group's largest
+    /// candidate. One entry per candidate (scatter max, then scatter add), not a dense [groups, candidates] mask:
+    /// a beam of B with K symbols has B (K + 2) candidates in about as many groups, so the dense form grows with
+    /// B^2 K^2 per frame (17 million entries at B = 64, K = 64). Slot <paramref name="groupCount"/> is a discard
+    /// slot and is dropped; every real group has at least one candidate and the candidates are finite.
+    /// </summary>
+    private static Tensor<T> GroupLogSumExp<T>(IEngine engine, Tensor<T> candidates, Tensor<int> groupIndex, int groupCount)
     {
-        var tiled = engine.TensorTile(candidates.Reshape([1, candidateCount]), [groupCount, 1]);
-        var fill = Filled(groupCount * candidateCount, logZero).Reshape([groupCount, candidateCount]);
-        var masked = engine.TensorWhere(member, tiled, fill);
-        return engine.TensorLogSumExp(masked, 1, false);
+        var peaks = engine.ScatterMax(candidates, groupIndex, out _, 0, groupCount + 1);
+        var shifted = engine.TensorSubtract(candidates, engine.TensorIndexSelect(peaks, groupIndex, 0));
+        var sums = engine.ScatterAdd(engine.TensorExp(shifted), groupIndex, 0, groupCount + 1);
+        var merged = engine.TensorAdd(engine.TensorLog(sums), peaks);
+        return engine.TensorSlice(merged, [0], [groupCount]);
     }
 
     private static Tensor<int> IntVector(int[] values) => new Tensor<int>(values, [values.Length]);
