@@ -963,6 +963,32 @@ public class GroundingHeadPaperTests
     }
 
     [Fact]
+    public void InverseSigmoid_HalfSaturatedCoordinate_StaysFinite()
+    {
+        // A box coordinate that saturates to exactly 0 or 1 in half precision (sigmoid of anything past about 8.3 is
+        // 1) is the next decoder layer's reference. The upper clamp was 1 - 2^-15, taken from the 16-bit storage width
+        // rather than the 11-bit significand; that rounds to 1 in Half, so the logit was log(1 / 0) = +infinity.
+        var ops = MathHelper.GetNumericOperations<Half>();
+        var p = new Tensor<Half>(new[] { 1, 4 }, new Vector<Half>(new[] { 0.0, 0.5, 1.0, 0.25 }.Select(ops.FromDouble).ToArray()));
+
+        var logits = GroundingHeadModule<Half>.InverseSigmoid(Engine, p).ToArray().Select(ops.ToDouble).ToArray();
+
+        Assert.All(logits, logit => Assert.False(double.IsNaN(logit) || double.IsInfinity(logit)));
+        Assert.Equal(0.0, logits[1], 1e-3);
+        Assert.Equal(Math.Log(0.25 / 0.75), logits[3], 1e-2);
+        // The clamp is symmetric in effect: 1 maps to a large positive logit, 0 to a large negative one.
+        // Half's spacing at 1 is 2^-10, so the clamp is [2^-10, 1 - 2^-10] and the logits are -+log(1023).
+        Assert.Equal(Math.Log(1023), logits[2], 2e-2);
+        Assert.Equal(-Math.Log(1023), logits[0], 2e-2);
+
+        // Types that can hold 1 - 1e-5 keep the reference's clamp exactly.
+        var wide = GroundingHeadModule<double>.InverseSigmoid(Engine,
+            new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new[] { 0.0, 1.0 }))).ToArray();
+        Assert.Equal(Math.Log(1e-5 / (1 - 1e-5)), wide[0], 1e-9);
+        Assert.Equal(Math.Log((1 - 1e-5) / 1e-5), wide[1], 1e-9);
+    }
+
+    [Fact]
     public void Ranked_TiedScores_KeepIndexOrder_AsTorchvisionsStableSort()
     {
         // Forty disjoint boxes with one score come back in index order.
