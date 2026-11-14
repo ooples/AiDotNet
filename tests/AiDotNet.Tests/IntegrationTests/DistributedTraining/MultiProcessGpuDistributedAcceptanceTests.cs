@@ -795,12 +795,32 @@ public static class Program
                 return Array.Empty<string>();
             }
 
-            string output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
-            if (proc.ExitCode != 0)
+            // Read both pipes asynchronously: a synchronous ReadToEnd blocks until stdout closes, so a hung
+            // nvidia-smi would never reach the exit deadline (and an unread stderr pipe can fill and stall it).
+            Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = proc.StandardError.ReadToEndAsync();
+            if (!proc.WaitForExit(5000))
+            {
+                try
+                {
+                    proc.Kill();
+                }
+                catch (InvalidOperationException)
+                {
+                    // Exited between the deadline and the kill.
+                }
+
+                proc.WaitForExit(2000);
+                Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 2000);
+                return Array.Empty<string>();
+            }
+
+            if (!Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000) || proc.ExitCode != 0)
             {
                 return Array.Empty<string>();
             }
+
+            string output = stdoutTask.Result;
 
             return output
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -1971,15 +1991,6 @@ public static class Program
     }
 
     #endregion
-
-#else
-
-    [Fact]
-    public void MultiProcessGpuSuite_CompilesCleanlyOnLegacyFramework()
-    {
-        // Multi-process child-host execution runs on net10.0; net471 compiles cleanly without executing.
-        Assert.NotNull(_output);
-    }
 
 #endif
 }
