@@ -66,18 +66,30 @@ internal static class ExplainerTensorOps<T>
     /// square of the largest magnitude in either, so their ratio is exact while neither sum overflows (a Half square
     /// overflows above 256). Returns (0, 0) when both tensors are all zero.
     /// </summary>
-    public static (T Numerator, T Denominator) ScaledSumsOfSquares(Tensor<T> numerator, Tensor<T> denominator)
+    /// <remarks>
+    /// The scaled sums only carry the ratio. A "denominator is degenerate" test has to look at the unscaled sum,
+    /// <c>DenominatorIsNegligible</c>: against a fixed epsilon the scaled denominator is never small unless it is
+    /// exactly zero, so a denominator made of rounding residue (a flat partial dependence, a constant target) would
+    /// pass the guard and the ratio of two rounding errors would be reported.
+    /// </remarks>
+    public static (T Numerator, T Denominator, bool DenominatorIsNegligible) ScaledSumsOfSquares(
+        Tensor<T> numerator, Tensor<T> denominator, double epsilon)
     {
         var engine = AiDotNetEngine.Current;
         T scale = MathHelper.Max(
             engine.TensorMaxValue(engine.TensorAbs(numerator)), engine.TensorMaxValue(engine.TensorAbs(denominator)));
         if (!NumOps.GreaterThan(scale, NumOps.Zero))
         {
-            return (NumOps.Zero, NumOps.Zero);
+            return (NumOps.Zero, NumOps.Zero, true);
         }
 
-        return (engine.TensorSumOfSquares(engine.TensorDivideScalar(numerator, scale)),
-            engine.TensorSumOfSquares(engine.TensorDivideScalar(denominator, scale)));
+        T scaledNumerator = engine.TensorSumOfSquares(engine.TensorDivideScalar(numerator, scale));
+        T scaledDenominator = engine.TensorSumOfSquares(engine.TensorDivideScalar(denominator, scale));
+
+        // The unscaled denominator, in double so the product cannot overflow a narrow T
+        double scaleValue = NumOps.ToDouble(scale);
+        double unscaled = scaleValue * scaleValue * NumOps.ToDouble(scaledDenominator);
+        return (scaledNumerator, scaledDenominator, unscaled < NumOps.ToDouble(Tolerance(epsilon)));
     }
 
     /// <summary>

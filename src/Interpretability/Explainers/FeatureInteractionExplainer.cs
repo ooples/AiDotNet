@@ -149,9 +149,9 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
         var pd2Columns = engine.TensorBroadcastTo(pd2.AsTensor().Reshape(new[] { 1, _gridSize }), shape);
         var interaction = engine.TensorSubtract(engine.TensorSubtract(pd2D, pd1Rows), pd2Columns);
         // Both sums pre-scaled by the largest magnitude: the ratio is unchanged and Half squares cannot overflow
-        var (numerator, denominator) = ExplainerTensorOps<T>.ScaledSumsOfSquares(interaction, pd2D);
+        var (numerator, denominator, negligible) = ExplainerTensorOps<T>.ScaledSumsOfSquares(interaction, pd2D, 1e-10);
 
-        if (NumOps.LessThan(denominator, ExplainerTensorOps<T>.Tolerance(1e-10)))
+        if (negligible)
             return NumOps.Zero;
 
         T hSquared = NumOps.Divide(numerator, denominator);

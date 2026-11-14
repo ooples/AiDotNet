@@ -356,10 +356,10 @@ public class GlobalSurrogateExplainer<T> : IGlobalExplainer<T, SurrogateExplanat
         var actualTensor = actual.AsTensor();
         T mean = engine.TensorMean(actualTensor);
         // Both sums pre-scaled by the largest magnitude: R^2 is unchanged and Half squares cannot overflow
-        var (ssRes, ssTot) = ExplainerTensorOps<T>.ScaledSumsOfSquares(
-            engine.TensorSubtract(actualTensor, predicted.GetSubVector(0, n).AsTensor()), engine.TensorSubtractScalar(actualTensor, mean));
+        var (ssRes, ssTot, negligible) = ExplainerTensorOps<T>.ScaledSumsOfSquares(
+            engine.TensorSubtract(actualTensor, predicted.GetSubVector(0, n).AsTensor()), engine.TensorSubtractScalar(actualTensor, mean), 1e-10);
 
-        if (NumOps.LessThan(ssTot, ExplainerTensorOps<T>.Tolerance(1e-10))) return NumOps.Zero;
+        if (negligible) return NumOps.Zero;
         return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
     }
 

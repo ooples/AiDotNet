@@ -2285,9 +2285,25 @@ public class ExplainerIntegrationTests
         var deviation = new Tensor<Half>(new[] { ops.FromDouble(300), ops.FromDouble(-300), ops.FromDouble(0) }, new[] { 3 });
 
         Assert.True(double.IsInfinity(ops.ToDouble(AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorSumOfSquares(deviation))));
-        var (ssRes, ssTot) = AiDotNet.Interpretability.Helpers.ExplainerTensorOps<Half>.ScaledSumsOfSquares(residual, deviation);
+        var (ssRes, ssTot, negligible) = AiDotNet.Interpretability.Helpers.ExplainerTensorOps<Half>.ScaledSumsOfSquares(residual, deviation, 1e-10);
 
+        Assert.False(negligible);
         Assert.Equal(0.01, ops.ToDouble(ssRes) / ops.ToDouble(ssTot), 1e-4);
+    }
+
+    [Fact]
+    public void ExplainerTensorOps_ScaledSumsOfSquares_RoundingResidueDenominator_IsNegligible()
+    {
+        // A denominator that is only rounding residue (a constant target minus its mean, a flat partial dependence)
+        // must still trip the "below 1e-10" guard. Its scaled sum of squares is of order one, so the guard has to be
+        // judged on the unscaled sum (here 3e-34), not on the scaled one.
+        var numerator = new Tensor<double>(new[] { 1e-17, -1e-17, 0.0 }, new[] { 3 });
+        var denominator = new Tensor<double>(new[] { 1e-17, 1e-17, 1e-17 }, new[] { 3 });
+
+        var (_, scaled, negligible) = AiDotNet.Interpretability.Helpers.ExplainerTensorOps<double>.ScaledSumsOfSquares(numerator, denominator, 1e-10);
+
+        Assert.True(scaled > 1.0);
+        Assert.True(negligible);
     }
 
     [Fact]
