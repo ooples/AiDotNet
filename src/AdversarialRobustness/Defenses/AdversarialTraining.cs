@@ -449,9 +449,20 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     /// Same idea (kill high-frequency components via coarse quantization in
     /// the DCT domain) without requiring an image-shape assumption.
     /// </summary>
+    /// <remarks>
+    /// The reconstruction is clamped to the observed [min, max] of the input, as the 2D JPEG path does, so the
+    /// output range does not depend on whether the input length factorises into 8 x 8 blocks.
+    /// </remarks>
     private Vector<T> Apply1DDCTQuantization(Vector<T> input)
     {
         int n = input.Length;
+        if (n == 0)
+        {
+            return input;
+        }
+
+        T minValue = Engine.TensorMinValue(input.AsTensor());
+        T maxValue = Engine.TensorMaxValue(input.AsTensor());
         var x = Engine.Reshape(input.AsTensor(), new[] { n, 1 });
         var reconstruction = new Tensor<T>(new[] { n, 1 });
 
@@ -462,7 +473,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             reconstruction = Engine.TensorAdd(reconstruction, QuantizedChunk(x, n, first, Math.Min(chunk, n - first)));
         }
 
-        return Engine.TensorClamp(Engine.Reshape(reconstruction, new[] { n }), NumOps.Zero, NumOps.One).ToVector();
+        return Engine.TensorClamp(Engine.Reshape(reconstruction, new[] { n }), minValue, maxValue).ToVector();
     }
 
     /// <summary>

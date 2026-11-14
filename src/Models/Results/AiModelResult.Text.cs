@@ -282,7 +282,6 @@ public partial class AiModelResult<T, TInput, TOutput>
             throw new InvalidOperationException("Model is not initialized.");
 
         bool useKvCache = InferenceOptimizationConfig?.EnableKVCache ?? true;
-        var numOps = MathHelper.GetNumericOperations<T>();
 
         if (useKvCache && Model is IIncrementalCausalLanguageModel<T> incrementalLm)
         {
@@ -343,21 +342,17 @@ public partial class AiModelResult<T, TInput, TOutput>
 
             for (int step = 0; step < maxSteps; step++)
             {
-                Tensor<T> stepTensor;
-                if (step == 0 || !sequence.IsKvCacheActive)
-                {
-                    stepTensor = new Tensor<T>(new[] { 1, running.Count });
-                    for (int i = 0; i < running.Count; i++)
-                        stepTensor[0, i] = numOps.FromDouble(running[i]);
-                }
-                else
-                {
-                    stepTensor = new Tensor<T>(new[] { 1, 1 });
-                    stepTensor[0, 0] = numOps.FromDouble(running[running.Count - 1]);
-                }
+                // The whole sequence on the first step (or without a KV cache), otherwise just the newest token.
+                var stepTensor = step == 0 || !sequence.IsKvCacheActive
+                    ? TokenIdTensor(running)
+                    : TokenIdTensor(new[] { running[running.Count - 1] });
 
                 var rawOut = sequence.Predict((TInput)(object)stepTensor);
-                var outTensor = (Tensor<T>)(object)rawOut!;
+                if (rawOut is not Tensor<T> outTensor)
+                {
+                    throw new InvalidOperationException("The inference sequence did not return a logits tensor.");
+                }
+
                 var logits = ExtractLastPositionLogitsVector(outTensor);
 
                 var (picked, cont) = onStep(step, logits);
@@ -375,11 +370,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             running.AddRange(promptIds);
             for (int step = 0; step < maxSteps; step++)
             {
-                var tensor = new Tensor<T>(new[] { 1, running.Count });
-                for (int i = 0; i < running.Count; i++)
-                    tensor[0, i] = numOps.FromDouble(running[i]);
-
-                var logitsTensor = languageModel.ForwardLogits(tensor);
+                var logitsTensor = languageModel.ForwardLogits(TokenIdTensor(running));
                 var logits = ExtractLastPositionLogitsVector(logitsTensor);
                 var (picked, cont) = onStep(step, logits);
                 if (!cont || picked < 0)
@@ -395,79 +386,58 @@ public partial class AiModelResult<T, TInput, TOutput>
             "Configure a causal language model (e.g. PretrainedSource, Transformer<T>, or IIncrementalCausalLanguageModel<T>).");
     }
 
+    /// <summary>The token ids as a [1, count] tensor of <typeparamref name="T"/>.</summary>
+    private static Tensor<T> TokenIdTensor(IReadOnlyList<int> tokenIds)
+    {
+        return new Tensor<int>(tokenIds.ToArray(), new[] { 1, tokenIds.Count }).Cast<T>();
+    }
+
     internal static Vector<T> ExtractLastPositionLogitsVector(Tensor<T> logitsTensor)
     {
         var shape = logitsTensor.Shape;
         int vocab = shape[shape.Length - 1];
-        var row = new T[vocab];
+        Tensor<T> row;
         if (shape.Length == 3)
         {
-            int lastPos = shape[1] - 1;
-            for (int v = 0; v < vocab; v++)
-                row[v] = logitsTensor[0, lastPos, v];
+            row = ResultEngine.TensorSlice(logitsTensor, new[] { 0, shape[1] - 1, 0 }, new[] { 1, 1, vocab });
         }
         else if (shape.Length == 2)
         {
-            int lastPos = shape[0] - 1;
-            for (int v = 0; v < vocab; v++)
-                row[v] = logitsTensor[lastPos, v];
+            row = ResultEngine.TensorSlice(logitsTensor, new[] { shape[0] - 1, 0 }, new[] { 1, vocab });
         }
         else
         {
             throw new InvalidOperationException($"Expected rank-2 or rank-3 logits tensor; got [{string.Join(",", shape)}].");
         }
 
-        return new Vector<T>(row);
+        return ResultEngine.Reshape(row, new[] { vocab }).ToVector();
     }
 
     private static int ArgMaxLogits(Vector<T> logits)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int bestIdx = 0;
-        T bestVal = logits[0];
-        for (int v = 1; v < logits.Length; v++)
-        {
-            if (numOps.GreaterThan(logits[v], bestVal))
-            {
-                bestVal = logits[v];
-                bestIdx = v;
-            }
-        }
-
-        return bestIdx;
+        // The first largest logit wins ties.
+        return ResultEngine.TensorArgMax(Tensor<T>.FromVector(logits), 0).ToArray()[0];
     }
 
     private static int SampleTemperatureLogits(Vector<T> logits, double temperature, Random rng)
     {
+        // p = softmax(logits / temperature). The largest logit is subtracted before dividing so a small temperature
+        // cannot overflow the scaled logits in low precision. The subtraction runs on halved logits and the factor
+        // of two is restored after the division: l - max itself overflows for logits of opposite sign near the top
+        // of the range (-60000 - 60000 in Half), which zeroed a token the temperature should have kept.
         var numOps = MathHelper.GetNumericOperations<T>();
-        int vocab = logits.Length;
-        var probs = new double[vocab];
-        double invT = 1.0 / Math.Max(1e-6, temperature);
-        double maxL = double.NegativeInfinity;
-        for (int v = 0; v < vocab; v++)
-        {
-            double l = numOps.ToDouble(logits[v]) * invT;
-            probs[v] = l;
-            if (l > maxL) maxL = l;
-        }
+        var halved = ResultEngine.TensorMultiplyScalar(Tensor<T>.FromVector(logits), numOps.FromDouble(0.5));
+        var shifted = ResultEngine.TensorSubtractScalar(halved, ResultEngine.TensorMaxValue(halved));
+        var scaled = ResultEngine.TensorMultiplyScalar(
+            ResultEngine.TensorDivideScalar(shifted, numOps.FromDouble(Math.Max(1e-6, temperature))),
+            numOps.FromDouble(2.0));
+        var cumulative = ResultEngine.TensorCumSum(ResultEngine.TensorSoftmax(scaled, 0), 0);
 
-        double sum = 0.0;
-        for (int v = 0; v < vocab; v++)
-        {
-            probs[v] = Math.Exp(probs[v] - maxL);
-            sum += probs[v];
-        }
-
-        double r = rng.NextDouble() * sum;
-        double cum = 0.0;
-        for (int v = 0; v < vocab; v++)
-        {
-            cum += probs[v];
-            if (r <= cum)
-                return v;
-        }
-
-        return vocab - 1;
+        // Inverse-CDF sampling: the first token whose cumulative probability reaches r, or the last token when
+        // rounding leaves the total just below r.
+        var r = new Tensor<T>(new[] { numOps.FromDouble(rng.NextDouble()) }, new[] { 1 });
+        int picked = ResultEngine.TensorSearchSorted(cumulative, r).ToArray()[0];
+        return Math.Min(picked, logits.Length - 1);
     }
 
     private static int? TryResolveEosTokenId(AiDotNet.Tokenization.Interfaces.ITokenizer tokenizer)

@@ -77,8 +77,14 @@ public static class VectorExtensions
     /// </remarks>
     public static List<Vector<T>> ToVectorList<T>(this IEnumerable<int> indices)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return indices.Select(index => new Vector<T>(new[] { numOps.FromDouble(index) })).ToList();
+        var raw = indices.ToArray();
+        if (raw.Length == 0)
+        {
+            return new List<Vector<T>>();
+        }
+
+        T[] values = new Tensor<int>(raw, new[] { raw.Length }).Cast<T>().ToArray();
+        return values.Select(value => new Vector<T>(new[] { value })).ToList();
     }
 
     /// <summary>
@@ -95,8 +101,15 @@ public static class VectorExtensions
     /// </remarks>
     public static List<int> ToIntList<T>(this IEnumerable<Vector<T>> vectors)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return vectors.SelectMany(v => v.Select(x => numOps.ToInt32(x))).ToList();
+        var parts = vectors.Where(v => v.Length > 0).Select(v => Tensor<T>.FromVector(v)).ToArray();
+        if (parts.Length == 0)
+        {
+            return new List<int>();
+        }
+
+        // Round to the nearest integer (ties to even), as INumericOperations.ToInt32 does, then convert.
+        var flat = parts.Length == 1 ? parts[0] : Eng.TensorConcatenate(parts, 0);
+        return Eng.TensorRound(flat).Cast<int>().ToArray().ToList();
     }
 
     /// <summary>
@@ -116,13 +129,12 @@ public static class VectorExtensions
     /// </remarks>
     public static Matrix<T> CreateDiagonal<T>(this Vector<T> vector)
     {
-        var matrix = new Matrix<T>(vector.Length, vector.Length);
-        for (int i = 0; i < vector.Length; i++)
+        if (vector.Length == 0)
         {
-            matrix[i, i] = vector[i];
+            return new Matrix<T>(0, 0);
         }
 
-        return matrix;
+        return Eng.TensorDiag(Tensor<T>.FromVector(vector)).ToMatrix();
     }
 
     /// <summary>
@@ -141,7 +153,32 @@ public static class VectorExtensions
     /// </remarks>
     public static int[] Argsort<T>(this Vector<T> vector)
     {
-        return Enumerable.Range(0, vector.Length).OrderBy(i => vector[i]).ToArray();
+        int n = vector.Length;
+        if (n == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        // Ascending and stable: equal values keep their original order. The engine's argsort is not documented as
+        // stable, so sort the tie-free composite key (rank of the value, original index) instead.
+        var values = Tensor<T>.FromVector(vector);
+
+        // NaN is ranked separately, after every number (numpy and torch order): a binary search over a sorted
+        // sequence that contains NaN is not defined, and gave the NaNs the rank of the smallest value, which
+        // interleaved them with the finite values.
+        var nanMask = Eng.TensorNotEquals(values, values);
+        bool hasNaN = Eng.TensorCountNonzero(nanMask) > 0;
+        var ranked = hasNaN ? Eng.TensorWhere(nanMask, Eng.TensorZerosLike(values), values) : values;
+        var (sorted, _) = Eng.TensorSort(ranked, 0, false);
+        var rank = Eng.TensorSearchSorted(sorted, ranked).Cast<long>();
+        if (hasNaN)
+        {
+            var isNaN = nanMask.Cast<long>();
+            var isNumber = Eng.TensorSubtract(Eng.TensorOnesLike(isNaN), isNaN);
+            rank = Eng.TensorAdd(Eng.TensorMultiply(rank, isNumber), Eng.TensorMultiplyScalar(isNaN, (long)n));
+        }
+        var key = Eng.TensorAdd(Eng.TensorMultiplyScalar(rank, (long)n), Eng.TensorArange<long>(0, n));
+        return Eng.TensorArgsort(key, 0, false).ToArray();
     }
 
     /// <summary>
@@ -384,23 +421,12 @@ public static class VectorExtensions
         if (vector.Length != matrix.Rows)
             throw new ArgumentException("Vector length must match matrix rows");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Vector<T>(matrix.Columns);
-        var resultSpan = result.AsWritableSpan();
+        if (matrix.Rows == 0 || matrix.Columns == 0)
+            return new Vector<T>(matrix.Columns);
 
-        // Initialize to zero (already done by Vector constructor, but make explicit)
-        numOps.Fill(resultSpan, numOps.Zero);
-
-        // Use SIMD row-based accumulation: result += vector[i] * row[i]
-        // This has better cache locality since rows are contiguous
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            var rowSpan = matrix.GetRowReadOnlySpan(i);
-            // MultiplyAdd computes: dest[j] = result[j] + row[j] * vector[i]
-            numOps.MultiplyAdd(resultSpan, rowSpan, vector[i], resultSpan);
-        }
-
-        return result;
+        // result = vector^T * matrix (row vector times matrix)
+        var row = Eng.Reshape(Tensor<T>.FromVector(vector), new[] { 1, matrix.Rows });
+        return Eng.Reshape(Eng.TensorMatMul(row, Tensor<T>.FromMatrix(matrix)), new[] { matrix.Columns }).ToVector();
     }
 
     /// <summary>
@@ -456,18 +482,13 @@ public static class VectorExtensions
     /// </remarks>
     public static Matrix<T> OuterProduct<T>(this Vector<T> leftVector, Vector<T> rightVector)
     {
-        var operations = MathHelper.GetNumericOperations<T>();
-        var matrix = new Matrix<T>(leftVector.Length, rightVector.Length);
-
-        for (int i = 0; i < leftVector.Length; i++)
+        if (leftVector.Length == 0 || rightVector.Length == 0)
         {
-            for (int j = 0; j < rightVector.Length; j++)
-            {
-                matrix[i, j] = operations.Multiply(leftVector[i], rightVector[j]);
-            }
+            return new Matrix<T>(leftVector.Length, rightVector.Length);
         }
 
-        return matrix;
+        // matrix[i, j] = left[i] * right[j]
+        return Eng.TensorOuter(Tensor<T>.FromVector(leftVector), Tensor<T>.FromVector(rightVector)).ToMatrix();
     }
 
     /// <summary>
@@ -672,21 +693,10 @@ public static class VectorExtensions
         if (vector.Length == 0)
             throw new ArgumentException("Vector cannot be empty");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var span = vector.AsSpan();
-
-        // Single-pass algorithm to find max absolute value without temp allocation
-        T maxAbs = numOps.Abs(span[0]);
-        for (int i = 1; i < span.Length; i++)
-        {
-            T absVal = numOps.Abs(span[i]);
-            if (numOps.GreaterThan(absVal, maxAbs))
-            {
-                maxAbs = absVal;
-            }
-        }
-
-        return maxAbs;
+        // First strict maximum of |x| (the first element seeds it, so a NaN never displaces an earlier value).
+        var magnitudes = Eng.TensorAbs(Tensor<T>.FromVector(vector));
+        int best = Eng.TensorArgMax(magnitudes, 0).ToArray()[0];
+        return magnitudes.ToArray()[best];
     }
 
     /// <summary>
@@ -749,13 +759,8 @@ public static class VectorExtensions
     /// </remarks>
     public static VectorBase<T> PointwiseSqrt<T>(this Vector<T> vector)
     {
-        var operations = MathHelper.GetNumericOperations<T>();
-        return vector.Transform(value =>
-        {
-            double doubleValue = Convert.ToDouble(value);
-            double sqrtValue = Math.Sqrt(doubleValue);
-            return operations.FromDouble(sqrtValue);
-        });
+        // Square root in T (the former Convert.ToDouble route threw for Half, which is not IConvertible).
+        return Eng.TensorSqrt(Tensor<T>.FromVector(vector)).ToVector();
     }
 
     /// <summary>
@@ -838,14 +843,12 @@ public static class VectorExtensions
     /// </remarks>
     public static Vector<T> Transform<T>(this Vector<T> vector, Func<T, T> function)
     {
-        var operations = MathHelper.GetNumericOperations<T>();
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
+        if (vector.Length == 0)
         {
-            result[i] = function(vector[i]);
+            return new Vector<T>(0);
         }
 
-        return result;
+        return Eng.TensorMap(Tensor<T>.FromVector(vector), function).ToVector();
     }
 
     /// <summary>
@@ -867,20 +870,8 @@ public static class VectorExtensions
         if (vector.Length == 0)
             throw new ArgumentException("Vector cannot be empty");
 
-        int maxIndex = 0;
-        T max = vector[0];
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (ops.GreaterThan(vector[i], max))
-            {
-                max = vector[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        // First occurrence of the maximum (strict comparison, so later ties and NaNs never win).
+        return Eng.TensorArgMax(Tensor<T>.FromVector(vector), 0).ToArray()[0];
     }
 
     /// <summary>
@@ -902,20 +893,8 @@ public static class VectorExtensions
         if (vector.Length == 0)
             throw new ArgumentException("Vector cannot be empty");
 
-        int minIndex = 0;
-        T min = vector[0];
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (ops.LessThan(vector[i], min))
-            {
-                min = vector[i];
-                minIndex = i;
-            }
-        }
-
-        return minIndex;
+        // First occurrence of the minimum (strict comparison, so later ties and NaNs never win).
+        return Eng.TensorArgMin(Tensor<T>.FromVector(vector), 0).ToArray()[0];
     }
 
     /// <summary>
@@ -974,16 +953,15 @@ public static class VectorExtensions
         if (indices == null)
             throw new ArgumentNullException(nameof(indices));
 
-        var result = new Vector<T>(indices.Length);
-        for (int i = 0; i < indices.Length; i++)
+        foreach (int index in indices)
         {
-            if (indices[i] >= vector.Length)
+            if (index >= vector.Length)
                 throw new ArgumentOutOfRangeException(nameof(indices), "Index out of range");
-
-            result[i] = vector[indices[i]];
+            if (index < 0)
+                throw new ArgumentOutOfRangeException("index");
         }
 
-        return result;
+        return Gather(vector, indices);
     }
 
     /// <summary>
@@ -1036,16 +1014,10 @@ public static class VectorExtensions
         if (vector == null)
             throw new ArgumentNullException(nameof(vector));
 
-        int n = vector.Length;
-        // CreateMatrix initializes to zeros, so we only need to set diagonal
-        var matrix = Matrix<T>.CreateMatrix<T>(n, n);
+        if (vector.Length == 0)
+            return new Matrix<T>(0, 0);
 
-        for (int i = 0; i < n; i++)
-        {
-            matrix[i, i] = vector[i];
-        }
-
-        return matrix;
+        return Eng.TensorDiag(Tensor<T>.FromVector(vector)).ToMatrix();
     }
 
     /// <summary>
@@ -1157,15 +1129,12 @@ public static class VectorExtensions
     /// </remarks>
     public static Vector<T> ToRealVector<T>(this Vector<Complex<T>> vector)
     {
-        var count = vector.Length;
-        var realVector = new Vector<T>(count);
-
-        for (int i = 0; i < count; i++)
+        if (vector.Length == 0)
         {
-            realVector[i] = vector[i].Real;
+            return new Vector<T>(0);
         }
 
-        return realVector;
+        return Eng.TensorReal(Tensor<Complex<T>>.FromVector(vector)).ToVector();
     }
 
 
@@ -1220,16 +1189,8 @@ public static class VectorExtensions
             throw new ArgumentException($"{nameof(rows)} and {nameof(columns)} multiplied together needs to be equal the array length");
         }
 
-        var matrix = Matrix<T>.CreateMatrix<T>(rows, columns);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < columns; j++)
-            {
-                matrix[i, j] = vector[i * columns + j];
-            }
-        }
-
-        return matrix;
+        // Row-major: matrix[i, j] = vector[i * columns + j]
+        return Eng.Reshape(Tensor<T>.FromVector(vector), new[] { rows, columns }).ToMatrix();
     }
 
     /// <summary>
@@ -1259,16 +1220,10 @@ public static class VectorExtensions
             throw new ArgumentNullException(nameof(vector));
 
         int n = vector.Length;
-        var matrix = Matrix<T>.CreateMatrix<T>(n, 1);
+        if (n == 0)
+            return Matrix<T>.CreateMatrix<T>(0, 1);
 
-        // For n×1 column matrix, each row has only 1 element
-        // Direct indexing is the simplest approach here
-        for (int i = 0; i < n; i++)
-        {
-            matrix[i, 0] = vector[i];
-        }
-
-        return matrix;
+        return Eng.Reshape(Tensor<T>.FromVector(vector), new[] { n, 1 }).ToMatrix();
     }
 
     /// <summary>
@@ -1303,17 +1258,21 @@ public static class VectorExtensions
             return numOps.Zero;
         }
 
+        // Sample standard deviation sqrt(sum((x - mean)^2) / (n - 1)). The deviations are divided by their largest
+        // magnitude before squaring so the squares cannot overflow (65504 in Half), then the scale is restored.
         T mean = vector.Average();
-        T sum = numOps.Zero;
-
-        for (int i = 0; i < n; i++)
+        var deviations = Eng.TensorSubtractScalar(Tensor<T>.FromVector(vector), mean);
+        T scale = PeakMagnitude(deviations);
+        if (numOps.Equals(scale, numOps.Zero) || numOps.IsInfinity(scale))
         {
-            T diff = numOps.Subtract(vector[i], mean);
-            sum = numOps.Add(sum, numOps.Multiply(diff, diff));
+            return numOps.Equals(scale, numOps.Zero) ? numOps.Zero : scale;
         }
 
-        T variance = numOps.Divide(sum, numOps.FromDouble(n - 1));
-        return numOps.Sqrt(variance);
+        // The engine norm of the scaled deviations is at most sqrt(n), and sqrt(n - 1) is formed before it is
+        // converted: the sum of the scaled squares can reach n, and n - 1 itself, which both leave the range of
+        // Half above 65504 elements although the standard deviation does not.
+        T scaledNorm = Eng.TensorNorm(Eng.TensorDivideScalar(deviations, scale))[0];
+        return numOps.Multiply(scale, numOps.Divide(scaledNorm, numOps.FromDouble(Math.Sqrt(n - 1))));
     }
 
     /// <summary>
@@ -1389,15 +1348,24 @@ public static class VectorExtensions
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        T sumOfSquares = numOps.Zero;
-
-        for (int i = 0; i < v1.Length; i++)
+        if (v1.Length == 0)
         {
-            T diff = numOps.Subtract(v1[i], v2[i]);
-            sumOfSquares = numOps.Add(sumOfSquares, numOps.Square(diff));
+            return numOps.Zero;
         }
 
-        return numOps.Sqrt(sumOfSquares);
+        // sqrt(sum((v1 - v2)^2)), with the differences pre-scaled by their largest magnitude so the squares cannot
+        // overflow (65504 in Half).
+        var differences = Eng.TensorSubtract(Tensor<T>.FromVector(v1), Tensor<T>.FromVector(v2));
+        T scale = PeakMagnitude(differences);
+        if (numOps.Equals(scale, numOps.Zero) || numOps.IsInfinity(scale))
+        {
+            return numOps.Equals(scale, numOps.Zero) ? numOps.Zero : scale;
+        }
+
+        // The engine norm of the scaled differences is at most sqrt(n); their sum of squares can reach n, which
+        // leaves the range of Half above 65504 elements although the distance does not.
+        T scaledNorm = Eng.TensorNorm(Eng.TensorDivideScalar(differences, scale))[0];
+        return numOps.Multiply(scale, scaledNorm);
     }
 
     /// <summary>
@@ -1409,12 +1377,41 @@ public static class VectorExtensions
     /// <returns>A new vector containing only the specified elements.</returns>
     public static Vector<T> Subvector<T>(this Vector<T> vector, int[] indices)
     {
-        var result = new Vector<T>(indices.Length);
-        for (int i = 0; i < indices.Length; i++)
+        foreach (int index in indices)
         {
-            result[i] = vector[indices[i]];
+            if (index < 0 || index >= vector.Length)
+                throw new ArgumentOutOfRangeException("index");
         }
 
-        return result;
+        return Gather(vector, indices);
+    }
+
+    private static IEngine Eng => AiDotNetEngine.Current;
+
+    /// <summary>The elements of <paramref name="vector"/> at <paramref name="indices"/>, in order.</summary>
+    private static Vector<T> Gather<T>(Vector<T> vector, int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var positions = new Tensor<int>((int[])indices.Clone(), new[] { indices.Length });
+        return Eng.TensorTake(Tensor<T>.FromVector(vector), positions).ToVector();
+    }
+
+    /// <summary>
+    /// The largest magnitude in <paramref name="values"/>, or NaN when any element is NaN (NaN never equals itself),
+    /// so a NaN input still propagates through the pre-scaled sums of squares.
+    /// </summary>
+    private static T PeakMagnitude<T>(Tensor<T> values)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (Eng.TensorCountNonzero(Eng.TensorNotEquals(values, values)) > 0)
+        {
+            return numOps.FromDouble(double.NaN);
+        }
+
+        return Eng.TensorMaxValue(Eng.TensorAbs(values));
     }
 }

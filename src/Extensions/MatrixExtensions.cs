@@ -24,19 +24,9 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> AddConstantColumn<T>(this Matrix<T> matrix, T value)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var newMatrix = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
-
-        // Vectorized: Copy each row using SIMD operations
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            newMatrix[i, 0] = value;
-            var sourceRow = matrix.GetRowReadOnlySpan(i);
-            var destRow = newMatrix.GetRowSpan(i);
-            numOps.Copy(sourceRow, destRow.Slice(1, matrix.Columns));
-        }
-
-        return newMatrix;
+        var constantColumn = new Tensor<T>(new[] { matrix.Rows, 1 });
+        Eng.TensorFill(constantColumn, value);
+        return Eng.TensorConcatenate(new[] { constantColumn, Tensor<T>.FromMatrix(matrix) }, 1).ToMatrix();
     }
 
     /// <summary>
@@ -148,14 +138,10 @@ public static class MatrixExtensions
     /// </remarks>
     public static Vector<T> GetColumn<T>(this Matrix<T> matrix, int columnIndex)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var column = new Vector<T>(matrix.Rows);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            column[i] = matrix[i, columnIndex];
-        }
+        if (columnIndex < 0 || columnIndex >= matrix.Columns)
+            throw new IndexOutOfRangeException($"Column index {columnIndex} is outside a matrix with {matrix.Columns} columns.");
 
-        return column;
+        return Eng.TensorSelect(Tensor<T>.FromMatrix(matrix), 1, columnIndex).ToVector();
     }
 
     /// <summary>
@@ -176,19 +162,13 @@ public static class MatrixExtensions
     public static Vector<T> BackwardSubstitution<T>(this Matrix<T> aMatrix, Vector<T> bVector)
     {
         int n = aMatrix.Rows;
-        var xVector = new Vector<T>(n);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = n - 1; i >= 0; --i)
-        {
-            xVector[i] = bVector[i];
-            for (int j = i + 1; j < n; ++j)
-            {
-                xVector[i] = ops.Subtract(xVector[i], ops.Multiply(aMatrix[i, j], xVector[j]));
-            }
-            xVector[i] = ops.Divide(xVector[i], aMatrix[i, i]);
-        }
+        if (n == 0)
+            return new Vector<T>(0);
 
-        return xVector;
+        // Only the upper triangle of the leading n x n block is referenced, exactly as the substitution reads it.
+        var upper = Eng.TensorTriu(LeadingSquare(aMatrix, n), 0);
+        var rhs = Eng.Reshape(Eng.TensorSlice(Tensor<T>.FromVector(bVector), new[] { 0 }, new[] { n }), new[] { n, 1 });
+        return Eng.Reshape(LinalgDispatch<T>.SolveTriangular(upper, rhs, upper: true), new[] { n }).ToVector();
     }
 
     /// <summary>
@@ -576,25 +556,9 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsConsistentBlock<T>(this Matrix<T> block)
     {
-        var rows = block.Rows;
-        var cols = block.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        // Implement your own logic to check consistency within the block
-        // For simplicity, let's assume the block is consistent if all elements are the same
+        // A block is consistent when every element equals the first one (exact comparison; NaN never matches).
         T firstElement = block[0, 0];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (!ops.Equals(block[i, j], firstElement))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        return !AnyNotEqual(Tensor<T>.FromMatrix(block), firstElement);
     }
 
     /// <summary>
@@ -612,27 +576,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsUpperTriangularMatrix<T>(this Matrix<T> matrix, T? tolerance = default)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
+        // A missing (default) tolerance means "use a small default", floored for Half where 1e-10 underflows to 0.
+        T tol = ResolveDefault(tolerance, 1e-10);
+        if (matrix.Rows <= 1)
+            return true;
 
-        // If tolerance is not provided (i.e., it's default(T)), use a small value based on the type
-        if (tolerance?.Equals(default(T)) ?? true)
-        {
-            tolerance = ops.FromDouble(1e-10); // Use a small value as default tolerance
-        }
-
-        for (int i = 1; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < i; j++)
-            {
-                // If any element below the main diagonal is non-zero (greater than tolerance), the matrix is not upper triangular.
-                if (ops.GreaterThan(ops.Abs(matrix[i, j]), tolerance))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // Elements strictly below the main diagonal must not exceed the tolerance in magnitude.
+        return !AnyAbsAbove(Eng.TensorTril(Tensor<T>.FromMatrix(matrix), -1), tol);
     }
 
     /// <summary>
@@ -650,26 +600,15 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsSparseMatrix<T>(this Matrix<T> matrix, T? sparsityThreshold = default)
     {
-        var NumOps = MathHelper.GetNumericOperations<T>();
-        sparsityThreshold ??= NumOps.FromDouble(0.5);
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        int totalElements = rows * cols;
-        int zeroCount = 0;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        // For value-type T a missing threshold arrives as default(T) = 0, not null; treat it as the documented 0.5.
+        T threshold = ResolveDefault(sparsityThreshold, 0.5);
+        int totalElements = matrix.Rows * matrix.Columns;
+        int zeroCount = totalElements - Eng.TensorCountNonzero(Tensor<T>.FromMatrix(matrix));
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (NumOps.Equals(matrix[i, j], NumOps.Zero))
-                {
-                    zeroCount++;
-                }
-            }
-        }
-
-        T sparsityRatio = NumOps.Divide(NumOps.FromDouble(zeroCount), NumOps.FromDouble(totalElements));
-        return NumOps.GreaterThanOrEquals(sparsityRatio, sparsityThreshold);
+        // Form the ratio from the integer counts so a Half matrix with more than 65504 elements does not divide by infinity.
+        T sparsityRatio = numOps.FromDouble((double)zeroCount / totalElements);
+        return numOps.GreaterThanOrEquals(sparsityRatio, threshold);
     }
 
     /// <summary>
@@ -687,26 +626,14 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsDenseMatrix<T>(this Matrix<T> matrix, T? denseThreshold = default)
     {
-        var NumOps = MathHelper.GetNumericOperations<T>();
-        denseThreshold ??= NumOps.FromDouble(0.5);
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        int totalElements = rows * cols;
-        int nonZeroCount = 0;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        // For value-type T a missing threshold arrives as default(T) = 0, not null; treat it as the documented 0.5.
+        T threshold = ResolveDefault(denseThreshold, 0.5);
+        int totalElements = matrix.Rows * matrix.Columns;
+        int nonZeroCount = Eng.TensorCountNonzero(Tensor<T>.FromMatrix(matrix));
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (!NumOps.Equals(matrix[i, j], NumOps.Zero))
-                {
-                    nonZeroCount++;
-                }
-            }
-        }
-
-        T densityRatio = NumOps.Divide(NumOps.FromDouble(nonZeroCount), NumOps.FromDouble(totalElements));
-        return NumOps.GreaterThanOrEquals(densityRatio, denseThreshold);
+        T densityRatio = numOps.FromDouble((double)nonZeroCount / totalElements);
+        return numOps.GreaterThanOrEquals(densityRatio, threshold);
     }
 
     /// <summary>
@@ -724,23 +651,15 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsLowerTriangularMatrix<T>(this Matrix<T> matrix, T? tolerance = default)
     {
-        var NumOps = MathHelper.GetNumericOperations<T>();
-        tolerance ??= NumOps.FromDouble(1e-10);
-        var rows = matrix.Rows;
+        // For value-type T a missing tolerance arrives as default(T) = 0, not null; resolve it like the upper check does.
+        T tol = ResolveDefault(tolerance, 1e-10);
+        int rows = matrix.Rows;
+        if (rows <= 1)
+            return true;
 
-        for (int i = 0; i < rows - 1; i++)
-        {
-            for (int j = i + 1; j < rows; j++)
-            {
-                // If any element above the main diagonal is non-zero, the matrix is not lower triangular.
-                if (NumOps.GreaterThan(NumOps.Abs(matrix[i, j]), tolerance))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // Elements above the main diagonal within the leading rows x rows block must not exceed the tolerance.
+        var square = Eng.TensorSlice(Tensor<T>.FromMatrix(matrix), new[] { 0, 0 }, new[] { rows, Math.Min(rows, matrix.Columns) });
+        return !AnyAbsAbove(Eng.TensorTriu(square, 1), tol);
     }
 
     /// <summary>
@@ -792,20 +711,12 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsSymmetricMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                if (!ops.Equals(matrix[i, j], matrix[j, i]))
-                {
-                    return false;
-                }
-            }
-        }
+        // A symmetric matrix is square by definition; a rectangular matrix has no transpose of the same shape.
+        if (matrix.Rows != matrix.Columns)
+            return false;
 
-        return true;
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        return Eng.TensorEqual(tensor, Eng.TensorTranspose(tensor));
     }
 
     /// <summary>
@@ -826,27 +737,12 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsDiagonalMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A diagonal matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (i != j && !ops.Equals(matrix[i, j], ops.Zero))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        return OutsideBandIsZero(Tensor<T>.FromMatrix(matrix), 0, 0);
     }
 
     /// <summary>
@@ -867,37 +763,12 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsIdentityMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // An identity matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (i == j)
-                {
-                    if (!ops.Equals(matrix[i, j], ops.One))
-                    {
-                        return false; // Diagonal elements must be 1
-                    }
-                }
-                else
-                {
-                    if (!ops.Equals(matrix[i, j], ops.Zero))
-                    {
-                        return false; // Non-diagonal elements must be 0
-                    }
-                }
-            }
-        }
-
-        return true;
+        return Eng.TensorEqual(Tensor<T>.FromMatrix(matrix), Eng.TensorEye<T>(matrix.Rows));
     }
 
     /// <summary>
@@ -916,27 +787,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsSkewSymmetricMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A skew-symmetric matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (!ops.Equals(matrix[i, j], ops.Negate(matrix[j, i])))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        return Eng.TensorEqual(tensor, Eng.TensorNegate(Eng.TensorTranspose(tensor)));
     }
 
     /// <summary>
@@ -957,38 +814,16 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsScalarMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A scalar matrix must be square
         }
 
         T diagonalValue = matrix[0, 0];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (i == j)
-                {
-                    if (!ops.Equals(matrix[i, j], diagonalValue))
-                    {
-                        return false; // All diagonal elements must be equal
-                    }
-                }
-                else
-                {
-                    if (!ops.Equals(matrix[i, j], ops.Zero))
-                    {
-                        return false; // All off-diagonal elements must be zero
-                    }
-                }
-            }
-        }
+        var tensor = Tensor<T>.FromMatrix(matrix);
 
-        return true;
+        // Every diagonal element equals the first one and every off-diagonal element is zero.
+        return !AnyNotEqual(Eng.TensorDiagonal(tensor), diagonalValue) && OutsideBandIsZero(tensor, 0, 0);
     }
 
     /// <summary>
@@ -1009,30 +844,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsUpperBidiagonalMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // An upper bidiagonal matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (i > j || j > i + 1)
-                {
-                    if (!ops.Equals(matrix[i, j], ops.Zero))
-                    {
-                        return false; // Elements below the main diagonal or above the first superdiagonal must be zero
-                    }
-                }
-            }
-        }
-
-        return true;
+        // Elements below the main diagonal or above the first superdiagonal must be zero.
+        return OutsideBandIsZero(Tensor<T>.FromMatrix(matrix), 0, 1);
     }
 
     /// <summary>
@@ -1053,30 +871,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsLowerBidiagonalMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A lower bidiagonal matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (i < j || i > j + 1)
-                {
-                    if (!ops.Equals(matrix[i, j], ops.Zero))
-                    {
-                        return false; // Elements above the main diagonal or below the first subdiagonal must be zero
-                    }
-                }
-            }
-        }
-
-        return true;
+        // Elements above the main diagonal or below the first subdiagonal must be zero.
+        return OutsideBandIsZero(Tensor<T>.FromMatrix(matrix), 1, 0);
     }
 
     /// <summary>
@@ -1097,27 +898,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsTridiagonalMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A tridiagonal matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (Math.Abs(i - j) > 1 && !ops.Equals(matrix[i, j], ops.Zero))
-                {
-                    return false; // Elements outside the three diagonals must be zero
-                }
-            }
-        }
-
-        return true;
+        // Elements outside the three central diagonals must be zero.
+        return OutsideBandIsZero(Tensor<T>.FromMatrix(matrix), 1, 1);
     }
 
     /// <summary>
@@ -1137,30 +924,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsBandMatrix<T>(this Matrix<T> matrix, int subDiagonalThreshold = 1, int superDiagonalThreshold = 1)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A band matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (Math.Abs(i - j) > subDiagonalThreshold || Math.Abs(i - j) > superDiagonalThreshold)
-                {
-                    if (!ops.Equals(matrix[i, j], ops.Zero))
-                    {
-                        return false; // Elements outside the specified bands must be zero
-                    }
-                }
-            }
-        }
-
-        return true;
+        // Lower bandwidth p and upper bandwidth q: a[i, j] = 0 whenever i > j + p or j > i + q.
+        return OutsideBandIsZero(Tensor<T>.FromMatrix(matrix), subDiagonalThreshold, superDiagonalThreshold);
     }
 
     /// <summary>
@@ -1179,26 +949,17 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsHermitianMatrix<T>(this Matrix<Complex<T>> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A Hermitian matrix must be square
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (matrix[i, j] != matrix[j, i].Conjugate())
-                {
-                    return false; // Check if element is equal to its conjugate transpose
-                }
-            }
-        }
-
-        return true;
+        // A = A^H: the real part is symmetric and the imaginary part is antisymmetric.
+        var complex = Tensor<Complex<T>>.FromMatrix(matrix);
+        var real = Eng.TensorReal(complex);
+        var imaginary = Eng.TensorImag(complex);
+        return Eng.TensorEqual(real, Eng.TensorTranspose(real))
+            && Eng.TensorEqual(imaginary, Eng.TensorNegate(Eng.TensorTranspose(imaginary)));
     }
 
     /// <summary>
@@ -1217,28 +978,17 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsSkewHermitianMatrix<T>(this Matrix<Complex<T>> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A skew-Hermitian matrix must be square
         }
 
-        var ops = MathHelper.GetNumericOperations<Complex<T>>();
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (!ops.Equals(matrix[i, j], ops.Negate(matrix[j, i].Conjugate())))
-                {
-                    return false; // Check if element is equal to the negation of its conjugate transpose
-                }
-            }
-        }
-
-        return true;
+        // A = -A^H: the real part is antisymmetric and the imaginary part is symmetric.
+        var complex = Tensor<Complex<T>>.FromMatrix(matrix);
+        var real = Eng.TensorReal(complex);
+        var imaginary = Eng.TensorImag(complex);
+        return Eng.TensorEqual(real, Eng.TensorNegate(Eng.TensorTranspose(real)))
+            && Eng.TensorEqual(imaginary, Eng.TensorTranspose(imaginary));
     }
 
     /// <summary>
@@ -1258,32 +1008,16 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsOrthogonalMatrix<T>(this Matrix<T> matrix, IMatrixDecomposition<T> matrixDecomposition)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // An orthogonal matrix must be square
         }
 
-        var transpose = matrix.Transpose();
-        var inverse = matrixDecomposition.Invert();
+        var transpose = Eng.TensorTranspose(Tensor<T>.FromMatrix(matrix));
+        var inverse = Tensor<T>.FromMatrix(matrixDecomposition.Invert());
 
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        // Check if transpose is equal to inverse
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (ops.GreaterThan(ops.Abs(ops.Subtract(transpose[i, j], inverse[i, j])), ops.FromDouble(0.0001)))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // The transpose must equal the inverse to within 1e-4.
+        return !AnyAbsAbove(Eng.TensorSubtract(transpose, inverse), SafeTolerance<T>(0.0001));
     }
 
     /// <summary>
@@ -1330,19 +1064,10 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<Complex<T>> ConjugateTranspose<T>(this Matrix<Complex<T>> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var result = matrix.CreateComplexMatrix(cols, rows);
-
-        for (int i = 0; i < cols; i++)
-        {
-            for (int j = 0; j < rows; j++)
-            {
-                result[i, j] = matrix[j, i].Conjugate();
-            }
-        }
-
-        return result;
+        var complex = Tensor<Complex<T>>.FromMatrix(matrix);
+        var real = Eng.TensorTranspose(Eng.TensorReal(complex));
+        var imaginary = Eng.TensorNegate(Eng.TensorTranspose(Eng.TensorImag(complex)));
+        return Eng.TensorComplex(real, imaginary).ToMatrix();
     }
 
     /// <summary>
@@ -1447,29 +1172,17 @@ public static class MatrixExtensions
             return false; // Positive definite matrices must be symmetric
         }
 
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        // Set default tolerance if not provided
-        tolerance ??= ops.FromDouble(1e-10);
+        // For value-type T a missing tolerance arrives as default(T) = 0, not null; resolve it to the documented default.
+        T tol = ResolveDefault(tolerance, 1e-10);
 
         try
         {
             // Attempt Cholesky decomposition
             var choleskyDecomposition = new CholeskyDecomposition<T>(matrix);
 
-            // Get the lower triangular matrix L
-            var L = choleskyDecomposition.L;
-
-            // Check if all diagonal elements of L are positive
-            for (int i = 0; i < L.Rows; i++)
-            {
-                if (ops.LessThanOrEquals(L[i, i], tolerance))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            // Every diagonal element of the lower factor L must exceed the tolerance.
+            var diagonal = Eng.TensorDiagonal(Tensor<T>.FromMatrix(choleskyDecomposition.L));
+            return Eng.TensorCountNonzero(Eng.TensorLessEqual(diagonal, Eng.TensorFullLike(diagonal, tol))) == 0;
         }
         catch (Exception)
         {
@@ -1499,22 +1212,11 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsIdempotentMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var product = matrix.Multiply(matrix);
-        var ops = MathHelper.GetNumericOperations<T>();
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        var product = Eng.TensorMatMul(tensor, tensor);
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < rows; j++)
-            {
-                if (ops.GreaterThan(ops.Abs(ops.Subtract(matrix[i, j], product[i, j])), ops.FromDouble(1e-10)))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // A * A must equal A to within 1e-10.
+        return !AnyAbsAbove(Eng.TensorSubtract(tensor, product), SafeTolerance<T>(1e-10));
     }
 
     /// <summary>
@@ -1544,28 +1246,17 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsStochasticMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var tensor = Tensor<T>.FromMatrix(matrix);
 
-        for (int i = 0; i < rows; i++)
+        // All elements must be non-negative and each row must sum to 1.
+        if (Eng.TensorCountNonzero(Eng.TensorLessThan(tensor, numOps.Zero)) > 0)
         {
-            T rowSum = ops.Zero;
-            for (int j = 0; j < cols; j++)
-            {
-                if (ops.LessThan(matrix[i, j], ops.Zero))
-                {
-                    return false; // All elements must be non-negative
-                }
-                rowSum = ops.Add(rowSum, matrix[i, j]);
-            }
-            if (ops.GreaterThan(ops.Abs(ops.Subtract(rowSum, ops.One)), ops.FromDouble(1e-10)))
-            {
-                return false; // Each row must sum to 1
-            }
+            return false;
         }
 
-        return true;
+        var rowSums = Eng.ReduceSum(tensor, new[] { 1 }, false);
+        return !AnyAbsAbove(Eng.TensorSubtractScalar(rowSums, numOps.One), SafeTolerance<T>(1e-10));
     }
 
     /// <summary>
@@ -1587,9 +1278,7 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsDoublyStochasticMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
 
         // Check if matrix is square
         if (!matrix.IsSquareMatrix())
@@ -1597,39 +1286,14 @@ public static class MatrixExtensions
             return false;
         }
 
-        // Check if all elements are non-negative and rows sum to 1
-        for (int i = 0; i < rows; i++)
+        // All elements non-negative, rows sum to 1 and columns sum to 1.
+        if (!matrix.IsStochasticMatrix())
         {
-            T rowSum = ops.Zero;
-            for (int j = 0; j < cols; j++)
-            {
-                if (ops.LessThan(matrix[i, j], ops.Zero))
-                {
-                    return false; // All elements must be non-negative
-                }
-                rowSum = ops.Add(rowSum, matrix[i, j]);
-            }
-            if (ops.GreaterThan(ops.Abs(ops.Subtract(rowSum, ops.One)), ops.FromDouble(1e-10)))
-            {
-                return false; // Each row must sum to 1
-            }
+            return false;
         }
 
-        // Check if columns sum to 1
-        for (int j = 0; j < cols; j++)
-        {
-            T colSum = ops.Zero;
-            for (int i = 0; i < rows; i++)
-            {
-                colSum = ops.Add(colSum, matrix[i, j]);
-            }
-            if (ops.GreaterThan(ops.Abs(ops.Subtract(colSum, ops.One)), ops.FromDouble(1e-10)))
-            {
-                return false; // Each column must sum to 1
-            }
-        }
-
-        return true;
+        var columnSums = Eng.ReduceSum(Tensor<T>.FromMatrix(matrix), new[] { 0 }, false);
+        return !AnyAbsAbove(Eng.TensorSubtractScalar(columnSums, numOps.One), SafeTolerance<T>(1e-10));
     }
 
     /// <summary>
@@ -1651,35 +1315,15 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsAdjacencyMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
         // Check if the matrix is square
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false;
         }
 
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                // Check if the element is either 0 or 1
-                if (!ops.Equals(matrix[i, j], ops.Zero) && !ops.Equals(matrix[i, j], ops.One))
-                {
-                    return false;
-                }
-
-                // Check symmetry: for undirected graphs, A[i,j] must equal A[j,i]
-                if (!ops.Equals(matrix[i, j], matrix[j, i]))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // Every element is 0 or 1, and A[i, j] equals A[j, i] (undirected graph).
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        return OnlyZeroAndOne(tensor) && Eng.TensorEqual(tensor, Eng.TensorTranspose(tensor));
     }
 
     /// <summary>
@@ -1705,29 +1349,32 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsCirculantMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
         {
             return false;
         }
 
-        // Check if each row is a cyclic shift of the previous row
-        for (int i = 1; i < rows; i++)
+        int n = matrix.Rows;
+        if (n <= 1)
         {
-            for (int j = 0; j < cols; j++)
+            return true;
+        }
+
+        // Each row is the row above shifted one position to the right: C[i, j] = C[0, (j - i) mod n].
+        var shift = new int[n * n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
             {
-                if (!ops.Equals(matrix[i, j], matrix[0, (j + i) % cols]))
-                {
-                    return false;
-                }
+                shift[i * n + j] = ((j - i) % n + n) % n;
             }
         }
 
-        return true;
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        var firstRow = Eng.TensorSelect(tensor, 0, 0);
+        var expected = Eng.Reshape(Eng.TensorTake(firstRow, new Tensor<int>(shift, new[] { n * n })), new[] { n, n });
+        return Eng.TensorEqual(tensor, expected);
     }
 
     /// <summary>
@@ -1780,45 +1427,27 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsVandermondeMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = matrix.Rows;
+        int cols = matrix.Columns;
 
-        // A Vandermonde matrix has V[i,j] = x_i^j, where x_i is the base for row i
-        // This means V[i,0] = 1 for all rows (x^0 = 1)
-        // And V[i,j] = V[i,j-1] * x_i where x_i = V[i,1]
-
-        // Check that first column is all 1's (x^0 = 1)
-        for (int i = 0; i < rows; i++)
+        // A Vandermonde matrix has V[i,j] = x_i^j, so the first column is all 1's (x^0 = 1).
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        if (AnyNotEqual(Eng.TensorSelect(tensor, 1, 0), numOps.One))
         {
-            if (!ops.Equals(matrix[i, 0], ops.One))
-            {
-                return false;
-            }
+            return false;
         }
 
-        if (cols < 2)
+        if (cols <= 2)
         {
-            return true; // A single column of 1's is a valid Vandermonde matrix
+            return true; // A column of 1's, optionally followed by any bases x_i, is a valid Vandermonde matrix
         }
 
-        // For each row, check that V[i,j] = V[i,j-1] * x_i where x_i = V[i,1]
-        for (int i = 0; i < rows; i++)
-        {
-            T x_i = matrix[i, 1]; // The base for this row
-
-            for (int j = 2; j < cols; j++)
-            {
-                // V[i,j] should equal V[i,j-1] * x_i
-                T expectedValue = ops.Multiply(matrix[i, j - 1], x_i);
-                if (ops.GreaterThan(ops.Abs(ops.Subtract(matrix[i, j], expectedValue)), ops.FromDouble(1e-10)))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // V[i,j] must equal V[i,j-1] * x_i, where x_i = V[i,1], to within 1e-10.
+        var bases = Eng.TensorBroadcastTo(Eng.TensorSlice(tensor, new[] { 0, 1 }, new[] { rows, 1 }), new[] { rows, cols - 2 });
+        var previous = Eng.TensorSlice(tensor, new[] { 0, 1 }, new[] { rows, cols - 2 });
+        var current = Eng.TensorSlice(tensor, new[] { 0, 2 }, new[] { rows, cols - 2 });
+        return !AnyAbsAbove(Eng.TensorSubtract(current, Eng.TensorMultiply(previous, bases)), SafeTolerance<T>(1e-10));
     }
 
     /// <summary>
@@ -1841,77 +1470,44 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsCauchyMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = matrix.Rows;
+        int cols = matrix.Columns;
 
         // Need at least 2x2 matrix to verify Cauchy property
         if (rows < 2 || cols < 2)
         {
             // 1x1 matrix is trivially Cauchy if non-zero
-            return rows == 1 && cols == 1 && !ops.Equals(matrix[0, 0], ops.Zero);
+            return rows == 1 && cols == 1 && !numOps.Equals(matrix[0, 0], numOps.Zero);
         }
 
         // All elements must be non-zero (they are reciprocals of differences)
-        for (int i = 0; i < rows; i++)
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        if (Eng.TensorCountNonzero(tensor) != rows * cols)
         {
-            for (int j = 0; j < cols; j++)
-            {
-                if (ops.Equals(matrix[i, j], ops.Zero))
-                {
-                    return false;
-                }
-            }
+            return false;
         }
 
-        // For a Cauchy matrix C[i,j] = 1/(x_i - y_j), the following must hold:
-        // 1/C[i,j] - 1/C[i,l] = y_l - y_j (independent of i)
-        // This means for any rows i,k and columns j,l:
-        // 1/C[i,j] - 1/C[i,l] must equal 1/C[k,j] - 1/C[k,l]
-
-        // Use row 0 as reference to compute expected column differences
-        for (int j = 0; j < cols - 1; j++)
+        // For C[i,j] = 1/(x_i - y_j), 1/C[i,j] - 1/C[i,j+1] is the same for every row i and
+        // 1/C[i,j] - 1/C[i+1,j] is the same for every column j.
+        T tolerance = SafeTolerance<T>(1e-10);
+        var reciprocal = Eng.TensorReciprocal(tensor);
+        var columnDiffs = Eng.TensorSubtract(
+            Eng.TensorSlice(reciprocal, new[] { 0, 0 }, new[] { rows, cols - 1 }),
+            Eng.TensorSlice(reciprocal, new[] { 0, 1 }, new[] { rows, cols - 1 }));
+        var referenceColumnDiffs = Eng.TensorBroadcastTo(
+            Eng.TensorSlice(columnDiffs, new[] { 0, 0 }, new[] { 1, cols - 1 }), new[] { rows, cols - 1 });
+        if (AnyAbsAbove(Eng.TensorSubtract(referenceColumnDiffs, columnDiffs), tolerance))
         {
-            // Reference difference: 1/C[0,j] - 1/C[0,j+1]
-            T refDiff = ops.Subtract(
-                ops.Divide(ops.One, matrix[0, j]),
-                ops.Divide(ops.One, matrix[0, j + 1]));
-
-            // Check all other rows have the same difference
-            for (int i = 1; i < rows; i++)
-            {
-                T rowDiff = ops.Subtract(
-                    ops.Divide(ops.One, matrix[i, j]),
-                    ops.Divide(ops.One, matrix[i, j + 1]));
-
-                if (ops.GreaterThan(ops.Abs(ops.Subtract(refDiff, rowDiff)), ops.FromDouble(1e-10)))
-                {
-                    return false;
-                }
-            }
+            return false;
         }
 
-        // Also verify row consistency: 1/C[i,j] - 1/C[k,j] should be constant for all j
-        for (int i = 0; i < rows - 1; i++)
-        {
-            T refDiff = ops.Subtract(
-                ops.Divide(ops.One, matrix[i, 0]),
-                ops.Divide(ops.One, matrix[i + 1, 0]));
-
-            for (int j = 1; j < cols; j++)
-            {
-                T colDiff = ops.Subtract(
-                    ops.Divide(ops.One, matrix[i, j]),
-                    ops.Divide(ops.One, matrix[i + 1, j]));
-
-                if (ops.GreaterThan(ops.Abs(ops.Subtract(refDiff, colDiff)), ops.FromDouble(1e-10)))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        var rowDiffs = Eng.TensorSubtract(
+            Eng.TensorSlice(reciprocal, new[] { 0, 0 }, new[] { rows - 1, cols }),
+            Eng.TensorSlice(reciprocal, new[] { 1, 0 }, new[] { rows - 1, cols }));
+        var referenceRowDiffs = Eng.TensorBroadcastTo(
+            Eng.TensorSlice(rowDiffs, new[] { 0, 0 }, new[] { rows - 1, 1 }), new[] { rows - 1, cols });
+        return !AnyAbsAbove(Eng.TensorSubtract(referenceRowDiffs, rowDiffs), tolerance);
     }
 
     /// <summary>
@@ -1929,29 +1525,25 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsHilbertMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
-
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
         {
             return false;
         }
 
-        // Check if the elements satisfy the Hilbert matrix definition
-        for (int i = 0; i < rows; i++)
+        int n = matrix.Rows;
+        if (n == 0)
         {
-            for (int j = 0; j < rows; j++)
-            {
-                T expectedValue = ops.Divide(ops.One, ops.FromDouble(i + j + 1)); // Hilbert matrix definition
-                if (ops.GreaterThan(ops.Abs(ops.Subtract(matrix[i, j], expectedValue)), ops.FromDouble(1e-10)))
-                {
-                    return false;
-                }
-            }
+            return true;
         }
 
-        return true;
+        // H[i, j] = 1 / (i + j + 1)
+        var index = Eng.TensorArange<T>(0, n);
+        var sums = Eng.TensorAdd(
+            Eng.TensorBroadcastTo(Eng.Reshape(index, new[] { n, 1 }), new[] { n, n }),
+            Eng.TensorBroadcastTo(Eng.Reshape(index, new[] { 1, n }), new[] { n, n }));
+        var hilbert = Eng.TensorReciprocal(Eng.TensorAddScalar(sums, MathHelper.GetNumericOperations<T>().One));
+        return !AnyAbsAbove(Eng.TensorSubtract(Tensor<T>.FromMatrix(matrix), hilbert), SafeTolerance<T>(1e-10));
     }
 
     /// <summary>
@@ -1973,50 +1565,26 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsCompanionMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
         {
             return false;
         }
 
-        // A companion matrix has:
-        // - Subdiagonal (i = j+1) contains all 1's
-        // - Last column contains polynomial coefficients (any values allowed)
-        // - All other elements are 0
-        for (int i = 0; i < rows; i++)
+        int n = matrix.Rows;
+        if (n <= 1)
         {
-            for (int j = 0; j < cols; j++)
-            {
-                // Skip last column - it contains polynomial coefficients (any value allowed)
-                if (j == cols - 1)
-                {
-                    continue;
-                }
-
-                // Subdiagonal elements (i = j+1) must be 1
-                if (i == j + 1)
-                {
-                    if (!ops.Equals(matrix[i, j], ops.One))
-                    {
-                        return false;
-                    }
-                }
-                // All other elements (except last column) must be 0
-                else
-                {
-                    if (!ops.Equals(matrix[i, j], ops.Zero))
-                    {
-                        return false;
-                    }
-                }
-            }
+            return true; // Only the coefficient column exists
         }
 
-        return true;
+        // Excluding the last column (polynomial coefficients), the subdiagonal (i = j + 1) is all 1's
+        // and every other element is 0.
+        var ones = new Tensor<T>(new[] { n - 1 });
+        Eng.TensorFill(ones, MathHelper.GetNumericOperations<T>().One);
+        var shiftedIdentity = Eng.TensorDiagEmbed(ones, -1);
+        var body = Eng.TensorSlice(Tensor<T>.FromMatrix(matrix), new[] { 0, 0 }, new[] { n, n - 1 });
+        var expected = Eng.TensorSlice(shiftedIdentity, new[] { 0, 0 }, new[] { n, n - 1 });
+        return Eng.TensorEqual(body, expected);
     }
 
     /// <summary>
@@ -2055,6 +1623,9 @@ public static class MatrixExtensions
             return false;
         }
 
+        // 1e-8 underflows to zero in Half, so the near-zero test is floored at Half's smallest normal.
+        T nearZero = SafeTolerance<T>(1e-8);
+
         try
         {
             // For small matrices (2x2 or 3x3), calculating the determinant directly is efficient
@@ -2064,7 +1635,7 @@ public static class MatrixExtensions
 
                 // Check if determinant is zero or very close to zero
                 if (numOps.Equals(determinant, numOps.Zero) ||
-                    MathHelper.AlmostEqual(determinant, numOps.Zero))
+                    MathHelper.AlmostEqual(determinant, numOps.Zero, nearZero))
                 {
                     return false;
                 }
@@ -2072,23 +1643,16 @@ public static class MatrixExtensions
                 return true;
             }
 
-            // For larger matrices, another approach is to try an LU decomposition
-            // If successful, the matrix is invertible
-            var decomposition = new LuDecomposition<T>(matrix);
-            var (l, u, p) = (decomposition.L, decomposition.U, decomposition.P);
+            // For larger matrices, factor A = P L U; the matrix is invertible when no diagonal element of U
+            // is zero or within the near-zero tolerance of it.
+            var (lu, _) = LinalgDispatch<T>.LuFactor(Tensor<T>.FromMatrix(matrix));
+            var pivots = Eng.TensorAbs(Eng.TensorDiagonal(lu));
 
-            // Check the diagonal elements of U matrix
-            // If any diagonal element is zero, the matrix is not invertible
-            for (int i = 0; i < u.Rows; i++)
-            {
-                if (numOps.Equals(u[i, i], numOps.Zero) ||
-                    MathHelper.AlmostEqual(u[i, i], numOps.Zero))
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            // A NaN pivot compares false with everything, so "no pivot below the tolerance" alone called a matrix
+            // containing NaN invertible; the elimination this replaced failed on a non-finite pivot.
+            bool finite = Eng.TensorCountNonzero(Eng.TensorNotEquals(pivots, pivots)) == 0
+                && Eng.TensorCountNonzero(Eng.TensorGreaterThan(pivots, numOps.MaxValue)) == 0;
+            return finite && Eng.TensorCountNonzero(Eng.TensorLessThan(pivots, nearZero)) == 0;
         }
         catch (Exception)
         {
@@ -2114,25 +1678,19 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsHankelMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = matrix.Rows;
+        int cols = matrix.Columns;
 
-        // A Hankel matrix has constant anti-diagonals (values along lines from bottom-left to top-right)
-        // For a Hankel matrix, matrix[i, j] depends only on i + j
-        // Check if each element equals the one below and to the left (same anti-diagonal)
-        for (int i = 0; i < rows - 1; i++)
+        // A Hankel matrix has constant anti-diagonals: matrix[i, j] == matrix[i + 1, j - 1].
+        if (rows < 2 || cols < 2)
         {
-            for (int j = 1; j < cols; j++)
-            {
-                if (!ops.Equals(matrix[i, j], matrix[i + 1, j - 1]))
-                {
-                    return false;
-                }
-            }
+            return true;
         }
 
-        return true;
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        var upperRight = Eng.TensorSlice(tensor, new[] { 0, 1 }, new[] { rows - 1, cols - 1 });
+        var lowerLeft = Eng.TensorSlice(tensor, new[] { 1, 0 }, new[] { rows - 1, cols - 1 });
+        return Eng.TensorEqual(upperRight, lowerLeft);
     }
 
     /// <summary>
@@ -2152,23 +1710,19 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsToeplitzMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = matrix.Rows;
+        int cols = matrix.Columns;
 
-        // Check if each element is the same as the one diagonally above it
-        for (int i = 1; i < rows; i++)
+        // Each element equals the one diagonally above it: matrix[i, j] == matrix[i - 1, j - 1].
+        if (rows < 2 || cols < 2)
         {
-            for (int j = 1; j < cols; j++)
-            {
-                if (!ops.Equals(matrix[i, j], matrix[i - 1, j - 1]))
-                {
-                    return false;
-                }
-            }
+            return true;
         }
 
-        return true;
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        var lowerRight = Eng.TensorSlice(tensor, new[] { 1, 1 }, new[] { rows - 1, cols - 1 });
+        var upperLeft = Eng.TensorSlice(tensor, new[] { 0, 0 }, new[] { rows - 1, cols - 1 });
+        return Eng.TensorEqual(lowerRight, upperLeft);
     }
 
     /// <summary>
@@ -2190,8 +1744,7 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsLaplacianMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -2199,53 +1752,37 @@ public static class MatrixExtensions
             return false;
         }
 
-        for (int i = 0; i < rows; i++)
+        if (matrix.Rows == 0)
         {
-            T rowSum = ops.Zero;
-            T colSum = ops.Zero;
-
-            for (int j = 0; j < rows; j++)
-            {
-                // Check for symmetry
-                if (!ops.Equals(matrix[i, j], matrix[j, i]))
-                {
-                    return false;
-                }
-
-                // Check if off-diagonal elements are non-positive
-                if (i != j && ops.GreaterThan(matrix[i, j], ops.Zero))
-                {
-                    return false;
-                }
-
-                // Sum the row and column elements
-                rowSum = ops.Add(rowSum, matrix[i, j]);
-                colSum = ops.Add(colSum, matrix[j, i]);
-            }
-
-            // Check if the sum of each row and column is zero
-            if (ops.GreaterThan(ops.Abs(rowSum), ops.FromDouble(1e-10)) ||
-                ops.GreaterThan(ops.Abs(colSum), ops.FromDouble(1e-10)))
-            {
-                return false;
-            }
-
-            // Check if diagonal elements are non-negative and equal to the sum of absolute values of the off-diagonal elements
-            T offDiagonalSum = ops.Zero;
-            for (int j = 0; j < rows; j++)
-            {
-                if (i != j)
-                {
-                    offDiagonalSum = ops.Add(offDiagonalSum, ops.Abs(matrix[i, j]));
-                }
-            }
-            if (!ops.Equals(matrix[i, i], offDiagonalSum))
-            {
-                return false;
-            }
+            return true;
         }
 
-        return true;
+        // L = D - A must be symmetric.
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        if (!Eng.TensorEqual(tensor, Eng.TensorTranspose(tensor)))
+        {
+            return false;
+        }
+
+        // Off-diagonal elements must be non-positive.
+        var offDiagonal = Eng.TensorAdd(Eng.TensorTril(tensor, -1), Eng.TensorTriu(tensor, 1));
+        if (Eng.TensorCountNonzero(Eng.TensorGreaterThan(offDiagonal, numOps.Zero)) > 0)
+        {
+            return false;
+        }
+
+        // Every row (and, by symmetry, every column) must sum to zero.
+        T tolerance = SafeTolerance<T>(1e-10);
+        if (AnyAbsAbove(Eng.ReduceSum(tensor, new[] { 1 }, false), tolerance) ||
+            AnyAbsAbove(Eng.ReduceSum(tensor, new[] { 0 }, false), tolerance))
+        {
+            return false;
+        }
+
+        // Each diagonal element is the vertex degree, the sum of the magnitudes of its off-diagonal entries.
+        // The sum is a rounded float, so compare it to within the same tolerance as the row sums.
+        var degrees = Eng.ReduceSum(Eng.TensorAbs(offDiagonal), new[] { 1 }, false);
+        return !AnyAbsAbove(Eng.TensorSubtract(Eng.TensorDiagonal(tensor), degrees), tolerance);
     }
 
     /// <summary>
@@ -2273,44 +1810,33 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsIncidenceMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows; // number of vertices
-        var cols = matrix.Columns; // number of edges
-        var ops = MathHelper.GetNumericOperations<T>();
-        T negOne = ops.FromDouble(-1);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int cols = matrix.Columns; // number of edges
+        if (cols == 0)
+        {
+            return true;
+        }
 
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        T negOne = numOps.Negate(numOps.One);
+        var isPlusOne = Eng.TensorEquals(tensor, numOps.One);
+        var isMinusOne = Eng.TensorEquals(tensor, negOne);
+
+        // Every element is -1, 0 or +1.
+        int signedEntries = Eng.TensorCountNonzero(isPlusOne) + Eng.TensorCountNonzero(isMinusOne);
+        if (Eng.TensorCountNonzero(tensor) != signedEntries)
+        {
+            return false;
+        }
+
+        // Count the +1's and -1's of each edge (column) as integers.
+        int[] plusOnes = Eng.ReduceSum(isPlusOne.Cast<int>(), new[] { 0 }, false).ToArray();
+        int[] minusOnes = Eng.ReduceSum(isMinusOne.Cast<int>(), new[] { 0 }, false).ToArray();
         for (int j = 0; j < cols; j++)
         {
-            int countPlusOnes = 0;
-            int countMinusOnes = 0;
-
-            for (int i = 0; i < rows; i++)
-            {
-                T element = matrix[i, j];
-
-                // Check if the element is -1, 0, or +1
-                if (!ops.Equals(element, ops.Zero) &&
-                    !ops.Equals(element, ops.One) &&
-                    !ops.Equals(element, negOne))
-                {
-                    return false;
-                }
-
-                // Count +1's and -1's
-                if (ops.Equals(element, ops.One))
-                {
-                    countPlusOnes++;
-                }
-                else if (ops.Equals(element, negOne))
-                {
-                    countMinusOnes++;
-                }
-            }
-
-            // For undirected: two +1's, no -1's
-            // For directed: one +1, one -1
-            bool isUndirectedEdge = countPlusOnes == 2 && countMinusOnes == 0;
-            bool isDirectedEdge = countPlusOnes == 1 && countMinusOnes == 1;
-
+            // Undirected: two +1's and no -1's. Directed: one +1 and one -1.
+            bool isUndirectedEdge = plusOnes[j] == 2 && minusOnes[j] == 0;
+            bool isDirectedEdge = plusOnes[j] == 1 && minusOnes[j] == 1;
             if (!isUndirectedEdge && !isDirectedEdge)
             {
                 return false;
@@ -2334,9 +1860,7 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsPermutationMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        var numOps = MathHelper.GetNumericOperations<T>();
 
         // Check if the matrix is square
         if (!matrix.IsSquareMatrix())
@@ -2344,39 +1868,23 @@ public static class MatrixExtensions
             return false;
         }
 
-        for (int i = 0; i < rows; i++)
+        if (matrix.Rows == 0)
         {
-            int rowCount = 0;
-            int colCount = 0;
-            for (int j = 0; j < cols; j++)
-            {
-                // Check if the element is either 0 or 1
-                if (!ops.Equals(matrix[i, j], ops.Zero) && !ops.Equals(matrix[i, j], ops.One))
-                {
-                    return false;
-                }
-
-                // Count the number of 1's in the current row
-                if (ops.Equals(matrix[i, j], ops.One))
-                {
-                    rowCount++;
-                }
-
-                // Count the number of 1's in the current column
-                if (ops.Equals(matrix[j, i], ops.One))
-                {
-                    colCount++;
-                }
-            }
-
-            // Each row and column must have exactly one 1
-            if (rowCount != 1 || colCount != 1)
-            {
-                return false;
-            }
+            return true;
         }
 
-        return true;
+        // Every element is 0 or 1, and each row and each column holds exactly one 1 (counted as integers).
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        if (!OnlyZeroAndOne(tensor))
+        {
+            return false;
+        }
+
+        var ones = Eng.TensorEquals(tensor, numOps.One).Cast<int>();
+        var rowCounts = Eng.ReduceSum(ones, new[] { 1 }, false);
+        var columnCounts = Eng.ReduceSum(ones, new[] { 0 }, false);
+        return Eng.TensorCountNonzero(Eng.TensorNotEquals(rowCounts, 1)) == 0
+            && Eng.TensorCountNonzero(Eng.TensorNotEquals(columnCounts, 1)) == 0;
     }
 
     /// <summary>
@@ -2453,76 +1961,55 @@ public static class MatrixExtensions
             return false; // Positive semi-definite matrices must be symmetric
         }
 
-        var eigenvalues = matrix.Eigenvalues();
-        var ops = MathHelper.GetNumericOperations<T>();
-        // Check if all eigenvalues are non-negative
-        foreach (var eigenvalue in eigenvalues)
+        if (matrix.Rows == 0)
         {
-            if (ops.LessThan(eigenvalue, ops.Zero))
-            {
-                return false;
-            }
+            return true;
         }
 
-        return true;
+        // All eigenvalues must be non-negative up to rounding. Computed eigenvalues carry an error of order
+        // eps * max|lambda|, so a singular PSD matrix can return a tiny negative one. As scipy's _PSD
+        // (scipy.stats._multivariate._eigvalsh_to_eps) does, eigenvalues above -cond * max|lambda| count as
+        // non-negative, with cond = 1e6 * eps for double and 1e3 * eps for float. scipy has no half-precision
+        // factor; Half uses 10 * eps, since its own rounding (eps = 2^-10) is already near float's cutoff.
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var eigenvalues = Tensor<T>.FromVector(matrix.Eigenvalues());
+        double factor = typeof(T) == typeof(Half) ? 1e1 : typeof(T) == typeof(float) ? 1e3 : 1e6;
+        T largest = Eng.TensorMaxValue(Eng.TensorAbs(eigenvalues));
+        T cutoff = numOps.Negate(numOps.Multiply(numOps.FromDouble(factor * MachineEpsilon<T>()), largest));
+        return Eng.TensorCountNonzero(Eng.TensorLessThan(eigenvalues, cutoff)) == 0;
     }
 
     /// <summary>
-    /// Calculates the eigenvalues of a matrix using the QR algorithm.
+    /// Calculates the eigenvalues of a symmetric matrix with the symmetric QR algorithm.
     /// </summary>
     /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
-    /// <param name="matrix">The matrix for which to calculate eigenvalues.</param>
-    /// <returns>A vector containing the eigenvalues of the matrix.</returns>
+    /// <param name="matrix">The symmetric matrix for which to calculate eigenvalues.</param>
+    /// <returns>A vector containing the eigenvalues of the matrix in ascending order.</returns>
+    /// <exception cref="ArgumentException">The matrix is not square.</exception>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Eigenvalues are special scalars associated with a matrix. When the matrix is multiplied by certain vectors 
     /// (called eigenvectors), the result is the same as multiplying those vectors by the eigenvalue. Eigenvalues are crucial in many 
-    /// applications including principal component analysis, vibration analysis, and quantum mechanics. This method uses the QR algorithm, 
-    /// which is an iterative approach to find eigenvalues of a matrix.
+    /// applications including principal component analysis, vibration analysis, and quantum mechanics. This method reduces the matrix to
+    /// tridiagonal form and applies implicit symmetric QR steps (Golub and Van Loan, Matrix Computations, section 8.3).
     /// </para>
     /// </remarks>
     public static Vector<T> Eigenvalues<T>(this Matrix<T> matrix)
     {
-        // QR algorithm for finding eigenvalues of a symmetric matrix
-        var rows = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var a = new Matrix<T>(rows, rows);
-
-        // Copy the matrix data using SIMD
-        ops.Copy(matrix.AsSpan(), a.AsWritableSpan());
-        var eigenvalues = new Vector<T>(rows);
-
-        for (int k = rows - 1; k > 0; k--)
+        if (matrix.Rows != matrix.Columns)
         {
-            while (ops.GreaterThan(ops.Abs(a[k, k - 1]), ops.FromDouble(1e-10))) // Replace ops.Epsilon with a small value
-            {
-                T mu = a[k, k];
-                for (int i = 0; i <= k; i++)
-                {
-                    for (int j = 0; j <= k; j++)
-                    {
-                        a[i, j] = ops.Subtract(a[i, j], ops.Multiply(ops.Multiply(mu, a[k, i]), a[k, j]));
-                    }
-                }
-
-                for (int i = 0; i < rows; i++)
-                {
-                    for (int j = 0; j < rows; j++)
-                    {
-                        a[i, j] = ops.Subtract(a[i, j], ops.Multiply(ops.Multiply(mu, a[i, k]), a[j, k]));
-                    }
-                }
-            }
-
-            eigenvalues[k] = a[k, k];
-            for (int i = 0; i <= k; i++)
-            {
-                a[k, i] = a[i, k] = ops.Zero;
-            }
+            throw new ArgumentException("Eigenvalues are only defined for square matrices.", nameof(matrix));
         }
-        eigenvalues[0] = a[0, 0];
 
-        return eigenvalues;
+        if (matrix.Rows == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // Symmetric eigendecomposition (Golub and Van Loan, Matrix Computations, section 8.3: tridiagonal
+        // reduction followed by implicit symmetric QR). Eigenvalues are returned in ascending order.
+        var (values, _) = LinalgDispatch<T>.Eigh(Tensor<T>.FromMatrix(matrix));
+        return values.ToVector();
     }
 
     /// <summary>
@@ -2542,7 +2029,6 @@ public static class MatrixExtensions
     public static T GetDeterminant<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
 
         // Base case: for 1x1 matrix, determinant is the single element
         if (rows == 1)
@@ -2550,35 +2036,14 @@ public static class MatrixExtensions
             return matrix[0, 0];
         }
 
-        T det = ops.Zero;
-        // Recursive case: compute the determinant using cofactor expansion
-        for (int j = 0; j < rows; j++)
+        if (rows == 0)
         {
-            // Calculate the cofactor of matrix[0, j]
-            var submatrix = Matrix<T>.CreateMatrix<T>(rows - 1, rows - 1);
-            for (int i = 1; i < rows; i++)
-            {
-                for (int k = 0; k < rows; k++)
-                {
-                    if (k < j)
-                    {
-                        submatrix[i - 1, k] = matrix[i, k];
-                    }
-                    else if (k > j)
-                    {
-                        submatrix[i - 1, k - 1] = matrix[i, k];
-                    }
-                }
-            }
-
-            // Add the cofactor to the determinant
-            T sign = ops.FromDouble(Math.Pow(-1, j));
-            T cofactor = ops.Multiply(sign, matrix[0, j]);
-            T subDet = submatrix.GetDeterminant();
-            det = ops.Add(det, ops.Multiply(cofactor, subDet));
+            return MathHelper.GetNumericOperations<T>().Zero;
         }
 
-        return det;
+        // LU factorisation with partial pivoting gives the same value as cofactor expansion in O(n^3)
+        // instead of O(n!).
+        return LinalgDispatch<T>.Det(Tensor<T>.FromMatrix(matrix)).ToArray()[0];
     }
 
     /// <summary>
@@ -2597,31 +2062,14 @@ public static class MatrixExtensions
     public static Matrix<T> InvertUpperTriangularMatrix<T>(this Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        // Create the inverse matrix (also upper triangular)
-        var inverse = Matrix<T>.CreateMatrix<T>(n, n);
-
-        // Process columns from right to left
-        for (int j = n - 1; j >= 0; j--)
+        if (n == 0)
         {
-            // Diagonal element: inv[j,j] = 1 / U[j,j]
-            inverse[j, j] = ops.Divide(ops.One, matrix[j, j]);
-
-            // Off-diagonal elements above diagonal: inv[i,j] for i < j
-            // inv[i,j] = -sum(U[i,k] * inv[k,j] for k=i+1 to j) / U[i,i]
-            for (int i = j - 1; i >= 0; i--)
-            {
-                T sum = ops.Zero;
-                for (int k = i + 1; k <= j; k++)
-                {
-                    sum = ops.Add(sum, ops.Multiply(matrix[i, k], inverse[k, j]));
-                }
-                inverse[i, j] = ops.Negate(ops.Divide(sum, matrix[i, i]));
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return inverse;
+        // Solve U X = I; only the upper triangle of U is referenced, so X is upper triangular too.
+        var upper = Eng.TensorTriu(LeadingSquare(matrix, n), 0);
+        return LinalgDispatch<T>.SolveTriangular(upper, Eng.TensorEye<T>(n), upper: true).ToMatrix();
     }
 
     /// <summary>
@@ -2641,21 +2089,13 @@ public static class MatrixExtensions
     public static Vector<T> ForwardSubstitution<T>(this Matrix<T> aMatrix, Vector<T> bVector)
     {
         int n = aMatrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var x = new Vector<T>(n);
+        if (n == 0)
+            return new Vector<T>(0);
 
-        for (int i = 0; i < n; i++)
-        {
-            x[i] = bVector[i];
-            for (int j = 0; j < i; j++)
-            {
-                x[i] = ops.Subtract(x[i], ops.Multiply(aMatrix[i, j], x[j]));
-            }
-
-            x[i] = ops.Divide(x[i], aMatrix[i, i]);
-        }
-
-        return x;
+        // Only the lower triangle of the leading n x n block is referenced, exactly as the substitution reads it.
+        var lower = Eng.TensorTril(LeadingSquare(aMatrix, n), 0);
+        var rhs = Eng.Reshape(Eng.TensorSlice(Tensor<T>.FromVector(bVector), new[] { 0 }, new[] { n }), new[] { n, 1 });
+        return Eng.Reshape(LinalgDispatch<T>.SolveTriangular(lower, rhs, upper: false), new[] { n }).ToVector();
     }
 
     /// <summary>
@@ -2673,20 +2113,8 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<Complex<T>> ToComplexMatrix<T>(this Matrix<T> matrix)
     {
-        var rows = matrix.Rows;
-        var cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var complexMatrix = Matrix<Complex<T>>.CreateMatrix<Complex<T>>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                complexMatrix[i, j] = new Complex<T>(matrix[i, j], ops.Zero);
-            }
-        }
-
-        return complexMatrix;
+        var real = Tensor<T>.FromMatrix(matrix);
+        return Eng.TensorComplex(real, Eng.TensorZerosLike(real)).ToMatrix();
     }
 
     /// <summary>
@@ -2704,16 +2132,8 @@ public static class MatrixExtensions
     /// </remarks>
     public static Vector<Complex<T>> ToComplexVector<T>(this Vector<T> vector)
     {
-        var count = vector.Length;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var complexVector = new Vector<Complex<T>>(count);
-
-        for (int i = 0; i < count; i++)
-        {
-            complexVector[i] = new Complex<T>(vector[i], ops.Zero);
-        }
-
-        return complexVector;
+        var real = Tensor<T>.FromVector(vector);
+        return Eng.TensorComplex(real, Eng.TensorZerosLike(real)).ToVector();
     }
 
     /// <summary>
@@ -2731,18 +2151,8 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> ToRealMatrix<T>(this Matrix<Complex<T>> matrix)
     {
-        var rows = matrix.Rows;
-        var realMatrix = new Matrix<T>(rows, rows);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < rows; j++)
-            {
-                realMatrix[i, j] = matrix[i, j].Real;
-            }
-        }
-
-        return realMatrix;
+        // The real part keeps the full rows x columns shape (a rectangular input is not truncated to square).
+        return Eng.TensorReal(Tensor<Complex<T>>.FromMatrix(matrix)).ToMatrix();
     }
 
     /// <summary>
@@ -2761,24 +2171,14 @@ public static class MatrixExtensions
     public static Matrix<T> InvertLowerTriangularMatrix<T>(this Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var invL = Matrix<T>.CreateMatrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            invL[i, i] = ops.Divide(ops.One, matrix[i, i]);
-            for (int j = 0; j < i; j++)
-            {
-                T sum = ops.Zero;
-                for (int k = j; k < i; k++)
-                {
-                    sum = ops.Add(sum, ops.Multiply(matrix[i, k], invL[k, j]));
-                }
-                invL[i, j] = ops.Negate(ops.Divide(sum, matrix[i, i]));
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return invL;
+        // Solve L X = I; only the lower triangle of L is referenced, so X is lower triangular too.
+        var lower = Eng.TensorTril(LeadingSquare(matrix, n), 0);
+        return LinalgDispatch<T>.SolveTriangular(lower, Eng.TensorEye<T>(n), upper: false).ToMatrix();
     }
 
     /// <summary>
@@ -2798,87 +2198,19 @@ public static class MatrixExtensions
     public static Matrix<T> InverseGaussianJordanElimination<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var augmentedMatrix = new Matrix<T>(rows, 2 * rows);
-
-        // Copy matrix into the left half of the augmented matrix
-        for (int i = 0; i < rows; i++)
+        if (rows == 0)
         {
-            for (int j = 0; j < rows; j++)
-            {
-                augmentedMatrix[i, j] = matrix[i, j];
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        // Add identity matrix to the right half of the augmented matrix
-        for (int i = 0; i < rows; i++)
+        // Solve A X = I with partial pivoting; a zero pivot (Info > 0) means A is singular.
+        var (inverse, info) = LinalgDispatch<T>.SolveEx(LeadingSquare(matrix, rows), Eng.TensorEye<T>(rows));
+        if (Eng.TensorCountNonzero(info) > 0)
         {
-            augmentedMatrix[i, i + rows] = ops.One;
+            throw new InvalidOperationException("Matrix is singular and cannot be inverted.");
         }
 
-        // Perform Gaussian elimination with partial pivoting
-        for (int i = 0; i < rows; i++)
-        {
-            // Find pivot row
-            int maxRowIndex = i;
-            T maxValue = ops.Abs(augmentedMatrix[i, i]);
-            for (int k = i + 1; k < rows; k++)
-            {
-                T absValue = ops.Abs(augmentedMatrix[k, i]);
-                if (ops.GreaterThan(absValue, maxValue))
-                {
-                    maxRowIndex = k;
-                    maxValue = absValue;
-                }
-            }
-
-            // Check for singularity
-            if (ops.Equals(maxValue, ops.Zero))
-            {
-                throw new InvalidOperationException("Matrix is singular and cannot be inverted.");
-            }
-
-            // Swap current row with pivot row
-            if (maxRowIndex != i)
-            {
-                for (int j = 0; j < 2 * rows; j++)
-                {
-                    (augmentedMatrix[maxRowIndex, j], augmentedMatrix[i, j]) = (augmentedMatrix[i, j], augmentedMatrix[maxRowIndex, j]);
-                }
-            }
-
-            // Make diagonal element 1
-            T pivot = augmentedMatrix[i, i];
-            for (int j = 0; j < 2 * rows; j++)
-            {
-                augmentedMatrix[i, j] = ops.Divide(augmentedMatrix[i, j], pivot);
-            }
-
-            // Make other elements in the column zero
-            for (int k = 0; k < rows; k++)
-            {
-                if (k != i)
-                {
-                    T factor = augmentedMatrix[k, i];
-                    for (int j = 0; j < 2 * rows; j++)
-                    {
-                        augmentedMatrix[k, j] = ops.Subtract(augmentedMatrix[k, j], ops.Multiply(factor, augmentedMatrix[i, j]));
-                    }
-                }
-            }
-        }
-
-        // Extract the right half of the augmented matrix (the inverse)
-        var inverseMatrix = new Matrix<T>(rows, rows);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < rows; j++)
-            {
-                inverseMatrix[i, j] = augmentedMatrix[i, j + rows];
-            }
-        }
-
-        return inverseMatrix;
+        return inverse.ToMatrix();
     }
 
     /// <summary>
@@ -2916,7 +2248,8 @@ public static class MatrixExtensions
     /// </summary>
     /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
     /// <param name="matrix">The matrix to analyze.</param>
-    /// <param name="threshold">Optional threshold value for determining when a value is considered zero. If not provided, a default threshold is calculated.</param>
+    /// <param name="threshold">Optional threshold value for determining when a singular value is considered zero. If not provided,
+    /// numpy.linalg.matrix_rank's default sigma_max * max(rows, columns) * eps is used, with eps the machine epsilon of T.</param>
     /// <returns>The nullity of the matrix.</returns>
     /// <remarks>
     /// <para>
@@ -2926,15 +2259,30 @@ public static class MatrixExtensions
     /// </remarks>
     public static int GetNullity<T>(this Matrix<T> matrix, T? threshold = default)
     {
-        var columns = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        int columns = matrix.Columns;
+        if (matrix.Rows == 0 || columns == 0)
+        {
+            return columns;
+        }
 
-        // Use default threshold if not provided
-        var _threshold = threshold ?? ops.FromDouble(1e-10);
+        // An omitted threshold arrives as default(T) = 0 for value-type T, not null. Then the tolerance is
+        // numpy.linalg.matrix_rank's default, sigma_max * max(m, n) * eps, with eps the machine epsilon of T.
+        T tolerance;
+        if (threshold is not null && !EqualityComparer<T?>.Default.Equals(threshold, default))
+        {
+            tolerance = threshold;
+        }
+        else
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var (_, singular, _) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices: false);
+            tolerance = numOps.Multiply(
+                Eng.TensorMaxValue(singular),
+                numOps.FromDouble(Math.Max(matrix.Rows, columns) * MachineEpsilon<T>()));
+        }
 
-        // Nullity = n - rank (dimension of column space minus rank gives dimension of null space)
-        int rank = matrix.GetRank(_threshold);
-        return columns - rank;
+        // Nullity = n - rank (rank-nullity theorem)
+        return columns - matrix.GetRank(tolerance);
     }
 
     /// <summary>
@@ -2953,32 +2301,28 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> Nullspace<T>(this Matrix<T> matrix, T threshold)
     {
-        int rows = matrix.Rows, columns = matrix.Columns, nullIndex = 0;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var weightsVector = new Vector<T>(columns);
-        var _epsilon = ops.FromDouble(1e-10); // Small number instead of Epsilon
-        var _threshold = ops.GreaterThanOrEquals(threshold, ops.Zero)
-            ? threshold
-            : ops.Multiply(
-                ops.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)),
-                ops.Multiply(weightsVector[0], _epsilon)
-            );
-        var nullspaceMatrix = Matrix<T>.CreateMatrix<T>(columns, matrix.GetNullity(_threshold));
-        var _vMatrix = matrix.Clone();
-
-        for (int i = 0; i < columns; i++)
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = matrix.Rows, columns = matrix.Columns;
+        if (columns == 0)
         {
-            if (ops.LessThanOrEquals(weightsVector[i], _threshold))
-            {
-                for (int j = 0; j < columns; j++)
-                {
-                    nullspaceMatrix[j, nullIndex] = _vMatrix[j, i];
-                }
-                nullIndex++;
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return nullspaceMatrix;
+        // Full SVD A = U S V^T: the right singular vectors whose singular value is at most the threshold
+        // (and those beyond min(rows, columns), whose singular value is zero) span the null space.
+        var (_, singular, vt) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices: true);
+        var weights = PadSingularValues(singular, columns);
+
+        // A negative threshold selects Numerical Recipes' default (Press et al., 3rd ed., section 2.6),
+        // 0.5 * sqrt(m + n + 1) * w_max * eps, with eps the machine epsilon of T.
+        T effectiveThreshold = numOps.GreaterThanOrEquals(threshold, numOps.Zero)
+            ? threshold
+            : numOps.Multiply(
+                numOps.FromDouble(0.5 * Math.Sqrt(rows + columns + 1) * MachineEpsilon<T>()),
+                Eng.TensorMaxValue(weights));
+
+        var selected = Eng.TensorLessEqual(weights, Eng.TensorFullLike(weights, effectiveThreshold));
+        return SelectColumns(Eng.TensorTranspose(vt), selected);
     }
 
     /// <summary>
@@ -2997,25 +2341,16 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> GetRange<T>(this Matrix<T> matrix, T threshold)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        int rows = matrix.Rows, columns = matrix.Columns, rank = 0;
-        var weightsVector = new Vector<T>(columns);
-        var rangeMatrix = new Matrix<T>(rows, matrix.GetRank(threshold));
-        var _uMatrix = matrix.Clone();
-
-        for (int i = 0; i < columns; i++)
+        int rows = matrix.Rows, columns = matrix.Columns;
+        if (rows == 0 || columns == 0)
         {
-            if (ops.GreaterThan(weightsVector[i], threshold))
-            {
-                for (int j = 0; j < rows; j++)
-                {
-                    rangeMatrix[j, rank] = _uMatrix[j, i];
-                }
-                rank++;
-            }
+            return new Matrix<T>(rows, 0);
         }
 
-        return rangeMatrix;
+        // Full SVD A = U S V^T: the left singular vectors whose singular value exceeds the threshold span the range.
+        var (u, singular, _) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices: true);
+        var weights = PadSingularValues(singular, rows);
+        return SelectColumns(u, Eng.TensorGreaterThan(weights, threshold));
     }
 
     /// <summary>
@@ -3059,22 +2394,7 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsZeroMatrix<T>(this Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (!ops.Equals(matrix[i, j], ops.Zero))
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        return Eng.TensorCountNonzero(Tensor<T>.FromMatrix(matrix)) == 0;
     }
 
     /// <summary>
@@ -3092,12 +2412,14 @@ public static class MatrixExtensions
     /// </remarks>
     public static T FrobeniusNorm<T>(this Matrix<T> matrix)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        if (matrix.Rows == 0 || matrix.Columns == 0)
+        {
+            return MathHelper.GetNumericOperations<T>().Zero;
+        }
 
-        // Vectorized: Compute sum of squares using SIMD dot product (x · x = sum of x² terms)
-        var span = matrix.AsSpan();
-        T sumOfSquares = numOps.Dot(span, span);
-        return numOps.Sqrt(sumOfSquares);
+        // sqrt(sum of squares), accumulated by the engine's norm in double. A sum of squares formed in T overflows
+        // Half (65504) once the norm passes 256, although the norm itself is representable.
+        return Eng.TensorNorm(Tensor<T>.FromMatrix(matrix))[0];
     }
 
     /// <summary>
@@ -3151,38 +2473,30 @@ public static class MatrixExtensions
 
         // For value types like double, default(T?) gives 0, not null
         // So we need to check if tolerance equals zero to use our default
-        T tol = (tolerance == null || NumOps.Equals(tolerance, NumOps.Zero))
-            ? NumOps.FromDouble(1e-10)
-            : tolerance;
+        T tol = ResolveDefault(tolerance, 1e-10);
 
         // Newton-Schulz iteration: X_{k+1} = X_k (2I - A X_k)
         // For convergence, we need spectral radius of (I - A X_0) < 1
         // Initial guess: X_0 = alpha * A^T where alpha = 1 / ||A||_F^2
-        var At = A.Transpose();
+        var a = Tensor<T>.FromMatrix(A);
         var frobNorm = A.FrobeniusNorm();
-        var normSquared = NumOps.Multiply(frobNorm, frobNorm);
-        var alpha = NumOps.Divide(NumOps.One, normSquared);
 
-        // Create scaled matrix using SIMD: X = alpha * A^T
-        var X = new Matrix<T>(n, n);
-        NumOps.MultiplyScalar(At.AsSpan(), alpha, X.AsWritableSpan());
-
-        var I = Matrix<T>.CreateIdentity(n);
+        // X_0 = (A^T / ||A||_F) / ||A||_F. Squaring the norm first overflows Half (65504) once it passes 256, and
+        // forming the scalar 1 / ||A||_F^2 first underflows to 0 once the norm passes about 4096 (X_0 = 0 never
+        // converges), while the entries of A^T / ||A||_F are at most 1 and the second quotient stays representable.
+        var x = Eng.TensorDivideScalar(Eng.TensorDivideScalar(Eng.TensorTranspose(a), frobNorm), frobNorm);
+        var identity = Eng.TensorEye<T>(n);
 
         for (int k = 0; k < maxIterations; k++)
         {
-            var AX = A.Multiply(X);
-            var R = I.Subtract(AX);
-            var residualNorm = R.FrobeniusNorm();
-
-            if (NumOps.LessThan(residualNorm, tol))
+            var residual = Eng.TensorSubtract(identity, Eng.TensorMatMul(a, x));
+            if (Eng.TensorCountNonzero(Eng.TensorLessThan(Eng.TensorNorm(residual), tol)) > 0)
             {
-                return X;
+                return x.ToMatrix();
             }
 
             // Newton-Schulz update: X_{k+1} = X_k + X_k * R = X_k + X_k * (I - A X_k)
-            var XR = X.Multiply(R);
-            X = X.Add(XR);
+            x = Eng.TensorAdd(x, Eng.TensorMatMul(x, residual));
         }
 
         throw new InvalidOperationException("Newton's method did not converge.");
@@ -3309,16 +2623,7 @@ public static class MatrixExtensions
             throw new ArgumentException($"{nameof(matrix)} has to contain at least one column of values", nameof(matrix));
         }
 
-        var newMatrix = Matrix<T>.CreateMatrix<T>(columns, rows);
-        for (int i = 0; i < columns; i++)
-        {
-            for (int j = 0; j < rows; j++)
-            {
-                newMatrix[i, j] = matrix[j, i];
-            }
-        }
-
-        return newMatrix;
+        return Eng.TensorTranspose(Tensor<T>.FromMatrix(matrix)).ToMatrix();
     }
 
     /// <summary>
@@ -3326,8 +2631,8 @@ public static class MatrixExtensions
     /// </summary>
     /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
     /// <param name="matrix">The matrix to calculate the rank for.</param>
-    /// <param name="threshold">The threshold value for determining linearly independent rows/columns.</param>
-    /// <returns>The rank of the matrix.</returns>
+    /// <param name="threshold">Singular values greater than this count toward the rank.</param>
+    /// <returns>The rank of the matrix: the number of singular values greater than <paramref name="threshold"/>.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The rank of a matrix tells you how many linearly independent rows or columns it has.
@@ -3337,69 +2642,16 @@ public static class MatrixExtensions
     /// </remarks>
     public static int GetRank<T>(this Matrix<T> matrix, T threshold)
     {
-        var rows = matrix.Rows;
-        var columns = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
-
-        // Create a copy to perform Gaussian elimination without modifying original
-        var work = new Matrix<T>(rows, columns);
-        ops.Copy(matrix.AsSpan(), work.AsWritableSpan());
-
-        int rank = 0;
-        int pivotRow = 0;
-
-        // Gaussian elimination with partial pivoting to find row echelon form
-        for (int col = 0; col < columns && pivotRow < rows; col++)
+        if (matrix.Rows == 0 || matrix.Columns == 0)
         {
-            // Find the row with the largest absolute value in this column (partial pivoting)
-            int maxRow = pivotRow;
-            T maxVal = ops.Abs(work[pivotRow, col]);
-
-            for (int row = pivotRow + 1; row < rows; row++)
-            {
-                T absVal = ops.Abs(work[row, col]);
-                if (ops.GreaterThan(absVal, maxVal))
-                {
-                    maxVal = absVal;
-                    maxRow = row;
-                }
-            }
-
-            // If the maximum value is below threshold, skip this column (no pivot)
-            if (ops.LessThanOrEquals(maxVal, threshold))
-                continue;
-
-            // Swap rows to bring the pivot to the current row
-            if (maxRow != pivotRow)
-            {
-                for (int j = col; j < columns; j++)
-                {
-                    T temp = work[pivotRow, j];
-                    work[pivotRow, j] = work[maxRow, j];
-                    work[maxRow, j] = temp;
-                }
-            }
-
-            // Eliminate entries below the pivot
-            T pivot = work[pivotRow, col];
-            for (int row = pivotRow + 1; row < rows; row++)
-            {
-                if (!ops.Equals(work[row, col], ops.Zero))
-                {
-                    T factor = ops.Divide(work[row, col], pivot);
-                    work[row, col] = ops.Zero;
-                    for (int j = col + 1; j < columns; j++)
-                    {
-                        work[row, j] = ops.Subtract(work[row, j], ops.Multiply(factor, work[pivotRow, j]));
-                    }
-                }
-            }
-
-            rank++;
-            pivotRow++;
+            return 0;
         }
 
-        return rank;
+        // numpy.linalg.matrix_rank(A, tol): the number of singular values of A greater than tol. Singular values
+        // are the reference for numerical rank; elimination pivots are not, and can stay large for an
+        // ill-conditioned matrix (Golub and Van Loan, Matrix Computations, section 5.4.1).
+        var (_, singular, _) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices: false);
+        return Eng.TensorCountNonzero(Eng.TensorGreaterThan(singular, threshold));
     }
 
     /// <summary>
@@ -3417,11 +2669,10 @@ public static class MatrixExtensions
     /// </remarks>
     public static void SwapRows<T>(this Matrix<T> matrix, int row1Index, int row2Index)
     {
-        var cols = matrix.Columns;
-        for (int i = 0; i < cols; i++)
-        {
-            (matrix[row2Index, i], matrix[row1Index, i]) = (matrix[row1Index, i], matrix[row2Index, i]);
-        }
+        // Swap the two contiguous row spans in place.
+        var first = matrix.GetRowReadOnlySpan(row1Index).ToArray();
+        matrix.GetRowReadOnlySpan(row2Index).CopyTo(matrix.GetRowSpan(row1Index));
+        first.AsSpan().CopyTo(matrix.GetRowSpan(row2Index));
     }
 
     /// <summary>
@@ -3440,14 +2691,14 @@ public static class MatrixExtensions
     public static Matrix<T> InvertDiagonalMatrix<T>(this Matrix<T> matrix)
     {
         var rows = matrix.Rows;
-        var invertedMatrix = Matrix<T>.CreateMatrix<T>(rows, rows);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < rows; i++)
+        if (rows == 0)
         {
-            invertedMatrix[i, i] = ops.Divide(ops.One, matrix[i, i]);
+            return new Matrix<T>(0, 0);
         }
 
-        return invertedMatrix;
+        // inverse[i, i] = 1 / matrix[i, i]; every off-diagonal element is zero.
+        var diagonal = Eng.TensorDiagonal(LeadingSquare(matrix, rows));
+        return Eng.TensorDiag(Eng.TensorReciprocal(diagonal)).ToMatrix();
     }
 
     /// <summary>
@@ -3484,30 +2735,16 @@ public static class MatrixExtensions
     /// </remarks>
     public static bool IsUnitaryMatrix<T>(this Matrix<Complex<T>> matrix, IMatrixDecomposition<Complex<T>> matrixDecomposition)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-
-        if (rows != cols)
+        if (matrix.Rows != matrix.Columns)
         {
             return false; // A unitary matrix must be square
         }
 
-        var conjugateTranspose = matrix.ConjugateTranspose();
-        var inverse = matrixDecomposition.Invert();
-
-        // Check if conjugate transpose is equal to inverse
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                if (conjugateTranspose[i, j] != inverse[i, j])
-                {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        // The conjugate transpose must equal the inverse, component by component.
+        var conjugateTranspose = Tensor<Complex<T>>.FromMatrix(matrix.ConjugateTranspose());
+        var inverse = Tensor<Complex<T>>.FromMatrix(matrixDecomposition.Invert());
+        return Eng.TensorEqual(Eng.TensorReal(conjugateTranspose), Eng.TensorReal(inverse))
+            && Eng.TensorEqual(Eng.TensorImag(conjugateTranspose), Eng.TensorImag(inverse));
     }
 
     /// <summary>
@@ -3557,6 +2794,12 @@ public static class MatrixExtensions
 
         var ops = MathHelper.GetNumericOperations<T>();
 
+        // det([a]) = a.
+        if (rows == 1)
+        {
+            return matrix[0, 0];
+        }
+
         if (rows == 2)
         {
             return ops.Subtract(
@@ -3564,32 +2807,9 @@ public static class MatrixExtensions
                 ops.Multiply(matrix[0, 1], matrix[1, 0])
             );
         }
-        else
-        {
-            // Cofactor expansion along the first row
-            T determinant = ops.Zero;
-            for (int i = 0; i < rows; i++)
-            {
-                // Create minor matrix by removing row 0 and column i
-                var tempMatrix = new Matrix<T>(rows - 1, rows - 1);
-                for (int j = 0; j < rows - 1; j++)
-                {
-                    for (int k = 0; k < rows - 1; k++)
-                    {
-                        // Row j in minor = row j+1 in original (skip row 0)
-                        // Column k in minor = column k if k < i, or column k+1 if k >= i (skip column i)
-                        tempMatrix[j, k] = matrix[j + 1, k < i ? k : k + 1];
-                    }
-                }
 
-                T subDeterminant = tempMatrix.Determinant();
-                T sign = ops.FromDouble(i % 2 == 0 ? 1 : -1);
-                T product = ops.Multiply(ops.Multiply(sign, matrix[0, i]), subDeterminant);
-                determinant = ops.Add(determinant, product);
-            }
-
-            return determinant;
-        }
+        // LU factorisation with partial pivoting: the product of U's diagonal times the permutation sign.
+        return LinalgDispatch<T>.Det(Tensor<T>.FromMatrix(matrix)).ToArray()[0];
     }
 
     /// <summary>
@@ -3645,13 +2865,11 @@ public static class MatrixExtensions
         if (length < 0 || startRow + length > matrix.Rows)
             throw new ArgumentOutOfRangeException(nameof(length));
 
-        var result = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            result[i] = matrix[startRow + i, columnIndex];
-        }
+        if (length == 0)
+            return new Vector<T>(0);
 
-        return result;
+        var segment = Eng.TensorSlice(Tensor<T>.FromMatrix(matrix), new[] { startRow, columnIndex }, new[] { length, 1 });
+        return Eng.Reshape(segment, new[] { length }).ToVector();
     }
 
     /// <summary>
@@ -3675,24 +2893,19 @@ public static class MatrixExtensions
     /// </remarks>
     public static T LogDeterminant<T>(this Matrix<T> matrix)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         if (matrix.Rows != matrix.Columns)
         {
             throw new ArgumentException("Matrix must be square to calculate determinant.");
         }
 
-        // Use LU decomposition to calculate log determinant
-        var lu = new LuDecomposition<T>(matrix);
-        var U = lu.U;
-
-        T logDet = numOps.Zero;
-        for (int i = 0; i < U.Rows; i++)
+        if (matrix.Rows == 0)
         {
-            logDet = numOps.Add(logDet, numOps.Log(numOps.Abs(U[i, i])));
+            return MathHelper.GetNumericOperations<T>().Zero;
         }
 
-        return logDet;
+        // Use LU decomposition: log|det A| = sum_i log|U[i, i]|.
+        var (lu, _) = LinalgDispatch<T>.LuFactor(Tensor<T>.FromMatrix(matrix));
+        return Eng.TensorSum(Eng.TensorLog(Eng.TensorAbs(Eng.TensorDiagonal(lu))));
     }
 
     /// <summary>
@@ -3752,18 +2965,10 @@ public static class MatrixExtensions
             throw new ArgumentException("The number of rows in the matrix must match the length of the vector.");
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        Matrix<T> result = new(matrix.Rows, matrix.Columns);
-
-        // Vectorized: Scale each row by corresponding vector element using SIMD operations
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            var sourceRow = matrix.GetRowReadOnlySpan(i);
-            var destRow = result.GetRowSpan(i);
-            numOps.MultiplyScalar(sourceRow, vector[i], destRow);
-        }
-
-        return result;
+        // Scale each row by the matching vector element.
+        var shape = new[] { matrix.Rows, matrix.Columns };
+        var scale = Eng.TensorBroadcastTo(Eng.Reshape(Tensor<T>.FromVector(vector), new[] { matrix.Rows, 1 }), shape);
+        return Eng.TensorMultiply(Tensor<T>.FromMatrix(matrix), scale).ToMatrix();
     }
 
     /// <summary>
@@ -3792,19 +2997,8 @@ public static class MatrixExtensions
             throw new ArgumentException("Column length must match matrix row count.");
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        Matrix<T> newMatrix = new Matrix<T>(matrix.Rows, matrix.Columns + 1);
-
-        // Vectorized: Copy each row using SIMD operations, then set last column
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            var sourceRow = matrix.GetRowReadOnlySpan(i);
-            var destRow = newMatrix.GetRowSpan(i);
-            numOps.Copy(sourceRow, destRow.Slice(0, matrix.Columns));
-            newMatrix[i, matrix.Columns] = column[i];
-        }
-
-        return newMatrix;
+        var columnTensor = Eng.Reshape(Tensor<T>.FromVector(column), new[] { matrix.Rows, 1 });
+        return Eng.TensorConcatenate(new[] { Tensor<T>.FromMatrix(matrix), columnTensor }, 1).ToMatrix();
     }
 
     /// <summary>
@@ -3872,19 +3066,18 @@ public static class MatrixExtensions
     public static Matrix<T> GetColumns<T>(this Matrix<T> matrix, IEnumerable<int> columnIndices)
     {
         var indices = columnIndices.ToArray();
-        var rows = matrix.Rows;
-        var result = new Matrix<T>(rows, indices.Length);
-
-        for (int j = 0; j < indices.Length; j++)
+        if (indices.Length == 0 || matrix.Rows == 0)
         {
-            int srcCol = indices[j];
-            for (int i = 0; i < rows; i++)
-            {
-                result[i, j] = matrix[i, srcCol];
-            }
+            return new Matrix<T>(matrix.Rows, indices.Length);
         }
 
-        return result;
+        foreach (int index in indices)
+        {
+            if (index < 0 || index >= matrix.Columns)
+                throw new IndexOutOfRangeException($"Column index {index} is outside a matrix with {matrix.Columns} columns.");
+        }
+
+        return Eng.TensorIndexSelect(Tensor<T>.FromMatrix(matrix), new Tensor<int>(indices, new[] { indices.Length }), 1).ToMatrix();
     }
 
     /// <summary>
@@ -3948,22 +3141,11 @@ public static class MatrixExtensions
     /// </remarks>
     public static T Max<T>(this Matrix<T> matrix, Func<T, T> selector)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        T max = selector(matrix[0, 0]);
-
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                T value = selector(matrix[i, j]);
-                if (numOps.GreaterThan(value, max))
-                {
-                    max = value;
-                }
-            }
-        }
-
-        return max;
+        // Map every element, then take the first strict maximum in row-major order (the first element seeds it,
+        // so a NaN never displaces an earlier value).
+        var mapped = Eng.Reshape(Eng.TensorMap(Tensor<T>.FromMatrix(matrix), selector), new[] { matrix.Rows * matrix.Columns });
+        int best = Eng.TensorArgMax(mapped, 0).ToArray()[0];
+        return mapped.ToArray()[best];
     }
 
     /// <summary>
@@ -3986,16 +3168,17 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> GetRowRange<T>(this Matrix<T> matrix, int startRow, int rowCount)
     {
-        Matrix<T> result = new(rowCount, matrix.Columns);
-        for (int i = 0; i < rowCount; i++)
+        if (rowCount == 0 || matrix.Columns == 0)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = matrix[startRow + i, j];
-            }
+            return new Matrix<T>(rowCount, matrix.Columns);
         }
 
-        return result;
+        if (startRow < 0 || rowCount < 0 || startRow + rowCount > matrix.Rows)
+        {
+            throw new IndexOutOfRangeException($"Rows {startRow}..{startRow + rowCount - 1} are outside a matrix with {matrix.Rows} rows.");
+        }
+
+        return Eng.TensorSlice(Tensor<T>.FromMatrix(matrix), new[] { startRow, 0 }, new[] { rowCount, matrix.Columns }).ToMatrix();
     }
 
     /// <summary>
@@ -4017,25 +3200,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static Vector<T> RowWiseArgmax<T>(this Matrix<T> matrix)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        Vector<T> result = new(matrix.Rows);
-
-        for (int i = 0; i < matrix.Rows; i++)
+        if (matrix.Rows == 0)
         {
-            T max = matrix[i, 0];
-            int maxIndex = 0;
-            for (int j = 1; j < matrix.Columns; j++)
-            {
-                if (numOps.GreaterThan(matrix[i, j], max))
-                {
-                    max = matrix[i, j];
-                    maxIndex = j;
-                }
-            }
-            result[i] = numOps.FromDouble(maxIndex);
+            return new Vector<T>(0);
         }
 
-        return result;
+        // First maximum of each row (strict comparison, as the scalar scan did), returned as T.
+        return Eng.TensorArgMax(Tensor<T>.FromMatrix(matrix), 1).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -4059,29 +3230,13 @@ public static class MatrixExtensions
     /// </remarks>
     public static Matrix<T> KroneckerProduct<T>(this Matrix<T> a, Matrix<T> b)
     {
-        int m = a.Rows;
-        int n = a.Columns;
-        int p = b.Rows;
-        int q = b.Columns;
-
-        var numOps = MathHelper.GetNumericOperations<T>();
-        Matrix<T> result = new(m * p, n * q);
-
-        for (int i = 0; i < m; i++)
+        if (a.Rows * b.Rows == 0 || a.Columns * b.Columns == 0)
         {
-            for (int j = 0; j < n; j++)
-            {
-                for (int k = 0; k < p; k++)
-                {
-                    for (int l = 0; l < q; l++)
-                    {
-                        result[i * p + k, j * q + l] = numOps.Multiply(a[i, j], b[k, l]);
-                    }
-                }
-            }
+            return new Matrix<T>(a.Rows * b.Rows, a.Columns * b.Columns);
         }
 
-        return result;
+        // result[i * p + k, j * q + l] = a[i, j] * b[k, l]
+        return Eng.TensorKron(Tensor<T>.FromMatrix(a), Tensor<T>.FromMatrix(b)).ToMatrix();
     }
 
     /// <summary>
@@ -4109,18 +3264,8 @@ public static class MatrixExtensions
     /// </remarks>
     public static Vector<T> Flatten<T>(this Matrix<T> matrix)
     {
-        var vector = new Vector<T>(matrix.Rows * matrix.Columns);
-        int index = 0;
-
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                vector[index++] = matrix[i, j];
-            }
-        }
-
-        return vector;
+        // Row-major flattening.
+        return Eng.Reshape(Tensor<T>.FromMatrix(matrix), new[] { matrix.Rows * matrix.Columns }).ToVector();
     }
 
     /// <summary>
@@ -4165,20 +3310,8 @@ public static class MatrixExtensions
             throw new ArgumentException("The total number of elements must remain the same after reshaping.");
         }
 
-        var reshaped = new Matrix<T>(newRows, newColumns);
-        int index = 0;
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                int newRow = index / newColumns;
-                int newCol = index % newColumns;
-                reshaped[newRow, newCol] = matrix[i, j];
-                index++;
-            }
-        }
-
-        return reshaped;
+        // Row-major order is preserved.
+        return Eng.Reshape(Tensor<T>.FromMatrix(matrix), new[] { newRows, newColumns }).ToMatrix();
     }
 
     /// <summary>
@@ -4190,16 +3323,18 @@ public static class MatrixExtensions
     /// <returns>A new matrix containing only the specified rows.</returns>
     public static Matrix<T> Submatrix<T>(this Matrix<T> matrix, int[] indices)
     {
-        var result = new Matrix<T>(indices.Length, matrix.Columns);
-        for (int i = 0; i < indices.Length; i++)
+        if (indices.Length == 0 || matrix.Columns == 0)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = matrix[indices[i], j];
-            }
+            return new Matrix<T>(indices.Length, matrix.Columns);
         }
 
-        return result;
+        foreach (int index in indices)
+        {
+            if (index < 0 || index >= matrix.Rows)
+                throw new IndexOutOfRangeException($"Row index {index} is outside a matrix with {matrix.Rows} rows.");
+        }
+
+        return Eng.TensorIndexSelect(Tensor<T>.FromMatrix(matrix), new Tensor<int>((int[])indices.Clone(), new[] { indices.Length }), 0).ToMatrix();
     }
 
     /// <summary>
@@ -4226,15 +3361,12 @@ public static class MatrixExtensions
             throw new ArgumentException("Trace is only defined for square matrices.", nameof(matrix));
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        T sum = numOps.Zero;
-
-        for (int i = 0; i < matrix.Rows; i++)
+        if (matrix.Rows == 0)
         {
-            sum = numOps.Add(sum, matrix[i, i]);
+            return MathHelper.GetNumericOperations<T>().Zero;
         }
 
-        return sum;
+        return Eng.TensorTrace(Tensor<T>.FromMatrix(matrix));
     }
 
     /// <summary>
@@ -4268,65 +3400,30 @@ public static class MatrixExtensions
             throw new ArgumentException("Matrix exponential is only defined for square matrices.", nameof(matrix));
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         int d = matrix.Rows;
-
-        // Result starts as identity matrix: e^0 = I
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
+        if (d == 0)
         {
-            result[i, i] = numOps.One;
+            return new Matrix<T>(0, 0);
         }
 
-        // power tracks A^k at each iteration
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                power[i, j] = matrix[i, j];
-            }
-        }
-
-        double factorial = 1.0;
+        // Truncated Taylor series: e^A = I + sum_{k=1..order} A^k / k!, built from the recurrence
+        // term_k = term_{k-1} A / k. The raw power A^k leaves the range of a narrow type long before the term
+        // A^k / k! does ([[10]] in Half: 10^5 overflows, 10^5 / 5! = 833 does not), and 1 / k! itself underflows.
+        int terms = Math.Max(order, 0);
+        T[] divisors = terms == 0
+            ? Array.Empty<T>()
+            : Eng.TensorArange<T>(1, terms + 1, 1).ToArray();
+        var a = Tensor<T>.FromMatrix(matrix);
+        var result = Eng.TensorEye<T>(d);
+        var term = Eng.TensorEye<T>(d);
 
         for (int k = 1; k <= order; k++)
         {
-            factorial *= k;
-            T invFactorial = numOps.FromDouble(1.0 / factorial);
-
-            // result += power / k!
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    result[i, j] = numOps.Add(result[i, j], numOps.Multiply(power[i, j], invFactorial));
-                }
-            }
-
-            // power = power * matrix (for next iteration)
-            if (k < order)
-            {
-                var nextPower = new Matrix<T>(d, d);
-                for (int i = 0; i < d; i++)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        T sum = numOps.Zero;
-                        for (int m = 0; m < d; m++)
-                        {
-                            sum = numOps.Add(sum, numOps.Multiply(power[i, m], matrix[m, j]));
-                        }
-
-                        nextPower[i, j] = sum;
-                    }
-                }
-
-                power = nextPower;
-            }
+            term = Eng.TensorDivideScalar(Eng.TensorMatMul(term, a), divisors[k - 1]);
+            result = Eng.TensorAdd(result, term);
         }
 
-        return result;
+        return result.ToMatrix();
     }
 
     /// <summary>
@@ -4355,69 +3452,115 @@ public static class MatrixExtensions
             throw new ArgumentException("Power must be non-negative.", nameof(power));
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         int d = matrix.Rows;
-
-        // A^0 = I
-        if (power == 0)
+        if (d == 0)
         {
-            var identity = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-            {
-                identity[i, i] = numOps.One;
-            }
-
-            return identity;
+            return new Matrix<T>(0, 0);
         }
 
-        // Binary exponentiation for efficiency
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            result[i, i] = numOps.One;
-        }
-
-        var baseMatrix = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                baseMatrix[i, j] = matrix[i, j];
-            }
-        }
-
+        // A^0 = I, then binary exponentiation for efficiency
+        var result = Eng.TensorEye<T>(d);
+        var baseMatrix = Tensor<T>.FromMatrix(matrix);
         int exp = power;
         while (exp > 0)
         {
             if ((exp & 1) == 1)
             {
-                result = MultiplyMatrices(result, baseMatrix, numOps, d);
+                result = Eng.TensorMatMul(result, baseMatrix);
             }
 
-            baseMatrix = MultiplyMatrices(baseMatrix, baseMatrix, numOps, d);
             exp >>= 1;
+            if (exp > 0)
+            {
+                baseMatrix = Eng.TensorMatMul(baseMatrix, baseMatrix);
+            }
         }
 
-        return result;
+        return result.ToMatrix();
     }
 
-    private static Matrix<T> MultiplyMatrices<T>(Matrix<T> a, Matrix<T> b, INumericOperations<T> numOps, int d)
-    {
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T sum = numOps.Zero;
-                for (int k = 0; k < d; k++)
-                {
-                    sum = numOps.Add(sum, numOps.Multiply(a[i, k], b[k, j]));
-                }
+    private static IEngine Eng => AiDotNetEngine.Current;
 
-                result[i, j] = sum;
-            }
+    /// <summary>Half's smallest positive normal value; tolerances below it underflow to zero in Half.</summary>
+    private const double HalfSmallestNormal = 6.103515625e-05;
+
+    /// <summary>
+    /// A tolerance of <paramref name="epsilon"/> in <typeparamref name="T"/>, floored at Half's smallest normal so
+    /// guards such as 1e-10 do not round to zero for Half.
+    /// </summary>
+    internal static T SafeTolerance<T>(double epsilon) =>
+        MathHelper.GetNumericOperations<T>().FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+
+    /// <summary>
+    /// Resolves an optional <c>T?</c> argument. For value-type <typeparamref name="T"/> an omitted argument arrives as
+    /// <c>default(T)</c> (zero) rather than null, so both mean "use <paramref name="fallback"/>".
+    /// </summary>
+    private static T ResolveDefault<T>(T? value, double fallback)
+    {
+        if (value is null || EqualityComparer<T?>.Default.Equals(value, default))
+        {
+            return SafeTolerance<T>(fallback);
         }
 
-        return result;
+        return value;
+    }
+
+    /// <summary>
+    /// The machine epsilon of <typeparamref name="T"/> (numpy.finfo(dtype).eps): 2^-10 for Half, 2^-23 for float
+    /// and 2^-52 for double and any other type.
+    /// </summary>
+    internal static double MachineEpsilon<T>() =>
+        typeof(T) == typeof(Half) ? 9.765625e-4
+        : typeof(T) == typeof(float) ? 1.1920928955078125e-7
+        : 2.220446049250313e-16;
+
+    /// <summary>True when any element of <paramref name="tensor"/> differs from <paramref name="value"/> (NaN always differs).</summary>
+    private static bool AnyNotEqual<T>(Tensor<T> tensor, T value) =>
+        Eng.TensorCountNonzero(Eng.TensorNotEquals(tensor, value)) > 0;
+
+    /// <summary>True when any element of <paramref name="tensor"/> has magnitude above <paramref name="tolerance"/> (NaN never does).</summary>
+    private static bool AnyAbsAbove<T>(Tensor<T> tensor, T tolerance) =>
+        Eng.TensorCountNonzero(Eng.TensorGreaterThan(Eng.TensorAbs(tensor), tolerance)) > 0;
+
+    /// <summary>True when every element is exactly 0 or 1.</summary>
+    private static bool OnlyZeroAndOne<T>(Tensor<T> tensor) =>
+        Eng.TensorCountNonzero(tensor) == Eng.TensorCountNonzero(Eng.TensorEquals(tensor, MathHelper.GetNumericOperations<T>().One));
+
+    /// <summary>
+    /// True when every element outside the band <c>-lowerBandwidth &lt;= j - i &lt;= upperBandwidth</c> is exactly zero.
+    /// </summary>
+    private static bool OutsideBandIsZero<T>(Tensor<T> square, int lowerBandwidth, int upperBandwidth) =>
+        Eng.TensorCountNonzero(Eng.TensorTril(square, -lowerBandwidth - 1)) == 0
+        && Eng.TensorCountNonzero(Eng.TensorTriu(square, upperBandwidth + 1)) == 0;
+
+    /// <summary>The leading <paramref name="n"/> x <paramref name="n"/> block of <paramref name="matrix"/>.</summary>
+    private static Tensor<T> LeadingSquare<T>(Matrix<T> matrix, int n)
+    {
+        var tensor = Tensor<T>.FromMatrix(matrix);
+        return matrix.Columns == n ? tensor : Eng.TensorSlice(tensor, new[] { 0, 0 }, new[] { n, n });
+    }
+
+    /// <summary>Singular values padded with zeros to <paramref name="length"/> (a full SVD has min(m, n) of them).</summary>
+    private static Tensor<T> PadSingularValues<T>(Tensor<T> singular, int length)
+    {
+        int count = singular.Length;
+        if (count >= length)
+        {
+            return Eng.TensorSlice(singular, new[] { 0 }, new[] { length });
+        }
+
+        return Eng.TensorConcatenate(new[] { singular, new Tensor<T>(new[] { length - count }) }, 0);
+    }
+
+    /// <summary>The columns of <paramref name="source"/> whose entry in the 0/1 <paramref name="selected"/> mask is 1, in order.</summary>
+    private static Matrix<T> SelectColumns<T>(Tensor<T> source, Tensor<T> selected)
+    {
+        var chosen = Eng.TensorNonzero(selected).ToArray();
+        if (chosen.Length == 0)
+        {
+            return new Matrix<T>(source.Shape[0], 0);
+        }
+
+        return Eng.TensorIndexSelect(source, new Tensor<int>(chosen, new[] { chosen.Length }), 1).ToMatrix();
     }
 }

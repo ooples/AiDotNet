@@ -201,6 +201,12 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         var prompted = ApplyPromptToInput(input);
         var attacked = ConversionsHelper.ConvertToVector<T, TInput>(attack.GenerateAdversarialExample(prompted, label, model));
         var offset = Engine.Subtract<T>(attacked, ConversionsHelper.ConvertToVector<T, TInput>(prompted));
+
+        // FGSM clips its result to [0, 1]. Where the prompted input lies outside that box (prompt entries range
+        // over [-1, 1]) the clip, not the attack step, moves the entry, by up to the distance to the box; keep the
+        // transferred offset inside the epsilon ball the training objective is defined over.
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        offset = Engine.Clamp<T>(offset, NumOps.Negate(epsilon), epsilon);
         var adversarial = Engine.Add<T>(ConversionsHelper.ConvertToVector<T, TInput>(input), offset);
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
     }

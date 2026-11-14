@@ -312,12 +312,23 @@ public class CertificationReferenceTests
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = new DelegateModel(1, x => x[0] > 0.0 ? new[] { 0.0, 1.0 } : new[] { 1.0, 0.0 });
         var inputs = new[] { new Vector<double>(new[] { 0.0 }) };
-        var top = smoothing.CertifyPrediction(inputs[0], model).PredictedClass;
-        var labels = new[] { new Vector<double>(new[] { top == 0 ? 1.0 : 0.0, top == 1 ? 1.0 : 0.0 }) };
+        var certification = smoothing.CertifyPrediction(inputs[0], model);
 
-        var metrics = smoothing.EvaluateCertifiedAccuracy(inputs, labels, model, 0.0);
-        Assert.Equal(0.0, metrics.CertifiedAccuracy, Tolerance);
-        Assert.Equal(0.0, metrics.CertificationRate, Tolerance);
+        // The premise: CERTIFY abstains here and still names one of the two real classes, not a sentinel.
+        Assert.False(certification.IsCertified);
+        Assert.InRange(certification.PredictedClass, 0, 1);
+
+        // Whichever class the evaluation's own draws select as the top class, one of these two labels matches
+        // it, so counting an abstention as certified correct makes one of the two evaluations non-zero. This
+        // does not depend on the evaluation drawing the same noise as the call above.
+        foreach (int labelClass in new[] { 0, 1 })
+        {
+            var labels = new[] { new Vector<double>(new[] { labelClass == 0 ? 1.0 : 0.0, labelClass == 1 ? 1.0 : 0.0 }) };
+            var metrics = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options)
+                .EvaluateCertifiedAccuracy(inputs, labels, model, 0.0);
+            Assert.Equal(0.0, metrics.CertifiedAccuracy, Tolerance);
+            Assert.Equal(0.0, metrics.CertificationRate, Tolerance);
+        }
     }
 
     [Fact(Timeout = 60000)]
@@ -1285,6 +1296,8 @@ public class CertificationReferenceTests
 
         var source = new AutoAttackOptions<double>
         {
+            // Inherited from ModelOptions; left unset it is null on both sides and proves nothing.
+            Seed = 23,
             Epsilon = 0.3,
             StepSize = 0.07,
             Iterations = 11,
