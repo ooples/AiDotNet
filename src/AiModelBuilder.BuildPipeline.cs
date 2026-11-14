@@ -2486,6 +2486,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 _distributedConfiguration);
             distNeuralNet.DistributedCoordinator = distCoordinator;
         }
+        else if (distBackend is { WorldSize: > 1 })
+        {
+            // Only a neural network gets the gradient coordinator; any other model would apply each rank's local
+            // gradients unreduced and the ranks' parameters would drift apart.
+            throw new NotSupportedException(
+                "Distributed streaming training supports only NeuralNetworkBase models. Use a neural network model, " +
+                "or disable ConfigureDistributedTraining for this model.");
+        }
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -2640,10 +2648,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             // store their statistics, so a resumed run would otherwise fit them on the first batch AFTER the skip and
             // scale every later batch differently from the run it resumes. Refit on that same batch (same epoch-0 seed)
             // before skipping ahead. With no Seed the shuffle is not reproducible, so no run could match exactly.
+            // A distributed run always fits here, on the raw loader's first global batch, never on a rank's own slice:
+            // every rank then scales with the same statistics, and a resume reproduces them on every rank.
             bool resumedPastFirstBatch = startEpoch > 0 || resumeSkipBatches > 0 || resumeSkipSamples > 0;
             bool targetPipelineUnfitted = _targetPipeline is { IsFitted: false };
             bool anyPipelineUnfitted = !pipelineFitted || targetPipelineUnfitted;
-            if (resumedPastFirstBatch && anyPipelineUnfitted)
+            if ((resumedPastFirstBatch || distLoader is not null) && anyPipelineUnfitted)
             {
                 if (!rawLoader.IsLoaded)
                 {
@@ -2789,7 +2799,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
                         }
 
-                        if ((gradientAccumulationSteps > 1 || isIdleDistributedNeuralRank)
+                        // Distributed ranks always take the accumulated step: one coordinated update per loader step
+                        // whatever the local batch holds (an idle rank, or heterogeneous sample shapes that would
+                        // otherwise train sample by sample and run a different number of collectives per rank).
+                        if ((gradientAccumulationSteps > 1 || distCoordinator is not null)
                             && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
                             && microBatchBuffer is not null)
                         {
@@ -2963,18 +2976,29 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     DateTime.UtcNow - streamingStart,
                     cancellationToken,
                     out var epochStopReason);
-                if (!continueTraining)
+                // A stop requested on one rank stops every rank: a rank leaving the loop alone would enter final
+                // validation and checkpointing while the others entered the next epoch's gradient collectives.
+                bool stopRequested = !continueTraining;
+                if (distCoordinator is not null)
+                    stopRequested = distCoordinator.AnyRank(stopRequested);
+                if (stopRequested)
                 {
                     streamingEarlyStopTriggered = true;
-                    streamingStopReason ??= epochStopReason;
+                    streamingStopReason ??= continueTraining
+                        ? $"another distributed rank requested a stop at epoch {epoch}"
+                        : epochStopReason;
                     break;
                 }
 
-                // Check for early stopping if configured
-                if (_optimizer is not null && _optimizer.ShouldEarlyStop())
+                // Check for early stopping if configured, agreed across ranks the same way.
+                bool optimizerStop = _optimizer is not null && _optimizer.ShouldEarlyStop();
+                bool anyOptimizerStop = distCoordinator is not null ? distCoordinator.AnyRank(optimizerStop) : optimizerStop;
+                if (anyOptimizerStop)
                 {
                     streamingEarlyStopTriggered = true;
-                    streamingStopReason ??= $"optimizer early-stopping criterion met at epoch {epoch}";
+                    streamingStopReason ??= optimizerStop
+                        ? $"optimizer early-stopping criterion met at epoch {epoch}"
+                        : $"another distributed rank's optimizer early-stopping criterion was met at epoch {epoch}";
                     break;
                 }
             }
