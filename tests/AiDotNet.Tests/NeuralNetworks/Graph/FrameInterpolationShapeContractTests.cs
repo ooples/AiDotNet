@@ -169,13 +169,7 @@ public class FrameInterpolationShapeContractTests
 
     private static object? Construct(Type closed)
     {
-        var ctor = closed.GetConstructors().FirstOrDefault(c =>
-        {
-            var ps = c.GetParameters();
-            return ps.Length > 0
-                && ps[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
-                && ps.Skip(1).All(p => p.HasDefaultValue);
-        });
+        var ctor = ModelSweepConstruction.FindArchitectureConstructor(closed, typeof(NeuralNetworkArchitecture<double>));
         if (ctor is null) return null;
 
         var architecture = new NeuralNetworkArchitecture<double>(
