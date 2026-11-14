@@ -2661,7 +2661,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
 
                 int? firstEpochSeed = streamingOptions?.Seed;
-                await foreach (var (fitInputs, fitOutputs) in rawLoader.GetBatchesAsync(shuffle: true, seed: firstEpochSeed, cancellationToken: cancellationToken))
+                // Without a Seed the raw loader shuffles with a per-process random source, so each rank would draw a
+                // different "first batch" and fit different statistics. A multi-rank run with no Seed therefore reads
+                // the shared fit batch in loader order, which is the same on every rank.
+                bool shuffleFitBatch = firstEpochSeed is not null || distBackend is not { WorldSize: > 1 };
+                await foreach (var (fitInputs, fitOutputs) in rawLoader.GetBatchesAsync(shuffle: shuffleFitBatch, seed: firstEpochSeed, cancellationToken: cancellationToken))
                 {
                     if (fitInputs.Length == 0) continue;
                     FitStreamingPipelines(fitInputs, fitOutputs);
