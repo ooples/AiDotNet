@@ -266,16 +266,6 @@ internal sealed class FusedTrainingSession<T>
 
         bool isDistributed = _owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: not null };
 
-        // A caller that asks for replay-agreement verification has a forward that may read host-side
-        // state the trace would freeze. The check compares this rank's eager loss with this rank's
-        // compiled loss and undoes a disagreeing update; in a distributed step the compiled loss is
-        // only available globally reduced, and one rank undoing its update and re-running the step
-        // would issue collectives its peers do not. Until the check is coordinated across ranks the
-        // protection is kept the safe way: every rank (the request is the same on all of them) takes
-        // the eager tape, which re-reads host state on every step.
-        if (isDistributed && request.VerifyReplayAgreement)
-            return Decline("replay-agreement verification requested in distributed mode (runs on the eager tape)");
-
         if (IsDisabled)
             return Decline("fused path sticky-disabled from a prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
@@ -350,8 +340,9 @@ internal sealed class FusedTrainingSession<T>
 
         // The first replay with new data (the step after the trace) is checked against the eager forward when the
         // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
-        // Distributed steps that request the check never get here (declined above).
-        bool checkReplay = !isDistributed && request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
+        // In distributed mode stepLoss is the globally reduced loss, so each rank compares its own eager loss with
+        // its own local compiled loss, and the ranks then take one verdict.
+        bool checkReplay = request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
         double eagerLoss = 0.0;
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
@@ -420,10 +411,16 @@ internal sealed class FusedTrainingSession<T>
 
         if (checkReplay && snapshot is not null)
         {
-            double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
+            double replayLoss = isDistributed
+                ? CompiledTapeTrainingStep<T>.LastDistributedLocalLoss
+                : NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
             double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
             bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
                 || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
+            // Every rank undoes the synchronized update and leaves the compiled path together, or none does: a rank
+            // that declined alone would run different collectives from the others.
+            if (_owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: { } replayCoordinator })
+                agree = !replayCoordinator.AnyRank(!agree);
             if (!agree)
             {
                 RestoreTrainedTensors(snapshot);

@@ -251,10 +251,9 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
         double max = 0.0;
         for (int i = 0; i < a.Length; i++)
         {
-            // NaN compares false against everything and matching infinities subtract to NaN, so a corrupted
-            // parameter would otherwise leave max at 0 and let every parity assertion pass.
-            Assert.False(float.IsNaN(a[i]) || float.IsInfinity(a[i]), $"Left parameter {i} is not finite: {a[i]}.");
-            Assert.False(float.IsNaN(b[i]) || float.IsInfinity(b[i]), $"Right parameter {i} is not finite: {b[i]}.");
+            // A NaN difference compares false against any tolerance, so non-finite parameters must fail here.
+            Assert.False(float.IsNaN(a[i]) || float.IsInfinity(a[i]), $"Left parameter {i} is not finite.");
+            Assert.False(float.IsNaN(b[i]) || float.IsInfinity(b[i]), $"Right parameter {i} is not finite.");
             double diff = Math.Abs((double)a[i] - b[i]);
             if (diff > max)
             {
@@ -1205,17 +1204,11 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
             Assert.True(jsonFiles.Length >= 1,
                 "Expected >=1 checkpoint written purely from wall-clock SaveInterval (saveFrequency=0, saveOnImprovement=false).");
 
-            // Training completion always writes a checkpoint at the final step (MaxSteps), so the mere existence
-            // of a file proves nothing about SaveInterval. Only an interval save can record a step below MaxSteps.
-            const int maxSteps = 8;
-            var committedSteps = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir)
-                .ListCheckpoints()
-                .Select(c => c.Step)
-                .ToArray();
-            Assert.NotEmpty(committedSteps);
-            Assert.True(committedSteps.Any(step => step > 0 && step < maxSteps),
-                $"Expected at least one wall-clock interval checkpoint before step {maxSteps}; " +
-                $"found steps [{string.Join(", ", committedSteps)}].");
+            // The completion save always records the final step (MaxSteps = 8); only an interval save records an
+            // earlier one, so at least one retained checkpoint below the final step proves SaveInterval fired.
+            var saved = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir).ListCheckpoints();
+            Assert.NotEmpty(saved);
+            Assert.Contains(saved, c => c.Step < 8);
         }
         finally
         {

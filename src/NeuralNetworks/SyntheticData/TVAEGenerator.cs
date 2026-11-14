@@ -636,8 +636,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
             }
         }
 
-        // Distributed runs: receive Rank 0's initial weights before the forward is recorded.
-        EnsureDistributedInitialParametersSynchronized();
+        SynchronizeDistributedParametersBeforeForward();
         using var tape = new GradientTape<T>();
         var (mean, logVar) = EncoderForward(input);
         var z = Reparameterize(mean, logVar);

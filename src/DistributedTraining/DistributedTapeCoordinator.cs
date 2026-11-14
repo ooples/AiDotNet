@@ -284,17 +284,35 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
 
         _lastShardedParamsRef = null;
 
-        if (WorldSize <= 1 || totalElements <= 0)
+        if (WorldSize <= 1)
         {
             _syncedParamSnapshot = uniqueParams;
             return;
         }
 
-        // The list is recorded as synchronized only after the broadcast, the unpack and the cache
-        // invalidation all succeed. Recording it up front would turn a retry after a failed broadcast
-        // into a no-op and leave the ranks with different parameters.
-        _syncedParamSnapshot = null;
         EnsureBackendInitialized();
+
+        // Every rank enters this agreement, so a rank that cannot broadcast (an idle rank whose lazy layers never
+        // materialized holds zero elements) fails together with the others instead of skipping the broadcast its
+        // peers are waiting in.
+        var layout = new Vector<T>(new[] { NumOps.FromDouble(totalElements), NumOps.FromDouble(-totalElements) });
+        Backend.AllReduce(layout, ReductionOperation.Max);
+        double maxElements = NumOps.ToDouble(layout[0]);
+        double minElements = -NumOps.ToDouble(layout[1]);
+        if (maxElements != minElements)
+        {
+            throw new InvalidOperationException(
+                $"Ranks disagree on the trainable parameter layout before the first synchronization: rank {Rank} has " +
+                $"{totalElements} elements, while the ranks range from {minElements} to {maxElements}. A rank whose first " +
+                "batch is empty cannot materialize lazily sized layers; give every rank a non-empty first batch, or build " +
+                "the model's layers before distributed training starts.");
+        }
+
+        if (totalElements <= 0)
+        {
+            _syncedParamSnapshot = uniqueParams;
+            return;
+        }
 
         var flat = new Vector<T>(totalElements);
         if (Rank == 0)
@@ -312,6 +330,9 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         flat = Backend.Broadcast(flat, root: 0);
         UnpackVectorIntoParameters(flat.AsSpan().Slice(0, totalElements), uniqueParams, preserveGpuWeightBuffers: false);
         invalidateCaches?.Invoke();
+
+        // Recorded only once every rank holds rank 0's weights: a broadcast, unpack or invalidation that throws leaves
+        // the list unsynchronized, so a retry broadcasts again.
         _syncedParamSnapshot = uniqueParams;
     }
 
@@ -542,6 +563,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
     /// <returns><c>true</c> if the optimizer step executed; <c>false</c> if mixed-precision gradient overflow was detected and the step was skipped.</returns>
     /// <exception cref="ObjectDisposedException">Thrown if this coordinator has been disposed.</exception>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="trainableParameters"/> or <paramref name="gradients"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown if both <paramref name="optimizer"/> and <paramref name="executeFullParameterStep"/> are null.</exception>
     public bool SynchronizeUnscaleClipAndStep(
         IReadOnlyList<Tensor<T>> trainableParameters,
         Dictionary<Tensor<T>, Tensor<T>> gradients,
@@ -565,13 +587,11 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             throw new ArgumentNullException(nameof(gradients));
         }
 
+        // Without either, both the replicated and the sharded branch would report a step that changed nothing.
         if (optimizer is null && executeFullParameterStep is null)
         {
-            // Without either mechanism the method would reduce gradients, record a successful scaler
-            // update and return true while leaving every parameter untouched. Reject that before any
-            // collective runs so no rank reports a training step that did not happen.
             throw new ArgumentException(
-                "Either an optimizer or an executeFullParameterStep callback is required to apply the parameter update.",
+                "An optimizer or an optimizer-step callback is required to apply the synchronized update.",
                 nameof(optimizer));
         }
 
@@ -936,6 +956,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
     /// <returns>Canonical serialized optimizer bytes on Rank 0; empty byte array on non-zero ranks.</returns>
     /// <exception cref="ObjectDisposedException">Thrown if this coordinator has been disposed.</exception>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="optimizer"/> or <paramref name="trainableParameters"/> is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown on a sharded multi-rank strategy when the optimizer does not derive from <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/>, so its shard state cannot be gathered.</exception>
     public byte[] ConsolidateOptimizerStateBytes(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         IReadOnlyList<Tensor<T>> trainableParameters)
@@ -961,9 +982,9 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
-        if (uniqueParams.Length == 0 || totalElements <= 0)
+        if (uniqueParams.Length == 0 || totalElements <= 0 || WorldSize <= 1)
         {
-            // No parameters, so no rank holds sharded optimizer state.
+            // No parameters to shard, or a single rank whose shard is the whole state.
             return WorldSize <= 1 || Rank == 0
                 ? effectiveOptimizer.Serialize()
                 : Array.Empty<byte>();
@@ -974,20 +995,11 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             PendingTapeTensorStatesField is null ||
             TapeStateSyncField is null)
         {
-            if (WorldSize <= 1)
-            {
-                // A single rank owns every element, so its serialized state is the complete state.
-                return effectiveOptimizer.Serialize();
-            }
-
-            // Each rank stepped this optimizer on its own parameter shard, so its state is split
-            // across ranks and there is no contract for gathering it. Serializing Rank 0 alone would
-            // write a checkpoint that silently drops every other rank's optimizer state and is then
-            // restored onto all ranks as if it were complete.
+            // Each rank stepped only its own shard, so rank 0's state alone is not the consolidated state; returning
+            // it as canonical would drop every other rank's moments on restore.
             throw new NotSupportedException(
-                $"Optimizer type '{effectiveOptimizer.GetType().Name}' does not derive from GradientBasedOptimizerBase, so its " +
-                $"per-rank state cannot be consolidated into one checkpoint under DistributedStrategy.{Strategy} with {WorldSize} ranks. " +
-                "Use a GradientBasedOptimizerBase-derived optimizer or a non-sharded strategy (DDP).");
+                $"Sharded optimizer-state consolidation requires an optimizer derived from GradientBasedOptimizerBase; " +
+                $"{effectiveOptimizer.GetType().Name} keeps per-rank shard state this coordinator cannot gather.");
         }
 
         EnsureBackendInitialized();
@@ -1117,6 +1129,24 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// True on every rank when <paramref name="localFlag"/> is true on any rank, so all ranks take one decision.
+    /// A single-rank coordinator returns the flag unchanged.
+    /// </summary>
+    /// <param name="localFlag">This rank's flag.</param>
+    /// <returns>Whether any rank raised the flag.</returns>
+    internal bool AnyRank(bool localFlag)
+    {
+        ThrowIfDisposed();
+        if (WorldSize <= 1)
+        {
+            return localFlag;
+        }
+
+        EnsureBackendInitialized();
+        return AllReduceAnyRankFlag(localFlag);
     }
 
     private bool AllReduceAnyRankFlag(bool hasLocal)

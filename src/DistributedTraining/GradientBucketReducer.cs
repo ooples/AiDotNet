@@ -384,12 +384,9 @@ public sealed class GradientBucketReducer<T> : IDisposable
             for (int b = 0; b < _buckets.Length; b++)
             {
                 var bucket = _buckets[b];
-
-                // A step that failed after dispatching this bucket (backward threw before
-                // FlushAndSynchronize) leaves its collective running on the backend worker, still
-                // reading and writing bucket.Buffer. Let it settle before the buffer is reused,
-                // otherwise the new step's gradients and the old collective corrupt each other.
-                SettleBucketHandles(bucket);
+                // A step abandoned after dispatch (backward threw) can leave its collective still reading or writing
+                // bucket.Buffer; it must settle before this step overwrites the buffer.
+                SettleAndDisposeBucketHandles(bucket);
                 bucket.ReadyCount = 0;
                 bucket.Dispatched = false;
                 bucket.SlotReady.AsSpan().Clear();
@@ -411,6 +408,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
     /// <param name="gradient">The local unscaled gradient computed for <paramref name="parameter"/>.</param>
     /// <exception cref="ObjectDisposedException">Thrown if this reducer has been disposed.</exception>
     /// <exception cref="ArgumentException">Thrown if <paramref name="gradient"/> length does not match <paramref name="parameter"/> length.</exception>
+    /// <exception cref="InvalidOperationException">Thrown if <paramref name="parameter"/> is reported again after its bucket was dispatched.</exception>
     public void NotifyGradientReady(Tensor<T> parameter, Tensor<T> gradient)
     {
         ThrowIfDisposed();
@@ -436,13 +434,11 @@ public sealed class GradientBucketReducer<T> : IDisposable
             var bucket = _buckets[slot.BucketIndex];
             if (bucket.Dispatched)
             {
-                // The bucket's collective already owns the buffer, so a further contribution cannot be
-                // added. Dropping it silently would make the reduced gradient depend on dispatch
-                // timing (a repeat before dispatch is accumulated below), so report the violation.
+                // The bucket's collective may still read the buffer, so a late contribution cannot be added; dropping
+                // it would make the reduced gradient depend on when the bucket dispatched.
                 throw new InvalidOperationException(
-                    "A gradient was reported for a parameter whose bucket has already been dispatched for reduction. " +
-                    "Each parameter's gradient must be final when it is reported in an overlapped step; " +
-                    "accumulate repeated contributions before notifying, or disable communication overlap.");
+                    "A gradient was reported again for a parameter whose bucket has already been dispatched for reduction. " +
+                    "Report each parameter's gradient once per step, accumulated.");
             }
 
             if (!bucket.SlotReady[slot.EntryIndex])
@@ -1195,53 +1191,35 @@ public sealed class GradientBucketReducer<T> : IDisposable
         return 8;
     }
 
-    private static void DisposeBucketHandles(Bucket bucket)
+    private static void SettleAndDisposeBucketHandles(Bucket bucket)
     {
         if (bucket.Handle is not null)
         {
+            SettleAbandonedCollective(bucket.Handle);
             bucket.Handle.Dispose();
             bucket.Handle = null;
         }
 
         if (bucket.ResultHandle is not null)
         {
+            SettleAbandonedCollective(bucket.ResultHandle);
             bucket.ResultHandle.Dispose();
             bucket.ResultHandle = null;
         }
     }
 
-    /// <summary>
-    /// Waits for a bucket's in-flight collective (if any) to finish, then releases its handle. The
-    /// outcome is discarded: the step that dispatched it has been abandoned, and only the buffer
-    /// ownership matters to the caller.
-    /// </summary>
-    private static void SettleBucketHandles(Bucket bucket)
+    // Waits for a collective from an abandoned step. Its result is discarded with the step, so a failure is recorded
+    // rather than raised: the step that owned it has already failed.
+    private static void SettleAbandonedCollective(IAsyncCollectiveHandle handle)
     {
-        if (bucket.Handle is { IsCompleted: false } pending)
+        try
         {
-            try
-            {
-                pending.Wait();
-            }
-            catch (Exception)
-            {
-                // The abandoned step's collective failed; its result is not used.
-            }
+            handle.Wait();
         }
-
-        if (bucket.ResultHandle is { IsCompleted: false } pendingResult)
+        catch (Exception ex)
         {
-            try
-            {
-                pendingResult.Wait();
-            }
-            catch (Exception)
-            {
-                // The abandoned step's collective failed; its result is not used.
-            }
+            Trace.TraceWarning($"A gradient-bucket collective from an abandoned step failed while settling: {ex}");
         }
-
-        DisposeBucketHandles(bucket);
     }
 
     private void ThrowIfDisposed()
@@ -1265,9 +1243,14 @@ public sealed class GradientBucketReducer<T> : IDisposable
         lock (_syncLock)
         {
             _disposed = true;
+            // Released without waiting: no later step reuses the buffers, and a collective blocked on a departed peer
+            // must not hang disposal.
             for (int b = 0; b < _buckets.Length; b++)
             {
-                DisposeBucketHandles(_buckets[b]);
+                _buckets[b].Handle?.Dispose();
+                _buckets[b].Handle = null;
+                _buckets[b].ResultHandle?.Dispose();
+                _buckets[b].ResultHandle = null;
             }
 
             _ownedUnpackGradients?.Clear();

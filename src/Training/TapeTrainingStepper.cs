@@ -306,6 +306,19 @@ internal sealed class TapeTrainingStepper<T>
         Func<Tensor<T>> objective,
         T learningRate,
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
+        => EagerSgdObjectiveStep(parameters, objective, learningRate, onGradients, owner: null);
+
+    /// <summary>
+    /// <see cref="EagerSgdObjectiveStep(Func{IReadOnlyList{Tensor{T}}}, Func{Tensor{T}}, T, Action{IReadOnlyDictionary{Tensor{T}, Tensor{T}}})"/>
+    /// governed by <paramref name="owner"/>: a model with a distributed coordinator runs it as a coordinated step
+    /// (the same collectives as its other ranks), and a mixed-precision context scales and unscales it.
+    /// </summary>
+    internal static T EagerSgdObjectiveStep(
+        Func<IReadOnlyList<Tensor<T>>> parameters,
+        Func<Tensor<T>> objective,
+        T learningRate,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
+        object? owner)
     {
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
@@ -324,7 +337,7 @@ internal sealed class TapeTrainingStepper<T>
             placeholder,
             (_, _) => objective(),
             (value, _) => value,
-            new EagerStepHooks { OnGradients = onGradients });
+            new EagerStepHooks { OnGradients = onGradients, Owner = owner });
     }
 
     /// <summary>
@@ -364,76 +377,97 @@ internal sealed class TapeTrainingStepper<T>
             preCoord.EnsureInitialParametersSynchronized(parameters, ownerNet.InvalidateLayerWeightCaches);
         }
 
-        var engine = AiDotNetEngine.Current;
-        var accumulated = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
-        var reached = new List<Tensor<T>>(parameters.Count);
-        double lossSum = 0.0;
-        for (int i = 0; i < microBatchCount; i++)
+        // The distributed step unscales the reduced gradients by the active loss scale, so a distributed
+        // mixed-precision accumulation runs as the ordinary mixed-precision step does: on working weights, with each
+        // micro-batch's backward on the scaled loss, and the FP32 masters restored before the update and on failure.
+        var mpNet = ownerNet?.DistributedCoordinator is not null ? ownerNet : null;
+        var mpCtx = mpNet?.ActiveMixedPrecisionContext;
+        List<float[]>? mpSnapshots = null;
+        List<Tensor<T>>? mpTargets = null;
+        bool mpRestored = true;
+        try
         {
-            using var tape = new GradientTape<T>();
-            var loss = microObjective(i);
-            if (loss is null)
-                throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
-            var gradients = tape.ComputeGradients(loss, parameters);
-            lossSum += loss.Length > 0 ? NumOps.ToDouble(loss[0]) : 0.0;
-            foreach (var parameter in parameters)
-            {
-                if (parameter is null || !gradients.TryGetValue(parameter, out var gradient))
-                    continue;
-                if (accumulated.TryGetValue(parameter, out var sum))
-                {
-                    engine.TensorAddInPlace(sum, gradient);
-                }
-                else
-                {
-                    // An owned copy: the gradient's own storage is recycled when this tape is disposed.
-                    accumulated[parameter] = new Tensor<T>(gradient.ToArray(), gradient.Shape.ToArray());
-                    reached.Add(parameter);
-                }
-            }
-        }
+            if (mpNet is not null && mpCtx is not null)
+                mpNet.PrepareMixedPrecisionWorkingWeights(mpCtx, parameters, out mpSnapshots, out mpTargets, ref mpRestored);
 
-        T inverseCount = NumOps.FromDouble(1.0 / microBatchCount);
-        foreach (var sum in accumulated.Values)
-            engine.TensorMultiplyScalarInPlace(sum, inverseCount);
-
-        T meanLoss = NumOps.FromDouble(lossSum / microBatchCount);
-        if (ownerNet?.DistributedCoordinator is { } distCoord)
-        {
-            return ExecuteDistributedAccumulatedObjectiveStep(
-                ownerNet,
-                distCoord,
-                parameters,
-                microBatchCount,
-                microObjective,
-                optimizer,
-                onGradients,
-                applyOptimizerRegularization,
-                accumulated,
-                lossSum,
-                inverseCount);
-        }
-        onGradients?.Invoke(accumulated);
-        RegularizeAndClip(optimizer, reached, accumulated,
-            applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null, modelClip: null);
-
-        // A line-searching optimizer re-evaluates the batch objective: the mean of the micro-objectives.
-        Tensor<T> MeanObjective()
-        {
-            Tensor<T>? total = null;
+            var engine = AiDotNetEngine.Current;
+            var accumulated = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+            var reached = new List<Tensor<T>>(parameters.Count);
+            double lossSum = 0.0;
             for (int i = 0; i < microBatchCount; i++)
             {
+                using var tape = new GradientTape<T>();
                 var loss = microObjective(i);
-                total = total is null ? loss : engine.TensorAdd(total, loss);
+                if (loss is null)
+                    throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
+                var lossForBackward = mpNet is not null && mpCtx is not null ? mpNet.ScaleLossForMixedPrecision(mpCtx, loss) : loss;
+                var gradients = tape.ComputeGradients(lossForBackward, parameters);
+                lossSum += loss.Length > 0 ? NumOps.ToDouble(loss[0]) : 0.0;
+                foreach (var parameter in parameters)
+                {
+                    if (parameter is null || !gradients.TryGetValue(parameter, out var gradient))
+                        continue;
+                    if (accumulated.TryGetValue(parameter, out var sum))
+                    {
+                        engine.TensorAddInPlace(sum, gradient);
+                    }
+                    else
+                    {
+                        // An owned copy: the gradient's own storage is recycled when this tape is disposed.
+                        accumulated[parameter] = new Tensor<T>(gradient.ToArray(), gradient.Shape.ToArray());
+                        reached.Add(parameter);
+                    }
+                }
             }
-            return engine.TensorMultiplyScalar(total ?? new Tensor<T>(new[] { 1 }), inverseCount);
-        }
 
-        var placeholder = new Tensor<T>(new[] { 1 });
-        OptimizerUpdate(optimizer)(new TapeStepContext<T>(
-            reached, accumulated, meanLoss, placeholder, placeholder,
-            (_, _) => MeanObjective(), (value, _) => value, parameterBuffer: null));
-        return meanLoss;
+            T inverseCount = NumOps.FromDouble(1.0 / microBatchCount);
+            foreach (var sum in accumulated.Values)
+                engine.TensorMultiplyScalarInPlace(sum, inverseCount);
+
+            T meanLoss = NumOps.FromDouble(lossSum / microBatchCount);
+            if (ownerNet?.DistributedCoordinator is { } distCoord)
+            {
+                return ExecuteDistributedAccumulatedObjectiveStep(
+                    ownerNet,
+                    distCoord,
+                    parameters,
+                    microBatchCount,
+                    microObjective,
+                    optimizer,
+                    onGradients,
+                    applyOptimizerRegularization,
+                    accumulated,
+                    lossSum,
+                    inverseCount,
+                    () => NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored));
+            }
+            onGradients?.Invoke(accumulated);
+            RegularizeAndClip(optimizer, reached, accumulated,
+                applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null, modelClip: null);
+
+            // A line-searching optimizer re-evaluates the batch objective: the mean of the micro-objectives.
+            Tensor<T> MeanObjective()
+            {
+                Tensor<T>? total = null;
+                for (int i = 0; i < microBatchCount; i++)
+                {
+                    var loss = microObjective(i);
+                    total = total is null ? loss : engine.TensorAdd(total, loss);
+                }
+                return engine.TensorMultiplyScalar(total ?? new Tensor<T>(new[] { 1 }), inverseCount);
+            }
+
+            var placeholder = new Tensor<T>(new[] { 1 });
+            OptimizerUpdate(optimizer)(new TapeStepContext<T>(
+                reached, accumulated, meanLoss, placeholder, placeholder,
+                (_, _) => MeanObjective(), (value, _) => value, parameterBuffer: null));
+            return meanLoss;
+        }
+        finally
+        {
+            // A no-op once the distributed step restored them before its update.
+            NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+        }
     }
 
     /// <summary>
@@ -772,7 +806,8 @@ internal sealed class TapeTrainingStepper<T>
         bool applyOptimizerRegularization,
         Dictionary<Tensor<T>, Tensor<T>> accumulated,
         double lossSum,
-        T inverseCount)
+        T inverseCount,
+        Action restoreFp32Masters)
     {
         var engine = AiDotNetEngine.Current;
         double localMeanLoss = lossSum / microBatchCount;
@@ -802,12 +837,8 @@ internal sealed class TapeTrainingStepper<T>
             parameters,
             accumulated,
             optimizer,
-            // The micro-objectives were differentiated on full-precision weights without loss
-            // scaling (as on the single-process path of EagerAccumulatedObjectiveStep). Passing the
-            // mixed-precision context would make the coordinator divide these gradients by a loss
-            // scale that was never applied.
-            mixedPrecisionContext: null,
-            restoreFp32Masters: null,
+            ownerNet.ActiveMixedPrecisionContext,
+            restoreFp32Masters,
             syncFp32MastersFromWorking: null,
             regularizer,
             ownerNet.MaxGradNormValue,
@@ -829,6 +860,56 @@ internal sealed class TapeTrainingStepper<T>
         }
 
         return globalLossT;
+    }
+
+    /// <summary>
+    /// Differentiates each term of an additive objective on its own tape (its backward on the mixed-precision scaled
+    /// loss) and sums the terms' losses and gradients into owned tensors.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Reads each objective term's one scalar loss; the loop runs over terms, not tensor elements.")]
+    private static (Tensor<T> Loss, Dictionary<Tensor<T>, Tensor<T>> Gradients) DifferentiateObjectiveTerms(
+        NeuralNetworks.NeuralNetworkBase<T> distNet,
+        MixedPrecision.MixedPrecisionContext? mpCtx,
+        IReadOnlyList<Func<Tensor<T>>> objectiveTerms,
+        Func<IReadOnlyList<Tensor<T>>> parameterProvider,
+        EagerStepHooks hooks)
+    {
+        if (objectiveTerms.Count == 0)
+            throw new ArgumentException("An additive objective needs at least one term.", nameof(objectiveTerms));
+
+        var engine = AiDotNetEngine.Current;
+        var summed = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        double total = 0.0;
+        foreach (var term in objectiveTerms)
+        {
+            using var termTape = new GradientTape<T>();
+            var termLoss = term();
+            if (termLoss is null || termLoss.Length != 1)
+                throw new InvalidOperationException("An additive training objective must return one scalar loss.");
+            total += NumOps.ToDouble(termLoss[0]);
+            if (double.IsNaN(total) || double.IsInfinity(total))
+                throw new InvalidOperationException("An additive training objective must have a finite total loss.");
+
+            var termParameters = parameterProvider()
+                ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
+            var sources = hooks.GradientSources?.Invoke(termParameters) ?? termParameters;
+            foreach (var pair in termTape.ComputeGradients(distNet.ScaleLossForMixedPrecision(mpCtx, termLoss), sources))
+            {
+                if (summed.TryGetValue(pair.Key, out var sum))
+                {
+                    engine.TensorAddInPlace(sum, pair.Value);
+                }
+                else
+                {
+                    // An owned copy: the term's tape recycles its gradient storage when it is disposed.
+                    summed.Add(pair.Key, new Tensor<T>(pair.Value.ToArray(), pair.Value.Shape.ToArray()));
+                }
+            }
+        }
+
+        var loss = new Tensor<T>(new[] { 1 });
+        loss[0] = NumOps.FromDouble(total);
+        return (loss, summed);
     }
 
     private static T ExecuteDistributedEagerTapeStep(
@@ -894,13 +975,11 @@ internal sealed class TapeTrainingStepper<T>
                 using var noGrad = new NoGradScope<T>();
                 recomputeForward(input, target);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // Best-effort warmup: the training objective below runs the same forward and surfaces
-                // the actionable failure. Record the cause so a failed initialization is visible.
-                System.Diagnostics.Trace.TraceWarning(
-                    $"[AiDotNet] {distNet.GetType().Name}: lazy-layer warmup forward failed before distributed parameter " +
-                    $"synchronization ({ex.GetType().Name}: {ex.Message}); continuing with the training objective.");
+                // Best-effort warmup: the training objective below raises any failure that persists. The cause is
+                // recorded because the parameter layout synchronized next is the one this warmup left.
+                System.Diagnostics.Trace.TraceWarning($"[AiDotNet] Distributed lazy-layer warmup failed: {ex}");
             }
             finally
             {
@@ -922,9 +1001,19 @@ internal sealed class TapeTrainingStepper<T>
             distNet.PrepareMixedPrecisionWorkingWeights(mpCtx, preParams, out mpSnapshots, out mpTargets, ref mpRestored);
 
             using var tape = new GradientTape<T>();
-            var loss = objective();
-            if (loss is null)
-                throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
+            // An additive objective is differentiated term by term on its own tapes, as SummedTapeObjective does on
+            // one rank; the summed gradients then go through the same coordinated reduction as a single objective's.
+            Dictionary<Tensor<T>, Tensor<T>>? termGradients = null;
+            Tensor<T> loss;
+            if (objectiveTerms is null)
+            {
+                loss = objective()
+                    ?? throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
+            }
+            else
+            {
+                (loss, termGradients) = DifferentiateObjectiveTerms(distNet, mpCtx, objectiveTerms, parameterProvider, hooks);
+            }
 
             var parameters = parameterProvider()
                 ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
@@ -958,6 +1047,11 @@ internal sealed class TapeTrainingStepper<T>
                         distCoord.OnParameterGradientReady(param, grad);
                         gradients[param] = distCoord.GetOrCreateGradientSlot(param);
                     });
+            }
+            else if (termGradients is not null)
+            {
+                hooks.OnTapeGradients?.Invoke(termGradients);
+                CopySelectedParameterGradients(parameters, termGradients, gradients, out _);
             }
             else
             {
@@ -1023,13 +1117,10 @@ internal sealed class TapeTrainingStepper<T>
                 using var noGrad = new NoGradScope<T>();
                 recomputeForward(input, target);
             }
-            catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // Best-effort warmup: the training objective below runs the same forward and surfaces
-                // the actionable failure. Record the cause so a failed initialization is visible.
-                System.Diagnostics.Trace.TraceWarning(
-                    $"[AiDotNet] {mpNet.GetType().Name}: lazy-layer warmup forward failed before the mixed-precision step " +
-                    $"({ex.GetType().Name}: {ex.Message}); continuing with the training objective.");
+                // Best-effort warmup; the step that follows raises any failure that persists.
+                System.Diagnostics.Trace.TraceWarning($"[AiDotNet] Lazy-layer warmup failed: {ex}");
             }
             finally
             {

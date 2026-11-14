@@ -423,7 +423,7 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
         int step,
         Dictionary<string, T> metrics,
         double? metricValue = null,
-        bool shouldMinimize = true,
+        bool? shouldMinimize = null,
         Dictionary<string, object>? metadata = null)
     {
         if (model == null)

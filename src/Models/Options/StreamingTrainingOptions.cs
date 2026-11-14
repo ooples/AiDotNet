@@ -54,13 +54,14 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// </summary>
     /// <value>The accumulation factor; defaults to <c>1</c> (step on every micro-batch).</value>
     /// <remarks>
+    /// <para>
     /// In distributed runs, gradient synchronization (<c>AllReduce</c> / <c>ReduceScatter</c>), mixed-precision
     /// unscaling, and global-norm clipping run once per optimizer step after all <see cref="GradientAccumulationSteps"/>
     /// micro-batches have been accumulated locally.
-    /// <para><b>For Beginners:</b> Sometimes the batch size you want does not fit in memory. Gradient accumulation
-    /// lets you process several small batches, add up what the model learned from each, and only then update the
-    /// weights once. Setting this to <c>4</c> with a batch size of <c>8</c> trains as if the batch size were
-    /// <c>32</c>, while only ever holding 8 samples in memory. Leave it at <c>1</c> to update after every batch.</para>
+    /// </para>
+    /// <para><b>For Beginners:</b> This controls how many loader batches contribute to one model update. A value of 1
+    /// updates the model after every batch. A value of 4 combines the gradients of four batches before updating, which
+    /// gives the effect of a four-times-larger batch without holding all four batches in memory at once.</para>
     /// </remarks>
     public int GradientAccumulationSteps { get; set; } = 1;
 

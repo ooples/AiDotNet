@@ -187,8 +187,8 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override void AllReduce(Vector<T> data, ReductionOperation operation)
     {
         EnsureInitialized();
-        ValidateData(data, nameof(data));
         DrainAsyncCollectives();
+        ValidateData(data, nameof(data));
 
         if (!_useMPI)
         {
@@ -243,8 +243,8 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> AllGather(Vector<T> sendData)
     {
         EnsureInitialized();
-        ValidateData(sendData, nameof(sendData));
         DrainAsyncCollectives();
+        ValidateData(sendData, nameof(sendData));
 
         if (!_useMPI)
         {
@@ -280,9 +280,9 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> Broadcast(Vector<T> data, int root = 0)
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
         ValidateData(data, nameof(data));
         ValidateRoot(root);
-        DrainAsyncCollectives();
 
         if (!_useMPI)
         {
@@ -319,8 +319,8 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> Scatter(Vector<T> sendData, int root = 0)
     {
         EnsureInitialized();
-        ValidateRoot(root);
         DrainAsyncCollectives();
+        ValidateRoot(root);
 
         if (!_useMPI)
         {
@@ -368,8 +368,8 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> ReduceScatter(Vector<T> data, ReductionOperation operation)
     {
         EnsureInitialized();
-        ValidateData(data, nameof(data));
         DrainAsyncCollectives();
+        ValidateData(data, nameof(data));
 
         if (!_useMPI)
         {
@@ -432,9 +432,9 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override void Send(Vector<T> data, int destinationRank, int tag = 0)
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
         ValidateData(data, nameof(data));
         ValidateRank(destinationRank, nameof(destinationRank));
-        DrainAsyncCollectives();
 
         if (tag < 0)
         {
@@ -472,8 +472,8 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> Receive(int sourceRank, int count, int tag = 0)
     {
         EnsureInitialized();
-        ValidateRank(sourceRank, nameof(sourceRank));
         DrainAsyncCollectives();
+        ValidateRank(sourceRank, nameof(sourceRank));
 
         if (count <= 0)
         {

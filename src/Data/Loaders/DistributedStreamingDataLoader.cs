@@ -172,16 +172,12 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             if (_localBatchSize != value)
             {
                 _localBatchSize = value;
+                _batchPlanSynchronized = _backend.WorldSize <= 1;
                 if (_backend.WorldSize <= 1)
                 {
                     _rankBatchSizes = new[] { value };
                     _globalBatchSize = value;
                 }
-
-                // With more than one rank the new size takes effect at the next enumeration, where
-                // every rank exchanges sizes unconditionally. A rank-local "plan is stale" flag must
-                // not decide whether to enter that collective: the rank that changed its size would
-                // gather while its peers went straight on to the seed broadcast or to training.
             }
         }
     }
@@ -228,7 +224,10 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         bool dropLast = false,
         int? seed = null)
     {
-        SynchronizeBatchPlan();
+        // Every rank exchanges its batch size at every enumeration boundary, whatever its local plan state: a
+        // rank-local "already synchronized" flag would let one rank skip the AllGather another rank enters after a
+        // BatchSize change, and the collective sequences would no longer match.
+        ExchangeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
@@ -266,7 +265,10 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         int? seed = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        SynchronizeBatchPlan();
+        // Every rank exchanges its batch size at every enumeration boundary, whatever its local plan state: a
+        // rank-local "already synchronized" flag would let one rank skip the AllGather another rank enters after a
+        // BatchSize change, and the collective sequences would no longer match.
+        ExchangeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
@@ -370,7 +372,6 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         rankCount = counts[rank];
     }
 
-    [AiDotNet.Attributes.ScalarKernel("One-time WorldSize batch-size metadata unpack")]
     private void EnsureBatchPlanSynchronized()
     {
         if (_batchPlanSynchronized)
@@ -378,16 +379,11 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             return;
         }
 
-        SynchronizeBatchPlan();
+        ExchangeBatchPlan();
     }
 
-    /// <summary>
-    /// Exchanges per-rank batch sizes with every rank. Called unconditionally at each enumeration
-    /// boundary so all ranks execute the same collective sequence whichever of them changed
-    /// <see cref="BatchSize"/> since the previous enumeration.
-    /// </summary>
     [AiDotNet.Attributes.ScalarKernel("Per-enumeration WorldSize batch-size metadata unpack")]
-    private void SynchronizeBatchPlan()
+    private void ExchangeBatchPlan()
     {
         if (!_backend.IsInitialized)
         {
