@@ -298,11 +298,22 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
         return engine.TensorAmin(distances, new[] { 0 }, keepDims: false);
     }
 
-    private static Tensor<T> NormalizeRows(Tensor<T> rows)
+    /// <summary>
+    /// Each row divided by its L2 norm; a zero row stays zero, so its cosine distance to any descriptor is 1.
+    /// </summary>
+    /// <remarks>
+    /// A black crop (or an encoder output of zeros) has norm 0, and 0 / 0 made its cosine costs NaN, which the
+    /// assignment solver rejects. A zero norm is divided by 1 instead; this applies to descriptors from the
+    /// built-in descriptor and from an injected encoder alike.
+    /// </remarks>
+    internal static Tensor<T> NormalizeRows(Tensor<T> rows)
     {
         var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
         var norms = engine.TensorNorm(rows, 1, keepDims: true);
-        return engine.TensorDivide(rows, engine.TensorBroadcastTo(norms, rows.Shape.ToArray()));
+        var safeNorms = engine.TensorWhere(
+            engine.TensorGreaterThan(norms, ops.Zero), norms, engine.TensorFullLike(norms, ops.One));
+        return engine.TensorDivide(rows, engine.TensorBroadcastTo(safeNorms, rows.Shape.ToArray()));
     }
 
     private static Tensor<T> Flatten(Tensor<T> feature)
