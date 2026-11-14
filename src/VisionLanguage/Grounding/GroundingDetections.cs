@@ -153,7 +153,7 @@ internal static class GroundingDetections<T>
     /// DETR-style query decoding shared by DINO-X and Grounding DINO 1.5: the flattened decoder output is cut into
     /// <paramref name="queries"/> equal blocks of <c>max(1, outDim / queries)</c> values. A block's four quarters
     /// sum to cx, cy, w and h, each divided by <c>max(1, block / 4)</c> and squashed with a sigmoid, and its
-    /// confidence is <c>sigmoid(1 - rms(block))</c>. A query past the end of a short output reads nothing.
+    /// confidence is <c>sigmoid(rms(block) - 1)</c>. A query past the end of a short output reads nothing.
     /// </summary>
     /// <param name="engine">Engine to run on.</param>
     /// <param name="decoderOut">Decoder output (read flattened).</param>
@@ -172,7 +172,7 @@ internal static class GroundingDetections<T>
         {
             // Nothing to read: every sum is zero and every rms is zero.
             var middle = engine.TensorSigmoid(new Tensor<T>([queries]));
-            confidences = engine.TensorSigmoid(Tensor<T>.CreateDefault([queries], numOps.One));
+            confidences = engine.TensorSigmoid(Tensor<T>.CreateDefault([queries], numOps.FromDouble(-1.0)));
             boxes = ClippedCornerBoxes(engine, middle, middle, middle, middle);
             return;
         }
@@ -187,7 +187,8 @@ internal static class GroundingDetections<T>
         var w = engine.TensorSigmoid(Part(block / 2, 3 * block / 4));
         var h = engine.TensorSigmoid(Part(3 * block / 4, block));
         var rms = WithEmptyRows(engine, RowRms(engine, blocks), empty);
-        confidences = engine.TensorSigmoid(engine.TensorAddScalar(engine.TensorNegate(rms), numOps.One));
+        // The scalar decoding was 1 / (1 + exp(-rms + 1)), which is sigmoid(rms - 1): stronger blocks score higher.
+        confidences = engine.TensorSigmoid(engine.TensorSubtractScalar(rms, numOps.One));
         boxes = ClippedCornerBoxes(engine, cx, cy, w, h);
     }
 

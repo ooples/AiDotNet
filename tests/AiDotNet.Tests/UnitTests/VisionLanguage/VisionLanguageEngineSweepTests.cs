@@ -254,7 +254,8 @@ public class VisionLanguageEngineSweepTests
             cy = Sigmoid(cy / Math.Max(1, span / 4));
             w = Sigmoid(w / Math.Max(1, span / 4));
             h = Sigmoid(h / Math.Max(1, span / 4));
-            conf = Sigmoid(-Math.Sqrt(conf / Math.Max(1, span)) + 1.0);
+            // The replaced loop, verbatim: the exponent is -rms + 1, so this is sigmoid(rms - 1).
+            conf = 1.0 / (1.0 + Math.Exp(-Math.Sqrt(conf / Math.Max(1, span)) + 1.0));
 
             Assert.Equal(Math.Max(0, cx - w / 2), boxes[q, 0], Tolerance);
             Assert.Equal(Math.Max(0, cy - h / 2), boxes[q, 1], Tolerance);
