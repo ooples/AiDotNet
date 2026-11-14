@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -15,6 +16,12 @@ namespace AiDotNet.ComputerVision.Tracking;
 /// <para><b>For Beginners:</b> SORT is a simple yet effective online tracking algorithm
 /// that uses Kalman filtering for state estimation and the Hungarian algorithm for
 /// detection-to-track association based on IoU overlap.</para>
+///
+/// <para>This follows the reference implementation (abewley/sort): a 7-state constant-velocity
+/// Kalman filter over (u, v, s, r) with filterpy's noise settings, an optimal assignment on the IoU
+/// matrix, matches below <see cref="TrackingOptions{T}.IouThreshold"/> rejected, and a track reported
+/// only in frames where it was matched and its hit streak has reached
+/// <see cref="TrackingOptions{T}.MinHits"/> (or during the first MinHits frames).</para>
 ///
 /// <para>Key features:
 /// - Kalman filter for motion prediction
@@ -55,78 +62,46 @@ public class SORT<T> : ObjectTrackerBase<T>
     {
         var startTime = DateTime.UtcNow;
         FrameCount++;
+        var engine = AiDotNetEngine.Current;
 
         // Filter detections by confidence
-        var filteredDetections = detections
-            .Where(d => NumOps.GreaterThanOrEquals(d.Confidence, Options.ConfidenceThreshold))
-            .ToList();
+        var scores = TrackingAssociation<T>.Scores(detections);
+        var keep = TrackingAssociation<T>.Where(
+            engine.TensorGreaterEqual(scores, engine.TensorFullLike(scores, Options.ConfidenceThreshold)));
+        var filteredDetections = keep.Select(i => detections[i]).ToList();
 
-        // Predict new locations of existing tracks
+        // Predict new locations of existing tracks; drop trackers whose prediction is not a number.
         foreach (var track in _kalmanTracks)
         {
             track.Predict();
         }
 
-        // Build cost matrix based on IoU
-        var costMatrix = BuildIoUCostMatrix(filteredDetections);
+        _kalmanTracks.RemoveAll(t => t.HasInvalidPrediction());
 
-        // Solve assignment problem
-        var assignment = HungarianAssignment(costMatrix);
+        var (matches, unmatchedDetections) = Associate(filteredDetections);
 
-        // Update matched tracks
-        var matchedDetections = new HashSet<int>();
-        var matchedTracks = new HashSet<int>();
-
-        for (int trackIdx = 0; trackIdx < assignment.Length; trackIdx++)
+        foreach (var (detIdx, trackIdx) in matches)
         {
-            int detIdx = assignment[trackIdx];
-            if (detIdx >= 0)
-            {
-                double iou = 1.0 - costMatrix[trackIdx, detIdx];
-                if (iou >= NumOps.ToDouble(Options.IouThreshold))
-                {
-                    _kalmanTracks[trackIdx].Update(filteredDetections[detIdx]);
-                    matchedDetections.Add(detIdx);
-                    matchedTracks.Add(trackIdx);
-                }
-            }
+            _kalmanTracks[trackIdx].Update(filteredDetections[detIdx]);
         }
 
-        // Handle unmatched tracks (mark as missing)
-        for (int i = 0; i < _kalmanTracks.Count; i++)
+        foreach (int detIdx in unmatchedDetections)
         {
-            if (!matchedTracks.Contains(i))
-            {
-                _kalmanTracks[i].MarkMissed();
-            }
+            _kalmanTracks.Add(new KalmanTrack<T>(NextTrackId++, filteredDetections[detIdx]));
         }
 
-        // Create new tracks for unmatched detections
-        for (int i = 0; i < filteredDetections.Count; i++)
-        {
-            if (!matchedDetections.Contains(i))
-            {
-                var newTrack = new KalmanTrack<T>(
-                    NextTrackId++,
-                    filteredDetections[i],
-                    NumOps,
-                    Options.MinHits);
-                _kalmanTracks.Add(newTrack);
-            }
-        }
-
-        // Remove dead tracks
-        _kalmanTracks.RemoveAll(t => t.TimeSinceUpdate > Options.MaxAge);
-
-        // Update base class tracks list
+        // Report tracks matched this frame whose hit streak reached MinHits (or every matched or new
+        // track during the first MinHits frames), then drop tracks unmatched for more than MaxAge frames.
         Tracks.Clear();
         foreach (var kt in _kalmanTracks)
         {
-            if (kt.Hits >= Options.MinHits || FrameCount <= Options.MinHits)
+            if (kt.TimeSinceUpdate < 1 && (kt.HitStreak >= Options.MinHits || FrameCount <= Options.MinHits))
             {
-                Tracks.Add(kt.ToTrack());
+                Tracks.Add(kt.ToTrack(Options.MinHits));
             }
         }
+
+        _kalmanTracks.RemoveAll(t => t.TimeSinceUpdate > Options.MaxAge);
 
         return new TrackingResult<T>
         {
@@ -136,25 +111,68 @@ public class SORT<T> : ObjectTrackerBase<T>
         };
     }
 
-    private double[,] BuildIoUCostMatrix(List<Detection<T>> detections)
+    /// <summary>
+    /// <c>associate_detections_to_trackers</c>: IoU matrix (detections x trackers); when every row and
+    /// column has at most one IoU above the threshold those pairs are taken directly, otherwise the
+    /// assignment that maximises total IoU is solved; pairs below the threshold are rejected.
+    /// </summary>
+    private (List<(int Det, int Track)> Matches, List<int> UnmatchedDetections) Associate(List<Detection<T>> detections)
     {
-        int numTracks = _kalmanTracks.Count;
-        int numDets = detections.Count;
-
-        var costMatrix = new double[numTracks, numDets];
-
-        for (int t = 0; t < numTracks; t++)
+        var matches = new List<(int Det, int Track)>();
+        if (_kalmanTracks.Count == 0 || detections.Count == 0)
         {
-            var predictedBox = _kalmanTracks[t].GetPredictedBox();
+            return (matches, Enumerable.Range(0, detections.Count).ToList());
+        }
 
-            for (int d = 0; d < numDets; d++)
+        var engine = AiDotNetEngine.Current;
+        var detBoxes = TrackingAssociation<T>.BoxesToTensor(detections.Select(d => d.Box).ToList());
+        var trackBoxes = TrackingAssociation<T>.BoxesToTensor(_kalmanTracks.Select(t => t.GetPredictedBox()).ToList());
+        var iou = TrackingAssociation<T>.IouMatrix(detBoxes, trackBoxes);
+        int numTracks = _kalmanTracks.Count;
+
+        var above = engine.TensorGreaterThan(iou, Options.IouThreshold);
+        T maxPerRow = engine.TensorMaxValue(engine.ReduceSum(above, new[] { 1 }, keepDims: false));
+        T maxPerCol = engine.TensorMaxValue(engine.ReduceSum(above, new[] { 0 }, keepDims: false));
+
+        var candidates = new List<(int Det, int Track)>();
+        if (NumOps.Equals(maxPerRow, NumOps.One) && NumOps.Equals(maxPerCol, NumOps.One))
+        {
+            int[] pairs = TrackingAssociation<T>.Where(above);
+            for (int k = 0; k + 1 < pairs.Length; k += 2)
             {
-                double iou = ComputeIoU(predictedBox, detections[d].Box);
-                costMatrix[t, d] = 1.0 - iou; // Convert to cost
+                candidates.Add((pairs[k], pairs[k + 1]));
+            }
+        }
+        else
+        {
+            int[] assignment = TrackingAssociation<T>.SolveAssignment(engine.TensorNegate(iou));
+            for (int d = 0; d < assignment.Length; d++)
+            {
+                if (assignment[d] >= 0)
+                {
+                    candidates.Add((d, assignment[d]));
+                }
             }
         }
 
-        return costMatrix;
+        int[] rejected = candidates.Count == 0
+            ? Array.Empty<int>()
+            : engine.TensorLessThan(
+                engine.TensorTake(iou, new Tensor<int>(
+                    candidates.Select(c => c.Det * numTracks + c.Track).ToArray(), new[] { candidates.Count })),
+                Options.IouThreshold).Cast<int>().ToArray();
+
+        var detMatched = new bool[detections.Count];
+        for (int k = 0; k < candidates.Count; k++)
+        {
+            if (rejected[k] == 0)
+            {
+                matches.Add(candidates[k]);
+                detMatched[candidates[k].Det] = true;
+            }
+        }
+
+        return (matches, Enumerable.Range(0, detections.Count).Where(d => !detMatched[d]).ToList());
     }
 
     /// <inheritdoc/>
@@ -166,478 +184,149 @@ public class SORT<T> : ObjectTrackerBase<T>
 }
 
 /// <summary>
-/// Full Kalman filter-based track for SORT.
+/// SORT's <c>KalmanBoxTracker</c>: a constant-velocity Kalman filter over the state
+/// <c>[u, v, s, r, u', v', s']</c> (box centre, area, aspect ratio and the first three velocities).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para>Implements a complete Kalman filter for object tracking with:</para>
-/// <list type="bullet">
-/// <item>State vector: [x, y, s, r, vx, vy, vs] (center, area, aspect ratio, velocities)</item>
-/// <item>Full state transition matrix F with velocity integration</item>
-/// <item>Proper measurement matrix H for observation</item>
-/// <item>Kalman gain K = PH'(HPH' + R)^(-1) computation</item>
-/// <item>Joseph form covariance update for numerical stability</item>
-/// </list>
+/// <para>Noise follows the reference implementation on top of filterpy's identity defaults:
+/// R = diag(1, 1, 10, 10), P0 = diag(10, 10, 10, 10, 1e4, 1e4, 1e4) and
+/// Q = diag(1, 1, 1, 1, 0.01, 0.01, 1e-4). The update is filterpy's, with the Joseph-form covariance
+/// <c>(I - KH) P (I - KH)^T + K R K^T</c>.</para>
 /// </remarks>
-internal class KalmanTrack<T>
+internal sealed class KalmanTrack<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private static readonly INumericOperations<T> NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+    private readonly IEngine _engine = AiDotNetEngine.Current;
     private readonly int _trackId;
-    private readonly int _minHits;
+    private readonly Tensor<T> _f;
+    private readonly Tensor<T> _fT;
+    private readonly Tensor<T> _h;
+    private readonly Tensor<T> _hT;
+    private readonly Tensor<T> _q;
+    private readonly Tensor<T> _r;
+    private readonly Tensor<T> _identity;
     private int _classId;
     private T _confidence;
-
-    private const int StateSize = 7;
-    private const int MeasurementSize = 4;
-
-    // Kalman state: [x, y, s, r, vx, vy, vs]
-    // x, y = center position
-    // s = area (w*h)
-    // r = aspect ratio (w/h)
-    // vx, vy, vs = velocities
-    private double[] _state;
-    private double[,] _covariance;
-
-    // State transition matrix F
-    private readonly double[,] _F;
-
-    // Measurement matrix H
-    private readonly double[,] _H;
-
-    // Process noise covariance Q
-    private readonly double[,] _Q;
-
-    // Measurement noise covariance R
-    private readonly double[,] _R;
+    private Tensor<T> _state;
+    private Tensor<T> _covariance;
 
     public int TimeSinceUpdate { get; private set; }
     public int Hits { get; private set; }
+    public int HitStreak { get; private set; }
     public int Age { get; private set; }
-    public TrackState State { get; private set; }
 
-    public KalmanTrack(int trackId, Detection<T> detection, INumericOperations<T> numOps, int minHits = 3)
+    public KalmanTrack(int trackId, Detection<T> detection)
     {
         _trackId = trackId;
-        _numOps = numOps;
-        _minHits = minHits;
         _classId = detection.ClassId;
         _confidence = detection.Confidence;
 
-        // Initialize state from detection
-        var (cx, cy, s, r) = BoxToState(detection.Box);
-        _state = new double[] { cx, cy, s, r, 0, 0, 0 };
+        T one = NumOps.One;
+        T ten = NumOps.FromDouble(10.0);
+        T big = NumOps.FromDouble(1e4);
+        T small = NumOps.FromDouble(0.01);
+        T tiny = NumOps.FromDouble(1e-4);
 
-        // State transition matrix F: constant velocity model
-        // x' = x + vx, y' = y + vy, s' = s + vs, r' = r (unchanged)
-        _F = new double[StateSize, StateSize];
-        for (int i = 0; i < StateSize; i++) _F[i, i] = 1.0;
-        _F[0, 4] = 1.0; // x += vx
-        _F[1, 5] = 1.0; // y += vy
-        _F[2, 6] = 1.0; // s += vs
-
-        // Measurement matrix H: we observe [x, y, s, r]
-        _H = new double[MeasurementSize, StateSize];
-        for (int i = 0; i < MeasurementSize; i++) _H[i, i] = 1.0;
-
-        // Process noise covariance Q
-        // Uncertainty in position, scale, and velocity
-        double stdWeight = 0.05; // Standard weight for position uncertainty
-        double stdVelWeight = 0.00625; // Standard weight for velocity uncertainty
-
-        _Q = new double[StateSize, StateSize];
-        _Q[0, 0] = Math.Pow(stdWeight * s, 2); // x position
-        _Q[1, 1] = Math.Pow(stdWeight * s, 2); // y position
-        _Q[2, 2] = 0.01; // area change
-        _Q[3, 3] = 1e-8; // aspect ratio (nearly constant)
-        _Q[4, 4] = Math.Pow(stdVelWeight * s, 2); // x velocity
-        _Q[5, 5] = Math.Pow(stdVelWeight * s, 2); // y velocity
-        _Q[6, 6] = 1e-4; // area velocity
-
-        // Measurement noise covariance R
-        _R = new double[MeasurementSize, MeasurementSize];
-        _R[0, 0] = Math.Pow(stdWeight * s, 2); // x measurement noise
-        _R[1, 1] = Math.Pow(stdWeight * s, 2); // y measurement noise
-        _R[2, 2] = 10.0; // area measurement noise
-        _R[3, 3] = 0.01; // aspect ratio measurement noise
-
-        // Initialize covariance P (uncertainty in initial state)
-        _covariance = new double[StateSize, StateSize];
-        _covariance[0, 0] = 2 * _R[0, 0]; // x
-        _covariance[1, 1] = 2 * _R[1, 1]; // y
-        _covariance[2, 2] = 10.0; // area
-        _covariance[3, 3] = 0.01; // aspect ratio
-        _covariance[4, 4] = Math.Pow(10 * stdVelWeight * s, 2); // vx (high uncertainty)
-        _covariance[5, 5] = Math.Pow(10 * stdVelWeight * s, 2); // vy (high uncertainty)
-        _covariance[6, 6] = 1e-2; // vs
-
-        TimeSinceUpdate = 0;
-        Hits = 1;
-        Age = 1;
-        State = TrackState.Tentative;
+        _identity = _engine.TensorEye<T>(7);
+        var shift = _engine.TensorSetSlice(new Tensor<T>(new[] { 7, 7 }), _engine.TensorEye<T>(3), new[] { 0, 4 });
+        _f = _engine.TensorAdd(_identity, shift);
+        _fT = _engine.TensorTranspose(_f);
+        _h = _engine.TensorSlice(_identity, new[] { 0, 0 }, new[] { 4, 7 });
+        _hT = _engine.TensorTranspose(_h);
+        _r = _engine.TensorDiag(new Tensor<T>(new[] { one, one, ten, ten }, new[] { 4 }));
+        _q = _engine.TensorDiag(new Tensor<T>(new[] { one, one, one, one, small, small, tiny }, new[] { 7 }));
+        _covariance = _engine.TensorDiag(new Tensor<T>(new[] { ten, ten, ten, ten, big, big, big }, new[] { 7 }));
+        _state = _engine.TensorConcatenate(new[] { BoxToMeasurement(detection.Box), new Tensor<T>(new[] { 3, 1 }) }, 0);
     }
 
-    /// <summary>
-    /// Performs the Kalman filter prediction step.
-    /// Predicts the state and covariance forward in time.
-    /// </summary>
+    /// <summary>Advances the state one frame (<c>KalmanBoxTracker.predict</c>).</summary>
     public void Predict()
     {
-        // State prediction: x' = F * x
-        var newState = new double[StateSize];
-        for (int i = 0; i < StateSize; i++)
+        // Keep the predicted area non-negative: drop the area velocity when it would make s <= 0.
+        if (NumOps.LessThanOrEquals(NumOps.Add(_state[6, 0], _state[2, 0]), NumOps.Zero))
         {
-            for (int j = 0; j < StateSize; j++)
-            {
-                newState[i] += _F[i, j] * _state[j];
-            }
+            _state[6, 0] = NumOps.Zero;
         }
-        _state = newState;
 
-        // Ensure positive area
-        if (_state[2] <= 0)
-            _state[2] = 1;
-
-        // Covariance prediction: P' = F * P * F' + Q
-        var FP = MatrixMultiply(_F, _covariance, StateSize, StateSize, StateSize);
-        var Ft = Transpose(_F, StateSize, StateSize);
-        var FPFt = MatrixMultiply(FP, Ft, StateSize, StateSize, StateSize);
-
-        for (int i = 0; i < StateSize; i++)
-        {
-            for (int j = 0; j < StateSize; j++)
-            {
-                _covariance[i, j] = FPFt[i, j] + _Q[i, j];
-            }
-        }
+        _state = _engine.TensorMatMul(_f, _state);
+        _covariance = _engine.TensorAdd(_engine.TensorMatMul(_engine.TensorMatMul(_f, _covariance), _fT), _q);
 
         Age++;
+        if (TimeSinceUpdate > 0)
+        {
+            HitStreak = 0;
+        }
+
         TimeSinceUpdate++;
     }
 
-    /// <summary>
-    /// Performs the Kalman filter update step with a new measurement.
-    /// Computes Kalman gain and updates state and covariance.
-    /// </summary>
-    public void Update(Detection<T> detection)
-    {
-        var (cx, cy, s, r) = BoxToState(detection.Box);
-        double[] measurement = { cx, cy, s, r };
-
-        // Innovation (measurement residual): y = z - H*x
-        var Hx = new double[MeasurementSize];
-        for (int i = 0; i < MeasurementSize; i++)
-        {
-            for (int j = 0; j < StateSize; j++)
-            {
-                Hx[i] += _H[i, j] * _state[j];
-            }
-        }
-
-        var innovation = new double[MeasurementSize];
-        for (int i = 0; i < MeasurementSize; i++)
-        {
-            innovation[i] = measurement[i] - Hx[i];
-        }
-
-        // Innovation covariance: S = H * P * H' + R
-        var PH = new double[StateSize, MeasurementSize];
-        for (int i = 0; i < StateSize; i++)
-        {
-            for (int j = 0; j < MeasurementSize; j++)
-            {
-                for (int k = 0; k < StateSize; k++)
-                {
-                    PH[i, j] += _covariance[i, k] * _H[j, k]; // H'[k,j] = H[j,k]
-                }
-            }
-        }
-
-        var S = new double[MeasurementSize, MeasurementSize];
-        for (int i = 0; i < MeasurementSize; i++)
-        {
-            for (int j = 0; j < MeasurementSize; j++)
-            {
-                for (int k = 0; k < StateSize; k++)
-                {
-                    S[i, j] += _H[i, k] * PH[k, j];
-                }
-                S[i, j] += _R[i, j];
-            }
-        }
-
-        // Kalman gain: K = P * H' * S^(-1)
-        var SInv = InvertMatrix4x4(S);
-        var K = new double[StateSize, MeasurementSize];
-        for (int i = 0; i < StateSize; i++)
-        {
-            for (int j = 0; j < MeasurementSize; j++)
-            {
-                for (int k = 0; k < MeasurementSize; k++)
-                {
-                    K[i, j] += PH[i, k] * SInv[k, j];
-                }
-            }
-        }
-
-        // State update: x' = x + K * y
-        for (int i = 0; i < StateSize; i++)
-        {
-            for (int j = 0; j < MeasurementSize; j++)
-            {
-                _state[i] += K[i, j] * innovation[j];
-            }
-        }
-
-        // Covariance update using Joseph form for numerical stability:
-        // P' = (I - K*H) * P * (I - K*H)' + K * R * K'
-        // Simplified: P' = (I - K*H) * P
-        var KH = new double[StateSize, StateSize];
-        for (int i = 0; i < StateSize; i++)
-        {
-            for (int j = 0; j < StateSize; j++)
-            {
-                for (int k = 0; k < MeasurementSize; k++)
-                {
-                    KH[i, j] += K[i, k] * _H[k, j];
-                }
-            }
-        }
-
-        var IminusKH = new double[StateSize, StateSize];
-        for (int i = 0; i < StateSize; i++)
-        {
-            for (int j = 0; j < StateSize; j++)
-            {
-                IminusKH[i, j] = (i == j ? 1.0 : 0.0) - KH[i, j];
-            }
-        }
-
-        var newCovariance = MatrixMultiply(IminusKH, _covariance, StateSize, StateSize, StateSize);
-        _covariance = newCovariance;
-
-        // Ensure covariance remains symmetric and positive semi-definite
-        for (int i = 0; i < StateSize; i++)
-        {
-            for (int j = i + 1; j < StateSize; j++)
-            {
-                double avg = (_covariance[i, j] + _covariance[j, i]) / 2;
-                _covariance[i, j] = avg;
-                _covariance[j, i] = avg;
-            }
-            // Ensure diagonal is positive
-            if (_covariance[i, i] < 1e-10)
-                _covariance[i, i] = 1e-10;
-        }
-
-        _classId = detection.ClassId;
-        _confidence = detection.Confidence;
-        TimeSinceUpdate = 0;
-        Hits++;
-
-        if (State == TrackState.Tentative && Hits >= _minHits)
-        {
-            State = TrackState.Confirmed;
-        }
-    }
-
-    public void MarkMissed()
-    {
-        if (State == TrackState.Tentative)
-        {
-            State = TrackState.Deleted;
-        }
-    }
-
-    public BoundingBox<T> GetPredictedBox()
-    {
-        return StateToBox(_state[0], _state[1], _state[2], _state[3]);
-    }
-
-    /// <summary>
-    /// Gets the Mahalanobis distance to a measurement (used for gating).
-    /// </summary>
-    public double MahalanobisDistance(BoundingBox<T> box)
-    {
-        var (cx, cy, s, r) = BoxToState(box);
-        double[] measurement = { cx, cy, s, r };
-
-        // Predicted measurement
-        var Hx = new double[MeasurementSize];
-        for (int i = 0; i < MeasurementSize; i++)
-        {
-            for (int j = 0; j < StateSize; j++)
-            {
-                Hx[i] += _H[i, j] * _state[j];
-            }
-        }
-
-        // Innovation
-        var y = new double[MeasurementSize];
-        for (int i = 0; i < MeasurementSize; i++)
-        {
-            y[i] = measurement[i] - Hx[i];
-        }
-
-        // Innovation covariance
-        var S = new double[MeasurementSize, MeasurementSize];
-        for (int i = 0; i < MeasurementSize; i++)
-        {
-            for (int j = 0; j < MeasurementSize; j++)
-            {
-                for (int k = 0; k < StateSize; k++)
-                {
-                    for (int l = 0; l < StateSize; l++)
-                    {
-                        S[i, j] += _H[i, k] * _covariance[k, l] * _H[j, l];
-                    }
-                }
-                S[i, j] += _R[i, j];
-            }
-        }
-
-        // Mahalanobis distance: d^2 = y' * S^(-1) * y
-        var SInv = InvertMatrix4x4(S);
-        double distance = 0;
-        for (int i = 0; i < MeasurementSize; i++)
-        {
-            for (int j = 0; j < MeasurementSize; j++)
-            {
-                distance += y[i] * SInv[i, j] * y[j];
-            }
-        }
-
-        return Math.Sqrt(distance);
-    }
-
-    public Track<T> ToTrack()
+    /// <summary>True when the predicted box contains NaN (the reference tracker then drops the track).</summary>
+    public bool HasInvalidPrediction()
     {
         var box = GetPredictedBox();
-        return new Track<T>(_trackId, box, _classId, _confidence)
-        {
-            VelocityX = _state[4],
-            VelocityY = _state[5],
-            TimeSinceUpdate = TimeSinceUpdate,
-            Age = Age,
-            Hits = Hits,
-            State = State
-        };
+        return NumOps.IsNaN(NumOps.Add(NumOps.Add(box.X1, box.Y1), NumOps.Add(box.X2, box.Y2)));
     }
 
-    private (double cx, double cy, double s, double r) BoxToState(BoundingBox<T> box)
+    /// <summary>Corrects the state with a matched detection (<c>KalmanBoxTracker.update</c>).</summary>
+    public void Update(Detection<T> detection)
     {
-        double x1 = _numOps.ToDouble(box.X1);
-        double y1 = _numOps.ToDouble(box.Y1);
-        double x2 = _numOps.ToDouble(box.X2);
-        double y2 = _numOps.ToDouble(box.Y2);
+        TimeSinceUpdate = 0;
+        Hits++;
+        HitStreak++;
+        _classId = detection.ClassId;
+        _confidence = detection.Confidence;
 
-        double w = x2 - x1;
-        double h = y2 - y1;
-        double cx = x1 + w / 2;
-        double cy = y1 + h / 2;
-        double s = w * h;
-        double r = h > 0 ? w / h : 1;
+        var measurement = BoxToMeasurement(detection.Box);
+        var innovation = _engine.TensorSubtract(measurement, _engine.TensorMatMul(_h, _state));
+        var pht = _engine.TensorMatMul(_covariance, _hT);
+        var s = _engine.TensorAdd(_engine.TensorMatMul(_h, pht), _r);
+        var gain = _engine.TensorMatMul(pht, LinalgDispatch<T>.Inv(s));
 
-        return (cx, cy, s, r);
+        _state = _engine.TensorAdd(_state, _engine.TensorMatMul(gain, innovation));
+        var iKh = _engine.TensorSubtract(_identity, _engine.TensorMatMul(gain, _h));
+        _covariance = _engine.TensorAdd(
+            _engine.TensorMatMul(_engine.TensorMatMul(iKh, _covariance), _engine.TensorTranspose(iKh)),
+            _engine.TensorMatMul(_engine.TensorMatMul(gain, _r), _engine.TensorTranspose(gain)));
     }
 
-    private BoundingBox<T> StateToBox(double cx, double cy, double s, double r)
+    /// <summary>The current state as an (x1, y1, x2, y2) box (<c>convert_x_to_bbox</c>).</summary>
+    public BoundingBox<T> GetPredictedBox()
     {
-        double w = Math.Sqrt(Math.Max(1, s * r));
-        double h = r > 0 ? w / r : w;
-
-        double x1 = cx - w / 2;
-        double y1 = cy - h / 2;
-        double x2 = cx + w / 2;
-        double y2 = cy + h / 2;
-
+        T half = NumOps.FromDouble(0.5);
+        T w = NumOps.Sqrt(NumOps.Multiply(_state[2, 0], _state[3, 0]));
+        T h = NumOps.Divide(_state[2, 0], w);
+        T halfW = NumOps.Multiply(w, half);
+        T halfH = NumOps.Multiply(h, half);
         return new BoundingBox<T>(
-            _numOps.FromDouble(x1), _numOps.FromDouble(y1),
-            _numOps.FromDouble(x2), _numOps.FromDouble(y2),
+            NumOps.Subtract(_state[0, 0], halfW), NumOps.Subtract(_state[1, 0], halfH),
+            NumOps.Add(_state[0, 0], halfW), NumOps.Add(_state[1, 0], halfH),
             BoundingBoxFormat.XYXY);
     }
 
-    #region Matrix Operations
-
-    private static double[,] MatrixMultiply(double[,] A, double[,] B, int m, int n, int p)
+    public Track<T> ToTrack(int minHits)
     {
-        var result = new double[m, p];
-        for (int i = 0; i < m; i++)
+        return new Track<T>(_trackId, GetPredictedBox(), _classId, _confidence)
         {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    result[i, j] += A[i, k] * B[k, j];
-                }
-            }
-        }
-        return result;
+            VelocityX = _state[4, 0],
+            VelocityY = _state[5, 0],
+            TimeSinceUpdate = TimeSinceUpdate,
+            Age = Age,
+            Hits = Hits,
+            State = HitStreak >= minHits ? TrackState.Confirmed : TrackState.Tentative
+        };
     }
 
-    private static double[,] Transpose(double[,] A, int m, int n)
+    /// <summary>(x1, y1, x2, y2) to the <c>[4, 1]</c> measurement (u, v, s, r) (<c>convert_bbox_to_z</c>);
+    /// a zero-height box gets aspect ratio 1 instead of a division by zero.</summary>
+    private static Tensor<T> BoxToMeasurement(BoundingBox<T> box)
     {
-        var result = new double[n, m];
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                result[j, i] = A[i, j];
-            }
-        }
-        return result;
+        T half = NumOps.FromDouble(0.5);
+        T w = NumOps.Subtract(box.X2, box.X1);
+        T h = NumOps.Subtract(box.Y2, box.Y1);
+        T cx = NumOps.Add(box.X1, NumOps.Multiply(w, half));
+        T cy = NumOps.Add(box.Y1, NumOps.Multiply(h, half));
+        T r = NumOps.GreaterThan(h, NumOps.Zero) ? NumOps.Divide(w, h) : NumOps.One;
+        return new Tensor<T>(new[] { cx, cy, NumOps.Multiply(w, h), r }, new[] { 4, 1 });
     }
-
-    private static double[,] InvertMatrix4x4(double[,] m)
-    {
-        // 4x4 matrix inversion using adjugate method
-        var result = new double[4, 4];
-
-        double det =
-            m[0, 0] * (m[1, 1] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) -
-                       m[1, 2] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) +
-                       m[1, 3] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1])) -
-            m[0, 1] * (m[1, 0] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) -
-                       m[1, 2] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) +
-                       m[1, 3] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0])) +
-            m[0, 2] * (m[1, 0] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) -
-                       m[1, 1] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) +
-                       m[1, 3] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0])) -
-            m[0, 3] * (m[1, 0] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]) -
-                       m[1, 1] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]) +
-                       m[1, 2] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0]));
-
-        if (Math.Abs(det) < 1e-10)
-        {
-            // Nearly singular, return identity
-            for (int i = 0; i < 4; i++) result[i, i] = 1;
-            return result;
-        }
-
-        double invDet = 1.0 / det;
-
-        // Compute adjugate matrix and multiply by 1/det
-        result[0, 0] = invDet * (m[1, 1] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[1, 2] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) + m[1, 3] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]));
-        result[0, 1] = invDet * (-(m[0, 1] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[0, 2] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) + m[0, 3] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1])));
-        result[0, 2] = invDet * (m[0, 1] * (m[1, 2] * m[3, 3] - m[1, 3] * m[3, 2]) - m[0, 2] * (m[1, 1] * m[3, 3] - m[1, 3] * m[3, 1]) + m[0, 3] * (m[1, 1] * m[3, 2] - m[1, 2] * m[3, 1]));
-        result[0, 3] = invDet * (-(m[0, 1] * (m[1, 2] * m[2, 3] - m[1, 3] * m[2, 2]) - m[0, 2] * (m[1, 1] * m[2, 3] - m[1, 3] * m[2, 1]) + m[0, 3] * (m[1, 1] * m[2, 2] - m[1, 2] * m[2, 1])));
-
-        result[1, 0] = invDet * (-(m[1, 0] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[1, 2] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[1, 3] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0])));
-        result[1, 1] = invDet * (m[0, 0] * (m[2, 2] * m[3, 3] - m[2, 3] * m[3, 2]) - m[0, 2] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[0, 3] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]));
-        result[1, 2] = invDet * (-(m[0, 0] * (m[1, 2] * m[3, 3] - m[1, 3] * m[3, 2]) - m[0, 2] * (m[1, 0] * m[3, 3] - m[1, 3] * m[3, 0]) + m[0, 3] * (m[1, 0] * m[3, 2] - m[1, 2] * m[3, 0])));
-        result[1, 3] = invDet * (m[0, 0] * (m[1, 2] * m[2, 3] - m[1, 3] * m[2, 2]) - m[0, 2] * (m[1, 0] * m[2, 3] - m[1, 3] * m[2, 0]) + m[0, 3] * (m[1, 0] * m[2, 2] - m[1, 2] * m[2, 0]));
-
-        result[2, 0] = invDet * (m[1, 0] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) - m[1, 1] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[1, 3] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0]));
-        result[2, 1] = invDet * (-(m[0, 0] * (m[2, 1] * m[3, 3] - m[2, 3] * m[3, 1]) - m[0, 1] * (m[2, 0] * m[3, 3] - m[2, 3] * m[3, 0]) + m[0, 3] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0])));
-        result[2, 2] = invDet * (m[0, 0] * (m[1, 1] * m[3, 3] - m[1, 3] * m[3, 1]) - m[0, 1] * (m[1, 0] * m[3, 3] - m[1, 3] * m[3, 0]) + m[0, 3] * (m[1, 0] * m[3, 1] - m[1, 1] * m[3, 0]));
-        result[2, 3] = invDet * (-(m[0, 0] * (m[1, 1] * m[2, 3] - m[1, 3] * m[2, 1]) - m[0, 1] * (m[1, 0] * m[2, 3] - m[1, 3] * m[2, 0]) + m[0, 3] * (m[1, 0] * m[2, 1] - m[1, 1] * m[2, 0])));
-
-        result[3, 0] = invDet * (-(m[1, 0] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]) - m[1, 1] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]) + m[1, 2] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0])));
-        result[3, 1] = invDet * (m[0, 0] * (m[2, 1] * m[3, 2] - m[2, 2] * m[3, 1]) - m[0, 1] * (m[2, 0] * m[3, 2] - m[2, 2] * m[3, 0]) + m[0, 2] * (m[2, 0] * m[3, 1] - m[2, 1] * m[3, 0]));
-        result[3, 2] = invDet * (-(m[0, 0] * (m[1, 1] * m[3, 2] - m[1, 2] * m[3, 1]) - m[0, 1] * (m[1, 0] * m[3, 2] - m[1, 2] * m[3, 0]) + m[0, 2] * (m[1, 0] * m[3, 1] - m[1, 1] * m[3, 0])));
-        result[3, 3] = invDet * (m[0, 0] * (m[1, 1] * m[2, 2] - m[1, 2] * m[2, 1]) - m[0, 1] * (m[1, 0] * m[2, 2] - m[1, 2] * m[2, 0]) + m[0, 2] * (m[1, 0] * m[2, 1] - m[1, 1] * m[2, 0]));
-
-        return result;
-    }
-
-    #endregion
 }

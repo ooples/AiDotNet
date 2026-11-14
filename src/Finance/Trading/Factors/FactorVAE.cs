@@ -620,15 +620,21 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// </remarks>
     private Tensor<T> ReparameterizedSample(Tensor<T> mean, Tensor<T> logVariance)
     {
-        var epsilon = new Tensor<T>(mean.Shape.ToArray());
-        for (int i = 0; i < epsilon.Length; i++)
+        // Box-Muller from the seeded RNG keeps sampling reproducible for a given seed: per element the draws
+        // u1 = 1 - U, then u2 = U, in master's order, filled interleaved; the transform runs on the engine.
+        int count = mean.Length;
+        var uniforms = new Tensor<T>(new[] { 2 * count });
+        for (int k = 0; k < 2 * count; k++)
         {
-            // Box-Muller from the seeded RNG keeps sampling reproducible for a given seed.
-            double u1 = 1.0 - _random.NextDouble();
-            double u2 = _random.NextDouble();
-            epsilon[i] = NumOps.FromDouble(
-                Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
+            uniforms[k] = NumOps.FromDouble(k % 2 == 0 ? 1.0 - _random.NextDouble() : _random.NextDouble());
         }
+
+        var pairs = Engine.Reshape(uniforms, new[] { count, 2 });
+        var u1 = Engine.Reshape(Engine.TensorSlice(pairs, new[] { 0, 0 }, new[] { count, 1 }), new[] { count });
+        var u2 = Engine.Reshape(Engine.TensorSlice(pairs, new[] { 0, 1 }, new[] { count, 1 }), new[] { count });
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
+        var angle = Engine.TensorCos(Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI)));
+        var epsilon = Engine.Reshape(Engine.TensorMultiply(radius, angle), mean.Shape.ToArray());
 
         var stdDev = Engine.TensorExp(
             Engine.TensorMultiplyScalar(logVariance, NumOps.FromDouble(0.5)));
@@ -917,60 +923,22 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         {
             var (mean, logVariance) = RunPriorHead(returns);
             var variance = Engine.TensorExp(logVariance);
+            // Law of total covariance over the prior's per-sample factor posteriors:
+            // Cov = (1/S) sum_i (mu_i - mu)(mu_i - mu)^T + diag((1/S) sum_i sigma_i^2), mu the mean of mu_i.
             int samples = Math.Max(1, mean.Length / _numFactors);
             var scale = NumOps.FromDouble(1.0 / samples);
+            var shape = new[] { samples, _numFactors };
+            var means = Engine.Reshape(
+                Engine.TensorSlice(Engine.Reshape(mean, new[] { mean.Length }), new[] { 0 }, new[] { samples * _numFactors }), shape);
+            var variances = Engine.Reshape(
+                Engine.TensorSlice(Engine.Reshape(variance, new[] { variance.Length }), new[] { 0 }, new[] { samples * _numFactors }), shape);
 
-            var factorMean = new T[_numFactors];
-            var withinVariance = new T[_numFactors];
-            for (int k = 0; k < _numFactors; k++)
-            {
-                factorMean[k] = NumOps.Zero;
-                withinVariance[k] = NumOps.Zero;
-            }
-
-            for (int i = 0; i < samples; i++)
-            {
-                for (int k = 0; k < _numFactors; k++)
-                {
-                    factorMean[k] = NumOps.Add(factorMean[k], mean[(i * _numFactors) + k]);
-                    withinVariance[k] = NumOps.Add(
-                        withinVariance[k], variance[(i * _numFactors) + k]);
-                }
-            }
-
-            for (int k = 0; k < _numFactors; k++)
-            {
-                factorMean[k] = NumOps.Multiply(factorMean[k], scale);
-                withinVariance[k] = NumOps.Multiply(withinVariance[k], scale);
-            }
-
-            var covariance = new Tensor<T>(new[] { _numFactors, _numFactors });
-            for (int i = 0; i < samples; i++)
-            {
-                for (int j = 0; j < _numFactors; j++)
-                {
-                    var centeredJ = NumOps.Subtract(mean[(i * _numFactors) + j], factorMean[j]);
-                    for (int k = 0; k < _numFactors; k++)
-                    {
-                        var centeredK = NumOps.Subtract(mean[(i * _numFactors) + k], factorMean[k]);
-                        int cell = (j * _numFactors) + k;
-                        covariance[cell] = NumOps.Add(
-                            covariance[cell], NumOps.Multiply(centeredJ, centeredK));
-                    }
-                }
-            }
-
-            for (int j = 0; j < _numFactors; j++)
-            {
-                for (int k = 0; k < _numFactors; k++)
-                {
-                    int cell = (j * _numFactors) + k;
-                    covariance[cell] = NumOps.Multiply(covariance[cell], scale);
-                }
-
-                int diagonal = (j * _numFactors) + j;
-                covariance[diagonal] = NumOps.Add(covariance[diagonal], withinVariance[j]);
-            }
+            var factorMean = Engine.TensorMultiplyScalar(Engine.ReduceSum(means, new[] { 0 }, keepDims: true), scale);
+            var withinVariance = Engine.TensorMultiplyScalar(Engine.ReduceSum(variances, new[] { 0 }, keepDims: false), scale);
+            var centered = Engine.TensorSubtract(means, Engine.TensorBroadcastTo(factorMean, shape));
+            var between = Engine.TensorMultiplyScalar(
+                Engine.TensorMatMul(Engine.TensorTranspose(centered), centered), scale);
+            var covariance = Engine.TensorAdd(between, Engine.TensorDiag(withinVariance));
 
             return covariance;
         });
@@ -1134,9 +1102,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
+        var inputData = input.Cast<float>().ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = OnnxSession.InputMetadata.Keys.First();
@@ -1148,11 +1114,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
 
         var outputTensor = results.First().AsTensor<float>();
         var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-
-        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+        return new Tensor<float>(outputTensor.ToArray(), outputShape).Cast<T>();
     }
 
     #endregion

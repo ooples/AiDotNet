@@ -151,24 +151,28 @@ public sealed class StockformerBands<T>
 
         int stocks = perStockSeries.Rows;
         int bandLength = BandLength(perStockSeries.Columns);
-        var low = new Matrix<T>(stocks, bandLength);
-        var high = new Matrix<T>(stocks, bandLength);
-
-        var row = new Vector<T>(perStockSeries.Columns);
-        for (int s = 0; s < stocks; s++)
+        if (stocks == 0 || bandLength == 0)
         {
-            for (int t = 0; t < perStockSeries.Columns; t++) row[t] = perStockSeries[s, t];
-            (var lowRow, var highRow) = Split(row);
-
-            // Decompose can return a band shorter or longer than the ideal halving depending on how
-            // the filter handles the boundary, so copy defensively rather than assuming alignment.
-            for (int t = 0; t < bandLength; t++)
-            {
-                low[s, t] = t < lowRow.Length ? lowRow[t] : Ops.Zero;
-                high[s, t] = t < highRow.Length ? highRow[t] : Ops.Zero;
-            }
+            return (new Matrix<T>(stocks, bandLength), new Matrix<T>(stocks, bandLength));
         }
 
-        return (low, high);
+        var bands = perStockSeries.GetRows().Select(Split).ToArray();
+
+        // Decompose can return a band shorter or longer than the ideal halving depending on how
+        // the filter handles the boundary, so fit each band to bandLength (truncate or zero-pad).
+        var engine = AiDotNetEngine.Current;
+        var low = engine.TensorStack(bands.Select(b => FitToLength(b.Low, bandLength)).ToArray(), 0);
+        var high = engine.TensorStack(bands.Select(b => FitToLength(b.High, bandLength)).ToArray(), 0);
+        return (low.ToMatrix(), high.ToMatrix());
+    }
+
+    /// <summary>The first <paramref name="length"/> entries of <paramref name="band"/>, zero-padded when shorter.</summary>
+    private static Tensor<T> FitToLength(Vector<T> band, int length)
+    {
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(band);
+        int kept = Math.Min(length, band.Length);
+        var head = kept == band.Length ? values : engine.TensorSlice(values, new[] { 0 }, new[] { kept });
+        return kept == length ? head : engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { length - kept }) }, 0);
     }
 }

@@ -32,14 +32,15 @@ public class GarchModelsTests
     {
         var m = new Garch11Model<double>();
         var r = ClusteredReturns(400);
-        m.FitReturns(r);
+        m.FitReturns(new Vector<double>(r));
 
-        double f = m.ForecastNextVariance(r);
+        double f = m.ForecastNextVariance(new Vector<double>(r));
         Assert.True(f > 0, "GARCH forecast variance must be positive");
 
         // α + β ∈ (0,1) by construction of the transform → covariance-stationary.
+        // Parameters follow arch's ConstantMean + GARCH order: μ, ω, α, β.
         var p = m.GetParameters();
-        double alpha = p[1], beta = p[2];
+        double alpha = p[2], beta = p[3];
         Assert.InRange(alpha + beta, 0.0, 1.0);
     }
 
@@ -48,7 +49,7 @@ public class GarchModelsTests
     {
         var m = new Garch11Model<double>();
         var r = ClusteredReturns(400);
-        m.FitReturns(r);
+        m.FitReturns(new Vector<double>(r));
 
         // Set params then compare: a series ending in a calm stretch vs one ending in a shock.
         var calm = new double[60];
@@ -56,7 +57,7 @@ public class GarchModelsTests
         var shocked = (double[])calm.Clone();
         for (int i = 50; i < 60; i++) shocked[i] = 0.05 * ((i % 2 == 0) ? 1 : -1);
 
-        Assert.True(m.ForecastNextVariance(shocked) > m.ForecastNextVariance(calm));
+        Assert.True(m.ForecastNextVariance(new Vector<double>(shocked)) > m.ForecastNextVariance(new Vector<double>(calm)));
     }
 
     [Fact]
@@ -64,11 +65,11 @@ public class GarchModelsTests
     {
         // Leverage effect: with γ > 0, a down-move feeds more into next variance than an up-move.
         var m = new GjrGarchModel<double>();
-        m.SetParameters(new Vector<double>(new[] { 1e-5, 0.03, 0.10, 0.85 })); // ω, α, γ, β  (γ>0)
+        m.SetParameters(new Vector<double>(new[] { 0.0, 1e-5, 0.03, 0.10, 0.85 })); // μ, ω, α, γ, β  (γ>0)
 
         var up = new double[] { 0.0, 0.04 };   // last move +4%
         var down = new double[] { 0.0, -0.04 }; // last move −4%
-        Assert.True(m.ForecastNextVariance(down) > m.ForecastNextVariance(up));
+        Assert.True(m.ForecastNextVariance(new Vector<double>(down)) > m.ForecastNextVariance(new Vector<double>(up)));
     }
 
     [Fact]
@@ -76,9 +77,9 @@ public class GarchModelsTests
     {
         var m = new EGarchModel<double>();
         var r = ClusteredReturns(400);
-        m.FitReturns(r);
+        m.FitReturns(new Vector<double>(r));
 
-        double vol = m.ForecastAnnualizedVol(r, periodsPerYear: 252);
+        double vol = m.ForecastAnnualizedVol(new Vector<double>(r), periodsPerYear: 252);
         Assert.True(vol > 0 && !double.IsNaN(vol) && !double.IsInfinity(vol), $"EGARCH annualized vol invalid: {vol}");
     }
 

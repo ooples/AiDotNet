@@ -101,16 +101,10 @@ public class TimeSeriesTokenizer<T>
         int seqLen = series.Length;
         var patches = new List<Tensor<T>>();
 
+        var flat = AiDotNetEngine.Current.Reshape(series, new[] { seqLen });
         for (int start = 0; start + PatchLength <= seqLen; start += Stride)
         {
-            var patch = new Tensor<T>(new[] { PatchLength });
-            for (int j = 0; j < PatchLength; j++)
-            {
-                int idx = start + j;
-                if (idx < series.Length)
-                    patch.Data.Span[j] = series[idx];
-            }
-            patches.Add(patch);
+            patches.Add(AiDotNetEngine.Current.TensorSlice(flat, new[] { start }, new[] { PatchLength }));
         }
 
         return patches;
@@ -149,28 +143,22 @@ public class TimeSeriesTokenizer<T>
             totalLen = (patches.Count - 1) * Stride + PatchLength;
         }
 
-        var result = new Tensor<T>(new[] { totalLen });
-        var counts = new int[totalLen];
+        // Overlap-add every patch at p * Stride, then average positions covered more than once.
+        var engine = AiDotNetEngine.Current;
+        int stride = Stride;
+        int patchLength = PatchLength;
+        var positions = Enumerable.Range(0, patches.Count * patchLength)
+            .Select(k => ((k / patchLength) * stride) + (k % patchLength))
+            .ToArray();
+        var target = new Tensor<int>(positions, new[] { positions.Length });
+        var values = engine.TensorConcatenate(
+            patches.Select(patch => engine.Reshape(patch, new[] { patchLength })).ToArray(), 0);
+        var ones = new Tensor<T>(new[] { positions.Length });
+        engine.TensorFill(ones, NumOps.One);
 
-        for (int p = 0; p < patches.Count; p++)
-        {
-            int start = p * Stride;
-            for (int j = 0; j < PatchLength && (start + j) < totalLen; j++)
-            {
-                int idx = start + j;
-                result.Data.Span[idx] = NumOps.Add(result[idx], patches[p][j]);
-                counts[idx]++;
-            }
-        }
-
-        // Average overlapping regions
-        for (int i = 0; i < totalLen; i++)
-        {
-            if (counts[i] > 1)
-                result.Data.Span[i] = NumOps.Divide(result[i], NumOps.FromDouble(counts[i]));
-        }
-
-        return result;
+        var sums = engine.ScatterAdd(new Tensor<T>(new[] { totalLen }), target, values, 0);
+        var counts = engine.ScatterAdd(new Tensor<T>(new[] { totalLen }), target, ones, 0);
+        return engine.TensorDivide(sums, engine.TensorClampMin(counts, NumOps.One));
     }
 
     /// <summary>
@@ -192,25 +180,14 @@ public class TimeSeriesTokenizer<T>
         if (len == 0)
             return (new Tensor<T>(series._shape), NumOps.Zero, NumOps.One);
 
-        T mean = NumOps.Zero;
-        for (int i = 0; i < len; i++)
-            mean = NumOps.Add(mean, series[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(len));
-
-        T variance = NumOps.Zero;
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(series[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(len));
+        // RevIN: population mean and variance over the instance, std = sqrt(var + 1e-5).
+        var engine = AiDotNetEngine.Current;
+        T mean = engine.TensorMean(series);
+        var centred = engine.TensorSubtractScalar(series, mean);
+        T variance = NumOps.Divide(engine.TensorSumOfSquares(centred), NumOps.FromDouble(len));
         T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
-        var normalized = new Tensor<T>(series._shape);
-        for (int i = 0; i < len; i++)
-            normalized.Data.Span[i] = NumOps.Divide(NumOps.Subtract(series[i], mean), std);
-
-        return (normalized, mean, std);
+        return (engine.TensorDivideScalar(centred, std), mean, std);
     }
 
     /// <summary>
@@ -224,11 +201,8 @@ public class TimeSeriesTokenizer<T>
     {
         Guard.NotNull(prediction);
 
-        var result = new Tensor<T>(prediction._shape);
-        for (int i = 0; i < prediction.Length; i++)
-            result.Data.Span[i] = NumOps.Add(NumOps.Multiply(prediction[i], std), mean);
-
-        return result;
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(prediction, std), mean);
     }
 
     /// <summary>
@@ -241,38 +215,36 @@ public class TimeSeriesTokenizer<T>
     /// discrete vocabulary tokens (like token #1234). This is how Chronos v1 works — it
     /// treats time series forecasting as a language modeling problem.
     /// </remarks>
-    public (int[] Tokens, double[] BinEdges) Quantize(Tensor<T> series)
+    public (int[] Tokens, Tensor<T> BinEdges) Quantize(Tensor<T> series)
     {
         Guard.NotNull(series);
 
         int len = series.Length;
         if (len == 0)
-            return (Array.Empty<int>(), new double[] { 0.0, 1.0 });
+            return (Array.Empty<int>(), new Tensor<T>(new[] { NumOps.Zero, NumOps.One }, new[] { 2 }));
 
-        double min = double.MaxValue, max = double.MinValue;
+        // The range and its degenerate-range guard are formed in double from the two extremes: in Half the 1e-10
+        // guard rounds to zero, so a constant series divided 0 by 0.
+        var engine = AiDotNetEngine.Current;
+        T min = engine.TensorMinValue(series);
+        double minValue = NumOps.ToDouble(min);
+        double rangeValue = NumOps.ToDouble(engine.TensorMaxValue(series)) - minValue;
+        if (rangeValue < 1e-10) rangeValue = 1.0;
+        T range = NumOps.FromDouble(rangeValue);
 
-        for (int i = 0; i < len; i++)
-        {
-            double val = NumOps.ToDouble(series[i]);
-            if (val < min) min = val;
-            if (val > max) max = val;
-        }
+        // Edges min + range * i / V for i = 0..V: a schedule, computed in double and rounded to T once.
+        T vocabulary = NumOps.FromDouble(VocabularySize);
+        var binEdges = engine.TensorAddScalar(
+            engine.TensorDivideScalar(
+                engine.TensorMultiplyScalar(engine.TensorArange<double>(0, VocabularySize + 1), rangeValue),
+                (double)VocabularySize),
+            minValue).Cast<T>();
 
-        double range = max - min;
-        if (range < 1e-10) range = 1.0;
-
-        var binEdges = new double[VocabularySize + 1];
-        for (int i = 0; i <= VocabularySize; i++)
-            binEdges[i] = min + (range * i / VocabularySize);
-
-        var tokens = new int[len];
-        for (int i = 0; i < len; i++)
-        {
-            double val = NumOps.ToDouble(series[i]);
-            // Map value to bin index [0, VocabularySize-1] using consistent binEdges spacing
-            int bin = (int)((val - min) / range * VocabularySize);
-            tokens[i] = Math.Max(0, Math.Min(VocabularySize - 1, bin));
-        }
+        // Map value to bin index [0, VocabularySize-1] using consistent binEdges spacing
+        var scaled = engine.TensorMultiplyScalar(
+            engine.TensorDivideScalar(engine.TensorSubtractScalar(series, min), range), vocabulary);
+        var bins = engine.TensorClamp(engine.TensorFloor(scaled), NumOps.Zero, NumOps.FromDouble(VocabularySize - 1));
+        var tokens = bins.Cast<int>().ToArray();
 
         return (tokens, binEdges);
     }
@@ -283,7 +255,7 @@ public class TimeSeriesTokenizer<T>
     /// <param name="tokens">Token indices from Quantize.</param>
     /// <param name="binEdges">Bin edges from Quantize.</param>
     /// <returns>Continuous tensor with dequantized values.</returns>
-    public Tensor<T> Dequantize(int[] tokens, double[] binEdges)
+    public Tensor<T> Dequantize(int[] tokens, Tensor<T> binEdges)
     {
         Guard.NotNull(tokens);
         Guard.NotNull(binEdges);
@@ -291,14 +263,16 @@ public class TimeSeriesTokenizer<T>
         if (binEdges.Length < 2)
             throw new ArgumentException("binEdges must have at least 2 elements (one bin requires a lower and upper edge).", nameof(binEdges));
 
-        var result = new Tensor<T>(new[] { tokens.Length });
-        for (int i = 0; i < tokens.Length; i++)
-        {
-            int bin = Math.Max(0, Math.Min(tokens[i], binEdges.Length - 2));
-            double center = (binEdges[bin] + binEdges[bin + 1]) / 2.0;
-            result.Data.Span[i] = NumOps.FromDouble(center);
-        }
-
-        return result;
+        // Bin centres (edge_b + edge_(b+1)) / 2, gathered at each token clamped to [0, bins - 1].
+        var engine = AiDotNetEngine.Current;
+        int binCount = binEdges.Length - 1;
+        var edges = engine.Reshape(binEdges, new[] { binEdges.Length });
+        var centers = engine.TensorMultiplyScalar(
+            engine.TensorAdd(
+                engine.TensorSlice(edges, new[] { 0 }, new[] { binCount }),
+                engine.TensorSlice(edges, new[] { 1 }, new[] { binCount })),
+            NumOps.FromDouble(0.5));
+        var bins = tokens.Select(token => Math.Max(0, Math.Min(token, binCount - 1))).ToArray();
+        return engine.TensorTake(centers, new Tensor<int>(bins, new[] { bins.Length }));
     }
 }

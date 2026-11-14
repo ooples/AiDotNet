@@ -22581,6 +22581,86 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+*REMOVED*AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeCosineSimilarity(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeIoU(AiDotNet.Augmentation.Image.BoundingBox<T>! a, AiDotNet.Augmentation.Image.BoundingBox<T>! b) -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.HungarianAssignment(double[,]! costMatrix) -> int[]!
+*REMOVED*AiDotNet.ComputerVision.Tracking.Track<T>.VelocityX.get -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.Track<T>.VelocityY.get -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.AppearanceWeight.get -> double
+*REMOVED*AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.MaxCosineDistance.get -> double
+AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeCosineSimilarity(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> T
+AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.ComputeIoU(AiDotNet.Augmentation.Image.BoundingBox<T>! a, AiDotNet.Augmentation.Image.BoundingBox<T>! b) -> T
+AiDotNet.ComputerVision.Tracking.ObjectTrackerBase<T>.HungarianAssignment(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! costMatrix) -> int[]!
+AiDotNet.ComputerVision.Tracking.Track<T>.VelocityX.get -> T
+AiDotNet.ComputerVision.Tracking.Track<T>.VelocityY.get -> T
+AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.AppearanceWeight.get -> T
+AiDotNet.ComputerVision.Tracking.TrackingOptions<T>.MaxCosineDistance.get -> T
+AiDotNet.ComputerVision.Tracking.DeepSORT<T>.DeepSORT(AiDotNet.ComputerVision.Tracking.TrackingOptions<T>! options, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? appearanceEncoder) -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.ByteTrackOptions() -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.BoxAreaConvention.get -> AiDotNet.Enums.BoxAreaConvention
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.BoxAreaConvention.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.DuplicateIouDistance.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.DuplicateIouDistance.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.FuseScore.get -> bool
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.FuseScore.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.LowScoreThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.LowScoreThreshold.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.MatchThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.MatchThreshold.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.NewTrackScoreMargin.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.NewTrackScoreMargin.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.SecondMatchThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.SecondMatchThreshold.set -> void
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.UnconfirmedMatchThreshold.get -> T
+AiDotNet.ComputerVision.Tracking.ByteTrackOptions<T>.UnconfirmedMatchThreshold.set -> void
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.InitialGuess(double sampleVariance) -> double[]!
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.NextVariance(double prevVariance, double prevReturn, double[]! natural) -> double
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToNatural(double[]! unconstrained) -> double[]!
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToUnconstrained(double[]! natural) -> double[]!
+*REMOVED*abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.UnconditionalVariance(double[]! natural) -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FitReturns(System.Collections.Generic.IReadOnlyList<double>! returns) -> void
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FittedUnconditionalVariance.get -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastAnnualizedVol(System.Collections.Generic.IReadOnlyList<double>! returns, double periodsPerYear = 252) -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastNextVariance(System.Collections.Generic.IReadOnlyList<double>! returns) -> double
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Parameters.get -> double[]?
+*REMOVED*AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToDoubles(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! t) -> double[]!
+*REMOVED*virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.MeanReversionSpeed(double[]! natural) -> double
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.InitialGuess(T sampleVariance) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.NextVariance(T prevVariance, T prevResidual, AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> T
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToNatural(AiDotNet.Tensors.LinearAlgebra.Vector<T>! unconstrained) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ToUnconstrained(AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.UnconditionalVariance(AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> T
+abstract AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.VariancePath(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! residuals, T backcast, AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FitReturns(AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns) -> void
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.FittedUnconditionalVariance.get -> T
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastAnnualizedVol(AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns, double periodsPerYear = 252) -> T
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ForecastNextVariance(AiDotNet.Tensors.LinearAlgebra.Vector<T>! returns) -> T
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Parameters.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.ReturnsVector(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! t) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.LinearRecurrence(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! drive, T decay, T initial) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Lagged(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! values, T presample) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.VolatilityParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.Backcast(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! residuals) -> T
+virtual AiDotNet.Finance.Volatility.ClassicalVolatilityModelBase<T>.MeanReversionSpeed(AiDotNet.Tensors.LinearAlgebra.Vector<T>! natural) -> T
+*REMOVED*static AiDotNet.Finance.Volatility.HarRvModel<T>.ForecastVolFromReturns(System.Collections.Generic.IReadOnlyList<double>! returns, double periodsPerYear = 252) -> double
+static AiDotNet.Finance.Volatility.HarRvModel<T>.ForecastVolFromReturns(System.Collections.Generic.IReadOnlyList<T>! returns, double periodsPerYear = 252) -> T
+*REMOVED*AiDotNet.Finance.Trading.Factors.Stockformer<T>.ComputeLoss(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! perStockReturns, AiDotNet.Tensors.LinearAlgebra.Vector<T>! returnTarget, AiDotNet.Tensors.LinearAlgebra.Vector<T>! directionTarget) -> (double Regression, double Classification, double Total)
+AiDotNet.Finance.Trading.Factors.Stockformer<T>.ComputeLoss(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! perStockReturns, AiDotNet.Tensors.LinearAlgebra.Vector<T>! returnTarget, AiDotNet.Tensors.LinearAlgebra.Vector<T>! directionTarget) -> (T Regression, T Classification, T Total)
+*REMOVED*static AiDotNet.Finance.Trading.Factors.StockformerMultiTaskLoss<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Vector<T>! mainRegression, AiDotNet.Tensors.LinearAlgebra.Vector<T>! lowRegression, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mainReturnTarget, AiDotNet.Tensors.LinearAlgebra.Vector<T>! lowReturnTarget, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mainClassLogits, AiDotNet.Tensors.LinearAlgebra.Vector<T>! lowClassLogits, AiDotNet.Tensors.LinearAlgebra.Vector<T>! directionTarget, int numClasses, double missingSentinel = 0, double taskLossWeight = 1) -> (double Regression, double Classification, double Total)
+static AiDotNet.Finance.Trading.Factors.StockformerMultiTaskLoss<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Vector<T>! mainRegression, AiDotNet.Tensors.LinearAlgebra.Vector<T>! lowRegression, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mainReturnTarget, AiDotNet.Tensors.LinearAlgebra.Vector<T>! lowReturnTarget, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mainClassLogits, AiDotNet.Tensors.LinearAlgebra.Vector<T>! lowClassLogits, AiDotNet.Tensors.LinearAlgebra.Vector<T>! directionTarget, int numClasses, double missingSentinel = 0, double taskLossWeight = 1) -> (T Regression, T Classification, T Total)
+*REMOVED*static AiDotNet.Finance.Trading.Factors.StockformerMultiTaskLoss<T>.CrossEntropy(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, AiDotNet.Tensors.LinearAlgebra.Vector<T>! targets, int numClasses) -> double
+static AiDotNet.Finance.Trading.Factors.StockformerMultiTaskLoss<T>.CrossEntropy(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, AiDotNet.Tensors.LinearAlgebra.Vector<T>! targets, int numClasses) -> T
+*REMOVED*static AiDotNet.Finance.Trading.Factors.StockformerMultiTaskLoss<T>.MaskedMae(AiDotNet.Tensors.LinearAlgebra.Vector<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels, double missingSentinel = 0) -> double
+static AiDotNet.Finance.Trading.Factors.StockformerMultiTaskLoss<T>.MaskedMae(AiDotNet.Tensors.LinearAlgebra.Vector<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels, double missingSentinel = 0) -> T
+*REMOVED*AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.AddGaussianExplorationNoise(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, System.Collections.Generic.IReadOnlyList<double>! standardDeviations) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.AddGaussianExplorationNoise(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, AiDotNet.Tensors.LinearAlgebra.Vector<T>! standardDeviations) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.GaussianLogProbability(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mean, System.Collections.Generic.IReadOnlyList<double>! logStds) -> double
+AiDotNet.Finance.Trading.Agents.TradingAgentBase<T>.GaussianLogProbability(AiDotNet.Tensors.LinearAlgebra.Vector<T>! action, AiDotNet.Tensors.LinearAlgebra.Vector<T>! mean, AiDotNet.Tensors.LinearAlgebra.Vector<T>! logStds) -> T
+*REMOVED*AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Dequantize(int[]! tokens, double[]! binEdges) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Dequantize(int[]! tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! binEdges) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Quantize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> (int[]! Tokens, double[]! BinEdges)
+AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<T>.Quantize(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! series) -> (int[]! Tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! BinEdges)
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void
@@ -22921,3 +23001,6 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Enums.BoxAreaConvention
+AiDotNet.Enums.BoxAreaConvention.Continuous = 1 -> AiDotNet.Enums.BoxAreaConvention
+AiDotNet.Enums.BoxAreaConvention.PixelInclusive = 0 -> AiDotNet.Enums.BoxAreaConvention

@@ -25,6 +25,13 @@ namespace AiDotNet.ComputerVision.Tracking;
 /// - Gallery of appearance features per track
 /// </para>
 ///
+/// <para>This follows the official deep_sort tracker: an xyah Kalman filter, a matching cascade by
+/// time since update with the nearest-neighbour cosine metric (budget 100, threshold
+/// <see cref="TrackingOptions{T}.MaxCosineDistance"/>) gated at the chi-square 0.95 Mahalanobis
+/// quantile, then IoU matching (max IoU distance 0.7) for unconfirmed tracks and tracks missed for one
+/// frame, all with optimal assignment. Without appearance features the cascade uses the gated IoU
+/// distance instead of the cosine metric.</para>
+///
 /// <para>Reference: Wojke et al., "Simple Online and Realtime Tracking with a Deep
 /// Association Metric", ICIP 2017</para>
 /// </remarks>
@@ -41,22 +48,45 @@ namespace AiDotNet.ComputerVision.Tracking;
     Authors = "Nicolai Wojke, Alex Bewley, Dietrich Paulus")]
 public class DeepSORT<T> : ObjectTrackerBase<T>
 {
+    /// <summary>Cost given to gated (inadmissible) pairs, deep_sort's <c>INFTY_COST</c>.</summary>
+    private const double InfinityCost = 1e5;
+
+    /// <summary>Largest IoU distance accepted in the IoU round (<c>max_iou_distance</c>).</summary>
+    private const double MaxIouDistance = 0.7;
+
     private readonly List<DeepTrack<T>> _deepTracks;
     private readonly ReIDNetwork<T>? _reidNetwork;
+    private readonly Func<Tensor<T>, Tensor<T>>? _appearanceEncoder;
+    private readonly XyahKalmanFilter<T> _kalman;
+    private readonly Dictionary<int, List<Tensor<T>>> _samples;
     private readonly int _maxGallerySize;
 
     /// <inheritdoc/>
     public override string Name => "DeepSORT";
 
     /// <summary>
-    /// Creates a new DeepSORT tracker.
+    /// Creates a new DeepSORT tracker. With <see cref="TrackingOptions{T}.UseAppearance"/> set, crops are
+    /// described by the built-in fixed (untrained) descriptor; use the overload that takes an encoder to
+    /// supply a trained re-identification network as in the paper.
     /// </summary>
-    public DeepSORT(TrackingOptions<T> options) : base(options)
+    public DeepSORT(TrackingOptions<T> options) : this(options, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new DeepSORT tracker whose appearance descriptors come from
+    /// <paramref name="appearanceEncoder"/>, which maps a <c>[1, C, 128, 64]</c> crop to a feature
+    /// vector (the paper uses a wide residual network trained for person re-identification).
+    /// </summary>
+    public DeepSORT(TrackingOptions<T> options, Func<Tensor<T>, Tensor<T>>? appearanceEncoder) : base(options)
     {
         _deepTracks = new List<DeepTrack<T>>();
+        _kalman = new XyahKalmanFilter<T>();
+        _samples = new Dictionary<int, List<Tensor<T>>>();
         _maxGallerySize = 100;
+        _appearanceEncoder = appearanceEncoder;
 
-        if (options.UseAppearance)
+        if (appearanceEncoder is null && options.UseAppearance)
         {
             _reidNetwork = new ReIDNetwork<T>();
         }
@@ -73,92 +103,54 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
     {
         var startTime = DateTime.UtcNow;
         FrameCount++;
+        var engine = AiDotNetEngine.Current;
 
         // Filter detections by confidence
-        var filteredDetections = detections
-            .Where(d => NumOps.GreaterThanOrEquals(d.Confidence, Options.ConfidenceThreshold))
-            .ToList();
+        var scores = TrackingAssociation<T>.Scores(detections);
+        var keep = TrackingAssociation<T>.Where(
+            engine.TensorGreaterEqual(scores, engine.TensorFullLike(scores, Options.ConfidenceThreshold)));
+        var filteredDetections = keep.Select(i => detections[i]).ToList();
 
-        // Extract appearance features if network available and image provided
+        // Extract appearance features if an encoder is available and an image is provided
         List<Tensor<T>> appearanceFeatures = new();
-        if (_reidNetwork != null && image != null)
+        if (image is not null && (_appearanceEncoder is not null || _reidNetwork is not null))
         {
             appearanceFeatures = ExtractAppearanceFeatures(image, filteredDetections);
         }
 
-        // Predict new locations
         foreach (var track in _deepTracks)
         {
             track.Predict();
         }
 
-        // Split tracks into confirmed and unconfirmed
-        var confirmedTracks = _deepTracks.Where(t => t.State == TrackState.Confirmed).ToList();
-        var unconfirmedTracks = _deepTracks.Where(t => t.State == TrackState.Tentative).ToList();
+        var (matches, unmatchedTracks, unmatchedDetections) = Match(filteredDetections, appearanceFeatures);
 
-        // Cascade matching for confirmed tracks
-        var (matchedConfirmed, unmatchedDetections) = CascadeMatching(
-            confirmedTracks, filteredDetections, appearanceFeatures);
-
-        // IoU matching for unconfirmed tracks
-        var (matchedUnconfirmed, remainingDetections) = IoUMatching(
-            unconfirmedTracks, unmatchedDetections, filteredDetections);
-
-        // Update matched tracks
-        foreach (var (trackIdx, detIdx) in matchedConfirmed)
+        foreach (var (trackIdx, detIdx) in matches)
         {
             var feat = appearanceFeatures.Count > detIdx ? appearanceFeatures[detIdx] : null;
-            confirmedTracks[trackIdx].Update(filteredDetections[detIdx], feat);
+            _deepTracks[trackIdx].Update(filteredDetections[detIdx], feat);
         }
 
-        foreach (var (trackIdx, detIdx) in matchedUnconfirmed)
+        foreach (int trackIdx in unmatchedTracks)
+        {
+            _deepTracks[trackIdx].MarkMissed();
+        }
+
+        foreach (int detIdx in unmatchedDetections)
         {
             var feat = appearanceFeatures.Count > detIdx ? appearanceFeatures[detIdx] : null;
-            unconfirmedTracks[trackIdx].Update(filteredDetections[detIdx], feat);
+            _deepTracks.Add(new DeepTrack<T>(NextTrackId++, filteredDetections[detIdx], feat, _kalman,
+                Options.MinHits, Options.MaxAge));
         }
 
-        // Mark unmatched tracks
-        var matchedConfirmedSet = matchedConfirmed.Select(m => m.trackIdx).ToHashSet();
-        var matchedUnconfirmedSet = matchedUnconfirmed.Select(m => m.trackIdx).ToHashSet();
+        _deepTracks.RemoveAll(t => t.State == TrackState.Deleted);
+        UpdateGallery();
 
-        for (int i = 0; i < confirmedTracks.Count; i++)
-        {
-            if (!matchedConfirmedSet.Contains(i))
-            {
-                confirmedTracks[i].MarkMissed();
-            }
-        }
-
-        for (int i = 0; i < unconfirmedTracks.Count; i++)
-        {
-            if (!matchedUnconfirmedSet.Contains(i))
-            {
-                unconfirmedTracks[i].MarkMissed();
-            }
-        }
-
-        // Create new tracks for remaining detections
-        foreach (int detIdx in remainingDetections)
-        {
-            var feat = appearanceFeatures.Count > detIdx ? appearanceFeatures[detIdx] : null;
-            var newTrack = new DeepTrack<T>(
-                NextTrackId++,
-                filteredDetections[detIdx],
-                feat,
-                _maxGallerySize,
-                NumOps);
-            _deepTracks.Add(newTrack);
-        }
-
-        // Remove deleted tracks
-        _deepTracks.RemoveAll(t => t.State == TrackState.Deleted ||
-                                   t.TimeSinceUpdate > Options.MaxAge);
-
-        // Update base class tracks
+        // Report confirmed tracks updated in this or the previous frame (deep_sort_app's output rule).
         Tracks.Clear();
         foreach (var dt in _deepTracks)
         {
-            if (dt.State == TrackState.Confirmed)
+            if (dt.State == TrackState.Confirmed && dt.TimeSinceUpdate <= 1)
             {
                 Tracks.Add(dt.ToTrack());
             }
@@ -172,26 +164,206 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
         };
     }
 
-    private List<Tensor<T>> ExtractAppearanceFeatures(Tensor<T> image, List<Detection<T>> detections)
+    /// <summary>
+    /// <c>Tracker._match</c>: a matching cascade over confirmed tracks by time since update with the
+    /// gated appearance metric, then an IoU round for unconfirmed tracks and confirmed tracks missed
+    /// for exactly one frame.
+    /// </summary>
+    private (List<(int Track, int Det)> Matches, List<int> UnmatchedTracks, List<int> UnmatchedDetections)
+        Match(List<Detection<T>> detections, List<Tensor<T>> features)
     {
-        if (_reidNetwork is null)
+        var confirmed = Enumerable.Range(0, _deepTracks.Count).Where(i => _deepTracks[i].State == TrackState.Confirmed).ToList();
+        var unconfirmed = Enumerable.Range(0, _deepTracks.Count).Where(i => _deepTracks[i].State != TrackState.Confirmed).ToList();
+        bool useAppearance = features.Count == detections.Count && detections.Count > 0;
+
+        // Matching cascade (deep_sort linear_assignment.matching_cascade).
+        var matchesA = new List<(int Track, int Det)>();
+        var unmatchedDetections = Enumerable.Range(0, detections.Count).ToList();
+        for (int level = 0; level < Options.MaxAge; level++)
         {
-            throw new InvalidOperationException(
-                $"{nameof(DeepSORT<T>)}: ReID network not initialized.");
+            if (unmatchedDetections.Count == 0)
+            {
+                break;
+            }
+
+            var tracksAtLevel = confirmed.Where(k => _deepTracks[k].TimeSinceUpdate == 1 + level).ToList();
+            if (tracksAtLevel.Count == 0)
+            {
+                continue;
+            }
+
+            var (cost, maxDistance) = GatedMetric(tracksAtLevel, unmatchedDetections, detections, features, useAppearance);
+            var (pairs, _, unmatchedCols) = TrackingAssociation<T>.MinCostMatching(cost, maxDistance);
+            matchesA.AddRange(pairs.Select(p => (tracksAtLevel[p.Row], unmatchedDetections[p.Col])));
+            unmatchedDetections = unmatchedCols.Select(c => unmatchedDetections[c]).ToList();
         }
 
-        var features = new List<Tensor<T>>();
+        var matchedA = new HashSet<int>(matchesA.Select(m => m.Track));
+        var unmatchedTracksA = confirmed.Where(k => !matchedA.Contains(k)).ToList();
 
+        // IoU round.
+        var iouCandidates = unconfirmed.Concat(unmatchedTracksA.Where(k => _deepTracks[k].TimeSinceUpdate == 1)).ToList();
+        unmatchedTracksA = unmatchedTracksA.Where(k => _deepTracks[k].TimeSinceUpdate != 1).ToList();
+
+        var matchesB = new List<(int Track, int Det)>();
+        var unmatchedTracksB = iouCandidates;
+        if (iouCandidates.Count > 0 && unmatchedDetections.Count > 0)
+        {
+            var (pairs, unmatchedRows, unmatchedCols) = TrackingAssociation<T>.MinCostMatching(
+                IouCost(iouCandidates, unmatchedDetections, detections), NumOps.FromDouble(MaxIouDistance));
+            matchesB = pairs.Select(p => (iouCandidates[p.Row], unmatchedDetections[p.Col])).ToList();
+            unmatchedTracksB = unmatchedRows.Select(r => iouCandidates[r]).ToList();
+            unmatchedDetections = unmatchedCols.Select(c => unmatchedDetections[c]).ToList();
+        }
+
+        var matches = matchesA.Concat(matchesB).ToList();
+        var unmatchedTracks = unmatchedTracksA.Concat(unmatchedTracksB).Distinct().ToList();
+        return (matches, unmatchedTracks, unmatchedDetections);
+    }
+
+    /// <summary>
+    /// Cost of the cascade: with appearance features, <c>w * cosine + (1 - w) * Mahalanobis</c>
+    /// (Eq. 5 with w = 1 - lambda; the official code uses w = 1); without them, the IoU distance.
+    /// Pairs outside the chi-square 0.95 Mahalanobis gate, or beyond the cosine threshold, get
+    /// <c>INFTY_COST</c>.
+    /// </summary>
+    private (Tensor<T> Cost, T MaxDistance) GatedMetric(List<int> trackIndices, List<int> detIndices,
+        List<Detection<T>> detections, List<Tensor<T>> features, bool useAppearance)
+    {
+        var engine = AiDotNetEngine.Current;
+        var detBoxes = TrackingAssociation<T>.BoxesToTensor(detIndices.Select(d => detections[d].Box).ToList());
+        var measurements = TrackingAssociation<T>.BoxesToXyah(detBoxes);
+        var maha = engine.TensorStack(
+            trackIndices.Select(t => _deepTracks[t].GatingDistance(measurements)).ToArray(), 0);
+        T chi2 = NumOps.FromDouble(XyahKalmanFilter<T>.GatingThreshold4Dof);
+        var gate = engine.TensorGreaterThan(maha, chi2);
+
+        Tensor<T> cost;
+        T maxDistance;
+        if (useAppearance)
+        {
+            var queries = engine.TensorStack(detIndices.Select(d => Flatten(features[d])).ToArray(), 0);
+            var cosine = engine.TensorStack(
+                trackIndices.Select(t => NearestNeighborCosineDistance(_deepTracks[t].TrackId, queries)).ToArray(), 0);
+            T weight = Options.AppearanceWeight;
+            T motionWeight = NumOps.Subtract(NumOps.One, weight);
+            cost = engine.TensorAdd(engine.TensorMultiplyScalar(cosine, weight), engine.TensorMultiplyScalar(maha, motionWeight));
+            gate = engine.TensorMax(gate, engine.TensorGreaterThan(cosine, Options.MaxCosineDistance));
+            maxDistance = NumOps.Add(NumOps.Multiply(weight, Options.MaxCosineDistance), NumOps.Multiply(motionWeight, chi2));
+        }
+        else
+        {
+            var trackBoxes = TrackingAssociation<T>.BoxesToTensor(trackIndices.Select(t => _deepTracks[t].GetPredictedBox()).ToList());
+            cost = TrackingAssociation<T>.IouDistance(trackBoxes, detBoxes);
+            maxDistance = NumOps.FromDouble(MaxIouDistance);
+        }
+
+        return (engine.TensorWhere(gate, engine.TensorFullLike(cost, NumOps.FromDouble(InfinityCost)), cost), maxDistance);
+    }
+
+    /// <summary>deep_sort <c>iou_cost</c>: 1 - IoU, with <c>INFTY_COST</c> rows for tracks missed for more than one frame.</summary>
+    private Tensor<T> IouCost(List<int> trackIndices, List<int> detIndices, List<Detection<T>> detections)
+    {
+        var engine = AiDotNetEngine.Current;
+        var trackBoxes = TrackingAssociation<T>.BoxesToTensor(trackIndices.Select(t => _deepTracks[t].GetPredictedBox()).ToList());
+        var detBoxes = TrackingAssociation<T>.BoxesToTensor(detIndices.Select(d => detections[d].Box).ToList());
+        var cost = TrackingAssociation<T>.IouDistance(trackBoxes, detBoxes);
+
+        T one = NumOps.One;
+        T zero = NumOps.Zero;
+        var stale = new Tensor<T>(trackIndices.Select(t => _deepTracks[t].TimeSinceUpdate > 1 ? one : zero).ToArray(),
+            new[] { trackIndices.Count, 1 });
+        return engine.TensorWhere(engine.TensorBroadcastTo(stale, cost.Shape.ToArray()),
+            engine.TensorFullLike(cost, NumOps.FromDouble(InfinityCost)), cost);
+    }
+
+    /// <summary>
+    /// <c>NearestNeighborDistanceMetric</c> ("cosine"): the smallest cosine distance between each query
+    /// row and the target's stored samples; 1 for every query when the target has no samples yet.
+    /// </summary>
+    private Tensor<T> NearestNeighborCosineDistance(int trackId, Tensor<T> queries)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (!_samples.TryGetValue(trackId, out var gallery) || gallery.Count == 0)
+        {
+            var unseen = new Tensor<T>(new[] { queries.Shape[0] });
+            engine.TensorFill(unseen, NumOps.One);
+            return unseen;
+        }
+
+        var samples = NormalizeRows(engine.TensorStack(gallery.ToArray(), 0));
+        var normalizedQueries = NormalizeRows(queries);
+        var distances = engine.ScalarMinusTensor(NumOps.One,
+            engine.TensorMatMul(samples, engine.TensorTranspose(normalizedQueries)));
+        return engine.TensorAmin(distances, new[] { 0 }, keepDims: false);
+    }
+
+    private static Tensor<T> NormalizeRows(Tensor<T> rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        var norms = engine.TensorNorm(rows, 1, keepDims: true);
+        return engine.TensorDivide(rows, engine.TensorBroadcastTo(norms, rows.Shape.ToArray()));
+    }
+
+    private static Tensor<T> Flatten(Tensor<T> feature)
+    {
+        return AiDotNetEngine.Current.Reshape(feature, new[] { feature.Length });
+    }
+
+    /// <summary>
+    /// <c>Tracker.update</c>'s metric step: confirmed tracks hand their new features to their gallery
+    /// (capped at the newest <c>nn_budget</c> = 100), and galleries of inactive targets are dropped.
+    /// </summary>
+    private void UpdateGallery()
+    {
+        var active = new HashSet<int>();
+        foreach (var track in _deepTracks)
+        {
+            if (track.State != TrackState.Confirmed)
+            {
+                continue;
+            }
+
+            active.Add(track.TrackId);
+            if (!_samples.TryGetValue(track.TrackId, out var gallery))
+            {
+                gallery = new List<Tensor<T>>();
+                _samples[track.TrackId] = gallery;
+            }
+
+            gallery.AddRange(track.TakeFeatures().Select(Flatten));
+            if (gallery.Count > _maxGallerySize)
+            {
+                gallery.RemoveRange(0, gallery.Count - _maxGallerySize);
+            }
+        }
+
+        foreach (int id in _samples.Keys.Where(k => !active.Contains(k)).ToList())
+        {
+            _samples.Remove(id);
+        }
+    }
+
+    private List<Tensor<T>> ExtractAppearanceFeatures(Tensor<T> image, List<Detection<T>> detections)
+    {
+        var features = new List<Tensor<T>>();
         foreach (var det in detections)
         {
             var crop = CropImage(image, det.Box);
-            var feat = _reidNetwork.Extract(crop);
-            features.Add(feat);
+            if (_appearanceEncoder is not null)
+            {
+                features.Add(_appearanceEncoder(crop));
+            }
+            else if (_reidNetwork is not null)
+            {
+                features.Add(_reidNetwork.Extract(crop));
+            }
         }
 
         return features;
     }
 
+    /// <summary>Nearest-neighbour crop of the box from image 0, resized to the 128 x 64 Re-ID input.</summary>
     private Tensor<T> CropImage(Tensor<T> image, BoundingBox<T> box)
     {
         int channels = image.Shape[1];
@@ -206,178 +378,18 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
         int cropW = Math.Max(1, x2 - x1);
         int cropH = Math.Max(1, y2 - y1);
 
-        // Resize to 128x64 (standard Re-ID size)
-        int targetH = 128;
-        int targetW = 64;
+        const int targetH = 128;
+        const int targetW = 64;
 
-        var crop = new Tensor<T>(new[] { 1, channels, targetH, targetW });
+        var rows = Enumerable.Range(0, targetH)
+            .Select(h => MathHelper.Clamp(y1 + (int)(h * (double)cropH / targetH), 0, imgH - 1)).ToArray();
+        var cols = Enumerable.Range(0, targetW)
+            .Select(w => MathHelper.Clamp(x1 + (int)(w * (double)cropW / targetW), 0, imgW - 1)).ToArray();
 
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < targetH; h++)
-            {
-                for (int w = 0; w < targetW; w++)
-                {
-                    int srcH = y1 + (int)(h * (double)cropH / targetH);
-                    int srcW = x1 + (int)(w * (double)cropW / targetW);
-
-                    srcH = MathHelper.Clamp(srcH, 0, imgH - 1);
-                    srcW = MathHelper.Clamp(srcW, 0, imgW - 1);
-
-                    crop[0, c, h, w] = image[0, c, srcH, srcW];
-                }
-            }
-        }
-
-        return crop;
-    }
-
-    private (List<(int trackIdx, int detIdx)> matched, List<int> unmatched) CascadeMatching(
-        List<DeepTrack<T>> tracks, List<Detection<T>> detections, List<Tensor<T>> features)
-    {
-        var matched = new List<(int trackIdx, int detIdx)>();
-        var unmatchedDets = Enumerable.Range(0, detections.Count).ToList();
-
-        // Cascade by time since update (prioritize recently seen tracks)
-        for (int cascade = 0; cascade <= Options.MaxAge; cascade++)
-        {
-            var tracksAtCascade = new List<int>();
-            for (int t = 0; t < tracks.Count; t++)
-            {
-                if (tracks[t].TimeSinceUpdate == cascade)
-                {
-                    tracksAtCascade.Add(t);
-                }
-            }
-
-            if (tracksAtCascade.Count == 0 || unmatchedDets.Count == 0)
-                continue;
-
-            // Build cost matrix for this cascade level
-            var costMatrix = BuildCombinedCostMatrix(tracks, detections, features, tracksAtCascade, unmatchedDets);
-
-            // Solve assignment
-            var assignment = HungarianAssignment(costMatrix);
-
-            // Process assignments
-            var newlyMatchedDets = new List<int>();
-            for (int i = 0; i < assignment.Length; i++)
-            {
-                if (assignment[i] >= 0)
-                {
-                    int trackIdx = tracksAtCascade[i];
-                    int detLocalIdx = assignment[i];
-                    int detIdx = unmatchedDets[detLocalIdx];
-
-                    if (costMatrix[i, detLocalIdx] < 0.7) // Threshold
-                    {
-                        matched.Add((trackIdx, detIdx));
-                        newlyMatchedDets.Add(detIdx);
-                    }
-                }
-            }
-
-            unmatchedDets = unmatchedDets.Where(d => !newlyMatchedDets.Contains(d)).ToList();
-        }
-
-        return (matched, unmatchedDets);
-    }
-
-    private (List<(int trackIdx, int detIdx)> matched, List<int> unmatched) IoUMatching(
-        List<DeepTrack<T>> tracks, List<int> detectionIndices,
-        List<Detection<T>> allDetections)
-    {
-        var matched = new List<(int trackIdx, int detIdx)>();
-
-        if (tracks.Count == 0 || detectionIndices.Count == 0)
-        {
-            return (matched, detectionIndices);
-        }
-
-        // Build IoU cost matrix
-        var costMatrix = new double[tracks.Count, detectionIndices.Count];
-
-        for (int t = 0; t < tracks.Count; t++)
-        {
-            var predictedBox = tracks[t].GetPredictedBox();
-
-            for (int d = 0; d < detectionIndices.Count; d++)
-            {
-                int detIdx = detectionIndices[d];
-                double iou = ComputeIoU(predictedBox, allDetections[detIdx].Box);
-                costMatrix[t, d] = 1.0 - iou;
-            }
-        }
-
-        var assignment = HungarianAssignment(costMatrix);
-
-        var matchedDets = new HashSet<int>();
-        for (int t = 0; t < assignment.Length; t++)
-        {
-            if (assignment[t] >= 0)
-            {
-                int localDetIdx = assignment[t];
-                int detIdx = detectionIndices[localDetIdx];
-
-                if (costMatrix[t, localDetIdx] < (1.0 - NumOps.ToDouble(Options.IouThreshold)))
-                {
-                    matched.Add((t, detIdx));
-                    matchedDets.Add(detIdx);
-                }
-            }
-        }
-
-        var unmatched = detectionIndices.Where(d => !matchedDets.Contains(d)).ToList();
-        return (matched, unmatched);
-    }
-
-    private double[,] BuildCombinedCostMatrix(
-        List<DeepTrack<T>> tracks, List<Detection<T>> detections,
-        List<Tensor<T>> features, List<int> trackIndices, List<int> detIndices)
-    {
-        var costMatrix = new double[trackIndices.Count, detIndices.Count];
-
-        for (int i = 0; i < trackIndices.Count; i++)
-        {
-            var track = tracks[trackIndices[i]];
-            var predictedBox = track.GetPredictedBox();
-
-            for (int j = 0; j < detIndices.Count; j++)
-            {
-                int detIdx = detIndices[j];
-                var detection = detections[detIdx];
-
-                // IoU cost
-                double iouCost = 1.0 - ComputeIoU(predictedBox, detection.Box);
-
-                // Appearance cost
-                double appearanceCost = 1.0;
-                if (Options.UseAppearance && features.Count > detIdx && track.HasAppearanceFeatures())
-                {
-                    double similarity = track.GetMinAppearanceDistance(features[detIdx]);
-                    appearanceCost = 1.0 - similarity;
-                }
-
-                // Combined cost
-                if (Options.UseAppearance)
-                {
-                    costMatrix[i, j] = Options.AppearanceWeight * appearanceCost +
-                                       (1 - Options.AppearanceWeight) * iouCost;
-                }
-                else
-                {
-                    costMatrix[i, j] = iouCost;
-                }
-
-                // Gate by Mahalanobis distance (simplified: use IoU threshold)
-                if (iouCost > 0.9) // Very low IoU
-                {
-                    costMatrix[i, j] = 1e5; // Infinite cost
-                }
-            }
-        }
-
-        return costMatrix;
+        var engine = AiDotNetEngine.Current;
+        var first = engine.TensorSlice(image, new[] { 0, 0, 0, 0 }, new[] { 1, channels, imgH, imgW });
+        var picked = engine.TensorIndexSelect(first, new Tensor<int>(rows, new[] { targetH }), 2);
+        return engine.TensorIndexSelect(picked, new Tensor<int>(cols, new[] { targetW }), 3);
     }
 
     /// <inheritdoc/>
@@ -385,52 +397,43 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
     {
         base.Reset();
         _deepTracks.Clear();
+        _samples.Clear();
     }
 }
 
 /// <summary>
-/// Track with appearance feature gallery for DeepSORT.
+/// deep_sort <c>Track</c>: an xyah Kalman state plus the appearance features observed since the last
+/// gallery update.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class DeepTrack<T>
+internal sealed class DeepTrack<T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private readonly int _trackId;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly XyahKalmanFilter<T> _kalman;
+    private readonly int _nInit;
+    private readonly int _maxAge;
+    private readonly List<Tensor<T>> _features;
+    private Tensor<T> _mean;
+    private Tensor<T> _covariance;
     private int _classId;
     private T _confidence;
-    private readonly int _maxGallerySize;
+    private Tensor<T>? _lastFeature;
 
-    // Kalman state
-    private double[] _state;
-    private double[] _velocity;
-
-    // Appearance gallery
-    private readonly List<Tensor<T>> _gallery;
-
-    public int TimeSinceUpdate { get; private set; }
-    public int Hits { get; private set; }
-    public int Age { get; private set; }
-    public TrackState State { get; private set; }
-
-    public DeepTrack(int trackId, Detection<T> detection, Tensor<T>? feature,
-        int maxGallerySize, INumericOperations<T> numOps)
+    public DeepTrack(int trackId, Detection<T> detection, Tensor<T>? feature, XyahKalmanFilter<T> kalman,
+        int nInit, int maxAge)
     {
-        _trackId = trackId;
-        _numOps = numOps;
+        TrackId = trackId;
+        _kalman = kalman;
+        _nInit = nInit;
+        _maxAge = maxAge;
         _classId = detection.ClassId;
         _confidence = detection.Confidence;
-        _maxGallerySize = maxGallerySize;
-
-        // Initialize state
-        var (cx, cy, s, r) = BoxToState(detection.Box);
-        _state = new double[] { cx, cy, s, r };
-        _velocity = new double[] { 0, 0, 0, 0 };
-
-        // Initialize gallery
-        _gallery = new List<Tensor<T>>();
-        if (feature != null)
+        (_mean, _covariance) = kalman.Initiate(ToXyah(detection.Box));
+        _features = new List<Tensor<T>>();
+        if (feature is not null)
         {
-            _gallery.Add(feature);
+            _features.Add(feature);
+            _lastFeature = feature;
         }
 
         TimeSinceUpdate = 0;
@@ -439,49 +442,33 @@ internal class DeepTrack<T>
         State = TrackState.Tentative;
     }
 
+    public int TrackId { get; }
+    public int TimeSinceUpdate { get; private set; }
+    public int Hits { get; private set; }
+    public int Age { get; private set; }
+    public TrackState State { get; private set; }
+
     public void Predict()
     {
-        // Simple motion model
-        _state[0] += _velocity[0];
-        _state[1] += _velocity[1];
-        _state[2] += _velocity[2];
-
-        if (_state[2] <= 0)
-            _state[2] = 1;
-
+        (_mean, _covariance) = _kalman.Predict(_mean, _covariance);
         Age++;
         TimeSinceUpdate++;
     }
 
     public void Update(Detection<T> detection, Tensor<T>? feature)
     {
-        var (cx, cy, s, r) = BoxToState(detection.Box);
-
-        // Update velocity
-        _velocity[0] = 0.5 * _velocity[0] + 0.5 * (cx - _state[0]);
-        _velocity[1] = 0.5 * _velocity[1] + 0.5 * (cy - _state[1]);
-        _velocity[2] = 0.5 * _velocity[2] + 0.5 * (s - _state[2]);
-
-        // Update state
-        _state = new double[] { cx, cy, s, r };
+        (_mean, _covariance) = _kalman.Update(_mean, _covariance, ToXyah(detection.Box));
+        if (feature is not null)
+        {
+            _features.Add(feature);
+            _lastFeature = feature;
+        }
 
         _classId = detection.ClassId;
         _confidence = detection.Confidence;
-        TimeSinceUpdate = 0;
         Hits++;
-
-        // Update gallery
-        if (feature != null)
-        {
-            _gallery.Add(feature);
-            if (_gallery.Count > _maxGallerySize)
-            {
-                _gallery.RemoveAt(0);
-            }
-        }
-
-        // Confirm track
-        if (State == TrackState.Tentative && Hits >= 3)
+        TimeSinceUpdate = 0;
+        if (State == TrackState.Tentative && Hits >= _nInit)
         {
             State = TrackState.Confirmed;
         }
@@ -489,174 +476,107 @@ internal class DeepTrack<T>
 
     public void MarkMissed()
     {
-        if (State == TrackState.Tentative)
+        if (State == TrackState.Tentative || TimeSinceUpdate > _maxAge)
         {
             State = TrackState.Deleted;
         }
     }
 
+    /// <summary>Squared Mahalanobis distance to each xyah measurement row.</summary>
+    public Tensor<T> GatingDistance(Tensor<T> measurements)
+    {
+        return _kalman.GatingDistance(_mean, _covariance, measurements);
+    }
+
+    /// <summary>Returns and clears the features gathered since the last gallery update.</summary>
+    public List<Tensor<T>> TakeFeatures()
+    {
+        var taken = new List<Tensor<T>>(_features);
+        _features.Clear();
+        return taken;
+    }
+
     public BoundingBox<T> GetPredictedBox()
     {
-        return StateToBox(_state[0], _state[1], _state[2], _state[3]);
-    }
-
-    public bool HasAppearanceFeatures()
-    {
-        return _gallery.Count > 0;
-    }
-
-    public double GetMinAppearanceDistance(Tensor<T> feature)
-    {
-        if (_gallery.Count == 0)
-            return 0;
-
-        double maxSimilarity = 0;
-
-        foreach (var galleryFeat in _gallery)
-        {
-            double similarity = ComputeCosineSimilarity(galleryFeat, feature);
-            maxSimilarity = Math.Max(maxSimilarity, similarity);
-        }
-
-        return maxSimilarity;
-    }
-
-    private double ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
-    {
-        if (a.Length != b.Length)
-            return 0;
-
-        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
+        T half = NumOps.FromDouble(0.5);
+        T h = _mean[3, 0];
+        T w = NumOps.Multiply(_mean[2, 0], h);
+        T x1 = NumOps.Subtract(_mean[0, 0], NumOps.Multiply(w, half));
+        T y1 = NumOps.Subtract(_mean[1, 0], NumOps.Multiply(h, half));
+        return new BoundingBox<T>(x1, y1, NumOps.Add(x1, w), NumOps.Add(y1, h), BoundingBoxFormat.XYXY);
     }
 
     public Track<T> ToTrack()
     {
-        var box = GetPredictedBox();
-        var track = new Track<T>(_trackId, box, _classId, _confidence)
+        return new Track<T>(TrackId, GetPredictedBox(), _classId, _confidence)
         {
-            VelocityX = _velocity[0],
-            VelocityY = _velocity[1],
+            VelocityX = _mean[4, 0],
+            VelocityY = _mean[5, 0],
             TimeSinceUpdate = TimeSinceUpdate,
             Age = Age,
             Hits = Hits,
-            State = State
+            State = State,
+            AppearanceFeature = _lastFeature
         };
+    }
 
-        if (_gallery.Count > 0)
+    private static Tensor<T> ToXyah(BoundingBox<T> box)
+    {
+        T half = NumOps.FromDouble(0.5);
+        T w = NumOps.Subtract(box.X2, box.X1);
+        T h = NumOps.Subtract(box.Y2, box.Y1);
+        return new Tensor<T>(new[]
         {
-            track.AppearanceFeature = _gallery[^1];
-        }
-
-        return track;
-    }
-
-    private (double cx, double cy, double s, double r) BoxToState(BoundingBox<T> box)
-    {
-        double x1 = _numOps.ToDouble(box.X1);
-        double y1 = _numOps.ToDouble(box.Y1);
-        double x2 = _numOps.ToDouble(box.X2);
-        double y2 = _numOps.ToDouble(box.Y2);
-
-        double w = x2 - x1;
-        double h = y2 - y1;
-        double cx = x1 + w / 2;
-        double cy = y1 + h / 2;
-        double s = w * h;
-        double r = h > 0 ? w / h : 1;
-
-        return (cx, cy, s, r);
-    }
-
-    private BoundingBox<T> StateToBox(double cx, double cy, double s, double r)
-    {
-        // Use minimum aspect ratio threshold to prevent numerical instability
-        const double minAspectRatio = 1e-6;
-        double safeR = Math.Max(Math.Abs(r), minAspectRatio);
-        double w = Math.Sqrt(Math.Max(1, s * safeR));
-        double h = w / safeR;
-
-        double x1 = cx - w / 2;
-        double y1 = cy - h / 2;
-        double x2 = cx + w / 2;
-        double y2 = cy + h / 2;
-
-        return new BoundingBox<T>(
-            _numOps.FromDouble(x1), _numOps.FromDouble(y1),
-            _numOps.FromDouble(x2), _numOps.FromDouble(y2),
-            BoundingBoxFormat.XYXY);
+            NumOps.Add(box.X1, NumOps.Multiply(w, half)),
+            NumOps.Add(box.Y1, NumOps.Multiply(h, half)),
+            NumOps.Divide(w, h),
+            h
+        }, new[] { 4 });
     }
 }
 
 /// <summary>
-/// Simple Re-ID network for appearance feature extraction.
+/// A fixed, untrained appearance descriptor: channel means projected onto sinusoids, squashed with
+/// tanh and L2-normalised. It stands in when no trained re-identification encoder is supplied.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 internal class ReIDNetwork<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly int _featureDim;
 
     public ReIDNetwork(int featureDim = 128)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _featureDim = featureDim;
     }
 
     public Tensor<T> Extract(Tensor<T> crop)
     {
-        // Simplified: average pooling + projection
-        // In practice, this would be a CNN like ResNet-18
-
+        var engine = AiDotNetEngine.Current;
         int channels = crop.Shape[1];
-        int height = crop.Shape[2];
-        int width = crop.Shape[3];
 
-        // Global average pooling
-        var pooled = new double[channels];
-        for (int c = 0; c < channels; c++)
-        {
-            double sum = 0;
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    sum += _numOps.ToDouble(crop[0, c, h, w]);
-                }
-            }
-            pooled[c] = sum / (height * width);
-        }
+        // Global average pooling of image 0: [C, 1]
+        var first = engine.TensorSlice(crop, new[] { 0, 0, 0, 0 }, new[] { 1, channels, crop.Shape[2], crop.Shape[3] });
+        var pooled = engine.Reshape(engine.ReduceMean(first, new[] { 2, 3 }, keepDims: false), new[] { channels, 1 });
 
-        // Simple projection to feature dimension
-        var feature = new Tensor<T>(new[] { _featureDim });
+        var projection = Projection(_featureDim, channels);
+        var feature = engine.Reshape(engine.TensorTanh(engine.TensorMatMul(projection, pooled)), new[] { _featureDim });
 
-        for (int f = 0; f < _featureDim; f++)
-        {
-            double val = 0;
-            for (int c = 0; c < channels; c++)
-            {
-                // Simple mixing (in practice, learned projection)
-                val += pooled[c] * Math.Sin((f + 1) * c * 0.1);
-            }
-            feature[f] = _numOps.FromDouble(Math.Tanh(val));
-        }
+        T norm = NumOps.Sqrt(engine.TensorSumOfSquares(feature));
+        return NumOps.GreaterThan(norm, NumOps.Zero) ? engine.TensorDivideScalar(feature, norm) : feature;
+    }
 
-        // L2 normalize
-        double norm = 0;
-        for (int i = 0; i < _featureDim; i++)
-        {
-            double v = _numOps.ToDouble(feature[i]);
-            norm += v * v;
-        }
-        norm = Math.Sqrt(norm);
-
-        if (norm > 0)
-        {
-            for (int i = 0; i < _featureDim; i++)
-            {
-                feature[i] = _numOps.FromDouble(_numOps.ToDouble(feature[i]) / norm);
-            }
-        }
-
-        return feature;
+    /// <summary>
+    /// The fixed projection <c>[featureDim, channels]</c>, <c>sin((f + 1) * c * 0.1)</c>. It is a constant
+    /// table, so it is computed in double and rounded to <typeparamref name="T"/> once: forming the angle in
+    /// <typeparamref name="T"/> would round 0.1 and the product first, an angle error that grows with
+    /// <c>(f + 1) * c</c>.
+    /// </summary>
+    internal static Tensor<T> Projection(int featureDim, int channels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var rows = engine.TensorArange<double>(1, featureDim + 1);
+        var cols = engine.TensorArange<double>(0, channels);
+        return engine.TensorSin(engine.TensorMultiplyScalar(engine.TensorOuter(rows, cols), 0.1)).Cast<T>();
     }
 }
