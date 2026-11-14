@@ -130,17 +130,18 @@ internal static class MaskSetPredictionLoss
         var classOneHot = engine.TensorOneHot<T>(new Tensor<int>(segments.Classes, new[] { m }), c);       // [M, C]
         var probability = engine.TensorMatMul(classOneHot, engine.TensorTranspose(engine.TensorSoftmax(classLogits, 1))); // [M, N]
 
-        var softplusSum = engine.ReduceSum(engine.Softplus(maskLogits), new[] { 1 }, false);              // [N]
+        // The matching cost carries no gradient, so both mask terms run in double and are rounded to T once: summed
+        // in Half, 0.5-valued sigmoids stop adding at 1024 and the BCE sums of a few thousand pixels overflow.
+        var logits = maskLogits.Cast<double>();
+        var truth = y.Cast<double>();
+        var softplusSum = engine.ReduceSum(engine.Softplus(logits), new[] { 1 }, false);                  // [N]
         var crossEntropy = engine.TensorMultiplyScalar(
             engine.TensorSubtract(
                 engine.TensorBroadcastTo(engine.Reshape(softplusSum, new[] { 1, n }), new[] { m, n }),
-                engine.TensorMatMul(y, engine.TensorTranspose(maskLogits))),
-            ops.FromDouble(1.0 / hw));
+                engine.TensorMatMul(truth, engine.TensorTranspose(logits))),
+            1.0 / hw).Cast<T>();
 
-        // The matching cost carries no gradient, so the Dice sums run in double and are rounded to T once: summed in
-        // Half, 0.5-valued sigmoids stop adding at 1024.
-        var sigmoid = engine.TensorSigmoid(maskLogits).Cast<double>();
-        var truth = y.Cast<double>();
+        var sigmoid = engine.TensorSigmoid(logits);
         var overlap = engine.TensorMatMul(truth, engine.TensorTranspose(sigmoid));                         // [M, N]
         var denominator = engine.TensorAdd(
             engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(truth, new[] { 1 }, false), new[] { m, 1 }), new[] { m, n }),
@@ -173,8 +174,6 @@ internal static class MaskSetPredictionLoss
         int matchedTotal = 0;
         var matchedWeightGap = ops.FromDouble(1.0 - Mask2FormerNoObjectWeight);
         var noObjectWeight = ops.FromDouble(Mask2FormerNoObjectWeight);
-        var perPixel = ops.FromDouble(1.0 / hw);
-        var two = ops.FromDouble(2.0);
         for (int i = 0; i < b; i++)
         {
             var cls = engine.Reshape(engine.TensorSlice(classLogits, new[] { i, 0, 0 }, new[] { 1, n, c }), new[] { n, c });
@@ -202,15 +201,11 @@ internal static class MaskSetPredictionLoss
             if (segment.Length == 0) continue;
             matchedTotal += segment.Length;
             var (x, y) = MatchedPairs(masks, segments[i], segment, prediction, n);
-            // The per-pixel BCE and the Dice numerator and denominator are summed in float for Half and BFloat16
-            // (WideRowSums): summed in Half, 0.5-valued sigmoids stop adding at 1024.
-            var bce = engine.TensorMultiplyScalar(
-                WideSum(engine.TensorSubtract(engine.Softplus(x), engine.TensorMultiply(x, y))), perPixel);
+            // The per-pixel BCE mean and the Dice ratio are formed in float for Half and BFloat16 (WideMean, Dice):
+            // summed in Half, 0.5-valued sigmoids stop adding at 1024 and a 65536-pixel area is infinite.
+            var bce = WideMean(engine.TensorSubtract(engine.Softplus(x), engine.TensorMultiply(x, y)), hw);
             var sigmoid = engine.TensorSigmoid(x);
-            var numerator = engine.TensorAddScalar(
-                engine.TensorMultiplyScalar(WideRowSums(engine.TensorMultiply(sigmoid, y)), two), ops.One);
-            var denominator = engine.TensorAddScalar(engine.TensorAdd(WideRowSums(sigmoid), TruthAreas(y)), ops.One);
-            var dice = engine.ReduceSum(engine.ScalarMinusTensor(ops.One, engine.TensorDivide(numerator, denominator)), null);
+            var dice = engine.ReduceSum(engine.ScalarMinusTensor(ops.One, Dice(sigmoid, y, 1.0, 0.0)), null);
             maskCrossEntropy = Accumulate(engine, maskCrossEntropy, bce);
             maskDice = Accumulate(engine, maskDice, dice);
         }
@@ -339,7 +334,7 @@ internal static class MaskSetPredictionLoss
                 engine.TensorMultiply(engine.TensorMatMul(querySelect, logProbability), classSelect), new[] { 1 }, false); // [P]
             var matchedProbability = engine.TensorExp(matchedLogProbability);
             var softMasks = engine.TensorSoftmax(logits, 0);
-            var dice = Dice(engine.TensorMatMul(querySelect, softMasks), y);                                   // [P]
+            var dice = Dice(engine.TensorMatMul(querySelect, softMasks), y, 0.0, DiceEpsilon);                                   // [P]
             var positive = engine.TensorDivide(engine.ReduceSum(engine.TensorNegate(engine.TensorAdd(
                 engine.TensorMultiply(engine.StopGradient(matchedProbability), dice),
                 engine.TensorMultiply(engine.StopGradient(dice), matchedLogProbability))), null), Count<T>(p));
@@ -358,8 +353,8 @@ internal static class MaskSetPredictionLoss
             var pixelTarget = engine.TensorMatMul(engine.TensorTranspose(querySelect), y);                     // [N, HW]
             // Counted in int: the 0/1 sum in T stops at 2048 in Half.
             int coveredPixels = Math.Max(1, engine.TensorSum(y.Cast<int>()));
-            var maskId = engine.TensorDivide(engine.TensorNegate(
-                WideSum(engine.TensorMultiply(pixelTarget, engine.TensorLogSoftmax(logits, 0)))), Count<T>(coveredPixels));
+            var maskId = engine.TensorNegate(
+                WideMean(engine.TensorMultiply(pixelTarget, engine.TensorLogSoftmax(logits, 0)), coveredPixels));
 
             imageLoss = engine.TensorAdd(
                 engine.TensorMultiplyScalar(panopticQuality, panopticQualityWeight),
@@ -441,7 +436,7 @@ internal static class MaskSetPredictionLoss
         var losses = engine.TensorNegate(WideRowSums(engine.TensorTranspose(
             engine.TensorMultiply(target, engine.TensorLogSoftmax(similarity, 0)))));                          // [S]
         int nonZero = engine.TensorSum(engine.TensorGreaterThan(engine.StopGradient(losses), ops.Zero).Cast<int>());
-        return engine.TensorDivide(WideSum(losses), Count<T>(Math.Max(1, nonZero)));
+        return WideMean(losses, Math.Max(1, nonZero));
     }
 
     /// <summary>
@@ -466,7 +461,7 @@ internal static class MaskSetPredictionLoss
         var oneHot = engine.TensorTranspose(engine.TensorOneHot<T>(new Tensor<int>(labels, new[] { labels.Length }), k));
         var losses = engine.TensorNegate(WideRowSums(engine.TensorTranspose(
             engine.TensorMultiply(oneHot, engine.TensorLogSoftmax(picked, 0)))));                              // [S]
-        return engine.TensorDivide(WideSum(losses), Count<T>(sampled.Length));
+        return WideMean(losses, sampled.Length);
     }
 
     /// <summary>
@@ -486,15 +481,52 @@ internal static class MaskSetPredictionLoss
         return engine.TensorDivide(engine.TensorMultiplyScalar(overlap, 2.0), engine.TensorClampMin(denominator, DiceEpsilon)).Cast<T>();
     }
 
-    /// <summary>Dice coefficient of aligned rows <c>[P]</c>; the sums run in float for Half and BFloat16.</summary>
-    private static Tensor<T> Dice<T>(Tensor<T> predicted, Tensor<T> truth)
+    /// <summary>
+    /// Dice coefficient <c>(2 sum(p t) + s) / max(sum p + sum t + s, eps)</c> of aligned rows <c>[P]</c>, with
+    /// smoothing <paramref name="smoothing"/> and floor <paramref name="epsilon"/>. For Half and BFloat16 the sums,
+    /// the ratio and the gradient are computed in float and only the ratio (at most 1) is rounded to T: in Half a
+    /// 256x256 mask's area of 65536 is infinite and, at a probability of 0.5, so is twice the overlap of 32768.
+    /// </summary>
+    private static Tensor<T> Dice<T>(Tensor<T> predicted, Tensor<T> truth, double smoothing, double epsilon)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
-        var overlap = WideRowSums(engine.TensorMultiply(predicted, truth));
-        var denominator = engine.TensorAdd(WideRowSums(predicted), TruthAreas(truth));
-        return engine.TensorDivide(engine.TensorMultiplyScalar(overlap, ops.FromDouble(2.0)),
-            engine.TensorClampMin(denominator, ops.FromDouble(DiceEpsilon)));
+        if (!IsNarrowFloat<T>())
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            var numerator = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(WideRowSums(engine.TensorMultiply(predicted, truth)), ops.FromDouble(2.0)),
+                ops.FromDouble(smoothing));
+            var denominator = engine.TensorAddScalar(
+                engine.TensorAdd(WideRowSums(predicted), TruthAreas(truth)), ops.FromDouble(smoothing));
+            return engine.TensorDivide(numerator, engine.TensorClampMin(denominator, ops.FromDouble(epsilon)));
+        }
+
+        int rows = predicted.Shape[0], columns = predicted.Shape[1];
+        var p = predicted.Cast<float>();
+        var t = truth.Cast<float>();
+        var wideNumerator = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorMultiply(p, t), new[] { 1 }, false), 2f), (float)smoothing);
+        var rawDenominator = engine.TensorAddScalar(
+            engine.TensorAdd(engine.ReduceSum(p, new[] { 1 }, false), engine.ReduceSum(t, new[] { 1 }, false)), (float)smoothing);
+        var wideDenominator = engine.TensorClampMin(rawDenominator, (float)epsilon);
+        var wideDice = engine.TensorDivide(wideNumerator, wideDenominator);                                   // [P] float
+        var dice = wideDice.Cast<T>();
+        // dD/dp = (2 t - D) / S where the floor is inactive, and 2 t / S where the floor holds S constant.
+        float[] diceValues = wideDice.ToArray(), raw = rawDenominator.ToArray();
+        var unclampedDice = new float[rows];
+        for (int i = 0; i < rows; i++) unclampedDice[i] = raw[i] >= epsilon ? diceValues[i] : 0f;
+        var subtracted = engine.TensorBroadcastTo(
+            engine.Reshape(new Tensor<float>(unclampedDice, new[] { rows }), new[] { rows, 1 }), new[] { rows, columns });
+        var perElement = engine.TensorDivide(
+            engine.TensorSubtract(engine.TensorMultiplyScalar(t, 2f), subtracted),
+            engine.TensorBroadcastTo(engine.Reshape(wideDenominator, new[] { rows, 1 }), new[] { rows, columns }));
+        DifferentiableOps.RecordUnary("WideDice", dice, predicted, (gradOutput, inputs, _, _, eng, grads) =>
+            DifferentiableOps.AccumulateGrad(grads, inputs[0],
+                eng.TensorMultiply(
+                    perElement,
+                    eng.TensorBroadcastTo(eng.Reshape(gradOutput.Cast<float>(), new[] { rows, 1 }), new[] { rows, columns }))
+                .Cast<T>(), eng));
+        return dice;
     }
 
     /// <summary>True for the 16-bit floating types, whose sums stall: Half stops adding 0.5 at 1024.</summary>
@@ -519,13 +551,28 @@ internal static class MaskSetPredictionLoss
         return sums;
     }
 
-    /// <summary>The sum of every element, accumulated in float for Half and BFloat16.</summary>
-    internal static Tensor<T> WideSum<T>(Tensor<T> x)
+    /// <summary>
+    /// The mean <c>sum(x) / count</c> as a one-element tensor <c>[1]</c>. For Half and BFloat16 the sum and the
+    /// division run in float and only the normalized mean is rounded to T: a sum of a few thousand per-pixel losses
+    /// (or a count of 65536) is infinite in Half even when the mean is small.
+    /// </summary>
+    internal static Tensor<T> WideMean<T>(Tensor<T> x, int count)
     {
         if (x is null) throw new ArgumentNullException(nameof(x));
+        if (count < 1) throw new ArgumentOutOfRangeException(nameof(count), "A mean needs a positive count.");
         var engine = AiDotNetEngine.Current;
-        if (!IsNarrowFloat<T>()) return engine.ReduceSum(x, null);
-        return WideRowSums(engine.Reshape(x, new[] { 1, x.Length }));
+        if (!IsNarrowFloat<T>()) return engine.TensorDivide(engine.ReduceSum(x, null), Count<T>(count));
+        int[] shape = x.Shape.ToArray();
+        int length = x.Length;
+        float scale = 1f / count;
+        var mean = engine.TensorMultiplyScalar(
+            engine.ReduceSum(engine.Reshape(x.Cast<float>(), new[] { 1, length }), new[] { 1 }, false), scale).Cast<T>();
+        DifferentiableOps.RecordUnary("WideMean", mean, x, (gradOutput, inputs, _, _, eng, grads) =>
+            DifferentiableOps.AccumulateGrad(grads, inputs[0],
+                eng.Reshape(eng.TensorBroadcastTo(
+                    eng.Reshape(eng.TensorMultiplyScalar(gradOutput.Cast<float>(), scale), new[] { 1, 1 }), new[] { 1, length }), shape)
+                .Cast<T>(), eng));
+        return mean;
     }
 
     /// <summary>A count as a one-element tensor <c>[1]</c> of T, the divisor of a summed loss term.</summary>
