@@ -180,8 +180,9 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
         var integral = engine.TensorEquals(engine.TensorFloor(indices), indices);
         var nonNegative = engine.ScalarMinusTensor(Ops.One, engine.TensorLessThan(indices, Ops.Zero));
         var inRange = engine.TensorLessThan(indices, Ops.FromDouble(_outputDim));
-        T valid = engine.TensorSum(engine.TensorMultiply(engine.TensorMultiply(integral, nonNegative), inRange));
-        if (!Ops.Equals(valid, Ops.FromDouble(actual.Length)))
+        // Every index must pass, so the smallest flag decides; a count compared with the length is not exact in T.
+        T valid = engine.TensorMinValue(engine.TensorMultiply(engine.TensorMultiply(integral, nonNegative), inRange));
+        if (!Ops.Equals(valid, Ops.One))
             throw new ArgumentOutOfRangeException(nameof(actual), "Class indices must be integers in the head's class range.");
         return engine.TensorOneHot<T>(indices.Cast<int>(), _outputDim).ToVector();
     }

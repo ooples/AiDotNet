@@ -202,7 +202,11 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
         var right = Tensor<T>.FromVector(b);
         var bothNaN = engine.TensorMultiply(engine.TensorNotEquals(left, left), engine.TensorNotEquals(right, right));
         var same = engine.TensorMax(engine.TensorEquals(left, right), bothNaN);
-        return NumOps.Equals(engine.TensorSum(same), NumOps.FromDouble(a.Length));
+
+        // Every entry must match, so the smallest flag decides. Counting the matches and comparing the count
+        // with the length is not exact in T: a float cannot tell 16777217 from 16777216, so one changed
+        // parameter in a model that large went unnoticed.
+        return NumOps.Equals(engine.TensorMinValue(same), NumOps.One);
     }
 
     /// <summary>q = f_gamma(x), sized to the head's feature dimension.</summary>
