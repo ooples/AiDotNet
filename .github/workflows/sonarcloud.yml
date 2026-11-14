@@ -45,13 +45,13 @@ on:
         required: false
         default: ''
       sonar_only:
-        description: 'Run only the SonarCloud analysis (for changes to that job). Skips the build, test shards, CodeQL and size check; the CI Gate fails closed, so this run never certifies a PR.'
+        description: 'Run only the SonarCloud analysis (for changes to that job). Skips the build, test shards and size check; the CI Gate fails closed, so this run never certifies a PR.'
         type: boolean
         default: false
   schedule:
     # NIGHTLY FULL MATRIX on master, the net under test-level selection: pull requests and merges
     # run only the tests their change can statically reach, so anything reached only by reflection
-    # over a name surfaces here within a day. Also the full traced CodeQL analysis. 03:00 UTC keeps
+    # over a name surfaces here within a day. 03:00 UTC keeps
     # the ~100-minute run clear of the working day and of the 04:30-06:00 nightly workflows.
     - cron: '0 3 * * *'
 
@@ -134,7 +134,7 @@ jobs:
       # conservatively treated as true; schema-v2 non-runtime certificates explicitly emit false.
       reused_requires_validation: ${{ steps.resolve.outputs.reused_requires_validation || steps.defaults.outputs.reused_requires_validation }}
       # Independent JSON booleans. A validation-only certificate suppresses the large build/test
-      # graph while still rerunning CodeQL and Sonar; only a complete certificate suppresses both.
+      # graph while still rerunning Sonar; only a complete certificate suppresses that too.
       # A sonar_only dispatch turns the whole build/test graph off; quality (Sonar) stays on.
       execute_validation: ${{ inputs.sonar_only && 'false' || steps.resolve.outputs.execute_validation || steps.defaults.outputs.execute_validation }}
       execute_quality: ${{ steps.resolve.outputs.execute_quality || steps.defaults.outputs.execute_quality }}
@@ -256,187 +256,12 @@ jobs:
           echo '::warning::exact-tree resolver failed unexpectedly; fail-closed defaults authorize full validation'
           echo 'Resolver failure: full validation remains enabled.' >> "$GITHUB_STEP_SUMMARY"
 
-  # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
-  # Runs on PRs, merge groups, pushes to master/main, and the weekly security schedule.
-  codeql:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    needs: [validation-source, select-shards]
-    # Build-less on EVERY event, so a pull request's alerts are compared with a baseline produced the
-    # same way. Pull requests used to extract build-less while master's baseline came from the traced
-    # build (#2268), and the two extractors do not report the same alerts on the same code: 380
-    # error-level alerts (cs/loss-of-precision, cs/unused-collection, ...) existed only in build-less
-    # results, so a large pull request had them attributed to it and failed the ruleset for lines it
-    # never touched (#2136). Pull requests still extract only the C# files they change; master pushes,
-    # the nightly schedule and manual runs extract the whole library, which becomes that baseline.
-    # The traced analysis continues in codeql-traced below, under its own category.
-    #
-    # Build-less extraction of the whole library holds a runner about 41 minutes; 85 leaves the same
-    # margin for hosted-runner variance the traced job needed.
-    timeout-minutes: 85
-    # CodeQL remains mandatory even for non-runtime changes because the active Main ruleset
-    # requires a CodeQL result for the candidate commit. This is one job, not a model/test matrix.
-    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Scope build-less analysis to this change
-        id: codeql-scope
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          # refs/pull/N/merge: the first parent is the base this PR is validated against.
-          mapfile -t changed < <(git -c core.quotepath=false diff --no-renames --diff-filter=AMR --name-only HEAD^1 HEAD -- '*.cs' \
-            | grep -Ev '^(tests|AiDotNetTests|AiDotNetTestConsole|AiDotNetBenchmarkTests|examples|docs)/' || true)
-          # codeql-action only loads a config file from inside the workspace.
-          config="$GITHUB_WORKSPACE/.codeql-pr-config.yml"
-          cp .github/codeql/codeql-config.yml "$config"
-          printf '\npaths:\n' >> "$config"
-          if [ "${#changed[@]}" -eq 0 ]; then
-            echo "no analyzed C# changed - extracting src/GlobalUsings.cs so the ruleset still receives a result"
-            changed=('src/GlobalUsings.cs')
-          fi
-          q="'"
-          for path in "${changed[@]}"; do
-            printf "  - '%s'\n" "${path//$q/$q$q}" >> "$config"
-          done
-          echo "extracting ${#changed[@]} changed C# file(s)"
-          echo "config=$config" >> "$GITHUB_OUTPUT"
-
-      - name: Initialize CodeQL (build-less, pull requests)
-        if: github.event_name == 'pull_request'
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          languages: csharp
-          build-mode: none
-          config-file: ${{ steps.codeql-scope.outputs.config }}
-          queries: security-and-quality
-
-      - name: Initialize CodeQL (build-less, whole library)
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          languages: csharp
-          build-mode: none
-          config-file: ./.github/codeql/codeql-config.yml
-          queries: security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          category: "/language:csharp"
-          upload: always
-
-
-  # Trace source-generated code as well as running the quick build-less analysis.
-  # Both categories exist on master, so PRs must upload both; skipping the traced category
-  # leaves GitHub's CodeQL check blocked by a missing analysis configuration.
-  codeql-traced:
-    name: CodeQL Analysis (traced)
-    runs-on: ubuntu-latest
-    needs: [validation-source, select-shards]
-    # PR #2294's full traced build took 43 minutes, then its analysis was cancelled after
-    # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
-    # with enough time for analysis and upload on the expanded native model source.
-    timeout-minutes: 120
-    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Free runner disk space
-        # The full solution Release build compiles net10.0 + net471 outputs and can exhaust
-        # ubuntu-latest's runner volume before downstream cleanup steps run. Keep the .NET
-        # host frameworks intact and remove only preinstalled toolchains this job does not use.
-        run: |
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /opt/ghc || true
-          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-          sudo rm -rf /opt/hostedtoolcache/PyPy || true
-          sudo rm -rf /opt/hostedtoolcache/Ruby || true
-          sudo rm -rf /opt/hostedtoolcache/go || true
-          sudo rm -rf /usr/share/swift || true
-          sudo rm -rf /usr/share/miniconda || true
-          sudo rm -rf /usr/local/share/boost || true
-          sudo apt-get clean || true
-          df -h /
-
-      - name: Setup .NET 10.0
-        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Cache NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore dependencies
-        run: |
-          dotnet restore src/AiDotNet.csproj
-          dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
-          dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
-          dotnet restore src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj
-
-      # Build-less extraction of the whole library still held a runner ~41 minutes per PR. A PR's
-      # code-scanning result only gates alerts in the lines it changes, so it extracts only the C#
-      # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
-      # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
-      - name: Initialize CodeQL (traced build)
-        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          languages: csharp
-          build-mode: manual
-          config-file: ./.github/codeql/codeql-config.yml
-          queries: security-and-quality
-
-      # CodeQL needs to trace the build - can't reuse artifacts.
-      # CodeQL only analyzes what the traced build compiles, so every shipped entry point that
-      # takes untrusted input has to be built here: the core library, the Serving API and the
-      # playground's Azure Functions. This step used to build the library alone to avoid a file
-      # lock on AiDotNet.Serving's static web assets; naming each project in its own sequential
-      # command (the pattern the build job uses) builds Serving exactly once, never concurrently.
-      # The core library's command is unchanged and runs first, so its extraction is identical;
-      # the next two builds find it up to date and compile only their own sources.
-      - name: Build for CodeQL (net10.0)
-        run: |
-          dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
-          dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
-          dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
-          dotnet build src/AiDotNet.Playground.Execution/AiDotNet.Playground.Execution.csproj -c Release --no-restore
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4
-        with:
-          category: "/language:csharp-traced"
-          upload: always
-
+  # CodeQL does not run in this workflow. Both analyses (build-less and traced) run from
+  # .github/workflows/codeql.yml on pushes to master and nightly, never on a pull request.
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
   # A DRAFT runs this compile check and nothing else: every other job gates on
-  # `github.event.pull_request.draft != true`, so drafts no longer queue CodeQL, the shards or the
+  # `github.event.pull_request.draft != true`, so drafts no longer queue the shards or the
   # paper-fidelity slices behind the PRs that are ready to merge. Marking the PR ready
   # (ready_for_review) starts the full run. Superseded draft builds cancel each other.
   draft-build:
@@ -3063,7 +2888,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # Certify the expensive validation stage independently from CodeQL and Sonar. A hosted runner
+  # Certify the expensive validation stage independently from Sonar. A hosted runner
   # disappearing during either quality job must not force the landed tree to repeat 100+ shards.
   validation-gate:
     name: Validation Gate
@@ -3211,8 +3036,8 @@ jobs:
 
   # ---------------------------------------------------------------------------------------------
   # Single aggregation gate for the dynamic build/test matrix. Keep this stable check in the
-  # `Main` ruleset alongside the separately required SonarCloud and CodeQL policies; do not list
-  # the individual shards themselves.
+  # `Main` ruleset; do not list the individual shards themselves. CodeQL is not part of this
+  # gate: it runs after merge from .github/workflows/codeql.yml.
   #
   # Required-check names must be STATIC, which is why a 158-job matrix cannot be listed directly:
   # every time a shard is re-split (G-I -> G + H-I, and so on) the job names change and any
@@ -3230,7 +3055,6 @@ jobs:
     needs:
       - validation-source
       - validation-gate
-      - codeql
       - build
       - build-compat
       - select-shards
@@ -3257,7 +3081,6 @@ jobs:
             -RequiresValidation '${{ (needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true' }}' `
             -ValidationGateResult '${{ needs.validation-gate.result }}' `
             -PromotionResult '${{ needs.promote-ci-test-analysis.result }}' `
-            -CodeQLResult '${{ needs.codeql.result }}' `
             -SonarResult '${{ needs.sonarcloud.result }}' `
             -SummaryFile $env:GITHUB_STEP_SUMMARY
   # The aggregate analysis artifact proves that tests emitted data; it does not prove validation
