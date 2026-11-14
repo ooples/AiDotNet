@@ -348,21 +348,12 @@ namespace AiDotNet.NeuralNetworks
 
             var embeddings = embeddingLayer.GetTokenEmbeddings(tokenIds);
 
-            var sumVector = new Vector<T>(_embeddingDimension);
-            for (int s = 0; s < tokenIds.Count; s++)
-            {
-                var tokenEmb = embeddings.GetRow(s);
-                for (int d = 0; d < _embeddingDimension; d++)
-                {
-                    sumVector[d] = NumOps.Add(sumVector[d], tokenEmb[d]);
-                }
-            }
-
-            var meanVector = new Vector<T>(_embeddingDimension);
-            for (int d = 0; d < _embeddingDimension; d++)
-            {
-                meanVector[d] = NumOps.Divide(sumVector[d], NumOps.FromDouble(tokenIds.Count));
-            }
+            // Mean of the token vectors
+            var tokenRows = Engine.TensorNarrow(
+                Engine.TensorNarrow(Tensor<T>.FromMatrix(embeddings), 0, 0, tokenIds.Count), 1, 0, _embeddingDimension);
+            var sum = Engine.ReduceSum(tokenRows, new[] { 0 }, false);
+            var mean = Engine.TensorDivide(sum, Tensor<T>.CreateDefault(sum._shape, NumOps.FromDouble(tokenIds.Count)));
+            var meanVector = mean.ToVector();
 
             // Normalization ensures that "length" doesn't distort similarity comparisons
             return meanVector.SafeNormalize();
@@ -388,13 +379,11 @@ namespace AiDotNet.NeuralNetworks
             var textList = texts.ToList();
             var matrix = new Matrix<T>(textList.Count, _embeddingDimension);
 
+            var rows = matrix.AsWritableSpan();
             for (int i = 0; i < textList.Count; i++)
             {
                 var embedding = Embed(textList[i]);
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    matrix[i, j] = embedding[j];
-                }
+                embedding.AsSpan().Slice(0, _embeddingDimension).CopyTo(rows.Slice(i * _embeddingDimension, _embeddingDimension));
             }
 
             return matrix;

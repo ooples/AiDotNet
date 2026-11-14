@@ -1,3 +1,5 @@
+using System;
+using AiDotNet.Distributions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -73,7 +75,7 @@ public class TabRRegression<T> : TabRBase<T>
         int numFeatures,
         int outputDimension = 1,
         TabROptions<T>? options = null)
-        : base(numFeatures, options)
+        : base(numFeatures, options, Math.Max(outputDimension, 0))
     {
         if (outputDimension < 1)
         {
@@ -87,6 +89,18 @@ public class TabRRegression<T> : TabRBase<T>
             EmbeddingDimension,
             outputDimension,
             (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Builds the retrieval index from training features and their targets, so every retrieved neighbour
+    /// contributes its target embedding (Gorishniy et al. 2024, eq. 5) and
+    /// <see cref="PredictWithConfidence"/> can measure the neighbours' spread.
+    /// </summary>
+    /// <param name="features">Training features [num_samples, num_features].</param>
+    /// <param name="targets">Training targets [num_samples, output_dim].</param>
+    public void BuildIndex(Tensor<T> features, Tensor<T> targets)
+    {
+        BuildIndexWithLabels(features, targets);
     }
 
     /// <summary>
@@ -122,15 +136,7 @@ public class TabRRegression<T> : TabRBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanSquaredError(predictions, targets);
     }
 
     /// <summary>
@@ -143,15 +149,7 @@ public class TabRRegression<T> : TabRBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanAbsoluteError(predictions, targets);
     }
 
     /// <summary>
@@ -164,12 +162,9 @@ public class TabRRegression<T> : TabRBase<T>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate, Vector<int>? sampleIndices = null)
     {
-        var predictions = Forward(features, sampleIndices);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(
+            () => TabularTraining.MeanSquaredErrorObjective(Forward(features, sampleIndices), targets),
+            learningRate);
     }
 
     /// <summary>
@@ -179,33 +174,7 @@ public class TabRRegression<T> : TabRBase<T>
     {
         var predictions = Predict(features);
 
-        // Compute target mean
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
-
-        // Compute SS_res and SS_tot
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
-
-        if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
-        {
-            return NumOps.Compare(ssRes, NumOps.Zero) == 0 ? NumOps.One : NumOps.Zero;
-        }
-
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+        return TabularMetrics.R2Score(predictions, targets);
     }
 
     /// <summary>
@@ -250,17 +219,29 @@ public class TabRRegression<T> : TabRBase<T>
         }
 
         int batchSize = features.Shape[0];
-        int k = Options.NumNeighbors;
 
+        // The neighbours actually retrieved: fewer than NumNeighbors when the index (less the excluded sample) is
+        // smaller
+        int k = attentionWeights.Shape[1];
+
+        // Sort each sample's neighbors by attention weight (descending). The order is computed as a stable
+        // sort, which is what List.Sort's insertion-sort path produced for the usual k <= 16 neighbors.
+        var weights = TabularMetrics.Flat(attentionWeights, batchSize * k).Reshape(batchSize, k);
+        var order = TieBreakArgMax.StableDescendingOrder(weights);
+        var sortedWeights = Engine.TensorTakeAlongDim(weights, order, 1).ToArray();
+        var neighbors = Tensor<int>.FromMatrix(neighborIndices);
+        neighbors = Engine.TensorNarrow(Engine.TensorNarrow(neighbors, 0, 0, batchSize), 1, 0, k);
+        var sortedNeighbors = Engine.TensorTakeAlongDim(neighbors, order, 1).ToArray();
+
+        // Packing into the (index, weight) tuples of the public return type is pure data movement.
         for (int b = 0; b < batchSize; b++)
         {
-            var sampleExplanation = new List<(int, T)>();
+            var sampleExplanation = new List<(int, T)>(k);
             for (int j = 0; j < k; j++)
             {
-                sampleExplanation.Add((neighborIndices[b, j], attentionWeights[b * k + j]));
+                sampleExplanation.Add((sortedNeighbors[b * k + j], sortedWeights[b * k + j]));
             }
-            // Sort by attention weight (descending)
-            sampleExplanation.Sort((a, b) => NumOps.Compare(b.Item2, a.Item2));
+
             explanations.Add(sampleExplanation);
         }
 
@@ -285,29 +266,38 @@ public class TabRRegression<T> : TabRBase<T>
         Tensor<T> features,
         double confidenceLevel = 0.95)
     {
+        if (confidenceLevel <= 0.0 || confidenceLevel >= 1.0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel), "Confidence level must lie in (0, 1).");
+        }
+
         // Run forward pass
         var predictions = Predict(features);
         int batchSize = predictions.Shape[0];
         int outputDim = _outputDimension;
 
-        // Get neighbor information
-        var neighborIndices = GetRetrievedNeighborIndices();
-
-        // For now, use a simple heuristic based on attention weight concentration
-        // A proper implementation would use neighbor target variance
-        var lower = new Tensor<T>([batchSize, outputDim]);
-        var upper = new Tensor<T>([batchSize, outputDim]);
-
-        // Simple placeholder: ±10% of prediction value
-        var margin = NumOps.FromDouble(0.1);
-
-        for (int i = 0; i < predictions.Length; i++)
+        var weights = GetAttentionWeights();
+        var neighborTargets = GetNeighborLabels();
+        if (weights == null || neighborTargets == null)
         {
-            var pred = predictions[i];
-            var delta = NumOps.Multiply(NumOps.Abs(pred), margin);
-            lower[i] = NumOps.Subtract(pred, delta);
-            upper[i] = NumOps.Add(pred, delta);
+            throw new InvalidOperationException(
+                "Confidence intervals need the neighbours' targets. Build the index with BuildIndex(features, targets).");
         }
+
+        // Retrieval-weighted spread of the neighbour targets: var = sum_i w_i (y_i - sum_j w_j y_j)^2, and the
+        // interval prediction +/- z * sqrt(var) with z the two-sided standard normal quantile
+        int k = weights.Shape[1];
+        var w = weights.Reshape(batchSize, k, 1);
+        var neighborMean = Engine.ReduceSum(Engine.TensorMultiply(w, neighborTargets), new[] { 1 }, true);
+        var centered = Engine.TensorSubtract(neighborTargets, neighborMean);
+        var variance = Engine.ReduceSum(
+            Engine.TensorMultiply(w, Engine.TensorMultiply(centered, centered)), new[] { 1 }, false);
+        var z = new NormalDistribution<T>().InverseCdf(NumOps.FromDouble(0.5 + confidenceLevel / 2.0));
+        var halfWidth = Engine.TensorMultiplyScalar(Engine.TensorSqrt(variance), z);
+
+        var centre = predictions.Reshape(batchSize, outputDim);
+        var lower = Engine.TensorSubtract(centre, halfWidth);
+        var upper = Engine.TensorAdd(centre, halfWidth);
 
         return (predictions, lower, upper);
     }

@@ -36,18 +36,23 @@ internal static class UnitIntervalTensorDomain
         public void Validate<T>(Tensor<T> input, string ownerName, string portName)
         {
             var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = operations.ToDouble(input[i]);
-                if (!double.IsNaN(value) && !double.IsInfinity(value)
-                    && value >= 0.0 && value <= 1.0)
-                    continue;
+            var engine = AiDotNetEngine.Current;
 
-                throw new InputContractViolationException(
-                    $"{ownerName}.{portName} requires continuous values in [0, 1], "
-                    + $"but element {i} is {value}.",
-                    portName);
-            }
+            // Non-zero where the element is NaN or lies outside [0, 1], 0 where it is valid
+            var outOfRange = engine.TensorWhere(
+                engine.TensorIsNan(input),
+                engine.TensorOnesLike(input),
+                engine.TensorAdd(
+                    engine.TensorLessThan(input, operations.Zero), engine.TensorGreaterThan(input, operations.One)));
+            if (engine.TensorCountNonzero(outOfRange) == 0)
+                return;
+
+            int i = TieBreakArgMax.FirstMaxIndex(outOfRange);
+            double value = operations.ToDouble(input.GetFlat(i));
+            throw new InputContractViolationException(
+                $"{ownerName}.{portName} requires continuous values in [0, 1], "
+                + $"but element {i} is {value}.",
+                portName);
         }
 
         public Tensor<T> CreateValid<T>(int[] shape, Random random)
@@ -61,23 +66,19 @@ internal static class UnitIntervalTensorDomain
 
         public Tensor<T> CreateNearby<T>(Tensor<T> input, double epsilon)
         {
-            var nearby = new Tensor<T>(input.Shape.ToArray());
             var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = Math.Min(Math.Max(operations.ToDouble(input[i]) + epsilon, 0.0), 1.0);
-                nearby[i] = operations.FromDouble(value);
-            }
-            return nearby;
+            var engine = AiDotNetEngine.Current;
+
+            // min(max(x + epsilon, 0), 1), with NaN passed through
+            var shifted = engine.TensorAddScalar(input, operations.FromDouble(epsilon));
+            var clamped = engine.TensorClamp(shifted, operations.Zero, operations.One);
+            return engine.TensorWhere(engine.TensorIsNan(shifted), shifted, clamped);
         }
 
         public Tensor<T> CreateInvalid<T>(int[] shape)
         {
-            var tensor = new Tensor<T>(shape);
             var invalid = MathHelper.GetNumericOperations<T>().FromDouble(-1.0);
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = invalid;
-            return tensor;
+            return Tensor<T>.CreateDefault(shape, invalid);
         }
     }
 }

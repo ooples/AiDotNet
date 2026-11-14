@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
@@ -142,6 +144,14 @@ public abstract class NODEBase<T> : IParameterSource<T>
             throw new ArgumentException("Number of features must be at least 1", nameof(numFeatures));
         }
 
+        // The choice and bin functions are the closed-form alpha-entmax cases; other alphas would need the
+        // general bisection solver, which has no engine op
+        if (Options.EntmaxAlpha != 1.0 && Options.EntmaxAlpha != 1.5 && Options.EntmaxAlpha != 2.0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options), "NODE supports EntmaxAlpha 1.0 (softmax), 1.5 (entmax) or 2.0 (sparsemax).");
+        }
+
         // Optional feature preprocessing
         if (Options.UseFeaturePreprocessing)
         {
@@ -168,11 +178,7 @@ public abstract class NODEBase<T> : IParameterSource<T>
             InitializeWeights(_featureSelectionWeights[t]);
 
             // Split thresholds for each depth
-            _splitThresholds[t] = new Tensor<T>(new[] { Options.TreeDepth });
-            for (int d = 0; d < Options.TreeDepth; d++)
-            {
-                _splitThresholds[t][d] = NumOps.Zero;
-            }
+            _splitThresholds[t] = new Tensor<T>(new[] { Options.TreeDepth });  // zero-initialised
 
             // Leaf values
             _leafValues[t] = new Tensor<T>(new[] { Options.NumLeaves, Options.TreeOutputDimension });
@@ -231,122 +237,154 @@ public abstract class NODEBase<T> : IParameterSource<T>
 
     private Tensor<T> ForwardTree(int treeIdx, Tensor<T> features, int batchSize)
     {
-        // Compute leaf weights for each sample
-        var leafWeights = new Tensor<T>(new[] { batchSize, Options.NumLeaves });
+        int depth = Options.TreeDepth;
+        int numLeaves = Options.NumLeaves;
 
-        // Initialize all samples at root (weight 1.0 for leaf index 0's path)
-        for (int b = 0; b < batchSize; b++)
+        // Soft feature selection: selected[b, d] = sum_f entmax(W[d, :])[f] * x[b, f]
+        var x = TabularMetrics.Flat(features, batchSize * NumFeatures).Reshape(batchSize, NumFeatures);
+        var selection = ComputeChoiceWeights(_featureSelectionWeights[treeIdx]);
+        var selectedFeature = Engine.TensorMatMul(x, Engine.TensorTranspose(selection));
+
+        // Soft split decision (probability of going right) at every depth: the two-class entmax of the
+        // scaled threshold logit (Popov et al. 2020, eq. 2), entmoid for the default alpha = 1.5
+        var thresholds = _splitThresholds[treeIdx].Reshape(1, depth);
+        var temp = NumOps.FromDouble(Options.Temperature);
+        var scaledDiff = Engine.TensorDivideScalar(Engine.TensorSubtract(selectedFeature, thresholds), temp);
+        var splitProbs = ComputeBinProbabilities(scaledDiff);
+        var stayLeftProbs = Engine.ScalarMinusTensor(NumOps.One, splitProbs);
+
+        // goesRight[d, leaf] = (leaf >> (depth - 1 - d)) & 1, computed as floor(leaf / 2^k) mod 2
+        var leafIds = Engine.TensorArange<T>(0, numLeaves).Reshape(1, numLeaves);
+        var pathScale = Engine.TensorExp2(Engine.TensorArange<T>(depth - 1, -1, -1)).Reshape(depth, 1);
+        var quotient = Engine.TensorFloor(Engine.TensorDivide(leafIds, pathScale));
+        var goesRight = Engine.TensorSubtract(
+            quotient, Engine.TensorMultiplyScalar(Engine.TensorFloor(Engine.TensorDivideScalar(quotient, NumOps.FromDouble(2.0))), NumOps.FromDouble(2.0)));
+        var goesLeft = Engine.ScalarMinusTensor(NumOps.One, goesRight);
+
+        // Leaf weight = product over depths of p_d (right) or 1 - p_d (left), multiplied in depth order
+        var leafWeights = Engine.TensorFullLike(new Tensor<T>(new[] { batchSize, numLeaves }), NumOps.One);
+        for (int d = 0; d < depth; d++)
         {
-            // For oblivious trees, compute the leaf index based on all split decisions
-            var splitProbs = new Tensor<T>(new[] { Options.TreeDepth });
-
-            for (int d = 0; d < Options.TreeDepth; d++)
-            {
-                // Compute feature selection (soft attention over features)
-                var selectedFeature = NumOps.Zero;
-                var softmaxWeights = ComputeSoftmax(_featureSelectionWeights[treeIdx], d);
-
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    var weight = softmaxWeights[f];
-                    var featureVal = features[b * NumFeatures + f];
-                    selectedFeature = NumOps.Add(selectedFeature,
-                        NumOps.Multiply(weight, featureVal));
-                }
-
-                // Soft split decision using sigmoid
-                var threshold = _splitThresholds[treeIdx][d];
-                var diff = NumOps.Subtract(selectedFeature, threshold);
-                var temp = NumOps.FromDouble(Options.Temperature);
-                var scaledDiff = NumOps.Divide(diff, temp);
-
-                // Sigmoid for soft split probability (probability of going right)
-                splitProbs[d] = Sigmoid(scaledDiff);
-            }
-
-            // Compute leaf weights using the product of split probabilities
-            // Each leaf corresponds to a binary path through the tree
-            for (int leaf = 0; leaf < Options.NumLeaves; leaf++)
-            {
-                var weight = NumOps.One;
-
-                for (int d = 0; d < Options.TreeDepth; d++)
-                {
-                    // Check if this leaf's path goes right (1) or left (0) at depth d
-                    bool goesRight = ((leaf >> (Options.TreeDepth - 1 - d)) & 1) == 1;
-
-                    if (goesRight)
-                    {
-                        weight = NumOps.Multiply(weight, splitProbs[d]);
-                    }
-                    else
-                    {
-                        weight = NumOps.Multiply(weight,
-                            NumOps.Subtract(NumOps.One, splitProbs[d]));
-                    }
-                }
-
-                leafWeights[b * Options.NumLeaves + leaf] = weight;
-            }
+            var right = Engine.TensorNarrow(goesRight, 0, d, 1);
+            var left = Engine.TensorNarrow(goesLeft, 0, d, 1);
+            var factor = Engine.TensorAdd(
+                Engine.TensorMultiply(right, Engine.TensorNarrow(splitProbs, 1, d, 1)),
+                Engine.TensorMultiply(left, Engine.TensorNarrow(stayLeftProbs, 1, d, 1)));
+            leafWeights = Engine.TensorMultiply(leafWeights, factor);
         }
 
         // Compute tree output as weighted sum of leaf values
-        var output = new Tensor<T>(new[] { batchSize, Options.TreeOutputDimension });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < Options.TreeOutputDimension; d++)
-            {
-                var sum = NumOps.Zero;
-
-                for (int leaf = 0; leaf < Options.NumLeaves; leaf++)
-                {
-                    var weight = leafWeights[b * Options.NumLeaves + leaf];
-                    var value = _leafValues[treeIdx][leaf * Options.TreeOutputDimension + d];
-                    sum = NumOps.Add(sum, NumOps.Multiply(weight, value));
-                }
-
-                output[b * Options.TreeOutputDimension + d] = sum;
-            }
-        }
-
-        return output;
+        return Engine.TensorMatMul(
+            leafWeights, _leafValues[treeIdx].Reshape(numLeaves, Options.TreeOutputDimension));
     }
 
-    private Vector<T> ComputeSoftmax(Tensor<T> weights, int depthIdx)
+    /// <summary>
+    /// The choice function over each depth's feature-selection logits: [tree_depth, num_features]. It is the
+    /// alpha-entmax of <see cref="NODEOptions{T}.EntmaxAlpha"/>: softmax at 1, entmax-1.5 at the paper's
+    /// default 1.5 and sparsemax at 2.
+    /// </summary>
+    private Tensor<T> ComputeChoiceWeights(Tensor<T> weights)
     {
-        var result = new Vector<T>(NumFeatures);
-        var maxVal = weights[depthIdx * NumFeatures + 0];
-
-        for (int f = 1; f < NumFeatures; f++)
-        {
-            var val = weights[depthIdx * NumFeatures + f];
-            if (NumOps.Compare(val, maxVal) > 0)
-                maxVal = val;
-        }
-
-        var sumExp = NumOps.Zero;
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            var val = weights[depthIdx * NumFeatures + f];
-            var exp = NumOps.Exp(NumOps.Subtract(val, maxVal));
-            result[f] = exp;
-            sumExp = NumOps.Add(sumExp, exp);
-        }
-
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            result[f] = NumOps.Divide(result[f], sumExp);
-        }
-
-        return result;
+        var logits = weights.Reshape(Options.TreeDepth, NumFeatures);
+        if (Options.EntmaxAlpha == 1.0) return Engine.Softmax(logits, -1);
+        if (Options.EntmaxAlpha == 2.0) return Engine.Sparsemax(logits, -1);
+        return Entmax15(logits);
     }
 
-    private T Sigmoid(T x)
+    /// <summary>
+    /// The bin function of the split logits: the two-class alpha-entmax, i.e. sigmoid at alpha 1, entmoid-1.5
+    /// at 1.5 and sparsemoid <c>clamp((x + 1) / 2, 0, 1)</c> at 2.
+    /// </summary>
+    private Tensor<T> ComputeBinProbabilities(Tensor<T> logits)
     {
-        var negX = NumOps.Negate(x);
-        var expNegX = NumOps.Exp(negX);
-        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
+        if (Options.EntmaxAlpha == 1.0) return Engine.Sigmoid(logits);
+        if (Options.EntmaxAlpha == 2.0)
+        {
+            var half = NumOps.FromDouble(0.5);
+            return Engine.TensorClamp(
+                TensorTapeOps.TapeAddScalar(Engine, TensorTapeOps.TapeMultiplyScalar(Engine, logits, half), half),
+                NumOps.Zero,
+                NumOps.One);
+        }
+
+        return Entmoid15(logits);
+    }
+
+    /// <summary>
+    /// 1.5-entmax along the last axis of a [rows, n] tensor (Peters, Niculae and Martins 2019):
+    /// <c>y = ReLU(z / 2 - tau)^2</c> with tau the unique threshold making each row sum to one.
+    /// </summary>
+    /// <remarks>
+    /// The threshold is found exactly by sorting: with X = z / 2 sorted descending, the candidate for a support
+    /// of size r is <c>tau_r = mean_r - sqrt((1 - r (meansq_r - mean_r^2)) / r)</c>, and the support is
+    /// <c>{ r : tau_r &lt;= X_(r) }</c>. The returned value recomputes tau from that support with differentiable
+    /// engine ops, so on the tape the gradient is the exact entmax Jacobian.
+    /// </remarks>
+    internal static Tensor<T> Entmax15(Tensor<T> logits)
+    {
+        var engine = AiDotNetEngine.Current;
+        int rows = logits.Shape[0];
+        int n = logits.Shape[1];
+        var one = NumOps.One;
+
+        // X = z / 2, shifted by the row max (entmax is shift invariant)
+        var halved = TensorTapeOps.TapeMultiplyScalar(engine, logits.Reshape(rows, n), NumOps.FromDouble(0.5));
+        var x = engine.TensorSubtract(halved, engine.ReduceMax(halved, new[] { 1 }, true));
+
+        // Threshold candidates over the descending order, and the support size
+        var sorted = engine.TensorSort(x, -1, descending: true).Values;
+        var rank = engine.TensorArange<T>(1, n + 1).Reshape(1, n);
+        var mean = engine.TensorDivide(engine.TensorCumSum(sorted, 1), rank);
+        var meanSquare = engine.TensorDivide(engine.TensorCumSum(engine.TensorMultiply(sorted, sorted), 1), rank);
+        var spread = engine.TensorMultiply(rank, engine.TensorSubtract(meanSquare, engine.TensorMultiply(mean, mean)));
+        var delta = engine.TensorDivide(engine.ScalarMinusTensor(one, spread), rank);
+        var candidates = engine.TensorSubtract(mean, engine.TensorSqrt(engine.ReLU(delta)));
+        // Counted in int: a 0/1 sum in T stops counting at 2048 in Half and would pick the wrong threshold
+        var outside = engine.TensorLessThan(engine.TensorSubtract(sorted, candidates), NumOps.Zero);
+        var supportCount = engine.ScalarMinusTensor(n, engine.ReduceSum(outside.Cast<int>(), new[] { 1 }, true));
+        var supportSize = supportCount.Cast<T>();
+
+        // Membership in original order: x >= the smallest supported value
+        var lastIndex = engine.TensorAddScalar(supportCount, -1);
+        var smallestSupported = engine.TensorTakeAlongDim(sorted, lastIndex, 1);
+        var support = engine.ScalarMinusTensor(
+            one, engine.TensorLessThan(engine.TensorSubtract(x, smallestSupported), NumOps.Zero));
+
+        // tau over the support: mean_S - sqrt((1 - ss_S) / k), ss_S = sum_S x^2 - k mean_S^2
+        var sum = engine.ReduceSum(engine.TensorMultiply(support, x), new[] { 1 }, true);
+        var sumSquares = engine.ReduceSum(engine.TensorMultiply(support, engine.TensorMultiply(x, x)), new[] { 1 }, true);
+        var supportMean = engine.TensorDivide(sum, supportSize);
+        var supportSpread = engine.TensorSubtract(sumSquares, engine.TensorMultiply(sum, supportMean));
+        var tau = engine.TensorSubtract(
+            supportMean,
+            engine.TensorSqrt(engine.TensorDivide(engine.ScalarMinusTensor(one, supportSpread), supportSize)));
+
+        var shifted = engine.ReLU(engine.TensorSubtract(x, tau));
+        return engine.TensorMultiply(shifted, shifted).Reshape(logits._shape);
+    }
+
+    /// <summary>
+    /// entmoid-1.5, the two-class 1.5-entmax <c>[entmax15([x, 0])]_0</c>, element-wise (Popov et al. 2020):
+    /// with a = |x|, <c>t = (a + sqrt(8 - a^2)) / 2</c> (2 once t &lt;= a), <c>y- = ReLU(t - a)^2 / 4</c> and
+    /// <c>y = 1 - y-</c> for x &gt;= 0, <c>y-</c> otherwise.
+    /// </summary>
+    internal static Tensor<T> Entmoid15(Tensor<T> logits)
+    {
+        var engine = AiDotNetEngine.Current;
+        var two = NumOps.FromDouble(2.0);
+        var a = engine.TensorAbs(logits);
+
+        // a is clamped to 2 inside the root: the result is unchanged (t is replaced by 2 beyond a = 2) and the
+        // root's argument stays >= 4, so its gradient is finite everywhere
+        var clamped = engine.TensorClamp(a, NumOps.Zero, two);
+        var root = engine.TensorSqrt(engine.ScalarMinusTensor(NumOps.FromDouble(8.0), engine.TensorMultiply(clamped, clamped)));
+        var t = TensorTapeOps.TapeMultiplyScalar(engine, engine.TensorAdd(a, root), NumOps.FromDouble(0.5));
+        t = engine.TensorWhere(engine.TensorGreaterThan(t, a), t, engine.TensorFullLike(t, two));
+
+        var gap = engine.ReLU(engine.TensorSubtract(t, a));
+        var negative = TensorTapeOps.TapeMultiplyScalar(engine, engine.TensorMultiply(gap, gap), NumOps.FromDouble(0.25));
+        return engine.TensorWhere(
+            engine.TensorLessThan(logits, NumOps.Zero), negative, engine.ScalarMinusTensor(NumOps.One, negative));
     }
 
     /// <summary>
@@ -355,29 +393,17 @@ public abstract class NODEBase<T> : IParameterSource<T>
     /// <returns>Feature importance scores [num_features].</returns>
     public Vector<T> GetFeatureImportance()
     {
-        var importance = new Vector<T>(NumFeatures);
+        var importance = new Tensor<T>(new[] { NumFeatures });
 
         for (int t = 0; t < Options.NumTrees; t++)
         {
-            for (int d = 0; d < Options.TreeDepth; d++)
-            {
-                var softmaxWeights = ComputeSoftmax(_featureSelectionWeights[t], d);
-
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    importance[f] = NumOps.Add(importance[f], softmaxWeights[f]);
-                }
-            }
+            var softmaxWeights = ComputeChoiceWeights(_featureSelectionWeights[t]);
+            importance = Engine.TensorAdd(importance, Engine.ReduceSum(softmaxWeights, new[] { 0 }, false));
         }
 
         // Normalize
         var scale = NumOps.FromDouble(1.0 / (Options.NumTrees * Options.TreeDepth));
-        for (int f = 0; f < NumFeatures; f++)
-        {
-            importance[f] = NumOps.Multiply(importance[f], scale);
-        }
-
-        return importance;
+        return Engine.TensorMultiplyScalar(importance, scale).ToVector();
     }
 
     /// <summary>
@@ -389,6 +415,38 @@ public abstract class NODEBase<T> : IParameterSource<T>
 
         // Update tree parameters (simplified gradient descent)
         // In practice, this would use proper gradient computation
+    }
+
+    /// <summary>
+    /// The live tensors a tape training step updates: the feature-selection logits, split thresholds and leaf responses of every tree, the optional preprocessing layer and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        tensors.AddRange(_featureSelectionWeights);
+        tensors.AddRange(_splitThresholds);
+        tensors.AddRange(_leafValues);
+        var layers = new List<ILayer<T>>();
+        if (_featurePreprocessing is not null) layers.Add(_featurePreprocessing);
+        layers.AddRange(GetExtraTrainableLayers().OfType<ILayer<T>>());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
     }
 
     /// <summary>

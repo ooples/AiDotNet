@@ -80,7 +80,7 @@ internal sealed class TapeReachabilityProbe<T> : IDisposable
     /// <param name="gradients">The gradients the tape produced.</param>
     internal void Record(object owner, IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         var reached = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
         if (gradients is not null && gradients.Count > 0)
@@ -89,13 +89,10 @@ internal sealed class TapeReachabilityProbe<T> : IDisposable
             {
                 if (!gradients.TryGetValue(requested, out var gradient) || gradient is null) continue;
 
-                for (int i = 0; i < gradient.Length; i++)
+                // Reached when any entry differs from zero (NaN counts as non-zero)
+                if (engine.TensorCountNonzero(gradient) > 0)
                 {
-                    if (!ops.Equals(gradient.GetFlat(i), ops.Zero))
-                    {
-                        reached.Add(requested);
-                        break;
-                    }
+                    reached.Add(requested);
                 }
             }
         }

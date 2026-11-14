@@ -130,14 +130,14 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Gets or sets whether to normalize embeddings for retrieval.
     /// </summary>
-    /// <value>True to normalize embeddings; false otherwise. Defaults to true.</value>
+    /// <value>True to normalize embeddings; false otherwise. Defaults to false.</value>
     /// <remarks>
     /// <para>
-    /// Normalizing embeddings to unit length makes cosine similarity equivalent
-    /// to dot product, which is more stable for retrieval.
+    /// Gorishniy et al. (2023) retrieve by the squared L2 distance between unnormalized keys, so the default is
+    /// off. Turning it on scales every encoding to unit length before retrieval.
     /// </para>
     /// </remarks>
-    public bool NormalizeEmbeddings { get; set; } = true;
+    public bool NormalizeEmbeddings { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the number of context encoder layers.

@@ -278,7 +278,7 @@ namespace AiDotNet.NeuralNetworks
                 }
             }
 
-            var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
+            var inputTensor = new Tensor<int>(tokens.ToArray(), new[] { 1, tokens.Count }).Cast<T>();
 
             var output = Predict(inputTensor);
             return PoolOutput(output);

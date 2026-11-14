@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Attributes;
 using System.Collections.Generic;
 using AiDotNet.Enums;
@@ -68,7 +69,7 @@ public class TabPFNRegression<T> : TabPFNBase<T>
         int numNumericalFeatures,
         int outputDimension = 1,
         TabPFNOptions<T>? options = null)
-        : base(numNumericalFeatures, options)
+        : base(numNumericalFeatures, options, Math.Max(outputDimension, 0))
     {
         if (outputDimension < 1)
         {
@@ -133,20 +134,12 @@ public class TabPFNRegression<T> : TabPFNBase<T>
             var preds = Predict(numericalFeatures, categoricalIndices);
 
             // Accumulate predictions
-            for (int i = 0; i < preds.Length; i++)
-            {
-                aggregatedPreds[i] = NumOps.Add(aggregatedPreds[i], preds[i]);
-            }
+            aggregatedPreds = Engine.TensorAdd(aggregatedPreds, preds.Reshape(aggregatedPreds._shape));
         }
 
         // Average
         var scale = NumOps.FromDouble(1.0 / numEnsembles);
-        for (int i = 0; i < aggregatedPreds.Length; i++)
-        {
-            aggregatedPreds[i] = NumOps.Multiply(aggregatedPreds[i], scale);
-        }
-
-        return aggregatedPreds;
+        return Engine.TensorMultiplyScalar(aggregatedPreds, scale);
     }
 
     /// <summary>
@@ -159,15 +152,7 @@ public class TabPFNRegression<T> : TabPFNBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanSquaredError(predictions, targets);
     }
 
     /// <summary>
@@ -180,15 +165,7 @@ public class TabPFNRegression<T> : TabPFNBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanAbsoluteError(predictions, targets);
     }
 
     /// <summary>
@@ -202,12 +179,9 @@ public class TabPFNRegression<T> : TabPFNBase<T>
     /// </remarks>
     public T TrainStep(Tensor<T> numericalFeatures, Tensor<T> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var predictions = Forward(numericalFeatures, categoricalIndices);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(
+            () => TabularTraining.MeanSquaredErrorObjective(Forward(numericalFeatures, categoricalIndices), targets),
+            learningRate);
     }
 
     /// <summary>
@@ -217,31 +191,7 @@ public class TabPFNRegression<T> : TabPFNBase<T>
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
 
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
-
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
-
-        if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
-        {
-            return NumOps.Compare(ssRes, NumOps.Zero) == 0 ? NumOps.One : NumOps.Zero;
-        }
-
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+        return TabularMetrics.R2Score(predictions, targets);
     }
 
     /// <summary>

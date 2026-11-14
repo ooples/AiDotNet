@@ -141,27 +141,7 @@ public class TabMClassifier<T> : TabMBase<T>
     {
         var probabilities = PredictProbabilities(features);
         int batchSize = probabilities.Shape[0];
-        var predictions = new int[batchSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(probabilities, batchSize, _numClasses).ToArray();
     }
 
     /// <summary>
@@ -173,19 +153,8 @@ public class TabMClassifier<T> : TabMBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, int[] targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return TabularMetrics.MeanNegativeLogLikelihood(probabilities, Vector<int>.Wrap(targets), batchSize, _numClasses, epsilon);
     }
 
     /// <summary>
@@ -197,21 +166,12 @@ public class TabMClassifier<T> : TabMBase<T>
     /// <returns>The training loss for this step.</returns>
     public T TrainStep(Tensor<T> features, int[] targets, T learningRate)
     {
-        // Forward pass
-        var probabilities = PredictProbabilities(features);
-
-        // Compute loss
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-
-        // Backward pass
-
-        // Update parameters
-        UpdateParameters(learningRate);
-
-        // Reset for next iteration
-        ResetState();
-
-        return loss;
+        int batchSize = features.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(Vector<int>.Wrap(targets), batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(PredictProbabilities(features), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>
@@ -239,27 +199,31 @@ public class TabMClassifier<T> : TabMBase<T>
     public T ComputeF1Score(Tensor<T> features, int[] targets)
     {
         var predictions = Predict(features);
-        var totalF1 = NumOps.Zero;
+        var engine = Engine;
+        int n = predictions.Length;
 
-        for (int c = 0; c < _numClasses; c++)
-        {
-            int tp = 0, fp = 0, fn = 0;
+        // One-hot rows ignore labels outside [0, numClasses), exactly as the per-class equality tests did. The
+        // counts are summed in int, as the scalar tp/fp/fn counters were: a 0/1 sum in T stops counting at 2048 in
+        // Half. Only the finished counts become T for the ratios.
+        var predicted = engine.TensorOneHot<int>(new Tensor<int>(predictions, new[] { n }), _numClasses);
+        var actual = engine.TensorOneHot<int>(
+            Tensor<int>.FromVector(Vector<int>.Wrap(targets).GetSubVector(0, n)), _numClasses);
 
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                if (predictions[i] == c && targets[i] == c) tp++;
-                else if (predictions[i] == c && targets[i] != c) fp++;
-                else if (predictions[i] != c && targets[i] == c) fn++;
-            }
+        var truePositives = engine.ReduceSum(engine.TensorMultiply(predicted, actual), new[] { 0 }, false).Cast<T>();
+        var predictedCounts = engine.ReduceSum(predicted, new[] { 0 }, false).Cast<T>();
+        var actualCounts = engine.ReduceSum(actual, new[] { 0 }, false).Cast<T>();
 
-            double precision = tp + fp > 0 ? (double)tp / (tp + fp) : 0.0;
-            double recall = tp + fn > 0 ? (double)tp / (tp + fn) : 0.0;
-            double f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0.0;
+        // tp is 0 whenever its count is 0, so dividing by max(count, 1) yields the 0 fallback exactly.
+        var precision = engine.TensorDivide(truePositives, engine.TensorMax(predictedCounts, NumOps.One));
+        var recall = engine.TensorDivide(truePositives, engine.TensorMax(actualCounts, NumOps.One));
+        var precisionPlusRecall = engine.TensorAdd(precision, recall);
+        var hasScore = engine.TensorGreaterThan(precisionPlusRecall, NumOps.Zero);
+        var safeDenominator = engine.TensorWhere(hasScore, precisionPlusRecall, engine.TensorOnesLike(precisionPlusRecall));
+        var f1 = engine.TensorDivide(
+            engine.TensorMultiplyScalar(engine.TensorMultiply(precision, recall), NumOps.FromDouble(2.0)),
+            safeDenominator);
 
-            totalF1 = NumOps.Add(totalF1, NumOps.FromDouble(f1));
-        }
-
-        return NumOps.Divide(totalF1, NumOps.FromDouble(_numClasses));
+        return NumOps.Divide(engine.TensorSum(f1), NumOps.FromDouble(_numClasses));
     }
 
     /// <summary>
@@ -283,23 +247,13 @@ public class TabMClassifier<T> : TabMBase<T>
     {
         var probabilities = PredictProbabilities(features);
         int batchSize = probabilities.Shape[0];
-        var uncertainty = new Vector<T>(batchSize);
         var epsilon = NumOps.FromDouble(1e-15);
+        var engine = Engine;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            var entropy = NumOps.Zero;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var p = probabilities[b * _numClasses + c];
-                var pSafe = NumOps.Add(p, epsilon);
-                entropy = NumOps.Subtract(entropy,
-                    NumOps.Multiply(p, NumOps.Log(pSafe)));
-            }
-            uncertainty[b] = entropy;
-        }
-
-        return uncertainty;
+        var p = TabularMetrics.Flat(probabilities, batchSize * _numClasses).Reshape(batchSize, _numClasses);
+        var plogp = engine.TensorMultiply(p, engine.TensorLog(engine.TensorAddScalar(p, epsilon)));
+        var entropy = engine.TensorNegate(engine.ReduceSum(plogp, new[] { 1 }, false));
+        return entropy.ToVector();
     }
 
     /// <summary>

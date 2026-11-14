@@ -379,10 +379,12 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
 
         Generator.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
-        T totalCriticLoss = NumOps.Zero;
+        // Loss of each critic step, averaged once the generator step reports
+        var criticStepLosses = new T[_criticIterations];
         var objectives = new List<Training.TrainingObjective<T>>(_criticIterations + 1);
         for (int i = 0; i < _criticIterations; i++)
         {
+            int step = i;
             objectives.Add(new Training.TrainingObjective<T>(
                 () => new[] { realImages, GenerateImages(noise) },
                 data =>
@@ -398,7 +400,7 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
                 Optimizer = _criticOptimizer,
                 OnLoss = loss =>
                 {
-                    totalCriticLoss = NumOps.Add(totalCriticLoss, loss);
+                    criticStepLosses[step] = loss;
                     ClipCriticWeights();
                 },
             });
@@ -418,6 +420,7 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
             AfterStep = () => Generator.SetTrainingMode(false),
             OnLoss = generatorLoss =>
             {
+                T totalCriticLoss = Engine.Sum(new Vector<T>(criticStepLosses));
                 _criticLosses.Add(NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations)));
                 _generatorLosses.Add(generatorLoss);
                 if (_criticLosses.Count > 100)
@@ -524,16 +527,7 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         Critic.SetTrainingMode(false);
         var criticScores = Critic.Predict(generatedImages);
 
-        var scoresList = new List<double>(sampleSize);
-        for (int i = 0; i < sampleSize; i++)
-        {
-            scoresList.Add(NumOps.ToDouble(criticScores[i, 0]));
-        }
-
-        metrics["AverageCriticScore"] = scoresList.Average();
-        metrics["MinCriticScore"] = scoresList.Min();
-        metrics["MaxCriticScore"] = scoresList.Max();
-        metrics["CriticScoreStdDev"] = StatisticsHelper<double>.CalculateStandardDeviation(scoresList);
+        CriticScoreMetrics.Add(metrics, criticScores, sampleSize);
 
         if (_generatorLosses.Count > 0)
         {

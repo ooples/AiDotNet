@@ -186,6 +186,10 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         InitializeLayers();
     }
 
+    /// <summary>The batch the last prediction ran on, attributed by <see cref="GetFeatureImportance"/>.</summary>
+    [Scratch]
+    private Tensor<T>? _importanceBatch;
+
     /// <summary>
     /// Initializes the layers of the TabTransformer network based on the provided architecture.
     /// </summary>
@@ -250,6 +254,9 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        // Kept for GetFeatureImportance, which attributes the most recent batch. It outlives this call, so it is a
+        // copy: the input can be an engine result in a tensor arena that a later call recycles.
+        _importanceBatch = TabularMetrics.KeptCopy(input);
 
         // CPU path: forward pass through each layer sequentially
         return Accelerate(input, () =>
@@ -303,45 +310,30 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     {
         var importance = new Dictionary<string, T>();
         int numFeatures = Architecture.CalculatedInputSize;
+        var batch = _importanceBatch;
 
-        // For TabTransformer, importance is derived from attention patterns
-        // Initialize with uniform weights as a baseline
-        var uniformValue = NumOps.FromDouble(1.0 / numFeatures);
-        for (int f = 0; f < numFeatures; f++)
+        // Mean-ablation attribution of the last predicted batch; before any prediction there is no data to
+        // attribute, so every feature keeps the uniform 1 / numFeatures
+        T[] scores;
+        if (batch is not null && batch.Rank == 2 && batch.Shape[1] == numFeatures && batch.Shape[0] > 1)
         {
-            importance[$"feature_{f}"] = uniformValue;
-        }
-
-        // Aggregate attention weights from MultiHeadAttentionLayers
-        int attentionLayerCount = 0;
-        var featureScores = new T[numFeatures];
-        for (int f = 0; f < numFeatures; f++)
-        {
-            featureScores[f] = NumOps.Zero;
-        }
-
-        foreach (var layer in Layers)
-        {
-            if (layer is MultiHeadAttentionLayer<T> attentionLayer)
+            try
             {
-                // For transformer models, attention provides indirect feature importance
-                // Each feature gets equal contribution from attention layer
-                for (int f = 0; f < numFeatures; f++)
-                {
-                    featureScores[f] = NumOps.Add(featureScores[f], NumOps.One);
-                }
-                attentionLayerCount++;
+                scores = TabularMetrics.MeanAblationImportance(Predict, batch);
+            }
+            finally
+            {
+                _importanceBatch = batch;
             }
         }
-
-        // Normalize by number of attention layers
-        if (attentionLayerCount > 0)
+        else
         {
-            var layerCountT = NumOps.FromDouble(attentionLayerCount);
-            for (int f = 0; f < numFeatures; f++)
-            {
-                importance[$"feature_{f}"] = NumOps.Divide(featureScores[f], layerCountT);
-            }
+            scores = Enumerable.Repeat(NumOps.FromDouble(1.0 / Math.Max(numFeatures, 1)), numFeatures).ToArray();
+        }
+
+        for (int f = 0; f < scores.Length; f++)
+        {
+            importance[$"feature_{f}"] = scores[f];
         }
 
         return importance;

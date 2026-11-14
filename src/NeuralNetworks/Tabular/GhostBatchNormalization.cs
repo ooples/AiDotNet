@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 
@@ -29,48 +30,43 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// It's particularly effective for tabular data where overfitting is common.
 /// </para>
 /// <para>
+/// The scale (gamma) and shift (beta) are trainable parameters registered with the layer machinery, so a
+/// composite that registers this layer as a sub-layer exposes them to the parameter vector, checkpoints and
+/// the autodiff tape. The running statistics are non-trainable buffers.
+/// </para>
+/// <para>
 /// Reference: "TabNet: Attentive Interpretable Tabular Learning" (Arik &amp; Pfister, AAAI 2021)
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ComponentType(ComponentType.Regularizer)]
 [PipelineStage(PipelineStage.Training)]
-public partial class GhostBatchNormalization<T>
+[LayerCategory(LayerCategory.Normalization)]
+[LayerTask(LayerTask.ActivationNormalization)]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, TestInputShape = "4, 3", TestConstructorArgs = "3")]
+[ElementWiseShape(Note = "Per-feature batch normalisation; every dimension is carried through.")]
+[AutoParameters]
+public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly int _numFeatures;
     private readonly int _virtualBatchSize;
     private readonly double _momentum;
     private readonly double _epsilon;
 
-    // Learnable parameters
-    [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T> _gamma; // Scale parameter
-    [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T> _beta;  // Shift parameter
+    // Learnable scale and shift
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+    private Tensor<T> _gamma;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+    private Tensor<T> _beta;
+
+    private Tensor<T>? _gammaGradient;
+    private Tensor<T>? _betaGradient;
 
     // Running statistics for inference
-    [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T> _runningMean;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T> _runningVar;
-
-    // Gradients
-    [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T>? _gammaGrad;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T>? _betaGrad;
-
-    // Training vs inference mode. Propagated by the owning composite layer
-    // (FeatureTransformerLayer / AttentiveTransformerLayer) so eval uses running stats.
-    private bool _isTraining = true;
-
-    /// <summary>
-    /// Sets training vs inference mode. In inference (and for under-sized batches in training)
-    /// the layer normalizes with the running statistics so the output stays input-dependent and
-    /// deterministic.
-    /// </summary>
-    public void SetTrainingMode(bool isTraining) => _isTraining = isTraining;
+    [Buffer(Name = "running_mean", Role = PersistentTensorRole.Constant)]
+    private Tensor<T> _runningMean;
+    [Buffer(Name = "running_variance", Role = PersistentTensorRole.Constant)]
+    private Tensor<T> _runningVar;
 
     /// <summary>
     /// Gets the name of this layer.
@@ -80,7 +76,7 @@ public partial class GhostBatchNormalization<T>
     /// <summary>
     /// Gets whether this layer supports training.
     /// </summary>
-    public bool SupportsTraining => true;
+    public override bool SupportsTraining => true;
 
     /// <summary>
     /// Initializes a new instance of the GhostBatchNormalization class.
@@ -103,29 +99,26 @@ public partial class GhostBatchNormalization<T>
         int virtualBatchSize = 128,
         double momentum = 0.02,
         double epsilon = 1e-5)
+        : base(new[] { numFeatures }, new[] { numFeatures })
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "numFeatures must be positive.");
+
         _numFeatures = numFeatures;
         _virtualBatchSize = virtualBatchSize;
         _momentum = momentum;
         _epsilon = epsilon;
 
-        // Initialize learnable parameters
-        _gamma = new Vector<T>(_numFeatures);
-        _beta = new Vector<T>(_numFeatures);
+        // gamma = 1, beta = 0; running mean 0, running variance 1
+        _gamma = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
+        _beta = Tensor<T>.CreateDefault([numFeatures], NumOps.Zero);
+        _runningMean = Tensor<T>.CreateDefault([numFeatures], NumOps.Zero);
+        _runningVar = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
 
-        // Initialize running statistics
-        _runningMean = new Vector<T>(_numFeatures);
-        _runningVar = new Vector<T>(_numFeatures);
-
-        // Initialize gamma to 1 and beta to 0
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            _gamma[i] = _numOps.One;
-            _beta[i] = _numOps.Zero;
-            _runningMean[i] = _numOps.Zero;
-            _runningVar[i] = _numOps.One;
-        }
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        RegisterBuffer(_runningMean, "running_mean");
+        RegisterBuffer(_runningVar, "running_variance");
     }
 
     /// <summary>
@@ -139,7 +132,7 @@ public partial class GhostBatchNormalization<T>
     /// separately. During inference, the running statistics are used instead.
     /// </para>
     /// </remarks>
-    public Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 2)
         {
@@ -154,7 +147,7 @@ public partial class GhostBatchNormalization<T>
             throw new ArgumentException($"Expected {_numFeatures} features, got {features}", nameof(input));
         }
 
-        var engine = AiDotNetEngine.Current;
+        var engine = Engine;
 
         // Choose normalization statistics. Batch statistics need >= 2 samples to be
         // meaningful; with a single sample (common at inference and in the invariant
@@ -166,9 +159,9 @@ public partial class GhostBatchNormalization<T>
         // All Engine ops, so the autodiff tape records the computation (the previous
         // manual-loop implementation was a tape dead-end, so nothing upstream of a
         // GhostBatchNorm could train).
-        bool useBatchStats = _isTraining && batchSize >= 2;
-        var minusOne = _numOps.FromDouble(-1.0);
-        var eps = _numOps.FromDouble(_epsilon);
+        bool useBatchStats = IsTrainingMode && batchSize >= 2;
+        var minusOne = NumOps.FromDouble(-1.0);
+        var eps = NumOps.FromDouble(_epsilon);
         Tensor<T> normalized;
 
         if (useBatchStats && _virtualBatchSize >= 2 && batchSize > _virtualBatchSize
@@ -193,7 +186,7 @@ public partial class GhostBatchNormalization<T>
             var bMean = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
             var bCentered = engine.TensorAdd(input, engine.TensorMultiplyScalar(bMean, minusOne));
             var bVar = engine.ReduceMean(engine.TensorMultiply(bCentered, bCentered), new[] { 0 }, keepDims: true);
-            UpdateRunningStatistics(bMean, bVar);
+            UpdateRunningStatistics(bMean, bVar, batchSize);
         }
         else if (useBatchStats)
         {
@@ -202,37 +195,45 @@ public partial class GhostBatchNormalization<T>
             var meanRow = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
             var centered = engine.TensorAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
             var varRow = engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true);
-            UpdateRunningStatistics(meanRow, varRow);
+            UpdateRunningStatistics(meanRow, varRow, batchSize);
             var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
             normalized = engine.TensorDivide(centered, std);
         }
         else
         {
             // Inference / single-sample: input-independent running statistics.
-            var meanRow = Tensor<T>.FromVector(_runningMean).Reshape(new[] { 1, _numFeatures });
-            var varRow = Tensor<T>.FromVector(_runningVar).Reshape(new[] { 1, _numFeatures });
+            var meanRow = _runningMean.Reshape(new[] { 1, _numFeatures });
+            var varRow = _runningVar.Reshape(new[] { 1, _numFeatures });
             var centered = engine.TensorAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
             var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
             normalized = engine.TensorDivide(centered, std);
         }
 
-        // Scale/shift by the learnable gamma/beta.
-        var gammaRow = Tensor<T>.FromVector(_gamma).Reshape(new[] { 1, _numFeatures });
-        var betaRow = Tensor<T>.FromVector(_beta).Reshape(new[] { 1, _numFeatures });
-        var scaled = engine.TensorMultiply(normalized, gammaRow);
-        return engine.TensorAdd(scaled, betaRow);
+        // Scale/shift by the learnable gamma/beta (broadcast over the batch), on the tape
+        var scaled = engine.TensorMultiply(normalized, _gamma.Reshape(new[] { 1, _numFeatures }));
+        return engine.TensorAdd(scaled, _beta.Reshape(new[] { 1, _numFeatures }));
     }
 
-    private void UpdateRunningStatistics(Tensor<T> meanRow, Tensor<T> varRow)
+    private void UpdateRunningStatistics(Tensor<T> meanRow, Tensor<T> varRow, int sampleCount)
     {
-        // Running stats are a non-tape side-effect; read the computed batch stats by value.
-        var oneMinus = _numOps.FromDouble(1 - _momentum);
-        var m = _numOps.FromDouble(_momentum);
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            _runningMean[f] = _numOps.Add(_numOps.Multiply(oneMinus, _runningMean[f]), _numOps.Multiply(m, meanRow[f]));
-            _runningVar[f] = _numOps.Add(_numOps.Multiply(oneMinus, _runningVar[f]), _numOps.Multiply(m, varRow[f]));
-        }
+        // Running stats are a non-tape side effect: running = (1 - momentum) running + momentum batch, written
+        // in place so the registered buffer keeps its identity. As in torch.nn.BatchNorm1d (which the reference
+        // pytorch-tabnet GBN wraps), the batch is normalized with the biased variance but the running variance
+        // tracks the unbiased one, var * n / (n - 1); callers guarantee n >= 2.
+        var engine = Engine;
+        var keep = NumOps.FromDouble(1 - _momentum);
+        var take = NumOps.FromDouble(_momentum);
+        var unbiasedTake = NumOps.FromDouble(_momentum * sampleCount / (sampleCount - 1.0));
+        var mean = engine.TensorAdd(
+            engine.TensorMultiplyScalar(_runningMean, keep),
+            engine.TensorMultiplyScalar(meanRow.Contiguous().Reshape(_numFeatures), take));
+        var variance = engine.TensorAdd(
+            engine.TensorMultiplyScalar(_runningVar, keep),
+            engine.TensorMultiplyScalar(varRow.Contiguous().Reshape(_numFeatures), unbiasedTake));
+        mean.AsSpan().CopyTo(_runningMean.AsWritableSpan());
+        variance.AsSpan().CopyTo(_runningVar.AsWritableSpan());
+        engine.InvalidatePersistentTensor(_runningMean);
+        engine.InvalidatePersistentTensor(_runningVar);
     }
 
     /// <summary>
@@ -242,78 +243,29 @@ public partial class GhostBatchNormalization<T>
     /// <returns>The normalized output tensor.</returns>
     public Tensor<T> ForwardInference(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
+        var engine = Engine;
         int features = input.Shape[1];
-        var output = new Tensor<T>(input._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                var normalized = _numOps.Divide(
-                    _numOps.Subtract(input[b * features + f], _runningMean[f]),
-                    _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(_runningVar[f]) + _epsilon)));
-
-                output[b * features + f] = _numOps.Add(
-                    _numOps.Multiply(_gamma[f], normalized),
-                    _beta[f]);
-            }
-        }
-
-        return output;
+        var std = engine.TensorSqrt(engine.TensorAddScalar(_runningVar, NumOps.FromDouble(_epsilon)));
+        var normalized = engine.TensorDivide(
+            engine.TensorSubtract(input, _runningMean.Reshape(1, features)), std.Reshape(1, features));
+        return engine.TensorAdd(
+            engine.TensorMultiply(normalized, _gamma.Reshape(1, features)), _beta.Reshape(1, features));
     }
 
     /// <summary>
-    /// Gets the learnable parameters of this layer.
+    /// Plain gradient descent on gamma and beta when a manual backward has supplied their gradients; the tape
+    /// training path updates the registered tensors directly instead.
     /// </summary>
-    /// <returns>A vector containing gamma and beta parameters.</returns>
-    public Vector<T> GetParameters()
+    public override void UpdateParameters(T learningRate)
     {
-        var parameters = new Vector<T>(_numFeatures * 2);
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            parameters[i] = _gamma[i];
-            parameters[_numFeatures + i] = _beta[i];
-        }
-        return parameters;
-    }
+        if (_gammaGradient is null || _betaGradient is null) return;
 
-    /// <summary>
-    /// Sets the learnable parameters of this layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing gamma and beta parameters.</param>
-    public void SetParameters(Vector<T> parameters)
-    {
-        if (parameters.Length != _numFeatures * 2)
-        {
-            throw new ArgumentException($"Expected {_numFeatures * 2} parameters, got {parameters.Length}");
-        }
-
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            _gamma[i] = parameters[i];
-            _beta[i] = parameters[_numFeatures + i];
-        }
-    }
-
-    /// <summary>
-    /// Gets the parameter gradients from the last backward pass.
-    /// </summary>
-    /// <returns>A vector containing gamma and beta gradients.</returns>
-    public Vector<T> GetParameterGradients()
-    {
-        if (_gammaGrad == null || _betaGrad == null)
-        {
-            return new Vector<T>(_numFeatures * 2);
-        }
-
-        var gradients = new Vector<T>(_numFeatures * 2);
-        for (int i = 0; i < _numFeatures; i++)
-        {
-            gradients[i] = _gammaGrad[i];
-            gradients[_numFeatures + i] = _betaGrad[i];
-        }
-        return gradients;
+        var gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+        var beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        gamma.AsSpan().CopyTo(_gamma.AsWritableSpan());
+        beta.AsSpan().CopyTo(_beta.AsWritableSpan());
+        Engine.InvalidatePersistentTensor(_gamma);
+        Engine.InvalidatePersistentTensor(_beta);
     }
 
     /// <summary>
@@ -321,8 +273,21 @@ public partial class GhostBatchNormalization<T>
     /// </summary>
     public void ResetGradients()
     {
-        _gammaGrad = null;
-        _betaGrad = null;
+        _gammaGradient = null;
+        _betaGradient = null;
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        ResetGradients();
+    }
+
+    /// <inheritdoc/>
+    public override void ResetState()
+    {
+        ResetGradients();
     }
 
     /// <summary>
@@ -336,27 +301,22 @@ public partial class GhostBatchNormalization<T>
     }
 
     /// <summary>
-    /// Gets the number of trainable parameters in this layer.
+    /// Gets a copy of the scale (gamma) parameters.
     /// </summary>
-    public long ParameterCount => _numFeatures * 2;
+    public Vector<T> Gamma => _gamma.ToVector();
 
     /// <summary>
-    /// Gets the scale (gamma) parameters.
+    /// Gets a copy of the shift (beta) parameters.
     /// </summary>
-    public Vector<T> Gamma => _gamma;
+    public Vector<T> Beta => _beta.ToVector();
 
     /// <summary>
-    /// Gets the shift (beta) parameters.
+    /// Gets a copy of the running mean statistics.
     /// </summary>
-    public Vector<T> Beta => _beta;
+    public Vector<T> RunningMean => _runningMean.ToVector();
 
     /// <summary>
-    /// Gets the running mean statistics.
+    /// Gets a copy of the running variance statistics.
     /// </summary>
-    public Vector<T> RunningMean => _runningMean;
-
-    /// <summary>
-    /// Gets the running variance statistics.
-    /// </summary>
-    public Vector<T> RunningVar => _runningVar;
+    public Vector<T> RunningVar => _runningVar.ToVector();
 }

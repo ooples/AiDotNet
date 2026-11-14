@@ -111,15 +111,7 @@ public class TabDPTRegression<T> : TabDPTBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanSquaredError(predictions, targets);
     }
 
     /// <summary>
@@ -132,15 +124,7 @@ public class TabDPTRegression<T> : TabDPTBase<T>
             throw new ArgumentException("Predictions and targets must have the same size");
         }
 
-        var totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], targets[i]);
-            totalLoss = NumOps.Add(totalLoss, NumOps.Abs(diff));
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(predictions.Length));
+        return TabularMetrics.MeanAbsoluteError(predictions, targets);
     }
 
     /// <summary>
@@ -148,12 +132,9 @@ public class TabDPTRegression<T> : TabDPTBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Tensor<T> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var predictions = Forward(numericalFeatures, categoricalIndices);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(
+            () => TabularTraining.MeanSquaredErrorObjective(Forward(numericalFeatures, categoricalIndices), targets),
+            learningRate);
     }
 
     /// <summary>
@@ -163,31 +144,7 @@ public class TabDPTRegression<T> : TabDPTBase<T>
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
 
-        var targetMean = NumOps.Zero;
-        for (int i = 0; i < targets.Length; i++)
-        {
-            targetMean = NumOps.Add(targetMean, targets[i]);
-        }
-        targetMean = NumOps.Divide(targetMean, NumOps.FromDouble(targets.Length));
-
-        var ssRes = NumOps.Zero;
-        var ssTot = NumOps.Zero;
-
-        for (int i = 0; i < targets.Length; i++)
-        {
-            var residual = NumOps.Subtract(targets[i], predictions[i]);
-            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-
-            var deviation = NumOps.Subtract(targets[i], targetMean);
-            ssTot = NumOps.Add(ssTot, NumOps.Multiply(deviation, deviation));
-        }
-
-        if (NumOps.Compare(ssTot, NumOps.Zero) == 0)
-        {
-            return NumOps.Compare(ssRes, NumOps.Zero) == 0 ? NumOps.One : NumOps.Zero;
-        }
-
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot));
+        return TabularMetrics.R2Score(predictions, targets);
     }
 
     /// <summary>

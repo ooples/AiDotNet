@@ -110,27 +110,7 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     {
         var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
         int batchSize = probabilities.Shape[0];
-        var predictions = new Vector<int>(batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(probabilities, batchSize, _numClasses);
     }
 
     /// <summary>
@@ -139,19 +119,8 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, Vector<int> targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return TabularMetrics.MeanNegativeLogLikelihood(probabilities, targets, batchSize, _numClasses, epsilon);
     }
 
     /// <summary>
@@ -159,12 +128,12 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Vector<int> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        int batchSize = numericalFeatures.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(targets, batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(PredictProbabilities(numericalFeatures, categoricalIndices), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>
@@ -173,14 +142,7 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     public T ComputeAccuracy(Tensor<T> numericalFeatures, Vector<int> targets, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Predict(numericalFeatures, categoricalIndices);
-        int correct = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (predictions[i] == targets[i])
-                correct++;
-        }
-
+        int correct = TabularMetrics.CountMatches(predictions, targets);
         return NumOps.FromDouble((double)correct / predictions.Length);
     }
 

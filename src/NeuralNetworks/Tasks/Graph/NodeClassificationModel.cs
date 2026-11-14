@@ -349,10 +349,19 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         // (including unlabeled val/test nodes) still participate in message
         // passing during the forward pass.
         int numNodes = task.Graph.NodeFeatures.Shape[0];
+        var labelColumns = Engine.TensorNarrow(
+            Engine.TensorNarrow(task.Labels, 0, 0, numNodes), 1, 0, task.NumClasses);
         var maskedLabels = new Tensor<T>([numNodes, task.NumClasses]);
-        foreach (int n in task.TrainIndices)
-            for (int c = 0; c < task.NumClasses; c++)
-                maskedLabels[n, c] = task.Labels[n, c];
+        if (task.TrainIndices.Length > 0)
+        {
+            var trainNodes = new Tensor<int>(task.TrainIndices, new[] { task.TrainIndices.Length });
+            var hits = Engine.TensorIndexAdd(
+                new Tensor<T>([numNodes]), 0, trainNodes,
+                Tensor<T>.CreateDefault(new[] { task.TrainIndices.Length }, NumOps.One));
+            var isTrainRow = Engine.TensorBroadcastTo(
+                Engine.TensorGreaterThan(hits, NumOps.Zero).Reshape(numNodes, 1), new[] { numNodes, task.NumClasses });
+            maskedLabels = Engine.TensorWhere(isTrainRow, labelColumns, maskedLabels);
+        }
 
         var history = new Dictionary<string, List<double>>
         {
@@ -414,17 +423,26 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         }
 
         // Gather logits and labels for the subset of nodes
-        var subsetLogits = new Tensor<T>([indices.Length, numClasses]);
-        var subsetLabels = new Tensor<T>([indices.Length, numClasses]);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            int nodeIdx = indices[i];
-            for (int c = 0; c < numClasses; c++)
-            {
-                subsetLogits[i, c] = logits[nodeIdx, c];
-                subsetLabels[i, c] = labels[nodeIdx, c];
-            }
-        }
+        var nodes = new Tensor<int>(indices, new[] { indices.Length });
+        var subsetLogits = GatherRows(logits, nodes, numClasses);
+        var subsetLabels = GatherRows(labels, nodes, numClasses);
+
+        double avgLoss = MeanLogitCrossEntropy(subsetLogits, subsetLabels);
+
+        // Compute accuracy: compare argmax of logits vs argmax of labels
+        double accuracy = (double)CountCorrect(subsetLogits, subsetLabels) / indices.Length;
+
+        return (avgLoss, accuracy);
+    }
+
+    /// <summary>
+    /// Mean over the rows of <c>-sum_c labels[c] * logSoftmax(logits)[c]</c>, classes with a zero label skipped.
+    /// </summary>
+    internal static double MeanLogitCrossEntropy(Tensor<T> subsetLogits, Tensor<T> subsetLabels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = subsetLogits.Shape[0];
 
         // Cross-entropy on the raw logits via numerically-stable log-softmax:
         //   CE = -Σ labels · logSoftmax(logits),  logSoftmax = z - max - log Σ exp(z - max).
@@ -432,102 +450,43 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         // must apply the softmax itself — matching the CrossEntropyWithLogitsLoss used
         // for the actual training gradient. (The previous version treated the logits as
         // if they were already probabilities, which made this reported loss meaningless.)
-        double totalLoss = 0.0;
-        for (int i = 0; i < indices.Length; i++)
-        {
-            double max = NumOps.ToDouble(subsetLogits[i, 0]);
-            for (int c = 1; c < numClasses; c++)
-                max = Math.Max(max, NumOps.ToDouble(subsetLogits[i, c]));
-
-            double sumExp = 0.0;
-            for (int c = 0; c < numClasses; c++)
-                sumExp += Math.Exp(NumOps.ToDouble(subsetLogits[i, c]) - max);
-            double logSumExp = Math.Log(sumExp) + max;
-
-            for (int c = 0; c < numClasses; c++)
-            {
-                double yc = NumOps.ToDouble(subsetLabels[i, c]);
-                if (yc != 0.0)
-                    totalLoss += -yc * (NumOps.ToDouble(subsetLogits[i, c]) - logSumExp);
-            }
-        }
-        double avgLoss = totalLoss / indices.Length;
-
-        // Compute accuracy: compare argmax of logits vs argmax of labels
-        int correct = 0;
-        for (int i = 0; i < indices.Length; i++)
-        {
-            int predictedClass = GetPredictedClassFromSubset(subsetLogits, i, numClasses);
-            int trueClass = GetTrueClassFromSubset(subsetLabels, i, numClasses);
-            if (predictedClass == trueClass) correct++;
-        }
-        double accuracy = (double)correct / indices.Length;
-
-        return (avgLoss, accuracy);
+        // Classes with a zero label are skipped, so a -inf logit there contributes nothing.
+        var max = engine.ReduceMax(subsetLogits, [1], keepDims: true, out _);
+        var sumExp = engine.ReduceSum(engine.TensorExp(engine.TensorSubtract(subsetLogits, max)), [1], keepDims: true);
+        var logSumExp = engine.TensorAdd(engine.TensorLog(sumExp), max);
+        var terms = engine.TensorNegate(
+            engine.TensorMultiply(subsetLabels, engine.TensorSubtract(subsetLogits, logSumExp)));
+        var labelled = engine.TensorNotEquals(subsetLabels, ops.Zero);
+        // Mean over nodes, dividing before the sum so a Half total cannot overflow
+        var nodeShares = engine.TensorDivideScalar(
+            engine.TensorWhere(labelled, terms, engine.TensorZerosLike(terms)), ops.FromDouble(rows));
+        return ops.ToDouble(engine.TensorSum(nodeShares));
     }
 
-    private int GetPredictedClassFromSubset(Tensor<T> logits, int rowIdx, int numClasses)
-    {
-        int maxClass = 0;
-        T maxValue = logits[rowIdx, 0];
-        for (int c = 1; c < numClasses; c++)
-        {
-            if (NumOps.GreaterThan(logits[rowIdx, c], maxValue))
-            {
-                maxValue = logits[rowIdx, c];
-                maxClass = c;
-            }
-        }
-        return maxClass;
-    }
+    /// <summary>
+    /// Rows <paramref name="nodes"/> of <paramref name="values"/>, first <paramref name="numClasses"/> columns.
+    /// </summary>
+    private Tensor<T> GatherRows(Tensor<T> values, Tensor<int> nodes, int numClasses)
+        => Engine.TensorNarrow(Engine.TensorIndexSelect(values, nodes, 0), 1, 0, numClasses);
 
-    private int GetTrueClassFromSubset(Tensor<T> labels, int rowIdx, int numClasses)
+    /// <summary>
+    /// Number of rows whose predicted class (first strictly greatest logit, scanning from class 0)
+    /// equals the true class (first non-zero label entry, NaN counting as non-zero, or 0 when none).
+    /// </summary>
+    private int CountCorrect(Tensor<T> logits, Tensor<T> labels)
     {
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (!NumOps.Equals(labels[rowIdx, c], NumOps.Zero))
-                return c;
-        }
-        return 0;
+        var predicted = TieBreakArgMax.FirstMaxIndexPerRow(logits, ArgMaxScan.GreaterThanFromFirst);
+        var actual = TieBreakArgMax.FirstMaxIndexPerRow(Engine.TensorNotEquals(labels, NumOps.Zero));
+        return Engine.TensorCountNonzero(Engine.TensorEquals(predicted, actual));
     }
 
     private double EvaluateAccuracy(Tensor<T> logits, Tensor<T> labels, int[] indices, int numClasses)
     {
         if (indices.Length == 0) return 0.0;
 
-        int correct = 0;
-        foreach (var nodeIdx in indices)
-        {
-            int predictedClass = GetPredictedClass(logits, nodeIdx, numClasses);
-            int trueClass = GetTrueClass(labels, nodeIdx, numClasses);
-            if (predictedClass == trueClass) correct++;
-        }
+        var nodes = new Tensor<int>(indices, new[] { indices.Length });
+        int correct = CountCorrect(GatherRows(logits, nodes, numClasses), GatherRows(labels, nodes, numClasses));
         return (double)correct / indices.Length;
-    }
-
-    private int GetPredictedClass(Tensor<T> logits, int nodeIdx, int numClasses)
-    {
-        int maxClass = 0;
-        T maxValue = logits[nodeIdx, 0];
-        for (int c = 1; c < numClasses; c++)
-        {
-            if (NumOps.GreaterThan(logits[nodeIdx, c], maxValue))
-            {
-                maxValue = logits[nodeIdx, c];
-                maxClass = c;
-            }
-        }
-        return maxClass;
-    }
-
-    private int GetTrueClass(Tensor<T> labels, int nodeIdx, int numClasses)
-    {
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (!NumOps.Equals(labels[nodeIdx, c], NumOps.Zero))
-                return c;
-        }
-        return 0;
     }
 
     #region Abstract Method Implementations
@@ -602,10 +561,7 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
             return;
         }
 
-        var identity = new Tensor<T>(new[] { numNodes, numNodes });
-        for (int i = 0; i < numNodes; i++)
-            identity[i, i] = NumOps.One;
-        SetAdjacencyMatrix(identity);
+        SetAdjacencyMatrix(Engine.TensorEye<T>(numNodes));
         _usesFallbackAdjacency = true;
     }
 

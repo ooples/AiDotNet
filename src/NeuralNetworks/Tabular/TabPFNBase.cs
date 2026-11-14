@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -36,6 +37,13 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "TabPFN: A Transformer That Solves Small Tabular Classification
 /// Problems in a Second" (2022)
 /// </para>
+/// <para>
+/// As in Hollmann et al. (2023), section 4, each context (training) token is the feature encoding plus the
+/// encoding of its label, each query token is the feature encoding alone, and attention is masked so every
+/// token attends only to the context tokens: the context learns from itself, and each query reads the
+/// labelled context without seeing the other queries. Without a context the blocks fall back to full
+/// self-attention over the queries.
+/// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract partial class TabPFNBase<T> : IParameterSource<T>
@@ -52,6 +60,10 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
     // Input encoding
     private readonly FullyConnectedLayer<T> _featureEncoder;
     private readonly FullyConnectedLayer<T>[] _categoricalEncoders;
+
+    // Label encoder of the context tokens (null when the model has no label width)
+    private readonly FullyConnectedLayer<T>? _labelEncoder;
+    private readonly int _labelDimension;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _positionalEncoding;
 
@@ -143,6 +155,7 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         yield return _featureEncoder;
 
         foreach (var enc in _categoricalEncoders) yield return enc;
+        if (_labelEncoder != null) yield return _labelEncoder;
         foreach (var block in _transformerBlocks) yield return block;
         foreach (var layer in _outputMLP) yield return layer;
 
@@ -182,13 +195,13 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         foreach (var component in EnumerateParameterComponents())
         {
             var part = component.GetParameters();
-            for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+            part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, part.Length));
+            offset += part.Length;
         }
 
         if (_positionalEncoding != null)
         {
-            for (int i = 0; i < _positionalEncoding.Length; i++)
-                result[offset++] = _positionalEncoding[i];
+            _positionalEncoding.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, _positionalEncoding.Length));
         }
 
         return result;
@@ -214,26 +227,36 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             int count = checked((int)component.ParameterCount);
             if (count == 0) continue;
 
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+            var slice = parameters.GetSubVector(offset, count);
+            offset += count;
             component.SetParameters(slice);
         }
 
         if (_positionalEncoding != null)
         {
-            for (int i = 0; i < _positionalEncoding.Length; i++)
-                _positionalEncoding[i] = parameters[offset++];
+            parameters.AsSpan().Slice(offset, _positionalEncoding.Length).CopyTo(_positionalEncoding.AsWritableSpan());
         }
     }
 
     /// <summary>
     /// Initializes a new instance of the TabPFNBase class.
     /// </summary>
-    protected TabPFNBase(int numNumericalFeatures, TabPFNOptions<T>? options = null)
+    /// <param name="numNumericalFeatures">Number of numerical features.</param>
+    /// <param name="options">Model configuration options.</param>
+    /// <param name="labelDimension">
+    /// Width of one encoded context label: the class count (one-hot) for a classifier, the output dimension for
+    /// a regressor. Zero builds no label encoder, so the context is conditioned on its features only.
+    /// </param>
+    protected TabPFNBase(int numNumericalFeatures, TabPFNOptions<T>? options = null, int labelDimension = 0)
     {
         if (numNumericalFeatures < 0)
         {
             throw new ArgumentException("Number of features cannot be negative", nameof(numNumericalFeatures));
+        }
+
+        if (labelDimension < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(labelDimension), "Label dimension cannot be negative.");
         }
 
         Options = options ?? new TabPFNOptions<T>();
@@ -278,6 +301,13 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
                 : new FullyConnectedLayer<T>(
                     embDim,
                     (IActivationFunction<T>?)null);
+        }
+
+        // Label encoder: a linear map of the encoded label, added to each context token
+        _labelDimension = labelDimension;
+        if (labelDimension > 0)
+        {
+            _labelEncoder = new FullyConnectedLayer<T>(labelDimension, embDim, (IActivationFunction<T>?)null);
         }
 
         // Initialize positional encoding if enabled
@@ -359,8 +389,19 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
                 $"Number of context samples ({numSamples}) exceeds maximum ({Options.MaxContextSamples})");
         }
 
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        if (_labelDimension > 0 && labels.Length != numSamples * _labelDimension)
+        {
+            throw new ArgumentException(
+                $"Context labels must hold {_labelDimension} values for each of the {numSamples} samples.",
+                nameof(labels));
+        }
+
         _contextFeatures = features;
-        _contextLabels = labels;
+        // The labels are read on every later prediction, so the context holds its own copy: a caller's labels can
+        // be an engine result (the classifier's one-hot) living in a tensor arena that a later call recycles
+        var keptLabels = TabularMetrics.KeptCopy(labels);
+        _contextLabels = _labelDimension > 0 ? keptLabels.Reshape(numSamples, _labelDimension) : keptLabels;
     }
 
     /// <summary>
@@ -410,20 +451,22 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             contextSize = _contextFeatures.Shape[0];
             var contextEncoded = _featureEncoder.Forward(_contextFeatures);
 
+            // Context tokens carry their labels: enc(x_i) + enc_y(y_i)
+            if (_labelEncoder != null && _contextLabels != null)
+            {
+                contextEncoded = Engine.TensorAdd(
+                    TabularMetrics.Flat(contextEncoded, contextSize * embDim).Reshape(contextSize, embDim),
+                    _labelEncoder.Forward(_contextLabels));
+            }
+
             // Combine context and query
-            combinedInput = new Tensor<T>([contextSize + querySize, embDim]);
-
-            // Copy context
-            for (int i = 0; i < contextSize * embDim; i++)
-            {
-                combinedInput[i] = contextEncoded[i];
-            }
-
-            // Copy query
-            for (int i = 0; i < querySize * embDim; i++)
-            {
-                combinedInput[contextSize * embDim + i] = queryEncoded[i];
-            }
+            combinedInput = Engine.TensorConcatenate(
+                new[]
+                {
+                    TabularMetrics.Flat(contextEncoded, contextSize * embDim).Reshape(contextSize, embDim),
+                    TabularMetrics.Flat(queryEncoded, querySize * embDim).Reshape(querySize, embDim),
+                },
+                0);
         }
         else
         {
@@ -433,33 +476,28 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         // Add positional encoding if enabled
         if (_positionalEncoding != null)
         {
+            // Position p reads encoding row p mod maxLen (the flat index wrapped over the whole table)
             int totalSize = combinedInput.Shape[0];
-            for (int pos = 0; pos < totalSize; pos++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    int idx = pos * embDim + d;
-                    combinedInput[idx] = NumOps.Add(
-                        combinedInput[idx],
-                        _positionalEncoding[idx % _positionalEncoding.Length]);
-                }
-            }
+            int maxLen = _positionalEncoding.Length / embDim;
+            int repeats = (totalSize + maxLen - 1) / maxLen;
+            var table = _positionalEncoding.Reshape(maxLen, embDim);
+            var encoding = Engine.TensorNarrow(
+                repeats > 1 ? Engine.TensorTile(table, new[] { repeats, 1 }) : table, 0, 0, totalSize);
+            combinedInput = Engine.TensorAdd(
+                TabularMetrics.Flat(combinedInput, totalSize * embDim).Reshape(totalSize, embDim), encoding);
         }
 
         // Apply transformer blocks
         var transformerOutput = combinedInput;
         foreach (var block in _transformerBlocks)
         {
-            transformerOutput = block.Forward(transformerOutput);
+            transformerOutput = block.Forward(transformerOutput, contextSize);
         }
 
         // Extract only query outputs (last querySize elements)
-        var queryOutput = new Tensor<T>([querySize, embDim]);
-        int startIdx = contextSize * embDim;
-        for (int i = 0; i < querySize * embDim; i++)
-        {
-            queryOutput[i] = transformerOutput[startIdx + i];
-        }
+        var queryOutput = Engine.TensorNarrow(
+            TabularMetrics.Flat(transformerOutput, (contextSize + querySize) * embDim).Reshape(contextSize + querySize, embDim),
+            0, contextSize, querySize);
 
         // Apply output MLP
         var mlpOutput = queryOutput;
@@ -480,16 +518,10 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
     private Tensor<T> CreateOneHotEncoding(Matrix<int> categoricalIndices, int featureIndex, int cardinality)
     {
         int batchSize = categoricalIndices.Rows;
-        var oneHot = new Tensor<T>([batchSize, cardinality]);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int categoryIndex = categoricalIndices[b, featureIndex];
-            if (categoryIndex >= 0 && categoryIndex < cardinality)
-            {
-                oneHot[b * cardinality + categoryIndex] = NumOps.One;
-            }
-        }
+        // Indices outside [0, cardinality) leave an all-zero row
+        var indices = Tensor<int>.FromVector(categoricalIndices.GetColumn(featureIndex));
+        var oneHot = Engine.TensorOneHot<T>(indices, cardinality).Reshape(batchSize, cardinality);
 
         return oneHot;
     }
@@ -506,6 +538,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             enc.UpdateParameters(learningRate);
         }
 
+        _labelEncoder?.UpdateParameters(learningRate);
+
         foreach (var block in _transformerBlocks)
         {
             block.UpdateParameters(learningRate);
@@ -520,6 +554,39 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
     }
 
     /// <summary>
+    /// The live tensors a tape training step updates: the feature and categorical encoders, every transformer block, the output MLP, the final norm and the task head.
+    /// </summary>
+    protected IEnumerable<Tensor<T>> GetTrainableTensors()
+    {
+        var tensors = new List<Tensor<T>>();
+        foreach (var block in _transformerBlocks) tensors.AddRange(block.TrainableTensors());
+        var layers = new List<ILayer<T>> { _featureEncoder };
+        layers.AddRange(_categoricalEncoders);
+        if (_labelEncoder != null) layers.Add(_labelEncoder);
+        layers.AddRange(_outputMLP);
+        layers.Add(_finalNorm);
+        layers.AddRange(GetExtraTrainableLayers());
+        tensors.AddRange(TabularTraining.LayerTensors(layers));
+        return tensors;
+    }
+
+    /// <summary>
+    /// One tape training step: gradients of <paramref name="objective"/> over every trainable tensor, then SGD.
+    /// </summary>
+    /// <returns>The loss before the update.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        try
+        {
+            return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
+        }
+        finally
+        {
+            ResetState();
+        }
+    }
+
+    /// <summary>
     /// Resets internal state and caches.
     /// </summary>
     public virtual void ResetState()
@@ -530,6 +597,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         {
             enc.ResetState();
         }
+
+        _labelEncoder?.ResetState();
 
         foreach (var block in _transformerBlocks)
         {
@@ -619,6 +688,10 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             yield return _outputWeights;
         }
 
+        /// <summary>The live tensors a tape training step updates: the projections, then the sub-layers.</summary>
+        public IEnumerable<Tensor<TBlock>> TrainableTensors()
+            => AttentionTensors().Concat(TabularTraining.LayerTensors(SubLayers().OfType<ILayer<TBlock>>()));
+
         private IEnumerable<IParameterSource<TBlock>> SubLayers()
         {
             yield return _ff1;
@@ -634,13 +707,15 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
 
             foreach (var tensor in AttentionTensors())
             {
-                for (int i = 0; i < tensor.Length; i++) result[offset++] = tensor[i];
+                tensor.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, tensor.Length));
+                offset += tensor.Length;
             }
 
             foreach (var layer in SubLayers())
             {
                 var part = layer.GetParameters();
-                for (int i = 0; i < part.Length; i++) result[offset++] = part[i];
+                part.AsSpan().CopyTo(result.AsWritableSpan().Slice(offset, part.Length));
+                offset += part.Length;
             }
 
             return result;
@@ -664,7 +739,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             // nothing else is looking at.
             foreach (var tensor in AttentionTensors())
             {
-                for (int i = 0; i < tensor.Length; i++) tensor[i] = parameters[offset++];
+                parameters.AsSpan().Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+                offset += tensor.Length;
             }
 
             foreach (var layer in SubLayers())
@@ -672,8 +748,8 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
                 int count = checked((int)layer.ParameterCount);
                 if (count == 0) continue;
 
-                var slice = new Vector<TBlock>(count);
-                for (int i = 0; i < count; i++) slice[i] = parameters[offset++];
+                var slice = parameters.GetSubVector(offset, count);
+                offset += count;
                 layer.SetParameters(slice);
             }
         }
@@ -687,6 +763,13 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             double initScale,
             Random random)
         {
+            if (numHeads < 1 || embeddingDim % numHeads != 0)
+            {
+                throw new ArgumentException(
+                    $"EmbeddingDimension ({embeddingDim}) must be a positive multiple of NumHeads ({numHeads}).",
+                    nameof(numHeads));
+            }
+
             _embeddingDim = embeddingDim;
             _numHeads = numHeads;
             _headDim = embeddingDim / numHeads;
@@ -733,7 +816,11 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             return weights;
         }
 
-        public Tensor<TBlock> Forward(Tensor<TBlock> input)
+        /// <summary>
+        /// One block over [contextSize + querySize, embedding] tokens. With a context, every token attends
+        /// only to the first <paramref name="contextSize"/> tokens; with none, attention is full.
+        /// </summary>
+        public Tensor<TBlock> Forward(Tensor<TBlock> input, int contextSize)
         {
             int seqLen = input.Shape[0];
 
@@ -752,7 +839,7 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
             var key = MatMul(x, _keyWeights);
             var value = MatMul(x, _valueWeights);
 
-            var attentionOutput = ComputeCausalAttention(query, key, value, seqLen);
+            var attentionOutput = ComputeCausalAttention(query, key, value, seqLen, contextSize);
             attentionOutput = MatMul(attentionOutput, _outputWeights);
 
             // Residual connection
@@ -790,76 +877,48 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         }
 
         /// <summary>
-        /// Computes causal attention where query can attend to all context
-        /// but test samples only attend to context + previous test samples.
+        /// Multi-head attention under the TabPFN mask (Hollmann et al. 2023): every token, context or query,
+        /// attends only to the context tokens, so queries neither see each other nor themselves. Each of the
+        /// <c>NumHeads</c> heads attends over its own <c>EmbeddingDimension / NumHeads</c> slice.
         /// </summary>
         private Tensor<TBlock> ComputeCausalAttention(
-            Tensor<TBlock> query, Tensor<TBlock> key, Tensor<TBlock> value, int seqLen)
+            Tensor<TBlock> query, Tensor<TBlock> key, Tensor<TBlock> value, int seqLen, int contextSize)
         {
             var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
 
-            // Compute attention scores: Q * K^T / sqrt(d_k)
-            var scores = new Tensor<TBlock>([seqLen, seqLen]);
+            var eng = AiDotNetEngine.Current;
+            int count = seqLen * _embeddingDim;
+            var q = TabularMetrics.Flat(query, count).Reshape(seqLen, _embeddingDim);
+            var k = TabularMetrics.Flat(key, count).Reshape(seqLen, _embeddingDim);
+            var v = TabularMetrics.Flat(value, count).Reshape(seqLen, _embeddingDim);
 
-            for (int i = 0; i < seqLen; i++)
+            // Split into heads: [seq, embedding] -> [heads, seq, headDim]
+            Tensor<TBlock> Split(Tensor<TBlock> x) => eng.TensorPermute(
+                eng.Reshape(x, new[] { seqLen, _numHeads, _headDim }), new[] { 1, 0, 2 });
+            var qh = Split(q);
+            var kh = Split(k);
+            var vh = Split(v);
+
+            // Per-head scores Q_h K_h^T / sqrt(d_head): [heads, seq, seq]
+            var scores = TensorTapeOps.TapeMultiplyScalar(
+                eng, eng.TensorBatchMatMul(qh, eng.TensorPermute(kh, new[] { 0, 2, 1 })), scale);
+
+            // Mask every key column past the context by selecting the lowest finite score there (broadcast over heads
+            // and rows). The column test is done on int positions, and a select rather than an additive -1e9: in Half
+            // 1e9 is infinity, and 0 * infinity on the context columns would make every score NaN.
+            if (contextSize > 0 && contextSize < seqLen)
             {
-                for (int j = 0; j < seqLen; j++)
-                {
-                    var dot = NumOps.Zero;
-                    for (int k = 0; k < _embeddingDim; k++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(
-                            query[i * _embeddingDim + k],
-                            key[j * _embeddingDim + k]));
-                    }
-                    scores[i * seqLen + j] = NumOps.Multiply(dot, scale);
-                }
+                var isContextKey = eng.TensorBroadcastTo(
+                    eng.TensorLessThan(eng.TensorArange<int>(0, seqLen), contextSize).Cast<TBlock>().Reshape(1, 1, seqLen),
+                    scores._shape);
+                scores = eng.TensorWhere(isContextKey, scores, eng.TensorFullLike(scores, NumOps.MinValue));
             }
 
-            // Apply softmax row-wise (for TabPFN, full attention within context)
-            for (int i = 0; i < seqLen; i++)
-            {
-                var maxVal = scores[i * seqLen];
-                for (int j = 1; j < seqLen; j++)
-                {
-                    var val = scores[i * seqLen + j];
-                    if (NumOps.Compare(val, maxVal) > 0)
-                        maxVal = val;
-                }
+            var weights = eng.Softmax(scores, -1);
 
-                var sumExp = NumOps.Zero;
-                for (int j = 0; j < seqLen; j++)
-                {
-                    var expVal = NumOps.Exp(NumOps.Subtract(scores[i * seqLen + j], maxVal));
-                    scores[i * seqLen + j] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-
-                for (int j = 0; j < seqLen; j++)
-                {
-                    scores[i * seqLen + j] = NumOps.Divide(scores[i * seqLen + j], sumExp);
-                }
-            }
-
-            // Compute output: softmax(scores) * V
-            var output = new Tensor<TBlock>([seqLen, _embeddingDim]);
-
-            for (int i = 0; i < seqLen; i++)
-            {
-                for (int k = 0; k < _embeddingDim; k++)
-                {
-                    var sum = NumOps.Zero;
-                    for (int j = 0; j < seqLen; j++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            scores[i * seqLen + j],
-                            value[j * _embeddingDim + k]));
-                    }
-                    output[i * _embeddingDim + k] = sum;
-                }
-            }
-
-            return output;
+            // softmax(scores) V per head, then the heads concatenated back to [seq, embedding]
+            var attended = eng.TensorBatchMatMul(weights, vh);
+            return eng.Reshape(eng.TensorPermute(attended, new[] { 1, 0, 2 }), new[] { seqLen, _embeddingDim });
         }
 
         private static Tensor<TBlock> MatMul(Tensor<TBlock> input, Tensor<TBlock> weights)
