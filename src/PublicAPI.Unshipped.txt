@@ -1607,27 +1607,6 @@ AiDotNet.VisionLanguage.Grounding.GroundingBox.<Clone>$() -> AiDotNet.VisionLang
 AiDotNet.VisionLanguage.Grounding.GroundingBox.Y2.get -> double
 AiDotNet.VisionLanguage.Grounding.GroundingBox.Deconstruct(out string! Phrase, out double X1, out double Y1, out double X2, out double Y2) -> void
 AiDotNet.VisionLanguage.Grounding.GroundingBox.Y2.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X1.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y1.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y1.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X1.init -> void
-override AiDotNet.VisionLanguage.Grounding.GroundingDetection.ToString() -> string!
-static AiDotNet.VisionLanguage.Grounding.GroundingDetection.operator !=(AiDotNet.VisionLanguage.Grounding.GroundingDetection? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection? right) -> bool
-static AiDotNet.VisionLanguage.Grounding.GroundingDetection.operator ==(AiDotNet.VisionLanguage.Grounding.GroundingDetection? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection? right) -> bool
-override AiDotNet.VisionLanguage.Grounding.GroundingDetection.GetHashCode() -> int
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y2.get -> double
-override AiDotNet.VisionLanguage.Grounding.GroundingDetection.Equals(object? obj) -> bool
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X2.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.X2.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Y2.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Equals(AiDotNet.VisionLanguage.Grounding.GroundingDetection? other) -> bool
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GroundingDetection!
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Deconstruct(out double X1, out double Y1, out double X2, out double Y2, out double Score, out string! Phrase) -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Phrase.get -> string!
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Score.get -> double
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Score.init -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.Phrase.init -> void
 AiDotNet.VisionLanguage.Grounding.GlammTurn.User.get -> string!
 AiDotNet.VisionLanguage.Grounding.GlammTurn.User.init -> void
 AiDotNet.VisionLanguage.Grounding.GlammTurn.Assistant.get -> string!
@@ -1671,10 +1650,8 @@ override AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.Equals(object? obj) ->
 AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.Equals(AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>? other) -> bool
 AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>!
 AiDotNet.VisionLanguage.Grounding.GlammAnswer<T>.Deconstruct(out string! Text, out System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks) -> void
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Detection.get -> AiDotNet.VisionLanguage.Grounding.GroundingDetection!
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Mask.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.MaskScore.get -> double
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Detection.init -> void
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.MaskScore.init -> void
 override AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.ToString() -> string!
@@ -1685,7 +1662,6 @@ override AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.GetHashCode() -> i
 override AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Equals(object? obj) -> bool
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Equals(AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>? other) -> bool
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>!
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Deconstruct(out AiDotNet.VisionLanguage.Grounding.GroundingDetection! Detection, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, out double MaskScore) -> void
 AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T>
 AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T>
 AiDotNet.Attributes.TaskVariantOfAttribute.Canonical.get -> System.Type!
@@ -5453,7 +5429,6 @@ override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.RegisterGenerated
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.TrainingUnavailableReason.get -> string?
 override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>.ThrowIfCannotTrain() -> void
-AiDotNet.VisionLanguage.Grounding.GroundingDetection.GroundingDetection(double X1, double Y1, double X2, double Y2, double Score, string! Phrase) -> void
 AiDotNet.VisionLanguage.Grounding.GroundingBox.GroundingBox(string! Phrase, double X1, double Y1, double X2, double Y2) -> void
 override AiDotNet.VisionLanguage.Encoders.SAM<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.VisionLanguage.Grounding.GroundingDINOOptions.TextThreshold.get -> double
@@ -5564,7 +5539,6 @@ AiDotNet.TimeSeries.AnomalyDetection.DeepANTOptions<T>.AnomalyThreshold.get -> d
 override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.RegisterComponents() -> void
 override AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.SetTrainingMode(bool isTraining) -> void
 override AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection!>!
 AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.TrainGrounding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> void
 AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.EvaluateGroundingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> T
 override AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
@@ -5600,7 +5574,6 @@ override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.Forecast(AiDotNet.Tenso
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.SetTrainingMode(bool isTraining) -> void
 override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.SerializeCore(System.IO.BinaryWriter! writer) -> void
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection!>!
 override AiDotNet.TimeSeries.AnomalyDetection.DeepANT<T>.DeserializeCore(System.IO.BinaryReader! reader) -> void
 AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.Segment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>!>!
 AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
@@ -5610,7 +5583,6 @@ override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.TryApplyLearningRule(
 AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.EvaluateGroundingLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption, System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingBox!>! boxes) -> T
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.ResolveLazyLayerShapes() -> void
 override AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.GroundedSegment(AiDotNet.VisionLanguage.Grounding.GroundingDetection! Detection, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, double MaskScore) -> void
 override AiDotNet.NER.SpanBased.W2NER<T>.DecodeSpans(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output, int seqLen) -> System.Collections.Generic.IReadOnlyList<AiDotNet.NER.SpanBased.NamedEntitySpan!>!
 override AiDotNet.NER.SpanBased.W2NER<T>.BuildTrainingTargets(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labels, int seqLen) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.NER.SpanBased.TriaffineNER<T>.BuildTrainingTargets(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labels, int seqLen) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -24497,8 +24469,6 @@ AiDotNet.Enums.AdversarialAttackMethod.Fgsm = 0 -> AiDotNet.Enums.AdversarialAtt
 AiDotNet.Enums.AdversarialAttackMethod.Pgd = 1 -> AiDotNet.Enums.AdversarialAttackMethod
 AiDotNet.Enums.AdversarialAttackMethod.CarliniWagner = 2 -> AiDotNet.Enums.AdversarialAttackMethod
 AiDotNet.Enums.AdversarialAttackMethod.AutoAttack = 3 -> AiDotNet.Enums.AdversarialAttackMethod
-AiDotNet.NeuralNetworks.Layers.VarianceTargets
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.VarianceTargets() -> void
 AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X1.get -> T
 AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y1.get -> T
 AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>
@@ -24523,35 +24493,10 @@ AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Phrase.init -> void
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Detection.get -> AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.MaskScore.get -> T
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Deconstruct(out AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>! Detection, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, out T MaskScore) -> void
-AiDotNet.Audio.Pitch.WorldPitchDetector<T>.EstimateF0(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double framePeriodMs) -> (double[]! F0, double[]! TemporalPositions)
-AiDotNet.Audio.Pitch.WorldPitchDetector<T>.EstimateF0(double[]! x, double framePeriodMs) -> (double[]! F0, double[]! TemporalPositions)
-AiDotNet.Audio.Pitch.WorldPitchDetector<T>.Harvest(double[]! x, double framePeriodMs) -> (double[]! F0, double[]! TemporalPositions)
-AiDotNet.Audio.Pitch.WorldPitchDetector<T>.StoneMask(double[]! x, double[]! f0, double[]! temporalPositions) -> double[]!
-AiDotNet.TextToSpeech.TtsTrainingSample<T>.Pitch.get -> double[]?
-AiDotNet.TextToSpeech.TtsTrainingSample<T>.Energy.get -> double[]?
-AiDotNet.TextToSpeech.TacotronSpectrogram.Magnitude(double[]! audio) -> double[,]!
-AiDotNet.TextToSpeech.TacotronSpectrogram.LogMel(double[]! audio) -> double[,]!
-AiDotNet.TextToSpeech.TacotronSpectrogram.LogMel(double[,]! magnitude) -> double[,]!
-AiDotNet.TextToSpeech.TacotronSpectrogram.Energy(double[,]! magnitude) -> double[]!
-AiDotNet.TextToSpeech.AcousticTargets<T>.Pitch.get -> double[]?
-AiDotNet.TextToSpeech.AcousticTargets<T>.Energy.get -> double[]?
-abstract AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.PredictDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, System.Random! random) -> double[]!
-override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.PredictDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, System.Random! random) -> double[]!
-override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.PredictDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, System.Random! random) -> double[]!
 AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.GroundingDetection(T X1, T Y1, T X2, T Y2, T Score, string! Phrase) -> void
 AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!>!
 AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!>!
 AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.GroundedSegment(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>! Detection, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, T MaskScore) -> void
-AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.TrainUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, double[]? pitch = null, double[]? energy = null) -> T
-AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.EvaluateUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, double[]? pitch = null, double[]? energy = null) -> T
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Durations.get -> int[]?
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Durations.init -> void
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Pitch.get -> double[]?
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Pitch.init -> void
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Energy.get -> double[]?
-AiDotNet.NeuralNetworks.Layers.VarianceTargets.Energy.init -> void
-AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.Adapt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.NeuralNetworks.Layers.VarianceTargets? targets, double durationScale = 1) -> AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>!
-AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.AddFrameVariance(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames, double[]? pitch, double[]? energy) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.CATSeg(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSegOptions? options = null) -> void
 *REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.CATSeg(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSegOptions? options = null) -> void
 *REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
@@ -24644,24 +24589,6 @@ AiDotNet.Models.Options.ReferringSegmentationOptions.ReferringSegmentationOption
 AiDotNet.Models.Options.ReferringSegmentationOptions.MaskThreshold.get -> double
 AiDotNet.Models.Options.ReferringSegmentationOptions.MaskThreshold.set -> void
 AiDotNet.Models.Options.ReferringSegmentationOptions.CopyReferringSettings(AiDotNet.Models.Options.ReferringSegmentationOptions! other) -> void
-*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary<double, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! quantileForecasts, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals) -> double
-AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary<double, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! quantileForecasts, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals) -> T
-*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! historicalData, int seasonalPeriod = 1) -> double
-AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! historicalData, int seasonalPeriod = 1) -> T
-*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, double quantileLevel) -> double
-AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, double quantileLevel) -> T
-*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! contextLengths, System.Collections.Generic.IReadOnlyList<int>! seasonalPeriods, double[]? quantileLevels = null) -> System.Collections.Generic.Dictionary<string!, double>!
-AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! contextLengths, System.Collections.Generic.IReadOnlyList<int>! seasonalPeriods, double[]? quantileLevels = null) -> System.Collections.Generic.Dictionary<string!, T>!
-*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! groundTruthLabels, double? threshold = null) -> System.Collections.Generic.Dictionary<string!, double>!
-AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! groundTruthLabels, double? threshold = null) -> System.Collections.Generic.Dictionary<string!, T>!
-*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! trueLabels, int numClasses) -> System.Collections.Generic.Dictionary<string!, double>!
-AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! trueLabels, int numClasses) -> System.Collections.Generic.Dictionary<string!, T>!
-*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>! testPairs) -> System.Collections.Generic.Dictionary<string!, double>!
-AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>! testPairs) -> System.Collections.Generic.Dictionary<string!, T>!
-*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! completeSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! masks) -> System.Collections.Generic.Dictionary<string!, double>!
-AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! completeSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! masks) -> System.Collections.Generic.Dictionary<string!, T>!
-*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>? forecastingData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Labels, double? Threshold)? anomalyData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<int>! Labels, int NumClasses)? classificationData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks)? imputationData = null) -> System.Collections.Generic.Dictionary<string!, System.Collections.Generic.Dictionary<string!, double>!>!
-AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>? forecastingData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Labels, double? Threshold)? anomalyData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<int>! Labels, int NumClasses)? classificationData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks)? imputationData = null) -> System.Collections.Generic.Dictionary<string!, System.Collections.Generic.Dictionary<string!, T>!>!
 *REMOVED*AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
 *REMOVED*AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
 AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.VisionLanguage.Interfaces.IVisualEncoder<T>! clipImageEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
