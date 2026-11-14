@@ -45,6 +45,33 @@ public class AiModelResultTestTimeAugmentationTests
         Assert.Equal(1.0 / (1.0 + 1.5), tta.Confidence.Value, 1e-3);
     }
 
+    [Fact]
+    public void PredictWithTestTimeAugmentation_HalfWeightedMean_WeightsBeyondHalfRange()
+    {
+        // y = 1 * x0 + 2 * x1: [10000, 10000] predicts 30000 and [12000, 12000] predicts 36000. Each prediction is
+        // weighted by its largest value, so the weighted mean is (30000^2 + 36000^2) / 66000 = 33272.7. The weight
+        // total 66000 overflows Half (65504), which made every normalised weight 0 and the aggregate 0.
+        using var model = new VectorModel<Half>(new Vector<Half>(new[] { (Half)1, (Half)2 }));
+        var result = new AiModelResult<Half, Matrix<Half>, Vector<Half>>(
+            new AiModelResultOptions<Half, Matrix<Half>, Vector<Half>>
+            {
+                OptimizationResult = new OptimizationResult<Half, Matrix<Half>, Vector<Half>> { BestSolution = model },
+                AugmentationConfig = new AugmentationConfig
+                {
+                    EnableTTA = true,
+                    TTAIncludeOriginal = true,
+                    TTANumAugmentations = 1,
+                    TTAAggregation = PredictionAggregationMethod.WeightedMean
+                }
+            });
+        var input = new Matrix<Half>(new[,] { { (Half)10000, (Half)10000 } });
+        var augmented = new Matrix<Half>(new[,] { { (Half)12000, (Half)12000 } });
+
+        var tta = result.PredictWithTestTimeAugmentation(input, new FixedPolicy(augmented));
+
+        Assert.Equal(33272.7, (double)tta.AggregatedPrediction[0], 64.0);
+    }
+
     /// <summary>An augmentation policy that always returns the same input.</summary>
     private sealed class FixedPolicy : IAugmentationPolicy<Half, Matrix<Half>>
     {

@@ -328,15 +328,26 @@ public partial class AiModelResult<T, TInput, TOutput>
         var numOps = MathHelper.GetNumericOperations<T>();
         var stacked = StackPredictions(vectors);
         var weights = ResultEngine.ReduceMax(stacked, new[] { 1 }, false);
-        T totalWeight = ResultEngine.TensorSum(weights);
 
-        if (numOps.LessThan(numOps.Abs(totalWeight), MatrixExtensions.SafeTolerance<T>(1e-10)))
+        // The weights are divided by their largest magnitude before summing, so the total cannot overflow in low
+        // precision (65504 in Half) when the weights are large; the normalised weights w / sum(w) are unchanged.
+        T peak = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(weights));
+        if (numOps.Equals(peak, numOps.Zero))
+        {
+            return ComputeMean(vectors); // Fallback to simple mean
+        }
+
+        var relative = ResultEngine.TensorDivideScalar(weights, peak);
+        T relativeTotal = ResultEngine.TensorSum(relative);
+
+        // |sum(w)| below 1e-10 falls back to the simple mean; compared in double as |sum(w / peak)| * peak.
+        if (Math.Abs(numOps.ToDouble(relativeTotal) * numOps.ToDouble(peak)) < 1e-10)
         {
             return ComputeMean(vectors); // Fallback to simple mean
         }
 
         // Normalising the weights first keeps the weighted sum within range in low precision.
-        var normalized = ResultEngine.Reshape(ResultEngine.TensorDivideScalar(weights, totalWeight), new[] { 1, vectors.Count });
+        var normalized = ResultEngine.Reshape(ResultEngine.TensorDivideScalar(relative, relativeTotal), new[] { 1, vectors.Count });
         return ResultEngine.Reshape(ResultEngine.TensorMatMul(normalized, stacked), new[] { vectors[0].Length }).ToVector();
     }
 
