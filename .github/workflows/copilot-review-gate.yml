@@ -16,8 +16,18 @@ permissions:
 jobs:
   gate:
     if: ${{ (github.event.pull_request.draft != true) && (!startsWith(github.head_ref, 'release-please--')) }}
-    runs-on: ubuntu-latest
+    # Same-repo PRs run on the self-hosted aidotnet-cpu pool to relieve the hosted queue; fork PRs
+    # stay on GitHub-hosted runners so untrusted code never runs on a self-hosted machine.
+    runs-on: ${{ github.event.pull_request.head.repo.full_name == github.repository && fromJSON('["self-hosted", "aidotnet-cpu"]') || 'ubuntu-latest' }}
     steps:
+      - name: Ensure gh is installed
+        # Hosted images ship gh; a self-hosted runner image may not.
+        run: |
+          command -v gh >/dev/null && exit 0
+          v=2.104.0
+          curl -fsSL "https://github.com/cli/cli/releases/download/v$v/gh_${v}_linux_amd64.tar.gz" | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/gh_${v}_linux_amd64/bin" >> "$GITHUB_PATH"
+
       - name: Check unresolved Copilot review threads
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
