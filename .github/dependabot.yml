@@ -31,6 +31,11 @@ updates:
         patterns: ["*"]
         exclude-patterns: ["AiDotNet.*"]
         update-types: ["minor", "patch"]
+      # Security updates ignore groups unless a group applies to them, so each
+      # advisory arrived as its own PR; one group per ecosystem collects them.
+      nuget-security:
+        applies-to: security-updates
+        patterns: ["*"]
 
   # GitHub Actions updates
   - package-ecosystem: "github-actions"
@@ -51,4 +56,8 @@ updates:
     # All action bumps in one PR (each separate PR ran the whole pipeline for a pinned-SHA change).
     groups:
       github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+      github-actions-security:
+        applies-to: security-updates
         patterns: ["*"]
