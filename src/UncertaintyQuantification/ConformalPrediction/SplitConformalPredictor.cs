@@ -212,6 +212,10 @@ public class SplitConformalPredictor<T>
         if (confidenceLevel <= 0 || confidenceLevel >= 1)
             throw new ArgumentException("Confidence level must be between 0 and 1", nameof(confidenceLevel));
 
+        if (testTargets.Length != testInputs.Rows)
+            throw new ArgumentException(
+                $"testTargets has {testTargets.Length} entries but testInputs has {testInputs.Rows} rows.", nameof(testTargets));
+
         var engine = AiDotNetEngine.Current;
         int totalCount = testInputs.Rows;
         var quantile = ComputeQuantile(_calibrationScores, confidenceLevel);

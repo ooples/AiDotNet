@@ -219,6 +219,10 @@ public class ConformalClassifier<T>
     /// </remarks>
     public T EvaluateCoverage(Matrix<T> testInputs, Vector<int> testLabels, double confidenceLevel = 0.9)
     {
+        if (testLabels.Length != testInputs.Rows)
+            throw new ArgumentException(
+                $"testLabels has {testLabels.Length} entries but testInputs has {testInputs.Rows} rows.", nameof(testLabels));
+
         var membership = PredictionSetMasks(testInputs, confidenceLevel, "Must calibrate classifier before evaluation");
         var engine = AiDotNetEngine.Current;
         int totalCount = testInputs.Rows;

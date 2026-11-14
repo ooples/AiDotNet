@@ -77,6 +77,33 @@ public class UncertaintyQuantificationPaperReferenceTests
         Assert.Equal(18.0, SplitConformalPredictor<double>.ComputeQuantile(scores, 0.9), 12);
     }
 
+    /// <summary>
+    /// Coverage is the fraction of the test rows whose label is in its set, so every row needs exactly one
+    /// label. Master gathered only the first two rows' sets for two labels and divided by three.
+    /// </summary>
+    [Fact]
+    public void ConformalClassifier_EvaluateCoverage_RejectsLabelCountMismatch()
+    {
+        var classifier = new ConformalClassifier<double>(new AiDotNet.Tests.Helpers.MockNeuralNetwork(outputSize: 3), numClasses: 3);
+        classifier.Calibrate(new Matrix<double>(4, 1), new Vector<int>(new[] { 0, 1, 2, 0 }));
+
+        var ex = Assert.Throws<ArgumentException>(
+            () => classifier.EvaluateCoverage(new Matrix<double>(3, 1), new Vector<int>(new[] { 0, 1 })));
+        Assert.Equal("testLabels", ex.ParamName);
+    }
+
+    /// <summary>Split conformal coverage needs one target per test row.</summary>
+    [Fact]
+    public void SplitConformal_EvaluateCoverage_RejectsTargetCountMismatch()
+    {
+        var predictor = new SplitConformalPredictor<double>(new AiDotNet.Tests.Helpers.MockNeuralNetwork(outputSize: 1));
+        predictor.Calibrate(new Matrix<double>(4, 1), new Vector<double>(new[] { 0.0, 1.0, 2.0, 3.0 }));
+
+        var ex = Assert.Throws<ArgumentException>(
+            () => predictor.EvaluateCoverage(new Matrix<double>(3, 1), new Vector<double>(new[] { 0.0, 1.0 })));
+        Assert.Equal("testTargets", ex.ParamName);
+    }
+
     /// <summary>One gradient step from T = 1 on logits [5, 0, 0], label 1: dNLL/dT = z_y - sum p z.</summary>
     [Fact]
     public void TemperatureScaling_OneStep_MatchesAnalyticGradient()
