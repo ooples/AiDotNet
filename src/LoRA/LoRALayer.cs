@@ -360,25 +360,9 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
             return;
         }
 
-        // Update matrix A
-        for (int i = 0; i < _loraA.Shape[0]; i++)
-        {
-            for (int j = 0; j < _loraA.Shape[1]; j++)
-            {
-                T update = NumOps.Multiply(_loraAGradient[i, j], learningRate);
-                _loraA[i, j] = NumOps.Subtract(_loraA[i, j], update);
-            }
-        }
-
-        // Update matrix B
-        for (int i = 0; i < _loraB.Shape[0]; i++)
-        {
-            for (int j = 0; j < _loraB.Shape[1]; j++)
-            {
-                T update = NumOps.Multiply(_loraBGradient[i, j], learningRate);
-                _loraB[i, j] = NumOps.Subtract(_loraB[i, j], update);
-            }
-        }
+        // Update matrices A and B in place: W -= learningRate * dW
+        Engine.TensorSubtractInPlace(_loraA, Engine.TensorMultiplyScalar(_loraAGradient, learningRate));
+        Engine.TensorSubtractInPlace(_loraB, Engine.TensorMultiplyScalar(_loraBGradient, learningRate));
     }
 
     /// <summary>
@@ -391,26 +375,10 @@ public partial class LoRALayer<T> : LayerBase<T>, IShapeContract
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Pack matrix A gradients
-        for (int i = 0; i < _loraAGradient.Shape[0]; i++)
-        {
-            for (int j = 0; j < _loraAGradient.Shape[1]; j++)
-            {
-                ParameterGradients[idx++] = _loraAGradient[i, j];
-            }
-        }
-
-        // Pack matrix B gradients
-        for (int i = 0; i < _loraBGradient.Shape[0]; i++)
-        {
-            for (int j = 0; j < _loraBGradient.Shape[1]; j++)
-            {
-                ParameterGradients[idx++] = _loraBGradient[i, j];
-            }
-        }
+        // Pack matrix A gradients then matrix B gradients (row-major) in one bulk concatenation.
+        ParameterGradients = Engine.TensorConcatenate(
+            [Engine.Reshape(_loraAGradient, [_loraAGradient.Length]), Engine.Reshape(_loraBGradient, [_loraBGradient.Length])],
+            0).ToVector();
     }
 
     /// <summary>

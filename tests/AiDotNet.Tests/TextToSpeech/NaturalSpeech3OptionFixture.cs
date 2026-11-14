@@ -31,7 +31,7 @@ internal static class NaturalSpeech3OptionFixture
             Tokens = tokens,
             Durations = new[] { 3, 2, 4, 1, 3, 2, 3, 2 },
             Audio = audio,
-            Pitch = Enumerable.Range(0, frames).Select(f => f % 5 == 4 ? 0.0 : 120 + 10 * Math.Sin(f)).ToArray(),
+            Pitch = new Tensor<double>(new[] { frames }, new Vector<double>(Enumerable.Range(0, frames).Select(f => f % 5 == 4 ? 0.0 : 120 + 10 * Math.Sin(f)).ToArray())).Cast<T>(),
             SpeakerId = 1,
         });
     }

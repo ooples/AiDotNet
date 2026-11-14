@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -41,32 +42,14 @@ public class ExplainedVarianceMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        int n = predictions.Length;
-
-        // Calculate means
-        double sumActuals = 0, sumResiduals = 0;
-        for (int i = 0; i < n; i++)
-        {
-            sumActuals += NumOps.ToDouble(actuals[i]);
-            sumResiduals += NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(predictions[i]);
-        }
-        double meanActuals = sumActuals / n;
-        double meanResiduals = sumResiduals / n;
-
-        // Calculate variances
-        double varActuals = 0, varResiduals = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double residual = actual - NumOps.ToDouble(predictions[i]);
-            double diffActuals = actual - meanActuals;
-            double diffResiduals = residual - meanResiduals;
-            varActuals += diffActuals * diffActuals;
-            varResiduals += diffResiduals * diffResiduals;
-        }
-
-        if (Math.Abs(varActuals) < 1e-10) return NumOps.One;
-        return NumOps.FromDouble(1 - varResiduals / varActuals);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var residual = engine.TensorSubtract(actual, pred);
+        double total = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, engine.TensorMean(actual)));
+        double error = engine.TensorSumOfSquares(engine.TensorSubtractScalar(residual, engine.TensorMean(residual)));
+        return Math.Abs(total) < 1e-10 ? NumOps.One : NumOps.FromDouble(1 - error / total);
     }
 
     /// <inheritdoc />
@@ -89,18 +72,17 @@ public class ExplainedVarianceMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

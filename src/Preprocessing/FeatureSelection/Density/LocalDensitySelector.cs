@@ -25,14 +25,14 @@ public class LocalDensitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
 
-    private double[]? _densityScores;
+    private Vector<T>? _densityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
-    public double[]? DensityScores => _densityScores;
+    public Vector<T>? DensityScores => _densityScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,80 +68,50 @@ public class LocalDensitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _densityScores = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var classValues = engine.TensorRound(Tensor<T>.FromVector(target));
         int k = Math.Min(_nNeighbors, n - 1);
 
+        // Standardize features (population std; a feature with std not above 1e-10 is left as is)
+        var mean = engine.ReduceMean(X, new[] { 0 }, true);
+        var centered = engine.TensorSubtract(X, engine.TensorBroadcastTo(mean, new[] { n, p }));
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
+        var standardized = engine.TensorWhere(
+            engine.TensorBroadcastTo(engine.TensorGreaterThan(std, PreprocessingTensorOps.Tolerance<T>(1e-10)), new[] { n, p }),
+            engine.TensorDivide(centered, engine.TensorBroadcastTo(std, new[] { n, p })), X);
+
+        // Compute local density for each point (1/average distance to k nearest neighbors)
+        var pairShape = new[] { n, n };
+        var self = engine.TensorEye<T>(n);
+        var excluded = PreprocessingTensorOps.Filled(pairShape, NumOps.MaxValue);
+        T neighbors = NumOps.FromDouble(k);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var ones = PreprocessingTensorOps.Filled(new[] { n }, NumOps.One);
+        var densities = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Standardize feature
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-            if (std > 1e-10)
-                for (int i = 0; i < n; i++)
-                    col[i] = (col[i] - mean) / std;
-
-            // Compute local density for each point (1/average distance to k nearest neighbors)
-            var localDensity = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                var distances = new List<double>();
-                for (int i2 = 0; i2 < n; i2++)
-                {
-                    if (i2 != i)
-                        distances.Add(Math.Abs(col[i] - col[i2]));
-                }
-                distances.Sort();
-
-                double avgDist = distances.Take(k).Average();
-                localDensity[i] = 1.0 / (avgDist + 1e-10);
-            }
-
-            // Compute correlation between local density and class label
-            double[] classValues = y.Select(c => (double)c).ToArray();
-            _densityScores[j] = Math.Abs(ComputeCorrelation(localDensity, classValues));
+            var col = PreprocessingTensorOps.ColumnVector(standardized, j);
+            var distances = engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.Reshape(col, new[] { n, 1 }), pairShape),
+                engine.TensorBroadcastTo(engine.Reshape(col, new[] { 1, n }), pairShape)));
+            var sorted = engine.TensorSort(engine.TensorWhere(self, excluded, distances), 1, false).Item1;
+            var nearest = engine.TensorSlice(sorted, new[] { 0, 0 }, new[] { n, k });
+            var avgDist = engine.TensorDivideScalar(engine.ReduceSum(nearest, new[] { 1 }, false), neighbors);
+            densities[j] = engine.TensorDivide(ones, engine.TensorAddScalar(avgDist, epsilon));
         }
 
+        // Compute |correlation| between local density and class label
+        var scores = p == 0
+            ? new Tensor<T>(new[] { 0 })
+            : engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(engine.TensorStack(densities, 1), classValues));
+        _densityScores = scores.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _densityScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
-
-    private double ComputeCorrelation(double[] x, double[] y)
-    {
-        int n = x.Length;
-        double xMean = x.Average();
-        double yMean = y.Average();
-
-        double numerator = 0, xSumSq = 0, ySumSq = 0;
-        for (int i = 0; i < n; i++)
-        {
-            numerator += (x[i] - xMean) * (y[i] - yMean);
-            xSumSq += (x[i] - xMean) * (x[i] - xMean);
-            ySumSq += (y[i] - yMean) * (y[i] - yMean);
-        }
-
-        double denominator = Math.Sqrt(xSumSq * ySumSq);
-        return denominator > 1e-10 ? numerator / denominator : 0;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -155,15 +125,7 @@ public class LocalDensitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("LocalDensitySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

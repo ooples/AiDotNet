@@ -174,23 +174,10 @@ public partial class TIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var refinedWeights = TransductiveRefine(supportFeatures, task);
 
         // Compute modulation factors from refined vs raw support features
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (supportFeatures != null && refinedWeights != null)
         {
-            double sumRatio = 0;
-            int count = 0;
-            for (int i = 0; i < Math.Min(supportFeatures.Length, refinedWeights.Length); i++)
-            {
-                double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                double adaptedVal = NumOps.ToDouble(refinedWeights[i]);
-                if (Math.Abs(rawVal) > 1e-10)
-                {
-                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                    count++;
-                }
-            }
-            if (count > 0)
-                modulationFactors = [sumRatio / count];
+            modulationFactors = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, refinedWeights, 0.5, 2.0, 1e-10);
         }
 
         return new TIMModel<T, TInput, TOutput>(MetaModel, currentParams, refinedWeights, modulationFactors);
@@ -329,23 +316,24 @@ public partial class TIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 /// </remarks>
 internal class TIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedWeights;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _refinedWeights;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     public TIMModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
-        Vector<T>? refinedWeights, double[]? modulationFactors)
+        Vector<T>? refinedWeights, Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -360,10 +348,7 @@ internal class TIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

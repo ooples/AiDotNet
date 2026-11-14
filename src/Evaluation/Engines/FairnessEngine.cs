@@ -90,20 +90,8 @@ public class FairnessEngine<T>
 
     private GroupFairnessMetrics ComputeGroupMetrics(T[] predictions, T[] actuals)
     {
-        int tp = 0, tn = 0, fp = 0, fn = 0;
-        int positive = 0;
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
-            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
-
-            if (pred) positive++;
-            if (pred && actual) tp++;
-            else if (!pred && !actual) tn++;
-            else if (pred && !actual) fp++;
-            else fn++;
-        }
+        var (tp, tn, fp, fn) = EvaluationTensorOps<T>.ThresholdConfusion(predictions, actuals, NumOps.FromDouble(0.5));
+        int positive = tp + fp;
 
         return new GroupFairnessMetrics
         {
@@ -169,27 +157,16 @@ public class FairnessEngine<T>
         int n = predictions.Length;
         if (n == 0) return 0;
 
-        // Compute benefit (1 for correct prediction, 0 for incorrect)
-        var benefits = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            bool pred = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5));
-            bool actual = NumOps.GreaterThanOrEquals(actuals[i], NumOps.FromDouble(0.5));
-            benefits[i] = pred == actual ? 1 : 0;
-        }
+        // Compute benefit (1 for correct prediction, 0 for incorrect); only the count of ones matters
+        var (tp, tn, _, _) = EvaluationTensorOps<T>.ThresholdConfusion(predictions, actuals, NumOps.FromDouble(0.5));
+        int correct = tp + tn;
 
-        double meanBenefit = benefits.Average();
+        double meanBenefit = (double)correct / n;
         if (meanBenefit < 1e-10) return 0;
 
-        double theil = 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (benefits[i] > 0)
-            {
-                double ratio = benefits[i] / meanBenefit;
-                theil += ratio * Math.Log(ratio);
-            }
-        }
+        // Every benefit of 1 contributes ratio * ln(ratio) with ratio = 1 / meanBenefit; zeros contribute nothing
+        double ratio = 1.0 / meanBenefit;
+        double theil = correct * (ratio * Math.Log(ratio));
 
         return theil / n;
     }

@@ -179,12 +179,10 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
             throw new ArgumentNullException(nameof(action));
         }
 
-        for (int i = 0; i < action.Length; i++)
+        int index = RLTensorOps.FirstPositiveIndex(action, NumOps.Zero, out bool found);
+        if (found)
         {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
+            return index;
         }
 
         // Invalid action vector - all elements are <= 0
@@ -206,22 +204,9 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
     private int GetBestAction(string stateKey)
     {
         EnsureStateExists(stateKey);
-        int bestAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qRow = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int bestAction = RLTensorOps.ArgMax(qRow);
+        bool allEqual = RLTensorOps.AllEqual(qRow, NumOps);
         if (allEqual)
             bestAction = HashStateToAction(stateKey, _options.ActionSize);
         return bestAction;
@@ -239,13 +224,7 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
             return NumOps.Zero;
         }
 
-        T sum = NumOps.Zero;
-        foreach (T value in returns)
-        {
-            sum = NumOps.Add(sum, value);
-        }
-
-        return NumOps.Divide(sum, NumOps.FromDouble(returns.Count));
+        return RLTensorOps.Average(returns);
     }
 
     /// <inheritdoc />

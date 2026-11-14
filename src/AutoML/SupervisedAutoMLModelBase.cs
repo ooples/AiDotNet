@@ -344,12 +344,8 @@ public abstract partial class SupervisedAutoMLModelBase<T, TInput, TOutput> : Au
         // Handle targets
         if (targets is Vector<T> targetVector)
         {
-            var elements = new List<T>();
-            foreach (int idx in indices)
-            {
-                elements.Add(targetVector[idx]);
-            }
-            subTargets = (TOutput)(object)new Vector<T>(elements.ToArray());
+            var gatherIndices = Tensor<int>.FromVector(Vector<int>.FromArray(indices));
+            subTargets = (TOutput)(object)AiDotNetEngine.Current.TensorGather(targetVector.AsTensor(), gatherIndices, 0).ToVector();
         }
         else if (targets is Matrix<T> targetMatrix)
         {

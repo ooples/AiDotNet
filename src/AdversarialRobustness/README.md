@@ -34,7 +34,7 @@ IPredictiveModel<double, Vector<double>, Vector<double>> model = /* your model *
 var attackOptions = new AdversarialAttackOptions<double>
 {
     Epsilon = 0.1,
-    NormType = "L-infinity"
+    NormType = AdversarialNormType.LInfinity
 };
 var attack = new FGSMAttack<double>(attackOptions);
 var adversarial = attack.GenerateAdversarialExample(input, trueLabel, model);

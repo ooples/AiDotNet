@@ -190,38 +190,43 @@ public abstract partial class VideoDenoisingBase<T> : VideoNeuralNetworkBase<T>,
         int height = noisyFrames.Shape[2];
         int width = noisyFrames.Shape[3];
 
-        var diffs = new List<double>();
+        var frame = Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(noisyFrames, [noisyFrames.Length]), 0, 0, channels * height * width),
+            [channels, height, width]);
+        return LaplacianNoiseSigma(frame);
+    }
 
-        // Compute high-frequency (Laplacian) response
-        for (int c = 0; c < channels; c++)
+    /// <summary>
+    /// MAD noise estimate from the 4-neighbour Laplacian response over the interior pixels of
+    /// <c>[planes, height, width]</c> data.
+    /// </summary>
+    /// <remarks>
+    /// The Laplacian <c>4x - up - down - left - right</c> of i.i.d. Gaussian noise has standard deviation
+    /// <c>sqrt(4² + 4)·sigma = sqrt(20)·sigma</c>, and the median of <c>|N(0, s²)|</c> is <c>0.6745·s</c>, so
+    /// <c>sigma = median(|response|) / (0.6745·sqrt(20))</c>. The median is element <c>n/2</c> of the sorted
+    /// responses (the upper median).
+    /// </remarks>
+    private protected double LaplacianNoiseSigma(Tensor<T> planes)
+    {
+        int height = planes.Shape[1];
+        int width = planes.Shape[2];
+        if (height < 3 || width < 3)
         {
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    int idxUp = c * height * width + (h - 1) * width + w;
-                    int idxDown = c * height * width + (h + 1) * width + w;
-                    int idxLeft = c * height * width + h * width + (w - 1);
-                    int idxRight = c * height * width + h * width + (w + 1);
-
-                    double center = NumOps.ToDouble(noisyFrames.Data.Span[idx]);
-                    double laplacian = 4 * center
-                        - NumOps.ToDouble(noisyFrames.Data.Span[idxUp])
-                        - NumOps.ToDouble(noisyFrames.Data.Span[idxDown])
-                        - NumOps.ToDouble(noisyFrames.Data.Span[idxLeft])
-                        - NumOps.ToDouble(noisyFrames.Data.Span[idxRight]);
-
-                    diffs.Add(Math.Abs(laplacian));
-                }
-            }
+            return 0;
         }
 
-        diffs.Sort();
-        double median = diffs.Count > 0 ? diffs[diffs.Count / 2] : 0;
+        Tensor<T> Shifted(int dh, int dw) =>
+            Engine.TensorNarrow(Engine.TensorNarrow(planes, 1, 1 + dh, height - 2), 2, 1 + dw, width - 2);
 
-        // MAD estimator: sigma = median / 0.6745
-        return median / 0.6745;
+        var neighbours = Engine.TensorAdd(
+            Engine.TensorAdd(Shifted(-1, 0), Shifted(1, 0)),
+            Engine.TensorAdd(Shifted(0, -1), Shifted(0, 1)));
+        var laplacian = Engine.TensorSubtract(
+            Engine.TensorMultiplyScalar(Shifted(0, 0), NumOps.FromDouble(4.0)), neighbours);
+        var magnitude = Engine.TensorAbs(laplacian);
+
+        var (median, _) = Engine.TensorKthvalue(magnitude, magnitude.Length / 2 + 1);
+        return NumOps.ToDouble(median) / (0.6745 * Math.Sqrt(20.0));
     }
 
     /// <inheritdoc />

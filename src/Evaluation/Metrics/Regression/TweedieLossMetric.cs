@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -62,42 +63,44 @@ public class TweedieLossMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double totalLoss = 0;
-        int validCount = 0;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var y = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var mu = EvaluationTensorOps<double>.MaxPreservingNaN(
+            EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>(), 1e-10);
+        var zeros = engine.TensorZerosLike(y);
+        var yPositive = engine.TensorGreaterThan(y, 0.0);
+        Tensor<double> loss;
 
-        for (int i = 0; i < predictions.Length; i++)
+        if (Math.Abs(_power) < 1e-10)
         {
-            double y = NumOps.ToDouble(actuals[i]);
-            double mu = Math.Max(1e-10, NumOps.ToDouble(predictions[i]));
-
-            double loss;
-            if (Math.Abs(_power) < 1e-10) // Normal (p = 0)
-            {
-                loss = (y - mu) * (y - mu);
-            }
-            else if (Math.Abs(_power - 1) < 1e-10) // Poisson (p = 1)
-            {
-                loss = y > 0 ? 2 * (y * Math.Log(y / mu) - (y - mu)) : 2 * mu;
-            }
-            else if (Math.Abs(_power - 2) < 1e-10) // Gamma (p = 2)
-            {
-                loss = y > 0 ? 2 * (-Math.Log(y / mu) + (y - mu) / mu) : 0;
-            }
-            else // General case
-            {
-                double a = Math.Max(1e-10, Math.Pow(y, 2 - _power)) / ((1 - _power) * (2 - _power));
-                double b = y * Math.Pow(mu, 1 - _power) / (1 - _power);
-                double c = Math.Pow(mu, 2 - _power) / (2 - _power);
-                loss = 2 * (a - b + c);
-            }
-
-            if (!double.IsNaN(loss) && !double.IsInfinity(loss))
-            {
-                totalLoss += loss;
-                validCount++;
-            }
+            loss = engine.TensorSquare(engine.TensorSubtract(y, mu));
         }
-
+        else if (Math.Abs(_power - 1) < 1e-10)
+        {
+            var positive = engine.TensorMultiplyScalar(
+                engine.TensorSubtract(engine.TensorMultiply(y, engine.TensorLog(engine.TensorDivide(y, mu))), engine.TensorSubtract(y, mu)),
+                2.0);
+            loss = engine.TensorWhere(yPositive, positive, engine.TensorMultiplyScalar(mu, 2.0));
+        }
+        else if (Math.Abs(_power - 2) < 1e-10)
+        {
+            var positive = engine.TensorMultiplyScalar(
+                engine.TensorSubtract(engine.TensorDivide(engine.TensorSubtract(y, mu), mu), engine.TensorLog(engine.TensorDivide(y, mu))),
+                2.0);
+            loss = engine.TensorWhere(yPositive, positive, zeros);
+        }
+        else
+        {
+            var a = engine.TensorMultiplyScalar(
+                EvaluationTensorOps<double>.MaxPreservingNaN(engine.TensorPower(y, 2 - _power), 1e-10),
+                1.0 / ((1 - _power) * (2 - _power)));
+            var b = engine.TensorMultiplyScalar(
+                engine.TensorMultiply(y, engine.TensorPower(mu, 1 - _power)), 1.0 / (1 - _power));
+            var c = engine.TensorMultiplyScalar(engine.TensorPower(mu, 2 - _power), 1.0 / (2 - _power));
+            loss = engine.TensorMultiplyScalar(engine.TensorAdd(engine.TensorSubtract(a, b), c), 2.0);
+        }
+        var (totalLoss, validCount) = EvaluationTensorOps<double>.FiniteSumAndCount(loss);
         return validCount > 0 ? NumOps.FromDouble(totalLoss / validCount) : NumOps.Zero;
     }
 
@@ -121,18 +124,17 @@ public class TweedieLossMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

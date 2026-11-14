@@ -245,13 +245,10 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (training)
         {
-            // Add exploration noise
-            for (int i = 0; i < action.Length; i++)
-            {
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.FromDouble(_options.ExplorationNoise), Random);
-                action[i] = NumOps.Add(action[i], noise);
-                action[i] = MathHelper.Clamp<T>(action[i], NumOps.FromDouble(-1), NumOps.FromDouble(1));
-            }
+            // Add exploration noise: clip(a + N(0, sigma), -1, 1), one draw per dimension in order
+            var engine = AiDotNetEngine.Current;
+            var noise = RLTensorOps.NormalRandom(Random, action.Length, NumOps.Zero, NumOps.FromDouble(_options.ExplorationNoise));
+            action = engine.Clamp(engine.Add(action, noise), NumOps.FromDouble(-1), NumOps.FromDouble(1));
         }
 
         return action;
@@ -308,12 +305,8 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         _perAgentRewards[bufferIndex] = new List<T>(rewards);
 
         // Also compute average reward for cooperative scenarios (backward compatibility)
-        T avgReward = NumOps.Zero;
-        foreach (var reward in rewards)
-        {
-            avgReward = NumOps.Add(avgReward, reward);
-        }
-        avgReward = NumOps.Divide(avgReward, NumOps.FromDouble(rewards.Count));
+        T rewardSum = rewards.Count == 0 ? NumOps.Zero : AiDotNetEngine.Current.Sum(Vector<T>.FromEnumerable(rewards));
+        T avgReward = NumOps.Divide(rewardSum, NumOps.FromDouble(rewards.Count));
 
         _replayBuffer.Add(new Experience<T, Vector<T>, Vector<T>>(jointState, jointAction, avgReward, jointNextState, done));
         _stepCount++;
@@ -353,10 +346,8 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (target.Length == 0)
             throw new ArgumentException("target must contain at least one element.", nameof(target));
 
-        T reward = NumOps.Zero;
-        for (int i = 0; i < target.Length; i++)
-            reward = NumOps.Add(reward, target[i]);
-        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+        // mean of the supervised target
+        T reward = NumOps.Divide(AiDotNetEngine.Current.Sum(target), NumOps.FromDouble(target.Length));
 
         int numAgents = _options.NumAgents;
         var states = new List<Vector<T>>(numAgents);
@@ -435,114 +426,130 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
         }
 
-        T totalLoss = NumOps.Zero;
+        var agentLosses = new List<T>(numAgents);
 
         // Per-agent centralized-critic + decentralized-actor update (Lowe et al. 2017).
         for (int agentId = 0; agentId < numAgents; agentId++)
         {
-            // --- Centralized critic update: y = r_i + gamma*(1-done)*Q'_i(x', a'_1..a'_N),
-            // a'_j = mu'_j(o'_j). Regress critic_i toward y on the stored (x, a_1..a_N). ---
-            var criticInputs = new Tensor<T>([n, criticIn]);
-            var yTargets = new Tensor<T>([n, 1]);
-            for (int i = 0; i < n; i++)
-            {
-                var exp = batch[i];
-                var jointNextAction = new Vector<T>(numAgents * ad);
-                for (int j = 0; j < numAgents; j++)
-                {
-                    var nextObsJ = SliceVector(exp.NextState, j * sd, sd);
-                    var aJ = _targetActorNetworks[j].Predict(Tensor<T>.FromVector(nextObsJ)).ToVector();
-                    for (int k = 0; k < ad; k++) jointNextAction[j * ad + k] = aJ[k];
-                }
-                var targetCriticInput = ConcatTwo(exp.NextState, jointNextAction);
-                T qNext = _targetCriticNetworks[agentId].Predict(Tensor<T>.FromVector(targetCriticInput)).ToVector()[0];
-
-                T rI = exp.Reward;
-                if (_perAgentRewards.TryGetValue(indices[i], out var pr))
-                {
-                    // A per-agent reward override must cover EVERY agent; a partial list would
-                    // silently fall back to the averaged scalar reward for the later agents and
-                    // train their critics on inconsistent targets. Reject it loudly instead.
-                    if (pr.Count != numAgents)
-                    {
-                        throw new InvalidOperationException(
-                            $"Per-agent reward override for replay index {indices[i]} contains {pr.Count} " +
-                            $"rewards; expected {numAgents}.");
-                    }
-                    rI = pr[agentId];
-                }
-                T y = rI;
-                if (!exp.Done) y = NumOps.Add(y, NumOps.Multiply(gamma, qNext));
-
-                var criticInput = ConcatTwo(exp.State, exp.Action);
-                for (int c = 0; c < criticIn; c++) criticInputs[i, c] = criticInput[c];
-                yTargets[i, 0] = y;
-            }
-            _criticNetworks[agentId].Train(criticInputs, yTargets);
-            T criticLoss = _criticNetworks[agentId].GetLastLoss();
-
-            // --- Decentralized actor update via the deterministic policy gradient: improve a_i in
-            // the direction ∇_{a_i} Q_i (estimated by central finite differences, holding the other
-            // agents' actions fixed), then train actor_i toward the improved action. ---
-            var actorInputs = new Tensor<T>([n, sd]);
-            var actorTargets = new Tensor<T>([n, ad]);
-            T step = NumOps.FromDouble(ActorGradientStepSize);
-            T eps = NumOps.FromDouble(ActorFiniteDifferenceEpsilon);
-            T twoEps = NumOps.FromDouble(2.0 * ActorFiniteDifferenceEpsilon);
-            for (int i = 0; i < n; i++)
-            {
-                var exp = batch[i];
-                var ownObs = SliceVector(exp.State, agentId * sd, sd);
-                var aI = _actorNetworks[agentId].Predict(Tensor<T>.FromVector(ownObs)).ToVector();
-
-                // Joint action with agent i's slot replaced by the current actor output.
-                var jointAction = exp.Action.Clone();
-                for (int k = 0; k < ad; k++) jointAction[agentId * ad + k] = aI[k];
-
-                var grad = new Vector<T>(ad);
-                for (int k = 0; k < ad; k++)
-                {
-                    var jaPlus = jointAction.Clone();
-                    var jaMinus = jointAction.Clone();
-                    jaPlus[agentId * ad + k] = NumOps.Add(jaPlus[agentId * ad + k], eps);
-                    jaMinus[agentId * ad + k] = NumOps.Subtract(jaMinus[agentId * ad + k], eps);
-                    T qPlus = _criticNetworks[agentId].Predict(Tensor<T>.FromVector(ConcatTwo(exp.State, jaPlus))).ToVector()[0];
-                    T qMinus = _criticNetworks[agentId].Predict(Tensor<T>.FromVector(ConcatTwo(exp.State, jaMinus))).ToVector()[0];
-                    grad[k] = NumOps.Divide(NumOps.Subtract(qPlus, qMinus), twoEps);
-                }
-
-                for (int j = 0; j < sd; j++) actorInputs[i, j] = ownObs[j];
-                for (int k = 0; k < ad; k++)
-                    actorTargets[i, k] = MathHelper.Clamp<T>(
-                        NumOps.Add(aI[k], NumOps.Multiply(step, grad[k])),
-                        NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-            }
-            _actorNetworks[agentId].Train(actorInputs, actorTargets);
-            T actorLoss = _actorNetworks[agentId].GetLastLoss();
-
-            totalLoss = NumOps.Add(totalLoss, NumOps.Add(criticLoss, actorLoss));
+            agentLosses.Add(TrainAgent(agentId, batch, indices, gamma));
 
             // Soft update target networks
             SoftUpdateTargetNetwork(_actorNetworks[agentId], _targetActorNetworks[agentId]);
             SoftUpdateTargetNetwork(_criticNetworks[agentId], _targetCriticNetworks[agentId]);
         }
 
+        T totalLoss = AiDotNetEngine.Current.Sum(Vector<T>.FromEnumerable(agentLosses));
         return NumOps.Divide(totalLoss, NumOps.FromDouble(_options.NumAgents * 2));
+    }
+
+    /// <summary>
+    /// One agent's centralized-critic and decentralized-actor update on the sampled joint batch; returns the
+    /// critic loss plus the actor loss.
+    /// </summary>
+    private T TrainAgent(int agentId, List<Experience<T, Vector<T>, Vector<T>>> batch, IReadOnlyList<int> indices, T gamma)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = batch.Count;
+        int numAgents = _options.NumAgents;
+        int sd = _options.StateSize;
+        int ad = _options.ActionSize;
+        int criticIn = (sd + ad) * numAgents;
+
+        // --- Centralized critic update: y = r_i + gamma*(1-done)*Q'_i(x', a'_1..a'_N),
+        // a'_j = mu'_j(o'_j). Regress critic_i toward y on the stored (x, a_1..a_N). ---
+        // Each target actor runs once on its agents' next observations for the whole batch.
+        var nextActionsPerAgent = Enumerable.Range(0, numAgents)
+            .Select(j => RLTensorOps.Rows(
+                _targetActorNetworks[j].Predict(RLTensorOps.Batch(batch.Select(exp => exp.NextState.GetSubVector(j * sd, sd)), sd)), n))
+            .ToList();
+        var targetCriticInputs = RLTensorOps.Batch(
+            batch.Select((exp, row) => RLTensorOps.Concat(
+                new[] { exp.NextState }.Concat(nextActionsPerAgent.Select(actions => RLTensorOps.Head(actions[row], ad))).ToArray())),
+            criticIn);
+        var qNext = RLTensorOps.FirstColumn(_targetCriticNetworks[agentId].Predict(targetCriticInputs), n);
+        var agentRewards = Vector<T>.FromEnumerable(batch.Select((exp, row) => AgentReward(exp, indices[row], agentId)));
+        var done = batch.Select(exp => exp.Done).ToArray();
+        var yTargets = new Tensor<T>([n, 1], RLTensorOps.TdTargets(agentRewards, qNext, done, gamma));
+
+        var criticInputs = RLTensorOps.Batch(batch.Select(exp => ConcatTwo(exp.State, exp.Action)), criticIn);
+        _criticNetworks[agentId].Train(criticInputs, yTargets);
+        T criticLoss = _criticNetworks[agentId].GetLastLoss();
+
+        // --- Decentralized actor update via the deterministic policy gradient: improve a_i in
+        // the direction ∇_{a_i} Q_i (estimated by central finite differences, holding the other
+        // agents' actions fixed), then train actor_i toward the improved action. ---
+        T step = NumOps.FromDouble(ActorGradientStepSize);
+        T lowerBound = NumOps.FromDouble(-1.0);
+        T upperBound = NumOps.FromDouble(1.0);
+        var actorInputs = RLTensorOps.Batch(batch.Select(exp => SliceVector(exp.State, agentId * sd, sd)), sd);
+        var currentActions = RLTensorOps.Rows(_actorNetworks[agentId].Predict(actorInputs), n);
+        var actorTargets = RLTensorOps.Batch(
+            batch.Select((exp, row) => engine.Clamp(
+                engine.Add(currentActions[row], engine.Multiply(OwnActionGradient(agentId, exp, currentActions[row]), step)),
+                lowerBound, upperBound)),
+            ad);
+        _actorNetworks[agentId].Train(actorInputs, actorTargets);
+        T actorLoss = _actorNetworks[agentId].GetLastLoss();
+
+        return NumOps.Add(criticLoss, actorLoss);
+    }
+
+    /// <summary>
+    /// Agent <paramref name="agentId"/>'s reward for a sampled transition: its per-agent override when the joint
+    /// transition stored one, else the averaged scalar reward.
+    /// </summary>
+    private T AgentReward(Experience<T, Vector<T>, Vector<T>> exp, int replayIndex, int agentId)
+    {
+        if (!_perAgentRewards.TryGetValue(replayIndex, out var pr))
+        {
+            return exp.Reward;
+        }
+
+        // A per-agent reward override must cover EVERY agent; a partial list would
+        // silently fall back to the averaged scalar reward for the later agents and
+        // train their critics on inconsistent targets. Reject it loudly instead.
+        if (pr.Count != _options.NumAgents)
+        {
+            throw new InvalidOperationException(
+                $"Per-agent reward override for replay index {replayIndex} contains {pr.Count} " +
+                $"rewards; expected {_options.NumAgents}.");
+        }
+
+        return pr[agentId];
+    }
+
+    /// <summary>
+    /// ∇_{a_i} Q_i(x, a) by central finite differences on agent i's action slot, with that slot holding the current
+    /// actor output and the other agents' actions fixed; all 2 * ActionSize probes in one batched critic forward.
+    /// </summary>
+    private Vector<T> OwnActionGradient(int agentId, Experience<T, Vector<T>, Vector<T>> exp, Vector<T> ownAction)
+    {
+        var engine = AiDotNetEngine.Current;
+        int ad = _options.ActionSize;
+        int jointWidth = exp.Action.Length;
+        int slot = agentId * ad;
+        T eps = NumOps.FromDouble(ActorFiniteDifferenceEpsilon);
+        T twoEps = NumOps.FromDouble(2.0 * ActorFiniteDifferenceEpsilon);
+
+        // Joint action with agent i's slot replaced by the current actor output.
+        var jointAction = RLTensorOps.Concat(
+            exp.Action.GetSubVector(0, slot), RLTensorOps.Head(ownAction, ad), exp.Action.GetSubVector(slot + ad, jointWidth - slot - ad));
+        var perturbations = Enumerable.Range(0, ad).Select(k => engine.Multiply(RLTensorOps.OneHot<T>(jointWidth, slot + k), eps)).ToList();
+        var probes = perturbations.Select(delta => ConcatTwo(exp.State, engine.Add(jointAction, delta)))
+            .Concat(perturbations.Select(delta => ConcatTwo(exp.State, engine.Subtract(jointAction, delta))))
+            .ToList();
+        var q = RLTensorOps.FirstColumn(_criticNetworks[agentId].Predict(RLTensorOps.StackRows(probes)), 2 * ad);
+        return engine.Divide(engine.Subtract(q.GetSubVector(0, ad), q.GetSubVector(ad, ad)), twoEps);
     }
 
     private static Vector<T> SliceVector(Vector<T> v, int start, int length)
     {
-        var result = new Vector<T>(length);
-        for (int i = 0; i < length; i++) result[i] = v[start + i];
-        return result;
+        return v.GetSubVector(start, length);
     }
 
     private static Vector<T> ConcatTwo(Vector<T> a, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length + b.Length);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
+        return RLTensorOps.Concat(a, b);
     }
 
     private void SoftUpdateTargetNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)
@@ -550,79 +557,27 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
 
-        var oneMinusTau = NumOps.Subtract(NumOps.One, _options.TargetUpdateTau);
-
-        for (int i = 0; i < sourceParams.Length; i++)
-        {
-            var sourceContrib = NumOps.Multiply(_options.TargetUpdateTau, sourceParams[i]);
-            var targetContrib = NumOps.Multiply(oneMinusTau, targetParams[i]);
-            targetParams[i] = NumOps.Add(sourceContrib, targetContrib);
-        }
-
-        target.UpdateParameters(targetParams);
+        // theta_target <- tau * theta + (1 - tau) * theta_target
+        target.UpdateParameters(RLTensorOps.SoftUpdate(sourceParams, targetParams, _options.TargetUpdateTau));
     }
 
     private Vector<T> ConcatenateVectors(List<Vector<T>> vectors)
     {
-        int totalSize = 0;
-        foreach (var vec in vectors)
-        {
-            totalSize += vec.Length;
-        }
-
-        var result = new Vector<T>(totalSize);
-        int offset = 0;
-
-        foreach (var vec in vectors)
-        {
-            for (int i = 0; i < vec.Length; i++)
-            {
-                result[offset + i] = vec[i];
-            }
-            offset += vec.Length;
-        }
-
-        return result;
+        return RLTensorOps.Concat(vectors.ToArray());
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var result = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++)
-        {
-            result[i] = state[i];
-        }
-        for (int i = 0; i < action.Length; i++)
-        {
-            result[state.Length + i] = action[i];
-        }
-        return result;
+        return RLTensorOps.Concat(state, action);
     }
 
     private Vector<T> ComputeJointTargetActions(Vector<T> jointNextState)
     {
-        // Decompose joint state into individual agent states
-        var individualActions = new List<Vector<T>>();
-
-        for (int i = 0; i < _options.NumAgents; i++)
-        {
-            // Extract this agent's next state from joint state
-            int stateOffset = i * _options.StateSize;
-            var agentNextState = new Vector<T>(_options.StateSize);
-            for (int j = 0; j < _options.StateSize; j++)
-            {
-                agentNextState[j] = jointNextState[stateOffset + j];
-            }
-
-            // Compute action using target actor network
-            var agentNextStateTensor = Tensor<T>.FromVector(agentNextState);
-            var targetActionTensor = _targetActorNetworks[i].Predict(agentNextStateTensor);
-            var targetAction = targetActionTensor.ToVector();
-
-            individualActions.Add(targetAction);
-        }
-
-        // Concatenate all target actions into joint action vector
+        // Each agent's target actor acts on its own slice of the joint next state; the actions are concatenated.
+        int stateSize = _options.StateSize;
+        var individualActions = Enumerable.Range(0, _options.NumAgents)
+            .Select(agent => _targetActorNetworks[agent].Predict(Tensor<T>.FromVector(jointNextState.GetSubVector(agent * stateSize, stateSize))).ToVector())
+            .ToList();
         return ConcatenateVectors(individualActions);
     }
 

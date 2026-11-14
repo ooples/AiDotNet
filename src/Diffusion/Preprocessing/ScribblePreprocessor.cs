@@ -44,34 +44,13 @@ public class ScribblePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 1, height, width });
+        if (!PreprocessorFilters.HasInterior(shape[2], shape[3]))
+            return new Tensor<T>(new[] { shape[0], 1, shape[2], shape[3] });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    // Compute Laplacian for edge detection
-                    double center = NumOps.ToDouble(data[b, 0, h, w]) * 4;
-                    double neighbors = NumOps.ToDouble(data[b, 0, h - 1, w])
-                                     + NumOps.ToDouble(data[b, 0, h + 1, w])
-                                     + NumOps.ToDouble(data[b, 0, h, w - 1])
-                                     + NumOps.ToDouble(data[b, 0, h, w + 1]);
-                    double edge = Math.Abs(center - neighbors);
-
-                    // Binary threshold to produce scribble-like output
-                    result[b, 0, h, w] = edge > _threshold
-                        ? NumOps.One
-                        : NumOps.Zero;
-                }
-            }
-        }
-
-        return result;
+        // Binary threshold of the Laplacian edge strength |4 c - neighbours| of channel 0; the border stays 0
+        var laplacian = PreprocessorFilters.Interior3x3(PreprocessorFilters.Channel(data, 0), PreprocessorFilters.Laplacian);
+        return PreprocessorFilters.PadBorder(PreprocessorFilters.Above(engine.TensorAbs(laplacian), _threshold));
     }
 }

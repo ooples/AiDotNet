@@ -750,7 +750,6 @@ internal static class DefectBaselines
             "global::AiDotNet.Finance.Graph.DCRNN<T>",
             "global::AiDotNet.Finance.Graph.GraphWaveNet<T>",
             "global::AiDotNet.Finance.Graph.MTGNN<T>",
-            "global::AiDotNet.Finance.Graph.RelationalGCN<T>",
             "global::AiDotNet.Finance.Graph.STGNN<T>",
             "global::AiDotNet.Finance.Graph.TemporalGCN<T>",
             "global::AiDotNet.Finance.NLP.BloombergGPT<T>",

@@ -32,10 +32,6 @@ public sealed class DiscretizedRFScheduler<T> : NoiseSchedulerBase<T>
         double dt = 1.0 / Math.Max(1, Timesteps.Length);
         var dtT = NumOps.FromDouble(dt);
 
-        var result = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
-            result[i] = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
-
-        return result;
+        return Engine.Subtract(sample, Engine.Multiply(modelOutput, dtT));
     }
 }

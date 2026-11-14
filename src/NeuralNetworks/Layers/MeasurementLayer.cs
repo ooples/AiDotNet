@@ -157,31 +157,22 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
         }
 
         int batchSize = input2D.Shape[0];
-        var probabilities = TensorAllocator.Rent<T>(new[] { batchSize, stateSize });
 
-        for (int b = 0; b < batchSize; b++)
+        // Born rule per row: p_i = |a_i|^2 / sum_j |a_j|^2, all zeros for an all-zero row. Entries are real
+        // amplitudes (GetComplex gave them a zero imaginary part), so |a|^2 = a^2. The probabilities were a
+        // freshly written tensor, so they stay off the gradient tape.
+        Tensor<T> probabilities;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int baseIndex = b * stateSize;
-            T sum = NumOps.Zero;
+            int[] shape2D = [batchSize, stateSize];
+            var magnitude = Engine.TensorMultiply(input2D, input2D);
+            var rowSum = Engine.TensorBroadcastTo(Engine.ReduceSum(magnitude, [1], keepDims: true), shape2D);
+            var zeroRow = Engine.TensorEquals(rowSum, NumOps.Zero);
 
-            for (int i = 0; i < stateSize; i++)
-            {
-                var complexValue = Tensor<T>.GetComplex(input2D, baseIndex + i);
-                var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
-                var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
-                var magnitude = NumOps.Add(realSquared, imagSquared);
-                probabilities[b, i] = magnitude;
-                sum = NumOps.Add(sum, magnitude);
-            }
-
-            T invSum = NumOps.Equals(sum, NumOps.Zero)
-                ? NumOps.Zero
-                : NumOps.Divide(NumOps.One, sum);
-
-            for (int i = 0; i < stateSize; i++)
-            {
-                probabilities[b, i] = NumOps.Multiply(probabilities[b, i], invSum);
-            }
+            // The division runs before the selection, so a zero row divides by one instead (decimal division by
+            // zero throws); the selection then puts zeros there.
+            var divisor = Engine.TensorWhere(zeroRow, Engine.TensorOnesLike(rowSum), rowSum);
+            probabilities = Engine.TensorWhere(zeroRow, new Tensor<T>(shape2D), Engine.TensorDivide(magnitude, divisor));
         }
 
         if (input.Rank == 1)

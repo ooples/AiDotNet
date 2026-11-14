@@ -189,11 +189,7 @@ public static class NumericalStabilityHelper
     {
         if (vector == null) return false;
 
-        for (int i = 0; i < vector.Length; i++)
-        {
-            if (IsNaN(vector[i])) return true;
-        }
-        return false;
+        return CountNaN(vector) > 0;
     }
 
     /// <summary>
@@ -206,11 +202,7 @@ public static class NumericalStabilityHelper
     {
         if (vector == null) return false;
 
-        for (int i = 0; i < vector.Length; i++)
-        {
-            if (IsInfinity(vector[i])) return true;
-        }
-        return false;
+        return CountInfinity(vector) > 0;
     }
 
     /// <summary>
@@ -234,11 +226,7 @@ public static class NumericalStabilityHelper
     {
         if (tensor == null) return false;
 
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            if (IsNaN(tensor[i])) return true;
-        }
-        return false;
+        return CountMatches(AiDotNetEngine.Current.TensorIsNan(tensor)) > 0;
     }
 
     /// <summary>
@@ -251,11 +239,7 @@ public static class NumericalStabilityHelper
     {
         if (tensor == null) return false;
 
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            if (IsInfinity(tensor[i])) return true;
-        }
-        return false;
+        return CountMatches(AiDotNetEngine.Current.TensorIsInf(tensor)) > 0;
     }
 
     /// <summary>
@@ -283,12 +267,8 @@ public static class NumericalStabilityHelper
         var numOps = MathHelper.GetNumericOperations<T>();
         T replaceValue = replacement ?? numOps.Zero;
 
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = IsNaN(vector[i]) ? replaceValue : vector[i];
-        }
-        return result;
+        var values = Tensor<T>.FromVector(vector);
+        return SelectWhere(AiDotNetEngine.Current.TensorIsNan(values), Filled(values, replaceValue), values);
     }
 
     /// <summary>
@@ -305,12 +285,8 @@ public static class NumericalStabilityHelper
         var numOps = MathHelper.GetNumericOperations<T>();
         T replaceValue = replacement ?? numOps.Zero;
 
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = IsInfinity(vector[i]) ? replaceValue : vector[i];
-        }
-        return result;
+        var values = Tensor<T>.FromVector(vector);
+        return SelectWhere(AiDotNetEngine.Current.TensorIsInf(values), Filled(values, replaceValue), values);
     }
 
     /// <summary>
@@ -327,12 +303,8 @@ public static class NumericalStabilityHelper
         var numOps = MathHelper.GetNumericOperations<T>();
         T replaceValue = replacement ?? numOps.Zero;
 
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = IsFinite(vector[i]) ? vector[i] : replaceValue;
-        }
-        return result;
+        var values = Tensor<T>.FromVector(vector);
+        return SelectWhere(AiDotNetEngine.Current.TensorIsFinite(values), values, Filled(values, replaceValue));
     }
 
     /// <summary>
@@ -354,35 +326,23 @@ public static class NumericalStabilityHelper
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(logits);
+
         // Find max for numerical stability
-        T maxVal = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (numOps.GreaterThan(logits[i], maxVal))
-                maxVal = logits[i];
-        }
+        T maxVal = engine.TensorMaxValue(values);
 
         // Compute exp(x - max) and sum
-        var expValues = new Vector<T>(logits.Length);
-        T sum = numOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            expValues[i] = numOps.Exp(numOps.Subtract(logits[i], maxVal));
-            sum = numOps.Add(sum, expValues[i]);
-        }
+        var expValues = engine.TensorExp(engine.TensorSubtractScalar(values, maxVal));
+        T sum = engine.TensorSum(expValues);
 
         // Normalize with epsilon protection
         T eps = numOps.FromDouble(DefaultEpsilon);
         if (numOps.LessThan(sum, eps))
             sum = eps;
 
-        var result = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            result[i] = numOps.Divide(expValues[i], sum);
-        }
-
-        return result;
+        return engine.TensorDivideScalar(expValues, sum).ToVector();
     }
 
     /// <summary>
@@ -404,31 +364,20 @@ public static class NumericalStabilityHelper
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(logits);
+
         // Find max for numerical stability
-        T maxVal = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (numOps.GreaterThan(logits[i], maxVal))
-                maxVal = logits[i];
-        }
+        T maxVal = engine.TensorMaxValue(values);
 
         // Compute log-sum-exp
-        T sumExp = numOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            sumExp = numOps.Add(sumExp, numOps.Exp(numOps.Subtract(logits[i], maxVal)));
-        }
+        T sumExp = engine.TensorSum(engine.TensorExp(engine.TensorSubtractScalar(values, maxVal)));
 
         T logSumExp = numOps.Add(maxVal, SafeLog(sumExp));
 
         // log_softmax(x_i) = x_i - log_sum_exp
-        var result = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            result[i] = numOps.Subtract(logits[i], logSumExp);
-        }
-
-        return result;
+        return engine.TensorSubtractScalar(values, logSumExp).ToVector();
     }
 
     /// <summary>
@@ -441,12 +390,7 @@ public static class NumericalStabilityHelper
     {
         if (vector == null) return 0;
 
-        int count = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            if (IsNaN(vector[i])) count++;
-        }
-        return count;
+        return CountMatches(AiDotNetEngine.Current.TensorIsNan(Tensor<T>.FromVector(vector)));
     }
 
     /// <summary>
@@ -459,12 +403,26 @@ public static class NumericalStabilityHelper
     {
         if (vector == null) return 0;
 
-        int count = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            if (IsInfinity(vector[i])) count++;
-        }
-        return count;
+        return CountMatches(AiDotNetEngine.Current.TensorIsInf(Tensor<T>.FromVector(vector)));
+    }
+
+    /// <summary>Number of set entries in an element-wise test mask.</summary>
+    private static int CountMatches(Tensor<AiDotNet.Tensors.Bit> mask)
+    {
+        var ones = AiDotNetEngine.Current.TensorAddScalar(new Tensor<int>(mask._shape), 1);
+        return AiDotNetEngine.Current.TensorCountNonzero(
+            AiDotNetEngine.Current.TensorWhere(mask, ones, new Tensor<int>(mask._shape)));
+    }
+
+    /// <summary>A tensor shaped like <paramref name="like"/> with every element equal to <paramref name="value"/>.</summary>
+    private static Tensor<T> Filled<T>(Tensor<T> like, T value)
+        => AiDotNetEngine.Current.TensorAddScalar(new Tensor<T>(like._shape), value);
+
+    /// <summary>Element-wise <paramref name="whenSet"/> where the mask is set, else <paramref name="otherwise"/>.</summary>
+    private static Vector<T> SelectWhere<T>(Tensor<AiDotNet.Tensors.Bit> mask, Tensor<T> whenSet, Tensor<T> otherwise)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorWhere(mask, whenSet, otherwise).ToVector();
     }
 
     /// <summary>

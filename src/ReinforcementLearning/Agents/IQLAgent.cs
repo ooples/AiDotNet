@@ -245,38 +245,21 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var policyOutputTensor = _policyNetwork.Predict(stateTensor);
         var policyOutput = policyOutputTensor.ToVector();
 
-        // Extract mean and log_std
-        var mean = new Vector<T>(_options.ActionSize);
-        var logStd = new Vector<T>(_options.ActionSize);
-
-        for (int i = 0; i < _options.ActionSize; i++)
-        {
-            mean[i] = policyOutput[i];
-            logStd[i] = policyOutput[_options.ActionSize + i];
-            logStd[i] = MathHelper.Clamp<T>(logStd[i], _numOps.FromDouble(-20), _numOps.FromDouble(2));
-        }
+        // Extract mean and log_std (clamped to [-20, 2])
+        var engine = AiDotNetEngine.Current;
+        var mean = policyOutput.GetSubVector(0, _options.ActionSize);
+        var logStd = engine.Clamp(
+            policyOutput.GetSubVector(_options.ActionSize, _options.ActionSize), _numOps.FromDouble(-20), _numOps.FromDouble(2));
 
         if (!training)
         {
             // Return mean action during evaluation
-            for (int i = 0; i < mean.Length; i++)
-            {
-                mean[i] = MathHelper.Tanh<T>(mean[i]);
-            }
-            return mean;
+            return engine.Tanh(mean);
         }
 
-        // Sample from Gaussian policy
-        var action = new Vector<T>(_options.ActionSize);
-        for (int i = 0; i < _options.ActionSize; i++)
-        {
-            var std = NumOps.Exp(logStd[i]);
-            var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One, _random);
-            var rawAction = _numOps.Add(mean[i], _numOps.Multiply(std, noise));
-            action[i] = MathHelper.Tanh<T>(rawAction);
-        }
-
-        return action;
+        // Sample from Gaussian policy: tanh(mean + exp(log_std) * N(0, 1)), one draw per dimension in order
+        var noise = RLTensorOps.NormalRandom<T>(_random, _options.ActionSize);
+        return engine.Tanh(engine.Add(mean, engine.Multiply(engine.Exp(logStd), noise)));
     }
 
     /// <inheritdoc />
@@ -304,61 +287,49 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         T gamma = _options.DiscountFactor;
         double tau = _options.Expectile;
 
-        var valueInputs = new Tensor<T>([n, stateDim]);
-        var valueTargets = new Tensor<T>([n, 1]);
-        var saInputs = new Tensor<T>([n, saDim]);
-        var qTargets = new Tensor<T>([n, 1]);
-        var policyInputs = new Tensor<T>([n, stateDim]);
-        var policyTargets = new Tensor<T>([n, actionDim * 2]);
+        // Every network sees the whole batch in one forward.
+        var engine = AiDotNetEngine.Current;
+        var saInputs = RLTensorOps.Batch(batch.Select(exp => ConcatenateStateAction(exp.State, exp.Action)), saDim);
+        var q1 = RLTensorOps.FirstColumn(_q1Network.Predict(saInputs), n).AsTensor();
+        var q2 = RLTensorOps.FirstColumn(_q2Network.Predict(saInputs), n).AsTensor();
+        var qMin = engine.TensorWhere(engine.TensorLessThan(q1, q2), q1, q2);
 
-        for (int i = 0; i < n; i++)
-        {
-            var exp = batch[i];
-            var saVec = ConcatenateStateAction(exp.State, exp.Action);
-            var saTensor = Tensor<T>.FromVector(saVec);
-            T q1 = _q1Network.Predict(saTensor).ToVector()[0];
-            T q2 = _q2Network.Predict(saTensor).ToVector()[0];
-            T qMin = _numOps.LessThan(q1, q2) ? q1 : q2;
+        var valueInputs = RLTensorOps.Batch(batch.Select(exp => exp.State), stateDim);
+        var v = RLTensorOps.FirstColumn(_valueNetwork.Predict(valueInputs), n).AsTensor();
 
-            var stateTensor = Tensor<T>.FromVector(exp.State);
-            T v = _valueNetwork.Predict(stateTensor).ToVector()[0];
+        // --- Expectile value regression (Kostrikov et al. 2021, eq. 5) ---
+        // The asymmetric expectile loss L2^tau(qMin − V) has gradient w·(V − qMin) with
+        // w = tau when qMin > V and (1−tau) otherwise. That is exactly the MSE gradient toward
+        // the per-sample target V + w·(qMin − V), so we realise the expectile update through the
+        // standard MSE Train without a custom loss.
+        var w = engine.TensorWhere(
+            engine.TensorGreaterThan(qMin, v),
+            engine.TensorFullLike(v, _numOps.FromDouble(tau)),
+            engine.TensorFullLike(v, _numOps.FromDouble(1.0 - tau)));
+        var advantage = engine.TensorSubtract(qMin, v);
+        var valueTargets = engine.Reshape(engine.TensorAdd(v, engine.TensorMultiply(w, advantage)), [n, 1]);
 
-            // --- Expectile value regression (Kostrikov et al. 2021, eq. 5) ---
-            // The asymmetric expectile loss L2^tau(qMin − V) has gradient w·(V − qMin) with
-            // w = tau when qMin > V and (1−tau) otherwise. That is exactly the MSE gradient toward
-            // the per-sample target V + w·(qMin − V), so we realise the expectile update through the
-            // standard MSE Train without a custom loss.
-            double w = _numOps.GreaterThan(qMin, v) ? tau : (1.0 - tau);
-            for (int j = 0; j < stateDim; j++) valueInputs[i, j] = exp.State[j];
-            valueTargets[i, 0] = _numOps.Add(v, _numOps.Multiply(_numOps.FromDouble(w), _numOps.Subtract(qMin, v)));
+        // --- Q Bellman regression toward V of the next state (IQL bootstraps off the learned
+        // value rather than a next action): y = r + gamma·(1−done)·V'(s'). ---
+        var vNext = RLTensorOps.FirstColumn(_targetValueNetwork.Predict(RLTensorOps.Batch(batch.Select(exp => exp.NextState), stateDim)), n);
+        var rewards = Vector<T>.FromEnumerable(batch.Select(exp => exp.Reward));
+        var done = batch.Select(exp => exp.Done).ToArray();
+        var qTargets = new Tensor<T>([n, 1], RLTensorOps.TdTargets(rewards, vNext, done, gamma));
 
-            // --- Q Bellman regression toward V of the next state (IQL bootstraps off the learned
-            // value rather than a next action): y = r + gamma·(1−done)·V'(s'). ---
-            T vNext = _targetValueNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector()[0];
-            T yQ = exp.Reward;
-            if (!exp.Done) yQ = _numOps.Add(yQ, _numOps.Multiply(gamma, vNext));
-            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
-            qTargets[i, 0] = yQ;
-
-            // --- Advantage-weighted policy extraction (IQL §4.2): pull the policy mean toward the
-            // dataset action with a weight that grows with the advantage A = qMin − V. The per-sample
-            // weighting is realised as a target blend: target_mean = mean + coef·(a − mean),
-            // coef = clamp(exp(temperature·A), 0, 1) (high-advantage actions imitated fully,
-            // low/negative-advantage ones barely). log_std targets 0. ---
-            T adv = _numOps.Subtract(qMin, v);
-            double coef = Math.Exp(_numOps.ToDouble(_numOps.Multiply(_options.Temperature, adv)));
-            if (coef > 1.0) coef = 1.0;
-            if (coef < 0.0) coef = 0.0;
-            var policyOut = _policyNetwork.Predict(stateTensor).ToVector();
-            for (int j = 0; j < stateDim; j++) policyInputs[i, j] = exp.State[j];
-            for (int k = 0; k < actionDim; k++)
-            {
-                T mean = policyOut[k];
-                policyTargets[i, k] = _numOps.Add(mean,
-                    _numOps.Multiply(_numOps.FromDouble(coef), _numOps.Subtract(exp.Action[k], mean)));
-                policyTargets[i, actionDim + k] = _numOps.Zero;
-            }
-        }
+        // --- Advantage-weighted policy extraction (IQL §4.2): pull the policy mean toward the
+        // dataset action with a weight that grows with the advantage A = qMin − V. The per-sample
+        // weighting is realised as a target blend: target_mean = mean + coef·(a − mean),
+        // coef = clamp(exp(temperature·A), 0, 1) (high-advantage actions imitated fully,
+        // low/negative-advantage ones barely). log_std targets 0. ---
+        var coef = engine.TensorClamp(
+            engine.TensorExp(engine.TensorMultiplyScalar(advantage, _options.Temperature)), _numOps.Zero, _numOps.One);
+        var policyInputs = valueInputs;
+        var policyOut = _policyNetwork.Predict(policyInputs);
+        var means = engine.TensorSlice(engine.Reshape(policyOut, [n, policyOut.ToVector().Length / n]), [0, 0], [n, actionDim]);
+        var datasetActions = RLTensorOps.Batch(batch.Select(exp => exp.Action), actionDim);
+        var coefTile = engine.TensorTile(engine.Reshape(coef, [n, 1]), [1, actionDim]);
+        var meanTargets = engine.TensorAdd(means, engine.TensorMultiply(coefTile, engine.TensorSubtract(datasetActions, means)));
+        var policyTargets = engine.TensorConcatenate([meanTargets, new Tensor<T>([n, actionDim])], 1);
 
         // Apply the gradient updates (each Train() is a tape-based forward/backward/step).
         _valueNetwork.Train(valueInputs, valueTargets);
@@ -402,31 +373,13 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var sourceParams = _valueNetwork.GetParameters();
         var targetParams = _targetValueNetwork.GetParameters();
 
-        var oneMinusTau = _numOps.Subtract(_numOps.One, _options.TargetUpdateTau);
-        var updatedParams = new Vector<T>(targetParams.Length);
-
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            var sourceContrib = _numOps.Multiply(_options.TargetUpdateTau, sourceParams[i]);
-            var targetContrib = _numOps.Multiply(oneMinusTau, targetParams[i]);
-            updatedParams[i] = _numOps.Add(sourceContrib, targetContrib);
-        }
-
-        _targetValueNetwork.SetParameters(updatedParams);
+        // theta_target <- tau * theta + (1 - tau) * theta_target
+        _targetValueNetwork.SetParameters(RLTensorOps.SoftUpdate(sourceParams, targetParams, _options.TargetUpdateTau));
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var result = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++)
-        {
-            result[i] = state[i];
-        }
-        for (int i = 0; i < action.Length; i++)
-        {
-            result[state.Length + i] = action[i];
-        }
-        return result;
+        return RLTensorOps.Concat(state, action);
     }
 
     /// <inheritdoc />
@@ -534,9 +487,10 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var parameters = network.GetParameters();
         writer.Write(parameters.Length);
 
-        foreach (var param in parameters)
+        var values = parameters.Length == 0 ? new Vector<double>(0) : parameters.AsTensor().Cast<double>().ToVector();
+        foreach (double value in values)
         {
-            writer.Write(MathHelper.GetNumericOperations<T>().ToDouble(param));
+            writer.Write(value);
         }
 
         return ms.ToArray();
@@ -548,12 +502,13 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         using var reader = new BinaryReader(ms);
 
         int paramCount = reader.ReadInt32();
-        var parameters = new Vector<T>(paramCount);
-
+        var values = new double[paramCount];
         for (int i = 0; i < paramCount; i++)
         {
-            parameters[i] = _numOps.FromDouble(reader.ReadDouble());
+            values[i] = reader.ReadDouble();
         }
+
+        var parameters = paramCount == 0 ? new Vector<T>(0) : Vector<double>.FromArray(values).AsTensor().Cast<T>().ToVector();
 
         network.SetParameters(parameters);
     }

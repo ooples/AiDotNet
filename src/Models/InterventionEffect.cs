@@ -118,5 +118,5 @@ public class InterventionEffect<T>
     /// - Determining if the effect was practically significant
     /// </para>
     /// </remarks>
-    public double Effect { get; set; }
+    public T Effect { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 }

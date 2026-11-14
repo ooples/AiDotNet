@@ -301,12 +301,11 @@ public sealed partial class RepViTBlockLayer<T> : LayerBase<T>, IShapeContract
 
     private static Vector<T> Concatenate(IEnumerable<LayerBase<T>> layers, bool gradients)
     {
-        var values = new List<T>();
+        var parts = new List<Vector<T>>();
         foreach (var layer in layers)
         {
-            var vector = gradients ? layer.GetParameterGradients() : layer.GetParameters();
-            for (int i = 0; i < vector.Length; i++) values.Add(vector[i]);
+            parts.Add(gradients ? layer.GetParameterGradients() : layer.GetParameters());
         }
-        return new Vector<T>(values.ToArray());
+        return Vector<T>.Concatenate(parts);
     }
 }

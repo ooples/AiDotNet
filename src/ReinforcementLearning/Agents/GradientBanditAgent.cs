@@ -73,11 +73,7 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         _options = options;
         Options = _options;
         _random = Random;
-        _preferences = new Vector<T>(_options.NumArms);
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _preferences[i] = NumOps.Zero;
-        }
+        _preferences = Vector<T>.CreateDefault(_options.NumArms, NumOps.Zero);
         _averageReward = NumOps.Zero;
         _totalSteps = 0;
     }
@@ -102,18 +98,8 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 
         // Sample action according to probabilities
         double r = _random.NextDouble();
-        double cumulative = 0.0;
-        int selectedArm = 0;
-
-        for (int a = 0; a < _options.NumArms; a++)
-        {
-            cumulative += NumOps.ToDouble(probs[a]);
-            if (r <= cumulative)
-            {
-                selectedArm = a;
-                break;
-            }
-        }
+        int selectedArm = RLTensorOps.SampleFromCdf(
+            probs.GetSubVector(0, Math.Min(probs.Length, _options.NumArms)), r, 0);
 
         result[selectedArm] = NumOps.One;
         return result;
@@ -145,53 +131,20 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
         T rewardDiff = NumOps.Subtract(reward, _averageReward);
         T stepSize = NumOps.FromDouble(_options.Alpha);
 
-        for (int a = 0; a < _options.NumArms; a++)
-        {
-            if (a == armIndex)
-            {
-                // Selected action
-                T update = NumOps.Multiply(stepSize, NumOps.Multiply(rewardDiff, NumOps.Subtract(NumOps.One, probs[a])));
-                _preferences[a] = NumOps.Add(_preferences[a], update);
-            }
-            else
-            {
-                // Non-selected actions
-                T update = NumOps.Multiply(stepSize, NumOps.Multiply(rewardDiff, NumOps.Negate(probs[a])));
-                _preferences[a] = NumOps.Add(_preferences[a], update);
-            }
-        }
+        // Both rules at once: H += alpha * (R - R_bar) * (onehot(a) - pi).
+        var engine = AiDotNetEngine.Current;
+        var indicator = new Vector<T>(_options.NumArms);
+        indicator[armIndex] = NumOps.One;
+        var direction = engine.Subtract(indicator, probs.GetSubVector(0, _options.NumArms));
+        var update = engine.Multiply(engine.Multiply(direction, rewardDiff), stepSize);
+        engine.Add(_preferences.GetSubVector(0, _options.NumArms), update).AsSpan().CopyTo(_preferences.AsWritableSpan());
     }
 
     private Vector<T> ComputeSoftmax(Vector<T> preferences)
     {
         // Find max for numerical stability
-        T maxPref = preferences[0];
-        for (int i = 1; i < preferences.Length; i++)
-        {
-            if (NumOps.GreaterThan(preferences[i], maxPref))
-            {
-                maxPref = preferences[i];
-            }
-        }
-
-        // Compute exp(H(a) - max)
-        var expValues = new Vector<T>(preferences.Length);
-        T sumExp = NumOps.Zero;
-        for (int i = 0; i < preferences.Length; i++)
-        {
-            T expVal = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(preferences[i], maxPref))));
-            expValues[i] = expVal;
-            sumExp = NumOps.Add(sumExp, expVal);
-        }
-
-        // Normalize
-        var probs = new Vector<T>(preferences.Length);
-        for (int i = 0; i < preferences.Length; i++)
-        {
-            probs[i] = NumOps.Divide(expValues[i], sumExp);
-        }
-
-        return probs;
+        // exp(H(a) - max H) / sum exp(H - max H)
+        return RLTensorOps.StableSoftmax(preferences);
     }
 
     /// <inheritdoc />
@@ -199,17 +152,7 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />
@@ -217,11 +160,8 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     {
         var metrics = new Dictionary<string, T>();
         var probs = ComputeSoftmax(_preferences);
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            metrics[$"preference_arm_{i}"] = _preferences[i];
-            metrics[$"probability_arm_{i}"] = probs[i];
-        }
+        RLTensorOps.AddIndexedMetrics(metrics, _options.NumArms,
+            ("preference_arm_", _preferences), ("probability_arm_", probs));
         metrics["average_reward"] = _averageReward;
         return metrics;
     }
@@ -229,10 +169,7 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     /// <inheritdoc />
     public override void ResetEpisode()
     {
-        for (int i = 0; i < _options.NumArms; i++)
-        {
-            _preferences[i] = NumOps.Zero;
-        }
+        _preferences.Fill(NumOps.Zero);
         _averageReward = NumOps.Zero;
         _totalSteps = 0;
     }

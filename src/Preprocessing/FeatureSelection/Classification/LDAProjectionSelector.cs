@@ -24,13 +24,13 @@ public class LDAProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _ldaScores;
+    private Vector<T>? _ldaScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? LDAScores => _ldaScores;
+    public Vector<T>? LDAScores => _ldaScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,73 +64,36 @@ public class LDAProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        // Counts and class sums are taken in double: a 0/1 mask summed in a narrow T (Half stops at 2048) saturates
+        var X = Tensor<T>.FromMatrix(data).Cast<double>();
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        var membership = PreprocessingTensorOps.ClassOneHot<double>(classIndex, k);                 // [n, k]
+        var classCounts = engine.ReduceSum(membership, new[] { 0 }, false);                     // [k]
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
+        // Global mean and class means
+        var globalMean = engine.ReduceMean(X, new[] { 0 }, true);                               // [1, p]
+        var classMeans = engine.TensorDivide(
+            engine.TensorMatMul(engine.TensorTranspose(membership), X), engine.Reshape(classCounts, new[] { k, 1 })); // [k, p]
 
-        // Compute global mean
-        var globalMean = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                globalMean[j] += X[i, j];
-            globalMean[j] /= n;
-        }
+        // LDA criterion per feature (Sb / Sw ratio approximation)
+        var withinClassVar = engine.ReduceSum(
+            engine.TensorSquare(engine.TensorSubtract(X, engine.TensorMatMul(membership, classMeans))), new[] { 0 }, false);
+        var betweenClassVar = engine.Reshape(
+            engine.TensorMatMul(
+                engine.Reshape(classCounts, new[] { 1, k }),
+                engine.TensorSquare(engine.TensorSubtract(classMeans, globalMean))),
+            new[] { p });
 
-        // Compute class means
-        var classMeans = new Dictionary<int, double[]>();
-        foreach (var c in classes)
-        {
-            classMeans[c] = new double[p];
-            var indices = classIndices[c];
-            for (int j = 0; j < p; j++)
-            {
-                foreach (int i in indices)
-                    classMeans[c][j] += X[i, j];
-                classMeans[c][j] /= indices.Count;
-            }
-        }
-
-        _ldaScores = new double[p];
-
-        // For each feature, compute LDA criterion (Sw / Sb ratio approximation)
-        for (int j = 0; j < p; j++)
-        {
-            double withinClassVar = 0;
-            double betweenClassVar = 0;
-
-            foreach (var c in classes)
-            {
-                var indices = classIndices[c];
-                double classMean = classMeans[c][j];
-
-                // Within-class variance
-                foreach (int i in indices)
-                    withinClassVar += (X[i, j] - classMean) * (X[i, j] - classMean);
-
-                // Between-class variance
-                betweenClassVar += indices.Count * (classMean - globalMean[j]) * (classMean - globalMean[j]);
-            }
-
-            _ldaScores[j] = withinClassVar > 1e-10 ? betweenClassVar / withinClassVar : 0;
-        }
+        var scores = engine.TensorWhere(
+            engine.TensorGreaterThan(withinClassVar, 1e-10),
+            engine.TensorDivide(betweenClassVar, withinClassVar),
+            new Tensor<double>(new[] { p }));
+        _ldaScores = scores.Cast<T>().ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _ldaScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -148,15 +111,7 @@ public class LDAProjectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("LDAProjectionSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -250,7 +250,7 @@ public class ParentDocumentRetriever<T> : RetrieverBase<T>
             {
                 // Update if this chunk has better score
                 var existing = parentDocuments[parentId];
-                if (NumOps.GreaterThan(score, existing.maxScore))
+                if (Comparer<T>.Default.Compare(score, existing.maxScore) > 0)
                 {
                     parentDocuments[parentId] = (existing.doc, score);
                 }

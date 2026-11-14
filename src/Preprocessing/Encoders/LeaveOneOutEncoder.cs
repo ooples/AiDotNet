@@ -38,8 +38,8 @@ public class LeaveOneOutEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly LeaveOneOutHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, (double Sum, int Count)>>? _categoryStats;
-    private double _globalMean;
+    private Dictionary<int, CategoryStatistics>? _categoryStats;
+    private T _globalMean = MathHelper.GetNumericOperations<T>().Zero;
     private int _nInputFeatures;
 
     /// <summary>
@@ -55,7 +55,7 @@ public class LeaveOneOutEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the global target mean.
     /// </summary>
-    public double GlobalMean => _globalMean;
+    public T GlobalMean => _globalMean;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -105,37 +105,24 @@ public class LeaveOneOutEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nInputFeatures = data.Columns;
+        var engine = Engine;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
         // Compute global mean
-        double targetSum = 0;
-        for (int i = 0; i < target.Length; i++)
-        {
-            targetSum += NumOps.ToDouble(target[i]);
-        }
-        _globalMean = targetSum / target.Length;
+        var y = Tensor<T>.FromVector(target);
+        _globalMean = engine.TensorMean(y);
 
-        // Compute category statistics
-        _categoryStats = new Dictionary<int, Dictionary<double, (double Sum, int Count)>>();
-
+        // Compute category statistics (per-category target sums and counts)
+        _categoryStats = new Dictionary<int, CategoryStatistics>();
         foreach (int col in columnsToProcess)
         {
-            var stats = new Dictionary<double, (double Sum, int Count)>();
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                double targetValue = NumOps.ToDouble(target[i]);
-
-                if (!stats.TryGetValue(categoryValue, out var existing))
-                {
-                    existing = (0, 0);
-                }
-
-                stats[categoryValue] = (existing.Sum + targetValue, existing.Count + 1);
-            }
-
-            _categoryStats[col] = stats;
+            var column = PreprocessingTensorOps.Column(data, col);
+            var categories = PreprocessingTensorOps.SortedUnique(column);
+            var position = PreprocessingTensorOps.LookupSorted(categories, column, out _);
+            _categoryStats[col] = new CategoryStatistics(
+                categories,
+                PreprocessingTensorOps.CategorySums(position, y, categories.Length),
+                PreprocessingTensorOps.CategoryCounts<T>(position, categories.Length));
         }
 
         IsFitted = true;
@@ -171,59 +158,50 @@ public class LeaveOneOutEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Target length must match data rows.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var y = Tensor<T>.FromVector(target);
+        var globalMean = PreprocessingTensorOps.Filled(new[] { numRows }, _globalMean);
+        T smoothing = NumOps.FromDouble(_smoothing);
+        T smoothedPrior = NumOps.Multiply(smoothing, _globalMean);
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (processSet.Contains(j))
             {
-                if (!processSet.Contains(j))
+                if (_categoryStats.TryGetValue(j, out var stats) && stats.Categories.Length > 0 && numRows > 0)
                 {
-                    result[i, j] = data[i, j];
-                    continue;
-                }
+                    // Leave-one-out: exclude the current sample from the statistics of its category
+                    var position = PreprocessingTensorOps.LookupSorted(stats.Categories, column, out var found);
+                    var looSum = engine.TensorSubtract(engine.TensorIndexSelect(stats.Sums, position, 0), y);
+                    var looCount = engine.TensorSubtractScalar(engine.TensorIndexSelect(stats.Counts, position, 0), NumOps.One);
+                    var looMean = engine.TensorDivide(looSum, looCount);
 
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-                double targetValue = NumOps.ToDouble(target[i]);
-
-                if (_categoryStats.TryGetValue(j, out var stats) &&
-                    stats.TryGetValue(categoryValue, out var catStats))
-                {
-                    // Leave-one-out: exclude current sample
-                    double looSum = catStats.Sum - targetValue;
-                    int looCount = catStats.Count - 1;
-
-                    double encodedValue;
-                    if (looCount > 0)
-                    {
-                        double looMean = looSum / looCount;
-                        // Apply smoothing
-                        encodedValue = (looCount * looMean + _smoothing * _globalMean) / (looCount + _smoothing);
-                    }
-                    else
-                    {
-                        // Only sample in category, use global mean
-                        encodedValue = _globalMean;
-                    }
-
-                    result[i, j] = NumOps.FromDouble(encodedValue);
+                    // Apply smoothing; the only sample of its category uses the global mean
+                    var smoothed = engine.TensorDivide(
+                        engine.TensorAddScalar(engine.TensorMultiply(looCount, looMean), smoothedPrior),
+                        engine.TensorAddScalar(looCount, smoothing));
+                    var encoded = engine.TensorWhere(engine.TensorGreaterThan(looCount, NumOps.Zero), smoothed, globalMean);
+                    column = engine.TensorWhere(found, encoded, globalMean);
                 }
                 else
                 {
-                    result[i, j] = NumOps.FromDouble(_globalMean);
+                    column = globalMean;
                 }
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
-    /// Transforms the data using standard target encoding (for test/inference data).
+    /// Transforms new data using full category statistics (for test data).
     /// </summary>
     /// <param name="data">The data to transform.</param>
     /// <returns>The encoded data.</returns>
@@ -234,52 +212,41 @@ public class LeaveOneOutEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        // Use full category statistics for test data: (count * mean + smoothing * global) / (count + smoothing)
+        var engine = Engine;
+        T smoothing = NumOps.FromDouble(_smoothing);
+        T smoothedPrior = NumOps.Multiply(smoothing, _globalMean);
+        var maps = new Dictionary<int, CategoryValueMap<T>>();
+        foreach (var entry in _categoryStats)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (!processSet.Contains(j))
-                {
-                    result[i, j] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-
-                if (_categoryStats.TryGetValue(j, out var stats) &&
-                    stats.TryGetValue(categoryValue, out var catStats))
-                {
-                    // Use full category statistics for test data
-                    double catMean = catStats.Sum / catStats.Count;
-                    double encodedValue = (catStats.Count * catMean + _smoothing * _globalMean) /
-                                         (catStats.Count + _smoothing);
-                    result[i, j] = NumOps.FromDouble(encodedValue);
-                }
-                else
-                {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case LeaveOneOutHandleUnknown.UseGlobalMean:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                        case LeaveOneOutHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                    }
-                }
-            }
+            var stats = entry.Value;
+            var mean = engine.TensorDivide(stats.Sums, stats.Counts);
+            var encoded = engine.TensorDivide(
+                engine.TensorAddScalar(engine.TensorMultiply(stats.Counts, mean), smoothedPrior),
+                engine.TensorAddScalar(stats.Counts, smoothing));
+            maps[entry.Key] = new CategoryValueMap<T>(stats.Categories, encoded);
         }
 
-        return new Matrix<T>(result);
+        var processSet = new HashSet<int>(GetColumnsToProcess(data.Columns));
+        return CategoryValueMap<T>.EncodeColumns(data, processSet, maps, _ => _globalMean,
+            _handleUnknown == LeaveOneOutHandleUnknown.Error);
+    }
+
+    private sealed class CategoryStatistics
+    {
+        public CategoryStatistics(Tensor<T> categories, Tensor<T> sums, Tensor<T> counts)
+        {
+            // Engine results kept across calls: copy them out of any tensor arena
+            Categories = CategoryValueMap<T>.Owned(categories);
+            Sums = CategoryValueMap<T>.Owned(sums);
+            Counts = CategoryValueMap<T>.Owned(counts);
+        }
+
+        public Tensor<T> Categories { get; }
+
+        public Tensor<T> Sums { get; }
+
+        public Tensor<T> Counts { get; }
     }
 
     /// <summary>

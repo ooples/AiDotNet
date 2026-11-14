@@ -30,30 +30,30 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
 
     // Encoder: hidden = ReLU(W1·x + b1). Decoder: out = W2·hidden + b2. Linear skip: + Wr·x + br.
     [TrainableParameter]
-    private readonly double[][] _w1; // [H][L]
+    private readonly Tensor<T> _w1; // [H, L]
     [TrainableParameter]
-    private readonly double[] _b1;   // [H]
+    private readonly Tensor<T> _b1; // [H]
     [TrainableParameter]
-    private readonly double[] _w2;   // [H]
+    private readonly Tensor<T> _w2; // [H]
     [TrainableParameter]
-    private double _b2;
+    private T _b2;
     [TrainableParameter]
-    private readonly double[] _wr;   // [L]
+    private readonly Tensor<T> _wr; // [L]
     [TrainableParameter]
-    private double _br;
+    private T _br;
 
     // TiDE's reference implementation optionally normalizes each series before
     // the dense encoder and restores its scale after decoding. This supervised
     // Matrix/Vector adaptation keeps equivalent training-set statistics so raw
     // time indices and large target offsets do not destabilize the MLP.
     [Buffer]
-    private readonly double[] _inputMeans;
+    private readonly Tensor<T> _inputMeans;
     [Buffer]
-    private readonly double[] _inputStds;
+    private readonly Tensor<T> _inputStds;
     [Buffer]
-    private double _targetMean;
+    private T _targetMean;
     [Buffer]
-    private double _targetStd = 1.0;
+    private T _targetStd;
 
     public TiDEModel(TiDEOptions<T>? options = null)
         : base(options ??= new TiDEOptions<T>())
@@ -64,230 +64,204 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
         _l = Math.Max(2, _options.LookbackWindow);
         _h = Math.Max(1, _options.HiddenSize);
 
-        _w1 = new double[_h][];
-        _b1 = new double[_h];
-        _w2 = new double[_h];
-        _wr = new double[_l];
-        _inputMeans = new double[_l];
-        _inputStds = Enumerable.Repeat(1.0, _l).ToArray();
-        double s1 = Math.Sqrt(2.0 / _l); // He init for ReLU
-        double s2 = Math.Sqrt(1.0 / _h);
-        for (int i = 0; i < _h; i++)
-        {
-            _w1[i] = new double[_l];
-            for (int j = 0; j < _l; j++) { _w1[i][j] = (_random.NextDouble() * 2 - 1) * s1; }
-            _w2[i] = (_random.NextDouble() * 2 - 1) * s2;
-        }
+        _b1 = new Tensor<T>(new[] { _h });
+        _b2 = NumOps.Zero;
+        _br = NumOps.Zero;
+        _inputMeans = new Tensor<T>(new[] { _l });
+        _inputStds = Tensor<T>.FromVector(Engine.Fill(_l, NumOps.One));
+        _targetMean = NumOps.Zero;
+        _targetStd = NumOps.One;
 
-        for (int j = 0; j < _l; j++) { _wr[j] = 1.0 / _l; } // skip starts as a moving average
+        // He init for ReLU. Row i of the draws holds W1 row i followed by W2[i]: the seeded stream is consumed
+        // in the same order as drawing each W1 row and then its decoder weight.
+        T s1 = NumOps.FromDouble(Math.Sqrt(2.0 / _l));
+        T s2 = NumOps.FromDouble(Math.Sqrt(1.0 / _h));
+        var draws = Engine.TensorSubtractScalar(
+            Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(_random, _h, _l + 1), NumOps.FromDouble(2.0)),
+            NumOps.One);
+        _w1 = Engine.TensorMultiplyScalar(Engine.TensorSlice(draws, new[] { 0, 0 }, new[] { _h, _l }), s1);
+        _w2 = Engine.TensorMultiplyScalar(
+            Engine.TensorSlice(draws, new[] { 0, _l }, new[] { _h, 1 }), s2).Reshape(new[] { _h });
+
+        _wr = Tensor<T>.FromVector(Engine.Fill(_l, NumOps.FromDouble(1.0 / _l))); // skip starts as a moving average
     }
 
-    private static bool IsFiniteValue(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
+    private bool IsFiniteValue(T v) => !NumOps.IsNaN(v) && !NumOps.IsInfinity(v);
 
     /// <summary>
-    /// Converts a forecast to <typeparamref name="T"/> and verifies finiteness AFTER the conversion.
-    /// Checking only the double is not enough: every double from about 3.4e38 up is finite yet
-    /// overflows to Infinity once narrowed to float, so a pre-conversion guard passes the value
-    /// through and the float caller still receives Infinity.
+    /// The last L columns of every row of <paramref name="rows"/> ([batch, cols]), zero-padded on the right
+    /// when there are fewer columns, with non-finite values replaced by zero.
     /// </summary>
-    private T ToFiniteT(double value)
+    private Tensor<T> Window(Tensor<T> rows)
     {
-        if (!IsFiniteValue(value)) { return NumOps.Zero; }
-        T converted = NumOps.FromDouble(value);
-        return IsFiniteValue(NumOps.ToDouble(converted)) ? converted : NumOps.Zero;
-    }
-
-    private static double[] Window(int l, Func<int, double> get, int count)
-    {
-        var x = new double[l];
-        int start = Math.Max(0, count - l);
-        for (int j = 0; j < l; j++)
+        int batch = rows.Shape[0];
+        int count = rows.Shape[1];
+        int start = Math.Max(0, count - _l);
+        int take = Math.Min(_l, count);
+        var window = take > 0
+            ? Engine.TensorSlice(rows, new[] { 0, start }, new[] { batch, take })
+            : new Tensor<T>(new[] { batch, 0 });
+        if (take < _l)
         {
-            int idx = start + j;
-            double v = idx < count ? get(idx) : 0.0;
-            x[j] = IsFiniteValue(v) ? v : 0.0;
+            window = Engine.TensorConcatenate(new[] { window, new Tensor<T>(new[] { batch, _l - take }) }, 1);
         }
 
-        return x;
+        return ZeroNonFinite(window);
     }
 
-    private (double[] Hidden, double Pred) Forward(double[] x)
-    {
-        var hidden = new double[_h];
-        for (int i = 0; i < _h; i++)
-        {
-            double z = _b1[i];
-            var row = _w1[i];
-            for (int j = 0; j < _l; j++) { z += row[j] * x[j]; }
-            hidden[i] = z > 0 ? z : 0.0; // ReLU
-        }
+    /// <summary>ReLU that maps NaN to zero, like <c>z &gt; 0 ? z : 0</c>.</summary>
+    private Tensor<T> PositivePart(Tensor<T> z)
+        => Engine.TensorWhere(Engine.TensorGreaterThan(z, NumOps.Zero), z, Engine.TensorZerosLike(z));
 
-        double pred = _b2 + _br;
-        for (int i = 0; i < _h; i++) { pred += _w2[i] * hidden[i]; }
-        for (int j = 0; j < _l; j++) { pred += _wr[j] * x[j]; }
-        return (hidden, pred);
+    /// <summary>Hidden activations ([batch, H]) and normalized predictions ([batch, 1]) of normalized windows.</summary>
+    private (Tensor<T> Hidden, Tensor<T> Pred) Forward(Tensor<T> x)
+    {
+        int batch = x.Shape[0];
+        var z = Engine.TensorAdd(
+            Engine.TensorMatMul(x, Engine.TensorTranspose(_w1)),
+            Engine.TensorBroadcastTo(_b1.Reshape(new[] { 1, _h }), new[] { batch, _h }));
+        var hidden = PositivePart(z);
+
+        var pred = Engine.TensorAdd(
+            Engine.TensorMatMul(hidden, _w2.Reshape(new[] { _h, 1 })),
+            Engine.TensorMatMul(x, _wr.Reshape(new[] { _l, 1 })));
+        return (hidden, Engine.TensorAddScalar(pred, NumOps.Add(_b2, _br)));
     }
 
-    private double[] NormalizeWindow(double[] x)
+    private Tensor<T> NormalizeWindow(Tensor<T> x)
     {
-        var normalized = new double[_l];
-        for (int j = 0; j < _l; j++)
-            normalized[j] = (x[j] - _inputMeans[j]) / _inputStds[j];
-        return normalized;
+        int batch = x.Shape[0];
+        var means = Engine.TensorBroadcastTo(_inputMeans.Reshape(new[] { 1, _l }), new[] { batch, _l });
+        var stds = Engine.TensorBroadcastTo(_inputStds.Reshape(new[] { 1, _l }), new[] { batch, _l });
+        return Engine.TensorDivide(Engine.TensorSubtract(x, means), stds);
     }
 
-    private void FitNormalization(Matrix<T> x, Vector<T> y)
+    /// <summary>Keeps <paramref name="std"/> where it is finite and above 1e-8, and uses 1 elsewhere.</summary>
+    private Tensor<double> GuardStd(Tensor<double> std)
     {
-        int n = x.Rows;
-        int cols = x.Columns;
+        var ones = Engine.TensorOnesLike(std);
+        return Engine.TensorWhere(Engine.TensorIsFinite(std),
+            Engine.TensorWhere(Engine.TensorGreaterThan(std, 1e-8), std, ones), ones);
+    }
 
-        Array.Clear(_inputMeans, 0, _inputMeans.Length);
-        for (int j = 0; j < _inputStds.Length; j++)
-            _inputStds[j] = 1.0;
+    /// <summary>
+    /// Fits the input and target statistics. They accumulate in double: a Half sum of the training
+    /// values overflows past 65504, and the 1e-8 floor would round to zero in Half.
+    /// </summary>
+    private void FitNormalization(Tensor<T> windows, Tensor<T> targets)
+    {
+        int n = windows.Shape[0];
 
-        for (int row = 0; row < n; row++)
-        {
-            var window = Window(_l, c => Convert.ToDouble(x[row, c]), cols);
-            for (int j = 0; j < _l; j++)
-                _inputMeans[j] += window[j];
-        }
+        Engine.TensorFill(_inputMeans, NumOps.Zero);
+        Engine.TensorFill(_inputStds, NumOps.One);
         if (n > 0)
         {
-            for (int j = 0; j < _l; j++)
-                _inputMeans[j] /= n;
+            var w = windows.Cast<double>();
+            var means = Engine.ReduceMean(w, new[] { 0 }, keepDims: false);
+            var centered = Engine.TensorSubtract(
+                w, Engine.TensorBroadcastTo(means.Reshape(new[] { 1, _l }), new[] { n, _l }));
+            var variances = Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false);
+            var stds = Engine.TensorSqrt(Engine.TensorDivideScalar(variances, (double)n));
+            Engine.TensorCopyInPlace(_inputMeans, means.Cast<T>());
+            Engine.TensorCopyInPlace(_inputStds, GuardStd(stds).Cast<T>());
         }
 
-        var variances = new double[_l];
-        _targetMean = 0.0;
-        int finiteTargets = 0;
-        for (int row = 0; row < n; row++)
+        // Non-finite targets are EXCLUDED from the statistics, matching NLinearModel.FitScalers.
+        // Window already clamps non-finite inputs, so _inputMeans and _inputStds were protected;
+        // the target path was not. A single NaN label made _targetMean NaN, and while _targetStd
+        // rescues _targetStd back to 1.0, nothing rescued the mean -- every normalized target,
+        // every error and every gradient then went NaN, training completed without an exception,
+        // and every later prediction collapsed to 0 through the output guard. Silent and total.
+        var t = targets.Cast<double>();
+        var finite = Engine.TensorIsFinite(t);
+        var zeros = Engine.TensorZerosLike(t);
+        int finiteTargets = Engine.TensorCountNonzero(Engine.TensorWhere(finite, Engine.TensorOnesLike(t), zeros));
+        double targetMean = n > 0 && finiteTargets > 0
+            ? Engine.TensorSum(Engine.TensorWhere(finite, t, zeros)) / finiteTargets
+            : 0.0;
+
+        double targetStd = 1.0;
+        if (finiteTargets > 0)
         {
-            var window = Window(_l, c => Convert.ToDouble(x[row, c]), cols);
-            for (int j = 0; j < _l; j++)
-            {
-                double centered = window[j] - _inputMeans[j];
-                variances[j] += centered * centered;
-            }
-            // Non-finite targets are EXCLUDED from the statistics, matching NLinearModel.FitScalers.
-            // Window already clamps non-finite inputs, so _inputMeans and _inputStds were protected;
-            // the target path was not. A single NaN label made _targetMean NaN, and while _targetStd
-            // rescues _targetStd back to 1.0, nothing rescued the mean -- every normalized target,
-            // every error and every gradient then went NaN, training completed without an exception,
-            // and every later prediction collapsed to 0 through the output guard. Silent and total.
-            double target = Convert.ToDouble(y[row]);
-            if (!IsFiniteValue(target)) continue;
-
-            _targetMean += target;
-            finiteTargets++;
+            var centered = Engine.TensorWhere(finite, Engine.TensorSubtractScalar(t, targetMean), zeros);
+            targetStd = Math.Sqrt(Engine.TensorSum(Engine.TensorMultiply(centered, centered)) / finiteTargets);
         }
 
-        if (n > 0)
-        {
-            _targetMean = finiteTargets > 0 ? _targetMean / finiteTargets : 0.0;
-            for (int j = 0; j < _l; j++)
-            {
-                double std = Math.Sqrt(variances[j] / n);
-                _inputStds[j] = std > 1e-8 && IsFiniteValue(std) ? std : 1.0;
-            }
-        }
-
-        double targetVariance = 0.0;
-        for (int row = 0; row < n; row++)
-        {
-            double target = Convert.ToDouble(y[row]);
-            if (!IsFiniteValue(target)) continue;
-
-            double centered = target - _targetMean;
-            targetVariance += centered * centered;
-        }
-        double targetStd = finiteTargets > 0 ? Math.Sqrt(targetVariance / finiteTargets) : 1.0;
-        _targetStd = targetStd > 1e-8 && IsFiniteValue(targetStd) ? targetStd : 1.0;
+        _targetMean = NumOps.FromDouble(targetMean);
+        _targetStd = targetStd > 1e-8 && !double.IsNaN(targetStd) && !double.IsInfinity(targetStd)
+            ? NumOps.FromDouble(targetStd)
+            : NumOps.One;
     }
 
     /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
-        int cols = x.Columns;
-        double lr = _options.LearningRate;
+        var windows = Window(Tensor<T>.FromMatrix(x));
+        var targets = Tensor<T>.FromVector(y, new[] { n, 1 });
 
-        FitNormalization(x, y);
+        FitNormalization(windows, targets);
+        var normalizedWindows = NormalizeWindow(windows);
+
+        // Filtering the statistics alone does not keep a NaN label out of the gradient: that row's error
+        // would still be NaN and would poison every weight it touches. Such rows are skipped (zero error).
+        var keep = FiniteMask(targets);
+        var normalizedTargets = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(targets, _targetMean), _targetStd);
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
-            var order = Enumerable.Range(0, n).OrderBy(_ => _random.Next()).ToList();
+            var order = Enumerable.Range(0, n).OrderBy(_ => _random.Next()).ToArray();
 
             for (int batchStart = 0; batchStart < n; batchStart += _options.BatchSize)
             {
                 int batchEnd = Math.Min(batchStart + _options.BatchSize, n);
-                int bs = batchEnd - batchStart;
-
-                // Gradient accumulators.
-                var gW1 = new double[_h][];
-                for (int i = 0; i < _h; i++) { gW1[i] = new double[_l]; }
-                var gB1 = new double[_h];
-                var gW2 = new double[_h];
-                double gB2 = 0;
-                var gWr = new double[_l];
-                double gBr = 0;
-
-                for (int bi = batchStart; bi < batchEnd; bi++)
-                {
-                    int idx = order[bi];
-                    var xv = NormalizeWindow(Window(_l, c => Convert.ToDouble(x[idx, c]), cols));
-                    var (hidden, pred) = Forward(xv);
-                    // Filtering the statistics alone does not keep a NaN label out of the gradient:
-                    // this row's error would still be NaN and would poison every weight it touches.
-                    // Skip the row instead.
-                    double rawTarget = Convert.ToDouble(y[idx]);
-                    if (!IsFiniteValue(rawTarget)) continue;
-
-                    double normalizedTarget = (rawTarget - _targetMean) / _targetStd;
-                    double err = pred - normalizedTarget; // dMSE/dpred
-
-                    gB2 += err;
-                    gBr += err;
-                    for (int j = 0; j < _l; j++) { gWr[j] += err * xv[j]; }
-                    for (int i = 0; i < _h; i++)
-                    {
-                        gW2[i] += err * hidden[i];
-                        double dz = hidden[i] > 0 ? err * _w2[i] : 0.0; // ReLU derivative
-                        gB1[i] += dz;
-                        var grow = gW1[i];
-                        for (int j = 0; j < _l; j++) { grow[j] += dz * xv[j]; }
-                    }
-                }
-
-                double inv = bs > 0 ? lr / bs : 0.0;
-                _b2 -= inv * gB2;
-                _br -= inv * gBr;
-                for (int j = 0; j < _l; j++) { _wr[j] -= inv * gWr[j]; }
-                for (int i = 0; i < _h; i++)
-                {
-                    _w2[i] -= inv * gW2[i];
-                    _b1[i] -= inv * gB1[i];
-                    var row = _w1[i];
-                    var grow = gW1[i];
-                    for (int j = 0; j < _l; j++) { row[j] -= inv * grow[j]; }
-                }
+                var batch = new Tensor<int>(new[] { batchEnd - batchStart }, new Vector<int>(
+                    new ArraySegment<int>(order, batchStart, batchEnd - batchStart)));
+                TrainBatch(normalizedWindows, normalizedTargets, Engine.TensorIndexSelect(keep, batch, 0), batch);
             }
         }
 
     }
 
+    /// <summary>One SGD step on the mean MSE gradient of the rows at <paramref name="batch"/>.</summary>
+    private void TrainBatch(Tensor<T> windows, Tensor<T> targets, Tensor<T> keep, Tensor<int> batch)
+    {
+        int bs = batch.Length;
+        var xv = Engine.TensorIndexSelect(windows, batch, 0);
+        var (hidden, pred) = Forward(xv);
+        var raw = Engine.TensorSubtract(pred, Engine.TensorIndexSelect(targets, batch, 0)); // dMSE/dpred
+        var err = Engine.TensorWhere(keep, raw, Engine.TensorZerosLike(raw));
+
+        // ReLU derivative: dz = hidden > 0 ? err * w2 : 0.
+        var errTimesW2 = Engine.TensorMatMul(err, _w2.Reshape(new[] { 1, _h }));
+        var dz = Engine.TensorWhere(Engine.TensorGreaterThan(hidden, NumOps.Zero), errTimesW2, Engine.TensorZerosLike(errTimesW2));
+
+        T inv = NumOps.FromDouble(bs > 0 ? _options.LearningRate / bs : 0.0);
+        T errSum = Engine.TensorSum(err);
+        _b2 = NumOps.Subtract(_b2, NumOps.Multiply(inv, errSum));
+        _br = NumOps.Subtract(_br, NumOps.Multiply(inv, errSum));
+
+        var gWr = Engine.TensorMatMul(Engine.TensorTranspose(xv), err).Reshape(new[] { _l });
+        var gW2 = Engine.TensorMatMul(Engine.TensorTranspose(hidden), err).Reshape(new[] { _h });
+        var gB1 = Engine.ReduceSum(dz, new[] { 0 }, keepDims: false);
+        var gW1 = Engine.TensorMatMul(Engine.TensorTranspose(dz), xv);
+        Engine.TensorSubtractInPlace(_wr, Engine.TensorMultiplyScalar(gWr, inv));
+        Engine.TensorSubtractInPlace(_w2, Engine.TensorMultiplyScalar(gW2, inv));
+        Engine.TensorSubtractInPlace(_b1, Engine.TensorMultiplyScalar(gB1, inv));
+        Engine.TensorSubtractInPlace(_w1, Engine.TensorMultiplyScalar(gW1, inv));
+    }
+
     /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
-        var xv = NormalizeWindow(Window(_l, j => Convert.ToDouble(input[j]), input.Length));
+        var xv = NormalizeWindow(Window(Tensor<T>.FromVector(input, new[] { 1, input.Length })));
         var (_, normalizedPrediction) = Forward(xv);
-        double pred = normalizedPrediction * _targetStd + _targetMean;
-        // ToFiniteT, not NumOps.FromDouble(IsFiniteValue(pred) ? pred : 0.0): the pre-conversion
-        // check is the insufficient one its own helper documents. Every double from about 3.4e38 up
-        // is finite yet overflows to Infinity once narrowed to float, so the pre-conversion form
-        // passed such a value straight through to a float model. GuardPrediction then still runs, as
-        // a second line of defence for the recursive-forecast path.
-        return GuardPrediction(ToFiniteT(pred));
+        T pred = NumOps.Add(NumOps.Multiply(normalizedPrediction[0, 0], _targetStd), _targetMean);
+        // The finiteness check runs on the value in T: every double from about 3.4e38 up is finite yet
+        // overflows to Infinity in float, so only a check after the arithmetic in T is sufficient.
+        // GuardPrediction then still runs, as a second line of defence for the recursive-forecast path.
+        return GuardPrediction(IsFiniteValue(pred) ? pred : NumOps.Zero);
     }
 
 

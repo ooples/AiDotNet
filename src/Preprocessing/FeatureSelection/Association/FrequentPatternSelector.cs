@@ -27,13 +27,13 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly double _minSupport;
     private readonly int _maxPatternSize;
 
-    private double[]? _patternScores;
+    private Vector<T>? _patternScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? PatternScores => _patternScores;
+    public Vector<T>? PatternScores => _patternScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,77 +71,68 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            double yVal = NumOps.ToDouble(target[i]);
-            y[i] = yVal > 0.5 ? 1 : 0;
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var positive = engine.Reshape(
+            engine.TensorGreaterThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5)), new[] { n, 1 });
 
-        // Binarize features using median split
-        var binarized = new bool[n, p];
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++) col[i] = X[i, j];
-            Array.Sort(col);
-            double median = col[n / 2];
-            for (int i = 0; i < n; i++)
-                binarized[i, j] = X[i, j] >= median;
-        }
+        // Binarize features using a median split (upper median: the element at n / 2 of the sorted column),
+        // keeping only the positive transactions.
+        var median = PreprocessingTensorOps.ColumnOrderStatistic(X, n / 2);
+        var positiveItems = engine.TensorMultiply(PreprocessingTensorOps.AtLeastRow(X, median), positive);
 
-        // Find frequent 1-itemsets
-        var freq1 = new Dictionary<int, int>();
-        for (int j = 0; j < p; j++)
-        {
-            int count = 0;
-            for (int i = 0; i < n; i++)
-                if (binarized[i, j] && y[i] == 1)
-                    count++;
-            if ((double)count / n >= _minSupport)
-                freq1[j] = count;
-        }
+        // Frequent 1-itemsets. Counted as int (a sum of 0/1 entries in T stops counting at 2048 for Half, 2048 + 1
+        // rounding back to 2048) and the support ratio formed in double before one cast: a count or n past 65504
+        // is inf in Half, which zeroed the support and dropped every frequent 1-itemset.
+        var support1Wide = engine.TensorDivideScalar(
+            engine.ReduceSum(positiveItems.Cast<int>(), new[] { 0 }, false).Cast<double>(), (double)n);
+        var frequent1Wide = PreprocessingTensorOps.AtLeast(support1Wide, _minSupport);
+        var freq1Keys = PreprocessingTensorOps.MaskPositions(frequent1Wide).ToList();
 
-        // Score features based on frequent itemsets they participate in
-        _patternScores = new double[p];
-        foreach (var kvp in freq1)
-            _patternScores[kvp.Key] += (double)kvp.Value / n;
+        // Score features based on the frequent itemsets they participate in
+        var scores = engine.TensorMultiply(support1Wide, frequent1Wide).Cast<T>();
 
-        // Find frequent 2-itemsets and higher (up to maxPatternSize)
-        if (_maxPatternSize >= 2)
+        // Frequent 2-itemsets and higher (up to maxPatternSize): per size, the summed support counts
+        // of the frequent patterns each feature belongs to.
+        int maxSize = Math.Min(_maxPatternSize, freq1Keys.Count);
+        if (_maxPatternSize >= 2 && maxSize >= 2)
         {
-            var freq1Keys = freq1.Keys.ToList();
-            for (int size = 2; size <= Math.Min(_maxPatternSize, freq1Keys.Count); size++)
+            int sizes = maxSize - 1;
+            // long: a feature in C(127, 2) frequent 3-itemsets over 300,000 rows sums 2.4e9 counts, past int
+            var countSums = new long[sizes * p];
+            var missingItems = PreprocessingTensorOps.Not(positiveItems);
+            T zero = NumOps.Zero;
+            for (int size = 2; size <= maxSize; size++)
             {
                 foreach (var pattern in GetCombinations(freq1Keys, size))
                 {
-                    int count = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        if (y[i] != 1) continue;
-                        bool allTrue = pattern.All(j => binarized[i, j]);
-                        if (allTrue) count++;
-                    }
+                    // A transaction supports the pattern when none of its items is missing.
+                    var columns = new Tensor<int>(pattern.ToArray(), new[] { pattern.Count });
+                    var missingPerRow = engine.ReduceSum(engine.TensorIndexSelect(missingItems, columns, 1), new[] { 1 }, false);
+                    int patternCount = engine.TensorCountNonzero(engine.TensorEquals(missingPerRow, zero));
 
-                    if ((double)count / n >= _minSupport)
+                    if ((double)patternCount / n >= _minSupport)
                     {
-                        double patternScore = (double)count / n / size;
                         foreach (int j in pattern)
-                            _patternScores[j] += patternScore;
+                            countSums[(size - 2) * p + j] += patternCount;
                     }
                 }
             }
+
+            // score += count / n / size for every frequent pattern. The ratio is formed from the int counts in
+            // double and converted to T in one cast: the summed counts and n * size overflow T types such as Half
+            // (max 65504), giving inf / inf = NaN, so they never exist in T.
+            var ratios = new double[sizes * p];
+            for (int k = 0; k < ratios.Length; k++)
+                ratios[k] = (double)countSums[k] / ((double)n * (k / p + 2));
+            var sizeScores = new Tensor<double>(ratios, new[] { sizes, p }).Cast<T>();
+            scores = engine.TensorAdd(scores, engine.ReduceSum(sizeScores, new[] { 0 }, false));
         }
 
+        _patternScores = scores.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _patternScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -179,15 +170,7 @@ public class FrequentPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("FrequentPatternSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

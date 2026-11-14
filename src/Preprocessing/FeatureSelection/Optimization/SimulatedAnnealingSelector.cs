@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Optimization;
 
@@ -29,7 +30,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -37,7 +38,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double InitialTemperature => _initialTemperature;
     public double CoolingRate => _coolingRate;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -76,147 +77,101 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
         // Initialize current solution
-        var current = new bool[p];
-        var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(numToSelect).ToList();
-        foreach (int idx in indices)
-            current[idx] = true;
+        var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(numToSelect).ToArray();
+        var current = PopulationSearchOps.IndexMask<T>(indices, p);
 
-        double currentEnergy = -EvaluateFitness(X, y, current, n, p);
-        var best = (bool[])current.Clone();
-        double bestEnergy = currentEnergy;
+        var currentEnergy = Energy(current, scores);
+        var best = current;
+        var bestEnergy = currentEnergy;
 
-        _featureImportances = new double[p];
-        double temperature = _initialTemperature;
+        // Importance totals are accumulated in double: a running total in a narrow T such as Half stops growing at
+        // 2048 (2048 + 1 rounds back to 2048), which flattened the normalized importances over long runs.
+        var importances = new Tensor<double>(new[] { p });
+        var temperature = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(_initialTemperature));
+        T cooling = NumOps.FromDouble(_coolingRate);
+        var zero = new Tensor<T>(new[] { 1 });
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
             // Generate neighbor by swapping a feature
-            var neighbor = (bool[])current.Clone();
-            int selectedCount = 0;
-            for (int j = 0; j < p; j++) if (neighbor[j]) selectedCount++;
+            var neighbor = current;
+            var selected = PreprocessingTensorOps.MaskPositions(current);
 
-            if (rand.NextDouble() < 0.5 && selectedCount > 1)
+            if (rand.NextDouble() < 0.5 && selected.Length > 1)
             {
                 // Remove a random selected feature
-                var selected = Enumerable.Range(0, p).Where(j => neighbor[j]).ToList();
-                int toRemove = selected[rand.Next(selected.Count)];
-                neighbor[toRemove] = false;
+                int toRemove = selected[rand.Next(selected.Length)];
+                neighbor = engine.TensorSubtract(neighbor, FeatureSelectionTensorOps.OneHot<T>(toRemove, p));
 
                 // Add a random unselected feature
-                var unselected = Enumerable.Range(0, p).Where(j => !neighbor[j]).ToList();
-                if (unselected.Count > 0)
+                var unselected = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.OneMinus(neighbor));
+                if (unselected.Length > 0)
                 {
-                    int toAdd = unselected[rand.Next(unselected.Count)];
-                    neighbor[toAdd] = true;
+                    int toAdd = unselected[rand.Next(unselected.Length)];
+                    neighbor = engine.TensorAdd(neighbor, FeatureSelectionTensorOps.OneHot<T>(toAdd, p));
                 }
             }
             else
             {
                 // Flip a random feature
-                int toFlip = rand.Next(p);
-                neighbor[toFlip] = !neighbor[toFlip];
+                var flip = FeatureSelectionTensorOps.OneHot<T>(rand.Next(p), p);
+                neighbor = engine.TensorWhere(flip, PreprocessingTensorOps.OneMinus(neighbor), neighbor);
             }
 
-            double neighborEnergy = -EvaluateFitness(X, y, neighbor, n, p);
-            double delta = neighborEnergy - currentEnergy;
+            var neighborEnergy = Energy(neighbor, scores);
+            var delta = engine.TensorSubtract(neighborEnergy, currentEnergy);
 
-            // Accept or reject
-            if (delta < 0 || rand.NextDouble() < Math.Exp(-delta / temperature))
+            // Metropolis criterion: accept downhill moves, uphill ones with probability exp(-delta / T)
+            bool accept = PopulationSearchOps.Greater(zero, delta)
+                || PopulationSearchOps.Greater(
+                    engine.TensorExp(engine.TensorNegate(engine.TensorDivide(delta, temperature))),
+                    PopulationSearchOps.Uniform<T>(rand, 1));
+            if (accept)
             {
                 current = neighbor;
                 currentEnergy = neighborEnergy;
 
-                if (currentEnergy < bestEnergy)
+                if (PopulationSearchOps.Greater(bestEnergy, currentEnergy))
                 {
-                    best = (bool[])current.Clone();
+                    best = current;
                     bestEnergy = currentEnergy;
                 }
             }
 
             // Track feature importance
-            for (int j = 0; j < p; j++)
-            {
-                if (current[j])
-                    _featureImportances[j] += -currentEnergy;
-            }
+            importances = engine.TensorSubtract(
+                importances, PopulationSearchOps.Scale(current.Cast<double>(), currentEnergy.Cast<double>()));
 
             // Cool down
-            temperature *= _coolingRate;
+            temperature = engine.TensorMultiplyScalar(temperature, cooling);
         }
 
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => best[j])
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(best);
 
         // Normalize feature importances
-        double maxImportance = _featureImportances.Max();
+        double maxImportance = engine.TensorMaxValue(importances);
         if (maxImportance > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] /= maxImportance;
-        }
+            importances = engine.TensorDivideScalar(importances, maxImportance);
+        _featureImportances = importances.Cast<T>().ToVector();
 
         IsFitted = true;
     }
 
-    private double EvaluateFitness(double[,] X, double[] y, bool[] mask, int n, int p)
-    {
-        var selectedFeatures = Enumerable.Range(0, p).Where(j => mask[j]).ToList();
-        if (selectedFeatures.Count == 0) return 0;
-
-        double totalCorr = 0;
-        foreach (int j in selectedFeatures)
-        {
-            double corr = ComputeCorrelation(X, y, j, n);
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / selectedFeatures.Count;
-    }
-
-    private double ComputeCorrelation(double[,] X, double[] y, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += X[i, j];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xd = X[i, j] - xMean;
-            double yd = y[i] - yMean;
-            sxy += xd * yd;
-            sxx += xd * xd;
-            syy += yd * yd;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-    }
+    /// <summary>The energy of a 0/1 mask [p]: minus the mean absolute target correlation of its features (0 when empty).</summary>
+    private Tensor<T> Energy(Tensor<T> mask, Tensor<T> scores) =>
+        Engine.TensorNegate(PopulationSearchOps.SubsetFitness(
+            Engine.Reshape(mask, new[] { 1, mask.Length }), scores, 0, NumOps.Zero, NumOps.Zero));
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -231,15 +186,7 @@ public class SimulatedAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("SimulatedAnnealingSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

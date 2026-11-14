@@ -24,13 +24,13 @@ public class EigenvalueRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _varianceContributions;
+    private Vector<T>? _varianceContributions;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? VarianceContributions => _varianceContributions;
+    public Vector<T>? VarianceContributions => _varianceContributions;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -54,70 +54,30 @@ public class EigenvalueRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(data);
+        var centered = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
 
-        // Center data
-        var means = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
-        }
+        // Sample covariance matrix; its diagonal is each feature's variance contribution.
+        var covariance = engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), NumOps.FromDouble(n - 1));
+        var variances = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, false), NumOps.FromDouble(n - 1));
+        T totalVariance = engine.TensorSum(variances);
 
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] -= means[j];
-
-        // Compute variance contribution for each feature
-        _varianceContributions = new double[p];
-        double totalVariance = 0;
-
-        for (int j = 0; j < p; j++)
-        {
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-                variance += X[i, j] * X[i, j];
-            variance /= (n - 1);
-            _varianceContributions[j] = variance;
-            totalVariance += variance;
-        }
-
-        // Also consider covariance contribution
-        for (int j = 0; j < p; j++)
-        {
-            double covSum = 0;
-            for (int k = 0; k < p; k++)
-            {
-                if (k != j)
-                {
-                    double cov = 0;
-                    for (int i = 0; i < n; i++)
-                        cov += X[i, j] * X[i, k];
-                    cov /= (n - 1);
-                    covSum += Math.Abs(cov);
-                }
-            }
-            // Features with unique information (low covariance) get bonus
-            _varianceContributions[j] += _varianceContributions[j] / (1 + covSum / p);
-        }
+        // Features with unique information (low covariance with the others) get a bonus.
+        var covSum = engine.TensorSubtract(
+            engine.ReduceSum(engine.TensorAbs(covariance), new[] { 1 }, false), engine.TensorAbs(variances));
+        var bonus = engine.TensorDivide(variances,
+            engine.TensorAddScalar(engine.TensorDivideScalar(covSum, NumOps.FromDouble(p)), NumOps.One));
+        var contributions = engine.TensorAdd(variances, bonus);
 
         // Normalize
-        if (totalVariance > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _varianceContributions[j] /= totalVariance;
-        }
+        if (NumOps.GreaterThan(totalVariance, NumOps.Zero))
+            contributions = engine.TensorDivideScalar(contributions, totalVariance);
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _varianceContributions[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _varianceContributions = contributions.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(contributions, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -134,15 +94,7 @@ public class EigenvalueRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("EigenvalueRatioSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

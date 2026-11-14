@@ -6,8 +6,8 @@ namespace AiDotNet.WindowFunctions;
 /// <remarks>
 /// <para>
 /// The Poisson window is an exponential window function defined by the equation:
-/// w(n) = exp(-a|n-N/2|/(N/2))
-/// where n is the sample index, N is the window size, and a (alpha) is a parameter
+/// w(n) = exp(-alpha * |n - (N-1)/2| / ((N-1)/2))
+/// where n is the sample index, N is the window size, and alpha is a parameter (scipy.signal.windows.exponential with tau = ((N-1)/2) / alpha)
 /// that controls the rate of decay from the center of the window to the edges.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that helps analyze signals more accurately.
@@ -99,7 +99,7 @@ public class PoissonWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Poisson window function formula:
-    /// w(n) = exp(-a|n-N/2|/(N/2))
+    /// w(n) = exp(-alpha * |n - (N-1)/2| / ((N-1)/2))
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates the actual window values based on the size you specify.
@@ -118,15 +118,15 @@ public class PoissonWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        T halfN = _numOps.Divide(_numOps.FromDouble(windowSize - 1), _numOps.FromDouble(2));
-        for (int n = 0; n < windowSize; n++)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            T x = _numOps.Divide(_numOps.Abs(_numOps.Subtract(_numOps.FromDouble(n), halfN)), halfN);
-            window[n] = _numOps.Exp(_numOps.Multiply(_numOps.Negate(_alpha), x));
+            return degenerate;
         }
 
-        return window;
+        // w(n) = exp(-alpha * |n - (N-1)/2| / ((N-1)/2))
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> x = engine.TensorAbs(WindowFunctionHelper.SymmetricCoordinate<T>(windowSize));
+        return engine.TensorExp(engine.TensorMultiplyScalar(x, _numOps.Negate(_alpha))).ToVector();
     }
 
     /// <summary>

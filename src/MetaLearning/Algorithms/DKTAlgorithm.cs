@@ -139,20 +139,6 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         _kernelParams[1] = NumOps.FromDouble(Math.Log(noiseVariance));
     }
 
-    /// <summary>Computes the RBF kernel value between two feature vectors.</summary>
-    private double ComputeKernel(Vector<T> a, Vector<T> b)
-    {
-        double lengthScale = Math.Exp(NumOps.ToDouble(_kernelParams[0]));
-        double sqDist = 0;
-        int minLen = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < minLen; i++)
-        {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sqDist += diff * diff;
-        }
-        return Math.Exp(-sqDist / (2.0 * lengthScale * lengthScale));
-    }
-
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -175,27 +161,7 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             var gpWeights = GPPredict(supportFeatures, queryFeatures);
             if (gpWeights != null && supportFeatures != null && supportFeatures.Length > 0)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, gpWeights.Length); i++)
-                {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double gpVal = NumOps.ToDouble(gpWeights[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, gpVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, supportFeatures, gpWeights, 0.5, 2.0, 1e-10);
             }
 
             // GP-modulated query loss (deep kernel affects training loss)
@@ -234,27 +200,7 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             var gpWeights = GPPredict(supportFeatures, queryFeatures);
             if (gpWeights != null && supportFeatures != null && supportFeatures.Length > 0)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, gpWeights.Length); i++)
-                {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double gpVal = NumOps.ToDouble(gpWeights[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, gpVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
-                }
+                ParameterModulation.ScaleByMeanClampedRatio(Engine, ParamModel, supportFeatures, gpWeights, 0.5, 2.0, 1e-10);
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
@@ -262,28 +208,6 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         ParamModel.SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
-    }
-
-    /// <summary>
-    /// Builds the GP kernel matrix between all pairs of feature vectors.
-    /// Uses the deep kernel: k(x,x') = RBF(f(x), f(x')) where f is the backbone.
-    /// </summary>
-    /// <param name="features">List of feature vectors.</param>
-    /// <returns>Kernel matrix K[i,j] = k(features[i], features[j]).</returns>
-    private double[,] BuildKernelMatrix(List<Vector<T>> features)
-    {
-        int n = features.Count;
-        var K = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                double kval = ComputeKernel(features[i], features[j]);
-                K[i, j] = kval;
-                K[j, i] = kval;
-            }
-        }
-        return K;
     }
 
     /// <summary>
@@ -300,59 +224,137 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         if (supportFeatures == null || queryFeatures == null || supportFeatures.Length == 0)
             return supportFeatures;
 
-        double noiseVar = Math.Exp(NumOps.ToDouble(_kernelParams[1]));
-
         // Estimate feature dimensionality: assume support and query have the same per-example dim.
         // Use the GCD-based heuristic: if both lengths share a common factor, that's likely the dim.
         // Fallback: treat each feature as a vector if lengths are equal, or use sqrt heuristic.
         int featureDim = EstimateFeatureDim(supportFeatures.Length, queryFeatures.Length);
-        int nSupport = Math.Max(supportFeatures.Length / Math.Max(featureDim, 1), 1);
-        int nQuery = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
+        int width = Math.Max(featureDim, 1);
+        int nSupport = Math.Max(supportFeatures.Length / width, 1);
+        int nQuery = Math.Max(queryFeatures.Length / width, 1);
 
-        // Split into per-example multi-dimensional feature vectors
-        var supportVecs = SplitIntoVectors(supportFeatures, nSupport, featureDim);
-        var queryVecs = SplitIntoVectors(queryFeatures, nQuery, featureDim);
+        // Split into per-example multi-dimensional feature vectors (a shorter last example is zero-padded)
+        var (support, supportMask, supportCount) = ExampleRows.Split(Engine, supportFeatures, nSupport, width);
+        var (query, queryMask, queryCount) = ExampleRows.Split(Engine, queryFeatures, nQuery, width);
 
-        if (supportVecs.Count < 2)
+        if (supportCount < 2)
             return supportFeatures;
 
-        // Build K_ss (support kernel matrix) + noise on diagonal
-        var Kss = BuildKernelMatrix(supportVecs);
-        for (int i = 0; i < supportVecs.Count; i++)
-            Kss[i, i] += noiseVar;
+        // K_ss (support kernel matrix) + noise on the diagonal, and k_qs for every query
+        T noiseVar = NumOps.Exp(_kernelParams[1]);
+        var kss = Engine.TensorAdd(
+            KernelMatrix(support, supportMask, support, supportMask),
+            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(supportCount), noiseVar));
 
         // Construct support labels: assume uniform class distribution
         // In a K-way N-shot task, assign class labels 0, 1, 2, ... cyclically
         int numClasses = Math.Max(_dktOptions.EvaluationTasks > 0 ? (int)Math.Sqrt(_dktOptions.EvaluationTasks) : 5, 2);
-        int shotsPerClass = Math.Max(supportVecs.Count / numClasses, 1);
-        var supportLabels = new double[supportVecs.Count];
-        for (int i = 0; i < supportVecs.Count; i++)
-            supportLabels[i] = (i / shotsPerClass) % numClasses;
+        int shotsPerClass = Math.Max(supportCount / numClasses, 1);
+        var supportLabels = new Tensor<int>(
+            Enumerable.Range(0, supportCount).Select(i => (i / shotsPerClass) % numClasses).ToArray(),
+            new[] { supportCount, 1 }).Cast<T>();
 
-        // For each query, compute GP predictive mean
         var result = new Vector<T>(nQuery);
-        for (int q = 0; q < nQuery; q++)
+        if (queryCount == 0)
+            return result;
+
+        // GP predictive mean for every query: alpha = (K_ss + sigma^2 I)^-1 k_qs, mean = alpha^T y_s, with the
+        // SPD solve through a Cholesky factor as in GPyTorch and scikit-learn
+        var kqs = KernelMatrix(support, supportMask, query, queryMask);
+        var alpha = ExampleRows.SolveSymmetricPositiveDefinite(kss, kqs);
+        var means = Engine.Reshape(
+            Engine.TensorMatMul(Engine.TensorTranspose(alpha), supportLabels), new[] { queryCount }).ToVector();
+
+        // Queries past the last example keep a zero mean
+        return queryCount == nQuery ? means : Vector<T>.Concatenate(means, new Vector<T>(nQuery - queryCount));
+    }
+
+    /// <summary>
+    /// The deep RBF kernel k(a_i, b_j) = exp(-||a_i - b_j||^2 / (2 l^2)) between the rows of two padded example
+    /// matrices, [rows of a, rows of b]. The distance runs over the entries both rows have (their common prefix).
+    /// </summary>
+    private Tensor<T> KernelMatrix(Tensor<T> a, Tensor<T> aMask, Tensor<T> b, Tensor<T> bMask)
+    {
+        // Direct differences preserve nearby rows with a large common offset. Bound both pair and
+        // feature axes; only the GP's output kernel requires all row pairs at once.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var wideNoGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        using var arena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        const int rowBlock = 16, featureBlock = 128;
+        int rowsA = a.Shape[0], rowsB = b.Shape[0], width = a.Shape[1];
+        if (rowsA == 0 || rowsB == 0) return new Tensor<T>([rowsA, rowsB]);
+        double inverseLengthScale = Math.Exp(-NumOps.ToDouble(_kernelParams[0]));
+        var type = Type.GetTypeCode(typeof(T));
+        bool nativeDifference = type is TypeCode.Decimal or TypeCode.Byte or TypeCode.SByte or TypeCode.Int16 or
+            TypeCode.UInt16 or TypeCode.Int32 or TypeCode.UInt32 or TypeCode.Int64 or TypeCode.UInt64;
+        var rowParts = new List<Tensor<T>>();
+        for (int rowA = 0; rowA < rowsA; rowA += rowBlock)
         {
-            if (q >= queryVecs.Count) break;
-
-            // Compute kernel between this query and all support examples
-            var kqs = new double[supportVecs.Count];
-            for (int s = 0; s < supportVecs.Count; s++)
-                kqs[s] = ComputeKernel(queryVecs[q], supportVecs[s]);
-
-            // Solve (K_ss + sigma^2 I) alpha = k_qs
-            var alphaVec = FRNAlgorithm<T, TInput, TOutput>.SolveLinearSystemStatic(
-                Kss, kqs, supportVecs.Count);
-
-            // GP predictive mean = alpha^T @ support_labels
-            double predMean = 0;
-            for (int s = 0; s < supportVecs.Count; s++)
-                predMean += alphaVec[s] * supportLabels[s];
-
-            result[q] = NumOps.FromDouble(predMean);
+            int countA = Math.Min(rowBlock, rowsA - rowA);
+            var columnParts = new List<Tensor<T>>();
+            for (int rowB = 0; rowB < rowsB; rowB += rowBlock)
+            {
+                int countB = Math.Min(rowBlock, rowsB - rowB);
+                var squaredDistance = new Tensor<double>([countA, countB]);
+                for (int feature = 0; feature < width; feature += featureBlock)
+                {
+                    int count = Math.Min(featureBlock, width - feature);
+                    var shape = new[] { countA, countB, count };
+                    var left = FeatureBlock(a, rowA, countA, feature, count);
+                    var right = FeatureBlock(b, rowB, countB, feature, count);
+                    var leftMask = FeatureBlock(aMask, rowA, countA, feature, count).Cast<double>();
+                    var rightMask = FeatureBlock(bMask, rowB, countB, feature, count).Cast<double>();
+                    var common = Engine.TensorMultiply(
+                        Engine.TensorBroadcastTo(Engine.Reshape(leftMask, [countA, 1, count]), shape),
+                        Engine.TensorBroadcastTo(Engine.Reshape(rightMask, [1, countB, count]), shape));
+                    var difference = nativeDifference ? NativeDifferences(left, right, countA, countB, count)
+                        : Engine.TensorSubtract(
+                            Engine.TensorBroadcastTo(Engine.Reshape(left.Cast<double>(), [countA, 1, count]), shape),
+                            Engine.TensorBroadcastTo(Engine.Reshape(right.Cast<double>(), [1, countB, count]), shape));
+                    // Mask before squaring: an absent feature must not turn 0 * infinity into NaN.
+                    difference = Engine.TensorWhere(common, difference, new Tensor<double>(shape));
+                    var normalized = Engine.TensorMultiplyScalar(difference, inverseLengthScale);
+                    squaredDistance = Engine.TensorAdd(squaredDistance,
+                        Engine.ReduceSum(Engine.TensorMultiply(normalized, normalized), [2], false));
+                }
+                columnParts.Add(Engine.TensorExp(Engine.TensorMultiplyScalar(squaredDistance, -0.5)).Cast<T>());
+            }
+            rowParts.Add(columnParts.Count == 1 ? columnParts[0] : Engine.TensorConcatenate(columnParts.ToArray(), 1));
         }
+        return rowParts.Count == 1 ? rowParts[0] : Engine.TensorConcatenate(rowParts.ToArray(), 0);
+    }
 
-        return result;
+    private Tensor<T> FeatureBlock(Tensor<T> values, int row, int rows, int feature, int features)
+    {
+        int width = values.Shape[1];
+        var indices = new int[checked(rows * features)];
+        for (int i = 0; i < rows; i++)
+        for (int d = 0; d < features; d++) indices[i * features + d] = (row + i) * width + feature + d;
+        var selected = Engine.TensorIndexSelect(Engine.Reshape(values, [values.Length]), new Tensor<int>(indices, [indices.Length]), 0);
+        return Engine.Reshape(selected, [rows, features]);
+    }
+
+    private static Tensor<double> NativeDifferences(Tensor<T> left, Tensor<T> right, int rows, int columns, int width)
+    {
+        // Preserve adjacent decimal/Int64 labels before widening; casting absolute values first loses their gaps.
+        var a = left.ToArray();
+        var b = right.ToArray();
+        var differences = new double[checked(rows * columns * width)];
+        for (int i = 0; i < rows; i++)
+        for (int j = 0; j < columns; j++)
+        for (int d = 0; d < width; d++)
+        {
+            decimal first = Convert.ToDecimal(a[i * width + d]);
+            decimal second = Convert.ToDecimal(b[j * width + d]);
+            double difference;
+            try { difference = (double)(first - second); }
+            catch (OverflowException)
+            {
+                // An overflowing decimal subtraction has a large gap, so double subtraction cannot erase it.
+                difference = (double)first - (double)second;
+            }
+            differences[(i * columns + j) * width + d] = difference;
+        }
+        return new Tensor<double>(differences, [rows, columns, width]);
     }
 
     /// <summary>
@@ -394,23 +396,6 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         return Math.Abs(a);
     }
 
-    /// <summary>Splits a flat feature vector into a list of per-example multi-dimensional vectors.</summary>
-    private static List<Vector<T>> SplitIntoVectors(Vector<T> flat, int numExamples, int featureDim)
-    {
-        var result = new List<Vector<T>>();
-        for (int i = 0; i < numExamples; i++)
-        {
-            int start = i * featureDim;
-            int len = Math.Min(featureDim, flat.Length - start);
-            if (len <= 0) break;
-            var vec = new Vector<T>(len);
-            for (int d = 0; d < len; d++)
-                vec[d] = flat[start + d];
-            result.Add(vec);
-        }
-        return result;
-    }
-
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
@@ -428,14 +413,10 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var gpWeights = GPPredict(supportFeatures, queryFeatures);
 
         // Compute modulation from GP weight magnitudes
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (gpWeights != null && gpWeights.Length > 0)
         {
-            double sumAbs = 0;
-            for (int i = 0; i < gpWeights.Length; i++)
-                sumAbs += Math.Abs(NumOps.ToDouble(gpWeights[i]));
-            double meanAbs = sumAbs / gpWeights.Length;
-            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+            modulationFactors = ParameterModulation.MeanAbsGate(Engine, gpWeights);
         }
 
         return new DKTModel<T, TInput, TOutput>(
@@ -453,19 +434,20 @@ public partial class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 /// </remarks>
 internal class DKTModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _gpWeights;
     private readonly double _lengthScale;
     private readonly double _noiseVariance;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _gpWeights;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -476,7 +458,7 @@ internal class DKTModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         Vector<T>? gpWeights,
         double lengthScale,
         double noiseVariance,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -493,10 +475,7 @@ internal class DKTModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

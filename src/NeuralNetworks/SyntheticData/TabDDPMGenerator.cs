@@ -147,8 +147,15 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private readonly List<int> _categoricalColumnWidths = new();
 
     // Preprocessing stats
-    private double[] _quantileMeans = Array.Empty<double>();
-    private double[] _quantileStds = Array.Empty<double>();
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private Tensor<T> _quantileMeans = new Tensor<T>(new[] { 1, 0 });
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private Tensor<T> _quantileStds = new Tensor<T>(new[] { 1, 0 });
+    // Per numerical column [1, J]: the fitted data's minimum and maximum (the clamp range of the reconstruction).
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private Tensor<T> _numericalMins = new Tensor<T>(new[] { 1, 0 });
+    [AiDotNet.Attributes.FittedParameter(InputSized = true)]
+    private Tensor<T> _numericalMaxs = new Tensor<T>(new[] { 1, 0 });
 
     // Whether custom layers are being used
     private bool _usingCustomLayers;
@@ -496,62 +503,99 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     {
         int n = data.Rows;
 
-        // Quantile normalization for numerical columns
-        var numerical = new Matrix<T>(n, _numNumericalFeatures);
-        _quantileMeans = new double[_numNumericalFeatures];
-        _quantileStds = new double[_numNumericalFeatures];
+        var dataTensor = Tensor<T>.FromMatrix(data);
 
-        for (int j = 0; j < _numNumericalFeatures; j++)
+        // Quantile normalization for numerical columns: (x - mean) / std per column, with the sample (n - 1)
+        // std (1 for a single row or a constant column).
+        Matrix<T> numerical;
+        if (_numNumericalFeatures == 0)
         {
-            int colIdx = _numericalColumnIndices[j];
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(data[i, colIdx]);
-            }
-            double mean = sum / n;
+            numerical = new Matrix<T>(n, 0);
+            _quantileMeans = new Tensor<T>(new[] { 1, 0 });
+            _quantileStds = new Tensor<T>(new[] { 1, 0 });
+            _numericalMins = new Tensor<T>(new[] { 1, 0 });
+            _numericalMaxs = new Tensor<T>(new[] { 1, 0 });
+        }
+        else
+        {
+            var columnIds = new Tensor<int>(_numericalColumnIndices.ToArray(), new[] { _numNumericalFeatures });
+            var values = Engine.TensorIndexSelect(dataTensor, columnIds, 1);                      // [n, J]
 
-            double sumSq = 0;
-            for (int i = 0; i < n; i++)
+            // A narrow T (Half, BFloat16) is normalized in float: its sum of squares overflows past 65504.
+            Tensor<T> mean, std, normalized;
+            if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
             {
-                double diff = NumOps.ToDouble(data[i, colIdx]) - mean;
-                sumSq += diff * diff;
+                var wide = NormalizeColumns(values.Cast<float>(), n);
+                (mean, std, normalized) = (wide.Mean.Cast<T>(), wide.Std.Cast<T>(), wide.Normalized.Cast<T>());
             }
-            double std = n > 1 ? Math.Sqrt(sumSq / (n - 1)) : 1.0;
-            if (std < 1e-10) std = 1.0;
-
-            _quantileMeans[j] = mean;
-            _quantileStds[j] = std;
-
-            for (int i = 0; i < n; i++)
+            else
             {
-                double val = (NumOps.ToDouble(data[i, colIdx]) - mean) / std;
-                numerical[i, j] = NumOps.FromDouble(val);
+                (mean, std, normalized) = NormalizeColumns(values, n);
             }
+
+            _quantileMeans = mean;
+            _quantileStds = std;
+            _numericalMins = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(values), new[] { 0 }, true));
+            _numericalMaxs = Engine.ReduceMax(values, new[] { 0 }, true);
+            numerical = normalized.ToMatrix();
         }
 
-        // One-hot encoding for categorical columns
-        var categorical = new Matrix<T>(n, _totalCategoricalWidth);
-        int catOffset = 0;
-
-        for (int j = 0; j < _numCategoricalFeatures; j++)
+        // One-hot encoding for categorical columns: the rounded (half to even) value selects the category;
+        // values outside [0, numCats) leave the block empty.
+        Matrix<T> categorical;
+        if (_numCategoricalFeatures == 0 || n == 0)
         {
-            int colIdx = _categoricalColumnIndices[j];
-            int numCats = _categoricalColumnWidths[j];
-
-            for (int i = 0; i < n; i++)
+            categorical = new Matrix<T>(n, _totalCategoricalWidth);
+        }
+        else
+        {
+            var categoryIds = new Tensor<int>(_categoricalColumnIndices.ToArray(), new[] { _numCategoricalFeatures });
+            var rounded = Engine.TensorRound(Engine.TensorIndexSelect(dataTensor, categoryIds, 1)).Cast<int>();   // [n, Jc]
+            var blocks = new Tensor<T>[_numCategoricalFeatures];
+            for (int j = 0; j < _numCategoricalFeatures; j++)
             {
-                int catVal = (int)Math.Round(NumOps.ToDouble(data[i, colIdx]));
-                if (catVal >= 0 && catVal < numCats)
-                {
-                    categorical[i, catOffset + catVal] = NumOps.One;
-                }
+                int numCats = _categoricalColumnWidths[j];
+                var ids = Engine.Reshape(Engine.TensorSlice(rounded, new[] { 0, j }, new[] { n, 1 }), new[] { n });
+                var inRange = Engine.TensorMultiply(
+                    Engine.TensorGreaterThan(ids, -1), Engine.TensorLessThan(ids, numCats));
+                var oneHot = Engine.TensorOneHot<T>(Engine.TensorMultiply(ids, inRange), numCats);
+                blocks[j] = Engine.TensorMultiply(
+                    oneHot, Engine.TensorBroadcastTo(Engine.Reshape(inRange.Cast<T>(), new[] { n, 1 }), new[] { n, numCats }));
             }
-
-            catOffset += numCats;
+            categorical = Engine.TensorConcatenate(blocks, 1).ToMatrix();
         }
 
         return (numerical, categorical);
+    }
+
+    /// <summary>
+    /// Per column of <c>[n, J]</c> values: the mean, the sample (n - 1) std (1 for a single row or a constant
+    /// column) and the values standardized with them.
+    /// </summary>
+    private (Tensor<TValue> Mean, Tensor<TValue> Std, Tensor<TValue> Normalized) NormalizeColumns<TValue>(
+        Tensor<TValue> values, int n)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
+        var shape = values._shape;
+        var mean = Engine.ReduceMean(values, new[] { 0 }, true);                              // [1, J]
+        var centered = Engine.TensorSubtract(values, Engine.TensorBroadcastTo(mean, shape));
+        var ones = Engine.TensorOnesLike(mean);
+        Tensor<TValue> std;
+        if (n > 1)
+        {
+            var variance = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, true), ops.FromDouble(n - 1));
+            std = Engine.TensorSqrt(variance);
+            var nearZero = Engine.TensorAdd(Engine.TensorLessThan(std, ops.FromDouble(1e-10)),
+                Engine.TensorEquals(std, ops.Zero));
+            std = Engine.TensorWhere(nearZero, ones, std);
+        }
+        else
+        {
+            std = ones;
+        }
+
+        return (mean, std, Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape)));
     }
 
     #endregion
@@ -561,28 +605,15 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private Vector<T> CreateTimestepEmbedding(int timestep)
     {
         int dim = _options.TimestepEmbeddingDimension;
-        var embedding = new Vector<T>(dim);
-
-        int halfDim = dim / 2;
-        for (int i = 0; i < halfDim; i++)
-        {
-            double freq = Math.Exp(-Math.Log(10000.0) * i / halfDim);
-            double angle = timestep * freq;
-            embedding[i] = NumOps.FromDouble(Math.Sin(angle));
-            if (i + halfDim < dim)
-            {
-                embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
-            }
-        }
+        var embedTensor = BuildRawTimestepEmbedding(timestep);
 
         if (_timestepProjection is not null)
         {
-            var embedTensor = VectorToTensor(embedding);
             var projected = _timestepProjection.Forward(embedTensor);
             return TensorToVector(projected, dim);
         }
 
-        return embedding;
+        return embedTensor.ToVector();
     }
 
     /// <summary>
@@ -594,22 +625,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// </summary>
     private Tensor<T> CreateTimestepEmbeddingTensor(int timestep)
     {
-        int dim = _options.TimestepEmbeddingDimension;
-        var embedding = new Vector<T>(dim);
-
-        int halfDim = dim / 2;
-        for (int i = 0; i < halfDim; i++)
-        {
-            double freq = Math.Exp(-Math.Log(10000.0) * i / halfDim);
-            double angle = timestep * freq;
-            embedding[i] = NumOps.FromDouble(Math.Sin(angle));
-            if (i + halfDim < dim)
-            {
-                embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
-            }
-        }
-
-        var embedTensor = VectorToTensor(embedding);
+        var embedTensor = BuildRawTimestepEmbedding(timestep);
         return _timestepProjection is not null
             ? _timestepProjection.Forward(embedTensor)
             : embedTensor;
@@ -622,43 +638,24 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private (Vector<T> NoisePred, Vector<T> CatLogits) DenoiserForward(
         Vector<T> numericalFeatures, Vector<T> categoricalFeatures, Vector<T> timestepEmbed)
     {
-        int totalLen = _numNumericalFeatures + _totalCategoricalWidth + _options.TimestepEmbeddingDimension;
-        var input = new Vector<T>(totalLen);
-
-        int offset = 0;
-        for (int i = 0; i < numericalFeatures.Length; i++) input[offset++] = numericalFeatures[i];
-        for (int i = 0; i < categoricalFeatures.Length; i++) input[offset++] = categoricalFeatures[i];
-        for (int i = 0; i < timestepEmbed.Length; i++) input[offset++] = timestepEmbed[i];
+        // [numerical | categorical | timestep] as one input row.
+        var current = Engine.TensorConcatenate(
+            new[] { VectorToTensor(numericalFeatures), VectorToTensor(categoricalFeatures), VectorToTensor(timestepEmbed) }, 0);
 
         // Forward through MLP layers
-        var current = VectorToTensor(input);
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
         _lastMLPOutput = current;
 
-        // Split output via separate heads
-        var noisePred = new Vector<T>(_numNumericalFeatures);
-        var catLogits = new Vector<T>(_totalCategoricalWidth);
-
-        if (_numericalOutputHead is not null)
-        {
-            var numOut = _numericalOutputHead.Forward(current);
-            for (int i = 0; i < _numNumericalFeatures && i < numOut.Length; i++)
-            {
-                noisePred[i] = numOut[i];
-            }
-        }
-
-        if (_categoricalOutputHead is not null)
-        {
-            var catOut = _categoricalOutputHead.Forward(current);
-            for (int i = 0; i < _totalCategoricalWidth && i < catOut.Length; i++)
-            {
-                catLogits[i] = catOut[i];
-            }
-        }
+        // Split output via separate heads (each keeps its leading values, zero-padded to the head width)
+        var noisePred = _numericalOutputHead is not null
+            ? TensorToVector(_numericalOutputHead.Forward(current), _numNumericalFeatures)
+            : new Vector<T>(_numNumericalFeatures);
+        var catLogits = _categoricalOutputHead is not null
+            ? TensorToVector(_categoricalOutputHead.Forward(current), _totalCategoricalWidth)
+            : new Vector<T>(_totalCategoricalWidth);
 
         return (noisePred, catLogits);
     }
@@ -791,18 +788,21 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// of <see cref="CreateTimestepEmbeddingTensor"/>.</summary>
     private Tensor<T> BuildRawTimestepEmbedding(int timestep)
     {
+        // [sin(angle_i), cos(angle_i)] with angle_i = timestep * exp(-ln(10000) i / halfDim); an odd dim
+        // leaves the last entry 0.
         int dim = _options.TimestepEmbeddingDimension;
-        var embedding = new Vector<T>(dim);
         int halfDim = dim / 2;
-        for (int i = 0; i < halfDim; i++)
-        {
-            double freq = Math.Exp(-Math.Log(10000.0) * i / halfDim);
-            double angle = timestep * freq;
-            embedding[i] = NumOps.FromDouble(Math.Sin(angle));
-            if (i + halfDim < dim)
-                embedding[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
-        }
-        return VectorToTensor(embedding);
+        if (halfDim == 0)
+            return new Tensor<T>(new[] { dim });
+        // The angles are formed in double: in a narrow T such as Half, timestep * frequency is off by up to
+        // half a radian.
+        var frequencies = Engine.TensorExp(Engine.TensorMultiplyScalar(
+            Engine.TensorArange<double>(0, halfDim, 1), -Math.Log(10000.0) / halfDim));
+        var angles = Engine.TensorMultiplyScalar(frequencies, (double)timestep);
+        var parts = dim % 2 == 0
+            ? new[] { Engine.TensorSin(angles).Cast<T>(), Engine.TensorCos(angles).Cast<T>() }
+            : new[] { Engine.TensorSin(angles).Cast<T>(), Engine.TensorCos(angles).Cast<T>(), new Tensor<T>(new[] { 1 }) };
+        return Engine.TensorConcatenate(parts, 0);
     }
 
     /// <summary>Assembles the persistent-slot data list for the MultiSlotFusedStep
@@ -993,59 +993,46 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private Matrix<T> InitializeRandomCategories(int numSamples)
     {
-        var cats = new Matrix<T>(numSamples, _totalCategoricalWidth);
+        // Every category of a column starts at 1 / numCats.
+        if (_totalCategoricalWidth == 0 || numSamples == 0)
+            return new Matrix<T>(numSamples, _totalCategoricalWidth);
+
+        var blockWidth = new int[_totalCategoricalWidth];
         int offset = 0;
-
-        for (int j = 0; j < _numCategoricalFeatures; j++)
+        foreach (int numCats in _categoricalColumnWidths)
         {
-            int numCats = _categoricalColumnWidths[j];
-            double uniform = 1.0 / numCats;
-
-            for (int i = 0; i < numSamples; i++)
-            {
-                for (int c = 0; c < numCats; c++)
-                {
-                    cats[i, offset + c] = NumOps.FromDouble(uniform);
-                }
-            }
-
+            blockWidth.AsSpan(offset, numCats).Fill(numCats);
             offset += numCats;
         }
 
-        return cats;
+        var uniformRow = Engine.Reshape(
+            Engine.TensorReciprocal(new Tensor<int>(blockWidth, new[] { _totalCategoricalWidth }).Cast<T>()),
+            new[] { 1, _totalCategoricalWidth });
+        return Engine.TensorTile(uniformRow, new[] { numSamples, 1 }).ToMatrix();
     }
 
     private Vector<T> DenoiseCategorical(Vector<T> noisyFeats, Vector<T> predictedLogits, int catT)
     {
         if (_multinomialDiffusion is null) return noisyFeats;
 
-        var result = new Vector<T>(_totalCategoricalWidth);
+        // Inputs past the end of either vector read as zero; each block's result is zero-padded to its width.
+        var noisy = PadTo(noisyFeats, _totalCategoricalWidth);
+        var logits = PadTo(predictedLogits, _totalCategoricalWidth);
+        var blocks = new Tensor<T>[_numCategoricalFeatures];
         int offset = 0;
 
         for (int j = 0; j < _numCategoricalFeatures; j++)
         {
             int numCats = _categoricalColumnWidths[j];
-
-            var colNoisy = new Vector<T>(numCats);
-            var colLogits = new Vector<T>(numCats);
-
-            for (int c = 0; c < numCats; c++)
-            {
-                colNoisy[c] = offset + c < noisyFeats.Length ? noisyFeats[offset + c] : NumOps.Zero;
-                colLogits[c] = offset + c < predictedLogits.Length ? predictedLogits[offset + c] : NumOps.Zero;
-            }
-
-            var denoised = _multinomialDiffusion.DenoisingStep(colNoisy, colLogits, catT);
-
-            for (int c = 0; c < numCats; c++)
-            {
-                result[offset + c] = c < denoised.Length ? denoised[c] : NumOps.Zero;
-            }
-
+            var denoised = _multinomialDiffusion.DenoisingStep(
+                noisy.GetSubVector(offset, numCats), logits.GetSubVector(offset, numCats), catT);
+            blocks[j] = Tensor<T>.FromVector(PadTo(denoised, numCats));
             offset += numCats;
         }
 
-        return result;
+        return _numCategoricalFeatures == 0
+            ? new Vector<T>(_totalCategoricalWidth)
+            : Engine.TensorConcatenate(blocks, 0).ToVector();
     }
 
     #endregion
@@ -1054,54 +1041,63 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     private Matrix<T> ReconstructData(Matrix<T> numericalSamples, Matrix<T> categoricalSamples, int numSamples)
     {
-        var result = new Matrix<T>(numSamples, _columns.Count);
+        if (numSamples == 0 || _columns.Count == 0)
+            return new Matrix<T>(numSamples, _columns.Count);
 
-        for (int i = 0; i < numSamples; i++)
+        // Numerical columns: undo the normalization (x * std + mean), clamp to the fitted range and round
+        // the discrete ones (half to even, as Math.Round).
+        Tensor<T>? numerical = null;
+        if (_numNumericalFeatures > 0)
         {
-            int numIdx = 0;
-            int catColIdx = 0;
-            int catOffset = 0;
+            var shape = new[] { numSamples, _numNumericalFeatures };
+            var restored = Engine.TensorAdd(
+                Engine.TensorMultiply(Tensor<T>.FromMatrix(numericalSamples), Engine.TensorBroadcastTo(_quantileStds, shape)),
+                Engine.TensorBroadcastTo(_quantileMeans, shape));
+            restored = Engine.TensorMax(
+                Engine.TensorBroadcastTo(_numericalMins, shape),
+                Engine.TensorMin(Engine.TensorBroadcastTo(_numericalMaxs, shape), restored));
+            var discrete = _columns.Where(c => c.IsNumerical).Select(c => c.DataType == ColumnDataType.Discrete ? 1 : 0).ToArray();
+            var discreteMask = Engine.TensorBroadcastTo(
+                new Tensor<int>(discrete, new[] { 1, _numNumericalFeatures }).Cast<T>(), shape);
+            numerical = Engine.TensorWhere(discreteMask, Engine.TensorRound(restored), restored);
+        }
 
-            for (int col = 0; col < _columns.Count; col++)
+        // Categorical columns: the first highest category of each block (NaN never wins).
+        var categoricalTensor = _totalCategoricalWidth > 0 ? Tensor<T>.FromMatrix(categoricalSamples) : null;
+        if (categoricalTensor is not null)
+        {
+            categoricalTensor = Engine.TensorWhere(
+                Engine.TensorIsNan(categoricalTensor),
+                Engine.TensorFullLike(categoricalTensor, NumOps.FromDouble(double.NegativeInfinity)),
+                categoricalTensor);
+        }
+
+        var outputColumns = new Tensor<T>[_columns.Count];
+        int numIdx = 0;
+        int catColIdx = 0;
+        int catOffset = 0;
+        for (int col = 0; col < _columns.Count; col++)
+        {
+            if (_columns[col].IsNumerical && numerical is not null)
             {
-                if (_columns[col].IsNumerical)
-                {
-                    double normalized = NumOps.ToDouble(numericalSamples[i, numIdx]);
-                    double original = normalized * _quantileStds[numIdx] + _quantileMeans[numIdx];
-                    original = Math.Max(_columns[col].Min, Math.Min(_columns[col].Max, original));
-
-                    if (_columns[col].DataType == ColumnDataType.Discrete)
-                    {
-                        original = Math.Round(original);
-                    }
-
-                    result[i, col] = NumOps.FromDouble(original);
-                    numIdx++;
-                }
-                else if (_columns[col].IsCategorical)
-                {
-                    int numCats = _categoricalColumnWidths[catColIdx];
-                    int bestCat = 0;
-                    double bestVal = double.MinValue;
-
-                    for (int c = 0; c < numCats; c++)
-                    {
-                        double v = NumOps.ToDouble(categoricalSamples[i, catOffset + c]);
-                        if (v > bestVal)
-                        {
-                            bestVal = v;
-                            bestCat = c;
-                        }
-                    }
-
-                    result[i, col] = NumOps.FromDouble(bestCat);
-                    catOffset += numCats;
-                    catColIdx++;
-                }
+                outputColumns[col] = Engine.TensorSlice(numerical, new[] { 0, numIdx }, new[] { numSamples, 1 });
+                numIdx++;
+            }
+            else if (_columns[col].IsCategorical && categoricalTensor is not null)
+            {
+                int numCats = _categoricalColumnWidths[catColIdx];
+                var block = Engine.TensorSlice(categoricalTensor, new[] { 0, catOffset }, new[] { numSamples, numCats });
+                outputColumns[col] = Engine.Reshape(Engine.TensorArgMax(block, 1).Cast<T>(), new[] { numSamples, 1 });
+                catOffset += numCats;
+                catColIdx++;
+            }
+            else
+            {
+                outputColumns[col] = new Tensor<T>(new[] { numSamples, 1 });
             }
         }
 
-        return result;
+        return Engine.TensorConcatenate(outputColumns, 1).ToMatrix();
     }
 
     #endregion
@@ -1224,34 +1220,60 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
     {
         int n = data.Rows;
-        double sum = 0;
-        double min = double.MaxValue;
-        double max = double.MinValue;
-
-        for (int row = 0; row < n; row++)
+        if (n == 0)
         {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
+            // An empty column keeps the empty-scan values: no min/max, mean 0/0, unit std.
+            meta.Min = double.MaxValue;
+            meta.Max = double.MinValue;
+            meta.Mean = 0.0 / n;
+            meta.Std = 1.0;
+            return;
         }
 
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            double diff = val - mean;
-            sumSqDiff += diff * diff;
-        }
+        var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
 
+        // A T other than double is reduced in float with the column first divided by its largest magnitude:
+        // the squared deviations of a finite float column (|x| near 1e20) overflow float, and a Half sum
+        // overflows past 65504. Double columns keep the plain double reduction.
+        var (mean, sumSqDiff) = typeof(T) == typeof(double)
+            ? ColumnMoments(column, prescale: false)
+            : ColumnMoments(column.Cast<float>(), prescale: true);
+
+        // Sample standard deviation (n - 1), floored at 1e-10.
         double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
         if (std < 1e-10) std = 1e-10;
 
-        meta.Min = min;
-        meta.Max = max;
+        meta.Min = NumOps.ToDouble(Engine.TensorMinValue(column));
+        meta.Max = NumOps.ToDouble(Engine.TensorMaxValue(column));
         meta.Mean = mean;
         meta.Std = std;
+    }
+
+    /// <summary>
+    /// The mean of a column and the sum of its squared deviations from that mean. With
+    /// <paramref name="prescale"/>, a column whose n * max|x|^2 could overflow float is divided by its largest
+    /// finite magnitude first and the moments are scaled back in double, so neither sum can overflow
+    /// <typeparamref name="TValue"/>.
+    /// </summary>
+    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column, bool prescale)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
+        double scale = 1.0;
+        if (prescale)
+        {
+            double largest = ops.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(column)));
+            // Only when n * largest^2 could overflow float, so ordinary columns keep their unscaled values.
+            if (largest > 0 && !double.IsInfinity(largest) && !double.IsNaN(largest)
+                && largest * largest * column.Length >= 1e36)
+            {
+                scale = largest;
+                column = Engine.TensorDivideScalar(column, ops.FromDouble(largest));
+            }
+        }
+
+        TValue mean = Engine.TensorMean(column);
+        double sumOfSquares = ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean)));
+        return (ops.ToDouble(mean) * scale, sumOfSquares * scale * scale);
     }
 
     #endregion
@@ -1271,35 +1293,43 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     #region Helpers
 
     private static Vector<T> GetMatrixRow(Matrix<T> data, int row)
-    {
-        var v = new Vector<T>(data.Columns);
-        for (int j = 0; j < data.Columns; j++) v[j] = data[row, j];
-        return v;
-    }
+        => data.Columns == 0 ? new Vector<T>(0) : data.GetRow(row);
 
+    /// <summary>Overwrites the leading min(columns, values.Length) entries of row <paramref name="row"/>.</summary>
     private static Matrix<T> SetMatrixRow(Matrix<T> data, int row, Vector<T> values)
     {
-        for (int j = 0; j < Math.Min(data.Columns, values.Length); j++)
-        {
-            data[row, j] = values[j];
-        }
+        int copyLen = Math.Min(data.Columns, values.Length);
+        if (copyLen == 0)
+            return data;
+        var current = data.GetRow(row);
+        var head = values.GetSubVector(0, copyLen);
+        data.SetRow(row, copyLen == data.Columns
+            ? head
+            : AiDotNetEngine.Current.TensorConcatenate(
+                new[] { Tensor<T>.FromVector(head), Tensor<T>.FromVector(current.GetSubVector(copyLen, data.Columns - copyLen)) }, 0)
+                .ToVector());
         return data;
     }
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
+    /// <summary>The first min(length, t.Length) values of <paramref name="t"/>, zero-padded to <paramref name="length"/>.</summary>
     private static Vector<T> TensorToVector(Tensor<T> t, int length)
     {
-        var v = new Vector<T>(length);
         int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
+        if (copyLen == 0)
+            return new Vector<T>(length);
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(t, new[] { t.Length });
+        var head = copyLen == t.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { copyLen });
+        if (copyLen < length)
+            head = engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { length - copyLen }) }, 0);
+        return head.ToVector();
     }
+
+    /// <summary>The first min(length, v.Length) values of <paramref name="v"/>, zero-padded to <paramref name="length"/>.</summary>
+    private static Vector<T> PadTo(Vector<T> v, int length)
+        => v.Length == length ? v : TensorToVector(Tensor<T>.FromVector(v), length);
 
     #endregion
 

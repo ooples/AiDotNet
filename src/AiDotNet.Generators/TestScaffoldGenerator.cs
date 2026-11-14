@@ -631,9 +631,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
     /// </summary>
     /// <remarks>
     /// Prototypical networks (Snell et al. 2017) take the ways from the labels: one prototype per class present.
+    /// P>M>F (Hu et al. 2022) is a prototypical classifier over a pre-trained backbone, so it takes them the same way.
     /// </remarks>
     private static readonly System.Collections.Generic.HashSet<string> ClassifierMetaLearnersWithoutClassCount =
-        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "ProtoNetsAlgorithm" };
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "ProtoNetsAlgorithm",
+            "PMFAlgorithm",
+        };
 
     /// <summary>
     /// Whether a meta-learner classifies: its options declare a class count, or it is a known classifier that
@@ -6151,7 +6156,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 32, " +
+                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 24, " +
                     "NumSpatialBlocks = 1, NumTemporalBlocks = 1, NumTextBlocks = 1, " +
                     // Paper warm-up is 1000 optimizer steps and the model keeps that default.
                     // These invariants train for one or two steps, where a 1000-step linear
@@ -8418,15 +8423,18 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "AudioGenModel" && model.TypeParameterCount == 1)
             {
                 // Production retains AudioGen-Medium (text dim 768, LM dim
-                // 1536, 24 decoder layers, four 1024-entry EnCodec books).
+                // 1536, 24 decoder layers, four 2048-entry EnCodec books and
+                // a 64-filter SEANet decoder with a 2-layer LSTM).
                 // Exercise the same token embedding -> text transformer ->
                 // cross-modal projection -> autoregressive LM -> codebook head
                 // through the public native constructor at CI-smoke scale.
+                // The frozen decoder shrinks through its options too: at the paper
+                // width it alone holds ~7.3M parameters for a few-thousand-parameter LM.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8 }" + ", seed: 42)";
+                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8, EncodecDimension = 8, EncodecFilters = 4, EncodecLstmLayers = 1 }" + ", seed: 42)";
             }
             else if (model.ClassName == "BandSplitRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -10660,8 +10668,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                      model.FullyQualifiedName.IndexOf(
                          "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal) >= 0)
             {
-                // Fit the same compact speech tokenizer used by the native ASR task tests.
-                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.Asr<double>()";
+                // The compact ASR fixture, its speech tokenizer fitted on a broad corpus (tones, offset noise, steady
+                // levels): a codebook fitted on two tones quantizes every generic probe to one audio token.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.AsrOverBroadAudio<double>()";
             }
 
             else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)
@@ -22925,6 +22934,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             "GraphWaveNet" => "207, 12",
             "MTGNN" => "207, 12",
 
+            // RelationalGCN (Schlichtkrull et al. 2018): per-node output [numNodes, forecastHorizon] = [100, 12]
+            // (RelationalGCNOptions defaults). Pairs with input "100, 12, 16".
+            "RelationalGCN" => "100, 12",
+
             // All others: [B, forecastHorizon]. Common paper defaults 96.
             _ => "96",
         };
@@ -23031,6 +23044,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // = [207, 12, 2], reshaped per-node for shared-weight WaveNet layers.
             "GraphWaveNet" => "207, 12, 2",
             "MTGNN" => "207, 12, 2",
+
+            // RelationalGCN: [numNodes, seqLen, numFeatures] = [100, 12, 16] (RelationalGCNOptions defaults),
+            // one history row per node for the per-node encoder ahead of the R-GCN layers.
+            "RelationalGCN" => "100, 12, 16",
 
             _ => ctx,
         };

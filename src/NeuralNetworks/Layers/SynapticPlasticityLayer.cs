@@ -337,94 +337,57 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
     public override void UpdateParameters(T learningRate)
     {
         int size = GetInputShape()[0];
+        var vectorShape = new[] { size };
+        var squareShape = new[] { size, size };
+        var half = NumOps.FromDouble(0.5);
+        var decay = NumOps.FromDouble(_traceDecay);
+        var ones = new Tensor<T>(vectorShape);
+        ones.Fill(NumOps.One);
 
-        // Update spike traces (exponential decay)
-        for (int i = 0; i < size; i++)
-        {
-            // Decay traces over time
-            _presynapticTraces[i] = NumOps.Multiply(_presynapticTraces[i], NumOps.FromDouble(_traceDecay));
-            _postsynapticTraces[i] = NumOps.Multiply(_postsynapticTraces[i], NumOps.FromDouble(_traceDecay));
+        // Spike traces decay every step and reset to 1 on a spike (binary activation: > 0.5 = spike).
+        var presynapticSpikes = Engine.TensorGreaterThan(
+            Engine.TensorSlice(Engine.Reshape(_lastInput, new[] { _lastInput.Length }), new[] { 0 }, vectorShape), half);
+        var postsynapticSpikes = Engine.TensorGreaterThan(
+            Engine.TensorSlice(Engine.Reshape(_lastOutput, new[] { _lastOutput.Length }), new[] { 0 }, vectorShape), half);
+        var presynapticTraces = Engine.TensorWhere(presynapticSpikes, ones,
+            Engine.TensorMultiplyScalar(Engine.Reshape(_presynapticTraces, vectorShape), decay));
+        var postsynapticTraces = Engine.TensorWhere(postsynapticSpikes, ones,
+            Engine.TensorMultiplyScalar(Engine.Reshape(_postsynapticTraces, vectorShape), decay));
+        Engine.TensorCopy(presynapticSpikes, _presynapticSpikes);
+        Engine.TensorCopy(postsynapticSpikes, _postsynapticSpikes);
+        Engine.TensorCopy(presynapticTraces, _presynapticTraces);
+        Engine.TensorCopy(postsynapticTraces, _postsynapticTraces);
 
-            // Record new spikes (assuming binary activation where 1.0 = spike)
-            if (NumOps.GreaterThan(_lastInput[i], NumOps.FromDouble(0.5)))
-            {
-                _presynapticSpikes[i] = NumOps.One;
-                _presynapticTraces[i] = NumOps.One; // Set trace to 1.0 when spike occurs
-            }
-            else
-            {
-                _presynapticSpikes[i] = NumOps.Zero;
-            }
+        // STDP on every off-diagonal synapse (i -> j):
+        //   LTP when i spiked and j's trace is positive: ltpRate * postTrace[j] * (maxWeight - w)
+        //   LTD when j spiked and i's trace is positive: ltdRate * preTrace[i] * (w - minWeight)
+        //   homeostasis: homeostasisRate * (w - 0.5)
+        // change = (LTP - LTD - homeostasis) * learningRate, then w + change clamped to [min, max].
+        var weights = Engine.Reshape(_weights, squareShape);
+        var zeros = new Tensor<T>(squareShape);
+        var postTraceRow = Engine.TensorBroadcastTo(Engine.Reshape(postsynapticTraces, new[] { 1, size }), squareShape);
+        var preTraceColumn = Engine.TensorBroadcastTo(Engine.Reshape(presynapticTraces, new[] { size, 1 }), squareShape);
 
-            if (NumOps.GreaterThan(_lastOutput[i], NumOps.FromDouble(0.5)))
-            {
-                _postsynapticSpikes[i] = NumOps.One;
-                _postsynapticTraces[i] = NumOps.One; // Set trace to 1.0 when spike occurs
-            }
-            else
-            {
-                _postsynapticSpikes[i] = NumOps.Zero;
-            }
-        }
+        var ltpMask = Engine.TensorOuterProduct(presynapticSpikes, Engine.TensorGreaterThan(postsynapticTraces, NumOps.Zero));
+        var potentiation = Engine.TensorWhere(ltpMask, Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(postTraceRow,
+                Engine.TensorSubtract(Engine.TensorAddScalar(zeros, NumOps.FromDouble(_maxWeight)), weights)),
+            NumOps.FromDouble(_stdpLtpRate)), zeros);
 
-        // Apply STDP rule to update weights
-        for (int i = 0; i < size; i++)
-        {
-            for (int j = 0; j < size; j++)
-            {
-                // Skip self-connections
-                if (i == j) continue;
+        var ltdMask = Engine.TensorOuterProduct(Engine.TensorGreaterThan(presynapticTraces, NumOps.Zero), postsynapticSpikes);
+        var depression = Engine.TensorWhere(ltdMask, Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(preTraceColumn, Engine.TensorSubtractScalar(weights, NumOps.FromDouble(_minWeight))),
+            NumOps.FromDouble(_stdpLtdRate)), zeros);
 
-                T currentWeight = _weights[i, j];
-                T weightChange = NumOps.Zero;
+        var homeostasis = Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(weights, half), NumOps.FromDouble(_homeostasisRate));
+        var weightChange = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(Engine.TensorSubtract(potentiation, depression), homeostasis), learningRate);
+        var updated = Engine.TensorClamp(
+            Engine.TensorAdd(weights, weightChange), NumOps.FromDouble(_minWeight), NumOps.FromDouble(_maxWeight));
 
-                // LTP: If presynaptic neuron fired before postsynaptic neuron
-                if (NumOps.Equals(_presynapticSpikes[i], NumOps.One) &&
-                    NumOps.GreaterThan(_postsynapticTraces[j], NumOps.Zero))
-                {
-                    // The strength of potentiation depends on the postsynaptic trace
-                    T potentiation = NumOps.Multiply(
-                        NumOps.FromDouble(_stdpLtpRate),
-                        NumOps.Multiply(_postsynapticTraces[j],
-                            NumOps.Subtract(NumOps.FromDouble(_maxWeight), currentWeight))
-                    );
-                    weightChange = NumOps.Add(weightChange, potentiation);
-                }
-
-                // LTD: If postsynaptic neuron fired before presynaptic neuron
-                if (NumOps.Equals(_postsynapticSpikes[j], NumOps.One) &&
-                    NumOps.GreaterThan(_presynapticTraces[i], NumOps.Zero))
-                {
-                    // The strength of depression depends on the presynaptic trace
-                    T depression = NumOps.Multiply(
-                        NumOps.FromDouble(_stdpLtdRate),
-                        NumOps.Multiply(_presynapticTraces[i],
-                            NumOps.Subtract(currentWeight, NumOps.FromDouble(_minWeight)))
-                    );
-                    weightChange = NumOps.Subtract(weightChange, depression);
-                }
-
-                // Apply calcium-based metaplasticity (homeostasis)
-                // If a synapse is very strong, make it harder to strengthen further
-                T homeostasisFactor = NumOps.Multiply(
-                    NumOps.FromDouble(_homeostasisRate),
-                    NumOps.Subtract(currentWeight, NumOps.FromDouble(0.5))
-                );
-                weightChange = NumOps.Subtract(weightChange, homeostasisFactor);
-
-                // Apply neuromodulation (using the provided learning rate as a global modulator)
-                weightChange = NumOps.Multiply(weightChange, learningRate);
-
-                // Update weight
-                _weights[i, j] = NumOps.Add(currentWeight, weightChange);
-
-                // Ensure weight stays within bounds
-                if (NumOps.LessThan(_weights[i, j], NumOps.FromDouble(_minWeight)))
-                    _weights[i, j] = NumOps.FromDouble(_minWeight);
-                if (NumOps.GreaterThan(_weights[i, j], NumOps.FromDouble(_maxWeight)))
-                    _weights[i, j] = NumOps.FromDouble(_maxWeight);
-            }
-        }
+        // Self-connections are skipped.
+        var selfConnection = Engine.TensorOneHot<T>(Engine.TensorArange<int>(0, size, 1), size);
+        Engine.TensorCopy(Engine.TensorWhere(selfConnection, weights, updated), _weights);
     }
 
     /// <summary>Construction state: the 'size' the layer was built with.</summary>

@@ -62,12 +62,8 @@ public sealed class DistillationLossAdapter<T> : LossFunctionBase<T>
         var teacherVec = target.ToVector();
         var g = _strategy.ComputeGradient(ToRow(predVec), ToRow(teacherVec), LabelRow());
 
-        var gConst = new Tensor<T>(predicted._shape);
-        int cols = predVec.Length;
-        for (int i = 0; i < cols; i++)
-        {
-            gConst[i] = g[0, i];
-        }
+        var gConst = Engine.Reshape(Tensor<T>.FromMatrix(g), predicted.Shape.ToArray());
+
 
         // Σ (g · ŷ): a tape expression over `predicted`, so backprop seeds the prediction cotangent
         // with g and carries it into the student's parameters.
@@ -79,14 +75,8 @@ public sealed class DistillationLossAdapter<T> : LossFunctionBase<T>
     // Null when no true label is set: the strategies then distil from the teacher alone.
     private Matrix<T>? LabelRow() => CurrentTrueLabel is null ? null : ToRow(CurrentTrueLabel);
 
-    private static Matrix<T> ToRow(Vector<T> v)
+    private Matrix<T> ToRow(Vector<T> v)
     {
-        var m = new Matrix<T>(1, v.Length);
-        for (int i = 0; i < v.Length; i++)
-        {
-            m[0, i] = v[i];
-        }
-
-        return m;
+        return Engine.Reshape(Tensor<T>.FromVector(v), [1, v.Length]).ToMatrix();
     }
 }

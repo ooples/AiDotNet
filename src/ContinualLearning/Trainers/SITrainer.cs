@@ -210,11 +210,16 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
             previousParams = CloneVector(InterfaceGuard.Parameterizable(Model).GetParameters());
         }
 
+        var regWeightT = NumOps.FromDouble(regWeight);
+        var replayLr = NumOps.Multiply(learningRate, NumOps.FromDouble(replayLrFactor));
+
         for (int epoch = 0; epoch < epochsPerTask; epoch++)
         {
             T epochTaskLoss = NumOps.Zero;
             T epochRegLoss = NumOps.Zero;
             int batchCount = 0;
+            var batchTaskLosses = new List<T>();
+            var batchRegLosses = new List<T>();
 
             // Shuffle indices for this epoch
             var indices = Enumerable.Range(0, numSamples)
@@ -229,7 +234,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
 
                 // Accumulate gradients for the batch
                 Vector<T>? batchGradients = null;
-                T batchLoss = NumOps.Zero;
+                var sampleLosses = new List<T>(actualBatchSize);
 
                 for (int i = batchStart; i < batchEnd; i++)
                 {
@@ -255,7 +260,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                     var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
                     var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
                     var sampleLoss = LossFunction.CalculateLoss(predictionVector, targetVector);
-                    batchLoss = NumOps.Add(batchLoss, sampleLoss);
+                    sampleLosses.Add(sampleLoss);
                 }
 
                 if (batchGradients == null)
@@ -264,9 +269,8 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                 // Average gradients over batch
                 AverageGradients(batchGradients, actualBatchSize);
 
-                // Compute regularization loss from SI
+                // Compute regularization loss from SI (scaled by the weight when the epoch is averaged)
                 var regLoss = Strategy.ComputeRegularizationLoss(Model);
-                regLoss = NumOps.Multiply(regLoss, NumOps.FromDouble(regWeight));
 
                 // Apply gradient clipping if configured
                 if (gradientClip.HasValue)
@@ -293,10 +297,9 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                     previousParams = CloneVector(InterfaceGuard.Parameterizable(Model).GetParameters());
                 }
 
-                // Track losses
-                batchLoss = NumOps.Divide(batchLoss, NumOps.FromDouble(actualBatchSize));
-                epochTaskLoss = NumOps.Add(epochTaskLoss, batchLoss);
-                epochRegLoss = NumOps.Add(epochRegLoss, regLoss);
+                // Track losses: the batch loss is the mean sample loss
+                batchTaskLosses.Add(Engine.Mean(new Vector<T>(sampleLosses)));
+                batchRegLosses.Add(regLoss);
                 batchCount++;
             }
 
@@ -311,9 +314,6 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
                     var replayGradients = ComputeReplayGradients(replayBatch);
                     if (replayGradients != null)
                     {
-                        var replayLr = NumOps.Multiply(
-                            learningRate,
-                            NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(Model, replayGradients);
                         GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
@@ -330,8 +330,8 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
             // Average epoch losses
             if (batchCount > 0)
             {
-                epochTaskLoss = NumOps.Divide(epochTaskLoss, NumOps.FromDouble(batchCount));
-                epochRegLoss = NumOps.Divide(epochRegLoss, NumOps.FromDouble(batchCount));
+                epochTaskLoss = Engine.Mean(new Vector<T>(batchTaskLosses));
+                epochRegLoss = Engine.Mean(Engine.Multiply(new Vector<T>(batchRegLosses), regWeightT));
             }
 
             var totalEpochLoss = NumOps.Add(epochTaskLoss, epochRegLoss);
@@ -394,28 +394,20 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
     private Vector<T> CloneVector(Vector<T> source)
     {
         var result = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            result[i] = source[i];
-        }
+        source.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
 
     private void AccumulateGradients(Vector<T> target, Vector<T> source)
     {
-        for (int i = 0; i < target.Length; i++)
-        {
-            target[i] = NumOps.Add(target[i], source[i]);
-        }
+        // In place: target += source (over target's length)
+        Engine.TensorAdd(target.AsTensor(), HeadView(source, target.Length)).AsSpan().CopyTo(target.AsWritableSpan());
     }
 
     private void AverageGradients(Vector<T> gradients, int count)
     {
         var divisor = NumOps.FromDouble(count);
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            gradients[i] = NumOps.Divide(gradients[i], divisor);
-        }
+        Engine.Divide(gradients, divisor).AsSpan().CopyTo(gradients.AsWritableSpan());
     }
 
     private void ClipGradients(Vector<T> gradients, double threshold)
@@ -426,10 +418,7 @@ public class SITrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TOu
         if (normValue > threshold)
         {
             var scale = NumOps.FromDouble(threshold / normValue);
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                gradients[i] = NumOps.Multiply(gradients[i], scale);
-            }
+            Engine.Multiply(gradients, scale).AsSpan().CopyTo(gradients.AsWritableSpan());
         }
     }
 

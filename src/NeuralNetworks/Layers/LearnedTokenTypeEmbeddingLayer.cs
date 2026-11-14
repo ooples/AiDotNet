@@ -64,9 +64,9 @@ public sealed partial class LearnedTokenTypeEmbeddingLayer<T> : LayerBase<T>
     {
         var gradients = GetParameterGradients();
         if (gradients.Length != _embeddings.Length) return;
-        for (int i = 0; i < _embeddings.Length; i++)
-            _embeddings[i] = NumOps.Subtract(
-                _embeddings[i], NumOps.Multiply(learningRate, gradients[i]));
+        // Update in place so engine persistent-tensor references stay valid.
+        var step = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(gradients, _embeddings._shape), learningRate);
+        Engine.TensorCopy(Engine.TensorSubtract(_embeddings, step), _embeddings);
         Engine.InvalidatePersistentTensor(_embeddings);
     }
 

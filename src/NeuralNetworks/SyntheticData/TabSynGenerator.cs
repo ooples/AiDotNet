@@ -1164,34 +1164,60 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private void ComputeColumnStatistics(Matrix<T> data, int colIndex, ColumnMetadata meta)
     {
         int n = data.Rows;
-        double sum = 0;
-        double min = double.MaxValue;
-        double max = double.MinValue;
-
-        for (int row = 0; row < n; row++)
+        if (n == 0)
         {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            sum += val;
-            if (val < min) min = val;
-            if (val > max) max = val;
+            // An empty column keeps the empty-scan values: no min/max, mean 0/0, unit std.
+            meta.Min = double.MaxValue;
+            meta.Max = double.MinValue;
+            meta.Mean = 0.0 / n;
+            meta.Std = 1.0;
+            return;
         }
 
-        double mean = sum / n;
-        double sumSqDiff = 0;
-        for (int row = 0; row < n; row++)
-        {
-            double val = NumOps.ToDouble(data[row, colIndex]);
-            double diff = val - mean;
-            sumSqDiff += diff * diff;
-        }
+        var column = Tensor<T>.FromVector(data.GetColumn(colIndex));
 
+        // A T other than double is reduced in float with the column first divided by its largest magnitude:
+        // the squared deviations of a finite float column (|x| near 1e20) overflow float, and a Half sum
+        // overflows past 65504. Double columns keep the plain double reduction.
+        var (mean, sumSqDiff) = typeof(T) == typeof(double)
+            ? ColumnMoments(column, prescale: false)
+            : ColumnMoments(column.Cast<float>(), prescale: true);
+
+        // Sample standard deviation (n - 1), floored at 1e-10.
         double std = n > 1 ? Math.Sqrt(sumSqDiff / (n - 1)) : 1.0;
         if (std < 1e-10) std = 1e-10;
 
-        meta.Min = min;
-        meta.Max = max;
+        meta.Min = NumOps.ToDouble(Engine.TensorMinValue(column));
+        meta.Max = NumOps.ToDouble(Engine.TensorMaxValue(column));
         meta.Mean = mean;
         meta.Std = std;
+    }
+
+    /// <summary>
+    /// The mean of a column and the sum of its squared deviations from that mean. With
+    /// <paramref name="prescale"/>, a column whose n * max|x|^2 could overflow float is divided by its largest
+    /// finite magnitude first and the moments are scaled back in double, so neither sum can overflow
+    /// <typeparamref name="TValue"/>.
+    /// </summary>
+    private (double Mean, double SumOfSquaredDeviations) ColumnMoments<TValue>(Tensor<TValue> column, bool prescale)
+    {
+        var ops = MathHelper.GetNumericOperations<TValue>();
+        double scale = 1.0;
+        if (prescale)
+        {
+            double largest = ops.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(column)));
+            // Only when n * largest^2 could overflow float, so ordinary columns keep their unscaled values.
+            if (largest > 0 && !double.IsInfinity(largest) && !double.IsNaN(largest)
+                && largest * largest * column.Length >= 1e36)
+            {
+                scale = largest;
+                column = Engine.TensorDivideScalar(column, ops.FromDouble(largest));
+            }
+        }
+
+        TValue mean = Engine.TensorMean(column);
+        double sumOfSquares = ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean)));
+        return (ops.ToDouble(mean) * scale, sumOfSquares * scale * scale);
     }
 
     #endregion
@@ -1227,19 +1253,20 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         return v;
     }
 
-    private static Tensor<T> VectorToTensor(Vector<T> v)
-    {
-        var t = new Tensor<T>([v.Length]);
-        for (int i = 0; i < v.Length; i++) t[i] = v[i];
-        return t;
-    }
+    private static Tensor<T> VectorToTensor(Vector<T> v) => Tensor<T>.FromVector(v);
 
+    /// <summary>The first min(length, t.Length) values of <paramref name="t"/>, zero-padded to <paramref name="length"/>.</summary>
     private static Vector<T> TensorToVector(Tensor<T> t, int length)
     {
-        var v = new Vector<T>(length);
         int copyLen = Math.Min(length, t.Length);
-        for (int i = 0; i < copyLen; i++) v[i] = t[i];
-        return v;
+        if (copyLen == 0)
+            return new Vector<T>(length);
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(t, new[] { t.Length });
+        var head = copyLen == t.Length ? flat : engine.TensorSlice(flat, new[] { 0 }, new[] { copyLen });
+        if (copyLen < length)
+            head = engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { length - copyLen }) }, 0);
+        return head.ToVector();
     }
 
     #endregion

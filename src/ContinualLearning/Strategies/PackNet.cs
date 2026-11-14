@@ -214,11 +214,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
         }
 
         // Initialize gradient importance accumulator
-        _gradientImportance = new Vector<T>(numParams);
-        for (int i = 0; i < numParams; i++)
-        {
-            _gradientImportance[i] = NumOps.Zero;
-        }
+        _gradientImportance = Engine.Fill(numParams, NumOps.Zero);
         _gradientCount = 0;
 
         // Store pre-task parameters
@@ -246,29 +242,23 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
         // Accumulate gradient importance (for gradient-based pruning)
         if (!_useMagnitudePruning && _gradientImportance != null)
         {
-            for (int i = 0; i < Math.Min(gradients.Length, _gradientImportance.Length); i++)
+            int count = Math.Min(gradients.Length, _gradientImportance.Length);
+            if (count > 0)
             {
-                double absGrad = Math.Abs(Convert.ToDouble(gradients[i]));
-                _gradientImportance[i] = NumOps.Add(
-                    _gradientImportance[i],
-                    NumOps.FromDouble(absGrad));
+                Engine.TensorAdd(Head(_gradientImportance, count), Engine.TensorAbs(Head(gradients, count))).AsSpan().CopyTo(Head(_gradientImportance, count).AsWritableSpan());
             }
             _gradientCount++;
         }
 
-        // Zero out gradients for parameters owned by previous tasks
-        var adjustedGradients = CloneVector(gradients);
-
-        for (int i = 0; i < Math.Min(adjustedGradients.Length, _parameterOwnership.Length); i++)
+        // Zero out gradients for parameters owned by previous tasks (frozen for a previous task)
+        var frozen = new bool[gradients.Length];
+        int owned = Math.Min(gradients.Length, _parameterOwnership.Length);
+        for (int i = 0; i < owned; i++)
         {
-            if (_parameterOwnership[i] > 0 && _parameterOwnership[i] <= TaskCount)
-            {
-                // Parameter is frozen for a previous task
-                adjustedGradients[i] = NumOps.Zero;
-            }
+            frozen[i] = _parameterOwnership[i] > 0 && _parameterOwnership[i] <= TaskCount;
         }
 
-        return adjustedGradients;
+        return Engine.TensorMaskedFill(gradients.AsTensor(), frozen, NumOps.Zero).AsVector();
     }
 
     /// <inheritdoc/>
@@ -303,38 +293,16 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     /// </summary>
     private Vector<T> ComputeImportanceScores(Vector<T> parameters)
     {
-        var importance = new Vector<T>(parameters.Length);
-
-        if (_useMagnitudePruning)
-        {
-            // Magnitude-based: importance = |θ|
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                double absVal = Math.Abs(Convert.ToDouble(parameters[i]));
-                importance[i] = NumOps.FromDouble(absVal);
-            }
-        }
-        else if (_gradientImportance != null && _gradientCount > 0)
+        if (!_useMagnitudePruning && _gradientImportance != null && _gradientCount > 0)
         {
             // Gradient-based: importance = |∂L/∂θ| * |θ|
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                double avgGrad = Convert.ToDouble(_gradientImportance[i]) / _gradientCount;
-                double magnitude = Math.Abs(Convert.ToDouble(parameters[i]));
-                importance[i] = NumOps.FromDouble(avgGrad * magnitude);
-            }
-        }
-        else
-        {
-            // Fallback to magnitude-based
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                double absVal = Math.Abs(Convert.ToDouble(parameters[i]));
-                importance[i] = NumOps.FromDouble(absVal);
-            }
+            var avgGrad = Engine.TensorDivideScalar(
+                Head(_gradientImportance, parameters.Length), NumOps.FromDouble(_gradientCount));
+            return Engine.TensorMultiply(avgGrad, Engine.TensorAbs(parameters.AsTensor())).AsVector();
         }
 
-        return importance;
+        // Magnitude-based (also the fallback): importance = |θ|
+        return Engine.Abs(parameters);
     }
 
     /// <summary>
@@ -452,15 +420,14 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
             return masked;
         }
 
-        for (int i = 0; i < Math.Min(masked.Length, mask.Length); i++)
+        var excluded = new bool[masked.Length];
+        int covered = Math.Min(masked.Length, mask.Length);
+        for (int i = 0; i < covered; i++)
         {
-            if (!mask[i])
-            {
-                masked[i] = NumOps.Zero;
-            }
+            excluded[i] = !mask[i];
         }
 
-        return masked;
+        return Engine.TensorMaskedFill(masked.AsTensor(), excluded, NumOps.Zero).AsVector();
     }
 
     /// <inheritdoc/>

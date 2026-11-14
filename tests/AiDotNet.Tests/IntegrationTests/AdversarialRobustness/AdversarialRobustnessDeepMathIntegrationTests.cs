@@ -278,7 +278,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         var options = new AdversarialAttackOptions<double>
         {
             Epsilon = epsilon,
-            NormType = "L-infinity",
+            NormType = AdversarialNormType.LInfinity,
             RandomSeed = Seed
         };
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -353,7 +353,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             Epsilon = epsilon,
             StepSize = 0.05,
             Iterations = 10,
-            NormType = "L-infinity",
+            NormType = AdversarialNormType.LInfinity,
             UseRandomStart = false,
             RandomSeed = Seed
         };
@@ -385,7 +385,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             Epsilon = epsilon,
             StepSize = 0.1,
             Iterations = 10,
-            NormType = "L2",
+            NormType = AdversarialNormType.L2,
             UseRandomStart = false,
             RandomSeed = Seed
         };

@@ -249,42 +249,25 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
         int actionSize = _dqnOptions.ActionSize;
 
         // Build batched state tensor [batchSize, stateSize]
-        var batchStates = new Tensor<T>([batch.Count, stateSize]);
-        for (int i = 0; i < batch.Count; i++)
-            for (int j = 0; j < stateSize; j++)
-                batchStates[i, j] = batch[i].State[j];
+        var batchStates = RLTensorOps.Batch(batch.Select(experience => experience.State), stateSize);
 
         // Compute TD targets outside tape (target network should NOT be tape-tracked)
         // First get current Q-values for constructing targets
         var currentQBatch = _qNetwork.Predict(batchStates);
 
-        // Build target Q-value tensor [batchSize, actionSize]
-        var targetQBatch = new Tensor<T>([batch.Count, actionSize]);
-        for (int i = 0; i < batch.Count; i++)
-        {
-            // Start with current Q-values (targets match current for non-updated actions)
-            for (int a = 0; a < actionSize; a++)
-                targetQBatch[i, a] = currentQBatch[i * actionSize + a];
+        // Next states for the bootstrap, batched; a terminal row's value is discarded, so its own state stands in.
+        int count = batch.Count;
+        var nextStates = RLTensorOps.Batch(batch.Select(experience => experience.Done ? experience.State : experience.NextState), stateSize);
+        var rewards = Vector<T>.FromEnumerable(batch.Select(experience => experience.Reward));
+        var done = batch.Select(experience => experience.Done).ToArray();
+        var takenActions = batch.Select(experience => ArgMax(experience.Action)).ToList();
 
-            // Compute TD target for the action taken
-            int actionIndex = ArgMax(batch[i].Action);
-            T tdTarget;
-            if (batch[i].Done)
-            {
-                tdTarget = batch[i].Reward;
-            }
-            else
-            {
-                var nextState = new Tensor<T>([1, stateSize]);
-                for (int j = 0; j < stateSize; j++)
-                    nextState[0, j] = batch[i].NextState[j];
-                var nextQ = _targetNetwork.Predict(nextState);
-                var maxNextQ = Max(nextQ.ToVector());
-                tdTarget = NumOps.Add(batch[i].Reward, NumOps.Multiply(DiscountFactor, maxNextQ));
-            }
-
-            targetQBatch[i, actionIndex] = tdTarget;
-        }
+        // TD target r + gamma * max_a' Q_target(s', a') (r alone at a terminal transition), written over the taken
+        // action's current Q-value; the other actions regress onto themselves.
+        var nextQ = RLTensorOps.Rows(_targetNetwork.Predict(nextStates), count);
+        var maxNextQ = Vector<T>.FromEnumerable(nextQ.Select(Max));
+        var tdTargets = RLTensorOps.TdTargets(rewards, maxNextQ, done, DiscountFactor);
+        var targetQBatch = RLTensorOps.ReplaceTakenActionValues(currentQBatch, count, actionSize, takenActions, tdTargets);
 
         // Single batched training step — tape-based forward + loss + optimizer update
         _qNetwork.Train(batchStates, targetQBatch);
@@ -372,33 +355,12 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
 
     private int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return RLTensorOps.ArgMax(vector);
     }
 
     private T Max(Vector<T> vector)
     {
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-            }
-        }
-
+        T maxValue = RLTensorOps.Max(vector);
         return maxValue;
     }
     /// <inheritdoc/>

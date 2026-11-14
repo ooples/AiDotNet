@@ -240,14 +240,16 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         ThrowIfDisposed();
         var probabilities = DetectLanguageProbabilities(audio);
-        string best = _options.Language;
-        double bestValue = double.NegativeInfinity;
-        foreach (var kv in probabilities)
-        {
-            double v = NumOps.ToDouble(kv.Value);
-            if (v > bestValue) { bestValue = v; best = kv.Key; }
-        }
-        return best;
+        var entries = probabilities.ToArray();
+        if (entries.Length == 0)
+            return _options.Language;
+
+        // The first language holding the largest posterior wins; NaN and -inf never win, and when nothing
+        // else is left the configured language stands.
+        var posteriors = new Tensor<T>(entries.Select(kv => kv.Value).ToArray(), new[] { 1, entries.Length });
+        int bestIndex = CtcGreedyDecoding.FirstMaxIndexPerRow(posteriors).GetFlat(0);
+        var winner = entries[bestIndex];
+        return NumOps.ToDouble(winner.Value) > double.NegativeInfinity ? winner.Key : _options.Language;
     }
 
     /// <summary>The LID decoder's language posteriors averaged over the greedy decoding's steps (the step that ends

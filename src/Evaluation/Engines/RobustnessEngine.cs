@@ -1,4 +1,5 @@
 using AiDotNet.Evaluation.Options;
+using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -83,7 +84,7 @@ public class RobustnessEngine<T>
             ? _metricEngine.ComputeClassificationMetrics(baselinePreds, targets)
             : _metricEngine.ComputeRegressionMetrics(baselinePreds, targets);
         var baselineMetric = baselineMetrics[metricName];
-        result.BaselineScore = baselineMetric != null ? NumOps.ToDouble(baselineMetric.Value) : 0;
+        result.BaselineScore = ScoreOf(baselineMetric);
 
         var random = _options?.RandomSeed.HasValue == true
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
@@ -99,7 +100,7 @@ public class RobustnessEngine<T>
                 ? _metricEngine.ComputeClassificationMetrics(noisyPreds, targets)
                 : _metricEngine.ComputeRegressionMetrics(noisyPreds, targets);
             var noisyMetric = noisyMetrics[metricName];
-            double score = noisyMetric != null ? NumOps.ToDouble(noisyMetric.Value) : 0;
+            double score = ScoreOf(noisyMetric);
 
             result.NoiseRobustness[noiseLevel] = score;
             // Degradation calculation respects metric direction
@@ -118,7 +119,7 @@ public class RobustnessEngine<T>
                 ? _metricEngine.ComputeClassificationMetrics(droppedPreds, targets)
                 : _metricEngine.ComputeRegressionMetrics(droppedPreds, targets);
             var droppedMetric = droppedMetrics[metricName];
-            double score = droppedMetric != null ? NumOps.ToDouble(droppedMetric.Value) : 0;
+            double score = ScoreOf(droppedMetric);
 
             result.DropoutRobustness[dropoutRate] = score;
         }
@@ -172,6 +173,9 @@ public class RobustnessEngine<T>
         return result;
     }
 
+    // A run's metric value as the double score the robustness result reports (0 when the metric is missing).
+    private static double ScoreOf(MetricWithCI<T>? metric) => metric != null ? NumOps.ToDouble(metric.Value) : 0;
+
     private T[,] ApplyFeatureDropout(T[,] features, double dropoutRate, Random random)
     {
         int rows = features.GetLength(0);
@@ -223,7 +227,7 @@ public class RobustnessEngine<T>
                 ? _metricEngine.ComputeClassificationMetrics(permutedPreds, targets)
                 : _metricEngine.ComputeRegressionMetrics(permutedPreds, targets);
             var permutedMetric = permutedMetrics[metricName];
-            double score = permutedMetric != null ? NumOps.ToDouble(permutedMetric.Value) : 0;
+            double score = ScoreOf(permutedMetric);
 
             // Importance = how much the metric degrades when this feature is shuffled
             // For higher-is-better metrics: importance = baseline - permuted (positive = important)

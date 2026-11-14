@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Training;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -286,42 +287,14 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
-        // CRITICAL: Prime _loraLayer caches by calling Forward, then mask to activeRank
-        // This ensures _loraLayer.Backward will have fresh cached inputs for gradient computation
-        Tensor<T> fullLoraOutput = _loraLayer.Forward(input);
-        Tensor<T> loraOutput = MaskOutputToRank(input, fullLoraOutput, activeRank);
+        // LoRA output using only the first activeRank components. The masked factors are built
+        // from the live LoRA tensors, so a gradient tape sees zero derivatives above activeRank.
+        Tensor<T> loraOutput = ForwardWithRank(input, activeRank);
 
         // Sum the outputs
         Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
-    }
-
-    /// <summary>
-    /// Masks the full LoRA output to only include contributions from the first 'rank' components.
-    /// </summary>
-    /// <param name="input">The input of this forward pass, from which the rank-restricted output is recomputed.</param>
-    /// <param name="fullOutput">The full LoRA output from all maxRank components.</param>
-    /// <param name="rank">Number of components to use (nested dropout rank).</param>
-    /// <returns>Masked LoRA output tensor using only first 'rank' components.</returns>
-    /// <remarks>
-    /// <para>
-    /// This recomputes the LoRA output using only the first 'rank' columns of A and rows of B.
-    /// By calling _loraLayer.Forward first (in Forward method), we ensure _loraLayer has fresh
-    /// cached inputs for gradient computation, then we mask the output to match the nested dropout rank.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> MaskOutputToRank(Tensor<T> input, Tensor<T> fullOutput, int rank)
-    {
-        // If using full rank, return as-is
-        if (rank == _maxRank)
-        {
-            return fullOutput;
-        }
-
-        // Recompute with rank restriction using ForwardWithRank logic
-        // (We must recompute rather than mask, since LoRA output is input*A*B, not linearly separable by rank)
-        return ForwardWithRank(input, rank);
     }
 
     /// <summary>
@@ -333,7 +306,10 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// <para>
     /// This restricts the LoRA computation to use only the first 'rank' columns of A and rows of B,
-    /// implementing the nested dropout mechanism.
+    /// implementing the nested dropout mechanism. Instead of copying sub-matrices, the live factors
+    /// are multiplied by 0/1 masks, which gives the same output (the masked terms add exact zeros)
+    /// and keeps the computation connected to the trainable tensors: under a gradient tape the
+    /// columns of A and rows of B above 'rank' receive exactly zero gradient.
     /// </para>
     /// <para><b>For Beginners:</b> This is the core of DyLoRA's flexibility. Instead of using all
     /// components of A and B, we only use the first 'rank' of them. This simulates what would happen
@@ -342,208 +318,28 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private Tensor<T> ForwardWithRank(Tensor<T> input, int rank)
     {
-        // Get matrices A and B from the LoRA layer
-        Matrix<T> fullA = _loraLayer.GetMatrixA();
-        Matrix<T> fullB = _loraLayer.GetMatrixB();
-
-        // Extract submatrices using only the first 'rank' components
-        // A: [inputSize, maxRank] -> [inputSize, rank]
-        // B: [maxRank, outputSize] -> [rank, outputSize]
-        int inputSize = fullA.Rows;
-        int outputSize = fullB.Columns;
-
-        Matrix<T> subA = new Matrix<T>(inputSize, rank);
-        for (int i = 0; i < inputSize; i++)
+        // Using full rank: the plain LoRA forward
+        if (rank == _maxRank)
         {
-            for (int j = 0; j < rank; j++)
-            {
-                subA[i, j] = fullA[i, j];
-            }
+            return _loraLayer.Forward(input);
         }
 
-        Matrix<T> subB = new Matrix<T>(rank, outputSize);
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                subB[i, j] = fullB[i, j];
-            }
-        }
+        // Live factors: A [inputSize, maxRank], B [maxRank, outputSize]
+        var factors = _loraLayer.GetTrainableParameters();
+        Tensor<T> fullA = factors[0];
+        Tensor<T> fullB = factors[1];
+        int inputSize = fullA.Shape[0];
+        int outputSize = fullB.Shape[1];
 
-        // Compute forward pass with submatrices
-        int batchSize = input.Shape[0];
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = input[i * inputSize + j];
-            }
-        }
+        // Keep the first 'rank' columns of A and rows of B
+        Tensor<T> maskA = Engine.TensorConcatenate(
+            [Tensor<T>.CreateDefault([inputSize, rank], NumOps.One), new Tensor<T>([inputSize, _maxRank - rank])], 1);
+        Tensor<T> maskB = Engine.TensorConcatenate(
+            [Tensor<T>.CreateDefault([rank, outputSize], NumOps.One), new Tensor<T>([_maxRank - rank, outputSize])], 0);
 
         // input * A_sub * B_sub * scaling
-        T scaling = _loraLayer.Scaling;
-        Matrix<T> intermediate = inputMatrix.Multiply(subA);
-        Matrix<T> output = intermediate.Multiply(subB).Multiply(scaling);
-
-        // Convert back to tensor
-        Vector<T> outputData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                outputData[idx++] = output[i, j];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
-    }
-
-    /// <summary>
-    /// Performs backward pass through LoRA layer using only the first 'rank' components.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from next layer.</param>
-    /// <param name="input">Input from forward pass.</param>
-    /// <param name="rank">Number of components that were used in forward pass.</param>
-    /// <returns>Input gradient tensor.</returns>
-    private Tensor<T> BackwardWithRank(Tensor<T> outputGradient, Tensor<T> input, int rank)
-    {
-        // Get matrices A and B from the LoRA layer
-        Matrix<T> fullA = _loraLayer.GetMatrixA();
-        Matrix<T> fullB = _loraLayer.GetMatrixB();
-
-        int inputSize = fullA.Rows;
-        int outputSize = fullB.Columns;
-
-        // Extract submatrices using only the first 'rank' components
-        Matrix<T> subA = new Matrix<T>(inputSize, rank);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                subA[i, j] = fullA[i, j];
-            }
-        }
-
-        Matrix<T> subB = new Matrix<T>(rank, outputSize);
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                subB[i, j] = fullB[i, j];
-            }
-        }
-
-        // Convert tensors to matrices
-        int batchSize = outputGradient.Shape[0];
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[b, j] = outputGradient[b, j];
-            }
-        }
-
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[b, j] = input[b, j];
-            }
-        }
-
-        // Compute gradients for submatrices
-        // dL/dB = (gradMatrix^T @ inputMatrix @ subA^T) with scaling
-        // dL/dA = (inputMatrix^T @ gradMatrix @ subB^T) with scaling
-        Matrix<T> gradB = gradMatrix.Transpose().Multiply(inputMatrix).Multiply(subA.Transpose());
-        Matrix<T> gradA = inputMatrix.Transpose().Multiply(gradMatrix).Multiply(subB.Transpose());
-
-        // Scale by _loraLayer.Scaling (alpha/maxRank) to match forward pass
-        // CRITICAL: Use same scaling as ForwardWithRank (line 394) for correct gradients
-        T scaleT = _loraLayer.Scaling;
-        for (int i = 0; i < gradB.Rows; i++)
-        {
-            for (int j = 0; j < gradB.Columns; j++)
-            {
-                gradB[i, j] = NumOps.Multiply(gradB[i, j], scaleT);
-            }
-        }
-        for (int i = 0; i < gradA.Rows; i++)
-        {
-            for (int j = 0; j < gradA.Columns; j++)
-            {
-                gradA[i, j] = NumOps.Multiply(gradA[i, j], scaleT);
-            }
-        }
-
-        // Update full gradient matrices (only the active rank components)
-        Matrix<T> fullGradA = new Matrix<T>(inputSize, _maxRank);
-        Matrix<T> fullGradB = new Matrix<T>(_maxRank, outputSize);
-
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                fullGradA[i, j] = gradA[i, j];
-            }
-        }
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                fullGradB[i, j] = gradB[i, j];
-            }
-        }
-
-        // Pack gradients into LoRA layer's parameter gradients
-        // Store them in cache to be used by UpdateParameterGradientsFromLayers
-        Vector<T> loraParamGrads = new Vector<T>((int)_loraLayer.ParameterCount);
-        int idx = 0;
-        for (int i = 0; i < fullGradA.Rows; i++)
-        {
-            for (int j = 0; j < fullGradA.Columns; j++)
-            {
-                loraParamGrads[idx++] = fullGradA[i, j];
-            }
-        }
-        for (int i = 0; i < fullGradB.Rows; i++)
-        {
-            for (int j = 0; j < fullGradB.Columns; j++)
-            {
-                loraParamGrads[idx++] = fullGradB[i, j];
-            }
-        }
-        // Cache the LoRA gradients for later use in UpdateParameterGradientsFromLayers
-        _cachedLoRAGradients = loraParamGrads;
-
-        // Compute input gradient: dL/dInput = gradMatrix @ (subB @ subA)^T
-        Matrix<T> combinedWeight = subB.Multiply(subA.Transpose());
-        // Use same scaling as ForwardWithRank (line 394) for correct gradients
-        T alphaScaleT = _loraLayer.Scaling;
-        for (int i = 0; i < combinedWeight.Rows; i++)
-        {
-            for (int j = 0; j < combinedWeight.Columns; j++)
-            {
-                combinedWeight[i, j] = NumOps.Multiply(combinedWeight[i, j], alphaScaleT);
-            }
-        }
-
-        Matrix<T> inputGradMatrix = gradMatrix.Multiply(combinedWeight);
-
-        // Convert back to tensor
-        Vector<T> inputGradVector = new Vector<T>(batchSize * inputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputGradVector[b * inputSize + j] = inputGradMatrix[b, j];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, inputSize }, inputGradVector);
+        return _loraLayer.ForwardWithFactors(
+            input, Engine.TensorMultiply(fullA, maskA), Engine.TensorMultiply(fullB, maskB));
     }
 
     /// <summary>
@@ -564,13 +360,10 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             if (_cachedLoRAGradients.Length == _loraLayer.ParameterCount)
             {
-                Vector<T> loraParams = _loraLayer.GetParameters();
-                for (int i = 0; i < loraParams.Length; i++)
-                {
-                    T update = NumOps.Multiply(_cachedLoRAGradients[i], learningRate);
-                    loraParams[i] = NumOps.Subtract(loraParams[i], update);
-                }
+                Vector<T> loraParams = Engine.Subtract(
+                    _loraLayer.GetParameters(), Engine.Multiply(_cachedLoRAGradients, learningRate));
                 _loraLayer.SetParameters(loraParams);
+
             }
 
             // Clear the cache after use.
@@ -585,7 +378,12 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <param name="targets">Training target tensors.</param>
     /// <param name="epochs">Number of training epochs.</param>
     /// <param name="learningRate">Learning rate for parameter updates.</param>
-    /// <param name="lossFunction">Loss function to minimize.</param>
+    /// <param name="lossFunction">
+    /// Scalar loss evaluated on every sample. A scalar value carries no gradient, so this overload
+    /// differentiates the half squared error 0.5 * ||output - target||² (output gradient
+    /// output - target). To train on a different objective, use the overload that takes a
+    /// tensor-valued tape loss.
+    /// </param>
     /// <remarks>
     /// <para>
     /// This training method ensures that all active ranks are trained by randomly selecting
@@ -610,6 +408,47 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         T learningRate,
         Func<Tensor<T>, Tensor<T>, T> lossFunction)
     {
+        if (lossFunction == null)
+        {
+            throw new ArgumentNullException(nameof(lossFunction));
+        }
+
+        TrainWithNestedDropout(inputs, targets, epochs, learningRate, (output, target) =>
+        {
+            _ = lossFunction(output, target);
+            var diff = Engine.TensorSubtract(output, Engine.Reshape(target, output.Shape.ToArray()));
+            var squared = Engine.Reshape(Engine.TensorMultiply(diff, diff), [diff.Length]);
+            return Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(squared, [0], keepDims: true), NumOps.FromDouble(0.5));
+        });
+    }
+
+    /// <summary>
+    /// Trains the adapter with nested dropout across all active ranks, differentiating a
+    /// caller-supplied tensor-valued loss.
+    /// </summary>
+    /// <param name="inputs">Training input tensors.</param>
+    /// <param name="targets">Training target tensors.</param>
+    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="learningRate">Learning rate for parameter updates.</param>
+    /// <param name="lossObjective">
+    /// Computes the loss for one sample from (output, target) with Engine tensor operations and
+    /// returns it as a single-element tensor. The operations are recorded on the gradient tape, so
+    /// the parameters are updated along the gradient of exactly this objective.
+    /// </param>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this overload when you want to train on something other than
+    /// squared error, for example absolute error or a cross-entropy. Build the loss from Engine
+    /// tensor operations so its gradient can flow back into the adapter.
+    /// </para>
+    /// </remarks>
+    public void TrainWithNestedDropout(
+        Tensor<T>[] inputs,
+        Tensor<T>[] targets,
+        int epochs,
+        T learningRate,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> lossObjective)
+    {
         if (inputs == null)
         {
             throw new ArgumentNullException(nameof(inputs));
@@ -618,6 +457,11 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         if (targets == null)
         {
             throw new ArgumentNullException(nameof(targets));
+        }
+
+        if (lossObjective == null)
+        {
+            throw new ArgumentNullException(nameof(lossObjective));
         }
 
         if (inputs.Length != targets.Length)
@@ -633,32 +477,20 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             for (int epoch = 0; epoch < epochs; epoch++)
             {
-                T totalLoss = NumOps.Zero;
-
                 for (int i = 0; i < inputs.Length; i++)
                 {
-                    // Forward pass (uses random rank due to training mode)
-                    Tensor<T> output = Forward(inputs[i]);
-
-                    // Compute loss
-                    T loss = lossFunction(output, targets[i]);
-                    totalLoss = NumOps.Add(totalLoss, loss);
-
-                    // Compute output gradient (simplified - assumes MSE loss)
-                    Tensor<T> outputGrad = new Tensor<T>(output._shape);
-                    for (int j = 0; j < output.Length; j++)
-                    {
-                        outputGrad[j] = NumOps.Subtract(output[j], targets[i][j]);
-                    }
-
-                    // Backward pass
-
-                    // Update parameters
-                    UpdateParameters(learningRate);
+                    // One tape training step on this sample. The forward samples rank b, the
+                    // masked factors give zero gradient above b, and the base layer is trained
+                    // through the same tape when it is not frozen. The caller's objective is
+                    // differentiated; SGD is applied while the tape's gradient buffers are alive.
+                    TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                        () => TapeTrainingStep<T>.CollectParameters(
+                            _freezeBaseLayer
+                                ? new ILayer<T>[] { _loraLayer }
+                                : new ILayer<T>[] { _baseLayer, _loraLayer }, structureVersion: -1),
+                        () => lossObjective(Forward(inputs[i]), targets[i]),
+                        learningRate);
                 }
-
-                // Optional: Print epoch loss
-                // Console.WriteLine($"Epoch {epoch + 1}/{epochs}, Loss: {totalLoss}");
             }
         }
         finally
@@ -714,49 +546,24 @@ public partial class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = fullB.Columns;
         int rank = _currentDeploymentRank;
 
-        // Extract submatrices
-        Matrix<T> subA = new Matrix<T>(inputSize, rank);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < rank; j++)
-            {
-                subA[i, j] = fullA[i, j];
-            }
-        }
-
-        Matrix<T> subB = new Matrix<T>(rank, outputSize);
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                subB[i, j] = fullB[i, j];
-            }
-        }
-
-        // Compute merged weights: W_lora = A_sub * B_sub * scaling
+        // Compute merged weights: W_lora = A_sub * B_sub * scaling ([inputSize, outputSize])
         T scaling = _loraLayer.Scaling;
-        Matrix<T> loraWeights = subA.Multiply(subB).Multiply(scaling).Transpose();
+        Matrix<T> loraWeights = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(
+                Engine.TensorNarrow(Tensor<T>.FromMatrix(fullA), 1, 0, rank),
+                Engine.TensorNarrow(Tensor<T>.FromMatrix(fullB), 0, 0, rank)),
+            scaling).ToMatrix();
 
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights. DenseLayer stores its weights input-major and FullyConnectedLayer
+        // output-major ([outputSize, inputSize]), so the latter uses the transpose.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

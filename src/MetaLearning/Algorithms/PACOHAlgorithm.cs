@@ -37,10 +37,10 @@ namespace AiDotNet.MetaLearning.Algorithms;
 ///        grad_task = ∂L(θ_τ; D^s_τ)/∂θ_τ
 ///        grad_prior = (θ_τ - μ_P) / σ²_P   (prior regularization)
 ///        θ_τ ← θ_τ - η_inner * (grad_task + λ_KL * grad_prior)
-///     3. Loss_τ = L(θ_τ; D^q_τ)
+///     3. Loss_τ = E_{θ ~ N(θ_τ, σ²_P)}[L(θ; D^q_τ)], averaged over NumPosteriorSamples draws
 ///
 /// Outer loop (PAC-Bayes bound optimization):
-///   L_PACOH = (1/T) Σ_τ Loss_τ + (KL_coeff / T) * KL(Q_avg || P)
+///   L_PACOH = (1/T) Σ_τ Loss_τ + (KL_coeff / T) * (KL(Q_avg || P) + ln(2√T / δ))
 ///   Where KL(Q_avg || P) = Σ_i [(μ_Q_i - μ_P_i)² / σ²_P_i + σ²_Q_i / σ²_P_i - 1 - ln(σ²_Q_i / σ²_P_i)]
 ///   Update μ_P, log(σ²_P) via gradient descent on L_PACOH
 /// </code>
@@ -73,6 +73,13 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
     private readonly int _paramDim;
 
+    // Seed of the posterior draws shared by every loss evaluation of one SPSA step, so the paired losses differ by
+    // the perturbation alone and not by Monte Carlo noise; null outside an SPSA step.
+    private int? _spsaDrawSeed;
+
+    // The posterior-draw source of the current loss evaluation; null means the learner's own generator.
+    private Random? _posteriorDraws;
+
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.PACOH;
 
@@ -82,13 +89,15 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
                optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
+        if (double.IsNaN(options.Delta) || options.Delta <= 0 || options.Delta >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "Delta must lie in (0, 1).");
+
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
 
         _priorMean = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters();
         _priorLogVar = new Vector<T>(_paramDim);
-        for (int i = 0; i < _paramDim; i++)
-            _priorLogVar[i] = NumOps.FromDouble(options.InitialLogVariance);
+        _priorLogVar.Fill(NumOps.FromDouble(options.InitialLogVariance));
     }
 
     /// <inheritdoc/>
@@ -100,45 +109,18 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Initialize from prior mean
-            var theta = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) theta[d] = _priorMean[d];
-
-            // Inner loop: MAP estimation with prior regularization
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(theta);
-                var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Prior gradient: (θ - μ_P) / σ²_P
-                var priorGrad = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double diff = NumOps.ToDouble(theta[d]) - NumOps.ToDouble(_priorMean[d]);
-                    double var_d = Math.Exp(NumOps.ToDouble(_priorLogVar[d]));
-                    priorGrad[d] = NumOps.FromDouble(diff / (var_d + 1e-10));
-                }
-
-                // Combined gradient: task + KL regularization
-                var stepGradient = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.KLCoefficient * NumOps.ToDouble(priorGrad[d]);
-                    stepGradient[d] = NumOps.FromDouble(combined);
-                }
-                theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
-
+            // Inner loop: MAP estimation with prior regularization, from the prior mean
+            var theta = AdaptToTask(task, clipTaskGradients: true);
             adaptedParamsList.Add(theta);
-            ParamModel.SetParameters(theta);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+
+            // Gibbs risk of the task posterior on the query set, with its location gradient
+            var (queryLoss, gradient) = PosteriorRisk(task, theta, withGradient: true);
             losses.Add(queryLoss);
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+            if (gradient is not null) metaGradients.Add(gradient);
         }
 
         // Compute PAC-Bayesian bound terms
-        double klTerm = ComputeAggregateKL(adaptedParamsList);
-        double pacBayesLoss = _algoOptions.KLCoefficient * klTerm / Math.Max(taskBatch.Tasks.Length, 1);
+        var pacBayesLoss = BoundPenalty(ComputeAggregateKL(adaptedParamsList), taskBatch.Tasks.Length);
 
         // Update prior mean via meta-gradients
         ParamModel.SetParameters(_priorMean);
@@ -150,115 +132,143 @@ public partial class PACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         }
 
         // Update prior log-variance via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _priorLogVar, _algoOptions.OuterLearningRate * 0.1, ComputePACOHLoss);
+        _spsaDrawSeed = RandomGenerator.Next();
+        try
+        {
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _priorLogVar, _algoOptions.OuterLearningRate * 0.1, ComputePACOHLoss);
+        }
+        finally
+        {
+            _spsaDrawSeed = null;
+            _posteriorDraws = null;
+        }
 
         // Add PAC-Bayes regularization to reported loss
-        var totalLoss = NumOps.Add(ComputeMean(losses), NumOps.FromDouble(pacBayesLoss));
-        return totalLoss;
+        return NumOps.Add(ComputeMean(losses), pacBayesLoss);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var theta = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) theta[d] = _priorMean[d];
-
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            ParamModel.SetParameters(theta);
-            var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            var priorGrad = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double diff = NumOps.ToDouble(theta[d]) - NumOps.ToDouble(_priorMean[d]);
-                double var_d = Math.Exp(NumOps.ToDouble(_priorLogVar[d]));
-                priorGrad[d] = NumOps.FromDouble(diff / (var_d + 1e-10));
-            }
-
-            var stepGradient = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.KLCoefficient * NumOps.ToDouble(priorGrad[d]);
-                stepGradient[d] = NumOps.FromDouble(combined);
-            }
-            theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-        }
-
+        var theta = AdaptToTask(task, clipTaskGradients: true);
         ParamModel.SetParameters(_priorMean);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, theta);
     }
 
     /// <summary>
-    /// Computes KL divergence between the empirical posterior (average of adapted params)
-    /// and the prior: KL(Q || P) for diagonal Gaussians.
+    /// MAP adaptation from the prior mean: each step descends the support loss plus
+    /// KLCoefficient * (theta - mu_P) / sigma_P^2, the gradient of the prior's negative log-density.
     /// </summary>
-    private double ComputeAggregateKL(List<Vector<T>> adaptedParams)
+    private Vector<T> AdaptToTask(IMetaLearningTask<T, TInput, TOutput> task, bool clipTaskGradients)
     {
-        if (adaptedParams.Count == 0) return 0;
+        var theta = _priorMean.Clone();
+        var priorVariance = Engine.Exp(_priorLogVar) + NumOps.FromDouble(1e-10);
+        var klCoefficient = NumOps.FromDouble(_algoOptions.KLCoefficient);
 
-        // Compute empirical posterior mean and variance
-        var posteriorMean = new double[_paramDim];
-        var posteriorVar = new double[_paramDim];
-
-        foreach (var theta in adaptedParams)
-            for (int d = 0; d < _paramDim; d++)
-                posteriorMean[d] += NumOps.ToDouble(theta[d]);
-        for (int d = 0; d < _paramDim; d++)
-            posteriorMean[d] /= adaptedParams.Count;
-
-        foreach (var theta in adaptedParams)
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double diff = NumOps.ToDouble(theta[d]) - posteriorMean[d];
-                posteriorVar[d] += diff * diff;
-            }
-        for (int d = 0; d < _paramDim; d++)
-            posteriorVar[d] = posteriorVar[d] / adaptedParams.Count + 1e-10;
-
-        // KL(N(μ_Q, σ²_Q) || N(μ_P, σ²_P))
-        double kl = 0;
-        for (int d = 0; d < _paramDim; d++)
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            double priorVar = Math.Exp(NumOps.ToDouble(_priorLogVar[d])) + 1e-10;
-            double diff = posteriorMean[d] - NumOps.ToDouble(_priorMean[d]);
-            kl += (diff * diff + posteriorVar[d]) / priorVar - 1.0 + Math.Log(priorVar / posteriorVar[d]);
+            ParamModel.SetParameters(theta);
+            var taskGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+            if (clipTaskGradients) taskGrad = ClipGradients(taskGrad);
+
+            // Prior gradient: (θ - μ_P) / σ²_P, then combined gradient: task + KL regularization
+            var priorGrad = Engine.Divide(Engine.Subtract(theta, _priorMean), priorVariance);
+            var stepGradient = Engine.Add(taskGrad, Engine.Multiply(priorGrad, klCoefficient));
+            theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
-        return 0.5 * kl;
+
+        return theta;
+    }
+
+    /// <summary>
+    /// Monte Carlo estimate of the Gibbs risk E_{θ ~ Q}[L(θ; D^q)] of the task posterior
+    /// Q = N(θ_MAP, σ²_P) from <see cref="PACOHOptions{T, TInput, TOutput}.NumPosteriorSamples"/> draws
+    /// (Rothfuss et al. 2021, Eq. 1), and the matching reparameterised gradient with respect to the location.
+    /// </summary>
+    private (T Loss, Vector<T>? Gradient) PosteriorRisk(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> theta, bool withGradient)
+    {
+        int samples = Math.Max(1, _algoOptions.NumPosteriorSamples);
+        var location = Tensor<T>.FromVector(theta);
+        var scale = Tensor<T>.FromVector(Engine.Exp(Engine.Multiply(_priorLogVar, NumOps.FromDouble(0.5))));
+        var losses = new List<T>(samples);
+        var gradients = new List<Vector<T>>(samples);
+
+        for (int s = 0; s < samples; s++)
+        {
+            ParamModel.SetParameters(Engine.TensorNormal(location, scale, (_posteriorDraws ?? RandomGenerator).Next()).ToVector());
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            if (withGradient)
+                gradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+        }
+
+        return (ComputeMean(losses), withGradient ? AverageVectors(gradients) : null);
+    }
+
+    /// <summary>
+    /// The PAC-Bayesian complexity term KLCoefficient * (KL(Q || P) + ln(2 sqrt(n) / δ)) / n over n tasks
+    /// (Rothfuss et al. 2021, Thm. 1, with the confidence term ln(2 sqrt(n) / δ) of the
+    /// <see cref="PACOHOptions{T, TInput, TOutput}.KLCoefficient"/> derivation).
+    /// </summary>
+    private T BoundPenalty(T kl, int taskCount)
+    {
+        int n = Math.Max(taskCount, 1);
+        double confidence = Math.Log(2.0 * Math.Sqrt(n) / _algoOptions.Delta);
+        return NumOps.Multiply(
+            NumOps.FromDouble(_algoOptions.KLCoefficient / n), NumOps.Add(kl, NumOps.FromDouble(confidence)));
+    }
+
+    /// <summary>
+    /// KL(N(μ_Q, σ²_Q) || N(μ_P, σ²_P)) where μ_Q and σ²_Q are the empirical mean and (population) variance of the
+    /// adapted parameters across tasks.
+    /// </summary>
+    private T ComputeAggregateKL(List<Vector<T>> adaptedParams)
+    {
+        if (adaptedParams.Count == 0) return NumOps.Zero;
+
+        var (posteriorMean, posteriorVar) = EmpiricalMoments(adaptedParams, _paramDim);
+        posteriorVar = posteriorVar + NumOps.FromDouble(1e-10);
+
+        // 0.5 Σ [((μ_Q - μ_P)² + σ²_Q) / σ²_P - 1 + ln(σ²_P / σ²_Q)]
+        var priorVar = Engine.Exp(_priorLogVar) + NumOps.FromDouble(1e-10);
+        var diff = Engine.Subtract(posteriorMean, _priorMean);
+        var terms = Engine.Add(
+            Engine.Divide(Engine.Add(Engine.Multiply(diff, diff), posteriorVar), priorVar),
+            VectorLog(Engine.Divide(priorVar, posteriorVar)));
+        return NumOps.Multiply(
+            NumOps.FromDouble(0.5), NumOps.Subtract(Engine.Sum(terms), NumOps.FromDouble(_paramDim)));
+    }
+
+    /// <summary>The per-coordinate mean and population variance of <paramref name="vectors"/>.</summary>
+    internal static (Vector<T> Mean, Vector<T> Variance) EmpiricalMoments(List<Vector<T>> vectors, int dimension)
+    {
+        var engine = AiDotNetEngine.Current;
+        var stacked = engine.TensorStack(vectors.Select(v => Tensor<T>.FromVector(v)).ToArray(), 0);
+        var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
+        var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, new[] { vectors.Count, dimension }));
+        var variance = engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 0 }, false);
+        return (mean.Reshape(dimension).ToVector(), variance.ToVector());
     }
 
     private double ComputePACOHLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        // Every evaluation of one SPSA step replays the same posterior draws.
+        if (_spsaDrawSeed is int seed) _posteriorDraws = RandomHelper.CreateSeededRandom(seed);
+
+        var losses = new List<T>();
         var adapted = new List<Vector<T>>();
 
         foreach (var task in taskBatch.Tasks)
         {
-            var theta = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) theta[d] = _priorMean[d];
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(theta);
-                var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var stepGradient = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double diff = NumOps.ToDouble(theta[d]) - NumOps.ToDouble(_priorMean[d]);
-                    double var_d = Math.Exp(NumOps.ToDouble(_priorLogVar[d])) + 1e-10;
-                    double combined = NumOps.ToDouble(grad[d]) + _algoOptions.KLCoefficient * diff / var_d;
-                    stepGradient[d] = NumOps.FromDouble(combined);
-                }
-                theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
-            }
-
+            var theta = AdaptToTask(task, clipTaskGradients: false);
             adapted.Add(theta);
-            ParamModel.SetParameters(theta);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(PosteriorRisk(task, theta, withGradient: false).Loss);
         }
 
-        double klPenalty = _algoOptions.KLCoefficient * ComputeAggregateKL(adapted) / Math.Max(taskBatch.Tasks.Length, 1);
+        var bound = losses.Count == 0
+            ? NumOps.Zero
+            : NumOps.Add(ComputeMean(losses), BoundPenalty(ComputeAggregateKL(adapted), taskBatch.Tasks.Length));
         ParamModel.SetParameters(_priorMean);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1) + klPenalty;
+        return NumOps.ToDouble(bound);
     }
 }

@@ -51,13 +51,21 @@ internal static class NonNegativeTensorDomain
 
         public void Validate<T>(Tensor<T> input, string ownerName, string portName)
         {
-            var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = operations.ToDouble(input[i]);
-                if (!double.IsNaN(value) && !double.IsInfinity(value) && value >= 0.0)
-                    continue;
+            if (input.Length == 0)
+                return;
 
+            // 1 where an element is NaN, infinite or negative; the first such element is reported.
+            var operations = MathHelper.GetNumericOperations<T>();
+            var engine = AiDotNetEngine.Current;
+            var flat = engine.Reshape(input, new[] { input.Length });
+            var ones = engine.TensorOnesLike(flat);
+            var violation = engine.TensorAdd(
+                engine.TensorWhere(engine.TensorIsFinite(flat), engine.TensorZerosLike(flat), ones),
+                engine.TensorLessThan(flat, operations.Zero));
+            int i = engine.TensorArgMax(violation, 0)[0];
+            double value = operations.ToDouble(flat.GetFlatIndexValue(i));
+            if (operations.ToDouble(violation.GetFlatIndexValue(i)) > 0.0)
+            {
                 throw new InputContractViolationException(
                     $"{ownerName}.{portName} requires finite non-negative values, "
                     + $"but element {i} is {value}.",
@@ -76,22 +84,16 @@ internal static class NonNegativeTensorDomain
 
         public Tensor<T> CreateNearby<T>(Tensor<T> input, double epsilon)
         {
-            var nearby = new Tensor<T>(input.Shape.ToArray());
+            // max(x + epsilon, 0) element-wise.
             var operations = MathHelper.GetNumericOperations<T>();
-            for (int i = 0; i < input.Length; i++)
-            {
-                double value = Math.Max(operations.ToDouble(input[i]) + epsilon, 0.0);
-                nearby[i] = operations.FromDouble(value);
-            }
-            return nearby;
+            var engine = AiDotNetEngine.Current;
+            return engine.TensorClampMin(engine.TensorAddScalar(input, operations.FromDouble(epsilon)), operations.Zero);
         }
 
         public Tensor<T> CreateInvalid<T>(int[] shape)
         {
             var tensor = new Tensor<T>(shape);
-            var invalid = MathHelper.GetNumericOperations<T>().FromDouble(-1.0);
-            for (int i = 0; i < tensor.Length; i++)
-                tensor[i] = invalid;
+            tensor.Fill(MathHelper.GetNumericOperations<T>().FromDouble(-1.0));
             return tensor;
         }
     }

@@ -488,36 +488,18 @@ public partial class RAFT<T> : OpticalFlowBase<T>
         return Engine.TensorConcatenate(corrChannels.ToArray(), axis: 1); // [B, corrDim, H, W]
     }
 
-    private Tensor<T> WarpByFlow(Tensor<T> image, Tensor<T> flow)
-    {
-        // Differentiable backward warp: resample `image` [B,C,H,W] at each pixel displaced by `flow`
-        // [B,2,H,W] (x=dx, y=dy) via a normalized identity grid + flow offset + GridSample — the same
-        // construction RIFE/VFI use. Gradients flow to both `image` and `flow`.
-        int batchSize = image.Shape[0];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var identityTheta = new Tensor<T>([batchSize, 2, 3]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            identityTheta[b, 0, 0] = NumOps.One; // x scale
-            identityTheta[b, 1, 1] = NumOps.One; // y scale
-        }
-        var baseGrid = Engine.AffineGrid(identityTheta, height, width); // [B,H,W,2] identity sampling grid
-
-        // A dx-pixel shift is 2*dx/(W-1) in the normalized [-1,1] grid coordinates.
-        double sx = width > 1 ? 2.0 / (width - 1) : 0.0;
-        double sy = height > 1 ? 2.0 / (height - 1) : 0.0;
-        var flowNHWC = Engine.TensorPermute(flow, new[] { 0, 2, 3, 1 }); // [B,H,W,2] (x=dx, y=dy)
-        var normScale = new Tensor<T>([batchSize, height, width, 2]);
-        var nsSpan = normScale.Data.Span;
-        for (int i = 0; i + 1 < nsSpan.Length; i += 2) { nsSpan[i] = NumOps.FromDouble(sx); nsSpan[i + 1] = NumOps.FromDouble(sy); }
-        var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, normScale));
-
-        // Engine.GridSample is NCHW (PyTorch convention): image is already [B,C,H,W],
-        // pass it directly. The grid is [B,H,W,2] regardless of image layout.
-        return Engine.GridSample(image, grid);                            // [B,C,H,W]
-    }
+    /// <summary>
+    /// Differentiable backward warp of <paramref name="image"/> [B,C,H,W] by <paramref name="flow"/> [B,2,H,W]
+    /// (x = dx, y = dy): the reference <c>bilinear_sampler</c>, grid_sample(align_corners=True) with zero padding
+    /// at pixel + flow. Gradients flow to both the image and the flow.
+    /// </summary>
+    /// <remarks>
+    /// This used to add a 2/(W - 1)-per-pixel flow offset (the align_corners=True scale) to an affine identity grid
+    /// and sample with the two-argument GridSample, the align_corners=False shim, so every lookup was displaced by
+    /// a stretch of the flow and the correlation was taken at the wrong positions.
+    /// </remarks>
+    internal Tensor<T> WarpByFlow(Tensor<T> image, Tensor<T> flow)
+        => WarpByFlow(image, flow, GridSamplePadding.Zeros);
 
     private Tensor<T> GRUUpdate(Tensor<T> hiddenState, Tensor<T> gruInput)
     {

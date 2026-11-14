@@ -92,37 +92,15 @@ public class SpatialSplitter<T> : DataSplitterBase<T>
                 $"Coordinate columns ({_xColumn}, {_yColumn}) must be within feature count ({nFeatures}).");
         }
 
-        // Find spatial bounds
-        double minX = double.MaxValue, maxX = double.MinValue;
-        double minY = double.MaxValue, maxY = double.MinValue;
-
-        for (int i = 0; i < nSamples; i++)
-        {
-            double x = Convert.ToDouble(X[i, _xColumn]);
-            double yr = Convert.ToDouble(X[i, _yColumn]);
-            minX = Math.Min(minX, x);
-            maxX = Math.Max(maxX, x);
-            minY = Math.Min(minY, yr);
-            maxY = Math.Max(maxY, yr);
-        }
-
-        double blockWidth = (maxX - minX) / _nBlocksX;
-        double blockHeight = (maxY - minY) / _nBlocksY;
-
-        // Avoid zero-size blocks
-        if (blockWidth <= 0) blockWidth = 1;
-        if (blockHeight <= 0) blockHeight = 1;
-
-        // Assign samples to blocks
+        // Assign samples to equal-width spatial blocks (zero-size blocks use width 1)
+        var blockXs = PreprocessingTensorOps.EqualWidthBlockIndex(PreprocessingTensorOps.Column(X, _xColumn), _nBlocksX);
+        var blockYs = PreprocessingTensorOps.EqualWidthBlockIndex(PreprocessingTensorOps.Column(X, _yColumn), _nBlocksY);
         var blockIndices = new Dictionary<(int, int), List<int>>();
 
         for (int i = 0; i < nSamples; i++)
         {
-            double x = Convert.ToDouble(X[i, _xColumn]);
-            double yr = Convert.ToDouble(X[i, _yColumn]);
-
-            int blockX = Math.Min((int)((x - minX) / blockWidth), _nBlocksX - 1);
-            int blockY = Math.Min((int)((yr - minY) / blockHeight), _nBlocksY - 1);
+            int blockX = blockXs[i];
+            int blockY = blockYs[i];
 
             var blockKey = (blockX, blockY);
             if (!blockIndices.TryGetValue(blockKey, out var list))

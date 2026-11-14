@@ -56,7 +56,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
     ///
     /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-    ///     .ConfigureModel(new TLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1))
+    ///     .ConfigureModel(new TLearner&lt;double&gt;(lambda: 0.01))
     ///     .Build(covariates, treatment, outcome);
     ///
     /// var (ate, se) = result.EstimateATE(covariates, treatment, outcome);
@@ -97,15 +97,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 nameof(treatment));
         }
 
-        for (int i = 0; i < treatment.Length; i++)
+        int invalid = FirstNonBinaryIndex(treatment);
+        if (invalid >= 0)
         {
-            if (treatment[i] != 0 && treatment[i] != 1)
-            {
-                throw new ArgumentException(
-                    $"Treatment assignment is 1 for the treated and 0 for the controls; found " +
-                    $"{treatment[i]} at index {i}.",
-                    nameof(treatment));
-            }
+            throw new ArgumentException(
+                $"Treatment assignment is 1 for the treated and 0 for the controls; found " +
+                $"{treatment[invalid]} at index {invalid}.",
+                nameof(treatment));
         }
 
         if (covariates is not TInput covariateInput || outcome is not TOutput outcomeOutput)

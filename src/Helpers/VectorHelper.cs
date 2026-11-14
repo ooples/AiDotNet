@@ -57,12 +57,7 @@ public static class VectorHelper
 
         if (norm < epsilon)
         {
-            var clone = new Vector<T>(vector.Length);
-            for (int i = 0; i < vector.Length; i++)
-            {
-                clone[i] = vector[i];
-            }
-            return clone;
+            return vector.Clone();
         }
 
         return AiDotNetEngine.Current.Multiply(vector, numOps.FromDouble(1.0 / norm));
@@ -84,10 +79,7 @@ public static class VectorHelper
         if (norm < epsilon) return;
 
         var normalized = AiDotNetEngine.Current.Multiply(vector, numOps.FromDouble(1.0 / norm));
-        for (int i = 0; i < vector.Length; i++)
-        {
-            vector[i] = normalized[i];
-        }
+        normalized.AsSpan().CopyTo(vector.AsWritableSpan());
     }
 
     /// <summary>
@@ -178,14 +170,8 @@ public static class VectorHelper
         if (a.Length != b.Length)
             throw new ArgumentException($"Vectors must have the same length. Got {a.Length} and {b.Length}.", nameof(b));
         var numOps = MathHelper.GetNumericOperations<T>();
-        T sumSq = numOps.Zero;
-        int n = a.Length;
-        for (int i = 0; i < n; i++)
-        {
-            T diffI = numOps.Subtract(a[i], b[i]);
-            sumSq = numOps.Add(sumSq, numOps.Multiply(diffI, diffI));
-        }
-        return numOps.Sqrt(sumSq);
+        var diff = _cosineEngine.Subtract(a, b);
+        return numOps.Sqrt(_cosineEngine.DotProduct(diff, diff));
     }
 
     /// <summary>

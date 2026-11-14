@@ -61,25 +61,22 @@ public class TrajectoryConsistencyDistiller<T>
     /// <returns>Averaged trajectory consistency loss.</returns>
     public T ComputeTrajectoryLoss(Vector<T>[] studentOutputs, Vector<T>[] targetOutputs)
     {
-        var totalLoss = NumOps.Zero;
+        // Mean over trajectory pairs of each pair's squared error (common prefix) divided by the student length
         int pairs = Math.Min(studentOutputs.Length, targetOutputs.Length);
+        if (pairs == 0)
+            return NumOps.Zero;
 
+        var squaredErrors = new T[pairs];
+        var lengths = new int[pairs];
         for (int p = 0; p < pairs; p++)
         {
-            var student = studentOutputs[p];
-            var target = targetOutputs[p];
-            var pairLoss = NumOps.Zero;
-
-            for (int i = 0; i < student.Length && i < target.Length; i++)
-            {
-                var diff = NumOps.Subtract(student[i], target[i]);
-                pairLoss = NumOps.Add(pairLoss, NumOps.Multiply(diff, diff));
-            }
-
-            totalLoss = NumOps.Add(totalLoss, NumOps.Divide(pairLoss, NumOps.FromDouble(student.Length)));
+            squaredErrors[p] = DiffusionVectorOps.SquaredDistance(studentOutputs[p], targetOutputs[p]);
+            lengths[p] = studentOutputs[p].Length;
         }
 
-        return pairs > 0 ? NumOps.Divide(totalLoss, NumOps.FromDouble(pairs)) : NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var pairLosses = engine.Divide(new Vector<T>(squaredErrors), new Tensor<int>(new[] { pairs }, new Vector<int>(lengths)).Cast<T>().ToVector());
+        return NumOps.Divide(engine.Sum(pairLosses), NumOps.FromDouble(pairs));
     }
 
     /// <summary>

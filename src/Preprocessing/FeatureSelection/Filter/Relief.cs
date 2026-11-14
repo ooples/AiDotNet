@@ -31,13 +31,13 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
     private readonly int _nIterations;
     private readonly int? _randomState;
 
-    private double[]? _featureWeights;
+    private Vector<T>? _featureWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureWeights => _featureWeights;
+    public Vector<T>? FeatureWeights => _featureWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -77,36 +77,10 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         int n = data.Rows;
         int p = data.Columns;
 
-        // Normalize features
-        var normalizedData = new double[n, p];
-        var minVals = new double[p];
-        var ranges = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            minVals[j] = double.MaxValue;
-            double maxVal = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                minVals[j] = Math.Min(minVals[j], val);
-                maxVal = Math.Max(maxVal, val);
-            }
-            ranges[j] = maxVal - minVals[j];
-            if (ranges[j] < 1e-10) ranges[j] = 1;
-        }
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                normalizedData[i, j] = (NumOps.ToDouble(data[i, j]) - minVals[j]) / ranges[j];
-
-        // Get class labels
-        var targetLabels = new int[n];
-        for (int i = 0; i < n; i++)
-            targetLabels[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-
-        // Initialize weights
-        _featureWeights = new double[p];
+        // Features scaled to [0, 1] by their range (a constant feature never differs) and integer class labels
+        var scaled = FeatureScoringTensorOps.RangeScaled(FilterStatisticTensorOps.AsTensor(data));
+        var labels = FilterStatisticTensorOps.ClassIndex(target, out int classCount);
+        var classOneHot = FilterStatisticTensorOps.ClassOneHot<T>(labels, classCount);
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
@@ -114,65 +88,16 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
 
         int iterations = Math.Min(_nIterations, n);
 
-        for (int iter = 0; iter < iterations; iter++)
-        {
-            // Sample a random instance
-            int ri = rand.Next(n);
-            int riClass = targetLabels[ri];
+        // Sample the instances (with replacement), in the same random order as before
+        var sampled = Enumerable.Range(0, iterations).Select(_ => rand.Next(n)).ToArray();
 
-            // Find nearest hit (same class) and nearest miss (different class)
-            int nearestHit = -1;
-            int nearestMiss = -1;
-            double nearestHitDist = double.MaxValue;
-            double nearestMissDist = double.MaxValue;
-
-            for (int j = 0; j < n; j++)
-            {
-                if (j == ri) continue;
-
-                double dist = 0;
-                for (int f = 0; f < p; f++)
-                    dist += Math.Abs(normalizedData[ri, f] - normalizedData[j, f]);
-
-                if (targetLabels[j] == riClass)
-                {
-                    if (dist < nearestHitDist)
-                    {
-                        nearestHitDist = dist;
-                        nearestHit = j;
-                    }
-                }
-                else
-                {
-                    if (dist < nearestMissDist)
-                    {
-                        nearestMissDist = dist;
-                        nearestMiss = j;
-                    }
-                }
-            }
-
-            // Update weights
-            if (nearestHit >= 0 && nearestMiss >= 0)
-            {
-                for (int f = 0; f < p; f++)
-                {
-                    double diffHit = Math.Abs(normalizedData[ri, f] - normalizedData[nearestHit, f]);
-                    double diffMiss = Math.Abs(normalizedData[ri, f] - normalizedData[nearestMiss, f]);
-                    _featureWeights[f] += (diffMiss - diffHit) / iterations;
-                }
-            }
-        }
+        // W += (|x - miss| - |x - hit|) / iterations under the Manhattan distance, for the instances that have both;
+        // the instance itself is no neighbour
+        var weights = FeatureScoringTensorOps.ReliefWeights(scaled, classOneHot, sampled, 1.0, iterations);
+        _featureWeights = weights.ToVector();
 
         // Select top features
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _featureWeights
-            .Select((w, idx) => (Weight: w, Index: idx))
-            .OrderByDescending(x => x.Weight)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(weights, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -190,15 +115,7 @@ public class Relief<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFe
         if (_selectedIndices is null)
             throw new InvalidOperationException("Relief has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -182,12 +182,7 @@ public partial class Mcnet<T> : VideoNeuralNetworkBase<T>
     {
         int time = differences.Shape[0];
         int h = differences.Shape[1], w = differences.Shape[2], c = differences.Shape[3];
-        int perFrame = h * w * c;
-
-        var result = new Tensor<T>(new[] { h, w, c });
-        int offset = (time - 1) * perFrame;
-        for (int i = 0; i < perFrame; i++) result[i] = differences[offset + i];
-        return result;
+        return Engine.Reshape(Engine.TensorNarrow(differences, 0, time - 1, 1), new[] { h, w, c });
     }
 
     /// <summary>

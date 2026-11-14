@@ -28,13 +28,13 @@ public class MutualInformationClassification<T> : TransformerBase<T, Matrix<T>, 
     private readonly int _nBins;
     private readonly bool _discreteFeatures;
 
-    private double[]? _mutualInfoScores;
+    private Vector<T>? _mutualInfoScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MutualInfoScores => _mutualInfoScores;
+    public Vector<T>? MutualInfoScores => _mutualInfoScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,108 +71,15 @@ public class MutualInformationClassification<T> : TransformerBase<T, Matrix<T>, 
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Get unique classes
-        var classes = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-            classes.Add((int)Math.Round(NumOps.ToDouble(target[i])));
-
-        int nClasses = classes.Count;
-        var classLabels = classes.OrderBy(x => x).ToArray();
-        var classIndex = classLabels.Select((c, i) => (c, i)).ToDictionary(x => x.c, x => x.i);
-
-        // Class probabilities
-        var classProbs = new double[nClasses];
-        for (int i = 0; i < n; i++)
-        {
-            int c = classIndex[(int)Math.Round(NumOps.ToDouble(target[i]))];
-            classProbs[c] += 1.0 / n;
-        }
-
-        _mutualInfoScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            int nFeatureBins;
-            int[] binAssignments = new int[n];
-
-            if (_discreteFeatures)
-            {
-                // Treat feature values as discrete
-                var uniqueValues = new HashSet<double>();
-                for (int i = 0; i < n; i++)
-                    uniqueValues.Add(NumOps.ToDouble(data[i, j]));
-
-                var valueList = uniqueValues.OrderBy(x => x).ToList();
-                var valueIndex = valueList.Select((v, idx) => (v, idx))
-                    .ToDictionary(x => x.v, x => x.idx);
-
-                nFeatureBins = uniqueValues.Count;
-                for (int i = 0; i < n; i++)
-                    binAssignments[i] = valueIndex[NumOps.ToDouble(data[i, j])];
-            }
-            else
-            {
-                // Bin continuous feature
-                double minVal = double.MaxValue, maxVal = double.MinValue;
-                for (int i = 0; i < n; i++)
-                {
-                    double val = NumOps.ToDouble(data[i, j]);
-                    minVal = Math.Min(minVal, val);
-                    maxVal = Math.Max(maxVal, val);
-                }
-
-                double range = maxVal - minVal;
-                if (range < 1e-10) range = 1;
-
-                nFeatureBins = _nBins;
-                for (int i = 0; i < n; i++)
-                {
-                    double val = NumOps.ToDouble(data[i, j]);
-                    binAssignments[i] = Math.Min((int)(((val - minVal) / range) * _nBins), _nBins - 1);
-                }
-            }
-
-            // Compute joint and marginal probabilities
-            var jointProb = new double[nFeatureBins, nClasses];
-            var featureProb = new double[nFeatureBins];
-
-            for (int i = 0; i < n; i++)
-            {
-                int bin = binAssignments[i];
-                int c = classIndex[(int)Math.Round(NumOps.ToDouble(target[i]))];
-                jointProb[bin, c] += 1.0 / n;
-                featureProb[bin] += 1.0 / n;
-            }
-
-            // Compute mutual information
-            double mi = 0;
-            for (int b = 0; b < nFeatureBins; b++)
-            {
-                for (int c = 0; c < nClasses; c++)
-                {
-                    if (jointProb[b, c] > 1e-10 && featureProb[b] > 1e-10 && classProbs[c] > 1e-10)
-                    {
-                        mi += jointProb[b, c] * Math.Log(jointProb[b, c] / (featureProb[b] * classProbs[c]));
-                    }
-                }
-            }
-
-            _mutualInfoScores[j] = Math.Max(0, mi);
-        }
-
-        // Select top features by MI
-        int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _mutualInfoScores
-            .Select((mi, idx) => (MI: mi, Index: idx))
-            .OrderByDescending(x => x.MI)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var x = FilterStatisticTensorOps.AsTensor(data);
+        int levels = _nBins;
+        var codes = _discreteFeatures
+            ? FeatureScoringTensorOps.DistinctValueCodes(x, out levels)
+            : FeatureScoringTensorOps.ScaledBins(x, _nBins);
+        var scores = Engine.TensorMax(DiscreteInformation<T>.ForTarget(codes, levels, target).Relevance(), NumOps.Zero);
+        _mutualInfoScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -189,15 +96,7 @@ public class MutualInformationClassification<T> : TransformerBase<T, Matrix<T>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("MutualInformationClassification has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

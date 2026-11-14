@@ -32,34 +32,22 @@ public class SemanticSegPreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        var r = PreprocessorFilters.Channel(data, 0);
+        var g = shape[1] > 1 ? PreprocessorFilters.Channel(data, 1) : r;
+        var bv = shape[1] > 2 ? PreprocessorFilters.Channel(data, 2) : r;
+        var four = NumOps.FromDouble(4.0);
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double r = NumOps.ToDouble(data[b, 0, h, w]);
-                    double g = shape[1] > 1 ? NumOps.ToDouble(data[b, 1, h, w]) : r;
-                    double bv = shape[1] > 2 ? NumOps.ToDouble(data[b, 2, h, w]) : r;
+        // Simple quantization-based segmentation (placeholder):
+        // classId = (trunc(4 r) * 25 + trunc(4 g) * 5 + trunc(4 b)) mod 150 (ADE20K has 150 classes)
+        var classId = engine.TensorAdd(engine.TensorAdd(
+                engine.TensorMultiplyScalar(engine.TensorTrunc(engine.TensorMultiplyScalar(r, four)), NumOps.FromDouble(25.0)),
+                engine.TensorMultiplyScalar(engine.TensorTrunc(engine.TensorMultiplyScalar(g, four)), NumOps.FromDouble(5.0))),
+            engine.TensorTrunc(engine.TensorMultiplyScalar(bv, four)));
+        classId = PreprocessorFilters.Mod(classId, 150);
 
-                    // Simple quantization-based segmentation (placeholder)
-                    int classId = (int)(r * 4) * 25 + (int)(g * 4) * 5 + (int)(bv * 4);
-                    classId = classId % 150; // ADE20K has 150 classes
-
-                    // Map class to deterministic color
-                    result[b, 0, h, w] = NumOps.FromDouble((classId * 37 % 256) / 255.0);
-                    result[b, 1, h, w] = NumOps.FromDouble((classId * 67 % 256) / 255.0);
-                    result[b, 2, h, w] = NumOps.FromDouble((classId * 97 % 256) / 255.0);
-                }
-            }
-        }
-
-        return result;
+        // Map class to deterministic color
+        return PreprocessorFilters.LabelColors(classId, 37, 67, 97);
     }
 }

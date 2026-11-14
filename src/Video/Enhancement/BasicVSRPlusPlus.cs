@@ -737,7 +737,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// are not differentiated), but the sampled feature stays on the tape so gradients
     /// flow back to whatever produced it.
     /// </summary>
-    private Tensor<T> WarpFeatureTape(Tensor<T> feature, Tensor<T> flow)
+    internal Tensor<T> WarpFeatureTape(Tensor<T> feature, Tensor<T> flow)
     {
         bool hasBatch = feature.Rank == 4;
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
@@ -750,7 +750,10 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // [batch, C, H, W], grid [batch, outH, outW, 2] -> output [batch, C, outH, outW]. Features
         // are already channels-first, so pass them directly — no permute.
         var feature4D = hasBatch ? feature : Engine.TensorExpandDims(feature, 0);
-        var warped = Engine.GridSample(feature4D, grid);
+        // The grid uses the align_corners=True mapping, so the sampler must too (mmedit flow_warp:
+        // grid_sample(mode="bilinear", padding_mode="zeros", align_corners=True)). The two-argument overload
+        // is the align_corners=False shim and decoded every coordinate with a half-pixel shift and stretch.
+        var warped = Engine.GridSample(feature4D, grid, GridSampleMode.Bilinear, GridSamplePadding.Zeros, true);
 
         return hasBatch ? warped : Engine.TensorSqueeze(warped, axis: 0);
     }
@@ -768,17 +771,11 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // first clip's flow into the plan.
         double widthNorm = width > 1 ? 2.0 / (width - 1) : 0.0;
         double heightNorm = height > 1 ? 2.0 / (height - 1) : 0.0;
-        var pixelValues = new T[height * width * 2];
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                int index = (h * width + w) * 2;
-                pixelValues[index] = NumOps.FromDouble(w * widthNorm - 1.0);
-                pixelValues[index + 1] = NumOps.FromDouble(h * heightNorm - 1.0);
-            }
-        }
-        var pixels = new Tensor<T>(pixelValues, new[] { 1, height, width, 2 });
+        var (columns, rows) = Engine.TensorMeshgrid(
+            Engine.TensorArange<T>(0, width, 1), Engine.TensorArange<T>(0, height, 1));
+        var pixelX = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(columns, NumOps.FromDouble(widthNorm)), NumOps.FromDouble(-1.0));
+        var pixelY = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(rows, NumOps.FromDouble(heightNorm)), NumOps.FromDouble(-1.0));
+        var pixels = Engine.Reshape(Engine.TensorStack([pixelX, pixelY], 2), new[] { 1, height, width, 2 });
         var normalization = new Tensor<T>(
             new[] { NumOps.FromDouble(widthNorm), NumOps.FromDouble(heightNorm) }, new[] { 1, 1, 1, 2 });
 
@@ -798,11 +795,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         // Convert to ONNX format
-        var inputData = new float[frames.Length];
-        for (int i = 0; i < frames.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(frames.Data.Span[i]);
-        }
+        var inputData = TensorCopyHelper.CastLogical<T, float>(frames).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames._shape);
         var inputMeta = _onnxSession.InputMetadata;
@@ -817,11 +810,8 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -948,9 +938,9 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     private void SerializeLayerParameters(BinaryWriter writer, Vector<T> parameters)
     {
         writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+        foreach (double value in parameters.AsTensor().Cast<double>().ToArray())
         {
-            writer.Write(NumOps.ToDouble(parameters[i]));
+            writer.Write(value);
         }
     }
 
@@ -960,12 +950,13 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     private Vector<T> DeserializeLayerParameters(BinaryReader reader)
     {
         int count = reader.ReadInt32();
-        var parameters = new T[count];
+        var values = new double[count];
         for (int i = 0; i < count; i++)
         {
-            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            values[i] = reader.ReadDouble();
         }
-        return new Vector<T>(parameters);
+
+        return new Tensor<double>(values, [count]).Cast<T>().ToVector();
     }
 
     #endregion

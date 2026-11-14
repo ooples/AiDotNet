@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -32,7 +33,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private readonly double _a; // Amplitude parameter
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +42,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     public int PopulationSize => _populationSize;
     public int NIterations => _nIterations;
     public double Amplitude => _a;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -88,136 +89,75 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        _featureScores = ComputeFeatureScores(data, target);
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
+        _featureScores = scores.ToVector();
 
         // Initialize positions
-        var positions = new double[_populationSize, p];
-        for (int i = 0; i < _populationSize; i++)
-        {
-            for (int j = 0; j < p; j++)
-                positions[i, j] = random.NextDouble();
-        }
+        var positions = PopulationSearchOps.Uniform<T>(random, _populationSize, p);
+        var fitness = PopulationSearchOps.ThresholdFitness(positions, scores, _nFeaturesToSelect, 0.1);
 
-        // Evaluate fitness and find best solution
-        var fitness = new double[_populationSize];
-        var bestPosition = new double[p];
-        double bestFitness = double.MinValue;
+        // The destination is the best solution found so far
+        int bestIdx = PopulationSearchOps.ArgMax(fitness);
+        var bestFitness = PopulationSearchOps.At(fitness, bestIdx);
+        var bestPosition = PopulationSearchOps.Row(positions, bestIdx);
 
-        for (int i = 0; i < _populationSize; i++)
-        {
-            fitness[i] = EvaluateFitness(positions, i, p);
-            if (fitness[i] > bestFitness)
-            {
-                bestFitness = fitness[i];
-                for (int j = 0; j < p; j++)
-                    bestPosition[j] = positions[i, j];
-            }
-        }
-
-        // Main loop
+        // Main loop (Mirjalili 2016): every agent moves against the same destination, then the destination is updated
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            // r1 decreases linearly from a to 0
-            double r1 = _a - iter * _a / _nIterations;
+            double r1 = ExplorationScale(iter, _nIterations, _a);
 
-            for (int i = 0; i < _populationSize; i++)
+            // Per agent and dimension: r2, r3 and r4, in the order of the scalar draws
+            var draws = PopulationSearchOps.Uniform<T>(random, _populationSize, p, 3);
+            positions = Move(positions, bestPosition, draws, r1);
+            fitness = PopulationSearchOps.ThresholdFitness(positions, scores, _nFeaturesToSelect, 0.1);
+
+            int iterBest = PopulationSearchOps.ArgMax(fitness);
+            var iterBestFitness = PopulationSearchOps.At(fitness, iterBest);
+            if (PopulationSearchOps.Greater(iterBestFitness, bestFitness))
             {
-                for (int j = 0; j < p; j++)
-                {
-                    double r2 = 2 * Math.PI * random.NextDouble();
-                    double r3 = 2 * random.NextDouble();
-                    double r4 = random.NextDouble();
-
-                    if (r4 < 0.5)
-                    {
-                        // Sine equation
-                        positions[i, j] = positions[i, j] + r1 * Math.Sin(r2) * Math.Abs(r3 * bestPosition[j] - positions[i, j]);
-                    }
-                    else
-                    {
-                        // Cosine equation
-                        positions[i, j] = positions[i, j] + r1 * Math.Cos(r2) * Math.Abs(r3 * bestPosition[j] - positions[i, j]);
-                    }
-
-                    // Clamp to [0, 1]
-                    positions[i, j] = Math.Max(0, Math.Min(1, positions[i, j]));
-                }
-
-                // Evaluate fitness
-                fitness[i] = EvaluateFitness(positions, i, p);
-
-                // Update best solution
-                if (fitness[i] > bestFitness)
-                {
-                    bestFitness = fitness[i];
-                    for (int j = 0; j < p; j++)
-                        bestPosition[j] = positions[i, j];
-                }
+                bestFitness = iterBestFitness;
+                bestPosition = PopulationSearchOps.Row(positions, iterBest);
             }
         }
 
         // Extract selected features from best position
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => bestPosition[j] * _featureScores[j])
-            .Take(_nFeaturesToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            Engine.TensorMultiply(bestPosition, scores), _nFeaturesToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeFeatureScores(Matrix<T> data, Vector<T> target)
+    /// <summary>
+    /// r1 = a - t a / T of Mirjalili (2016) for the 1-based iteration t = <paramref name="iter"/> + 1, so it falls
+    /// linearly to exactly 0 on the last of the <paramref name="iterations"/> updates (SCA.m counts the
+    /// initialisation as iteration 1 and its updates as t = 2 .. T).
+    /// </summary>
+    internal static double ExplorationScale(int iter, int iterations, double a) => a - (iter + 1) * a / iterations;
+
+    /// <summary>
+    /// The sine-cosine update X = X + r1 sin(r2) |r3 P - X| when r4 &lt; 0.5 and X + r1 cos(r2) |r3 P - X| otherwise,
+    /// with r2 = 2 pi u, r3 = 2 u', clamped to [0, 1]. <paramref name="draws"/> is [m, p, 3] with the uniforms for
+    /// r2, r3 and r4.
+    /// </summary>
+    internal static Tensor<T> Move(Tensor<T> positions, Tensor<T> destination, Tensor<T> draws, double r1)
     {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = positions.Shape[0];
+        int p = positions.Shape[1];
+        var shape = new[] { m, p };
+        var r2 = engine.TensorMultiplyScalar(
+            engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 0 }, new[] { m, p, 1 }), shape), ops.FromDouble(2 * Math.PI));
+        var r3 = engine.TensorMultiplyScalar(
+            engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 1 }, new[] { m, p, 1 }), shape), ops.FromDouble(2));
+        var r4 = engine.Reshape(engine.TensorSlice(draws, new[] { 0, 0, 2 }, new[] { m, p, 1 }), shape);
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
-    }
-
-    private double EvaluateFitness(double[,] positions, int idx, int p)
-    {
-        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
-        double fitness = 0;
-        double selected = 0;
-
-        for (int j = 0; j < p; j++)
-        {
-            if (positions[idx, j] > 0.5)
-            {
-                fitness += featureScores[j];
-                selected++;
-            }
-        }
-
-        double penalty = Math.Abs(selected - _nFeaturesToSelect) * 0.1;
-
-        return selected > 0 ? fitness / selected - penalty : 0;
+        var target = engine.TensorBroadcastTo(engine.Reshape(destination, new[] { 1, p }), shape);
+        var distance = engine.TensorAbs(engine.TensorSubtract(engine.TensorMultiply(r3, target), positions));
+        var wave = engine.TensorWhere(
+            engine.TensorLessThan(r4, ops.FromDouble(0.5)), engine.TensorSin(r2), engine.TensorCos(r2));
+        var step = engine.TensorMultiplyScalar(engine.TensorMultiply(wave, distance), ops.FromDouble(r1));
+        return PopulationSearchOps.Clamp01(engine.TensorAdd(positions, step));
     }
 
     /// <inheritdoc />
@@ -233,15 +173,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("SineCosine has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

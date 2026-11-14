@@ -150,7 +150,7 @@ public class ExpSineSquaredKernel<T> : IKernelFunction<T>
 
         // Compute sin(π * d / period)
         T sineArg = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(Math.PI), distance), _numOps.FromDouble(_period));
-        T sineValue = MathHelper.Sin(sineArg);
+        T sineValue = _numOps.FromDouble(Math.Sin(_numOps.ToDouble(sineArg)));
 
         // Compute exp(-2 * sin²(...) / lengthScale²)
         T exponent = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(-2.0), _numOps.Multiply(sineValue, sineValue)),

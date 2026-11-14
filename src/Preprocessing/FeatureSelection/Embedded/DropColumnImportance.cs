@@ -26,18 +26,18 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly Func<Matrix<T>, Vector<T>, double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, T>? _scorer;
     private readonly int _nFolds;
 
-    private double[]? _importances;
+    private Vector<T>? _importances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double _baselineScore;
+    private T _baselineScore = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Importances => _importances;
-    public double BaselineScore => _baselineScore;
+    public Vector<T>? Importances => _importances;
+    public T BaselineScore => _baselineScore;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -45,7 +45,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
     public DropColumnImportance(
         int nFeaturesToSelect = 10,
-        Func<Matrix<T>, Vector<T>, double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, T>? scorer = null,
         int nFolds = 5,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -72,7 +72,6 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var scorer = _scorer ?? DefaultCVScorer;
@@ -80,158 +79,114 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         // Compute baseline score with all features
         _baselineScore = scorer(data, target);
 
-        _importances = new double[p];
-
         // For each feature, drop it and measure score decrease
+        var droppedScores = new T[p];
+        var allColumns = Enumerable.Range(0, p).ToArray();
         for (int j = 0; j < p; j++)
         {
-            var droppedData = CreateDataWithoutFeature(data, j, n, p);
-            double droppedScore = scorer(droppedData, target);
-            _importances[j] = _baselineScore - droppedScore;
+            int dropped = j;
+            var droppedData = PreprocessingTensorOps.SelectColumns(data, allColumns.Where(c => c != dropped).ToArray());
+            droppedScores[j] = scorer(droppedData, target);
         }
+
+        var importances = Engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { p }, _baselineScore),
+            new Tensor<T>(droppedScores, new[] { p }));
+        _importances = importances.ToVector();
 
         // Select top features by importance
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _importances
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, numToSelect);
 
         IsFitted = true;
     }
 
-    private Matrix<T> CreateDataWithoutFeature(Matrix<T> data, int featureIdx, int n, int p)
+    private T DefaultCVScorer(Matrix<T> data, Vector<T> target)
     {
-        var result = new T[n, p - 1];
-        int newCol = 0;
-
-        for (int j = 0; j < p; j++)
-        {
-            if (j == featureIdx) continue;
-
-            for (int i = 0; i < n; i++)
-                result[i, newCol] = data[i, j];
-            newCol++;
-        }
-
-        return new Matrix<T>(result);
-    }
-
-    private double DefaultCVScorer(Matrix<T> data, Vector<T> target)
-    {
-        // Cross-validated R² score
+        // Cross-validated R² score over contiguous folds (the last fold takes the remainder)
+        var engine = Engine;
         int n = data.Rows;
         int p = data.Columns;
         int foldSize = n / _nFolds;
-        double totalScore = 0;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var totalScore = new Tensor<T>(new[] { 1 });
 
         for (int fold = 0; fold < _nFolds; fold++)
         {
             int testStart = fold * foldSize;
             int testEnd = fold == _nFolds - 1 ? n : (fold + 1) * foldSize;
+            int testCount = testEnd - testStart;
+            int trainCount = n - testCount;
 
-            // Split data
-            var trainX = new List<double[]>();
-            var trainY = new List<double>();
-            var testX = new List<double[]>();
-            var testY = new List<double>();
-
-            for (int i = 0; i < n; i++)
+            if (trainCount > 0 && testCount > 0 && p > 0)
             {
-                var row = new double[p];
-                for (int j = 0; j < p; j++)
-                    row[j] = NumOps.ToDouble(data[i, j]);
-
-                double y = NumOps.ToDouble(target[i]);
-
-                if (i >= testStart && i < testEnd)
-                {
-                    testX.Add(row);
-                    testY.Add(y);
-                }
-                else
-                {
-                    trainX.Add(row);
-                    trainY.Add(y);
-                }
-            }
-
-            if (trainX.Count > 0 && testX.Count > 0 && p > 0)
-            {
-                double score = ComputeR2Score(trainX, trainY, testX, testY);
-                totalScore += score;
+                var trainRows = Enumerable.Range(0, n).Where(i => i < testStart || i >= testEnd).ToArray();
+                var trainIndex = new Tensor<int>(trainRows, new[] { trainCount });
+                var score = ComputeR2Score(
+                    engine.TensorIndexSelect(X, trainIndex, 0), engine.TensorIndexSelect(y, trainIndex, 0),
+                    engine.TensorSlice(X, new[] { testStart, 0 }, new[] { testCount, p }),
+                    engine.TensorSlice(y, new[] { testStart }, new[] { testCount }));
+                totalScore = engine.TensorAdd(totalScore, score);
             }
         }
 
-        return totalScore / _nFolds;
+        return NumOps.Divide(engine.TensorSum(totalScore), NumOps.FromDouble(_nFolds));
     }
 
-    private static double ComputeR2Score(List<double[]> trainX, List<double> trainY,
-        List<double[]> testX, List<double> testY)
+    /// <summary>
+    /// Test-set R² of the per-feature correlation predictor <c>yMean + sum_j r_j * z_j * yStd</c> fitted on the
+    /// training rows (population statistics; features with std at most 1e-10 contribute nothing). Returns [1].
+    /// </summary>
+    private Tensor<T> ComputeR2Score(Tensor<T> trainX, Tensor<T> trainY, Tensor<T> testX, Tensor<T> testY)
     {
-        if (trainX.Count == 0 || testX.Count == 0)
-            return 0;
+        var engine = Engine;
+        int nTrain = trainX.Shape[0];
+        int nTest = testX.Shape[0];
+        int nFeatures = trainX.Shape[1];
+        T floor = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var featureShape = new[] { nFeatures };
+        var trainShape = new[] { nTrain, nFeatures };
+        var testShape = new[] { nTest, nFeatures };
 
-        int nFeatures = trainX[0].Length;
-        int nTrain = trainX.Count;
+        // Means, correlations and standard deviations
+        var xMeans = engine.ReduceMean(trainX, new[] { 0 }, true);
+        var xDiff = engine.TensorSubtract(trainX, engine.TensorBroadcastTo(xMeans, trainShape));
+        var yMean = engine.ReduceMean(trainY, new[] { 0 }, true);
+        var yDiff = engine.TensorSubtract(trainY, engine.TensorBroadcastTo(yMean, new[] { nTrain }));
+        var yVar = engine.ReduceMean(engine.TensorSquare(yDiff), new[] { 0 }, true);
+        var yStd = engine.TensorSqrt(yVar);
 
-        // Compute means
-        double yMean = trainY.Average();
-        var xMeans = new double[nFeatures];
-        for (int j = 0; j < nFeatures; j++)
-        {
-            for (int i = 0; i < nTrain; i++)
-                xMeans[j] += trainX[i][j];
-            xMeans[j] /= nTrain;
-        }
-
-        // Compute correlations and standard deviations
-        var correlations = new double[nFeatures];
-        var xStds = new double[nFeatures];
-        double yVar = trainY.Select(y => (y - yMean) * (y - yMean)).Sum() / nTrain;
-        double yStd = Math.Sqrt(yVar);
-
-        for (int j = 0; j < nFeatures; j++)
-        {
-            double sxy = 0, sxx = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                double xDiff = trainX[i][j] - xMeans[j];
-                double yDiff = trainY[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-            }
-            xStds[j] = Math.Sqrt(sxx / nTrain);
-            correlations[j] = (sxx > 1e-10 && yVar > 1e-10) ? sxy / Math.Sqrt(sxx * yVar * nTrain) : 0;
-        }
+        var sxy = engine.ReduceSum(engine.TensorMultiply(xDiff,
+            engine.TensorBroadcastTo(engine.Reshape(yDiff, new[] { nTrain, 1 }), trainShape)), new[] { 0 }, false);
+        var sxx = engine.ReduceSum(engine.TensorSquare(xDiff), new[] { 0 }, false);
+        var xStds = engine.TensorSqrt(engine.TensorDivideScalar(sxx, NumOps.FromDouble(nTrain)));
+        var yVarFeatures = engine.TensorBroadcastTo(yVar, featureShape);
+        var zeros = new Tensor<T>(featureShape);
+        var correlations = engine.TensorWhere(
+            engine.TensorMultiply(engine.TensorGreaterThan(sxx, floor), engine.TensorGreaterThan(yVarFeatures, floor)),
+            engine.TensorDivide(sxy, engine.TensorMultiply(engine.TensorSqrt(sxx), engine.TensorMultiplyScalar(
+                engine.TensorBroadcastTo(yStd, featureShape), NumOps.Sqrt(NumOps.FromDouble(nTrain))))),
+            zeros);
 
         // Predict on test set
-        double ssTot = 0, ssRes = 0;
-        double testYMean = testY.Average();
+        var usable = engine.TensorGreaterThan(xStds, floor);
+        var safeStds = engine.TensorWhere(usable, xStds, PreprocessingTensorOps.Filled(featureShape, NumOps.One));
+        var zScores = engine.TensorDivide(
+            engine.TensorSubtract(testX, engine.TensorBroadcastTo(xMeans, testShape)),
+            engine.TensorBroadcastTo(engine.Reshape(safeStds, new[] { 1, nFeatures }), testShape));
+        var weights = engine.TensorWhere(usable,
+            engine.TensorMultiply(correlations, engine.TensorBroadcastTo(yStd, featureShape)), zeros);
+        var predictions = engine.TensorAdd(engine.TensorBroadcastTo(yMean, new[] { nTest }), engine.ReduceSum(
+            engine.TensorMultiply(zScores, engine.TensorBroadcastTo(engine.Reshape(weights, new[] { 1, nFeatures }), testShape)),
+            new[] { 1 }, false));
 
-        for (int i = 0; i < testX.Count; i++)
-        {
-            double pred = yMean;
-            for (int j = 0; j < nFeatures; j++)
-            {
-                if (xStds[j] > 1e-10)
-                {
-                    double zScore = (testX[i][j] - xMeans[j]) / xStds[j];
-                    pred += correlations[j] * zScore * yStd;
-                }
-            }
-
-            double residual = testY[i] - pred;
-            ssRes += residual * residual;
-            ssTot += (testY[i] - testYMean) * (testY[i] - testYMean);
-        }
-
-        return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
+        var ssRes = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(testY, predictions)), new[] { 0 }, true);
+        var testDiff = engine.TensorSubtract(testY, engine.TensorBroadcastTo(engine.ReduceMean(testY, new[] { 0 }, true), new[] { nTest }));
+        var ssTot = engine.ReduceSum(engine.TensorSquare(testDiff), new[] { 0 }, true);
+        var one = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.One);
+        return engine.TensorWhere(engine.TensorGreaterThan(ssTot, floor),
+            engine.TensorSubtract(one, engine.TensorDivide(ssRes, ssTot)), new Tensor<T>(new[] { 1 }));
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -245,15 +200,7 @@ public class DropColumnImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("DropColumnImportance has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

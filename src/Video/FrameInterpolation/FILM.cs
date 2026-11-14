@@ -427,36 +427,16 @@ public partial class FILM<T> : FrameInterpolationBase<T>
     // + normalized flow offset) so gradients flow back into BOTH features and flow — the standard
     // differentiable warp (cf. RIFE.WarpImage). Was a scalar per-pixel bilinear loop that detached the
     // tape. flow: [B, 2, H, W] in pixel units (channel 0 = dx, 1 = dy).
-    private Tensor<T> WarpFeatures(Tensor<T> features, Tensor<T> flow)
-    {
-        int b = features.Shape[0];
-        int h = features.Shape[2];
-        int w = features.Shape[3];
-
-        var identityTheta = new Tensor<T>([b, 2, 3]);
-        for (int bi = 0; bi < b; bi++)
-        {
-            identityTheta[bi, 0, 0] = NumOps.One; // x scale
-            identityTheta[bi, 1, 1] = NumOps.One; // y scale
-        }
-        var baseGrid = Engine.AffineGrid(identityTheta, h, w);
-
-        var flowNHWC = Engine.TensorPermute(flow, [0, 2, 3, 1]); // [B, h, w, 2]
-        double sx = w > 1 ? 2.0 / (w - 1) : 0.0;
-        double sy = h > 1 ? 2.0 / (h - 1) : 0.0;
-        var scale = new Tensor<T>([b, h, w, 2]);
-        var scaleSpan = scale.Data.Span;
-        for (int idx = 0; idx + 1 < scaleSpan.Length; idx += 2)
-        {
-            scaleSpan[idx] = NumOps.FromDouble(sx);
-            scaleSpan[idx + 1] = NumOps.FromDouble(sy);
-        }
-        var grid = Engine.TensorAdd(baseGrid, Engine.TensorMultiply(flowNHWC, scale));
-
-        // Engine.GridSample is NCHW (PyTorch convention): features are already [B, C, H, W],
-        // pass them directly. The grid is [B, H, W, 2] regardless of image layout.
-        return Engine.GridSample(features, grid);
-    }
+    /// <summary>
+    /// FILM's <c>warp</c> (<c>tfa.image.dense_image_warp(image, -flow)</c>): bilinear sampling at pixel + flow in
+    /// pixel units with the taps clamped to the image, i.e. grid_sample(align_corners=True, padding="border").
+    /// </summary>
+    /// <remarks>
+    /// This used to scale the flow by the align_corners=True factor 2/(W - 1) and sample with the two-argument
+    /// GridSample, which is the align_corners=False shim, so every lookup was shifted and stretched.
+    /// </remarks>
+    internal Tensor<T> WarpFeatures(Tensor<T> features, Tensor<T> flow)
+        => WarpByFlow(features, flow, GridSamplePadding.Border);
 
     private Tensor<T> FuseFeatures(
         Tensor<T> warped1, Tensor<T> warped2,

@@ -179,22 +179,17 @@ public static class SSMQuantizationHelper<T>
     /// <param name="layer">The layer to analyze.</param>
     /// <param name="bitWidth">Target bit width to simulate.</param>
     /// <returns>Mean absolute error between original and quantized parameters.</returns>
-    public static double ComputeQuantizationError(ILayer<T> layer, int bitWidth)
+    public static T ComputeQuantizationError(ILayer<T> layer, int bitWidth)
     {
         if (layer == null) throw new ArgumentNullException(nameof(layer));
 
         var original = layer.GetParameters();
+        if (original.Length == 0) return NumOps.Zero;
         var quantized = QuantizeVector(original, bitWidth);
 
-        double totalError = 0;
-        for (int i = 0; i < original.Length; i++)
-        {
-            double diff = Math.Abs(
-                NumOps.ToDouble(original[i]) - NumOps.ToDouble(quantized[i]));
-            totalError += diff;
-        }
-
-        return original.Length > 0 ? totalError / original.Length : 0;
+        var engine = AiDotNetEngine.Current;
+        return NumOps.FromDouble(engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(
+            original.AsTensor().Cast<double>(), quantized.AsTensor().Cast<double>()))));
     }
 
     private static Vector<T> QuantizeVector(Vector<T> parameters, int bitWidth)
@@ -202,48 +197,37 @@ public static class SSMQuantizationHelper<T>
         if (parameters.Length == 0)
             return parameters;
 
-        // Find min and max for scaling
-        double minVal = NumOps.ToDouble(parameters[0]);
-        double maxVal = minVal;
-        for (int i = 1; i < parameters.Length; i++)
-        {
-            double val = NumOps.ToDouble(parameters[i]);
-            if (val < minVal) minVal = val;
-            if (val > maxVal) maxVal = val;
-        }
-
-        double range = maxVal - minVal;
-        if (range < 1e-10)
-        {
-            // All values are essentially the same, nothing to quantize
-            var result = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-                result[i] = parameters[i];
-            return result;
-        }
-
-        // 32-bit is a no-op: quantize-dequantize would not meaningfully change values
+        // 32-bit is a no-op: quantize-dequantize would not meaningfully change values. Checked before the double
+        // round trip below, which would change decimal and long values double cannot hold.
         if (bitWidth >= 32)
         {
-            var copy = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-                copy[i] = parameters[i];
-            return copy;
+            return parameters.Clone();
         }
 
-        long levels = (1L << bitWidth) - 1;
-        var quantized = new Vector<T>(parameters.Length);
+        // Find min and max for scaling
+        if (typeof(T) != typeof(double))
+            return SSMQuantizationHelper<double>.QuantizeVector(parameters.AsTensor().Cast<double>().ToVector(), bitWidth)
+                .AsTensor().Cast<T>().ToVector();
 
-        for (int i = 0; i < parameters.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        var values = parameters.AsTensor();
+        T minVal = engine.TensorMinValue(values);
+        T maxVal = engine.TensorMaxValue(values);
+
+        T range = NumOps.Subtract(maxVal, minVal);
+        if (NumOps.LessThan(range, NumOps.FromDouble(1e-10)))
         {
-            double val = NumOps.ToDouble(parameters[i]);
-            double normalized = (val - minVal) / range;
-            double quantizedLevel = Math.Round(normalized * levels);
-            double dequantized = (quantizedLevel / levels) * range + minVal;
-            quantized[i] = NumOps.FromDouble(dequantized);
+            // All values are essentially the same, nothing to quantize
+            return parameters.Clone();
         }
 
-        return quantized;
+        // Min-max uniform quantization: level = round((x - min) / range * L), x' = level / L * range + min.
+        T levels = NumOps.FromDouble((1L << bitWidth) - 1);
+        var normalized = engine.TensorDivideScalar(engine.TensorAddScalar(values, NumOps.Negate(minVal)), range);
+        var level = engine.TensorRound(engine.TensorMultiplyScalar(normalized, levels));
+        var dequantized = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorDivideScalar(level, levels), range), minVal);
+        return dequantized.ToVector();
     }
 
 }

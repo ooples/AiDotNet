@@ -52,7 +52,7 @@ namespace AiDotNet.CausalInference;
 /// var outcome = new Vector&lt;double&gt;(new double[] { 3.1, 7.2, 2.8, 8.0, 3.4, 7.6 });
 ///
 /// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new TLearner&lt;double&gt;(maxIterations: 100, learningRate: 0.1))
+///     .ConfigureModel(new TLearner&lt;double&gt;(lambda: 0.01))
 ///     .Build(covariates, treatment, outcome);
 ///
 /// // One effect per person, over the covariates alone.
@@ -90,30 +90,36 @@ public partial class TLearner<T> : CausalModelBase<T>
     private T _biasControl;
 
     /// <summary>
-    /// Gets the maximum iterations for training.
-    /// </summary>
-    public int MaxIterations { get; }
-
-    /// <summary>
-    /// Gets the learning rate for training.
-    /// </summary>
-    public double LearningRate { get; }
-
-    /// <summary>
     /// Gets the L2 regularization strength.
     /// </summary>
     public double Lambda { get; }
 
     /// <summary>
+    /// The removed gradient-descent signature, kept only so that a positional call such as <c>new TLearner&lt;T&gt;(100)</c>
+    /// fails to compile instead of silently binding the integer to <c>lambda</c>.
+    /// </summary>
+    /// <param name="maxIterations">No longer used: the outcome models are solved exactly.</param>
+    /// <remarks>
+    /// Only the one-integer form needs a guard: the old two- and three-argument calls match no constructor and
+    /// already fail to compile.
+    /// </remarks>
+    [Obsolete("The iteration count and learning rate are gone: the outcome models are ridge regressions solved " +
+        "exactly. Use TLearner(lambda: ...).", error: true)]
+    public TLearner(int maxIterations) : this()
+    {
+    }
+
+    /// <summary>
     /// Creates a new T-Learner.
     /// </summary>
-    /// <param name="maxIterations">Maximum training iterations (default: 100).</param>
-    /// <param name="learningRate">Learning rate (default: 0.1).</param>
-    /// <param name="lambda">L2 regularization (default: 0.01).</param>
-    public TLearner(int maxIterations = 100, double learningRate = 0.1, double lambda = 0.01) : base()
+    /// <param name="lambda">L2 regularization of the two ridge outcome models (default: 0.01).</param>
+    /// <remarks>
+    /// Each outcome model is ridge regression solved exactly. It used to be approximated by a fixed number of
+    /// gradient steps, which diverged on unscaled covariates, and is why the iteration count and learning rate are
+    /// gone.
+    /// </remarks>
+    public TLearner(double lambda = 0.01) : base()
     {
-        MaxIterations = maxIterations;
-        LearningRate = learningRate;
         Lambda = lambda;
         _biasTreated = NumOps.Zero;
         _biasControl = NumOps.Zero;
@@ -124,82 +130,24 @@ public partial class TLearner<T> : CausalModelBase<T>
     /// </summary>
     public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
     {
-        int n = features.Rows;
-        int p = features.Columns;
-        NumFeatures = p;
+        NumFeatures = features.Columns;
 
-        // Convert treatment to int
-        var treatmentInt = new Vector<int>(n);
-        for (int i = 0; i < n; i++)
-            treatmentInt[i] = NumOps.GreaterThan(treatment[i], NumOps.FromDouble(0.5)) ? 1 : 0;
-
+        var treatmentInt = BinarizeTreatment(treatment);
         ValidateCausalData(features, treatmentInt, outcome);
 
         // Split data by treatment status
-        var treatedIndices = new List<int>();
-        var controlIndices = new List<int>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (treatmentInt[i] == 1)
-                treatedIndices.Add(i);
-            else
-                controlIndices.Add(i);
-        }
+        var treatedIndices = GroupIndices(treatmentInt, 1);
+        var controlIndices = GroupIndices(treatmentInt, 0);
 
         // Train treatment model
-        (_weightsTreated, _biasTreated) = TrainLinearModel(features, outcome, treatedIndices.ToArray());
+        (_weightsTreated, _biasTreated) = FitRidgeRegression(
+            SelectRows(features, treatedIndices), SelectElements(outcome, treatedIndices), Lambda);
 
         // Train control model
-        (_weightsControl, _biasControl) = TrainLinearModel(features, outcome, controlIndices.ToArray());
+        (_weightsControl, _biasControl) = FitRidgeRegression(
+            SelectRows(features, controlIndices), SelectElements(outcome, controlIndices), Lambda);
 
         IsFitted = true;
-    }
-
-    /// <summary>
-    /// Trains a linear regression model on specified indices.
-    /// </summary>
-    private (Vector<T> weights, T bias) TrainLinearModel(Matrix<T> features, Vector<T> outcome, int[] indices)
-    {
-        int n = indices.Length;
-        int p = features.Columns;
-
-        var weights = new Vector<T>(p);
-        var bias = NumOps.Zero;
-
-        for (int iter = 0; iter < MaxIterations; iter++)
-        {
-            var gradWeights = new double[p];
-            double gradBias = 0;
-
-            for (int idx = 0; idx < n; idx++)
-            {
-                int i = indices[idx];
-
-                // Predict
-                double pred = NumOps.ToDouble(bias);
-                for (int j = 0; j < p; j++)
-                    pred += NumOps.ToDouble(weights[j]) * NumOps.ToDouble(features[i, j]);
-
-                // Error
-                double error = pred - NumOps.ToDouble(outcome[i]);
-
-                // Gradients
-                gradBias += error;
-                for (int j = 0; j < p; j++)
-                    gradWeights[j] += error * NumOps.ToDouble(features[i, j]);
-            }
-
-            // Update with regularization
-            bias = NumOps.FromDouble(NumOps.ToDouble(bias) - LearningRate * gradBias / n);
-            for (int j = 0; j < p; j++)
-            {
-                double grad = gradWeights[j] / n + Lambda * NumOps.ToDouble(weights[j]);
-                weights[j] = NumOps.FromDouble(NumOps.ToDouble(weights[j]) - LearningRate * grad);
-            }
-        }
-
-        return (weights, bias);
     }
 
     /// <summary>
@@ -208,26 +156,7 @@ public partial class TLearner<T> : CausalModelBase<T>
     public override Vector<T> EstimateTreatmentEffect(Matrix<T> features)
     {
         EnsureFitted();
-
-        int n = features.Rows;
-        var effects = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            // Predict with treatment model
-            double predTreated = NumOps.ToDouble(_biasTreated);
-            for (int j = 0; j < features.Columns; j++)
-                predTreated += NumOps.ToDouble(_weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
-
-            // Predict with control model
-            double predControl = NumOps.ToDouble(_biasControl);
-            for (int j = 0; j < features.Columns; j++)
-                predControl += NumOps.ToDouble(_weightsControl[j]) * NumOps.ToDouble(features[i, j]);
-
-            effects[i] = NumOps.FromDouble(predTreated - predControl);
-        }
-
-        return effects;
+        return Engine.Subtract(PredictTreated(features), PredictControl(features));
     }
 
     /// <summary>
@@ -236,16 +165,7 @@ public partial class TLearner<T> : CausalModelBase<T>
     public override Vector<T> PredictTreated(Matrix<T> features)
     {
         EnsureFitted();
-
-        var result = new Vector<T>(features.Rows);
-        for (int i = 0; i < features.Rows; i++)
-        {
-            double pred = NumOps.ToDouble(_biasTreated);
-            for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsTreated[j]) * NumOps.ToDouble(features[i, j]);
-            result[i] = NumOps.FromDouble(pred);
-        }
-        return result;
+        return PredictLinear(features, _weightsTreated, _biasTreated);
     }
 
     /// <summary>
@@ -254,39 +174,21 @@ public partial class TLearner<T> : CausalModelBase<T>
     public override Vector<T> PredictControl(Matrix<T> features)
     {
         EnsureFitted();
-
-        var result = new Vector<T>(features.Rows);
-        for (int i = 0; i < features.Rows; i++)
-        {
-            double pred = NumOps.ToDouble(_biasControl);
-            for (int j = 0; j < features.Columns; j++)
-                pred += NumOps.ToDouble(_weightsControl[j]) * NumOps.ToDouble(features[i, j]);
-            result[i] = NumOps.FromDouble(pred);
-        }
-        return result;
+        return PredictLinear(features, _weightsControl, _biasControl);
     }
 
     /// <summary>
-    /// Standard prediction - returns treatment effect.
+    /// Standard prediction - returns treatment effects.
     /// </summary>
     /// <remarks>
-    /// Mirrors <see cref="CausalModelBase{T}.Train(Matrix{T}, Vector{T})"/>'s
-    /// "first column is treatment" convention: if <paramref name="input"/> has
-    /// one more column than the trained feature count, the first column is
-    /// treated as the treatment indicator and stripped before estimating
-    /// treatment effects on the covariates. Callers that already have a
-    /// feature-only matrix can pass it directly.
+    /// Accepts covariates alone, or the [treatment | covariates] layout <see cref="CausalModelBase{T}.Train"/>
+    /// consumes, in which case the treatment column is dropped.
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (input.Columns == NumFeatures + 1)
         {
-            int n = input.Rows;
-            var features = new Matrix<T>(n, NumFeatures);
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < NumFeatures; j++)
-                    features[i, j] = input[i, j + 1];
-            return EstimateTreatmentEffect(features);
+            return EstimateTreatmentEffect(DropLeadingColumn(input));
         }
         if (input.Columns != NumFeatures)
         {
@@ -301,30 +203,17 @@ public partial class TLearner<T> : CausalModelBase<T>
     /// <inheritdoc />
     public override (T estimate, T standardError) EstimateATE(Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
-        var effects = EstimateTreatmentEffect(x);
-        double mean = effects.ToArray().Average(e => NumOps.ToDouble(e));
-        double variance = effects.ToArray().Sum(e => Math.Pow(NumOps.ToDouble(e) - mean, 2)) / Math.Max(1, effects.Length - 1);
-        double se = Math.Sqrt(variance / effects.Length);
-        return (NumOps.FromDouble(mean), NumOps.FromDouble(se));
+        return MeanWithStandardError(EstimateTreatmentEffect(x));
     }
 
     /// <inheritdoc />
     public override (T estimate, T standardError) EstimateATT(Matrix<T> x, Vector<int> treatment, Vector<T> outcome)
     {
-        var treatedIndices = Enumerable.Range(0, treatment.Length).Where(i => treatment[i] == 1).ToArray();
+        var treatedIndices = GroupIndices(treatment, 1);
         if (treatedIndices.Length == 0)
             return (NumOps.Zero, NumOps.Zero);
 
-        var treatedFeatures = new Matrix<T>(treatedIndices.Length, x.Columns);
-        for (int i = 0; i < treatedIndices.Length; i++)
-            for (int j = 0; j < x.Columns; j++)
-                treatedFeatures[i, j] = x[treatedIndices[i], j];
-
-        var effects = EstimateTreatmentEffect(treatedFeatures);
-        double mean = effects.ToArray().Average(e => NumOps.ToDouble(e));
-        double variance = effects.ToArray().Sum(e => Math.Pow(NumOps.ToDouble(e) - mean, 2)) / Math.Max(1, effects.Length - 1);
-        double se = Math.Sqrt(variance / effects.Length);
-        return (NumOps.FromDouble(mean), NumOps.FromDouble(se));
+        return MeanWithStandardError(EstimateTreatmentEffect(SelectRows(x, treatedIndices)));
     }
 
     /// <inheritdoc />
@@ -342,10 +231,8 @@ public partial class TLearner<T> : CausalModelBase<T>
     /// <inheritdoc />
     protected override Vector<T> EstimatePropensityScoresCore(Matrix<T> x)
     {
-        var result = new Vector<T>(x.Rows);
-        for (int i = 0; i < x.Rows; i++)
-            result[i] = NumOps.FromDouble(0.5);
-        return result;
+        // T-Learner doesn't model propensity scores directly
+        return Tensor<T>.CreateDefault(new[] { x.Rows }, NumOps.FromDouble(0.5)).ToVector();
     }
 
     /// <inheritdoc />
@@ -365,16 +252,14 @@ public partial class TLearner<T> : CausalModelBase<T>
         if (_weightsTreated is null || _weightsControl is null)
             return new Vector<T>(2) { [0] = _biasTreated, [1] = _biasControl };
 
-        int p = _weightsTreated.Length;
-        var parameters = new Vector<T>(2 + 2 * p);
-        parameters[0] = _biasTreated;
-        parameters[1] = _biasControl;
-        for (int i = 0; i < p; i++)
+        // [biasTreated, biasControl, weightsTreated..., weightsControl...]
+        return Engine.TensorConcatenate(new[]
         {
-            parameters[2 + i] = _weightsTreated[i];
-            parameters[2 + p + i] = _weightsControl[i];
-        }
-        return parameters;
+            Tensor<T>.CreateDefault(new[] { 1 }, _biasTreated),
+            Tensor<T>.CreateDefault(new[] { 1 }, _biasControl),
+            _weightsTreated.AsTensor(),
+            _weightsControl.AsTensor(),
+        }, 0).ToVector();
     }
 
     private void RestoreLinearModelParameters(Vector<T> parameters)
@@ -390,45 +275,27 @@ public partial class TLearner<T> : CausalModelBase<T>
         _biasTreated = parameters[0];
         _biasControl = parameters[1];
 
-        int remaining = parameters.Length - 2;
-        int p = remaining / 2;
-        _weightsTreated = new Vector<T>(p);
-        _weightsControl = new Vector<T>(p);
-        for (int i = 0; i < p; i++)
-        {
-            _weightsTreated[i] = parameters[2 + i];
-            _weightsControl[i] = parameters[2 + p + i];
-        }
+        int p = (parameters.Length - 2) / 2;
+        _weightsTreated = parameters.GetSubVector(2, p);
+        _weightsControl = parameters.GetSubVector(2 + p, p);
     }
 
     /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
-        var copy = new TLearner<T>(MaxIterations, LearningRate, Lambda);
+        var copy = new TLearner<T>(Lambda);
         copy.SetParameters(parameters);
         return copy;
     }
 
-    /// <summary>
-    /// Persists the two fitted linear sub-models (treated + control weights and biases) so
-    /// <see cref="CausalModelBase{T}.DeepCopy"/> / <c>Clone</c> and Serialize/Deserialize reconstruct
-    /// them. Without this the clone copied only NumFeatures + IsFitted (base model-data) while the
-    /// weight vectors stayed at their empty <c>Vector&lt;T&gt;(0)</c> default, so EstimateTreatmentEffect
-    /// on the clone indexed <c>_weightsTreated[j]</c> out of range. Mirrors SLearner/XLearner.
-    /// </summary>
+    /// <inheritdoc />
     protected override System.Collections.Generic.Dictionary<string, object> GetAdditionalModelData()
     {
         var data = base.GetAdditionalModelData();
         data["BiasTreated"] = NumOps.ToDouble(_biasTreated);
         data["BiasControl"] = NumOps.ToDouble(_biasControl);
-        var weightsTreated = new double[_weightsTreated.Length];
-        for (int i = 0; i < _weightsTreated.Length; i++)
-            weightsTreated[i] = NumOps.ToDouble(_weightsTreated[i]);
-        data["WeightsTreated"] = weightsTreated;
-        var weightsControl = new double[_weightsControl.Length];
-        for (int i = 0; i < _weightsControl.Length; i++)
-            weightsControl[i] = NumOps.ToDouble(_weightsControl[i]);
-        data["WeightsControl"] = weightsControl;
+        data["WeightsTreated"] = _weightsTreated.ToArray();
+        data["WeightsControl"] = _weightsControl.ToArray();
         return data;
     }
 
@@ -447,15 +314,11 @@ public partial class TLearner<T> : CausalModelBase<T>
 
         if (modelDataObj["WeightsTreated"] is Newtonsoft.Json.Linq.JArray weightsTreatedArr)
         {
-            _weightsTreated = new Vector<T>(weightsTreatedArr.Count);
-            for (int i = 0; i < weightsTreatedArr.Count; i++)
-                _weightsTreated[i] = NumOps.FromDouble(weightsTreatedArr[i].ToObject<double>());
+            _weightsTreated = new Vector<T>(weightsTreatedArr.ToObject<T[]>() ?? Array.Empty<T>());
         }
         if (modelDataObj["WeightsControl"] is Newtonsoft.Json.Linq.JArray weightsControlArr)
         {
-            _weightsControl = new Vector<T>(weightsControlArr.Count);
-            for (int i = 0; i < weightsControlArr.Count; i++)
-                _weightsControl[i] = NumOps.FromDouble(weightsControlArr[i].ToObject<double>());
+            _weightsControl = new Vector<T>(weightsControlArr.ToObject<T[]>() ?? Array.Empty<T>());
         }
 
         // base.LoadAdditionalModelData restored IsFitted. Persisted state that claims to be fitted

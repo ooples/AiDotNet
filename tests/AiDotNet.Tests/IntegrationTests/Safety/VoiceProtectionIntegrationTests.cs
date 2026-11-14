@@ -211,4 +211,47 @@ public class VoiceProtectionIntegrationTests
     }
 
     #endregion
+
+    [Fact(Timeout = 120000)]
+    public async Task Watermark_FrameBatchesMatchOneBatch()
+    {
+        await Task.Yield();
+        // 30 frames in batches of 3: the overlap carried between batches and the global chip index must make the
+        // batched result identical to the single-batch one.
+        var protector = new WatermarkVoiceProtector<double>(watermarkStrength: 0.05, watermarkKey: 42);
+        var audio = GenerateSineWave(8000, 440.0, 16000);
+
+        var whole = protector.EmbedWatermark(audio, 16000, frameBatch: 1 << 20);
+        var batched = protector.EmbedWatermark(audio, 16000, frameBatch: 3);
+
+        Assert.Equal(whole.Length, batched.Length);
+        for (int i = 0; i < whole.Length; i++)
+        {
+            Assert.Equal(whole[i], batched[i], 12);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task VoiceprintDetector_HalfMatchesFloat()
+    {
+        await Task.Yield();
+        // A 0.5-amplitude 1 kHz tone: its Half spectral first moment (~128,000) overflows Half's 65504.
+        var tone = new float[8192];
+        for (int i = 0; i < tone.Length; i++) tone[i] = 0.5f * (float)Math.Sin(2 * Math.PI * 1000.0 * i / 16000.0);
+        var asHalf = new Half[tone.Length];
+        for (int i = 0; i < tone.Length; i++) asHalf[i] = (Half)tone[i];
+        var widened = new float[tone.Length];
+        for (int i = 0; i < tone.Length; i++) widened[i] = (float)asHalf[i];
+
+        var fromHalf = new AiDotNet.Safety.Audio.VoiceprintDeepfakeDetector<Half>(0.0, 16000)
+            .EvaluateAudio(new Vector<Half>(asHalf), 16000);
+        var fromFloat = new AiDotNet.Safety.Audio.VoiceprintDeepfakeDetector<float>(0.0, 16000)
+            .EvaluateAudio(new Vector<float>(widened), 16000);
+
+        Assert.Equal(fromFloat.Count, fromHalf.Count);
+        for (int i = 0; i < fromFloat.Count; i++)
+        {
+            Assert.Equal(fromFloat[i].Confidence, fromHalf[i].Confidence, 6);
+        }
+    }
 }

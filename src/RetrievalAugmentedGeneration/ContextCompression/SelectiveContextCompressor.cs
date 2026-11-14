@@ -51,17 +51,16 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
         foreach (var doc in documents)
         {
             var sentences = SplitIntoSentences(doc.Content);
-            var scoredSentences = new List<(string sentence, T score)>();
+            var scores = CalculateRelevance(query, sentences);
 
-            foreach (var sentence in sentences)
-            {
-                var score = CalculateRelevance(query, sentence);
-                if (NumOps.GreaterThan(score, _relevanceThreshold) ||
-                    NumOps.Equals(score, _relevanceThreshold))
-                {
-                    scoredSentences.Add((sentence, score));
-                }
-            }
+            // Keep sentences scoring at least the threshold.
+            var belowThreshold = sentences.Count == 0
+                ? new int[0]
+                : AiDotNetEngine.Current.TensorLessThan(new Tensor<T>(scores, [scores.Length]), _relevanceThreshold).Cast<int>().ToArray();
+            var scoredSentences = sentences
+                .Select((sentence, i) => (sentence, score: scores[i]))
+                .Where((_, i) => belowThreshold[i] == 0)
+                .ToList();
 
             var selectedSentences = scoredSentences
                 .OrderByDescending(s => s.score)
@@ -87,15 +86,21 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
         return TextProcessingHelper.SplitIntoSentences(text);
     }
 
-    private T CalculateRelevance(string query, string sentence)
+    private T[] CalculateRelevance(string query, List<string> sentences)
     {
-        // Simple relevance using word overlap - in production would use embeddings
-        var queryWords = query.ToLowerInvariant().Split(new[] { ' ', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
-        var sentenceWords = sentence.ToLowerInvariant().Split(new[] { ' ', ',', '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+        // Simple relevance using word overlap - in production would use embeddings:
+        // |distinct query words found in the sentence| / |distinct query words|
+        var separators = new[] { ' ', ',', '.', '!', '?' };
+        var queryWords = new HashSet<string>(query.ToLowerInvariant().Split(separators, StringSplitOptions.RemoveEmptyEntries));
+        if (sentences.Count == 0)
+            return new T[0];
 
-        var overlap = queryWords.Intersect(sentenceWords).Count();
-        var score = overlap > 0 ? (double)overlap / queryWords.Length : 0.0;
-
-        return NumOps.FromDouble(score);
+        var overlaps = sentences
+            .Select(sentence => queryWords.Intersect(sentence.ToLowerInvariant().Split(separators, StringSplitOptions.RemoveEmptyEntries)).Count())
+            .ToArray();
+        var overlap = new Tensor<int>(overlaps, [overlaps.Length]).Cast<T>();
+        return queryWords.Count == 0
+            ? new T[sentences.Count]
+            : AiDotNetEngine.Current.TensorDivideScalar(overlap, NumOps.FromDouble(queryWords.Count)).ToArray();
     }
 }

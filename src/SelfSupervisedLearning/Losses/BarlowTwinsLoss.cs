@@ -128,17 +128,17 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var variance = Engine.TensorDivideScalar(
             Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true),
             NumOps.FromDouble(batchSize));
-        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-12)));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, ObjectiveOps.Epsilon<T>(1e-12)));
         return Engine.TensorDivide(centered, std);
     }
 
     private T ComputeLossScalarLegacy(Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (z1 is null) throw new ArgumentNullException(nameof(z1));
         if (z2 is null) throw new ArgumentNullException(nameof(z2));
 
         var batchSize = z1.Shape[0];
-        var dim = z1.Shape[1];
 
         // Normalize along batch dimension
         var z1Norm = _normalize ? BatchNormalize(z1) : z1;
@@ -148,28 +148,12 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var crossCorr = ComputeCrossCorrelation(z1Norm, z2Norm, batchSize);
 
         // Compute loss: invariance (diagonal) + redundancy (off-diagonal)
-        T invarianceLoss = NumOps.Zero;
-        T redundancyLoss = NumOps.Zero;
+        // Invariance term: sum_i (1 - C_ii)^2
+        T invarianceLoss = Engine.TensorSumOfSquares(
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorDiagonal(crossCorr)));
 
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                var cij = crossCorr[i, j];
-
-                if (i == j)
-                {
-                    // Invariance term: (1 - C_ii)^2
-                    var diff = NumOps.Subtract(NumOps.One, cij);
-                    invarianceLoss = NumOps.Add(invarianceLoss, NumOps.Multiply(diff, diff));
-                }
-                else
-                {
-                    // Redundancy term: C_ij^2
-                    redundancyLoss = NumOps.Add(redundancyLoss, NumOps.Multiply(cij, cij));
-                }
-            }
-        }
+        // Redundancy term: sum_{i != j} C_ij^2
+        T redundancyLoss = Engine.TensorSumOfSquares(OffDiagonal(crossCorr));
 
         // Total loss = invariance + lambda * redundancy
         var lambdaT = NumOps.FromDouble(_lambda);
@@ -184,6 +168,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     public (T loss, Tensor<T> gradZ1, Tensor<T> gradZ2) ComputeLossWithGradients(
         Tensor<T> z1, Tensor<T> z2)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = z1.Shape[0];
         var dim = z1.Shape[1];
 
@@ -193,77 +178,32 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var crossCorr = ComputeCrossCorrelation(z1Norm, z2Norm, batchSize);
 
         // Compute loss components
-        T invarianceLoss = NumOps.Zero;
-        T redundancyLoss = NumOps.Zero;
+        T invarianceLoss = Engine.TensorSumOfSquares(
+            Engine.ScalarMinusTensor(NumOps.One, Engine.TensorDiagonal(crossCorr)));
+        T redundancyLoss = Engine.TensorSumOfSquares(OffDiagonal(crossCorr));
 
-        // Gradient of cross-correlation w.r.t. loss
-        var gradC = new T[dim * dim];
-
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                var cij = crossCorr[i, j];
-
-                if (i == j)
-                {
-                    var diff = NumOps.Subtract(NumOps.One, cij);
-                    invarianceLoss = NumOps.Add(invarianceLoss, NumOps.Multiply(diff, diff));
-                    // Gradient: -2 * (1 - C_ii)
-                    gradC[i * dim + j] = NumOps.Multiply(NumOps.FromDouble(-2.0), diff);
-                }
-                else
-                {
-                    redundancyLoss = NumOps.Add(redundancyLoss, NumOps.Multiply(cij, cij));
-                    // Gradient: 2 * lambda * C_ij
-                    gradC[i * dim + j] = NumOps.Multiply(NumOps.FromDouble(2.0 * _lambda), cij);
-                }
-            }
-        }
+        // Gradient of cross-correlation w.r.t. loss:
+        // diagonal -2 * (1 - C_ii), off-diagonal 2 * lambda * C_ij
+        var diagonalGrad = Engine.TensorMultiplyScalar(
+            Engine.ScalarMinusTensor(NumOps.One, crossCorr), NumOps.FromDouble(-2.0));
+        var offDiagonalGrad = Engine.TensorMultiplyScalar(crossCorr, NumOps.FromDouble(2.0 * _lambda));
+        var gradC = Engine.TensorWhere(Engine.TensorEye<T>(dim), diagonalGrad, offDiagonalGrad);
 
         var lambdaT = NumOps.FromDouble(_lambda);
         var totalLoss = NumOps.Add(invarianceLoss, NumOps.Multiply(lambdaT, redundancyLoss));
 
         // Backpropagate through cross-correlation to get gradients w.r.t. z1, z2
-        var gradZ1 = new T[batchSize * dim];
-        var gradZ2 = new T[batchSize * dim];
-
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
+        var z1Scaled = Engine.TensorMultiplyScalar(z1Norm, invBatch);
+        var z2Scaled = Engine.TensorMultiplyScalar(z2Norm, invBatch);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract z2Norm row and z1Norm row for this batch sample
-            var z2Row = new Vector<T>(dim);
-            var z1Row = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                z2Row[d] = NumOps.Multiply(z2Norm[b, d], invBatch);
-                z1Row[d] = NumOps.Multiply(z1Norm[b, d], invBatch);
-            }
+        // gradZ1[b,i] = sum_j gradC[i,j] * z2Norm[b,j] / N
+        var gradZ1 = Engine.TensorMatMul(z2Scaled, Engine.TensorTranspose(gradC));
 
-            for (int i = 0; i < dim; i++)
-            {
-                // gradZ1[b,i] = Σ_j gradC[i,j] * z2Norm[b,j] / N
-                var gradCRow = new Vector<T>(dim);
-                for (int j = 0; j < dim; j++)
-                {
-                    gradCRow[j] = gradC[i * dim + j];
-                }
-                gradZ1[b * dim + i] = Engine.DotProduct(gradCRow, z2Row);
+        // gradZ2[b,i] = sum_j gradC[j,i] * z1Norm[b,j] / N
+        var gradZ2 = Engine.TensorMatMul(z1Scaled, gradC);
 
-                // gradZ2[b,i] = Σ_j gradC[j,i] * z1Norm[b,j] / N
-                var gradCCol = new Vector<T>(dim);
-                for (int j = 0; j < dim; j++)
-                {
-                    gradCCol[j] = gradC[j * dim + i];
-                }
-                gradZ2[b * dim + i] = Engine.DotProduct(gradCCol, z1Row);
-            }
-        }
-
-        return (totalLoss,
-                new Tensor<T>(gradZ1, [batchSize, dim]),
-                new Tensor<T>(gradZ2, [batchSize, dim]));
+        return (totalLoss, gradZ1, gradZ2);
     }
 
     /// <summary>
@@ -271,33 +211,11 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     public Tensor<T> ComputeCrossCorrelation(Tensor<T> z1, Tensor<T> z2, int batchSize)
     {
-        var dim = z1.Shape[1];
-        var result = new T[dim * dim];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
 
-        // Pre-extract columns as Vector<T> for Engine.DotProduct
-        var z1Cols = new Vector<T>[dim];
-        var z2Cols = new Vector<T>[dim];
-        for (int d = 0; d < dim; d++)
-        {
-            z1Cols[d] = new Vector<T>(batchSize);
-            z2Cols[d] = new Vector<T>(batchSize);
-            for (int b = 0; b < batchSize; b++)
-            {
-                z1Cols[d][b] = z1[b, d];
-                z2Cols[d][b] = z2[b, d];
-            }
-        }
-
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                result[i * dim + j] = NumOps.Multiply(Engine.DotProduct(z1Cols[i], z2Cols[j]), invBatch);
-            }
-        }
-
-        return new Tensor<T>(result, [dim, dim]);
+        // C[i,j] = (sum_b z1[b,i] * z2[b,j]) / batchSize
+        return Engine.TensorMultiplyScalar(Engine.TensorMatMul(Engine.TensorTranspose(z1), z2), invBatch);
     }
 
     /// <summary>
@@ -305,40 +223,20 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     private Tensor<T> BatchNormalize(Tensor<T> tensor)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-        var result = new T[batchSize * dim];
+        var batchSizeT = NumOps.FromDouble(batchSize);
 
-        for (int j = 0; j < dim; j++)
-        {
-            // Compute mean
-            T mean = NumOps.Zero;
-            for (int i = 0; i < batchSize; i++)
-            {
-                mean = NumOps.Add(mean, tensor[i, j]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(batchSize));
+        // Per-feature mean and population variance across the batch
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(tensor, new[] { 0 }, keepDims: true), batchSizeT);
+        var centered = Engine.TensorSubtract(tensor, mean);
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 0 }, keepDims: true), batchSizeT);
 
-            // Compute variance
-            T variance = NumOps.Zero;
-            for (int i = 0; i < batchSize; i++)
-            {
-                var diff = NumOps.Subtract(tensor[i, j], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(batchSize));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, ObjectiveOps.Epsilon<T>(1e-8)));
 
-            var std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-8)));
-
-            // Normalize
-            for (int i = 0; i < batchSize; i++)
-            {
-                result[i * dim + j] = NumOps.Divide(
-                    NumOps.Subtract(tensor[i, j], mean), std);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        // Normalize
+        return Engine.TensorDivide(centered, std);
     }
 
     /// <summary>
@@ -346,22 +244,19 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     /// </summary>
     public T OffDiagonalSum(Tensor<T> matrix)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorSumOfSquares(OffDiagonal(matrix));
+    }
+
+    /// <summary>
+    /// A copy of a square matrix with its diagonal replaced by zero (selected, so a non-finite
+    /// diagonal entry does not leak into off-diagonal sums).
+    /// </summary>
+    private Tensor<T> OffDiagonal(Tensor<T> matrix)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var dim = matrix.Shape[0];
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = 0; j < dim; j++)
-            {
-                if (i != j)
-                {
-                    var val = matrix[i, j];
-                    sum = NumOps.Add(sum, NumOps.Multiply(val, val));
-                }
-            }
-        }
-
-        return sum;
+        return Engine.TensorWhere(Engine.TensorEye<T>(dim), new Tensor<T>(new[] { dim, dim }), matrix);
     }
 
     /// <summary>
@@ -380,7 +275,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var mean = Engine.ReduceMean(z, batchAxis, keepDims: true);
         var centred = Engine.TensorSubtract(z, mean);
         var variance = Engine.ReduceMean(Engine.TensorMultiply(centred, centred), batchAxis, keepDims: true);
-        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(BatchVarianceEpsilon)));
+        var scale = Engine.TensorSqrt(Engine.TensorAddScalar(variance, ObjectiveOps.Epsilon<T>(BatchVarianceEpsilon)));
 
         return Engine.TensorDivide(centred, scale);
     }

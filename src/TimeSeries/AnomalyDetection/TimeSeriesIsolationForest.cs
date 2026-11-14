@@ -171,25 +171,16 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         var (features, validIndices) = CreateFeatureMatrix(timeSeries);
         var scores = ComputeAnomalyScores(features);
 
-        // Map scores back to original time series length
-        var fullScores = new Vector<T>(timeSeries.Length);
-        for (int i = 0; i < validIndices.Count; i++)
+        // Map scores back to original time series length; early indices get the neutral score (0.5)
+        var fullScores = Engine.TensorFullLike(new Tensor<T>(new[] { timeSeries.Length }), _numOps.FromDouble(0.5));
+        if (validIndices.Count > 0)
         {
-            fullScores[validIndices[i]] = scores[i];
+            var positions = new Tensor<int>(new[] { validIndices.Count }, new Vector<int>(validIndices.ToArray()));
+            Engine.TensorIndexPutInPlace(fullScores, new[] { positions },
+                Tensor<T>.FromVector(scores.GetSubVector(0, validIndices.Count)));
         }
 
-        // Fill early indices with neutral score (0.5)
-        // Use HashSet for O(1) lookup instead of List's O(n) Contains
-        var validIndicesSet = new HashSet<int>(validIndices);
-        for (int i = 0; i < timeSeries.Length; i++)
-        {
-            if (!validIndicesSet.Contains(i))
-            {
-                fullScores[i] = _numOps.FromDouble(0.5);
-            }
-        }
-
-        return fullScores;
+        return fullScores.ToVector();
     }
 
     /// <summary>
@@ -200,14 +191,9 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
     public bool[] GetAnomalyLabels(Vector<T> timeSeries)
     {
         var scores = DetectAnomalies(timeSeries);
-        var labels = new bool[timeSeries.Length];
-
-        for (int i = 0; i < timeSeries.Length; i++)
-        {
-            labels[i] = _numOps.ToDouble(scores[i]) > _anomalyThreshold;
-        }
-
-        return labels;
+        // score > threshold in T (NaN compares false, as the double comparison did)
+        return TimeSeriesEngineOps<T>.GreaterThan(
+            scores.GetSubVector(0, timeSeries.Length), _numOps.FromDouble(_anomalyThreshold));
     }
 
     /// <summary>
@@ -233,125 +219,83 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
                          (_options.UseTrendFeatures ? 2 : 0) + // Trend features (derivative, acceleration)
                          (_options.UseSeasonalDecomposition ? 1 : 0); // Seasonal residual
 
-        var validIndices = new List<int>();
-        var featureRows = new List<T[]>();
-
-        for (int i = startIndex; i < n; i++)
+        // One feature row for every time step i = startIndex .. n - 1
+        int rows = Math.Max(0, n - startIndex);
+        var validIndices = Enumerable.Range(startIndex, rows).ToList();
+        if (rows == 0)
         {
-            var features = new T[numFeatures];
-            int idx = 0;
+            return (new Matrix<T>(0, numFeatures), validIndices);
+        }
 
-            // Original value
-            features[idx++] = timeSeries[i];
+        // Original value
+        var columns = new List<Vector<T>> { timeSeries.GetSubVector(startIndex, rows) };
 
-            // Lag features
-            for (int lag = 1; lag <= _options.LagFeatures; lag++)
-            {
-                features[idx++] = timeSeries[i - lag];
-            }
+        // Lag features: x[i - lag] for lag = 1..LagFeatures
+        columns.AddRange(Enumerable.Range(1, Math.Max(0, _options.LagFeatures))
+            .Select(lag => timeSeries.GetSubVector(startIndex - lag, rows)));
 
-            // Rolling statistics
-            var windowValues = new List<T>();
-            for (int j = i - _options.RollingWindowSize + 1; j <= i; j++)
-            {
-                windowValues.Add(timeSeries[j]);
-            }
+        // Rolling statistics over the window x[i - RollingWindowSize + 1 .. i]
+        int window = _options.RollingWindowSize;
+        if (window <= 0)
+        {
+            throw new ArgumentOutOfRangeException("index"); // an empty window has no minimum
+        }
 
-            features[idx++] = ComputeMean(windowValues);
-            features[idx++] = ComputeStd(windowValues);
-            features[idx++] = ComputeMin(windowValues);
-            features[idx++] = ComputeMax(windowValues);
+        var windows = Engine.TensorUnfold(
+            Tensor<T>.FromVector(timeSeries.GetSubVector(startIndex - window + 1, rows + window - 1)), 0, window, 1);
+        T count = _numOps.FromDouble(window);
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(windows, new[] { 1 }, keepDims: false), count);
+        var centered = Engine.TensorSubtract(windows, Engine.TensorBroadcastTo(Engine.Reshape(mean, new[] { rows, 1 }), new[] { rows, window }));
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, keepDims: false), count);
+        columns.Add(mean.ToVector());
+        columns.Add(Engine.TensorSqrt(variance).ToVector());
+        columns.Add(WindowExtreme(windows, rows, minimum: true));
+        columns.Add(WindowExtreme(windows, rows, minimum: false));
 
-            // Trend features
-            if (_options.UseTrendFeatures)
-            {
-                // First derivative (rate of change)
-                features[idx++] = _numOps.Subtract(timeSeries[i], timeSeries[i - 1]);
+        // Trend features
+        if (_options.UseTrendFeatures)
+        {
+            // First derivative (rate of change)
+            var d1 = Engine.Subtract(timeSeries.GetSubVector(startIndex, rows), timeSeries.GetSubVector(startIndex - 1, rows));
+            columns.Add(d1);
 
-                // Second derivative (acceleration)
-                if (i >= 2)
-                {
-                    var d1 = _numOps.Subtract(timeSeries[i], timeSeries[i - 1]);
-                    var d0 = _numOps.Subtract(timeSeries[i - 1], timeSeries[i - 2]);
-                    features[idx++] = _numOps.Subtract(d1, d0);
-                }
-                else
-                {
-                    features[idx++] = _numOps.Zero;
-                }
-            }
+            // Second derivative (acceleration) where i >= 2, zero before
+            int leading = Math.Min(rows, Math.Max(0, 2 - startIndex));
+            var rest = d1.GetSubVector(leading, rows - leading);
+            var d0 = Engine.Subtract(timeSeries.GetSubVector(startIndex + leading - 1, rows - leading),
+                timeSeries.GetSubVector(startIndex + leading - 2, rows - leading));
+            columns.Add(Vector<T>.Concatenate(new Vector<T>(leading), Engine.Subtract(rest, d0)));
+        }
 
-            // Seasonal residual
-            if (_options.UseSeasonalDecomposition && i >= _options.SeasonalPeriod)
-            {
-                // Simple seasonal difference
-                features[idx++] = _numOps.Subtract(timeSeries[i], timeSeries[i - _options.SeasonalPeriod]);
-            }
-            else if (_options.UseSeasonalDecomposition)
-            {
-                features[idx++] = _numOps.Zero;
-            }
-
-            featureRows.Add(features);
-            validIndices.Add(i);
+        // Seasonal residual: simple seasonal difference x[i] - x[i - SeasonalPeriod] where i >= SeasonalPeriod
+        if (_options.UseSeasonalDecomposition)
+        {
+            int period = _options.SeasonalPeriod;
+            int leading = Math.Min(rows, Math.Max(0, period - startIndex));
+            var seasonal = Engine.Subtract(timeSeries.GetSubVector(startIndex + leading, rows - leading),
+                timeSeries.GetSubVector(startIndex + leading - period, rows - leading));
+            columns.Add(Vector<T>.Concatenate(new Vector<T>(leading), seasonal));
         }
 
         // Convert to matrix
-        var matrix = new Matrix<T>(featureRows.Count, numFeatures);
-        for (int i = 0; i < featureRows.Count; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                matrix[i, j] = featureRows[i][j];
-            }
-        }
-
+        var matrix = Matrix<T>.FromRowVectors(columns).Transpose();
         return (matrix, validIndices);
     }
 
-    private T ComputeMean(List<T> values)
+    /// <summary>
+    /// Minimum (or maximum) of each window row as a running scan from the first element: NaN values
+    /// after the first are skipped, a NaN first element stays.
+    /// </summary>
+    private Vector<T> WindowExtreme(Tensor<T> windows, int rows, bool minimum)
     {
-        var sum = _numOps.Zero;
-        foreach (var v in values)
-        {
-            sum = _numOps.Add(sum, v);
-        }
-        return _numOps.Divide(sum, _numOps.FromDouble(values.Count));
-    }
-
-    private T ComputeStd(List<T> values)
-    {
-        var mean = ComputeMean(values);
-        var sumSq = _numOps.Zero;
-        foreach (var v in values)
-        {
-            var diff = _numOps.Subtract(v, mean);
-            sumSq = _numOps.Add(sumSq, _numOps.Multiply(diff, diff));
-        }
-        var variance = _numOps.Divide(sumSq, _numOps.FromDouble(values.Count));
-        return _numOps.Sqrt(variance);
-    }
-
-    private T ComputeMin(List<T> values)
-    {
-        var min = values[0];
-        foreach (var v in values)
-        {
-            if (_numOps.ToDouble(v) < _numOps.ToDouble(min))
-                min = v;
-        }
-        return min;
-    }
-
-    private T ComputeMax(List<T> values)
-    {
-        var max = values[0];
-        foreach (var v in values)
-        {
-            if (_numOps.ToDouble(v) > _numOps.ToDouble(max))
-                max = v;
-        }
-        return max;
+        var isNan = Engine.TensorIsNan(windows);
+        var clean = Engine.TensorWhere(isNan, Engine.TensorFullLike(windows, minimum ? _numOps.MaxValue : _numOps.MinValue), windows);
+        var extreme = minimum
+            ? Engine.TensorAmin(clean, new[] { 1 }, keepDims: false)
+            : Engine.ReduceMax(clean, new[] { 1 }, keepDims: false);
+        var first = Engine.Reshape(Engine.TensorSlice(windows, new[] { 0, 0 }, new[] { rows, 1 }), new[] { rows });
+        return Engine.TensorWhere(Engine.TensorIsNan(first), first, extreme).ToVector();
     }
 
     private List<int> SampleIndices(int n, int sampleSize)
@@ -364,15 +308,13 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
 
     private Matrix<T> ExtractRows(Matrix<T> matrix, List<int> indices)
     {
-        var result = new Matrix<T>(indices.Count, matrix.Columns);
-        for (int i = 0; i < indices.Count; i++)
+        if (indices.Count == 0)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = matrix[indices[i], j];
-            }
+            return new Matrix<T>(0, matrix.Columns);
         }
-        return result;
+
+        var rows = new Tensor<int>(new[] { indices.Count }, new Vector<int>(indices.ToArray()));
+        return Engine.TensorIndexSelect(Tensor<T>.FromMatrix(matrix), rows, 0).ToMatrix();
     }
 
     private IsolationTree<T> BuildTree(Matrix<T> data, int depth)

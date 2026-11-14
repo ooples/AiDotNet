@@ -11,6 +11,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Safety;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Adversarial;
 
@@ -210,27 +212,34 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
         int height = batched.Shape[2];
         int width = batched.Shape[3];
 
-        // Build per-batch [batch, 3] feature tensor.
-        var features = new Tensor<T>(new[] { batch, FeatureCount });
-        for (int b = 0; b < batch; b++)
-        {
-            // Slice this sample as flat span for the heuristic computations.
-            int sampleSize = channels * height * width;
-            var sampleData = new T[sampleSize];
-            int offset = 0;
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                        sampleData[offset++] = batched[b, c, h, w];
-            var sampleSpan = new ReadOnlySpan<T>(sampleData);
-            var sampleShape = new[] { channels, height, width };
+        // The heuristics read each sample as its flat C*H*W buffer: rows of `width` values with
+        // the channels stacked, i.e. a [batch, channels * height, width] view. They are fixed
+        // feature extractors (not trained), so nothing here is recorded on the tape.
+        using var noGrad = new NoGradScope<T>();
+        var engine = Engine;
+        var samples = engine.Reshape(batched.Contiguous(), new[] { batch, channels * height, width });
 
-            features[b, 0] = NumOps.FromDouble(ComputeHighFrequencyAnomalyScore(sampleSpan, sampleShape));
-            features[b, 1] = NumOps.FromDouble(ComputeHistogramAnomalyScore(sampleSpan));
-            features[b, 2] = NumOps.FromDouble(ComputeFeatureSqueezingScore(sampleSpan));
+        if (typeof(T) == typeof(Half))
+        {
+            // Half overflows the squared Laplacian of a 0/255 image (Infinity / Infinity) and turns the 1e-10
+            // darkness guard into zero (0 / 0), so the features are computed in float and only the result narrowed.
+            using var wideNoGrad = new NoGradScope<float>();
+            var wide = samples.Cast<float>();
+            return engine.TensorStack(new[]
+            {
+                AdversarialImageEvaluator<float>.ComputeHighFrequencyAnomalyScore(wide),
+                AdversarialImageEvaluator<float>.ComputeHistogramAnomalyScore(wide),
+                AdversarialImageEvaluator<float>.ComputeFeatureSqueezingScore(wide)
+            }, 1).Cast<T>();
         }
 
-        return features;
+        // Build per-batch [batch, 3] feature tensor.
+        return engine.TensorStack(new[]
+        {
+            ComputeHighFrequencyAnomalyScore(samples),
+            ComputeHistogramAnomalyScore(samples),
+            ComputeFeatureSqueezingScore(samples)
+        }, 1);
     }
 
     /// <inheritdoc />
@@ -288,9 +297,7 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
         int side = (int)Math.Sqrt(content.Length);
         if (side * side > content.Length) side -= 1;
         if (side < 4) return new List<SafetyFinding>();
-        var data = new T[side * side];
-        for (int i = 0; i < data.Length; i++) data[i] = content[i];
-        var tensor = new Tensor<T>(new[] { 1, side, side }, new Vector<T>(data));
+        var tensor = new Tensor<T>(new[] { 1, side, side }, content.Subvector(0, side * side));
         return EvaluateImage(tensor);
     }
 
@@ -354,105 +361,124 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
     /// <inheritdoc />
 
 
-    private static double ComputeHighFrequencyAnomalyScore(ReadOnlySpan<T> span, int[] shape)
+    private static Tensor<T> ComputeHighFrequencyAnomalyScore(Tensor<T> samples)
     {
         // Compute energy in high-frequency components using Laplacian approximation.
         // Natural images concentrate energy in low frequencies; adversarial perturbations
-        // raise the HF ratio.
-        int width = shape.Length >= 2 ? shape[shape.Length - 1] : (int)Math.Sqrt(span.Length);
-        int height = span.Length / Math.Max(width, 1);
+        // raise the HF ratio. `samples` is [batch, rows, width] (each sample's flat buffer).
+        var engine = AiDotNetEngine.Current;
+        int batch = samples.Shape[0];
+        int height = samples.Shape[1];
+        int width = samples.Shape[2];
 
-        if (width < 4 || height < 4) return 0;
+        if (width < 4 || height < 4) return Tensor<T>.CreateZeros(batch);
 
-        double lfEnergy = 0, hfEnergy = 0;
-        int count = 0;
+        // Interior points y in [1, maxRows), x in [1, maxCols); every 4-neighbour is in range.
+        int rows = Math.Min(height - 1, 128) - 1;
+        int cols = Math.Min(width - 1, 128) - 1;
+        var center = engine.TensorSlice(samples, new[] { 0, 1, 1 }, new[] { batch, rows, cols });
+        var left = engine.TensorSlice(samples, new[] { 0, 1, 0 }, new[] { batch, rows, cols });
+        var right = engine.TensorSlice(samples, new[] { 0, 1, 2 }, new[] { batch, rows, cols });
+        var up = engine.TensorSlice(samples, new[] { 0, 0, 1 }, new[] { batch, rows, cols });
+        var down = engine.TensorSlice(samples, new[] { 0, 2, 1 }, new[] { batch, rows, cols });
 
-        int stride = width;
-        int maxRows = Math.Min(height - 1, 128);
-        int maxCols = Math.Min(width - 1, 128);
+        var laplacian = engine.TensorSubtract(
+            engine.TensorSubtract(
+                engine.TensorSubtract(
+                    engine.TensorSubtract(engine.TensorMultiplyScalar(center, StaticNumOps.FromDouble(4)), left),
+                    right),
+                up),
+            down);
+        var axes = new[] { 1, 2 };
+        var hfEnergy = engine.ReduceSum(engine.TensorSquare(laplacian), axes, false);
+        var lfEnergy = engine.ReduceSum(engine.TensorSquare(center), axes, false);
 
-        for (int y = 1; y < maxRows; y++)
-        {
-            for (int x = 1; x < maxCols; x++)
-            {
-                int idx = y * stride + x;
-                if (idx >= span.Length || idx + 1 >= span.Length || idx - 1 < 0 ||
-                    idx - stride < 0 || idx + stride >= span.Length) continue;
-
-                double center = StaticNumOps.ToDouble(span[idx]);
-                double right = StaticNumOps.ToDouble(span[idx + 1]);
-                double left = StaticNumOps.ToDouble(span[idx - 1]);
-                double up = StaticNumOps.ToDouble(span[idx - stride]);
-                double down = StaticNumOps.ToDouble(span[idx + stride]);
-
-                double laplacian = 4 * center - left - right - up - down;
-                hfEnergy += laplacian * laplacian;
-                lfEnergy += center * center;
-                count++;
-            }
-        }
-
-        if (count == 0 || lfEnergy < 1e-10) return 0;
-
-        double hfRatio = hfEnergy / (lfEnergy + hfEnergy);
-        if (hfRatio < 0.15) return 0;
-        return Math.Min(1.0, (hfRatio - 0.15) / 0.5);
+        // lfEnergy < 1e-10 -> 0; hfRatio < 0.15 -> 0; else min(1, (hfRatio - 0.15) / 0.5).
+        var tooDark = SafetyTensorOps<T>.Lt(lfEnergy, 1e-10);
+        var total = engine.TensorAdd(lfEnergy, hfEnergy);
+        var hfRatio = engine.TensorDivide(hfEnergy, SafetyTensorOps<T>.Where(tooDark, 1.0, total));
+        var score = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(hfRatio, 0.15), 0.0,
+            SafetyTensorOps<T>.MinOne(SafetyTensorOps<T>.Affine(hfRatio, 1.0 / 0.5, -0.15 / 0.5)));
+        return SafetyTensorOps<T>.Where(tooDark, 0.0, score);
     }
 
-    private static double ComputeHistogramAnomalyScore(ReadOnlySpan<T> span)
+    /// <summary>
+    /// Scales pixels above 1 from the 0-255 range down to 0-1 (<c>val &gt; 1 ? val / 255 : val</c>).
+    /// </summary>
+    private static Tensor<T> NormalizePixelRange(Tensor<T> values)
     {
+        var engine = AiDotNetEngine.Current;
+        return SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(values, 1.0),
+            engine.TensorDivideScalar(values, StaticNumOps.FromDouble(255.0)), values);
+    }
+
+    private static Tensor<T> ComputeHistogramAnomalyScore(Tensor<T> samples)
+    {
+        var engine = AiDotNetEngine.Current;
         int bins = 64;
-        int[] histogram = new int[bins];
-        int totalPixels = 0;
+        int batch = samples.Shape[0];
+        int sampleSize = samples.Shape[1] * samples.Shape[2];
+        int totalPixels = Math.Min(sampleSize, 65536);
 
-        for (int i = 0; i < span.Length && i < 65536; i++)
-        {
-            double val = StaticNumOps.ToDouble(span[i]);
-            if (val > 1.0) val /= 255.0;
-            val = Math.Max(0, Math.Min(1.0 - 1e-10, val));
-            int bin = (int)(val * bins);
-            bin = Math.Max(0, Math.Min(bins - 1, bin));
-            histogram[bin]++;
-            totalPixels++;
-        }
+        if (totalPixels < 100) return Tensor<T>.CreateZeros(batch);
 
-        if (totalPixels < 100) return 0;
+        // Bin each value of the first 65536 pixels into [0, 1): pixels above 1 are rescaled from
+        // 0-255, everything is clamped to [0, 1 - 1e-10]; a NaN pixel lands in bin 0.
+        var flat = engine.TensorNarrow(engine.Reshape(samples, new[] { batch, sampleSize }), 1, 0, totalPixels);
+        var values = NormalizePixelRange(engine.TensorWhere(engine.TensorIsNan(flat),
+            SafetyTensorOps<T>.FullLike(flat, 0.0), flat));
+        values = SafetyTensorOps<T>.MaxZero(values);
+        values = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(values, 1.0 - 1e-10), 1.0 - 1e-10, values);
+        var bin = engine.TensorFloor(engine.TensorMultiplyScalar(values, StaticNumOps.FromDouble(bins)));
+        bin = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(bin, bins - 1), bins - 1.0, bin);
 
-        int emptyBins = 0;
-        for (int i = 0; i < bins; i++)
-            if (histogram[i] == 0) emptyBins++;
+        // histogram[b, i] = number of pixels of sample b in bin i (bin ids are exact integers,
+        // so a [0, bins) histogram with `bins` buckets counts each id in its own bucket)
+        var perSample = new Tensor<T>[batch];
+        T lower = StaticNumOps.Zero;
+        T upper = StaticNumOps.FromDouble(bins);
+        for (int b = 0; b < batch; b++)
+            perSample[b] = engine.TensorHistc(engine.TensorSliceAxis(bin, 0, b), bins, lower, upper);
+        var histogram = engine.TensorStack(perSample, 0);
 
-        double smoothnessViolation = 0;
-        for (int i = 1; i < bins - 1; i++)
-        {
-            double laplacian = histogram[i - 1] + histogram[i + 1] - 2.0 * histogram[i];
-            smoothnessViolation += Math.Abs(laplacian);
-        }
-        double avgSmoothness = smoothnessViolation / (bins - 2) / Math.Max(totalPixels / bins, 1);
-        double smoothnessScore = Math.Min(1.0, Math.Max(0, (avgSmoothness - 0.5) / 1.0));
-        double emptyBinRatio = (double)emptyBins / bins;
-        double gapScore = Math.Min(1.0, Math.Max(0, (emptyBinRatio - 0.1) / 0.4));
+        var axis1 = new[] { 1 };
+        var emptyBins = engine.ReduceSum(SafetyTensorOps<T>.Lt(histogram, 0.5), axis1, false);
 
-        return 0.6 * smoothnessScore + 0.4 * gapScore;
+        int inner = bins - 2;
+        var laplacian = engine.TensorSubtract(
+            engine.TensorAdd(engine.TensorNarrow(histogram, 1, 0, inner), engine.TensorNarrow(histogram, 1, 2, inner)),
+            engine.TensorMultiplyScalar(engine.TensorNarrow(histogram, 1, 1, inner), StaticNumOps.FromDouble(2.0)));
+        var smoothnessViolation = engine.ReduceSum(engine.TensorAbs(laplacian), axis1, false);
+        var avgSmoothness = engine.TensorDivideScalar(
+            engine.TensorDivideScalar(smoothnessViolation, StaticNumOps.FromDouble(inner)),
+            StaticNumOps.FromDouble(Math.Max(totalPixels / bins, 1)));
+        var smoothnessScore = SafetyTensorOps<T>.ClampUnit(SafetyTensorOps<T>.Affine(avgSmoothness, 1.0, -0.5));
+        var emptyBinRatio = engine.TensorDivideScalar(emptyBins, StaticNumOps.FromDouble(bins));
+        var gapScore = SafetyTensorOps<T>.ClampUnit(SafetyTensorOps<T>.Affine(emptyBinRatio, 1.0 / 0.4, -0.1 / 0.4));
+
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(smoothnessScore, StaticNumOps.FromDouble(0.6)),
+            engine.TensorMultiplyScalar(gapScore, StaticNumOps.FromDouble(0.4)));
     }
 
-    private static double ComputeFeatureSqueezingScore(ReadOnlySpan<T> span)
+    private static Tensor<T> ComputeFeatureSqueezingScore(Tensor<T> samples)
     {
-        int numPixels = Math.Min(span.Length, 16384);
-        double l2Sum = 0;
+        var engine = AiDotNetEngine.Current;
+        int batch = samples.Shape[0];
+        int sampleSize = samples.Shape[1] * samples.Shape[2];
+        int numPixels = Math.Min(sampleSize, 16384);
 
-        for (int i = 0; i < numPixels; i++)
-        {
-            double val = StaticNumOps.ToDouble(span[i]);
-            if (val > 1.0) val /= 255.0;
+        var values = NormalizePixelRange(
+            engine.TensorNarrow(engine.Reshape(samples, new[] { batch, sampleSize }), 1, 0, numPixels));
 
-            double squeezed = Math.Round(val * 15.0) / 15.0;
-            double diff = val - squeezed;
-            l2Sum += diff * diff;
-        }
+        // Squeeze to 4-bit depth (round half to even, like Math.Round) and measure the RMS change.
+        var fifteen = StaticNumOps.FromDouble(15.0);
+        var squeezed = engine.TensorDivideScalar(engine.TensorRound(engine.TensorMultiplyScalar(values, fifteen)), fifteen);
+        var diff = engine.TensorSubtract(values, squeezed);
+        var l2Sum = engine.ReduceSum(engine.TensorSquare(diff), new[] { 1 }, false);
 
-        double rms = Math.Sqrt(l2Sum / numPixels);
-        if (rms < 0.01) return 0;
-        return Math.Min(1.0, (rms - 0.01) / 0.03);
+        var rms = engine.TensorSqrt(engine.TensorDivideScalar(l2Sum, StaticNumOps.FromDouble(numPixels)));
+        return SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(rms, 0.01), 0.0,
+            SafetyTensorOps<T>.MinOne(SafetyTensorOps<T>.Affine(rms, 1.0 / 0.03, -0.01 / 0.03)));
     }
 }

@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -48,72 +49,19 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length < 2) return NumOps.Zero;
 
-        int n = predictions.Length;
-
-        // Compute ranks
-        var predRanks = ComputeRanks(predictions);
-        var actualRanks = ComputeRanks(actuals);
-
-        // Compute Spearman correlation using Pearson correlation on ranks
-        // This correctly handles ties (the d² formula assumes no ties)
-        double meanPred = 0, meanActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanPred += predRanks[i];
-            meanActual += actualRanks[i];
-        }
-        meanPred /= n;
-        meanActual /= n;
-
-        double cov = 0, varPred = 0, varActual = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dp = predRanks[i] - meanPred;
-            double da = actualRanks[i] - meanActual;
-            cov += dp * da;
-            varPred += dp * dp;
-            varActual += da * da;
-        }
-
-        // Guard against zero variance (constant ranks)
-        if (varPred < 1e-12 || varActual < 1e-12)
-            return NumOps.Zero;
-
-        double rho = cov / Math.Sqrt(varPred * varActual);
-
-        return NumOps.FromDouble(rho);
-    }
-
-    private double[] ComputeRanks(ReadOnlySpan<T> values)
-    {
-        int n = values.Length;
-        var indexed = new (double value, int index)[n];
-        for (int i = 0; i < n; i++)
-        {
-            indexed[i] = (NumOps.ToDouble(values[i]), i);
-        }
-        Array.Sort(indexed, (a, b) => a.value.CompareTo(b.value));
-
-        var ranks = new double[n];
-        int i2 = 0;
-        while (i2 < n)
-        {
-            int start = i2;
-            double value = indexed[start].value;
-
-            // Find all tied values
-            while (i2 < n && Math.Abs(indexed[i2].value - value) < 1e-10)
-                i2++;
-
-            // Assign average rank to all tied values
-            double avgRank = (start + 1 + i2) / 2.0;
-            for (int j = start; j < i2; j++)
-            {
-                ranks[indexed[j].index] = avgRank;
-            }
-        }
-
-        return ranks;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals);
+        var predictedRanks = EvaluationTensorOps<T>.MidRanks(pred);
+        var actualRanks = EvaluationTensorOps<T>.MidRanks(actual);
+        var dp = engine.TensorSubtractScalar(predictedRanks, engine.TensorMean(predictedRanks));
+        var da = engine.TensorSubtractScalar(actualRanks, engine.TensorMean(actualRanks));
+        double covariance = engine.TensorSum(engine.TensorMultiply(dp, da));
+        double predictedVariance = engine.TensorSumOfSquares(dp);
+        double actualVariance = engine.TensorSumOfSquares(da);
+        if (predictedVariance < 1e-12 || actualVariance < 1e-12) return NumOps.Zero;
+        return NumOps.FromDouble(covariance / (Math.Sqrt(predictedVariance) * Math.Sqrt(actualVariance)));
     }
 
     /// <inheritdoc />
@@ -136,18 +84,17 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n < 2) return (NumOps.FromDouble(-1), NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

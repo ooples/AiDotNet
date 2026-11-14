@@ -24,13 +24,13 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _marginScores;
+    private Vector<T>? _marginScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MarginScores => _marginScores;
+    public Vector<T>? MarginScores => _marginScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,83 +64,87 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _marginScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Standardize
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-            if (std > 1e-10)
-                for (int i = 0; i < n; i++)
-                    col[i] = (col[i] - mean) / std;
-
-            // For each pair of classes, compute margin
-            double totalMargin = 0;
-            int pairs = 0;
-
-            for (int ci = 0; ci < classes.Count; ci++)
-            {
-                for (int cj = ci + 1; cj < classes.Count; cj++)
-                {
-                    var class1Vals = classIndices[classes[ci]].Select(i => col[i]).ToList();
-                    var class2Vals = classIndices[classes[cj]].Select(i => col[i]).ToList();
-
-                    // Compute margin as gap between class ranges
-                    double min1 = class1Vals.Min();
-                    double max1 = class1Vals.Max();
-                    double min2 = class2Vals.Min();
-                    double max2 = class2Vals.Max();
-
-                    // Margin = gap between closest edges
-                    double margin = Math.Max(0, Math.Max(min2 - max1, min1 - max2));
-
-                    // If overlapping, use negative margin based on overlap
-                    if (margin == 0)
-                    {
-                        double overlap = Math.Min(max1, max2) - Math.Max(min1, min2);
-                        margin = -overlap;
-                    }
-
-                    // Normalize by average spread
-                    double avgSpread = ((max1 - min1) + (max2 - min2)) / 2;
-                    if (avgSpread > 1e-10)
-                        margin /= avgSpread;
-
-                    totalMargin += margin;
-                    pairs++;
-                }
-            }
-
-            _marginScores[j] = pairs > 0 ? totalMargin / pairs : 0;
-        }
-
+        // Half and BFloat16 are scored in float and the scores cast back once: squaring centred values past 256
+        // overflows Half, which made the standard deviation inf and collapsed the standardized column to 0
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _marginScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var wideScores = ComputeMarginScores(X.Cast<float>(), classIndex, classes.Length);
+            _marginScores = wideScores.Cast<T>().ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(wideScores, numToSelect);
+        }
+        else
+        {
+            var scores = ComputeMarginScores(X, classIndex, classes.Length);
+            _marginScores = scores.ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
+        }
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The mean normalized margin between the per-class ranges of every standardized column of <paramref name="X"/>
+    /// ([n, p]) over all class pairs.
+    /// </summary>
+    private static Tensor<TC> ComputeMarginScores<TC>(Tensor<TC> X, int[] classIndex, int k)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int n = X.Shape[0];
+        int p = X.Shape[1];
+        var membership = engine.TensorTranspose(PreprocessingTensorOps.ClassOneHot<TC>(classIndex, k)); // [k, n]
+        // Standardize each feature (population std); near-constant features stay as they are
+        TC eps = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        var mean = engine.ReduceMean(X, new[] { 0 }, true);
+        var centered = engine.TensorSubtract(X, mean);
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, true));
+        var standardized = engine.TensorWhere(
+            engine.TensorBroadcastTo(engine.TensorGreaterThan(std, eps), new[] { n, p }),
+            engine.TensorDivide(centered, std),
+            X);
+
+        // Per-class range of every feature
+        var classMin = new Tensor<TC>[k];
+        var classMax = new Tensor<TC>[k];
+        for (int c = 0; c < k; c++)
+            (classMin[c], classMax[c]) = PreprocessingTensorOps.MaskedColumnRange(
+                standardized, PreprocessingTensorOps.RowVector(membership, c));
+
+        // For each pair of classes, compute the margin between their ranges
+        var totalMargin = new Tensor<TC>(new[] { p });
+        var zeros = new Tensor<TC>(new[] { p });
+        int pairs = 0;
+        TC half = ops.FromDouble(0.5);
+        for (int ci = 0; ci < k; ci++)
+        {
+            for (int cj = ci + 1; cj < k; cj++)
+            {
+                var min1 = classMin[ci];
+                var max1 = classMax[ci];
+                var min2 = classMin[cj];
+                var max2 = classMax[cj];
+
+                // Margin = gap between closest edges; overlapping ranges give the negative overlap
+                var gap = engine.TensorMax(
+                    engine.TensorMax(engine.TensorSubtract(min2, max1), engine.TensorSubtract(min1, max2)), zeros);
+                var overlap = engine.TensorSubtract(engine.TensorMin(max1, max2), engine.TensorMax(min1, min2));
+                var margin = engine.TensorWhere(engine.TensorEquals(gap, zeros), engine.TensorNegate(overlap), gap);
+
+                // Normalize by average spread
+                var avgSpread = engine.TensorMultiplyScalar(
+                    engine.TensorAdd(engine.TensorSubtract(max1, min1), engine.TensorSubtract(max2, min2)), half);
+                margin = engine.TensorWhere(engine.TensorGreaterThan(avgSpread, eps), engine.TensorDivide(margin, avgSpread), margin);
+
+                totalMargin = engine.TensorAdd(totalMargin, margin);
+                pairs++;
+            }
+        }
+
+        return pairs > 0 ? engine.TensorDivideScalar(totalMargin, ops.FromDouble(pairs)) : zeros;
     }
 
     /// <inheritdoc />
@@ -156,15 +160,7 @@ public class MarginSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("MarginSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

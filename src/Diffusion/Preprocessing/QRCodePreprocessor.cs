@@ -44,48 +44,14 @@ public class QRCodePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
-        var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 1, height, width });
-        int halfBlock = _blockSize / 2;
+        var engine = AiDotNetEngine.Current;
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double pixel = NumOps.ToDouble(data[b, 0, h, w]);
-
-                    // Compute local mean for adaptive threshold
-                    double sum = 0;
-                    int count = 0;
-                    int hMin = Math.Max(0, h - halfBlock);
-                    int hMax = Math.Min(height - 1, h + halfBlock);
-                    int wMin = Math.Max(0, w - halfBlock);
-                    int wMax = Math.Min(width - 1, w + halfBlock);
-
-                    for (int kh = hMin; kh <= hMax; kh++)
-                    {
-                        for (int kw = wMin; kw <= wMax; kw++)
-                        {
-                            sum += NumOps.ToDouble(data[b, 0, kh, kw]);
-                            count++;
-                        }
-                    }
-
-                    double localMean = sum / count;
-
-                    // Adaptive threshold: pixel is dark if below local mean
-                    result[b, 0, h, w] = pixel < localMean - 0.02
-                        ? NumOps.Zero
-                        : NumOps.One;
-                }
-            }
-        }
-
-        return result;
+        // Adaptive threshold: a pixel is dark (0) if below the local mean (neighbourhood clipped to the image) - 0.02.
+        // The mean, threshold and comparison stay in double and only the binary result is narrowed: a Half mean and
+        // threshold round enough to flip pixels within a Half ulp of the threshold.
+        var pixel = TensorCopyHelper.CastLogical<T, double>(PreprocessorFilters.Channel(data, 0));
+        var localMean = PreprocessorFilters.ClippedBoxMean(pixel, _blockSize / 2);
+        var dark = engine.TensorLessThan(pixel, engine.TensorAddScalar(localMean, -0.02));
+        return TensorCopyHelper.CastLogical<double, T>(engine.ScalarMinusTensor(1.0, dark));
     }
 }

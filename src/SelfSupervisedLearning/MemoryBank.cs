@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -40,6 +41,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class MemoryBank<T> : IMemoryBank<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly T[] _storage;
     private readonly int _capacity;
@@ -102,14 +104,12 @@ public class MemoryBank<T> : IMemoryBank<T>
                 nameof(embeddings));
         }
 
+        var source = embeddings.Contiguous().AsSpan();
         for (int b = 0; b < batchSize; b++)
         {
             // Copy embedding to storage at current pointer position
             int storageOffset = _pointer * _embeddingDim;
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                _storage[storageOffset + d] = embeddings[b, d];
-            }
+            source.Slice(b * _embeddingDim, _embeddingDim).CopyTo(_storage.AsSpan(storageOffset, _embeddingDim));
 
             // Update pointer (circular buffer)
             _pointer = (_pointer + 1) % _capacity;
@@ -201,6 +201,7 @@ public class MemoryBank<T> : IMemoryBank<T>
     /// <inheritdoc />
     public void UpdateWithMomentum(int[] indices, Tensor<T> newEmbeddings, double momentum)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (indices is null) throw new ArgumentNullException(nameof(indices));
         if (newEmbeddings is null) throw new ArgumentNullException(nameof(newEmbeddings));
         if (momentum < 0 || momentum > 1) throw new ArgumentOutOfRangeException(nameof(momentum));
@@ -221,16 +222,12 @@ public class MemoryBank<T> : IMemoryBank<T>
                 throw new ArgumentOutOfRangeException(nameof(indices), $"Index {idx} out of range");
             }
 
+            // EMA update: new = m * old + (1 - m) * new (rows in order, so a repeated index compounds)
             int storageOffset = idx * _embeddingDim;
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                // EMA update: new = m * old + (1 - m) * new
-                var oldVal = _storage[storageOffset + d];
-                var newVal = newEmbeddings[i, d];
-                _storage[storageOffset + d] = NumOps.Add(
-                    NumOps.Multiply(m, oldVal),
-                    NumOps.Multiply(oneMinusM, newVal));
-            }
+            var oldRow = Tensor<T>.FromMemory(_storage.AsMemory(storageOffset, _embeddingDim), new[] { _embeddingDim });
+            var newRow = Engine.TensorSlice(newEmbeddings, new[] { i, 0 }, new[] { 1, _embeddingDim }).Reshape(_embeddingDim);
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(oldRow, m), Engine.TensorMultiplyScalar(newRow, oneMinusM))
+                .AsSpan().CopyTo(_storage.AsSpan(storageOffset, _embeddingDim));
         }
     }
 

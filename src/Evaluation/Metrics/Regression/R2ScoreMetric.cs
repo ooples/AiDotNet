@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,27 +48,21 @@ public class R2ScoreMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        // Calculate mean of actuals
-        double sumActuals = 0;
-        for (int i = 0; i < actuals.Length; i++)
-            sumActuals += NumOps.ToDouble(actuals[i]);
-        double mean = sumActuals / actuals.Length;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        const double tolerance = 1e-10;
 
-        // Calculate SS_res and SS_tot
-        double ssRes = 0, ssTot = 0;
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            double diffRes = actual - pred;
-            double diffTot = actual - mean;
-            ssRes += diffRes * diffRes;
-            ssTot += diffTot * diffTot;
-        }
+        // SS_res and SS_tot, the latter around the mean of actuals
+        double mean = engine.TensorMean(actual);
+        double ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
+        double ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
 
         // If actuals are constant (zero variance), R² is only 1 if predictions are also perfect
-        if (Math.Abs(ssTot) < 1e-10)
-            return Math.Abs(ssRes) < 1e-10 ? NumOps.One : NumOps.Zero;
+        if (Math.Abs(ssTot) < tolerance)
+            return Math.Abs(ssRes) < tolerance ? NumOps.One : NumOps.Zero;
+
         return NumOps.FromDouble(1 - ssRes / ssTot);
     }
 
@@ -91,18 +86,17 @@ public class R2ScoreMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

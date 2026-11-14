@@ -78,17 +78,8 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
             // experience (Sutton & Barto, Actor-Critic Methods). Sampling here is
             // what supplies on-policy exploration.
             double r = Random.NextDouble();
-            double cumulative = 0.0;
-            selectedAction = _options.ActionSize - 1;
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                cumulative += NumOps.ToDouble(probs[a]);
-                if (r <= cumulative)
-                {
-                    selectedAction = a;
-                    break;
-                }
-            }
+            selectedAction = RLTensorOps.SampleFromCdf(
+                probs.GetSubVector(0, Math.Min(probs.Length, _options.ActionSize)), r, _options.ActionSize - 1);
         }
         else
         {
@@ -146,35 +137,12 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
 
     private Vector<T> ComputeSoftmax(Dictionary<int, T> preferences)
     {
-        T maxPref = preferences[0];
-        for (int i = 1; i < preferences.Count; i++)
-        {
-            if (NumOps.GreaterThan(preferences[i], maxPref))
-            {
-                maxPref = preferences[i];
-            }
-        }
-
-        var expValues = new Vector<T>(preferences.Count);
-        T sumExp = NumOps.Zero;
-        for (int i = 0; i < preferences.Count; i++)
-        {
-            T expVal = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(preferences[i], maxPref))));
-            expValues[i] = expVal;
-            sumExp = NumOps.Add(sumExp, expVal);
-        }
-
-        var probs = new Vector<T>(preferences.Count);
-        for (int i = 0; i < preferences.Count; i++)
-        {
-            probs[i] = NumOps.Divide(expValues[i], sumExp);
-        }
-
-        return probs;
+        // exp(h - max h) / sum exp(h - max h) over actions 0..Count-1.
+        return RLTensorOps.StableSoftmax(RLTensorOps.Row(preferences, preferences.Count));
     }
 
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
-    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+    private int ArgMax(Vector<T> values) { int maxIndex = RLTensorOps.ArgMax(values); return maxIndex; }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_valueTable.Count) };

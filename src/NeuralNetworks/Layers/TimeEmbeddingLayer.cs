@@ -153,6 +153,12 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _frequencies;
 
     /// <summary>
+    /// The frequencies in float, used for a narrow T (Half, BFloat16): rounded to Half, freq_i alone moves
+    /// t * freq_i by up to a tenth of a radian at t = 999.
+    /// </summary>
+    private readonly Tensor<float>? _wideFrequencies;
+
+    /// <summary>
     /// The maximum timestep value for scaling embeddings.
     /// </summary>
     private readonly T _maxTimestep;
@@ -201,9 +207,24 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         // sin/cos frequency regardless of embeddingDim.
         int halfDim = embeddingDim / 2;
         double logMax = Math.Log(10000.0);
-        _frequencies = new Tensor<T>([halfDim, 1]);
-        for (int i = 0; i < halfDim; i++)
-            _frequencies[i, 0] = NumOps.FromDouble(Math.Exp(-logMax * i / halfDim));
+        // freq_i = exp(-ln(10000) * i / halfDim), formed in double and converted once: in a narrow T such as
+        // Half, i * (-ln(10000) / halfDim) and its exponential would each round.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>())
+        {
+            _frequencies = halfDim == 0
+                ? new Tensor<T>([0, 1])
+                : Engine.Reshape(
+                    Engine.TensorExp(Engine.TensorMultiplyScalar(
+                        Engine.TensorArange<double>(0, halfDim, 1), -logMax / halfDim)),
+                    [halfDim, 1]).Cast<T>();
+            if (halfDim > 0 && (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)))
+            {
+                _wideFrequencies = Engine.Reshape(
+                    Engine.TensorExp(Engine.TensorMultiplyScalar(
+                        Engine.TensorArange<double>(0, halfDim, 1), -logMax / halfDim)),
+                    [halfDim, 1]).Cast<float>();
+            }
+        }
 
         // Initialize weights with Xavier/Glorot
         for (int i = 0; i < embeddingDim; i++)
@@ -239,12 +260,26 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     {
         int batch = timesteps.Shape[0];
         var timestepColumn = Engine.Reshape(timesteps, [batch, 1]);
-        var angles = Engine.TensorMatMul(
-            timestepColumn,
-            Engine.TensorTranspose(_frequencies));
-        var embedding = Engine.TensorConcatenate(
-            [Engine.TensorSin(angles), Engine.TensorCos(angles)],
-            axis: 1);
+
+        // A narrow T (Half, BFloat16) forms the angles in float: a Half t * freq_i is off by up to a
+        // quarter radian at t = 999. Timesteps and frequencies carry no gradient.
+        Tensor<T> embedding;
+        if (_wideFrequencies is not null)
+        {
+            var wideAngles = Engine.TensorMatMul(
+                timestepColumn.Cast<float>(), Engine.TensorTranspose(_wideFrequencies));
+            embedding = Engine.TensorConcatenate(
+                [Engine.TensorSin(wideAngles), Engine.TensorCos(wideAngles)], axis: 1).Cast<T>();
+        }
+        else
+        {
+            var angles = Engine.TensorMatMul(
+                timestepColumn,
+                Engine.TensorTranspose(_frequencies));
+            embedding = Engine.TensorConcatenate(
+                [Engine.TensorSin(angles), Engine.TensorCos(angles)],
+                axis: 1);
+        }
 
         // For odd embedding widths, retain the historical zero-valued final feature while keeping
         // every timestep-dependent feature on the IEngine graph.

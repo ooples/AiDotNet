@@ -271,46 +271,22 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
     private double CalculateDistance(Vector<T> v1, Vector<T> v2)
     {
         // Euclidean distance
-        var sum = 0.0;
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var diff = Convert.ToDouble(NumOps.Subtract(v1[i], v2[i]));
-            sum += diff * diff;
-        }
-        return Math.Sqrt(sum);
+        return NumOps.ToDouble(Engine.Norm(Engine.Subtract(v1, v2)));
     }
 
     private Vector<T> CreateAdjustmentVector(Vector<T> anchor, Vector<T> positive, double learningRate)
     {
-        var values = new T[anchor.Length];
-        for (int i = 0; i < anchor.Length; i++)
-        {
-            var diff = NumOps.Subtract(positive[i], anchor[i]);
-            var adjustment = NumOps.Multiply(diff, NumOps.FromDouble(learningRate));
-            values[i] = adjustment;
-        }
-        return new Vector<T>(values);
+        return Engine.Multiply(Engine.Subtract(positive, anchor), NumOps.FromDouble(learningRate));
     }
 
     private Vector<T> AverageVectors(Vector<T> v1, Vector<T> v2)
     {
-        var values = new T[v1.Length];
-        for (int i = 0; i < v1.Length; i++)
-        {
-            var sum = NumOps.Add(v1[i], v2[i]);
-            values[i] = NumOps.Divide(sum, NumOps.FromDouble(2.0));
-        }
-        return new Vector<T>(values);
+        return Engine.Divide(Engine.Add(v1, v2), NumOps.FromDouble(2.0));
     }
 
     private Vector<T> ApplyAdjustment(Vector<T> baseEmb, Vector<T> adjustment)
     {
-        var values = new T[baseEmb.Length];
-        for (int i = 0; i < baseEmb.Length; i++)
-        {
-            values[i] = NumOps.Add(baseEmb[i], adjustment[i]);
-        }
-        return new Vector<T>(values).Normalize();
+        return Engine.Add(baseEmb, adjustment).Normalize();
     }
 
     /// <inheritdoc />

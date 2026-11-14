@@ -130,11 +130,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             // Apply tanh squashing if enabled
             if (_useTanhSquashing)
             {
-                for (int i = 0; i < action.Length; i++)
-                {
-                    double actionValue = NumOps.ToDouble(action[i]);
-                    action[i] = NumOps.FromDouble(Math.Tanh(actionValue));
-                }
+                action = AiDotNetEngine.Current.Tanh(action);
             }
 
             if (training)

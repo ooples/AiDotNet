@@ -89,6 +89,15 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly bool[] _adaptedLayers;
 
     /// <summary>
+    /// The layer each body parameter belongs to, built once from <see cref="_layers"/> (which never changes) so
+    /// the per-step rate expansion does not rebuild a parameter-sized index. It is an integer lookup derived
+    /// entirely from the model's layer layout, rebuilt by every constructor, so it is scratch: not trained,
+    /// not counted and not saved.
+    /// </summary>
+    [Scratch]
+    private readonly Tensor<int> _layerIndex;
+
+    /// <summary>
     /// Initializes a new instance of the BOILAlgorithm class.
     /// </summary>
     /// <param name="options">BOIL configuration options containing the model and all hyperparameters.</param>
@@ -135,6 +144,7 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         _headBias = new Vector<T>(options.NumClasses);
         _layers = BodyLayers(options.MetaModel, InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length);
         _adaptedLayers = TopLayers(_layers.Length, options.BodyAdaptationFraction);
+        _layerIndex = LayerIndex();
         _layerStepRates = options.UseLayerwiseLearningRates ? InitialLayerStepRates() : new Vector<T>(0);
     }
 
@@ -222,6 +232,9 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var (loss, weights, bias) = HeadLossAndGradient(Embed(adapted, task.QueryInput), queryLabels, _headWeights, _headBias);
         var lambda = BodyGradient(adapted, task.QueryInput, task.QueryOutput, regularize: false);
         var rates = new Vector<T>(_layerStepRates.Length);
+        int layerCount = _layers.Length;
+        var rateRows = _layerStepRates.Length > 0 && layerCount > 0 ? new Vector<T>?[_layerStepRates.Length / layerCount] : null;
+        var layerIndex = rateRows is not null ? _layerIndex : null;
 
         // Walk the inner loop back. body_{k+1} = body_k - A_k o g_k with g_k the support gradient; the adjoint lambda
         // of body_{k+1} gives each learned rate -sum_layer(g_k o lambda), sends -d/dhead (g_k . A_k o lambda) to the
@@ -229,20 +242,9 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         for (int k = trace.Count - 1; k >= 0; k--)
         {
             var (stepBody, stepGradient) = trace[k];
-            if (_layerStepRates.Length > 0)
+            if (rateRows is not null && layerIndex is not null)
             {
-                for (int l = 0; l < _layers.Length; l++)
-                {
-                    if (!_adaptedLayers[l]) continue;
-                    var (offset, count) = _layers[l];
-                    T dot = NumOps.Zero;
-                    for (int i = offset; i < offset + count; i++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(stepGradient[i], lambda[i]));
-                    }
-
-                    rates[k * _layers.Length + l] = NumOps.Negate(dot);
-                }
+                rateRows[k] = LayerRateGradient(stepGradient, lambda, layerIndex);
             }
 
             if (_boilOptions.UseFirstOrder) continue;
@@ -266,7 +268,47 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             lambda = Combine(lambda, bodyPlus, bodyMinus, -1.0 / (2 * eps));
         }
 
+        if (rateRows is not null)
+        {
+            // Steps the trace did not reach keep a zero rate gradient.
+            var rows = new List<Vector<T>>(rateRows.Length);
+            foreach (var row in rateRows) rows.Add(row ?? new Vector<T>(layerCount));
+            rates = Vector<T>.Concatenate(rows);
+        }
+
         return (loss, lambda, weights, bias, rates);
+    }
+
+    /// <summary>
+    /// One step's learned-rate gradient, -sum over each adapted layer of g_k o lambda (zero for layers the inner loop
+    /// leaves alone), as a per-layer vector.
+    /// </summary>
+    private Vector<T> LayerRateGradient(Vector<T> stepGradient, Vector<T> lambda, Tensor<int> layerIndex)
+    {
+        var products = Tensor<T>.FromVector(Engine.Multiply(stepGradient, lambda));
+        var layerSums = Engine.ScatterAdd(products, layerIndex, 0, _layers.Length).ToVector();
+        return Engine.Negate(Engine.Multiply(layerSums, AdaptedLayerMask()));
+    }
+
+    /// <summary>The layer each body parameter belongs to; the layers tile the parameter vector in order.</summary>
+    private Tensor<int> LayerIndex()
+    {
+        int length = _layers.Length == 0 ? 0 : _layers[_layers.Length - 1].Offset + _layers[_layers.Length - 1].Count;
+        var index = new int[length];
+        for (int l = 0; l < _layers.Length; l++)
+        {
+            var (offset, count) = _layers[l];
+            for (int i = offset; i < offset + count; i++) index[i] = l;
+        }
+
+        return new Tensor<int>(index, new[] { length });
+    }
+
+    /// <summary>1 for each layer the inner loop adapts, 0 otherwise.</summary>
+    private Vector<T> AdaptedLayerMask()
+    {
+        var ones = Tensor<T>.FromVector(Engine.Fill(_layers.Length, NumOps.One));
+        return Engine.TensorWhere(_adaptedLayers, ones, Engine.TensorZerosLike(ones)).ToVector();
     }
 
     /// <summary>
@@ -391,10 +433,7 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         if (regularize && _boilOptions.BodyL2Regularization > 0)
         {
             T strength = NumOps.FromDouble(_boilOptions.BodyL2Regularization);
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                gradient[i] = NumOps.Add(gradient[i], NumOps.Multiply(strength, body[i]));
-            }
+            gradient = Engine.Add(gradient, Engine.Multiply(body, strength));
         }
 
         return gradient;
@@ -438,18 +477,14 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// </summary>
     private Vector<T> RateVector(int step)
     {
-        int length = _layers.Length == 0 ? 0 : _layers[_layers.Length - 1].Offset + _layers[_layers.Length - 1].Count;
-        var rates = new Vector<T>(length);
-        T shared = NumOps.FromDouble(_boilOptions.InnerLearningRate);
-        for (int l = 0; l < _layers.Length; l++)
-        {
-            if (!_adaptedLayers[l]) continue;
-            T rate = _layerStepRates.Length > 0 ? _layerStepRates[step * _layers.Length + l] : shared;
-            var (offset, count) = _layers[l];
-            for (int i = offset; i < offset + count; i++) rates[i] = rate;
-        }
+        if (_layers.Length == 0) return new Vector<T>(0);
 
-        return rates;
+        // Each layer's rate (zero outside adapted layers), spread over that layer's parameters.
+        var layerRates = _layerStepRates.Length > 0
+            ? _layerStepRates.GetSubVector(step * _layers.Length, _layers.Length)
+            : Engine.Fill(_layers.Length, NumOps.FromDouble(_boilOptions.InnerLearningRate));
+        var masked = Tensor<T>.FromVector(Engine.Multiply(layerRates, AdaptedLayerMask()));
+        return Engine.TensorIndexSelect(masked, _layerIndex, 0).ToVector();
     }
 
     /// <summary>
@@ -496,18 +531,17 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private Vector<T> InitialLayerStepRates()
     {
         int steps = _boilOptions.AdaptationSteps;
-        var rates = new Vector<T>(steps * _layers.Length);
-        for (int k = 0; k < steps; k++)
-        {
-            for (int l = 0; l < _layers.Length; l++)
-            {
-                bool early = _layers.Length > 1 && l < _layers.Length / 2;
-                double rate = _boilOptions.InnerLearningRate * (early ? _boilOptions.EarlyLayerLrMultiplier : 1.0);
-                rates[k * _layers.Length + l] = NumOps.FromDouble(rate);
-            }
-        }
+        int layers = _layers.Length;
+        if (steps <= 0 || layers == 0) return new Vector<T>(Math.Max(steps, 0) * layers);
 
-        return rates;
+        // Every step uses the same per-layer rates: the lower half of the layers (with more than one) scaled.
+        int early = layers > 1 ? layers / 2 : 0;
+        T rate = NumOps.FromDouble(_boilOptions.InnerLearningRate);
+        T earlyRate = NumOps.FromDouble(_boilOptions.InnerLearningRate * _boilOptions.EarlyLayerLrMultiplier);
+        var row = early > 0
+            ? Vector<T>.Concatenate(Engine.Fill(early, earlyRate), Engine.Fill(layers - early, rate))
+            : Engine.Fill(layers, rate);
+        return ParameterModulation.Cycle(Engine, row, steps * layers);
     }
 
     #endregion
@@ -532,22 +566,12 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         int rows = embeddings.Shape[0];
         int classes = _boilOptions.NumClasses;
         int width = _boilOptions.FeatureDimension;
-        var weightGradient = new Vector<T>(weights.Length);
-        var biasGradient = new Vector<T>(bias.Length);
-        for (int r = 0; r < rows; r++)
-        {
-            for (int c = 0; c < classes; c++)
-            {
-                T g = logitGradient[r * classes + c];
-                for (int f = 0; f < width; f++)
-                {
-                    weightGradient[c * width + f] = NumOps.Add(
-                        weightGradient[c * width + f], NumOps.Multiply(g, embeddings[r * width + f]));
-                }
 
-                biasGradient[c] = NumOps.Add(biasGradient[c], g);
-            }
-        }
+        // dL/dW = G^T H and dL/db = column sums of G, with G = dL/dlogits [rows, classes] and H [rows, width].
+        var g = Engine.Reshape(logitGradient, new[] { rows, classes });
+        var weightGradient = Engine.TensorMatMul(
+            Engine.TensorTranspose(g), Engine.Reshape(embeddings, new[] { rows, width })).ToVector();
+        var biasGradient = Engine.ReduceSum(g, new[] { 0 }, false).ToVector();
 
         return (loss, weightGradient, biasGradient);
     }
@@ -573,74 +597,54 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <summary>The central-difference step along a direction: small relative to the point, zero with no direction.</summary>
     private static double DifferenceStep(Vector<T> point, Vector<T> direction)
     {
-        double directionNorm = 0, pointNorm = 0;
-        for (int i = 0; i < point.Length; i++)
-        {
-            double d = NumOps.ToDouble(direction[i]);
-            double p = NumOps.ToDouble(point[i]);
-            directionNorm += d * d;
-            pointNorm += p * p;
-        }
+        var engine = AiDotNetEngine.Current;
 
-        directionNorm = Math.Sqrt(directionNorm);
+        var wideDirection = direction.AsTensor().Cast<double>().ToVector();
+        var widePoint = point.AsTensor().Cast<double>().ToVector();
+        double directionNorm = Math.Sqrt(engine.DotProduct(wideDirection, wideDirection));
+        double pointNorm = engine.DotProduct(widePoint, widePoint);
         return directionNorm == 0 ? 0 : 1e-5 * (1.0 + Math.Sqrt(pointNorm)) / directionNorm;
     }
 
     private static Vector<T> Hadamard(Vector<T> a, Vector<T> b)
     {
-        var product = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++) product[i] = NumOps.Multiply(a[i], b[i]);
-        return product;
+        return AiDotNetEngine.Current.Multiply(a, b);
     }
 
     private static Vector<T> Subtract(Vector<T> a, Vector<T> b)
     {
-        var difference = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++) difference[i] = NumOps.Subtract(a[i], b[i]);
-        return difference;
+        return AiDotNetEngine.Current.Subtract(a, b);
     }
 
     private static Vector<T> Shift(Vector<T> values, Vector<T> direction, double step)
     {
-        var shifted = new Vector<T>(values.Length);
-        T s = NumOps.FromDouble(step);
-        for (int i = 0; i < values.Length; i++) shifted[i] = NumOps.Add(values[i], NumOps.Multiply(s, direction[i]));
-        return shifted;
+        var engine = AiDotNetEngine.Current;
+        return engine.Add(values, engine.Multiply(direction, NumOps.FromDouble(step)));
     }
 
     /// <summary><c>baseline + scale * (plus - minus)</c>.</summary>
     private static Vector<T> Combine(Vector<T> baseline, Vector<T> plus, Vector<T> minus, double scale)
     {
-        var combined = new Vector<T>(baseline.Length);
-        T s = NumOps.FromDouble(scale);
-        for (int i = 0; i < baseline.Length; i++)
-        {
-            combined[i] = NumOps.Add(baseline[i], NumOps.Multiply(s, NumOps.Subtract(plus[i], minus[i])));
-        }
-
-        return combined;
+        var engine = AiDotNetEngine.Current;
+        return engine.Add(baseline, engine.Multiply(engine.Subtract(plus, minus), NumOps.FromDouble(scale)));
     }
 
     private Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return Engine.Add(sum, values);
     }
 
     private static Vector<T> Scale(Vector<T> values, T divisor)
     {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
+        return AiDotNetEngine.Current.Divide(values, divisor);
     }
 
     /// <summary>Clones a vector.</summary>
     /// <remarks>An instance member: the coverage suite reaches it by reflection over instance methods.</remarks>
     private Vector<T> CloneVector(Vector<T> source)
     {
-        var clone = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
+        return source.Clone();
     }
 
     #endregion

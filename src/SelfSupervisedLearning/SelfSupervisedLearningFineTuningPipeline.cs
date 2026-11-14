@@ -125,145 +125,99 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private Tensor<T> ComputeLogits(Tensor<T> features)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // logits = features[:, :encoderOutputDim] W + b
+        return Engine.TensorAdd(
+            Engine.TensorMatMul(FeatureColumns(features), ClassifierWeightsView),
+            ClassifierBiasView.Reshape(1, _numClasses));
+    }
+
+    /// <summary>Zero-copy [encoderOutputDim, numClasses] view of the classifier weights.</summary>
+    private Tensor<T> ClassifierWeightsView =>
+        Tensor<T>.FromMemory(_classifierWeights.AsMemory(), new[] { _encoderOutputDim, _numClasses });
+
+    /// <summary>Zero-copy [numClasses] view of the classifier bias.</summary>
+    private Tensor<T> ClassifierBiasView => Vector<T>.Wrap(_classifierBias).AsTensor();
+
+    /// <summary>The first <c>encoderOutputDim</c> columns of a [batch, features] tensor.</summary>
+    private Tensor<T> FeatureColumns(Tensor<T> features)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = features.Shape[0];
-        var logits = new T[batchSize * _numClasses];
+        return features.Rank == 2 && features.Shape[1] == _encoderOutputDim
+            ? features
+            : Engine.TensorSlice(features, new[] { 0, 0 }, new[] { batchSize, _encoderOutputDim });
+    }
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                T sum = _classifierBias[c];
-                for (int d = 0; d < _encoderOutputDim; d++)
-                {
-                    sum = NumOps.Add(sum,
-                        NumOps.Multiply(features[b, d], _classifierWeights[d * _numClasses + c]));
-                }
-                logits[b * _numClasses + c] = sum;
-            }
-        }
+    /// <summary>
+    /// Row max, exp(logit - max) and its row sum over the first numClasses logits.
+    /// </summary>
+    private (Tensor<T> Max, Tensor<T> Exps, Tensor<T> SumExp) ShiftedExponentials(Tensor<T> logits)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var batchSize = logits.Shape[0];
+        var classLogits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, _numClasses });
+        var maxLogit = Engine.ReduceMax(classLogits, new[] { 1 }, keepDims: true);
+        var exps = Engine.TensorExp(Engine.TensorSubtract(classLogits, maxLogit));
+        return (maxLogit, exps, Engine.ReduceSum(exps, new[] { 1 }, keepDims: true));
+    }
 
-        return new Tensor<T>(logits, [batchSize, _numClasses]);
+    /// <summary>One-hot [batch, numClasses] targets for the labels.</summary>
+    private Tensor<T> LabelTargets(int[] labels, int batchSize)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorOneHot<T>(new Tensor<int>(labels.Take(batchSize).ToArray(), new[] { batchSize }), _numClasses);
     }
 
     private T ComputeCrossEntropyLoss(Tensor<T> logits, int[] labels)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
-        T totalLoss = NumOps.Zero;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Softmax
-            T maxLogit = logits[b, 0];
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (NumOps.GreaterThan(logits[b, c], maxLogit))
-                    maxLogit = logits[b, c];
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logits[b, c], maxLogit)));
-            }
-
-            var trueLogit = logits[b, labels[b]];
-            var logProb = NumOps.Subtract(NumOps.Subtract(trueLogit, maxLogit), NumOps.Log(sumExp));
-            totalLoss = NumOps.Subtract(totalLoss, logProb);
-        }
+        // log p_true = (trueLogit - max) - log(sum exp(logit - max))
+        var (maxLogit, _, sumExp) = ShiftedExponentials(logits);
+        var classLogits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, _numClasses });
+        var trueLogit = Engine.ReduceSum(
+            Engine.TensorWhere(LabelTargets(labels, batchSize), classLogits, new Tensor<T>(new[] { batchSize, _numClasses })),
+            new[] { 1 }, keepDims: true);
+        var logProb = Engine.TensorSubtract(Engine.TensorSubtract(trueLogit, maxLogit), Engine.TensorLog(sumExp));
+        T totalLoss = NumOps.Negate(Engine.TensorSum(logProb));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
 
     private Tensor<T> ComputeGradients(Tensor<T> logits, int[] labels)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
-        var grads = new T[batchSize * _numClasses];
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Softmax
-            T maxLogit = logits[b, 0];
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (NumOps.GreaterThan(logits[b, c], maxLogit))
-                    maxLogit = logits[b, c];
-            }
-
-            T sumExp = NumOps.Zero;
-            var probs = new T[_numClasses];
-            for (int c = 0; c < _numClasses; c++)
-            {
-                probs[c] = NumOps.Exp(NumOps.Subtract(logits[b, c], maxLogit));
-                sumExp = NumOps.Add(sumExp, probs[c]);
-            }
-
-            for (int c = 0; c < _numClasses; c++)
-            {
-                probs[c] = NumOps.Divide(probs[c], sumExp);
-                grads[b * _numClasses + c] = probs[c];
-                if (c == labels[b])
-                {
-                    grads[b * _numClasses + c] = NumOps.Subtract(grads[b * _numClasses + c], NumOps.One);
-                }
-            }
-        }
-
-        return new Tensor<T>(grads, [batchSize, _numClasses]);
+        // Softmax probabilities minus the one-hot target
+        var (_, exps, sumExp) = ShiftedExponentials(logits);
+        var probs = Engine.TensorDivide(exps, sumExp);
+        return Engine.TensorSubtract(probs, LabelTargets(labels, batchSize));
     }
 
     private void UpdateClassifier(Tensor<T> features, Tensor<T> gradLogits, double lr)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = features.Shape[0];
         var lrT = NumOps.FromDouble(lr / batchSize);
 
-        for (int d = 0; d < _encoderOutputDim; d++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                T grad = NumOps.Zero;
-                for (int b = 0; b < batchSize; b++)
-                {
-                    grad = NumOps.Add(grad, NumOps.Multiply(features[b, d], gradLogits[b, c]));
-                }
-                _classifierWeights[d * _numClasses + c] = NumOps.Subtract(
-                    _classifierWeights[d * _numClasses + c],
-                    NumOps.Multiply(lrT, grad));
-            }
-        }
+        // dW = features^T gradLogits, db = sum_b gradLogits
+        var gradWeights = Engine.TensorMatMul(Engine.TensorTranspose(FeatureColumns(features)), gradLogits);
+        Engine.TensorSubtract(ClassifierWeightsView, Engine.TensorMultiplyScalar(gradWeights, lrT))
+            .AsSpan().CopyTo(_classifierWeights);
 
-        for (int c = 0; c < _numClasses; c++)
-        {
-            T grad = NumOps.Zero;
-            for (int b = 0; b < batchSize; b++)
-            {
-                grad = NumOps.Add(grad, gradLogits[b, c]);
-            }
-            _classifierBias[c] = NumOps.Subtract(
-                _classifierBias[c],
-                NumOps.Multiply(lrT, grad));
-        }
+        var gradBias = Engine.ReduceSum(gradLogits, new[] { 0 }, keepDims: false);
+        Engine.TensorSubtract(ClassifierBiasView, Engine.TensorMultiplyScalar(gradBias, lrT))
+            .AsSpan().CopyTo(_classifierBias);
     }
 
     private Tensor<T> ComputeFeatureGradients(Tensor<T> gradLogits)
     {
-        var batchSize = gradLogits.Shape[0];
-        var gradFeatures = new T[batchSize * _encoderOutputDim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _encoderOutputDim; d++)
-            {
-                T grad = NumOps.Zero;
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    grad = NumOps.Add(grad,
-                        NumOps.Multiply(gradLogits[b, c], _classifierWeights[d * _numClasses + c]));
-                }
-                gradFeatures[b * _encoderOutputDim + d] = grad;
-            }
-        }
-
-        return new Tensor<T>(gradFeatures, [batchSize, _encoderOutputDim]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // dFeatures = gradLogits W^T
+        return Engine.TensorMatMul(gradLogits, Engine.TensorTranspose(ClassifierWeightsView));
     }
 
     private void UpdateEncoder(double lr)
@@ -276,28 +230,14 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private int ComputeCorrect(Tensor<T> logits, int[] labels)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = logits.Shape[0];
-        int correct = 0;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int predicted = 0;
-            T maxLogit = logits[b, 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                if (NumOps.GreaterThan(logits[b, c], maxLogit))
-                {
-                    maxLogit = logits[b, c];
-                    predicted = c;
-                }
-            }
-
-            if (predicted == labels[b])
-                correct++;
-        }
-
-        return correct;
+        // Predicted class per row is the first index of the row maximum
+        var classLogits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, _numClasses });
+        var predicted = Engine.TensorArgMax(classLogits, 1).ToArray();
+        // labels[b] is indexed per row, so a short label array throws exactly as master did
+        return predicted.Select((p, b) => p == labels[b] ? 1 : 0).Sum();
     }
 
     private double GetLearningRate(int epoch, int totalEpochs)
@@ -318,17 +258,8 @@ public class SelfSupervisedLearningFineTuningPipeline<T>
 
     private Tensor<T> ExtractBatch(Tensor<T> data, int startIdx, int batchSize)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var dim = data.Shape[1];
-        var batch = new T[batchSize * dim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                batch[b * dim + d] = data[startIdx + b, d];
-            }
-        }
-
-        return new Tensor<T>(batch, [batchSize, dim]);
+        return Engine.TensorSlice(data, new[] { startIdx, 0 }, new[] { batchSize, dim });
     }
 }

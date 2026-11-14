@@ -31,6 +31,11 @@ internal static class ClassifierOutputs<T>
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// How far a label may sit from the nearest whole number and still count as that class index.
+    /// </summary>
+    private const double FractionalLabelTolerance = 1e-9;
+
+    /// <summary>
     /// A model output as one row per example, <c>[rows, width]</c>. A vector or a rank-1 tensor holds one scalar
     /// per example, so it becomes <c>[rows, 1]</c>.
     /// </summary>
@@ -48,15 +53,7 @@ internal static class ClassifierOutputs<T>
             case Vector<T> vector:
                 return Tensor<T>.FromVector(vector).Reshape(vector.Length, 1);
             case Matrix<T> matrix:
-            {
-                var rows = new Tensor<T>(new[] { matrix.Rows, matrix.Columns });
-                for (int r = 0; r < matrix.Rows; r++)
-                {
-                    for (int c = 0; c < matrix.Columns; c++) rows[r * matrix.Columns + c] = matrix[r, c];
-                }
-
-                return rows;
-            }
+                return Tensor<T>.FromMatrix(matrix);
 
             default:
                 throw new NotSupportedException(
@@ -70,7 +67,15 @@ internal static class ClassifierOutputs<T>
     /// </summary>
     internal static Tensor<T> Labels(object? labels, int numClasses)
     {
-        Tensor<T> flat = labels switch
+        var flat = FlatLabels(labels);
+        ValidateLabels(flat, numClasses);
+        return flat;
+    }
+
+    /// <summary>The labels as one <c>[rows]</c> tensor, not yet validated.</summary>
+    private static Tensor<T> FlatLabels(object? labels)
+    {
+        return labels switch
         {
             Tensor<T> tensor => tensor.Reshape(tensor.Length),
             Vector<T> vector => Tensor<T>.FromVector(vector),
@@ -79,19 +84,30 @@ internal static class ClassifierOutputs<T>
                 $"Class labels must be a Tensor<T>, Vector<T> or Matrix<T> of class indices, not "
                 + $"'{labels?.GetType().Name ?? "null"}'."),
         };
+    }
 
-        for (int i = 0; i < flat.Length; i++)
+    /// <summary>Throws unless every label is a whole number in <c>[0, numClasses)</c>.</summary>
+    private static void ValidateLabels(Tensor<T> flat, int numClasses)
+    {
+        // 1 where a label is negative, at or above numClasses, or not a whole number (NaN compares false, as before).
+        var engine = AiDotNetEngine.Current;
+        var wide = flat.Cast<double>();
+        double classCount = numClasses;
+        var negative = engine.TensorLessThan(wide, 0.0);
+        var tooLarge = engine.TensorAdd(engine.TensorGreaterThan(wide, classCount), engine.TensorEquals(wide, classCount));
+        var fractional = engine.TensorGreaterThan(
+            engine.TensorAbs(engine.TensorSubtract(wide, engine.TensorRound(wide))), FractionalLabelTolerance);
+        var invalid = engine.TensorAdd(engine.TensorAdd(negative, tooLarge), fractional);
+        if (engine.TensorSum(invalid) > 0)
         {
+            // The first invalid label, as the scalar scan reported. invalid counts the failed checks (a fractional
+            // negative label fails two), so the arg-max is taken over the 0/1 flag rather than over the counts.
+            int i = engine.TensorArgMax(engine.TensorGreaterThan(invalid, 0.0), 0).ToArray()[0];
             double value = Ops.ToDouble(flat[i]);
-            if (value < 0 || value >= numClasses || Math.Abs(value - Math.Round(value)) > 1e-9)
-            {
-                throw new ArgumentException(
-                    $"Label {value} at position {i} is not a class index in [0, {numClasses}). Classifier "
-                    + "meta-learners take one class index per example.", nameof(labels));
-            }
+            throw new ArgumentException(
+                $"Label {value} at position {i} is not a class index in [0, {numClasses}). Classifier "
+                + "meta-learners take one class index per example.", "labels");
         }
-
-        return flat;
     }
 
     /// <summary>
@@ -115,22 +131,51 @@ internal static class ClassifierOutputs<T>
     {
         if (support is Matrix<T> supportMatrix && query is Matrix<T> queryMatrix)
         {
-            var stacked = new Matrix<T>(supportMatrix.Rows + queryMatrix.Rows, supportMatrix.Columns);
-            for (int r = 0; r < supportMatrix.Rows; r++)
-                for (int c = 0; c < supportMatrix.Columns; c++) stacked[r, c] = supportMatrix[r, c];
-            for (int r = 0; r < queryMatrix.Rows; r++)
-                for (int c = 0; c < queryMatrix.Columns; c++) stacked[supportMatrix.Rows + r, c] = queryMatrix[r, c];
-            return (TInput)(object)stacked;
+            // Query rows keep the support's column count, as the row-by-row copy did.
+            var queryRows = Tensor<T>.FromMatrix(queryMatrix);
+            if (queryMatrix.Columns > supportMatrix.Columns)
+            {
+                throw new ArgumentException("Query rows are wider than the support rows they are stacked under.", nameof(query));
+            }
+
+            if (queryMatrix.Columns < supportMatrix.Columns)
+            {
+                queryRows = AiDotNetEngine.Current.Concat(
+                    new[] { queryRows, new Tensor<T>(new[] { queryMatrix.Rows, supportMatrix.Columns - queryMatrix.Columns }) }, 1);
+            }
+
+            var stacked = AiDotNetEngine.Current.Concat(new[] { Tensor<T>.FromMatrix(supportMatrix), queryRows }, 0);
+            return (TInput)(object)stacked.ToMatrix();
         }
 
         if (support is Tensor<T> supportTensor && query is Tensor<T> queryTensor)
         {
+            // Row-major: the support's examples, then the query's, in the support's trailing shape. A narrower
+            // query example is zero-padded at the end of its own row (as the matrix branch does), so no query
+            // example spills into the next one.
             var shape = supportTensor.Shape.ToArray();
-            shape[0] += queryTensor.Shape[0];
-            var stacked = new Tensor<T>(shape);
-            for (int i = 0; i < supportTensor.Length; i++) stacked[i] = supportTensor[i];
-            for (int i = 0; i < queryTensor.Length; i++) stacked[supportTensor.Length + i] = queryTensor[i];
-            return (TInput)(object)stacked;
+            int supportRows = shape[0];
+            int queryRows = queryTensor.Shape.Length == 0 ? 0 : queryTensor.Shape[0];
+            shape[0] += queryRows;
+            int width = 1;
+            for (int axis = 1; axis < shape.Length; axis++) width *= shape[axis];
+            int queryWidth = queryRows == 0 ? 0 : queryTensor.Length / queryRows;
+            if (queryWidth > width)
+            {
+                throw new ArgumentException("Query examples are larger than the support examples they are stacked after.", nameof(query));
+            }
+
+            var engine = AiDotNetEngine.Current;
+            var queryRowsTensor = engine.Reshape(queryTensor, new[] { queryRows, queryWidth });
+            if (queryWidth < width)
+            {
+                queryRowsTensor = engine.Concat(
+                    new[] { queryRowsTensor, new Tensor<T>(new[] { queryRows, width - queryWidth }) }, 1);
+            }
+
+            var stacked = engine.Concat(
+                new[] { engine.Reshape(supportTensor, new[] { supportRows, width }), queryRowsTensor }, 0);
+            return (TInput)(object)engine.Reshape(stacked, shape);
         }
 
         throw new NotSupportedException(
@@ -145,17 +190,11 @@ internal static class ClassifierOutputs<T>
     /// </summary>
     internal static T ProbabilityLoss(ILossFunction<T> loss, object? predictions, object? expected)
     {
-        var labels = Labels(expected, int.MaxValue);
+        var labels = FlatLabels(expected);
         if (predictions is Vector<T> predictedClasses)
         {
-            int wrong = 0;
-            for (int i = 0; i < labels.Length; i++)
-            {
-                if (i >= predictedClasses.Length || Math.Abs(Ops.ToDouble(predictedClasses[i]) - Ops.ToDouble(labels[i])) > 0.5)
-                    wrong++;
-            }
-
-            return Ops.FromDouble(labels.Length == 0 ? 0 : (double)wrong / labels.Length);
+            ValidateLabels(labels, int.MaxValue);
+            return ErrorRate(predictedClasses, labels);
         }
 
         var probabilities = ScoreRows(predictions, labels.Length);
@@ -169,13 +208,15 @@ internal static class ClassifierOutputs<T>
         // two elementwise and threw "Tensor shapes must match. Got [rows, classes] and [rows]". One-hot is the
         // form every loss here understands, and for the index-consuming case it is the same number:
         // -sum_c y_c log p_c collapses to -log p(true class).
+        // A label outside [0, classes) would leave its one-hot row all zero and silently drop that example, so
+        // the labels are checked against the probability columns.
         int classes = logProbabilities.Shape.Length > 1 ? logProbabilities.Shape[1] : 1;
-        var oneHot = new Tensor<T>(new[] { labels.Length, classes });
-        for (int row = 0; row < labels.Length; row++)
-        {
-            int column = (int)Math.Round(Ops.ToDouble(labels[row]));
-            if (column >= 0 && column < classes) oneHot[row * classes + column] = Ops.One;
-        }
+        ValidateLabels(labels, classes);
+        var shape = new[] { labels.Length, classes };
+        var columns = new Tensor<int>(Enumerable.Range(0, classes).ToArray(), new[] { 1, classes }).Cast<double>();
+        var oneHot = engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.Reshape(engine.TensorRound(labels.Cast<double>()), new[] { labels.Length, 1 }), shape),
+            engine.TensorBroadcastTo(columns, shape)).Cast<T>();
 
         return loss.ComputeTapeLoss(logProbabilities, oneHot)[0];
     }
@@ -189,14 +230,7 @@ internal static class ClassifierOutputs<T>
         var labels = Labels(expected, numClasses);
         if (predictions is Vector<T> predictedClasses)
         {
-            int wrong = 0;
-            for (int i = 0; i < labels.Length; i++)
-            {
-                if (i >= predictedClasses.Length || Math.Abs(Ops.ToDouble(predictedClasses[i]) - Ops.ToDouble(labels[i])) > 0.5)
-                    wrong++;
-            }
-
-            return Ops.FromDouble(labels.Length == 0 ? 0 : (double)wrong / labels.Length);
+            return ErrorRate(predictedClasses, labels);
         }
 
         using var noGrad = new NoGradScope<T>();
@@ -212,16 +246,32 @@ internal static class ClassifierOutputs<T>
         if (typeof(TOutput) == typeof(Matrix<T>))
         {
             int rows = scores.Shape[0], classes = scores.Shape[1];
-            var matrix = new Matrix<T>(rows, classes);
-            for (int r = 0; r < rows; r++)
-            {
-                for (int c = 0; c < classes; c++) matrix[r, c] = scores[r * classes + c];
-            }
-
-            return (TOutput)(object)matrix;
+            return (TOutput)(object)scores.Reshape(rows, classes).ToMatrix();
         }
 
         throw new NotSupportedException(
             $"Cannot return classifier scores as {typeof(TOutput).Name}. Supported: Tensor<T>, Vector<T>, Matrix<T>, T[].");
+    }
+
+    /// <summary>
+    /// The fraction of examples whose predicted class is more than 0.5 from the label; a missing prediction is wrong.
+    /// </summary>
+    private static T ErrorRate(Vector<T> predictedClasses, Tensor<T> labels)
+    {
+        int n = labels.Length;
+        if (n == 0) return Ops.Zero;
+
+        var engine = AiDotNetEngine.Current;
+        int compared = Math.Min(n, predictedClasses.Length);
+        double wrong = n - compared;
+        if (compared > 0)
+        {
+            var predicted = Tensor<T>.FromVector(predictedClasses.GetSubVector(0, compared)).Cast<double>();
+            var expected = engine.TensorSlice(labels, new[] { 0 }, new[] { compared }).Cast<double>();
+            var far = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(predicted, expected)), 0.5);
+            wrong += engine.TensorSum(far);
+        }
+
+        return Ops.FromDouble(wrong / n);
     }
 }

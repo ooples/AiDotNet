@@ -117,69 +117,6 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         _frnOptions = options;
     }
 
-    /// <summary>
-    /// Computes the reconstruction error for a query given class support features.
-    /// Uses ridge regression: w* = (S^T S + lambda I)^-1 S^T q, error = ||q - S w*||^2
-    /// </summary>
-    /// <param name="queryFeature">Query feature vector.</param>
-    /// <param name="supportFeatures">List of support features for one class.</param>
-    /// <returns>Reconstruction error (lower = better match).</returns>
-    private double ComputeReconstructionError(Vector<T> queryFeature, List<Vector<T>> supportFeatures)
-    {
-        if (supportFeatures.Count == 0 || queryFeature.Length == 0)
-            return double.MaxValue;
-
-        double lambda = _frnOptions.ReconstructionLambda;
-        int n = supportFeatures.Count;
-        int d = queryFeature.Length;
-
-        // Compute S^T S (n x n gram matrix)
-        var gram = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                double dot = 0;
-                int minLen = Math.Min(supportFeatures[i].Length, supportFeatures[j].Length);
-                for (int k = 0; k < minLen; k++)
-                    dot += NumOps.ToDouble(supportFeatures[i][k]) * NumOps.ToDouble(supportFeatures[j][k]);
-                gram[i, j] = dot;
-                gram[j, i] = dot;
-            }
-            gram[i, i] += lambda; // Regularization
-        }
-
-        // Compute S^T q (n x 1)
-        var stq = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double dot = 0;
-            int minLen = Math.Min(supportFeatures[i].Length, d);
-            for (int k = 0; k < minLen; k++)
-                dot += NumOps.ToDouble(supportFeatures[i][k]) * NumOps.ToDouble(queryFeature[k]);
-            stq[i] = dot;
-        }
-
-        // Solve (S^T S + lambda I) w = S^T q using simple Gaussian elimination
-        var w = SolveLinearSystemStatic(gram, stq, n);
-
-        // Compute reconstruction: q_hat = S w
-        double error = 0;
-        for (int k = 0; k < d; k++)
-        {
-            double reconstructed = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (k < supportFeatures[i].Length)
-                    reconstructed += w[i] * NumOps.ToDouble(supportFeatures[i][k]);
-            }
-            double diff = NumOps.ToDouble(queryFeature[k]) - reconstructed;
-            error += diff * diff;
-        }
-
-        return error;
-    }
-
     /// <summary>Solves a linear system Ax = b using Gaussian elimination.</summary>
     internal static double[] SolveLinearSystemStatic(double[,] A, double[] b, int n)
     {
@@ -272,14 +209,10 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         // Compute modulation from reconstruction weight magnitudes
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (reconstructionWeights != null && reconstructionWeights.Length > 0)
         {
-            double sumAbs = 0;
-            for (int i = 0; i < reconstructionWeights.Length; i++)
-                sumAbs += Math.Abs(NumOps.ToDouble(reconstructionWeights[i]));
-            double meanAbs = sumAbs / reconstructionWeights.Length;
-            modulationFactors = [0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0))];
+            modulationFactors = ParameterModulation.MeanAbsGate(Engine, reconstructionWeights);
         }
 
         return new FRNModel<T, TInput, TOutput>(
@@ -306,50 +239,38 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         int actualComponents = Math.Min(numComponents, supportFeatures.Length / Math.Max(featureDim, 1));
         actualComponents = Math.Max(actualComponents, 1);
 
-        var supportList = new List<Vector<T>>();
-        for (int i = 0; i < actualComponents; i++)
+        // S [n, featureDim]: a shorter last example is zero-padded, which leaves every dot product unchanged
+        var (support, _, n) = ExampleRows.Split(Engine, supportFeatures, actualComponents, featureDim);
+        if (n == 0)
         {
-            int start = i * featureDim;
-            int len = Math.Min(featureDim, supportFeatures.Length - start);
-            if (len <= 0) break;
-            var vec = new Vector<T>(len);
-            for (int d = 0; d < len; d++)
-                vec[d] = supportFeatures[start + d];
-            supportList.Add(vec);
-        }
-
-        if (supportList.Count == 0)
-        {
-            var fallback = new Vector<T>(queryFeatures.Length);
-            for (int i = 0; i < fallback.Length; i++)
-                fallback[i] = NumOps.FromDouble(0.5);
-            return fallback;
+            return Engine.Fill(queryFeatures.Length, NumOps.FromDouble(0.5));
         }
 
         // Split query features into per-example vectors using the same feature dimension
         int numQueries = Math.Max(queryFeatures.Length / Math.Max(featureDim, 1), 1);
-        var weights = new Vector<T>(numQueries);
-
-        for (int q = 0; q < numQueries; q++)
+        var (queries, queryMask, queryCount) = ExampleRows.Split(Engine, queryFeatures, numQueries, featureDim);
+        if (queryCount == 0)
         {
-            int qStart = q * featureDim;
-            int qLen = Math.Min(featureDim, queryFeatures.Length - qStart);
-            if (qLen <= 0) break;
-
-            var queryVec = new Vector<T>(qLen);
-            for (int d = 0; d < qLen; d++)
-                queryVec[d] = queryFeatures[qStart + d];
-
-            // Compute reconstruction error using ridge regression (lower = better match)
-            double error = ComputeReconstructionError(queryVec, supportList);
-
-            // Convert error to weight via sigmoid of negative error (scaled by feature dim)
-            double scaledError = error / Math.Max(featureDim, 1);
-            double weight = 1.0 / (1.0 + Math.Exp(scaledError));
-            weights[q] = NumOps.FromDouble(weight);
+            return new Vector<T>(numQueries);
         }
 
-        return weights;
+        // Ridge regression for every query at once: (S S^T + lambda I) W = S Q^T, error_q = ||q - W_q^T S||^2 over
+        // the query's own entries (lower = better match)
+        var gram = Engine.TensorAdd(
+            Engine.TensorMatMul(support, Engine.TensorTranspose(support)),
+            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(n), NumOps.FromDouble(_frnOptions.ReconstructionLambda)));
+        var coefficients = ExampleRows.SolveSymmetricPositiveDefinite(
+            gram, Engine.TensorMatMul(support, Engine.TensorTranspose(queries)));
+        var reconstructed = Engine.TensorMatMul(Engine.TensorTranspose(coefficients), support);
+        var residual = Engine.TensorMultiply(Engine.TensorSubtract(queries, reconstructed), queryMask);
+        var errors = Engine.ReduceSum(Engine.TensorSquare(residual), new[] { 1 }, false);
+
+        // Convert error to weight via sigmoid of negative error (scaled by feature dim)
+        var weights = Engine.TensorSigmoid(
+            Engine.TensorMultiplyScalar(errors, NumOps.FromDouble(-1.0 / Math.Max(featureDim, 1)))).ToVector();
+        return queryCount == numQueries
+            ? weights
+            : Vector<T>.Concatenate(weights, new Vector<T>(numQueries - queryCount));
     }
 
 }
@@ -364,19 +285,20 @@ public partial class FRNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 /// </remarks>
 internal class FRNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _supportFeatures;
     private readonly Vector<T>? _reconstructionWeights;
     private readonly double _lambda;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _supportFeatures;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -387,7 +309,7 @@ internal class FRNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
         Vector<T>? supportFeatures,
         Vector<T>? reconstructionWeights,
         double lambda,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -404,10 +326,7 @@ internal class FRNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

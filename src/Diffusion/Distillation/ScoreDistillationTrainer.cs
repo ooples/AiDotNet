@@ -72,19 +72,8 @@ public class ScoreDistillationTrainer<T>
         Vector<T> predictedNoise,
         Vector<T> addedNoise)
     {
-        // SDS gradient: w(t) * (epsilon_pretrained - epsilon_added)
-        var gradient = new Vector<T>(generatedLatent.Length);
-        var weight = NumOps.FromDouble(_guidanceScale);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var diff = NumOps.Subtract(
-                i < predictedNoise.Length ? predictedNoise[i] : NumOps.Zero,
-                i < addedNoise.Length ? addedNoise[i] : NumOps.Zero);
-            gradient[i] = NumOps.Multiply(weight, diff);
-        }
-
-        return gradient;
+        // guidance * (eps_pred - eps) over the generated latent length, both noises zero-padded
+        return DiffusionVectorOps.ScaledDifference(predictedNoise, addedNoise, generatedLatent.Length, NumOps.FromDouble(_guidanceScale));
     }
 
     /// <summary>

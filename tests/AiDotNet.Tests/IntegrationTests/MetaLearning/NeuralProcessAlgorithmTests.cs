@@ -77,6 +77,28 @@ public class NeuralProcessAlgorithmTests
         Assert.NotNull(predictions);
     }
 
+    [Fact]
+    public void KLDivergenceGaussian_MatchesTheClosedForm()
+    {
+        // KL(N(m1, s1^2) || N(m2, s2^2)) = log(s2/s1) + (s1^2 + (m1 - m2)^2) / (2 s2^2) - 1/2, summed over dimensions;
+        // torch.distributions.kl_divergence(Normal(m1, s1), Normal(m2, s2)).sum() gives the same 1.7620792530117262.
+        // Dimension 0: m1 = 1, s1 = 0.5, m2 = 0, s2 = 2 -> log 4 + 1.25 / 8 - 0.5 = 1.0425443611198906.
+        // Dimension 1: m1 = -0.5, s1 = 1.5, m2 = 0.5, s2 = 1 -> log(2/3) + 3.25 / 2 - 0.5 = 0.7195348918918356.
+        var algorithm = new NPAlgorithm<double, Matrix<double>, Vector<double>>(
+            new NPOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(3)));
+        var mean1 = new Vector<double>(new[] { 1.0, -0.5 });
+        var logvar1 = new Vector<double>(new[] { Math.Log(0.25), Math.Log(2.25) });
+        var mean2 = new Vector<double>(new[] { 0.0, 0.5 });
+        var logvar2 = new Vector<double>(new[] { Math.Log(4.0), Math.Log(1.0) });
+
+        double expected = Math.Log(4.0) + 1.25 / 8.0 - 0.5 + Math.Log(1.0 / 1.5) + 3.25 / 2.0 - 0.5;
+        Assert.Equal(1.7620792530117262, expected, 12);
+        Assert.Equal(expected, algorithm.KLDivergenceGaussianForTesting(mean1, logvar1, mean2, logvar2), 12);
+
+        // Identical distributions are zero apart.
+        Assert.Equal(0.0, algorithm.KLDivergenceGaussianForTesting(mean1, logvar1, mean1, logvar1), 12);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task NP_MetaTrainAndAdapt_ProducesFiniteLossAndChangesParams()
     {

@@ -49,7 +49,8 @@ public class ProDiffPaperTests
             pitch[f] = 150 + 30 * Math.Sin(0.5 * f);
             energy[f] = 1 + 0.5 * Math.Cos(0.3 * f);
         }
-        return new TtsTrainingSample<double> { Tokens = tokens, Mel = mel, Durations = new[] { 3, 3, 3, 3 }, Pitch = pitch, Energy = energy };
+        return new TtsTrainingSample<double> { Tokens = tokens, Mel = mel, Durations = new[] { 3, 3, 3, 3 },
+            Pitch = new Tensor<double>(new[] { frames }, new Vector<double>(pitch)), Energy = new Tensor<double>(new[] { frames }, new Vector<double>(energy)) };
     }
 
     [Fact(Timeout = 240000)]

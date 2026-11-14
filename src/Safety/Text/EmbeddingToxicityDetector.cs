@@ -100,25 +100,24 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
 
         // Compute embedding for input text
         var inputEmbedding = ComputeTextEmbedding(text);
+        if (_toxicConceptVectors.Length == 0) return findings;
 
-        // Compare against each toxic concept
-        for (int i = 0; i < _toxicConceptVectors.Length; i++)
+        // Compare against every toxic concept at once
+        var similarities = SafetyTensorOps<T>.CosineSimilarities(inputEmbedding, _toxicConceptVectors);
+        var similarityValues = similarities.ToArray();
+
+        foreach (int i in SafetyTensorOps<T>.IndicesAtLeast(similarities, _threshold))
         {
-            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(inputEmbedding, _toxicConceptVectors[i]));
-
-            if (NumOps.GreaterThanOrEquals(similarity, _threshold))
+            double simDouble = NumOps.ToDouble(similarityValues[i]);
+            findings.Add(new SafetyFinding
             {
-                double simDouble = NumOps.ToDouble(similarity);
-                findings.Add(new SafetyFinding
-                {
-                    Category = _toxicCategories[i],
-                    Severity = simDouble >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
-                    Confidence = simDouble,
-                    Description = $"Text embedding similarity to {_toxicCategories[i]} concept: {simDouble:F3}.",
-                    RecommendedAction = simDouble >= 0.8 ? SafetyAction.Block : SafetyAction.Warn,
-                    SourceModule = ModuleName
-                });
-            }
+                Category = _toxicCategories[i],
+                Severity = simDouble >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
+                Confidence = simDouble,
+                Description = $"Text embedding similarity to {_toxicCategories[i]} concept: {simDouble:F3}.",
+                RecommendedAction = simDouble >= 0.8 ? SafetyAction.Block : SafetyAction.Warn,
+                SourceModule = ModuleName
+            });
         }
 
         return findings;
@@ -130,32 +129,15 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
     /// </summary>
     private Vector<T> ComputeTextEmbedding(string text)
     {
-        var embedding = new Vector<T>(_embeddingDim);
         string normalized = text.ToLowerInvariant().Trim();
 
-        // Character trigram hashing
-        for (int i = 0; i <= normalized.Length - 3; i++)
-        {
-            int hash = HashNgram(normalized, i, 3);
-            int idx = ((hash % _embeddingDim) + _embeddingDim) % _embeddingDim;
-            // Use sign of hash for random projection
-            T delta = (hash & 0x80000) != 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-            embedding[idx] = NumOps.Add(embedding[idx], delta);
-        }
-
-        // Character 4-gram hashing
-        for (int i = 0; i <= normalized.Length - 4; i++)
-        {
-            int hash = HashNgram(normalized, i, 4);
-            int idx = ((hash % _embeddingDim) + _embeddingDim) % _embeddingDim;
-            T delta = (hash & 0x80000) != 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-            embedding[idx] = NumOps.Add(embedding[idx], delta);
-        }
+        // Character trigram and 4-gram hashing; the sign of the hash is a random projection
+        var hashes = SafetyTensorOps<T>.NgramHashes(normalized, 3);
+        hashes.AddRange(SafetyTensorOps<T>.NgramHashes(normalized, 4));
+        var embedding = SafetyTensorOps<T>.HashedCounts(_embeddingDim, hashes, signed: true);
 
         // L2 normalize
-        VectorHelper.NormalizeInPlace(embedding);
-
-        return embedding;
+        return SafetyTensorOps<T>.NormalizeUnlessTiny(embedding).ToVector();
     }
 
     /// <summary>
@@ -163,35 +145,12 @@ public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
     /// </summary>
     private Vector<T> ComputeConceptEmbedding(string[] phrases)
     {
-        var centroid = new Vector<T>(_embeddingDim);
+        if (phrases.Length == 0) return new Vector<T>(_embeddingDim);
 
-        foreach (var phrase in phrases)
-        {
-            var phraseEmb = ComputeTextEmbedding(phrase);
-            for (int i = 0; i < _embeddingDim; i++)
-            {
-                centroid[i] = NumOps.Add(centroid[i], phraseEmb[i]);
-            }
-        }
-
-        VectorHelper.NormalizeInPlace(centroid);
-        return centroid;
-    }
-
-
-    private static int HashNgram(string text, int start, int length)
-    {
-        // FNV-1a hash for character n-grams
-        unchecked
-        {
-            int hash = (int)2166136261;
-            for (int i = start; i < start + length && i < text.Length; i++)
-            {
-                hash ^= text[i];
-                hash *= 16777619;
-            }
-            return hash;
-        }
+        var phraseEmbeddings = Engine.TensorStack(
+            Array.ConvertAll(phrases, phrase => Tensor<T>.FromVector(ComputeTextEmbedding(phrase))), 0);
+        var centroid = Engine.ReduceSum(phraseEmbeddings, new[] { 0 }, false);
+        return SafetyTensorOps<T>.NormalizeUnlessTiny(centroid).ToVector();
     }
 
     private static List<ToxicConcept> BuildToxicConcepts()

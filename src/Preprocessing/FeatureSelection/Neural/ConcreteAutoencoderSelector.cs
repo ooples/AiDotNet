@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
@@ -30,13 +31,13 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private readonly double _initialTemperature;
     private readonly double _minTemperature;
 
-    private double[]? _selectionProbabilities;
+    private Vector<T>? _selectionProbabilities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? SelectionProbabilities => _selectionProbabilities;
+    public Vector<T>? SelectionProbabilities => _selectionProbabilities;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,139 +68,136 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
 
         // Normalize
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-            for (int i = 0; i < n; i++) X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
+        var x = NeuralSelectorOps.StandardizeSample(Tensor<T>.FromMatrix(data));
+        var rows = NeuralSelectorOps.SplitRows(x);
 
         int k = Math.Min(_nFeaturesToSelect, p);
         int h = Math.Min(_hiddenSize, p);
         var rand = RandomHelper.CreateSecureRandom();
 
-        // Selection logits (one for each feature, for each of k selections)
-        var logits = new double[k, p];
-        for (int s = 0; s < k; s++)
-            for (int j = 0; j < p; j++)
-                logits[s, j] = (rand.NextDouble() * 2 - 1) * 0.1;
-
-        // Decoder weights
-        var W2 = new double[k, p];
-        double scale = Math.Sqrt(2.0 / (k + p));
-        for (int i = 0; i < k; i++)
-            for (int j = 0; j < p; j++)
-                W2[i, j] = (rand.NextDouble() * 2 - 1) * scale;
-
-        double lr = 0.01;
+        // Selection logits (one for each feature, for each of k selections) and the decoder k -> h -> p
+        var network = new ConcreteNetwork
+        {
+            Logits = NeuralSelectorOps.SymmetricUniform<T>(rand, 0.1, k, p),
+            HiddenWeights = NeuralSelectorOps.SymmetricUniform<T>(rand, Math.Sqrt(2.0 / (k + h)), k, h),
+            HiddenBias = new Tensor<T>(new[] { h }),
+            OutputWeights = NeuralSelectorOps.SymmetricUniform<T>(rand, Math.Sqrt(2.0 / (h + p)), h, p),
+            OutputBias = new Tensor<T>(new[] { p }),
+        };
+        T rate = NumOps.FromDouble(0.01);
 
         for (int epoch = 0; epoch < _nEpochs; epoch++)
         {
-            // Anneal temperature
+            // Anneal temperature: T0 (T_B / T0)^(epoch / B)
             double temp = _initialTemperature * Math.Pow(_minTemperature / _initialTemperature, (double)epoch / _nEpochs);
 
             for (int i = 0; i < n; i++)
             {
-                // Sample Concrete/Gumbel-Softmax selections
-                var selections = new double[k, p];
-                var selectedValues = new double[k];
-
-                for (int s = 0; s < k; s++)
-                {
-                    // Gumbel-Softmax
-                    var gumbels = new double[p];
-                    double maxLogit = double.MinValue;
-                    for (int j = 0; j < p; j++)
-                    {
-                        double u = rand.NextDouble();
-                        gumbels[j] = logits[s, j] - Math.Log(-Math.Log(u + 1e-20) + 1e-20);
-                        maxLogit = Math.Max(maxLogit, gumbels[j]);
-                    }
-
-                    // Softmax with temperature
-                    double sumExp = 0;
-                    for (int j = 0; j < p; j++)
-                    {
-                        selections[s, j] = Math.Exp((gumbels[j] - maxLogit) / temp);
-                        sumExp += selections[s, j];
-                    }
-                    for (int j = 0; j < p; j++)
-                    {
-                        selections[s, j] /= sumExp;
-                        selectedValues[s] += selections[s, j] * X[i, j];
-                    }
-                }
-
-                // Decode
-                var output = new double[p];
-                for (int j = 0; j < p; j++)
-                    for (int s = 0; s < k; s++)
-                        output[j] += selectedValues[s] * W2[s, j];
-
-                // Reconstruction error
-                var error = new double[p];
-                for (int j = 0; j < p; j++)
-                    error[j] = output[j] - X[i, j];
-
-                // Gradient for decoder
-                for (int s = 0; s < k; s++)
-                    for (int j = 0; j < p; j++)
-                        W2[s, j] -= lr * error[j] * selectedValues[s];
-
-                // Gradient for selection logits
-                var gradSelected = new double[k];
-                for (int s = 0; s < k; s++)
-                    for (int j = 0; j < p; j++)
-                        gradSelected[s] += error[j] * W2[s, j];
-
-                for (int s = 0; s < k; s++)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        // Gradient of Gumbel-Softmax
-                        double grad = gradSelected[s] * X[i, j] * selections[s, j] * (1 - selections[s, j]) / temp;
-                        logits[s, j] -= lr * grad;
-                    }
-                }
+                var gradients = network.Gradients(rows[i], PopulationSearchOps.Uniform<T>(rand, k, p), temp);
+                network.Logits = NeuralSelectorOps.Step(network.Logits, gradients.Logits, rate);
+                network.HiddenWeights = NeuralSelectorOps.Step(network.HiddenWeights, gradients.HiddenWeights, rate);
+                network.HiddenBias = NeuralSelectorOps.Step(network.HiddenBias, gradients.HiddenBias, rate);
+                network.OutputWeights = NeuralSelectorOps.Step(network.OutputWeights, gradients.OutputWeights, rate);
+                network.OutputBias = NeuralSelectorOps.Step(network.OutputBias, gradients.OutputBias, rate);
             }
         }
 
         // Compute selection probabilities from final logits
-        _selectionProbabilities = new double[p];
-        for (int s = 0; s < k; s++)
-        {
-            double maxLogit = logits[s, 0];
-            for (int j = 1; j < p; j++) maxLogit = Math.Max(maxLogit, logits[s, j]);
-
-            double sumExp = 0;
-            var probs = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                probs[j] = Math.Exp(logits[s, j] - maxLogit);
-                sumExp += probs[j];
-            }
-            for (int j = 0; j < p; j++)
-                _selectionProbabilities[j] += probs[j] / sumExp;
-        }
-
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _selectionProbabilities[j])
-            .Take(k)
-            .OrderBy(x => x)
-            .ToArray();
+        var probabilities = engine.ReduceSum(engine.TensorSoftmax(network.Logits, 1), new[] { 0 }, false);
+        _selectionProbabilities = probabilities.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(probabilities, k);
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The concrete autoencoder of Abid, Balin and Zou (2019): k concrete selector nodes with logits [k, p] pick
+    /// m_s = softmax((logits_s + gumbel) / T) and pass v_s = m_s . x to a decoder with one LeakyReLU (0.2) hidden
+    /// layer of size h and a linear output of size p, trained on the squared reconstruction error.
+    /// </summary>
+    internal sealed class ConcreteNetwork
+    {
+        public Tensor<T> Logits { get; set; } = new Tensor<T>(new[] { 0, 0 });
+
+        public Tensor<T> HiddenWeights { get; set; } = new Tensor<T>(new[] { 0, 0 });
+
+        public Tensor<T> HiddenBias { get; set; } = new Tensor<T>(new[] { 0 });
+
+        public Tensor<T> OutputWeights { get; set; } = new Tensor<T>(new[] { 0, 0 });
+
+        public Tensor<T> OutputBias { get; set; } = new Tensor<T>(new[] { 0 });
+
+        /// <summary>
+        /// The reconstruction loss |output - x|^2 / 2 of one sample x [p] for the uniforms [k, p] of the Gumbel
+        /// noise -log(-log(u + 1e-20) + 1e-20) at temperature <paramref name="temperature"/>. Returns [1].
+        /// </summary>
+        public Tensor<T> Loss(Tensor<T> x, Tensor<T> uniforms, double temperature)
+        {
+            var engine = AiDotNetEngine.Current;
+            Forward(x, uniforms, temperature, out _, out _, out _, out _, out var error);
+            return PopulationSearchOps.Affine(engine.ReduceSum(engine.TensorSquare(error), new[] { 0 }, true), 0.5, 0);
+        }
+
+        /// <summary>
+        /// Gradients of <see cref="Loss"/> with respect to every parameter. With e = output - x, the decoder
+        /// gradients are the usual back-propagation ones; through the selector, dv = W_h dhidden and, since
+        /// dv_s / dlogit_sj = m_sj (x_j - v_s) / T, dlogits_sj = dv_s m_sj (x_j - v_s) / T.
+        /// </summary>
+        public ConcreteNetwork Gradients(Tensor<T> x, Tensor<T> uniforms, double temperature)
+        {
+            var engine = AiDotNetEngine.Current;
+            var ops = MathHelper.GetNumericOperations<T>();
+            int k = Logits.Shape[0];
+            int p = Logits.Shape[1];
+            Forward(x, uniforms, temperature, out var selection, out var selected, out var hiddenPre, out var hidden, out var error);
+
+            var slope = engine.TensorWhere(
+                engine.TensorGreaterThan(hiddenPre, ops.Zero),
+                PreprocessingTensorOps.Filled(new[] { hidden.Length }, ops.One),
+                PreprocessingTensorOps.Filled(new[] { hidden.Length }, ops.FromDouble(0.2)));
+            var hiddenDelta = engine.TensorMultiply(NeuralSelectorOps.MatVec(OutputWeights, error), slope);
+            var selectedDelta = NeuralSelectorOps.MatVec(HiddenWeights, hiddenDelta);
+
+            var gap = engine.TensorSubtract(
+                engine.TensorBroadcastTo(engine.Reshape(x, new[] { 1, p }), new[] { k, p }),
+                engine.TensorBroadcastTo(engine.Reshape(selected, new[] { k, 1 }), new[] { k, p }));
+            var logitGradient = PopulationSearchOps.Affine(
+                engine.TensorMultiply(
+                    engine.TensorMultiply(selection, gap),
+                    engine.TensorBroadcastTo(engine.Reshape(selectedDelta, new[] { k, 1 }), new[] { k, p })),
+                1 / temperature, 0);
+
+            return new ConcreteNetwork
+            {
+                Logits = logitGradient,
+                HiddenWeights = NeuralSelectorOps.Outer(selected, hiddenDelta),
+                HiddenBias = hiddenDelta,
+                OutputWeights = NeuralSelectorOps.Outer(hidden, error),
+                OutputBias = error,
+            };
+        }
+
+        private void Forward(
+            Tensor<T> x, Tensor<T> uniforms, double temperature, out Tensor<T> selection, out Tensor<T> selected,
+            out Tensor<T> hiddenPre, out Tensor<T> hidden, out Tensor<T> error)
+        {
+            var engine = AiDotNetEngine.Current;
+            var ops = MathHelper.GetNumericOperations<T>();
+            // 1e-20 is 0 in Half, where a draw rounded up to 1 would give log(0) and an infinite Gumbel value
+            T tiny = PopulationSearchOps.Tiny<T>(1e-20);
+            var gumbel = engine.TensorNegate(engine.TensorLog(engine.TensorAddScalar(
+                engine.TensorNegate(engine.TensorLog(engine.TensorAddScalar(uniforms, tiny))), tiny)));
+            selection = engine.TensorSoftmax(PopulationSearchOps.Affine(engine.TensorAdd(Logits, gumbel), 1 / temperature, 0), 1);
+            selected = NeuralSelectorOps.MatVec(selection, x);
+            hiddenPre = engine.TensorAdd(NeuralSelectorOps.VecMat(selected, HiddenWeights), HiddenBias);
+            hidden = engine.TensorWhere(
+                engine.TensorGreaterThan(hiddenPre, ops.Zero), hiddenPre, engine.TensorMultiplyScalar(hiddenPre, ops.FromDouble(0.2)));
+            var output = engine.TensorAdd(NeuralSelectorOps.VecMat(hidden, OutputWeights), OutputBias);
+            error = engine.TensorSubtract(output, x);
+        }
     }
 
     /// <inheritdoc />
@@ -208,15 +206,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("ConcreteAutoencoderSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

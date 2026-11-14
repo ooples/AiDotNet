@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Hybrid;
 
@@ -29,13 +30,13 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private readonly int _filterRatio;
     private readonly int _wrapperIterations;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,68 +73,43 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
 
         // Phase 1: Filter - compute correlation-based scores
-        var filterScores = new double[p];
-        double yMean = y.Average();
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xd = X[i, j] - xMean;
-                double yd = y[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-            filterScores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
+        var filterScores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
         // Select top features from filter
         int filterCount = Math.Min(_nFeaturesToSelect * _filterRatio, p);
-        var filteredFeatures = Enumerable.Range(0, p)
-            .OrderByDescending(j => filterScores[j])
-            .Take(filterCount)
-            .ToList();
+        var remaining = PreprocessingTensorOps.StableOrder(filterScores, descending: true).Take(filterCount).ToList();
 
-        // Phase 2: Wrapper - forward selection on filtered features
+        // Phase 2: Wrapper - forward selection on filtered features. One shuffle defines the cross-validation
+        // folds of every candidate subset, so all candidates are compared on the same splits.
+        var foldOrder = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).ToArray();
         var selected = new List<int>();
-        var remaining = new HashSet<int>(filteredFeatures);
-        double bestOverallScore = double.MinValue;
+        var bestOverallScore = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.MinValue);
 
         while (selected.Count < _nFeaturesToSelect && remaining.Count > 0)
         {
             int bestFeature = -1;
-            double bestScore = double.MinValue;
+            Tensor<T>? bestScore = null;
 
             foreach (int j in remaining)
             {
                 var testSet = new List<int>(selected) { j };
-                double score = EvaluateSubset(X, y, testSet, n, p, rand);
-                if (score > bestScore)
+                var score = CrossValidatedRSquared(x, y, testSet, foldOrder);
+                if (bestScore is null || PopulationSearchOps.Greater(score, bestScore))
                 {
                     bestScore = score;
                     bestFeature = j;
                 }
             }
 
-            if (bestFeature >= 0 && bestScore > bestOverallScore - 0.001)
+            if (bestFeature >= 0 && bestScore is not null
+                && PopulationSearchOps.Greater(bestScore, PopulationSearchOps.Affine(bestOverallScore, 1, -0.001)))
             {
                 selected.Add(bestFeature);
                 remaining.Remove(bestFeature);
@@ -145,129 +121,60 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
             }
         }
 
-        // Compute final scores (combination of filter and selection order)
-        _featureScores = new double[p];
+        // Compute final scores (combination of filter and selection order): filter score + (count - rank)
+        var rankBonus = new int[p];
         for (int i = 0; i < selected.Count; i++)
-            _featureScores[selected[i]] = filterScores[selected[i]] + (selected.Count - i);
+            rankBonus[selected[i]] = selected.Count - i;
+        var bonus = new Tensor<int>(rankBonus, new[] { p }).Cast<T>();
+        var featureScores = engine.TensorMultiply(
+            engine.TensorAdd(filterScores, bonus), PopulationSearchOps.IndexMask<T>(selected.ToArray(), p));
+        _featureScores = featureScores.ToVector();
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _selectedIndices = selected.OrderBy(i => i).ToArray();
         IsFitted = true;
     }
 
-    private double EvaluateSubset(double[,] X, double[] y, List<int> features, int n, int p, Random rand)
+    /// <summary>
+    /// Mean over min(5, n) contiguous folds of <paramref name="foldOrder"/> of the test R^2 of a least-squares fit
+    /// with intercept (ridge 1e-6) on the other rows. A fold with fewer training rows than coefficients, no test
+    /// rows or a constant test target contributes 0. Returns [1].
+    /// </summary>
+    internal static Tensor<T> CrossValidatedRSquared(Tensor<T> x, Tensor<T> y, List<int> features, int[] foldOrder)
     {
-        if (features.Count == 0) return 0;
+        // Half and BFloat16 cross-validate in double: the fold Gram matrix passes 65504 (eight rows of 300 give
+        // 720000) before RidgeCoefficients sees it, and widening inside the solve cannot recover it.
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return FilterWrapperHybridSelector<double>.CrossValidatedRSquared(
+                x.Cast<double>(), y.Cast<double>(), features, foldOrder).Cast<T>();
 
-        // Simple cross-validation with linear regression
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = foldOrder.Length;
         int folds = Math.Min(5, n);
-        double totalScore = 0;
+        var total = new Tensor<T>(new[] { 1 });
+        if (features.Count == 0)
+            return total;
 
-        var indices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).ToList();
-
+        var design = SubsetRegressionOps.WithIntercept(SubsetRegressionOps.Columns(x, features));
         for (int fold = 0; fold < folds; fold++)
         {
             int testStart = fold * n / folds;
             int testEnd = (fold + 1) * n / folds;
-
-            // Train on non-test indices
-            var trainIdx = indices.Where((_, i) => i < testStart || i >= testEnd).ToList();
-            var testIdx = indices.Skip(testStart).Take(testEnd - testStart).ToList();
-
-            if (trainIdx.Count < features.Count + 1 || testIdx.Count == 0)
+            var trainIdx = foldOrder.Where((_, i) => i < testStart || i >= testEnd).ToArray();
+            var testIdx = foldOrder.Skip(testStart).Take(testEnd - testStart).ToArray();
+            if (trainIdx.Length < features.Count + 1 || testIdx.Length == 0)
                 continue;
 
-            // Fit simple linear model
-            var beta = FitLinearModel(X, y, features, trainIdx, n);
-
-            // Evaluate on test
-            double mse = 0;
-            double ssTot = 0;
-            double yMeanTest = testIdx.Average(i => y[i]);
-
-            foreach (int i in testIdx)
-            {
-                double pred = beta[0];
-                for (int k = 0; k < features.Count; k++)
-                    pred += beta[k + 1] * X[i, features[k]];
-                mse += (y[i] - pred) * (y[i] - pred);
-                ssTot += (y[i] - yMeanTest) * (y[i] - yMeanTest);
-            }
-
-            if (ssTot > 1e-10)
-                totalScore += 1 - mse / ssTot; // R-squared
+            var coefficients = SubsetRegressionOps.RidgeCoefficients(
+                SubsetRegressionOps.Rows(design, trainIdx), SubsetRegressionOps.Rows(y, trainIdx), 1e-6);
+            var testY = SubsetRegressionOps.Rows(y, testIdx);
+            var prediction = SubsetRegressionOps.Predict(SubsetRegressionOps.Rows(design, testIdx), coefficients);
+            var rSquared = SubsetRegressionOps.RSquared(
+                testY, prediction, engine.ReduceMean(testY, new[] { 0 }, true), out _);
+            total = engine.TensorAdd(total, rSquared);
         }
 
-        return totalScore / folds;
-    }
-
-    private double[] FitLinearModel(double[,] X, double[] y, List<int> features, List<int> indices, int n)
-    {
-        int k = features.Count + 1;
-        var XtX = new double[k, k];
-        var Xty = new double[k];
-
-        foreach (int i in indices)
-        {
-            var xi = new double[k];
-            xi[0] = 1; // Intercept
-            for (int j = 0; j < features.Count; j++)
-                xi[j + 1] = X[i, features[j]];
-
-            for (int j1 = 0; j1 < k; j1++)
-            {
-                for (int j2 = 0; j2 < k; j2++)
-                    XtX[j1, j2] += xi[j1] * xi[j2];
-                Xty[j1] += xi[j1] * y[i];
-            }
-        }
-
-        // Add regularization and solve
-        for (int j = 0; j < k; j++)
-            XtX[j, j] += 1e-6;
-
-        return SolveSystem(XtX, Xty, k);
-    }
-
-    private double[] SolveSystem(double[,] A, double[] b, int n)
-    {
-        var aug = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                aug[i, j] = A[i, j];
-            aug[i, n] = b[i];
-        }
-
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= n; j++)
-                    aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-                x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
+        return engine.TensorDivideScalar(total, ops.FromDouble(folds));
     }
 
     /// <inheritdoc />
@@ -283,15 +190,7 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("FilterWrapperHybridSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

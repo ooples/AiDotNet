@@ -181,9 +181,11 @@ public class ContinualEvaluationResult<T>
 
         sb.AppendLine();
         sb.AppendLine("--- Per-Task Results ---");
-        for (int i = 0; i < TaskCount; i++)
+        int taskIndex = 0;
+        foreach (var (accuracy, loss) in TaskAccuracies.Zip(TaskLosses, (accuracy, loss) => (accuracy, loss)))
         {
-            sb.AppendLine($"Task {i}: Accuracy={TaskAccuracies[i]}, Loss={TaskLosses[i]}");
+            sb.AppendLine($"Task {taskIndex}: Accuracy={accuracy}, Loss={loss}");
+            taskIndex++;
         }
 
         return sb.ToString();

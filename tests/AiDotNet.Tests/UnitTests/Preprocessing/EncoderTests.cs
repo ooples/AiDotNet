@@ -483,7 +483,7 @@ public class EncoderTests
     public async Task OrdinalEncoder_CustomCategories_UsesProvidedOrder()
     {
         // Arrange - Custom order: [20, 10, 30] -> indices 0, 1, 2
-        var categories = new List<double[]> { new[] { 20.0, 10.0, 30.0 } };
+        var categories = new List<Vector<double>> { new Vector<double>(new[] { 20.0, 10.0, 30.0 }) };
         var data = new Matrix<double>(new double[,]
         {
             { 30.0 },

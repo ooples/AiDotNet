@@ -229,6 +229,13 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
                 $"Inner model returned {missMatrix.Rows} embeddings for {missKeys.Count} distinct texts.");
         }
 
+        // Checked before anything is cached: a rejected batch must not leave entries that fail every later read.
+        if (missMatrix.Columns != EmbeddingDimension)
+        {
+            throw new InvalidOperationException(
+                $"Inner model returned embeddings of dimension {missMatrix.Columns}; expected {EmbeddingDimension}.");
+        }
+
         for (int m = 0; m < missKeys.Count; m++)
         {
             var vector = GetRow(missMatrix, m);
@@ -246,14 +253,7 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     /// </summary>
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
     {
-        var cols = matrix.Columns;
-        var values = new T[cols];
-        for (int j = 0; j < cols; j++)
-        {
-            values[j] = matrix[row, j];
-        }
-
-        return new Vector<T>(values);
+        return new Vector<T>(matrix.GetRowReadOnlySpan(row).ToArray());
     }
 
     /// <summary>
@@ -261,20 +261,13 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     /// </summary>
     private Matrix<T> BuildMatrix(Vector<T>[] results)
     {
-        var rows = results.Length;
         var cols = EmbeddingDimension;
-        var matrix = new Matrix<T>(rows, cols);
+        var mismatch = Array.FindIndex(results, vector => vector.Length != cols);
+        if (mismatch >= 0)
+            throw new InvalidOperationException(
+                $"Embedding at index {mismatch} has dimension {results[mismatch].Length}; expected {cols}.");
 
-        for (int i = 0; i < rows; i++)
-        {
-            var vector = results[i];
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = vector[j];
-            }
-        }
-
-        return matrix;
+        return results.Length == 0 ? new Matrix<T>(0, cols) : Matrix<T>.FromRowVectors(results);
     }
 
     /// <summary>
@@ -282,12 +275,6 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     /// </summary>
     private static Vector<T> Clone(Vector<T> vector)
     {
-        var values = new T[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            values[i] = vector[i];
-        }
-
-        return new Vector<T>(values);
+        return new Vector<T>(vector.ToArray());
     }
 }

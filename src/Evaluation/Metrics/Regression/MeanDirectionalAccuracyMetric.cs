@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -47,23 +48,25 @@ public class MeanDirectionalAccuracyMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length < 2) return NumOps.FromDouble(0.5);
 
-        int correct = 0;
-        int total = 0;
-        for (int i = 1; i < predictions.Length; i++)
-        {
-            double actualChange = NumOps.ToDouble(actuals[i]) - NumOps.ToDouble(actuals[i - 1]);
-            double predChange = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(predictions[i - 1]);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var actualChange = engine.TensorDiff(actual, 1, 0);
+        var predChange = engine.TensorDiff(pred, 1, 0);
+        var zeros = engine.TensorZerosLike(actualChange);
+        var tolerance = engine.TensorFullLike(actualChange, 1e-10);
 
-            // Check if directions match (both positive, both negative, or both zero)
-            if ((actualChange > 0 && predChange > 0) ||
-                (actualChange < 0 && predChange < 0) ||
-                (Math.Abs(actualChange) < 1e-10 && Math.Abs(predChange) < 1e-10))
-            {
-                correct++;
-            }
-            total++;
-        }
+        // Directions match when both rise, both fall, or both stay (within 1e-10)
+        var bothUp = engine.TensorMultiply(engine.TensorGreaterThan(actualChange, zeros), engine.TensorGreaterThan(predChange, zeros));
+        var bothDown = engine.TensorMultiply(engine.TensorLessThan(actualChange, zeros), engine.TensorLessThan(predChange, zeros));
+        var bothFlat = engine.TensorMultiply(
+            engine.TensorLessThan(engine.TensorAbs(actualChange), tolerance),
+            engine.TensorLessThan(engine.TensorAbs(predChange), tolerance));
+        var match = engine.TensorMax(engine.TensorMax(bothUp, bothDown), bothFlat);
 
+        int correct = EvaluationTensorOps<double>.Count(match);
+        int total = actualChange.Length;
         return total > 0 ? NumOps.FromDouble((double)correct / total) : NumOps.FromDouble(0.5);
     }
 
@@ -87,18 +90,17 @@ public class MeanDirectionalAccuracyMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n < 2) return (NumOps.Zero, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

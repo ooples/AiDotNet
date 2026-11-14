@@ -3,6 +3,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Scoring;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Probabilistic;
 
@@ -75,22 +76,20 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
         // For point predictions, compute Gaussian negative log-likelihood:
         // NLL = 0.5 * log(2π * σ²) + (y - ŷ)² / (2σ²)
         // First estimate σ² from residuals, then compute mean NLL
-        double sumSqErr = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double diff = NumOps.ToDouble(predictions[i]) - NumOps.ToDouble(actuals[i]);
-            sumSqErr += diff * diff;
-        }
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        double sumSqErr = engine.TensorSumOfSquares(engine.TensorSubtract(pred, actual));
 
         int n = predictions.Length;
-        double variance = sumSqErr / n;
-        if (variance < 1e-15) variance = 1e-15;
+        double variance = Math.Max(sumSqErr / n, 1e-15);
 
         // Full mean NLL under Gaussian with estimated variance:
         // mean_NLL = 0.5 * log(2π * σ²) + sumSqErr / (2 * n * σ²)
-        double meanNll = 0.5 * Math.Log(2 * Math.PI * variance) + sumSqErr / (2.0 * n * variance);
-
-        return NumOps.FromDouble(meanNll);
+        double logTerm = 0.5 * Math.Log(2 * Math.PI * variance);
+        double fitTerm = sumSqErr / (2.0 * n * variance);
+        return NumOps.FromDouble(logTerm + fitTerm);
     }
 
     /// <inheritdoc/>
@@ -123,7 +122,7 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray();
         var actArr = actual.ToArray();
         var sp = new T[n];
@@ -137,13 +136,11 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
                 sp[i] = predArr[idx];
                 sa[i] = actArr[idx];
             }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

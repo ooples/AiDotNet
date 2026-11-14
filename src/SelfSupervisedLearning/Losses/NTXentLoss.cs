@@ -101,12 +101,7 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
         var logProbs = ObjectiveOps.LogSoftmax(logits, axis: 1);
 
         // Positive of anchor i is i+N (and i-N for the second half): a constant permutation mask.
-        var positive = new Tensor<T>(new[] { 2 * n, 2 * n });
-        for (int i = 0; i < n; i++)
-        {
-            positive[i, i + n] = NumOps.One;
-            positive[i + n, i] = NumOps.One;
-        }
+        var positive = PartnerMask(n);
 
         var picked = Engine.ReduceSum(Engine.TensorMultiply(logProbs, positive), null, keepDims: false);
         return Engine.TensorNegate(
@@ -136,42 +131,32 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
         var (loss, gradCombined) = ComputeContrastiveLossWithGrad(tempScaled, batchSize, combined);
 
         // Split gradients back
-        var gradZ1 = new T[batchSize * dim];
-        var gradZ2 = new T[batchSize * dim];
+        var gradZ1 = Engine.TensorSlice(gradCombined, new[] { 0, 0 }, new[] { batchSize, dim });
+        var gradZ2 = Engine.TensorSlice(gradCombined, new[] { batchSize, 0 }, new[] { batchSize, dim });
 
-        for (int i = 0; i < batchSize * dim; i++)
-        {
-            gradZ1[i] = gradCombined.Data.Span[i];
-            gradZ2[i] = gradCombined.Data.Span[batchSize * dim + i];
-        }
+        return (loss, gradZ1, gradZ2);
+    }
 
-        return (loss, new Tensor<T>(gradZ1, [batchSize, dim]), new Tensor<T>(gradZ2, [batchSize, dim]));
+    /// <summary>
+    /// Constant [2n, 2n] mask with a one at (i, i + n) and (i + n, i): the augmented partner of each anchor.
+    /// </summary>
+    private Tensor<T> PartnerMask(int n)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var eye = Engine.TensorEye<T>(n);
+        var zeros = new Tensor<T>(new[] { n, n });
+        var top = Engine.TensorConcatenate(new[] { zeros, eye }, 1);
+        var bottom = Engine.TensorConcatenate(new[] { eye, zeros }, 1);
+        return Engine.TensorConcatenate(new[] { top, bottom }, 0);
     }
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-        var result = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T sumSquared = NumOps.Zero;
-            for (int j = 0; j < dim; j++)
-            {
-                var val = tensor[i, j];
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(val, val));
-            }
-
-            var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
-
-            for (int j = 0; j < dim; j++)
-            {
-                result[i * dim + j] = NumOps.Divide(tensor[i, j], norm);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // x / sqrt(sum(x^2) + 1e-8) per row
+        var sumSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, ObjectiveOps.Epsilon<T>(1e-8)));
+        return Engine.TensorDivide(tensor, norm);
     }
 
     /// <summary>Stacks two <c>[N, D]</c> view embeddings into the <c>[2N, D]</c> batch NT-Xent scores.</summary>
@@ -188,100 +173,49 @@ public class NTXentLoss<T> : ContrastiveLossBase<T>
 
     private Tensor<T> ComputeSimilarityMatrix(Tensor<T> embeddings)
     {
-        var n = embeddings.Shape[0];
-        var dim = embeddings.Shape[1];
-        var sim = new T[n * n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                T dot = NumOps.Zero;
-                for (int k = 0; k < dim; k++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(embeddings[i, k], embeddings[j, k]));
-                }
-                sim[i * n + j] = dot;
-            }
-        }
-
-        return new Tensor<T>(sim, [n, n]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // sim[i, j] = e_i . e_j
+        return Engine.TensorMatMul(embeddings, Engine.TensorTranspose(embeddings));
     }
 
     private Tensor<T> ScaleByTemperature(Tensor<T> similarity)
     {
-        var result = new T[similarity.Length];
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var invTemp = NumOps.FromDouble(1.0 / _temperature);
-
-        for (int i = 0; i < similarity.Length; i++)
-        {
-            result[i] = NumOps.Multiply(similarity.Data.Span[i], invTemp);
-        }
-
-        return new Tensor<T>(result, similarity._shape);
+        return Engine.TensorMultiplyScalar(similarity, invTemp);
     }
 
     private (T loss, Tensor<T> grad) ComputeContrastiveLossWithGrad(
         Tensor<T> similarity, int batchSize, Tensor<T> embeddings)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var n = similarity.Shape[0];
-        var dim = embeddings.Shape[1];
-        var grad = new T[n * dim];
-        T totalLoss = NumOps.Zero;
+        var zeros = new Tensor<T>(new[] { n, n });
 
-        for (int i = 0; i < n; i++)
-        {
-            int positiveIdx = i < batchSize ? i + batchSize : i - batchSize;
+        // Self-comparisons (the diagonal) take no part: they are selected to MinValue so they
+        // never win the row max, and their softmax weight is selected to zero below.
+        var self = Engine.TensorEye<T>(n);
+        var positive = PartnerMask(batchSize);
+        var others = Engine.TensorWhere(self, Engine.TensorAddScalar(zeros, NumOps.MinValue), similarity);
 
-            // Compute softmax probabilities
-            T maxVal = NumOps.MinValue;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    var val = similarity[i, j];
-                    if (NumOps.GreaterThan(val, maxVal)) maxVal = val;
-                }
-            }
+        // Softmax over j != i, with the row max subtracted for stability
+        var maxVal = Engine.ReduceMax(others, new[] { 1 }, keepDims: true);
+        var expVals = Engine.TensorWhere(self, zeros, Engine.TensorExp(Engine.TensorSubtract(others, maxVal)));
+        var sumExp = Engine.ReduceSum(expVals, new[] { 1 }, keepDims: true);
 
-            T sumExp = NumOps.Zero;
-            var expVals = new T[n];
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    expVals[j] = NumOps.Exp(NumOps.Subtract(similarity[i, j], maxVal));
-                    sumExp = NumOps.Add(sumExp, expVals[j]);
-                }
-            }
+        // Loss_i = logsumexp_{j != i} - sim[i, positive(i)]
+        var logSumExp = Engine.TensorAdd(maxVal, Engine.TensorLog(sumExp));
+        var positiveSim = Engine.ReduceSum(
+            Engine.TensorWhere(positive, similarity, zeros), new[] { 1 }, keepDims: true);
+        T totalLoss = Engine.TensorSum(Engine.TensorSubtract(logSumExp, positiveSim));
 
-            var logSumExp = NumOps.Add(maxVal, NumOps.Log(sumExp));
-            totalLoss = NumOps.Add(totalLoss, NumOps.Subtract(logSumExp, similarity[i, positiveIdx]));
+        // Gradients: (p_ij - [j == positive(i)]) / tau for j != i, accumulated over e_j
+        var invTemp = NumOps.FromDouble(1.0 / _temperature);
+        var prob = Engine.TensorDivide(expVals, sumExp);
+        var gradWeight = Engine.TensorWhere(self, zeros, Engine.TensorSubtract(prob, positive));
+        var grad = Engine.TensorMatMul(Engine.TensorMultiplyScalar(gradWeight, invTemp), embeddings);
 
-            // Compute gradients
-            var invTemp = NumOps.FromDouble(1.0 / _temperature);
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    var prob = NumOps.Divide(expVals[j], sumExp);
-                    var gradWeight = j == positiveIdx
-                        ? NumOps.Subtract(prob, NumOps.One)
-                        : prob;
-
-                    gradWeight = NumOps.Multiply(gradWeight, invTemp);
-
-                    for (int k = 0; k < dim; k++)
-                    {
-                        grad[i * dim + k] = NumOps.Add(
-                            grad[i * dim + k],
-                            NumOps.Multiply(gradWeight, embeddings[j, k]));
-                    }
-                }
-            }
-        }
-
-        return (NumOps.Divide(totalLoss, NumOps.FromDouble(n)), new Tensor<T>(grad, [n, dim]));
+        return (NumOps.Divide(totalLoss, NumOps.FromDouble(n)), grad);
     }
 
     /// <summary>Row-wise L2 normalization on the tape.</summary>

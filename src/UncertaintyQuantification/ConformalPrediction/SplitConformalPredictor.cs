@@ -88,25 +88,15 @@ public class SplitConformalPredictor<T>
         var numCalibration = calibrationInputs.Rows;
         if (numCalibration == 0)
             throw new ArgumentException("Calibration set must contain at least one sample.", nameof(calibrationInputs));
-        _calibrationScores = new Vector<T>(numCalibration);
+        var engine = AiDotNetEngine.Current;
 
-        // Compute non-conformity scores (absolute residuals)
-        for (int i = 0; i < numCalibration; i++)
-        {
-            var input = calibrationInputs.GetRow(i);
-            var prediction = _model.Predict(new Tensor<T>([input.Length], input));
-            if (prediction.Length != 1)
-                throw new InvalidOperationException($"Model must return scalar output for regression. Got length={prediction.Length} shape=[{string.Join(", ", prediction._shape)}] (sample index {i}).");
-            var predValue = prediction[0]; // Assuming scalar output
-
-            var residual = _numOps.Abs(_numOps.Subtract(calibrationTargets[i], predValue));
-            _calibrationScores[i] = residual;
-        }
+        // Non-conformity scores: absolute residuals |y_i - f(x_i)|
+        var predictions = PredictRows(calibrationInputs, includeSampleIndex: true);
+        var residuals = engine.TensorAbs(engine.TensorSubtract(calibrationTargets.AsTensor(), predictions));
 
         // Sort calibration scores for quantile computation
-        var scoresArray = _calibrationScores.ToArray();
-        Array.Sort(scoresArray);
-        _calibrationScores = new Vector<T>(scoresArray);
+        var (sorted, _) = engine.TensorSort(residuals, 0, false);
+        _calibrationScores = sorted.ToVector();
 
         _isCalibrated = true;
     }
@@ -163,21 +153,43 @@ public class SplitConformalPredictor<T>
     /// </summary>
     /// <param name="scores">Sorted calibration scores.</param>
     /// <param name="confidenceLevel">The desired confidence level.</param>
-    /// <returns>The quantile value.</returns>
-    private T ComputeQuantile(Vector<T> scores, double confidenceLevel)
+    /// <returns>The quantile value; positive infinity when the calibration set is too small for the level.</returns>
+    /// <remarks>
+    /// Split conformal prediction (Lei et al. 2018; Angelopoulos and Bates 2021, Sec. 1) uses the k-th smallest
+    /// score with k = ceil((n + 1) * confidenceLevel). When k &gt; n no finite threshold guarantees the coverage,
+    /// so the quantile is +infinity and the interval is unbounded.
+    /// </remarks>
+    internal static T ComputeQuantile(Vector<T> scores, double confidenceLevel)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         var n = scores.Length;
+        var k = (int)Math.Ceiling((n + 1) * confidenceLevel);
+        if (k > n)
+            return numOps.FromDouble(double.PositiveInfinity);
 
-        // Adjusted quantile level to ensure coverage guarantee
-        // Using ceil((n+1)*alpha)/n as per conformal prediction theory
-        var adjustedLevel = Math.Ceiling((n + 1) * confidenceLevel) / n;
-        if (adjustedLevel > 1.0) adjustedLevel = 1.0;
+        return scores[Math.Max(k, 1) - 1];
+    }
 
-        var index = (int)Math.Ceiling(n * adjustedLevel) - 1;
-        if (index < 0) index = 0;
-        if (index >= n) index = n - 1;
+    /// <summary>
+    /// Runs the model on every row and returns the scalar predictions as an [n] tensor.
+    /// </summary>
+    private Tensor<T> PredictRows(Matrix<T> inputs, bool includeSampleIndex)
+    {
+        var outputs = new Tensor<T>[inputs.Rows];
+        for (int i = 0; i < inputs.Rows; i++)
+        {
+            var row = inputs.GetRow(i);
+            var prediction = _model.Predict(new Tensor<T>([row.Length], row));
+            if (prediction.Length != 1)
+            {
+                string where = includeSampleIndex ? $" (sample index {i})" : string.Empty;
+                throw new InvalidOperationException($"Model must return scalar output for regression. Got length={prediction.Length} shape=[{string.Join(", ", prediction._shape)}]{where}.");
+            }
 
-        return scores[index];
+            outputs[i] = AiDotNetEngine.Current.Reshape(prediction, new[] { 1 });
+        }
+
+        return outputs.Length == 0 ? new Tensor<T>([0]) : AiDotNetEngine.Current.TensorConcatenate(outputs, 0);
     }
 
     /// <summary>
@@ -192,28 +204,29 @@ public class SplitConformalPredictor<T>
     /// For example, with 90% confidence level, the empirical coverage should be around 0.90.
     /// If it's much lower, your calibration set might not be representative.
     /// </remarks>
-    public double EvaluateCoverage(Matrix<T> testInputs, Vector<T> testTargets, double confidenceLevel = 0.9)
+    public T EvaluateCoverage(Matrix<T> testInputs, Vector<T> testTargets, double confidenceLevel = 0.9)
     {
-        if (!_isCalibrated)
+        if (!_isCalibrated || _calibrationScores == null)
             throw new InvalidOperationException("Must calibrate predictor before evaluation");
 
-        int coveredCount = 0;
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentException("Confidence level must be between 0 and 1", nameof(confidenceLevel));
+
+        if (testTargets.Length != testInputs.Rows)
+            throw new ArgumentException(
+                $"testTargets has {testTargets.Length} entries but testInputs has {testInputs.Rows} rows.", nameof(testTargets));
+
+        var engine = AiDotNetEngine.Current;
         int totalCount = testInputs.Rows;
+        var quantile = ComputeQuantile(_calibrationScores, confidenceLevel);
+        var predictions = PredictRows(testInputs, includeSampleIndex: false);
 
-        for (int i = 0; i < totalCount; i++)
-        {
-            var input = new Tensor<T>([testInputs.Columns], testInputs.GetRow(i));
-            var (_, lower, upper) = PredictWithInterval(input, confidenceLevel);
-            var trueValue = testTargets[i];
+        // Covered when |y - f(x)| <= q, i.e. y lies in [f(x) - q, f(x) + q]; counted as int.
+        var residuals = engine.TensorAbs(engine.TensorSubtract(testTargets.AsTensor(), predictions));
+        var covered = engine.TensorAdd(engine.TensorLessThan(residuals, quantile), engine.TensorEquals(residuals, quantile)).Cast<int>();
+        int coveredCount = engine.TensorSum(covered);
 
-            // Check if true value is within the interval
-            if (_numOps.GreaterThanOrEquals(trueValue, lower) && _numOps.LessThanOrEquals(trueValue, upper))
-            {
-                coveredCount++;
-            }
-        }
-
-        return (double)coveredCount / totalCount;
+        return _numOps.Divide(_numOps.FromDouble(coveredCount), _numOps.FromDouble(totalCount));
     }
 
     /// <summary>
@@ -226,23 +239,20 @@ public class SplitConformalPredictor<T>
     /// <b>For Beginners:</b> Narrower intervals are better (more precise), but coverage must
     /// still be maintained. This metric helps you understand the precision of your uncertainty estimates.
     /// </remarks>
-    public double ComputeAverageIntervalWidth(Matrix<T> testInputs, double confidenceLevel = 0.9)
+    public T ComputeAverageIntervalWidth(Matrix<T> testInputs, double confidenceLevel = 0.9)
     {
-        if (!_isCalibrated)
+        if (!_isCalibrated || _calibrationScores == null)
             throw new InvalidOperationException("Must calibrate predictor before computing interval width");
 
-        double totalWidth = 0.0;
-        int count = testInputs.Rows;
+        if (confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentException("Confidence level must be between 0 and 1", nameof(confidenceLevel));
 
-        for (int i = 0; i < count; i++)
-        {
-            var input = new Tensor<T>([testInputs.Columns], testInputs.GetRow(i));
-            var (_, lower, upper) = PredictWithInterval(input, confidenceLevel);
+        var engine = AiDotNetEngine.Current;
+        var quantile = ComputeQuantile(_calibrationScores, confidenceLevel);
+        var predictions = PredictRows(testInputs, includeSampleIndex: false);
 
-            var width = _numOps.Subtract(upper, lower);
-            totalWidth += Convert.ToDouble(width);
-        }
-
-        return totalWidth / count;
+        // Each interval is [f(x) - q, f(x) + q].
+        var widths = engine.TensorSubtract(engine.TensorAddScalar(predictions, quantile), engine.TensorSubtractScalar(predictions, quantile));
+        return engine.TensorMean(widths);
     }
 }

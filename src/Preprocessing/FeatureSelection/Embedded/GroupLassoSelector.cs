@@ -31,13 +31,13 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _groupNorms;
+    private Vector<T>? _groupNorms;
     private int[]? _selectedGroups;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NGroupsToSelect => _nGroupsToSelect;
-    public double[]? GroupNorms => _groupNorms;
+    public Vector<T>? GroupNorms => _groupNorms;
     public int[]? SelectedGroups => _selectedGroups;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
@@ -103,111 +103,82 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             }
         }
 
-        // Standardize data
-        var X = new double[n, p];
-        var y = new double[n];
-        var means = new double[p];
-        var stds = new double[p];
+        var engine = Engine;
 
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
+        // Standardize data (population std; a near-zero std is replaced by 1) and center the target
+        var X = FeatureScoringTensorOps.Standardize(Tensor<T>.FromMatrix(data), out _);
+        var residuals = FeatureScoringTensorOps.Center(Tensor<T>.FromVector(target));
 
+        // Per-group column blocks, single columns and penalty thresholds alpha * sqrt(|group|)
+        T one = NumOps.One;
+        T zero = NumOps.Zero;
+        T count = NumOps.FromDouble(n);
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        T alpha = NumOps.FromDouble(_alpha);
+        T tol = NumOps.FromDouble(_tolerance);
+        var columnShape = new[] { n };
+        var groupBlocks = new Tensor<T>[nGroups];
+        var groupThresholds = new Tensor<T>[nGroups];
+        var columns = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
+            columns[j] = PreprocessingTensorOps.ColumnVector(X, j);
+        for (int g = 0; g < nGroups; g++)
         {
-            for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-                stds[j] += Math.Pow(NumOps.ToDouble(data[i, j]) - means[j], 2);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+            groupBlocks[g] = engine.TensorIndexSelect(X, new Tensor<int>(groups[g], new[] { groups[g].Length }), 1);
+            groupThresholds[g] = engine.TensorMultiplyScalar(engine.TensorSqrt(engine.ReduceSum(
+                PreprocessingTensorOps.Filled(new[] { groups[g].Length }, one), new[] { 0 }, true)), alpha);
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - means[j]) / stds[j];
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-        }
-
-        // Block coordinate descent
-        var beta = new double[p];
-        var residuals = new double[n];
-        Array.Copy(y, residuals, n);
+        // Block coordinate descent; beta is kept as one [1] tensor per feature
+        var beta = new Tensor<T>[p];
+        for (int j = 0; j < p; j++)
+            beta[j] = new Tensor<T>(new[] { 1 });
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            double maxChange = 0;
+            var maxChange = new Tensor<T>(new[] { 1 });
 
-            foreach (var group in groups)
+            for (int g = 0; g < nGroups; g++)
             {
+                var group = groups[g];
                 int groupSize = group.Length;
+                var block = groupBlocks[g];
 
-                // Compute gradient for this group
-                var gradient = new double[groupSize];
-                for (int g = 0; g < groupSize; g++)
+                // Gradient X_G' r for this group, then the group soft-thresholded step
+                var gradient = engine.ReduceSum(engine.TensorMultiply(block, engine.TensorBroadcastTo(
+                    engine.Reshape(residuals, new[] { n, 1 }), new[] { n, groupSize })), new[] { 0 }, false);
+                var old = engine.TensorConcatenate(group.Select(j => beta[j]).ToArray(), 0);
+                var step = engine.TensorAdd(old, engine.TensorDivideScalar(gradient, count));
+                var gradNorm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(step), new[] { 0 }, true));
+                var scale = engine.TensorMax(engine.TensorAddScalar(engine.TensorNegate(
+                    engine.TensorDivide(groupThresholds[g], engine.TensorAddScalar(gradNorm, epsilon))), one), zero);
+                var updated = engine.TensorMultiply(step, engine.TensorBroadcastTo(scale, new[] { groupSize }));
+
+                // Update coefficients and residuals one feature at a time
+                for (int k = 0; k < groupSize; k++)
                 {
-                    int j = group[g];
-                    for (int i = 0; i < n; i++)
-                        gradient[g] += X[i, j] * residuals[i];
-                }
-
-                // Compute old group coefficient norm
-                double oldNorm = 0;
-                for (int g = 0; g < groupSize; g++)
-                    oldNorm += beta[group[g]] * beta[group[g]];
-                oldNorm = Math.Sqrt(oldNorm);
-
-                // Group soft thresholding
-                double gradNorm = 0;
-                for (int g = 0; g < groupSize; g++)
-                {
-                    double val = beta[group[g]] + gradient[g] / n;
-                    gradNorm += val * val;
-                }
-                gradNorm = Math.Sqrt(gradNorm);
-
-                double scale = Math.Max(0, 1 - _alpha * Math.Sqrt(groupSize) / (gradNorm + 1e-10));
-
-                // Update coefficients
-                for (int g = 0; g < groupSize; g++)
-                {
-                    double oldBeta = beta[group[g]];
-                    beta[group[g]] = scale * (beta[group[g]] + gradient[g] / n);
-
-                    // Update residuals
-                    for (int i = 0; i < n; i++)
-                        residuals[i] -= (beta[group[g]] - oldBeta) * X[i, group[g]];
-
-                    maxChange = Math.Max(maxChange, Math.Abs(beta[group[g]] - oldBeta));
+                    int j = group[k];
+                    var newBeta = engine.TensorSlice(updated, new[] { k }, new[] { 1 });
+                    var delta = engine.TensorSubtract(newBeta, beta[j]);
+                    beta[j] = newBeta;
+                    residuals = engine.TensorSubtract(residuals,
+                        engine.TensorMultiply(engine.TensorBroadcastTo(delta, columnShape), columns[j]));
+                    maxChange = engine.TensorMax(maxChange, engine.TensorAbs(delta));
                 }
             }
 
-            if (maxChange < _tolerance)
+            if (PreprocessingTensorOps.IsBelow(engine.TensorMaxValue(maxChange), tol))
                 break;
         }
 
         // Compute group norms
-        _groupNorms = new double[nGroups];
-        for (int g = 0; g < nGroups; g++)
-        {
-            foreach (int j in groups[g])
-                _groupNorms[g] += beta[j] * beta[j];
-            _groupNorms[g] = Math.Sqrt(_groupNorms[g]);
-        }
-
+        var groupNorms = engine.TensorConcatenate(groups.Select(group => engine.TensorSqrt(engine.ReduceSum(
+            engine.TensorSquare(engine.TensorConcatenate(group.Select(j => beta[j]).ToArray(), 0)),
+            new[] { 0 }, true))).ToArray(), 0);
+        _groupNorms = groupNorms.ToVector();
         // Select top groups
         int nToSelect = Math.Min(_nGroupsToSelect, nGroups);
-        _selectedGroups = _groupNorms
-            .Select((norm, idx) => (Norm: norm, Index: idx))
-            .OrderByDescending(x => x.Norm)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedGroups = PreprocessingTensorOps.TopKIndicesSorted(groupNorms, nToSelect);
 
         // Collect all selected feature indices
         var selectedSet = new HashSet<int>();
@@ -232,15 +203,7 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("GroupLassoSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

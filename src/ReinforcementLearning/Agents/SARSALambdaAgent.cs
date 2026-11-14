@@ -101,12 +101,7 @@ public partial class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
         else
         {
             // Use ArgMax helper to get best action
-            var qValues = new Vector<T>(_options.ActionSize);
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                qValues[a] = _qTable[stateKey][a];
-            }
-            selectedAction = ArgMax(qValues);
+            selectedAction = ArgMax(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize));
         }
 
         var result = new Vector<T>(_options.ActionSize);
@@ -133,16 +128,15 @@ public partial class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
 
             _eligibilityTraces[stateKey][_lastAction] = NumOps.Add(_eligibilityTraces[stateKey][_lastAction], NumOps.One);
 
+            var engine = AiDotNetEngine.Current;
+            T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
             foreach (var s in _qTable.Keys.ToList())
             {
-                for (int a = 0; a < _options.ActionSize; a++)
-                {
-                    T update = NumOps.Multiply(LearningRate, NumOps.Multiply(delta, _eligibilityTraces[s][a]));
-                    _qTable[s][a] = NumOps.Add(_qTable[s][a], update);
-
-                    T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
-                    _eligibilityTraces[s][a] = NumOps.Multiply(_eligibilityTraces[s][a], decayFactor);
-                }
+                // Whole-row update of this state: Q += lr * (delta * e), then e *= gamma * lambda.
+                var traces = RLTensorOps.Row(_eligibilityTraces[s], _options.ActionSize);
+                var qRow = RLTensorOps.Row(_qTable[s], _options.ActionSize);
+                RLTensorOps.Fill(_qTable[s], engine.Add(qRow, engine.Multiply(engine.Multiply(traces, delta), LearningRate)));
+                RLTensorOps.Fill(_eligibilityTraces[s], engine.Multiply(traces, decayFactor));
             }
         }
 
@@ -178,17 +172,7 @@ public partial class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />

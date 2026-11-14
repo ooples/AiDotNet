@@ -290,6 +290,10 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
             ? new HashSet<int>()
             : Enumerable.Range(0, _options.NumLevelsSkipped).ToHashSet();
 
+        // Flow and feature magnitudes double per finer level, or grow by 2^skipped when the finest motion is skipped
+        T levelScale = NumOps.FromDouble(2.0);
+        T skippedLevelsScale = NumOps.FromDouble(1 << _options.NumLevelsSkipped);
+
         for (int level = _options.NumPyramidLevels - 1; level >= 0; level--)
         {
             // The released fast variants skip whole intermediate fine levels, then
@@ -316,13 +320,11 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
             }
             else
             {
-                double scale = skipMotionAtFinest
-                    ? 1 << _options.NumLevelsSkipped
-                    : 2.0;
+                T scale = skipMotionAtFinest ? skippedLevelsScale : levelScale;
                 lastFlow = Engine.TensorMultiplyScalar(
-                    Resize(flow, motionHeight, motionWidth), NumOps.FromDouble(scale));
+                    Resize(flow, motionHeight, motionWidth), scale);
                 lastFeature = Engine.TensorMultiplyScalar(
-                    Resize(feature, motionHeight, motionWidth), NumOps.FromDouble(scale));
+                    Resize(feature, motionHeight, motionWidth), scale);
                 interpolation = Resize((interpolation ?? throw new InvalidOperationException("interpolation is null where it is required.")), levelHeight, levelWidth);
             }
 

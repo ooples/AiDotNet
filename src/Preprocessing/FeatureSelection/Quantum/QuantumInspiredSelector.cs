@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Quantum;
 
@@ -29,13 +30,13 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly int _nGenerations;
     private readonly double _rotationAngle;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -51,6 +52,8 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (double.IsNaN(rotationAngle) || double.IsInfinity(rotationAngle) || rotationAngle < 0)
+            throw new ArgumentException("Rotation angle must be finite and non-negative.", nameof(rotationAngle));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _populationSize = populationSize;
@@ -72,134 +75,88 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
-        // Initialize quantum population (qubits as angles)
-        // Each qubit j has angle theta[j], where cos^2(theta) = probability of being 0
-        var qubits = new double[_populationSize, p];
+        // Initialize quantum population (qubits as angles): sin^2(theta) is the probability of observing 1,
+        // and every qubit starts in the 50-50 superposition theta = pi / 4
+        T quarterPi = NumOps.FromDouble(Math.PI / 4);
+        T sizePenalty = NumOps.FromDouble(0.01);
+        var qubits = new Tensor<T>[_populationSize];
         for (int i = 0; i < _populationSize; i++)
-            for (int j = 0; j < p; j++)
-                qubits[i, j] = Math.PI / 4; // Initialize to 50-50 superposition
+            qubits[i] = PreprocessingTensorOps.Filled(new[] { p }, quarterPi);
 
         // Best solution tracking
-        var bestSolution = new bool[p];
-        double bestFitness = double.MinValue;
-        var selectionCounts = new double[p];
+        var bestSolution = new Tensor<T>(new[] { p });
+        Tensor<T>? bestFitness = null;
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var selectionCounts = new Tensor<int>(new[] { p });
 
         for (int gen = 0; gen < _nGenerations; gen++)
         {
             for (int i = 0; i < _populationSize; i++)
             {
-                // Observe (collapse) qubits to classical solution
-                var solution = new bool[p];
-                for (int j = 0; j < p; j++)
-                {
-                    double probOne = Math.Sin(qubits[i, j]) * Math.Sin(qubits[i, j]);
-                    solution[j] = rand.NextDouble() < probOne;
-                }
+                // Observe (collapse) qubits to a classical solution, ensuring at least one feature
+                var solution = ParetoOps.EnsureNonEmpty(Observe(qubits[i], PopulationSearchOps.Uniform<T>(rand, p)), rand);
 
-                // Ensure at least one feature selected
-                if (!solution.Any(s => s))
-                    solution[rand.Next(p)] = true;
-
-                // Evaluate fitness
-                double fitness = EvaluateFitness(X, y, solution, n, p);
-
-                // Update best
-                if (fitness > bestFitness)
+                // Evaluate fitness and update the best
+                var fitness = PopulationSearchOps.SubsetFitness(
+                    engine.Reshape(solution, new[] { 1, p }), correlations, _nFeaturesToSelect,
+                    sizePenalty, NumOps.MinValue);
+                if (bestFitness is null || PopulationSearchOps.Greater(fitness, bestFitness))
                 {
                     bestFitness = fitness;
-                    Array.Copy(solution, bestSolution, p);
+                    bestSolution = solution;
                 }
 
                 // Update selection counts
-                for (int j = 0; j < p; j++)
-                    if (solution[j])
-                        selectionCounts[j]++;
+                selectionCounts = engine.TensorAdd(selectionCounts, solution.Cast<int>());
 
-                // Quantum rotation gate update
-                for (int j = 0; j < p; j++)
-                {
-                    // Direction based on whether best solution has this feature
-                    double direction = bestSolution[j] ? 1 : -1;
-
-                    // Adjust based on current solution
-                    if (solution[j] != bestSolution[j])
-                    {
-                        double delta = _rotationAngle * direction;
-
-                        // Bound the rotation
-                        if (bestSolution[j] && qubits[i, j] < Math.PI / 2)
-                            qubits[i, j] += delta;
-                        else if (!bestSolution[j] && qubits[i, j] > 0)
-                            qubits[i, j] -= delta;
-                    }
-                }
+                // Quantum rotation gate update towards the best solution
+                qubits[i] = Rotate(qubits[i], solution, bestSolution, _rotationAngle);
             }
         }
 
         // Compute feature scores from selection counts and best solution
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            _featureScores[j] = selectionCounts[j] / ((double)_populationSize * _nGenerations);
-            if (bestSolution[j])
-                _featureScores[j] += 1.0;
-        }
+        var featureScores = engine.TensorAdd(
+            PopulationSearchOps.Frequency<T>(selectionCounts, (double)_populationSize * _nGenerations),
+            bestSolution);
+        _featureScores = featureScores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(featureScores, numToSelect);
 
         IsFitted = true;
     }
 
-    private double EvaluateFitness(double[,] X, double[] y, bool[] solution, int n, int p)
+    /// <summary>Observation of a qubit row: bit j is 1 when <paramref name="draws"/>[j] &lt; sin^2(theta_j).</summary>
+    internal static Tensor<T> Observe(Tensor<T> theta, Tensor<T> draws)
     {
-        var features = Enumerable.Range(0, p).Where(j => solution[j]).ToList();
-        if (features.Count == 0) return double.MinValue;
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorLessThan(draws, engine.TensorSquare(engine.TensorSin(theta)));
+    }
 
-        // Compute average correlation with target
-        double yMean = y.Average();
-        double totalScore = 0;
-
-        foreach (int j in features)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xd = X[i, j] - xMean;
-                double yd = y[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            totalScore += corr;
-        }
-
-        // Penalty for too many features
-        double sizePenalty = Math.Abs(features.Count - _nFeaturesToSelect) * 0.01;
-
-        return totalScore / features.Count - sizePenalty;
+    /// <summary>
+    /// The rotation gate of Han and Kim (2002) for a solution worse than or equal to the best: where the observed
+    /// bit differs from the best solution's bit, theta turns by <paramref name="angle"/> towards it, increasing
+    /// (towards pi / 2, bit 1) while theta &lt; pi / 2 when the best bit is 1 and decreasing (towards 0, bit 0)
+    /// while theta &gt; 0 when it is 0. The result is clamped to [0, pi / 2]: a large angle (2.0 from pi / 4 gives
+    /// 2.785) otherwise overshot past pi / 2, lowered P(1) to 0.12 and could not turn back.
+    /// </summary>
+    internal static Tensor<T> Rotate(Tensor<T> theta, Tensor<T> solution, Tensor<T> best, double angle)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var differs = engine.TensorAbs(engine.TensorSubtract(solution, best));
+        var up = engine.TensorMultiply(
+            engine.TensorMultiply(differs, best), engine.TensorLessThan(theta, ops.FromDouble(Math.PI / 2)));
+        var down = engine.TensorMultiply(
+            engine.TensorMultiply(differs, PreprocessingTensorOps.OneMinus(best)), engine.TensorGreaterThan(theta, ops.Zero));
+        var rotated = engine.TensorAdd(theta, engine.TensorMultiplyScalar(engine.TensorSubtract(up, down), ops.FromDouble(angle)));
+        return engine.TensorClamp(rotated, ops.Zero, ops.FromDouble(Math.PI / 2));
     }
 
     /// <inheritdoc />
@@ -215,15 +172,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("QuantumInspiredSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -438,49 +438,14 @@ public partial class VBLoRAAdapter<T> : LoRAAdapterBase<T>
             bankB = _globalBankB[_bankKey];
         }
 
-        // Build matrix A from selected bank columns
-        Matrix<T> loraA = new Matrix<T>(bankA.Rows, Rank);
-        for (int i = 0; i < bankA.Rows; i++)
-        {
-            for (int j = 0; j < Rank; j++)
-            {
-                loraA[i, j] = bankA[i, _bankIndicesA[j]];
-            }
-        }
+        // Build matrix A from selected bank columns and matrix B from selected bank rows
+        Tensor<T> loraA = Engine.TensorIndexSelect(
+            Tensor<T>.FromMatrix(bankA), new Tensor<int>(_bankIndicesA, [_bankIndicesA.Length]), 1);
+        Tensor<T> loraB = Engine.TensorIndexSelect(
+            Tensor<T>.FromMatrix(bankB), new Tensor<int>(_bankIndicesB, [_bankIndicesB.Length]), 0);
 
-        // Build matrix B from selected bank rows
-        Matrix<T> loraB = new Matrix<T>(Rank, bankB.Columns);
-        for (int i = 0; i < Rank; i++)
-        {
-            for (int j = 0; j < bankB.Columns; j++)
-            {
-                loraB[i, j] = bankB[_bankIndicesB[i], j];
-            }
-        }
-
-        // Pack matrices into parameter vector and set
-        int inputSize = loraA.Rows;
-        int outputSize = loraB.Columns;
-        Vector<T> params_vec = new Vector<T>(inputSize * Rank + Rank * outputSize);
-
-        int idx = 0;
-        // Pack A
-        for (int i = 0; i < loraA.Rows; i++)
-        {
-            for (int j = 0; j < loraA.Columns; j++)
-            {
-                params_vec[idx++] = loraA[i, j];
-            }
-        }
-
-        // Pack B
-        for (int i = 0; i < loraB.Rows; i++)
-        {
-            for (int j = 0; j < loraB.Columns; j++)
-            {
-                params_vec[idx++] = loraB[i, j];
-            }
-        }
+        // Pack matrices into parameter vector (A then B, row-major) and set
+        Vector<T> params_vec = Vector<T>.Concatenate(loraA.ToVector(), loraB.ToVector());
 
         loraLayer.SetParameters(params_vec);
     }
@@ -554,23 +519,16 @@ public partial class VBLoRAAdapter<T> : LoRAAdapterBase<T>
             Matrix<T> bankA = _globalBankA[_bankKey];
             Matrix<T> bankB = _globalBankB[_bankKey];
 
-            // Write updated A matrix columns back to bank A
-            for (int i = 0; i < loraA.Rows; i++)
-            {
-                for (int j = 0; j < Rank; j++)
-                {
-                    bankA[i, _bankIndicesA[j]] = loraA[i, j];
-                }
-            }
-
-            // Write updated B matrix rows back to bank B
-            for (int i = 0; i < Rank; i++)
-            {
-                for (int j = 0; j < loraB.Columns; j++)
-                {
-                    bankB[_bankIndicesB[i], j] = loraB[i, j];
-                }
-            }
+            // Write updated A matrix columns back to bank A and updated B matrix rows back to
+            // bank B, in place (the banks are shared by every adapter with this bank key).
+            Tensor<T> updatedBankA = Engine.TensorIndexCopy(
+                Tensor<T>.FromMatrix(bankA), 1, new Tensor<int>(_bankIndicesA, [_bankIndicesA.Length]),
+                Tensor<T>.FromMatrix(loraA));
+            Tensor<T> updatedBankB = Engine.TensorIndexCopy(
+                Tensor<T>.FromMatrix(bankB), 0, new Tensor<int>(_bankIndicesB, [_bankIndicesB.Length]),
+                Tensor<T>.FromMatrix(loraB));
+            updatedBankA.AsSpan().CopyTo(bankA.AsWritableSpan());
+            updatedBankB.AsSpan().CopyTo(bankB.AsWritableSpan());
         }
     }
 
@@ -619,24 +577,12 @@ public partial class VBLoRAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights
-        // DenseLayer uses [inputSize, outputSize] convention
-        // loraWeights from MergeWeights() is also [inputSize, outputSize]
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / outputSize;
-            int col = i % outputSize;
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights. loraWeights is [inputSize, outputSize]; DenseLayer stores its weights
+        // input-major and FullyConnectedLayer output-major, so the latter uses the transpose.
+        // Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

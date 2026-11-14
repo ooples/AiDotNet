@@ -152,15 +152,9 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
                 }
             }
 
-            // Initialize B[r] to zero (so LoHa has no effect initially)
+            // Initialize B[r] to zero (so LoHa has no effect initially); fresh tensors are zero-filled
             _matricesB[r] = new Tensor<T>([inputSize, outputSize]);
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int j = 0; j < outputSize; j++)
-                {
-                    _matricesB[r][i, j] = NumOps.Zero;
-                }
-            }
+
 
         }
 
@@ -231,49 +225,33 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         int inputSize = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert input to matrix [batchSize, inputSize]
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < inputSize; i++)
-            {
-                inputMatrix[b, i] = input[b * inputSize + i];
-            }
-        }
+        // View input as [batchSize, inputSize]
+        Tensor<T> inputTensor = Engine.Reshape(input, [batchSize, inputSize]);
 
         // First compute ΔW = Σ_r (A[r] ⊙ B[r]) in weight space
-        Matrix<T> deltaWeights = new Matrix<T>(inputSize, outputSize);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                deltaWeights[i, o] = NumOps.Zero;
-            }
-        }
-
-        // Sum over rank: ΔW += A[r] ⊙ B[r] for each r
-        for (int r = 0; r < Rank; r++)
-        {
-            // Hadamard product: A[r] ⊙ B[r] (element-wise multiplication)
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    T hadamard = NumOps.Multiply(_matricesA[r][i, o], _matricesB[r][i, o]);
-                    deltaWeights[i, o] = NumOps.Add(deltaWeights[i, o], hadamard);
-                }
-            }
-        }
+        Tensor<T> deltaTensor = SumHadamardProducts(inputSize, outputSize);
 
         // Apply ΔW to input: output = input × ΔW — vectorized Engine.TensorMatMul
-        var inputTensor = Tensor<T>.FromMatrix(inputMatrix);
-        var deltaTensor = Tensor<T>.FromMatrix(deltaWeights);
         var deltaResultTensor = Engine.TensorMatMul(inputTensor, deltaTensor);
         // Apply scaling
         deltaResultTensor = Engine.TensorMultiplyScalar(deltaResultTensor, _scaling);
 
         // Return result as tensor [batchSize, outputSize]
         return deltaResultTensor.Reshape(batchSize, outputSize);
+    }
+
+    /// <summary>
+    /// Computes Σ_r (A[r] ⊙ B[r]) as an [inputSize, outputSize] tensor, accumulated in rank order.
+    /// </summary>
+    private Tensor<T> SumHadamardProducts(int inputSize, int outputSize)
+    {
+        Tensor<T> sum = new Tensor<T>([inputSize, outputSize]);
+        for (int r = 0; r < Rank; r++)
+        {
+            sum = Engine.TensorAdd(sum, Engine.TensorMultiply(_matricesA[r], _matricesB[r]));
+        }
+
+        return sum;
     }
 
     /// <summary>
@@ -288,24 +266,9 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         int inputSize = lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Convert to matrices
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < inputSize; i++)
-            {
-                inputMatrix[b, i] = _lastInput[b * inputSize + i];
-            }
-        }
-
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                gradMatrix[b, o] = outputGradient[b * outputSize + o];
-            }
-        }
+        // View as matrices
+        Tensor<T> inputTensorBW = Engine.Reshape(lastInput, [batchSize, inputSize]);
+        Tensor<T> gradTensorBW = Engine.Reshape(outputGradient, [batchSize, outputSize]);
 
         // Initialize gradients
         _matricesAGradient = new Tensor<T>[Rank];
@@ -317,8 +280,6 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute input^T @ grad once — shared across all ranks
-        var inputTensorBW = Tensor<T>.FromMatrix(inputMatrix);
-        var gradTensorBW = Tensor<T>.FromMatrix(gradMatrix);
         var inputT = inputTensorBW.Transpose(new[] { 1, 0 });
         var inputTGrad = Engine.TensorMatMul(inputT, gradTensorBW); // [inputSize, outputSize]
 
@@ -366,25 +327,9 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         // Update all A and B matrices
         for (int r = 0; r < Rank; r++)
         {
-            // Update A[r]
-            for (int i = 0; i < _matricesA[r].Shape[0]; i++)
-            {
-                for (int j = 0; j < _matricesA[r].Shape[1]; j++)
-                {
-                    T update = NumOps.Multiply(_matricesAGradient[r][i, j], learningRate);
-                    _matricesA[r][i, j] = NumOps.Subtract(_matricesA[r][i, j], update);
-                }
-            }
-
-            // Update B[r]
-            for (int i = 0; i < _matricesB[r].Shape[0]; i++)
-            {
-                for (int j = 0; j < _matricesB[r].Shape[1]; j++)
-                {
-                    T update = NumOps.Multiply(_matricesBGradient[r][i, j], learningRate);
-                    _matricesB[r][i, j] = NumOps.Subtract(_matricesB[r][i, j], update);
-                }
-            }
+            // A[r] -= learningRate * dA[r], B[r] -= learningRate * dB[r]
+            Engine.TensorSubtractInPlace(_matricesA[r], Engine.TensorMultiplyScalar(_matricesAGradient[r], learningRate));
+            Engine.TensorSubtractInPlace(_matricesB[r], Engine.TensorMultiplyScalar(_matricesBGradient[r], learningRate));
         }
 
         // Update base layer if not frozen
@@ -433,59 +378,18 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
 
-        // Compute LoHa weight delta: sum over rank of (A[r] ⊙ B[r]) * scaling
-        Matrix<T> lohaDelta = new Matrix<T>(inputSize, outputSize);
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                lohaDelta[i, o] = NumOps.Zero;
-            }
-        }
-
-        for (int r = 0; r < Rank; r++)
-        {
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    // Hadamard product: A[r][i,o] * B[r][i,o]
-                    T hadamard = NumOps.Multiply(_matricesA[r][i, o], _matricesB[r][i, o]);
-                    lohaDelta[i, o] = NumOps.Add(lohaDelta[i, o], hadamard);
-                }
-            }
-        }
-
-        // Apply scaling
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                lohaDelta[i, o] = NumOps.Multiply(lohaDelta[i, o], _scaling);
-            }
-        }
+        // Compute LoHa weight delta: sum over rank of (A[r] ⊙ B[r]) * scaling ([inputSize, outputSize])
+        Matrix<T> lohaDelta = Engine.TensorMultiplyScalar(SumHadamardProducts(inputSize, outputSize), _scaling).ToMatrix();
 
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
-        // Merge weights (base layer stores weights in row-major order: [output, input])
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;  // output index
-            int col = i % inputSize;   // input index
-            // lohaDelta is [input, output], so we transpose the indices
-            mergedParams[i] = NumOps.Add(baseParams[i], lohaDelta[col, row]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        // Merge weights. FullyConnectedLayer stores its weights output-major ([output, input]) and
+        // DenseLayer input-major, so FullyConnectedLayer uses the transpose. Biases are kept unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? lohaDelta.Transpose() : lohaDelta, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

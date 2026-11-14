@@ -27,13 +27,13 @@ public class KendallCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _tauScores;
+    private Vector<T>? _tauScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? TauScores => _tauScores;
+    public Vector<T>? TauScores => _tauScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,82 +67,17 @@ public class KendallCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        _tauScores = new double[p];
-
-        // Extract target values
-        var targetValues = new double[n];
-        for (int i = 0; i < n; i++)
-            targetValues[i] = NumOps.ToDouble(target[i]);
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract feature values
-            var featureValues = new double[n];
-            for (int i = 0; i < n; i++)
-                featureValues[i] = NumOps.ToDouble(data[i, j]);
-
-            // Compute Kendall's Tau
-            _tauScores[j] = ComputeKendallTau(featureValues, targetValues, n);
-        }
+        // Kendall's tau-b of every feature with the target
+        var tauScores = FeatureScoringTensorOps.KendallTau(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), tauB: true);
+        _tauScores = tauScores.ToVector();
 
         // Select top features by absolute Tau
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_tauScores[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(Engine.TensorAbs(tauScores), numToSelect);
 
         IsFitted = true;
     }
-
-    private double ComputeKendallTau(double[] x, double[] y, int n)
-    {
-        int concordant = 0;
-        int discordant = 0;
-        int tiesX = 0;
-        int tiesY = 0;
-
-        for (int i = 0; i < n - 1; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double xDiff = x[i] - x[j];
-                double yDiff = y[i] - y[j];
-
-                if (Math.Abs(xDiff) < 1e-10)
-                {
-                    tiesX++;
-                    if (Math.Abs(yDiff) < 1e-10)
-                        tiesY++;
-                }
-                else if (Math.Abs(yDiff) < 1e-10)
-                {
-                    tiesY++;
-                }
-                else if (xDiff * yDiff > 0)
-                {
-                    concordant++;
-                }
-                else
-                {
-                    discordant++;
-                }
-            }
-        }
-
-        int totalPairs = n * (n - 1) / 2;
-
-        // Tau-b formula (handles ties)
-        double n0 = totalPairs;
-        double n1 = tiesX;
-        double n2 = tiesY;
-
-        double denom = Math.Sqrt((n0 - n1) * (n0 - n2));
-
-        return denom > 0 ? (concordant - discordant) / denom : 0;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -156,15 +91,7 @@ public class KendallCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("KendallCorrelation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

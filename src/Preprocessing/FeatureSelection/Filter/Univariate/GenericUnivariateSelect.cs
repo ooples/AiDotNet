@@ -37,8 +37,8 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly object _param;
 
     // Fitted parameters
-    private double[]? _scores;
-    private double[]? _pValues;
+    private Vector<T>? _scores;
+    private Vector<T>? _pValues;
     private bool[]? _supportMask;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
@@ -61,12 +61,12 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     /// <summary>
     /// Gets the scores for each feature.
     /// </summary>
-    public double[]? Scores => _scores;
+    public Vector<T>? Scores => _scores;
 
     /// <summary>
     /// Gets the p-values for each feature.
     /// </summary>
-    public double[]? PValues => _pValues;
+    public Vector<T>? PValues => _pValues;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -83,12 +83,12 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     /// </summary>
     /// <param name="mode">The selection mode to use.</param>
     /// <param name="param">The mode-specific parameter (k for KBest, percentile for Percentile, alpha for FPR/FDR/FWE).</param>
-    /// <param name="scoringFunction">The scoring function to use. Defaults to FRegression.</param>
+    /// <param name="scoringFunction">The scoring function to use. Defaults to FClassif, scikit-learn's default (f_classif).</param>
     /// <param name="columnIndices">The column indices to evaluate, or null for all columns.</param>
     public GenericUnivariateSelect(
         UnivariateSelectMode mode = UnivariateSelectMode.Percentile,
         object? param = null,
-        SelectKBestScoreFunc scoringFunction = SelectKBestScoreFunc.FRegression,
+        SelectKBestScoreFunc scoringFunction = SelectKBestScoreFunc.FClassif,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -143,6 +143,14 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
                 {
                     throw new ArgumentException("For FPR/FDR/FWE modes, param (alpha) must be between 0 and 1.", nameof(_param));
                 }
+                // these modes threshold p-values, which mutual information does not produce (scikit-learn rejects the
+                // pair too); checked here so the invalid pair fails at construction, not at Fit
+                if (_scoringFunction == SelectKBestScoreFunc.MutualInfoRegression)
+                {
+                    throw new ArgumentException(
+                        $"The {_mode} mode needs p-values, which the {_scoringFunction} scoring function does not produce.",
+                        "scoringFunction");
+                }
                 break;
         }
     }
@@ -169,138 +177,72 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         }
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        var y = new double[n];
-
-        for (int i = 0; i < n; i++)
+        // scores and p-values of every feature (scikit-learn's univariate scoring functions); the p-value modes
+        // need a scoring function that has p-values
+        bool needsPValues = _mode == UnivariateSelectMode.Fpr
+            || _mode == UnivariateSelectMode.Fdr
+            || _mode == UnivariateSelectMode.Fwe;
+        if (needsPValues)
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
+            var (scores, pValues) = StatisticalTestHelper.ComputeScoresWithPValues(data, target, _scoringFunction);
+            _scores = scores;
+            _pValues = pValues;
         }
-
-        // Compute scores and p-values for each feature
-        _scores = new double[p];
-        _pValues = new double[p];
-
-        for (int j = 0; j < p; j++)
+        else
         {
-            var featureValues = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                featureValues[i] = X[i, j];
-            }
-
-            var (score, pValue) = StatisticalTestHelper.ComputeScore(featureValues, y, _scoringFunction);
-            _scores[j] = score;
-            _pValues[j] = pValue;
+            var (scores, pValues) = StatisticalTestHelper.ComputeScores(data, target, _scoringFunction);
+            _scores = scores;
+            _pValues = pValues;
         }
 
         // Select features based on mode
-        _selectedIndices = SelectFeatures(p);
-
-        // Create support mask
-        _supportMask = new bool[p];
-        foreach (int idx in _selectedIndices)
-        {
-            _supportMask[idx] = true;
-        }
+        _selectedIndices = SelectFeatures(_scores, _pValues);
+        _supportMask = FeatureScoringTensorOps.SupportMask(_selectedIndices, p);
 
         IsFitted = true;
     }
 
-    private int[] SelectFeatures(int p)
+    // The rules of scikit-learn's SelectKBest, SelectPercentile, SelectFpr, SelectFdr and SelectFwe; like them, a
+    // p-value rule that no feature passes selects none.
+    private int[] SelectFeatures(Vector<T> scores, Vector<T>? pValues)
     {
-        if (_scores is null || _pValues is null)
-        {
-            throw new InvalidOperationException("Scores have not been computed.");
-        }
-
-        var selectedList = new List<int>();
+        var engine = Engine;
+        var scoreTensor = FilterStatisticTensorOps.AsTensor(scores);
+        int p = scores.Length;
 
         switch (_mode)
         {
             case UnivariateSelectMode.KBest:
-                int k = Convert.ToInt32(_param);
-                k = Math.Min(k, p);
-                var sortedByScore = Enumerable.Range(0, p)
-                    .OrderByDescending(i => _scores[i])
-                    .Take(k)
-                    .OrderBy(i => i)
-                    .ToList();
-                selectedList.AddRange(sortedByScore);
-                break;
+                return PreprocessingTensorOps.TopKIndicesSorted(scoreTensor, Math.Min(Convert.ToInt32(_param), p));
 
             case UnivariateSelectMode.Percentile:
-                double percentile = Convert.ToDouble(_param);
-                int numToSelect = Math.Max(1, (int)Math.Ceiling(p * percentile / 100.0));
-                var sortedByScorePercentile = Enumerable.Range(0, p)
-                    .OrderByDescending(i => _scores[i])
-                    .Take(numToSelect)
-                    .OrderBy(i => i)
-                    .ToList();
-                selectedList.AddRange(sortedByScorePercentile);
-                break;
+                return FeatureScoringTensorOps.PercentileSupport(scoreTensor, Convert.ToDouble(_param));
+        }
 
+        if (pValues is null)
+            throw new InvalidOperationException(
+                $"The {_mode} mode needs p-values, which the {_scoringFunction} scoring function does not produce.");
+
+        var pValueTensor = FilterStatisticTensorOps.AsTensor(pValues);
+        T alpha = NumOps.FromDouble(Convert.ToDouble(_param));
+        switch (_mode)
+        {
             case UnivariateSelectMode.Fpr:
-                double alphaFpr = Convert.ToDouble(_param);
-                for (int j = 0; j < p; j++)
-                {
-                    if (_pValues[j] < alphaFpr)
-                    {
-                        selectedList.Add(j);
-                    }
-                }
-                break;
+                return FilterStatisticTensorOps.MaskPositions(engine.TensorLessThan(pValueTensor, alpha));
 
             case UnivariateSelectMode.Fdr:
-                double alphaFdr = Convert.ToDouble(_param);
-                var adjustedFdr = StatisticalTestHelper.BenjaminiHochbergCorrection(_pValues);
-                for (int j = 0; j < p; j++)
-                {
-                    if (adjustedFdr[j] < alphaFdr)
-                    {
-                        selectedList.Add(j);
-                    }
-                }
-                break;
+                return FilterStatisticTensorOps.MaskPositions(FeatureScoringTensorOps.AtMost(
+                    FilterStatisticTensorOps.AsTensor(StatisticalTestHelper.BenjaminiHochbergCorrection(pValues)), alpha));
 
             case UnivariateSelectMode.Fwe:
-                double alphaFwe = Convert.ToDouble(_param);
-                var adjustedFwe = StatisticalTestHelper.BonferroniCorrection(_pValues);
-                for (int j = 0; j < p; j++)
-                {
-                    if (adjustedFwe[j] < alphaFwe)
-                    {
-                        selectedList.Add(j);
-                    }
-                }
-                break;
-        }
+                return FilterStatisticTensorOps.MaskPositions(engine.TensorLessThan(
+                    FilterStatisticTensorOps.AsTensor(StatisticalTestHelper.BonferroniCorrection(pValues)), alpha));
 
-        // Ensure at least one feature is selected
-        if (selectedList.Count == 0)
-        {
-            int bestIdx = 0;
-            double bestScore = _scores[0];
-            for (int j = 1; j < p; j++)
-            {
-                if (_scores[j] > bestScore)
-                {
-                    bestScore = _scores[j];
-                    bestIdx = j;
-                }
-            }
-            selectedList.Add(bestIdx);
+            default:
+                throw new InvalidOperationException($"Unknown selection mode {_mode}.");
         }
-
-        return selectedList.OrderBy(i => i).ToArray();
     }
 
     /// <summary>
@@ -322,19 +264,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
             throw new InvalidOperationException("GenericUnivariateSelect has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>

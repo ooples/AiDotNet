@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -42,7 +43,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 public partial class WaveNet<T> : SegmentVocoderBase<T>
 {
     private WaveNetNetwork<T>? _network;
+    private WaveNetNetwork<T> RequiredNetwork => _network ?? throw new InvalidOperationException("The network has not been created.");
     private CenteredLogMel<T>? _features;
+    private CenteredLogMel<T> RequiredFeatures => _features ?? throw new InvalidOperationException("The network has not been created.");
 
     /// <summary>Creates a WaveNet that runs an exported ONNX graph.</summary>
     public WaveNet(NeuralNetworkArchitecture<T> architecture, string modelPath, WaveNetOptions? options = null)
@@ -90,30 +93,27 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
 
     /// <inheritdoc />
     /// <remarks>The reference's <c>logmelspectrogram</c>: <c>log10(max(mel, 1e-10))</c> of a centred librosa STFT.</remarks>
-    protected override Tensor<T> ComputeInputMel(Tensor<T> audio) => _features!.Forward(audio);
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio) => RequiredFeatures.Forward(audio);
 
     // The upsampled condition [1, mel, samples].
     private Tensor<T> Condition(Tensor<T> mel, int samples)
     {
-        var up = _network!.Upsample(mel);
+        var up = RequiredNetwork.Upsample(mel);
         return Engine.TensorSlice(up, new[] { 0, 0, 0 }, new[] { 1, mel.Shape[1], samples });
     }
 
     private Tensor<T> OneHot(int[] classes)
     {
         int levels = PaperOptions.MuLawLevels;
-        var t = new Tensor<T>(new[] { 1, levels, classes.Length });
-        for (int i = 0; i < classes.Length; i++) t[0, classes[i], i] = NumOps.One;
-        return t;
+        var rows = Engine.TensorOneHot<T>(new Tensor<int>(classes, new[] { classes.Length }), levels);   // [samples, levels]
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, levels, classes.Length });
     }
 
     /// <summary>The μ-law classes of a waveform <c>[samples]</c>.</summary>
     public int[] Quantize(Tensor<T> audio)
     {
         int levels = PaperOptions.MuLawLevels;
-        var q = new int[audio.Length];
-        for (int i = 0; i < q.Length; i++) q[i] = MuLaw.Encode(NumOps.ToDouble(audio[i]), levels);
-        return q;
+        return Array.ConvertAll(TensorCopyHelper.CastLogical<T, double>(audio).ToArray(), x => MuLaw.Encode(x, levels));
     }
 
     /// <summary>The log-probabilities <c>[1, classes, samples]</c> of every sample's class given the previous samples
@@ -126,7 +126,7 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
         var previous = new int[q.Length];
         previous[0] = MuLaw.Encode(0, PaperOptions.MuLawLevels);
         for (int t = 1; t < q.Length; t++) previous[t] = q[t - 1];
-        return LogSoftmaxOverClasses(_network!.Forward(OneHot(previous), Condition(mel, q.Length)));
+        return LogSoftmaxOverClasses(RequiredNetwork.Forward(OneHot(previous), Condition(mel, q.Length)));
     }
 
     /// <inheritdoc />
@@ -150,19 +150,19 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
         // loop resets the arena per sample; the condition every step slices is copied out of it once. Without the
         // reset every sample's scratch stayed live until Predict returned (15 GB for 2048 samples at test scale).
         if (InferenceRecycleActive) condition = DetachFromArena(condition);
-        var state = _network!.NewState();
-        var wave = new Tensor<T>(new[] { 1, 1, samples });
+        var state = RequiredNetwork.NewState();
+        var wave = new double[samples];
         int previous = MuLaw.Encode(0, levels);
         for (int t = 0; t < samples; t++)
         {
-            var logits = _network.Step(state, OneHot(new[] { previous }),
+            var logits = RequiredNetwork.Step(state, OneHot(new[] { previous }),
                 Engine.TensorSlice(condition, new[] { 0, 0, t }, new[] { 1, mel.Shape[1], 1 }));
             int chosen = SampleClass(logits, random);
-            wave[0, 0, t] = NumOps.FromDouble(MuLaw.Decode(chosen, levels));
+            wave[t] = MuLaw.Decode(chosen, levels);
             previous = chosen;
             RecycleInferenceScratch();
         }
-        return wave;
+        return new Tensor<double>(wave, new[] { 1, 1, samples }).Cast<T>();
     }
 
     /// <inheritdoc />

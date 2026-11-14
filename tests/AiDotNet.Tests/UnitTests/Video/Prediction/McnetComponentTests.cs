@@ -130,6 +130,26 @@ public class McnetComponentTests
     // ---------------------------------------------------------------- loss
 
     [Fact]
+    public void PixelLossIsComputedInDouble()
+    {
+        // |3e38 - (-3e38)|^2 = 3.6e77: the float difference overflows to infinity, the double one does not.
+        var predicted = new Vector<float>(new[] { 3e38f });
+        var target = new Vector<float>(new[] { -3e38f });
+
+        Assert.Equal(3.6e77, McnetLoss<float>.Pixel(predicted, target), 3.6e77 * 1e-6);
+    }
+
+    [Fact]
+    public void PixelLossOfASubnormalErrorIsThatError()
+    {
+        // 1 / 1e-310 overflows double, so normalizing by the reciprocal returned infinity instead of 1e-310.
+        var predicted = new Vector<double>(new[] { 1e-310 });
+        var target = new Vector<double>(new[] { 0.0 });
+
+        Assert.Equal(1e-310, McnetLoss<double>.Pixel(predicted, target, p: 1));
+    }
+
+    [Fact]
     public void PixelLossUsesTheSquaredNormByDefault()
     {
         // p = 2. Errors of 1 and 3 give a mean square of 5, not the L1 mean of 2.

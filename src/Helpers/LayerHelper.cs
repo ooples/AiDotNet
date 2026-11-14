@@ -6022,7 +6022,8 @@ public static partial class LayerHelper<T>
             new DenseLayer<T>(decoderVocabularySize, identityActivation),
             encoderVocabularySize: 32128,
             decoderVocabularySize: decoderVocabularySize,
-            maximumDecoderLength: maxAudioTokens);
+            maximumDecoderLength: maxAudioTokens,
+            maximumEncoderLength: maxTextLength);
     }
 
     /// <summary>
@@ -9796,48 +9797,123 @@ public static partial class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(inputChannels, 3, 1, 1);
     }
 
+    // The numFeatures that gives RVM's published widths, and the first MobileNetV3-Large block (the stride-2 160-channel
+    // one) that RVM's backbone dilates instead of striding, keeping the last stage at 1/16.
+    private const int RvmPaperFeatures = 32;
+    private const int RvmDilatedBlockStart = 12;
+
     /// <summary>
-    /// Creates default layers for RVM (Robust Video Matting).
+    /// Creates default layers for RVM (Robust Video Matting, Lin et al. 2021), in the order
+    /// <c>RVM</c> binds them.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The network of the paper (Fig. 2): a four-stage stride-2 encoder (1/2 to 1/16) with an LR-ASPP head on the last
+    /// stage, then the recurrent decoder: a bottleneck ConvGRU, three upsampling blocks (upsample, concatenate the
+    /// encoder skip and the downsampled image, 3x3 conv + BatchNorm + ReLU, ConvGRU on half the channels), an output
+    /// block (two 3x3 conv + BatchNorm + ReLU at full resolution) and a 1x1 projection to the foreground residual and
+    /// alpha. Every ConvGRU is a 3x3 <c>ih</c> conv with sigmoid giving the reset and update gates and a 3x3 <c>hh</c>
+    /// conv with tanh giving the candidate.
+    /// </para>
+    /// <para>
+    /// The encoder is MobileNetV3-Large (Howard et al. 2019) cut into the four feature stages RVM reads: the stem
+    /// (3x3 stride-2 conv, BatchNorm, hard-swish) and the first inverted residual block at 1/2; two blocks at 1/4;
+    /// three squeeze-excitation blocks at 1/8; and the remaining nine blocks plus the 1x1 conv, BatchNorm and
+    /// hard-swish to the 960-channel features at 1/16. The blocks are the library's MobileNetV3-Large blocks
+    /// (expansion, squeeze-excitation and activation per block). As in RVM's backbone, the last stage stays at 1/16:
+    /// the reference dilates its final stride-2 block, and this block runs at stride 1 instead, since the inverted
+    /// residual block has no dilation.
+    /// </para>
+    /// <para>
+    /// Widths scale with <paramref name="numFeatures"/> as a width multiplier of <c>numFeatures / 32</c>: the default
+    /// 32 gives the paper's encoder (16, 24, 40, 960 channels), LR-ASPP (128) and decoder (80, 40, 32, 16). Each
+    /// decoder width is even so it splits into two equal halves. The 43 layers are: 21 encoder layers (4, 2, 3 and
+    /// 12 per stage); LR-ASPP conv, BatchNorm, gate conv; bottleneck ConvGRU ih, hh; per upsampling block conv,
+    /// BatchNorm, ConvGRU ih, hh; output conv, BatchNorm, conv, BatchNorm; projection.
+    /// </para>
+    /// <para>
+    /// The list is NOT a forward chain: encoder skips feed the upsampling blocks, the LR-ASPP gate reads the pooled
+    /// last encoder stage rather than the BatchNorm before it, and every ConvGRU also reads its recurrent state.
+    /// <c>RvmRecurrentNetwork</c> wires the layers in that graph.
+    /// </para>
+    /// <para><b>For Beginners:</b> RVM separates a person from the background in every frame of a video and
+    /// produces an alpha matte (how opaque each pixel of the person is) plus the person's colours. It remembers
+    /// what it saw in earlier frames through recurrent (ConvGRU) units, which keeps the matte steady from frame to
+    /// frame. This method builds those layers; the model connects them.</para>
+    /// </remarks>
+    /// <param name="inputChannels">Channels of each input frame (3 for RGB).</param>
+    /// <param name="inputHeight">Frame height in pixels. The convolutions are resolution-independent; this
+    /// documents the expected size.</param>
+    /// <param name="inputWidth">Frame width in pixels, as for <paramref name="inputHeight"/>.</param>
+    /// <param name="numFeatures">Width base: 32 gives the paper's widths, and every width scales with it.</param>
+    /// <returns>The 43 layers in the order listed above.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultRVMLayers(
         int inputChannels = 3,
         int inputHeight = 512,
         int inputWidth = 512,
         int numFeatures = 32)
     {
-        int h = inputHeight;
-        int w = inputWidth;
+        int nf = Math.Max(1, numFeatures);
+        static int Even(int width) => Math.Max(2, width - (width % 2));
+        static IActivationFunction<T> Sigmoid() => new SigmoidActivation<T>();
+        static IActivationFunction<T> Tanh() => new TanhActivation<T>();
 
-        // Encoder (MobileNetV3-style)
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 2, 1, new ReLU6Activation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
+        // Encoder: MobileNetV3-Large stages at 1/2, 1/4, 1/8, 1/16
+        double alpha = nf / (double)RvmPaperFeatures;
+        int Scaled(int paperWidth) => Even((int)Math.Round(paperWidth * alpha));
+        yield return new ConvolutionalLayer<T>(MakeScaledChannels(16, alpha), 3, 2, 1,
+            activationFunction: new IdentityActivation<T>());
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(activationFunction: new HardSwishActivation<T>());
+        var blocks = GetMobileNetV3LargeBlocks(alpha).ToArray();
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            var block = blocks[i];
+            yield return new InvertedResidualBlock<T>(
+                outChannels: block.outChannels,
+                expansionRatio: block.expansion,
+                stride: i >= RvmDilatedBlockStart ? 1 : block.stride,
+                useSE: block.useSE,
+                seRatio: 4,
+                activationFunction: block.useHardSwish ? new HardSwishActivation<T>() : new ReLUActivation<T>());
+        }
 
-        // Recurrent module (GRU-style for temporal consistency)
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(numFeatures * 8, 3, 1, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        int encoderDepth = MakeScaledChannels(960, alpha);
+        yield return new ConvolutionalLayer<T>(encoderDepth, 1, 1, 0, activationFunction: new IdentityActivation<T>());
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ActivationLayer<T>(activationFunction: new HardSwishActivation<T>());
 
-        // Decoder with upsampling
-        yield return new ConvolutionalLayer<T>(numFeatures * 4, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new UpsamplingLayer<T>(2);
-        h *= 2; w *= 2;
+        // LR-ASPP: ReLU(BN(conv1x1(x))) * sigmoid(conv1x1(avgpool(x)))
+        int aspp = Scaled(128);
+        yield return new ConvolutionalLayer<T>(aspp, 1, 1, 0, activationFunction: null, biasMode: BiasMode.Never);
+        yield return new BatchNormalizationLayer<T>();
+        // The gate reads the pooled last encoder stage (encoderDepth channels), not the BatchNorm output before it in
+        // this list: its depth is declared so no shape walk binds it to the ASPP width, and it is marked as a branch root.
+        yield return LayerGraphContract.FromDerivedInput(
+            ConvolutionalLayer<T>.WithInputDepth(encoderDepth, aspp, 1, 1, 0, activationFunction: Sigmoid()), "encoder");
 
-        // Output heads: alpha matte (1 channel) + foreground (3 channels)
-        yield return new ConvolutionalLayer<T>(4, 1, 1, 0); // RGBA output
+        // Bottleneck ConvGRU on half of the LR-ASPP channels
+        yield return new ConvolutionalLayer<T>(aspp, 3, 1, 1, activationFunction: Sigmoid());
+        yield return new ConvolutionalLayer<T>(aspp / 2, 3, 1, 1, activationFunction: Tanh());
+
+        // Upsampling blocks at 1/8, 1/4, 1/2
+        foreach (int width in new[] { Scaled(80), Scaled(40), Scaled(32) })
+        {
+            yield return new ConvolutionalLayer<T>(width, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ConvolutionalLayer<T>(width, 3, 1, 1, activationFunction: Sigmoid());
+            yield return new ConvolutionalLayer<T>(width / 2, 3, 1, 1, activationFunction: Tanh());
+        }
+
+        // Output block at full resolution
+        int output = Scaled(16);
+        yield return new ConvolutionalLayer<T>(output, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
+        yield return new BatchNormalizationLayer<T>();
+        yield return new ConvolutionalLayer<T>(output, 3, 1, 1, activationFunction: null, biasMode: BiasMode.Never);
+        yield return new BatchNormalizationLayer<T>();
+
+        // Projection: foreground residual (3) and alpha (1)
+        yield return new ConvolutionalLayer<T>(4, 1, 1, 0);
     }
 
     /// <summary>

@@ -82,17 +82,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             Fuse(denseResults, _denseWeight);
             Fuse(sparseResults, _sparseWeight);
 
-            return rrfScores
-                .OrderByDescending(kv => kv.Value)
-                .Take(topK)
-                .Select(kv =>
-                {
-                    var doc = docById[kv.Key];
-                    doc.RelevanceScore = NumOps.FromDouble(kv.Value);
-                    doc.HasRelevanceScore = true;
-                    return doc;
-                })
-                .ToList();
+            return TakeTopByFusedScore(rrfScores.Select(kv => (docById[kv.Key], kv.Value)), topK);
         }
     }
 }

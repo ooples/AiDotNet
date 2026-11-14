@@ -29,7 +29,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     private readonly int _nBins;
     private readonly MRMRMethod _method;
 
-    private double[]? _mrmrScores;
+    private Vector<T>? _mrmrScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -43,7 +43,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? MRMRScores => _mrmrScores;
+    public Vector<T>? MRMRScores => _mrmrScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -83,171 +83,59 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         int n = data.Rows;
         int p = data.Columns;
 
-        // Discretize data
-        var discreteData = new int[n, p];
-        var discreteTarget = new int[n];
+        // Discretize data and target (one-hot bins)
+        var engine = Engine;
+        var xBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
+        var yBins = PreprocessingTensorOps.RangeScaledBinOneHot(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins);
 
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                min = Math.Min(min, val);
-                max = Math.Max(max, val);
-            }
-            double range = max - min;
-            if (range < 1e-10) range = 1;
+        // Mutual information with target
+        var relevance = engine.Reshape(
+            PreprocessingTensorOps.HistogramMutualInformation(xBins, yBins, _nBins, bits: false, clampAtZero: false),
+            new[] { p });
 
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                int bin = (int)((val - min) / range * (_nBins - 1));
-                discreteData[i, j] = Math.Max(0, Math.Min(bin, _nBins - 1));
-            }
-        }
-
-        // Discretize target
-        double tMin = double.MaxValue, tMax = double.MinValue;
-        for (int i = 0; i < n; i++)
-        {
-            double val = NumOps.ToDouble(target[i]);
-            tMin = Math.Min(tMin, val);
-            tMax = Math.Max(tMax, val);
-        }
-        double tRange = tMax - tMin;
-        if (tRange < 1e-10) tRange = 1;
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = NumOps.ToDouble(target[i]);
-            int bin = (int)((val - tMin) / tRange * (_nBins - 1));
-            discreteTarget[i] = Math.Max(0, Math.Min(bin, _nBins - 1));
-        }
-
-        // Calculate mutual information with target
-        var relevance = new double[p];
-        for (int j = 0; j < p; j++)
-            relevance[j] = MutualInformation(discreteData, j, discreteTarget, n);
-
-        // Greedy forward selection with mRMR criterion
+        // Greedy forward selection with mRMR criterion; redundancySum[j] accumulates MI(j, s) over selected s
         var selected = new List<int>();
-        var remaining = Enumerable.Range(0, p).ToHashSet();
-        _mrmrScores = new double[p];
+        var isSelected = new bool[p];
+        var redundancySum = new Tensor<T>(new[] { p });
+        var excluded = PreprocessingTensorOps.Filled(new[] { p }, NumOps.MinValue);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var selectedScores = new Tensor<T>[p];
 
-        while (selected.Count < Math.Min(_nFeaturesToSelect, p) && remaining.Count > 0)
+        while (selected.Count < Math.Min(_nFeaturesToSelect, p))
         {
-            int bestFeature = -1;
-            double bestScore = double.MinValue;
+            var redundancy = selected.Count > 0
+                ? engine.TensorDivideScalar(redundancySum, PreprocessingTensorOps.CountAsScalar<T>(selected.Count))
+                : redundancySum;
 
-            foreach (int j in remaining)
-            {
-                double redundancy = 0;
-                if (selected.Count > 0)
-                {
-                    foreach (int s in selected)
-                        redundancy += FeatureMutualInformation(discreteData, j, s, n);
-                    redundancy /= selected.Count;
-                }
+            var score = _method == MRMRMethod.MID
+                ? engine.TensorSubtract(relevance, redundancy)
+                : engine.TensorWhere(engine.TensorGreaterThan(redundancy, eps), engine.TensorDivide(relevance, redundancy), relevance);
 
-                double score;
-                if (_method == MRMRMethod.MID)
-                    score = relevance[j] - redundancy;
-                else // MIQ
-                    score = redundancy > 1e-10 ? relevance[j] / redundancy : relevance[j];
+            var open = engine.TensorWhere(isSelected, excluded, score);
+            int bestFeature = PreprocessingTensorOps.FirstArgMax(open);
+            // Keep only the selected feature's score: retaining every open [p] tensor costs O(p * k)
+            selectedScores[bestFeature] = engine.TensorIndexSelect(
+                open, new Tensor<int>(new[] { bestFeature }, new[] { 1 }), 0);
+            selected.Add(bestFeature);
+            isSelected[bestFeature] = true;
 
-                if (score > bestScore)
-                {
-                    bestScore = score;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                _mrmrScores[bestFeature] = bestScore;
-                selected.Add(bestFeature);
-                remaining.Remove(bestFeature);
-            }
-            else
-            {
-                break;
-            }
+            var bestBins = engine.TensorSlice(xBins, new[] { 0, bestFeature * _nBins }, new[] { n, _nBins });
+            redundancySum = engine.TensorAdd(redundancySum, engine.Reshape(
+                PreprocessingTensorOps.HistogramMutualInformation(xBins, bestBins, _nBins, bits: false, clampAtZero: false),
+                new[] { p }));
         }
 
+        // Each selected feature keeps the mRMR score it was selected with; the rest stay 0
+        var scores = new Tensor<T>(new[] { p });
+        foreach (int j in selected)
+        {
+            var position = new Tensor<int>(new[] { j }, new[] { 1 });
+            scores = engine.TensorIndexCopy(scores, 0, position, selectedScores[j]);
+        }
+
+        _mrmrScores = scores.ToVector();
         _selectedIndices = selected.OrderBy(x => x).ToArray();
         IsFitted = true;
-    }
-
-    private double MutualInformation(int[,] data, int featureIdx, int[] target, int n)
-    {
-        // Joint and marginal distributions
-        var jointCount = new int[_nBins, _nBins];
-        var featureCount = new int[_nBins];
-        var targetCount = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int fVal = data[i, featureIdx];
-            int tVal = target[i];
-            jointCount[fVal, tVal]++;
-            featureCount[fVal]++;
-            targetCount[tVal]++;
-        }
-
-        double mi = 0;
-        for (int f = 0; f < _nBins; f++)
-        {
-            for (int t = 0; t < _nBins; t++)
-            {
-                if (jointCount[f, t] > 0)
-                {
-                    double pJoint = (double)jointCount[f, t] / n;
-                    double pFeature = (double)featureCount[f] / n;
-                    double pTarget = (double)targetCount[t] / n;
-
-                    if (pFeature > 0 && pTarget > 0)
-                        mi += pJoint * Math.Log(pJoint / (pFeature * pTarget) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
-    }
-
-    private double FeatureMutualInformation(int[,] data, int f1, int f2, int n)
-    {
-        var jointCount = new int[_nBins, _nBins];
-        var count1 = new int[_nBins];
-        var count2 = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int v1 = data[i, f1];
-            int v2 = data[i, f2];
-            jointCount[v1, v2]++;
-            count1[v1]++;
-            count2[v2]++;
-        }
-
-        double mi = 0;
-        for (int i = 0; i < _nBins; i++)
-        {
-            for (int j = 0; j < _nBins; j++)
-            {
-                if (jointCount[i, j] > 0)
-                {
-                    double pJoint = (double)jointCount[i, j] / n;
-                    double p1 = (double)count1[i] / n;
-                    double p2 = (double)count2[j] / n;
-
-                    if (p1 > 0 && p2 > 0)
-                        mi += pJoint * Math.Log(pJoint / (p1 * p2) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
     }
 
     /// <inheritdoc />
@@ -263,15 +151,7 @@ public class MRMR<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("MRMR has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -28,14 +28,14 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _informationGains;
+    private Vector<T>? _informationGains;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? InformationGains => _informationGains;
+    public Vector<T>? InformationGains => _informationGains;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,95 +70,12 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        // Compute class probabilities and base entropy H(Y)
-        var classCount = new Dictionary<int, int>();
-        for (int i = 0; i < n; i++)
-        {
-            int c = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classCount.ContainsKey(c))
-                classCount[c] = 0;
-            classCount[c]++;
-        }
-
-        double baseEntropy = 0;
-        foreach (var count in classCount.Values)
-        {
-            double p_c = (double)count / n;
-            if (p_c > 0)
-                baseEntropy -= p_c * Math.Log(p_c);
-        }
-
-        _informationGains = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Get feature values and discretize into bins
-            var values = new double[n];
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                values[i] = NumOps.ToDouble(data[i, j]);
-                min = Math.Min(min, values[i]);
-                max = Math.Max(max, values[i]);
-            }
-
-            double binWidth = (max - min) / _nBins;
-            if (binWidth < 1e-10) binWidth = 1;
-
-            // Count joint frequencies
-            var binClassCount = new Dictionary<int, Dictionary<int, int>>();
-            var binCount = new Dictionary<int, int>();
-
-            for (int i = 0; i < n; i++)
-            {
-                int bin = Math.Min((int)((values[i] - min) / binWidth), _nBins - 1);
-                int c = (int)Math.Round(NumOps.ToDouble(target[i]));
-
-                if (!binClassCount.ContainsKey(bin))
-                    binClassCount[bin] = new Dictionary<int, int>();
-                if (!binClassCount[bin].ContainsKey(c))
-                    binClassCount[bin][c] = 0;
-                binClassCount[bin][c]++;
-
-                if (!binCount.ContainsKey(bin))
-                    binCount[bin] = 0;
-                binCount[bin]++;
-            }
-
-            // Compute conditional entropy H(Y|X)
-            double conditionalEntropy = 0;
-            foreach (var bin in binClassCount.Keys)
-            {
-                double binProb = (double)binCount[bin] / n;
-                double binEntropy = 0;
-
-                foreach (var count in binClassCount[bin].Values)
-                {
-                    double p_c_bin = (double)count / binCount[bin];
-                    if (p_c_bin > 0)
-                        binEntropy -= p_c_bin * Math.Log(p_c_bin);
-                }
-
-                conditionalEntropy += binProb * binEntropy;
-            }
-
-            // Information Gain = H(Y) - H(Y|X)
-            _informationGains[j] = baseEntropy - conditionalEntropy;
-        }
-
-        // Select top features
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _informationGains
-            .Select((ig, idx) => (IG: ig, Index: idx))
-            .OrderByDescending(x => x.IG)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureScoringTensorOps.EqualWidthBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var scores = info.Relevance();
+        _informationGains = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -175,15 +92,7 @@ public class InformationGain<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("InformationGain has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

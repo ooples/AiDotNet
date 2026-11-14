@@ -399,23 +399,10 @@ public partial class NPBMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var decodedFeatures = DecodeLatent(sampledLatent, supportFeatures);
 
         // Compute modulation factors from decoded vs raw support features
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (decodedFeatures != null && supportFeatures != null && supportFeatures.Length > 0)
         {
-            double sumRatio = 0;
-            int count = 0;
-            for (int i = 0; i < Math.Min(supportFeatures.Length, decodedFeatures.Length); i++)
-            {
-                double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                double decodedVal = NumOps.ToDouble(decodedFeatures[i]);
-                if (Math.Abs(rawVal) > 1e-10)
-                {
-                    sumRatio += Math.Max(0.5, Math.Min(2.0, decodedVal / rawVal));
-                    count++;
-                }
-            }
-            if (count > 0)
-                modulationFactors = [sumRatio / count];
+            modulationFactors = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, decodedFeatures, 0.5, 2.0, 1e-10);
         }
 
         return new NPBMLModel<T, TInput, TOutput>(
@@ -439,7 +426,9 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _sampledLatent;
     private readonly int _numSamples;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -448,14 +437,14 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
     public Vector<T>? AdaptedSupportFeatures => _sampledLatent;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     public NPBMLModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? sampledLatent,
         int numSamples,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -474,17 +463,13 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
             // Bayesian prediction: average over multiple latent samples
             // Each sample applies a slightly different modulation to the backbone
             TOutput? bestPred = default;
+            var engine = AiDotNetEngine.Current;
+            var baseModulated = ParameterModulation.Apply(engine, _backboneParams, _modulationFactors);
             for (int s = 0; s < _numSamples; s++)
             {
-                var modulatedParams = new Vector<T>(_backboneParams.Length);
-                for (int i = 0; i < _backboneParams.Length; i++)
-                {
-                    // Vary modulation per sample using the sample index
-                    double baseMod = _modulationFactors[i % _modulationFactors.Length];
-                    double sampleScale = 1.0 + (s - _numSamples / 2.0) * 0.01;
-                    modulatedParams[i] = NumOps.Multiply(_backboneParams[i],
-                        NumOps.FromDouble(baseMod * sampleScale));
-                }
+                // Vary modulation per sample using the sample index
+                double sampleScale = 1.0 + (s - _numSamples / 2.0) * 0.01;
+                var modulatedParams = engine.Multiply(baseModulated, NumOps.FromDouble(sampleScale));
                 InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
                 bestPred = _model.Predict(input);
             }
@@ -495,12 +480,7 @@ internal class NPBMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
 
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulatedParams = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-            {
-                double mod = _modulationFactors[i % _modulationFactors.Length];
-                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
-            }
+            var modulatedParams = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
         }
         else

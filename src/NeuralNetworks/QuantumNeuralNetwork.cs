@@ -326,56 +326,39 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         // maximum can overflow even though the input itself is valid; normalizing by that overflowed
         // norm collapses every amplitude to zero. The scaled values are bounded by one, so both the
         // accumulation and the final two-step division remain finite.
-        var maxMagnitude = NumOps.Zero;
-        for (int i = 0; i < flatInput.Length; i++)
-        {
-            var value = flatInput[i];
-            if (NumOps.IsNaN(value) || NumOps.IsInfinity(value))
-            {
-                throw new ArgumentException(
-                    $"Quantum state input contains a non-finite value at index {i}.",
-                    nameof(input));
-            }
+        int length = flatInput.Length;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();  // detached, as before
+        var values = Engine.Reshape(flatInput, new[] { length });
 
-            var magnitude = NumOps.Abs(value);
-            if (NumOps.GreaterThan(magnitude, maxMagnitude)) maxMagnitude = magnitude;
+        // x - x is 0 exactly for finite values and NaN for NaN/infinity; report the first offender.
+        var nonFinite = Engine.TensorAddScalar(
+            Engine.TensorNegate(Engine.TensorEquals(Engine.TensorSubtract(values, values), NumOps.Zero)), NumOps.One);
+        if (NumOps.GreaterThan(Engine.TensorMaxValue(nonFinite), NumOps.Zero))
+        {
+            int firstBad = Engine.TensorArgMax(nonFinite, 0).ToArray()[0];
+            throw new ArgumentException(
+                $"Quantum state input contains a non-finite value at index {firstBad}.",
+                nameof(input));
         }
 
-        // A zero vector has no direction to encode. The neutral state is
-        // the uniform superposition, which is normalised and finite; dividing by the zero norm would
-        // reintroduce the NaN this method exists to avoid.
+        var maxMagnitude = Engine.TensorMaxValue(Engine.TensorAbs(values));
+
         if (!NumOps.GreaterThan(maxMagnitude, NumOps.Zero))
-            return CreateUniformQuantumState(flatInput.Length);
+            return CreateUniformQuantumState(length);
 
-        var scaledSumOfSquares = NumOps.Zero;
-        for (int i = 0; i < flatInput.Length; i++)
-        {
-            var scaled = NumOps.Divide(flatInput[i], maxMagnitude);
-            scaledSumOfSquares = NumOps.Add(scaledSumOfSquares, NumOps.Multiply(scaled, scaled));
-        }
-
-        var scaledNorm = NumOps.Sqrt(scaledSumOfSquares);
-        var quantumState = new Tensor<Complex<T>>([flatInput.Length]);
-
-        for (int i = 0; i < flatInput.Length; i++)
-        {
-            // Stable signed L2 normalization keeps the state finite for negative and very large
-            // inputs while preserving unit norm. Scaling first avoids overflow in the norm.
-            var scaled = NumOps.Divide(flatInput[i], maxMagnitude);
-            var amplitude = NumOps.Divide(scaled, scaledNorm);
-            quantumState[i] = new Complex<T>(amplitude, NumOps.Zero);
-        }
-
-        return quantumState;
+        // Amplitude encoding: scale by the max magnitude first (overflow-safe), then L2-normalise.
+        var scaled = Engine.TensorDivide(values, Engine.TensorFullLike(values, maxMagnitude));
+        var scaledNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorMultiply(scaled, scaled)));
+        var amplitudes = Engine.TensorDivideScalar(scaled, scaledNorm);
+        return Engine.TensorComplex(amplitudes, new Tensor<T>(new[] { length }));
     }
 
     private Tensor<Complex<T>> CreateUniformQuantumState(int length)
     {
-        var quantumState = new Tensor<Complex<T>>([length]);
         var uniform = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(length)));
-        for (int i = 0; i < length; i++)
-            quantumState[i] = new Complex<T>(uniform, NumOps.Zero);
-        return quantumState;
+        var amplitudes = new Tensor<T>(new[] { length });
+        amplitudes.Fill(uniform);
+        return Engine.TensorComplex(amplitudes, new Tensor<T>(new[] { length }));
     }
 
     /// <summary>
@@ -395,18 +378,9 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     private Tensor<T> MeasureQuantumState(Tensor<Complex<T>> quantumState)
     {
-        var measuredState = new Tensor<T>([quantumState.Length]);
-
-        for (int i = 0; i < quantumState.Length; i++)
-        {
-            var magnitudeSquared = NumOps.Add(
-                NumOps.Multiply(quantumState[i].Real, quantumState[i].Real),
-                NumOps.Multiply(quantumState[i].Imaginary, quantumState[i].Imaginary)
-            );
-            measuredState[i] = magnitudeSquared;
-        }
-
-        return measuredState;
+        // |amplitude|^2 = re^2 + im^2 per basis state (Born rule).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            return Engine.Reshape(Engine.NativeComplexMagnitudeSquared(quantumState), new[] { quantumState.Length });
     }
 
     /// <summary>
@@ -454,13 +428,9 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     private Tensor<Complex<T>> ConvertToComplexTensor(Tensor<T> realTensor)
     {
-        var complexTensor = new Tensor<Complex<T>>(realTensor._shape);
-        for (int i = 0; i < realTensor.Length; i++)
-        {
-            complexTensor[i] = new Complex<T>(realTensor[i], NumOps.Zero);
-        }
-
-        return complexTensor;
+        // Fresh, detached tensor as before.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            return Engine.TensorComplex(realTensor, new Tensor<T>(realTensor._shape));
     }
 
     /// <summary>
@@ -501,13 +471,9 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     private Tensor<T> ExtractRealPart(Tensor<Complex<T>> complexTensor)
     {
-        var realTensor = new Tensor<T>(complexTensor._shape);
-        for (int i = 0; i < complexTensor.Length; i++)
-        {
-            realTensor[i] = complexTensor[i].Real;
-        }
-
-        return realTensor;
+        // Fresh, detached tensor as before.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            return Engine.Reshape(Engine.TensorReal(complexTensor), complexTensor._shape);
     }
 
     /// <summary>
@@ -528,12 +494,7 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
     /// </remarks>
     private Tensor<Complex<T>> ConvertToComplexTensor(Vector<T> realVector)
     {
-        var complexTensor = new Tensor<Complex<T>>([realVector.Length]);
-        for (int i = 0; i < realVector.Length; i++)
-        {
-            complexTensor[i] = new Complex<T>(realVector[i], NumOps.Zero);
-        }
-
-        return complexTensor;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            return Engine.TensorComplex(Tensor<T>.FromVector(realVector), new Tensor<T>(new[] { realVector.Length }));
     }
 }

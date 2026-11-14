@@ -27,14 +27,14 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
     private readonly int _nFeaturesToSelect;
     private readonly double _threshold;
 
-    private double[]? _madScores;
+    private Vector<T>? _madScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Threshold => _threshold;
-    public double[]? MADScores => _madScores;
+    public Vector<T>? MADScores => _madScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -57,63 +57,26 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         int n = data.Rows;
         int p = data.Columns;
 
-        _madScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract column values
-            var values = new double[n];
-            for (int i = 0; i < n; i++)
-                values[i] = NumOps.ToDouble(data[i, j]);
-
-            // Compute median
-            Array.Sort(values);
-            double median = n % 2 == 1
-                ? values[n / 2]
-                : (values[n / 2 - 1] + values[n / 2]) / 2;
-
-            // Compute absolute deviations
-            var absDeviations = new double[n];
-            for (int i = 0; i < n; i++)
-                absDeviations[i] = Math.Abs(values[i] - median);
-
-            // Compute MAD (median of absolute deviations)
-            Array.Sort(absDeviations);
-            _madScores[j] = n % 2 == 1
-                ? absDeviations[n / 2]
-                : (absDeviations[n / 2 - 1] + absDeviations[n / 2]) / 2;
-        }
+        var scores = n == 0
+            ? PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero)
+            : SelectorTensorOps.ColumnMedianAbsoluteDeviation(Tensor<T>.FromMatrix(data));
+        _madScores = scores.ToVector();
 
         // Select features
         if (_nFeaturesToSelect > 0)
         {
-            int nToSelect = Math.Min(_nFeaturesToSelect, p);
-            _selectedIndices = _madScores
-                .Select((mad, idx) => (MAD: mad, Index: idx))
-                .OrderByDescending(x => x.MAD)
-                .Take(nToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         }
         else
         {
             // Use threshold
-            _selectedIndices = _madScores
-                .Select((mad, idx) => (MAD: mad, Index: idx))
-                .Where(x => x.MAD > _threshold)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.MaskPositions(
+                Engine.TensorGreaterThan(scores, NumOps.FromDouble(_threshold)));
 
             if (_selectedIndices.Length == 0)
             {
                 // Keep highest MAD
-                int maxIdx = 0;
-                for (int j = 1; j < p; j++)
-                    if (_madScores[j] > _madScores[maxIdx])
-                        maxIdx = j;
-                _selectedIndices = new[] { maxIdx };
+                _selectedIndices = new[] { PreprocessingTensorOps.FirstArgMax(scores) };
             }
         }
 
@@ -132,15 +95,7 @@ public class MADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCo
         if (_selectedIndices is null)
             throw new InvalidOperationException("MADSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

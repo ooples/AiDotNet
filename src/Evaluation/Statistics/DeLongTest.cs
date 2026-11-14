@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -52,19 +53,12 @@ public class DeLongTest<T> : IStatisticalTest<T>
         int n = predictions1.Length;
 
         // Separate positives and negatives
-        var posIndices = new List<int>();
-        var negIndices = new List<int>();
+        using var noGrad = new NoGradScope<T>();
+        var positiveMask = EvaluationTensorOps<T>.EqualMask(new Tensor<T>(actuals, new[] { n }), NumOps.One);
+        var negativeMask = EvaluationTensorOps<T>.Not(positiveMask);
 
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.Compare(actuals[i], NumOps.One) == 0)
-                posIndices.Add(i);
-            else
-                negIndices.Add(i);
-        }
-
-        int nPos = posIndices.Count;
-        int nNeg = negIndices.Count;
+        int nPos = EvaluationTensorOps<T>.Count(positiveMask);
+        int nNeg = n - nPos;
 
         if (nPos == 0 || nNeg == 0)
         {
@@ -79,15 +73,9 @@ public class DeLongTest<T> : IStatisticalTest<T>
             };
         }
 
-        // Compute AUC for both models using Mann-Whitney U statistic
-        double auc1 = ComputeAUC(predictions1, actuals, posIndices, negIndices);
-        double auc2 = ComputeAUC(predictions2, actuals, posIndices, negIndices);
-
-        // Compute structural components (V matrices)
-        double[] V10_1 = ComputeV10(predictions1, posIndices, negIndices);
-        double[] V10_2 = ComputeV10(predictions2, posIndices, negIndices);
-        double[] V01_1 = ComputeV01(predictions1, posIndices, negIndices);
-        double[] V01_2 = ComputeV01(predictions2, posIndices, negIndices);
+        // Reduce pair kernels in bounded blocks; retain only the per-positive and per-negative components.
+        var (auc1, V10_1, V01_1) = ComputeComponents(predictions1, positiveMask, negativeMask);
+        var (auc2, V10_2, V01_2) = ComputeComponents(predictions2, positiveMask, negativeMask);
 
         // Compute variance-covariance matrix
         double s10_11 = Covariance(V10_1, V10_1);
@@ -133,69 +121,54 @@ public class DeLongTest<T> : IStatisticalTest<T>
         };
     }
 
-    private double ComputeAUC(T[] predictions, T[] actuals, List<int> posIndices, List<int> negIndices)
+    // psi(pos, neg) = 1 when pos > neg, else 0.5 when |pos - neg| < 1e-10, else 0.
+    private static (double Auc, Tensor<double> V10, Tensor<double> V01) ComputeComponents(
+        T[] predictions, Tensor<T> positiveMask, Tensor<T> negativeMask)
     {
-        double sum = 0;
-        foreach (int posIdx in posIndices)
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<double>();
+        var scores = new Tensor<T>(predictions, new[] { predictions.Length });
+        var pos = EvaluationTensorOps<T>.Select(scores, positiveMask).Cast<double>();
+        var neg = EvaluationTensorOps<T>.Select(scores, negativeMask).Cast<double>();
+        var rowSums = new Tensor<double>(new[] { pos.Length });
+        var columnSums = new Tensor<double>(new[] { neg.Length });
+        for (int row = 0; row < pos.Length; row += 256)
         {
-            double posProb = NumOps.ToDouble(predictions[posIdx]);
-            foreach (int negIdx in negIndices)
+            int rows = Math.Min(256, pos.Length - row);
+            var rowTotal = new Tensor<double>(new[] { rows });
+            var positives = engine.Reshape(engine.TensorNarrow(pos, 0, row, rows), new[] { rows, 1 });
+            for (int column = 0; column < neg.Length; column += 256)
             {
-                double negProb = NumOps.ToDouble(predictions[negIdx]);
-                if (posProb > negProb) sum += 1;
-                else if (Math.Abs(posProb - negProb) < 1e-10) sum += 0.5;
+                int columns = Math.Min(256, neg.Length - column);
+                var negatives = engine.Reshape(engine.TensorNarrow(neg, 0, column, columns), new[] { 1, columns });
+                var shape = new[] { rows, columns };
+                var left = engine.TensorBroadcastTo(positives, shape);
+                var right = engine.TensorBroadcastTo(negatives, shape);
+                var above = engine.TensorGreaterThan(left, right);
+                var equal = EvaluationTensorOps<double>.And(engine.TensorEquals(left, right),
+                    EvaluationTensorOps<double>.Not(EvaluationTensorOps<double>.NanMask(left)));
+                var near = engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtract(left, right)), 1e-10);
+                var tied = engine.TensorMultiply(EvaluationTensorOps<double>.Not(above), engine.TensorMax(equal, near));
+                var kernel = engine.TensorAdd(above, engine.TensorMultiplyScalar(tied, 0.5));
+                rowTotal = engine.TensorAdd(rowTotal, engine.ReduceSum(kernel, new[] { 1 }, false));
+                var columnTotal = engine.TensorAdd(engine.TensorNarrow(columnSums, 0, column, columns),
+                    engine.ReduceSum(kernel, new[] { 0 }, false));
+                columnTotal.AsSpan().CopyTo(columnSums.AsWritableSpan().Slice(column, columns));
             }
+            rowTotal.AsSpan().CopyTo(rowSums.AsWritableSpan().Slice(row, rows));
         }
-        return sum / ((double)posIndices.Count * negIndices.Count);
+        double auc = engine.TensorSum(rowSums) / ((double)pos.Length * neg.Length);
+        return (auc, engine.TensorDivideScalar(rowSums, (double)neg.Length),
+            engine.TensorDivideScalar(columnSums, (double)pos.Length));
     }
 
-    private double[] ComputeV10(T[] predictions, List<int> posIndices, List<int> negIndices)
-    {
-        var result = new double[posIndices.Count];
-        for (int i = 0; i < posIndices.Count; i++)
-        {
-            double posProb = NumOps.ToDouble(predictions[posIndices[i]]);
-            double sum = 0;
-            foreach (int negIdx in negIndices)
-            {
-                double negProb = NumOps.ToDouble(predictions[negIdx]);
-                if (posProb > negProb) sum += 1;
-                else if (Math.Abs(posProb - negProb) < 1e-10) sum += 0.5;
-            }
-            result[i] = sum / negIndices.Count;
-        }
-        return result;
-    }
-
-    private double[] ComputeV01(T[] predictions, List<int> posIndices, List<int> negIndices)
-    {
-        var result = new double[negIndices.Count];
-        for (int i = 0; i < negIndices.Count; i++)
-        {
-            double negProb = NumOps.ToDouble(predictions[negIndices[i]]);
-            double sum = 0;
-            foreach (int posIdx in posIndices)
-            {
-                double posProb = NumOps.ToDouble(predictions[posIdx]);
-                if (posProb > negProb) sum += 1;
-                else if (Math.Abs(posProb - negProb) < 1e-10) sum += 0.5;
-            }
-            result[i] = sum / posIndices.Count;
-        }
-        return result;
-    }
-
-    private double Covariance(double[] x, double[] y)
+    private static double Covariance(Tensor<double> x, Tensor<double> y)
     {
         if (x.Length != y.Length || x.Length < 2) return 0;
-        double meanX = x.Average();
-        double meanY = y.Average();
-        double sum = 0;
-        for (int i = 0; i < x.Length; i++)
-        {
-            sum += (x[i] - meanX) * (y[i] - meanY);
-        }
-        return sum / (x.Length - 1);
+        var engine = AiDotNetEngine.Current;
+        var dx = engine.TensorSubtractScalar(x, engine.TensorMean(x));
+        var dy = engine.TensorSubtractScalar(y, engine.TensorMean(y));
+        return engine.TensorSum(engine.TensorMultiply(dx, dy)) / (x.Length - 1);
     }
 
     private double NormalCDF(double z)

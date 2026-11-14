@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -42,15 +43,15 @@ public class PairedTTest<T> : IPairedTest<T>
         int n = sample1.Length;
 
         // Calculate differences
-        var differences = new double[n];
-        for (int i = 0; i < n; i++)
+        var engine = AiDotNetEngine.Current;
+        double meanDiff, sumSqDiff;
+        using (new NoGradScope<T>())
         {
-            differences[i] = NumOps.ToDouble(sample1[i]) - NumOps.ToDouble(sample2[i]);
+            var differences = engine.TensorSubtract(new Tensor<T>(sample1, new[] { n }).Cast<double>(),
+                new Tensor<T>(sample2, new[] { n }).Cast<double>());
+            meanDiff = engine.TensorMean(differences);
+            sumSqDiff = engine.TensorSumOfSquares(engine.TensorSubtractScalar(differences, meanDiff));
         }
-
-        // Calculate mean and standard deviation of differences
-        double meanDiff = differences.Average();
-        double sumSqDiff = differences.Sum(d => (d - meanDiff) * (d - meanDiff));
         double stdDiff = Math.Sqrt(sumSqDiff / (n - 1));
 
         // Handle zero-variance case (all differences are identical)

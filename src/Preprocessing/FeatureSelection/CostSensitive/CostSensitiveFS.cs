@@ -27,19 +27,19 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _costWeight;
-    private double[]? _featureCosts;
+    private Vector<T>? _featureCosts;
 
-    private double[]? _relevanceScores;
-    private double[]? _costBenefitScores;
+    private Vector<T>? _relevanceScores;
+    private Vector<T>? _costBenefitScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double CostWeight => _costWeight;
-    public double[]? FeatureCosts => _featureCosts;
-    public double[]? RelevanceScores => _relevanceScores;
-    public double[]? CostBenefitScores => _costBenefitScores;
+    public Vector<T>? FeatureCosts => _featureCosts;
+    public Vector<T>? RelevanceScores => _relevanceScores;
+    public Vector<T>? CostBenefitScores => _costBenefitScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -48,7 +48,7 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     public CostSensitiveFS(
         int nFeaturesToSelect = 10,
         double costWeight = 0.5,
-        double[]? featureCosts = null,
+        Vector<T>? featureCosts = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -76,11 +76,14 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Compute relevance scores (correlation with target)
-        _relevanceScores = ComputeRelevanceScores(data, target, n, p);
+        var engine = Engine;
+
+        // Compute relevance scores (|correlation| with target)
+        var relevance = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+        _relevanceScores = relevance.ToVector();
 
         // Get or create feature costs
         var costs = _featureCosts ?? CreateUniformCosts(p);
@@ -89,32 +92,24 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         _featureCosts = costs;
 
         // Normalize costs to [0, 1]
-        var normalizedCosts = NormalizeCosts(costs, p);
+        var normalizedCosts = NormalizeCosts(Tensor<T>.FromVector(costs), p);
 
         // Compute cost-benefit scores
-        _costBenefitScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            // Higher relevance and lower cost = better score
-            double relevance = _relevanceScores[j];
-            double cost = normalizedCosts[j];
-
-            // Weighted combination: (1-w) * relevance - w * cost
-            _costBenefitScores[j] = (1 - _costWeight) * relevance - _costWeight * cost;
-        }
+        // Higher relevance and lower cost = better score
+        // Weighted combination: (1-w) * relevance - w * cost
+        var costBenefit = engine.TensorSubtract(
+            engine.TensorMultiplyScalar(relevance, NumOps.FromDouble(1 - _costWeight)),
+            engine.TensorMultiplyScalar(normalizedCosts, NumOps.FromDouble(_costWeight)));
+        _costBenefitScores = costBenefit.ToVector();
 
         // Select features with best cost-benefit scores
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _costBenefitScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(costBenefit, numToSelect);
 
         IsFitted = true;
     }
 
-    public void Fit(Matrix<T> data, Vector<T> target, double[] featureCosts)
+    public void Fit(Matrix<T> data, Vector<T> target, Vector<T> featureCosts)
     {
         if (featureCosts.Length != data.Columns)
             throw new ArgumentException("Feature costs must match number of columns.");
@@ -123,66 +118,33 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         Fit(data, target);
     }
 
-    private double[] ComputeRelevanceScores(Matrix<T> data, Vector<T> target, int n, int p)
+    private Vector<T> CreateUniformCosts(int p)
     {
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return scores;
+        return PreprocessingTensorOps.Filled(new[] { p }, NumOps.One).ToVector();
     }
 
-    private double[] CreateUniformCosts(int p)
+    private Tensor<T> NormalizeCosts(Tensor<T> costs, int p)
     {
-        var costs = new double[p];
-        for (int j = 0; j < p; j++)
-            costs[j] = 1.0;
-        return costs;
+        // (cost - min) / range, or 0.5 everywhere when the range is not above 1e-10
+        if (p == 0)
+            return costs;
+
+        var engine = Engine;
+        T min = engine.TensorMinValue(costs);
+        T range = NumOps.Subtract(engine.TensorMaxValue(costs), min);
+        if (!NumOps.GreaterThan(range, PreprocessingTensorOps.Tolerance<T>(1e-10)))
+            return PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(0.5));
+
+        return engine.TensorDivideScalar(engine.TensorSubtractScalar(costs, min), range);
     }
 
-    private double[] NormalizeCosts(double[] costs, int p)
+    public T GetTotalCost()
     {
-        double min = double.MaxValue, max = double.MinValue;
-        for (int j = 0; j < p; j++)
-        {
-            if (costs[j] < min) min = costs[j];
-            if (costs[j] > max) max = costs[j];
-        }
+        if (_selectedIndices is null || _featureCosts is null)
+            return NumOps.Zero;
 
-        var normalized = new double[p];
-        double range = max - min;
-
-        for (int j = 0; j < p; j++)
-        {
-            normalized[j] = range > 1e-10 ? (costs[j] - min) / range : 0.5;
-        }
-
-        return normalized;
+        return Engine.TensorSum(Tensor<T>.FromVector(PreprocessingTensorOps.SelectElements(_featureCosts, _selectedIndices)));
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -196,15 +158,7 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("CostSensitiveFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
@@ -226,13 +180,6 @@ public class CostSensitiveFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         return mask;
     }
 
-    public double GetTotalCost()
-    {
-        if (_selectedIndices is null || _featureCosts is null)
-            return 0;
-
-        return _selectedIndices.Sum(j => _featureCosts[j]);
-    }
 
     /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)

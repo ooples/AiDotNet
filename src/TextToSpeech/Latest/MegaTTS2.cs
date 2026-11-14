@@ -89,7 +89,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     private readonly MegaTTS2Options _options;
     private readonly bool _useNativeMode;
     private readonly string[] _vocabulary;
-    private readonly MegaTtsMel _mel;
+    private readonly MegaTtsMel<T> _mel;
     private bool _disposed;
 
     private MegaTts2Network<T>? _network;
@@ -127,7 +127,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         InitializeLayers();
     }
 
-    private (string[] Vocabulary, MegaTtsMel Mel) ConfigureBase()
+    private (string[] Vocabulary, MegaTtsMel<T> Mel) ConfigureBase()
     {
         var o = _options;
         if (o.Language == MegaTtsLanguage.Chinese && o.PhoneSet is null)
@@ -148,7 +148,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         base.MelChannels = o.MelChannels;
         base.HopSize = o.HopSize;
         base.HiddenDim = o.HiddenDim;
-        return (o.Vocabulary, new MegaTtsMel(o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency));
+        return (o.Vocabulary, new MegaTtsMel<T>(o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency));
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
@@ -247,12 +247,12 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         var phones = _options.Language == MegaTtsLanguage.English ? NatSpeechFrontEnd.EnglishPhonesOf(text) : NatSpeechFrontEnd.ChinesePhonesOf(text);
         var ids = NatSpeechFrontEnd.Encode(phones, _vocabulary).Take(_options.MaxTextLength).ToArray();
         if (ids.Length == 0) throw new ArgumentException("The text has no phonemes.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return IdTensor(ids);
     }
 
     internal int[] Ids(Tensor<T> tokens, string name)
     {
-        var ids = tokens.ToArray().Select(v => (int)Math.Round(NumOps.ToDouble(v))).ToArray();
+        var ids = RoundedIds(tokens);
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);
         if (ids.Any(i => i < 0 || i >= _vocabulary.Length))
             throw new ArgumentOutOfRangeException(name, $"Phone ids lie in [0, {_vocabulary.Length}).");
@@ -315,7 +315,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     internal Prompt ReadPrompt(TtsVoice<T> voice, string name)
     {
-        var mel = voice.ReferenceAudio is not null ? MelOf(Doubles(voice.ReferenceAudio))
+        var mel = voice.ReferenceAudio is not null ? MelOf(voice.ReferenceAudio)
             : voice.Reference ?? throw new ArgumentException("A prompt is a recording (ReferenceAudio) or its mel spectrogram (Reference).", name);
         if (mel.Shape.Length != 2 || mel.Shape[1] != _options.MelChannels)
             throw new ArgumentException($"A prompt's mel spectrogram is [frames, {_options.MelChannels}].", name);
@@ -371,8 +371,9 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         for (int i = 0; i < l; i++)
         {
             var row = Engine.TensorSlice(rows, new[] { i, 0 }, new[] { 1, rows.Shape[1] });
-            double predicted = NumOps.ToDouble(model.Extend(new[] { token }, row, cache)[0]);
-            result[i] = phones[i] == 0 ? 0 : Math.Max(i == 0 ? 0 : 1, (int)Math.Round(predicted, MidpointRounding.ToEven));
+            // One rounded (half to even) scalar read per step.
+            int predicted = RoundedIds(model.Extend(new[] { token }, row, cache))[0];
+            result[i] = phones[i] == 0 ? 0 : Math.Max(i == 0 ? 0 : 1, predicted);
             token = Math.Min(result[i], _options.DurationCodes);
         }
         return result;
@@ -398,7 +399,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// not drawn (the length follows the durations); top-k sampling of what remains.
     /// </summary>
     internal int[] SampleProsody(IReadOnlyList<Prompt> target, IReadOnlyList<Prompt>? style, Tensor<T> pooled, Random random,
-        Action<IReadOnlyList<double>>? observeDistribution = null)
+        Action<Tensor<T>>? observeDistribution = null)
     {
         var model = Network.ProsodyModel;
         MegaTts3DurationCache<T> Prefill(IEnumerable<Prompt> prompts)
@@ -417,17 +418,19 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         int n = pooled.Shape[0], h = pooled.Shape[1], v = _options.Codes + 1;
         var codes = new int[n];
         int token = Network.StartToken;
-        double[] Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
+        var startMask = new bool[v];
+        startMask[0] = true;
+        // The softmax, the Eq. 3 mixture and the start-token renormalization run in double and only the final
+        // distribution is narrowed to T: in half precision exp(logit − max) is 0 for a logit 17.3 below the maximum,
+        // and no rescaling after the narrowing brings those tokens back once the start token is masked.
+        Tensor<double> Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
         {
-            var logits = model.Extend(new[] { token }, row, cache);
-            var p = new double[v];
-            double max = double.NegativeInfinity;
-            for (int c = 0; c < v; c++) max = Math.Max(max, p[c] = NumOps.ToDouble(logits[0, c]));
-            double sum = 0;
-            for (int c = 0; c < v; c++) sum += p[c] = Math.Exp(p[c] - max);
-            for (int c = 0; c < v; c++) p[c] /= sum;
-            return p;
+            var logits = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(
+                Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v }));
+            var e = Engine.TensorExp(Engine.TensorAddScalar(logits, -Engine.TensorMaxValue(logits)));
+            return Engine.TensorDivideScalar(e, Engine.TensorSum(e));
         }
+        double keep = 1 - gamma;
         for (int i = 0; i < n; i++)
         {
             var row = Engine.TensorSlice(pooled, new[] { i, 0 }, new[] { 1, h });
@@ -435,27 +438,25 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             if (styleCache is not null)
             {
                 var q = Probabilities(styleCache, row);
-                for (int c = 0; c < v; c++) p[c] = (1 - gamma) * p[c] + gamma * q[c];
+                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, keep), Engine.TensorMultiplyScalar(q, gamma));
             }
-            p[0] = 0;
-            observeDistribution?.Invoke(p);
-            codes[i] = TopK(p, _options.TopK, random) - 1;
+            p = TtsSampling<double>.Fill(p, startMask, 0.0);
+            double remaining = Engine.TensorSum(p);
+            if (remaining > 0) p = Engine.TensorDivideScalar(p, remaining);
+            var distribution = p.Cast<T>();
+            observeDistribution?.Invoke(distribution);
+            codes[i] = TopK(distribution, _options.TopK, random) - 1;
             token = codes[i] + 1;
         }
         return codes;
     }
 
     // Top-k random sampling (Fan et al. 2018): the k most probable tokens, renormalized, one draw.
-    private static int TopK(double[] probabilities, int k, Random random)
+    internal static int TopK(Tensor<T> probabilities, int k, Random random)
     {
-        var top = Enumerable.Range(0, probabilities.Length).OrderByDescending(i => probabilities[i]).ThenBy(i => i).Take(k).ToArray();
-        double u = random.NextDouble() * top.Sum(i => probabilities[i]);
-        foreach (int i in top)
-        {
-            u -= probabilities[i];
-            if (u < 0) return i;
-        }
-        return top[top.Length - 1];
+        var top = TtsSampling<T>.StableOrder(probabilities, descending: true).Take(k).ToArray();
+        var weights = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorIndexSelect(probabilities, new Tensor<int>(top, new[] { top.Length }), 0);
+        return top[TtsSampling<T>.DrawPosition(weights, random.NextDouble(), inclusive: false)];
     }
 
     internal Tensor<T> Content(int[] phones)
@@ -479,15 +480,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <summary>NATSpeech's log10 mel spectrogram <c>[frames, mels]</c> of a recording at <see cref="TtsModelOptions.SampleRate"/>.</summary>
-    internal Tensor<T> MelOf(double[] audio)
-    {
-        var mel = _mel.LogMel(audio);
-        int frames = mel.GetLength(0), mels = mel.GetLength(1);
-        var values = new T[frames * mels];
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < mels; m++) values[f * mels + m] = NumOps.FromDouble(mel[f, m]);
-        return new Tensor<T>(new[] { frames, mels }, new Vector<T>(values));
-    }
+    internal Tensor<T> MelOf(Tensor<T> audio) => _mel.LogMel(audio);
 
     /// <summary>HiFi-GAN's waveform <c>[samples]</c> of a mel spectrogram <c>[frames, mels]</c>.</summary>
     internal Tensor<T> Wave(Tensor<T> mel)
@@ -498,7 +491,6 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         return Engine.Reshape(wave, new[] { wave.Length });
     }
 
-    private static double[] Doubles(Tensor<T> audio) => audio.ToArray().Select(v => MathHelper.GetNumericOperations<T>().ToDouble(v)).ToArray();
 
     // ---------------------------------------------------------------- weights
 

@@ -327,7 +327,7 @@ public class DiffusionScheduleAndMedianTests
         var forecasts = levels.ToDictionary(
             level => level, _ => new Tensor<float>(new[] { 1 }, new Vector<float>(new[] { 9e37f })));
 
-        float crps = new GIFTEvalBenchmark<float>().ComputeCRPS(
+        double crps = new GIFTEvalBenchmark<float>().ComputeCRPS(
             forecasts, new Tensor<float>(new[] { 1 }, new Vector<float>(new[] { 1e38f })));
 
         Assert.Equal(0.1, crps, 5);
@@ -347,8 +347,8 @@ public class DiffusionScheduleAndMedianTests
         var method = typeof(GIFTEvalBenchmark<float>).GetMethod(
             "FiniteMeanOrNaN", BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(method);
-        var result = method?.Invoke(null, new object[] { new List<float> { 3e38f, 3e38f } });
-        var (mean, finite) = Assert.IsType<ValueTuple<float, int>>(result);
+        var result = method?.Invoke(null, new object[] { new List<double> { 3e38f, 3e38f } });
+        var (mean, finite) = Assert.IsType<ValueTuple<double, int>>(result);
         Assert.Equal(3e38f, mean);
         Assert.Equal(2, finite);
     }

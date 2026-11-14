@@ -182,102 +182,73 @@ public static class KktConditions
             variableCount, nameof(equalityMatrix), nameof(equalityBounds),
             nameof(equalityMultipliers));
 
+        var engine = SolverTensorOps<T>.Engine;
+
         // Stationarity: gradient of the objective plus the constraint normals weighted by their
         // multipliers must vanish.
-        var gradient = new Vector<T>(variableCount);
-        for (int i = 0; i < variableCount; i++)
+        var x = SolverTensorOps<T>.AsTensor(solution);
+        var gradient = SolverTensorOps<T>.AsTensor(linear);
+        if (quadratic is not null)
         {
-            T value = linear[i];
-            if (quadratic is not null)
-            {
-                for (int j = 0; j < variableCount; j++)
-                {
-                    value = numOps.Add(value, numOps.Multiply(quadratic[i, j], solution[j]));
-                }
-            }
-
-            gradient[i] = value;
+            gradient = engine.TensorAdd(gradient, SolverTensorOps<T>.MatVec(SolverTensorOps<T>.AsTensor(quadratic), x));
         }
 
-        if (equalityMatrix is not null && equalityMultipliers is not null)
+        Tensor<T>? equalityRows = equalityMatrix is not null && equalityMatrix.Rows > 0
+            ? SolverTensorOps<T>.AsTensor(equalityMatrix)
+            : null;
+        Tensor<T>? inequalityRows = inequalityMatrix is not null && inequalityMatrix.Rows > 0
+            ? SolverTensorOps<T>.AsTensor(inequalityMatrix)
+            : null;
+        if (equalityRows is not null && equalityMultipliers is not null)
         {
-            for (int r = 0; r < equalityMatrix.Rows; r++)
-            {
-                for (int c = 0; c < variableCount; c++)
-                {
-                    gradient[c] = numOps.Add(
-                        gradient[c], numOps.Multiply(equalityMatrix[r, c], equalityMultipliers[r]));
-                }
-            }
+            gradient = engine.TensorAdd(
+                gradient, SolverTensorOps<T>.TransposedMatVec(equalityRows, SolverTensorOps<T>.AsTensor(equalityMultipliers)));
         }
 
-        if (inequalityMatrix is not null && inequalityMultipliers is not null)
+        if (inequalityRows is not null && inequalityMultipliers is not null)
         {
-            for (int r = 0; r < inequalityMatrix.Rows; r++)
-            {
-                for (int c = 0; c < variableCount; c++)
-                {
-                    gradient[c] = numOps.Add(
-                        gradient[c], numOps.Multiply(inequalityMatrix[r, c], inequalityMultipliers[r]));
-                }
-            }
+            gradient = engine.TensorAdd(
+                gradient, SolverTensorOps<T>.TransposedMatVec(inequalityRows, SolverTensorOps<T>.AsTensor(inequalityMultipliers)));
         }
 
-        T stationarity = numOps.Zero;
-        for (int i = 0; i < variableCount; i++)
-        {
-            stationarity = Max(numOps, stationarity, numOps.Abs(gradient[i]));
-        }
+        T stationarity = SolverTensorOps<T>.FoldMax(numOps.Zero, engine.TensorAbs(gradient));
 
         // Primal feasibility: constraint violations.
         T primalFeasibility = numOps.Zero;
-
-        if (inequalityMatrix is not null && inequalityBounds is not null)
+        Tensor<T>? inequalitySlack = null;
+        if (inequalityRows is not null && inequalityBounds is not null)
         {
-            for (int r = 0; r < inequalityMatrix.Rows; r++)
-            {
-                T rowValue = RowDot(numOps, inequalityMatrix, r, solution);
-                T violation = numOps.Subtract(rowValue, inequalityBounds[r]);
-                if (numOps.GreaterThan(violation, primalFeasibility)) primalFeasibility = violation;
-            }
+            inequalitySlack = engine.TensorSubtract(
+                SolverTensorOps<T>.MatVec(inequalityRows, x), SolverTensorOps<T>.AsTensor(inequalityBounds));
+            primalFeasibility = SolverTensorOps<T>.FoldMaxSkippingNaN(primalFeasibility, inequalitySlack);
         }
 
-        if (equalityMatrix is not null && equalityBounds is not null)
+        if (equalityRows is not null && equalityBounds is not null)
         {
-            for (int r = 0; r < equalityMatrix.Rows; r++)
-            {
-                T rowValue = RowDot(numOps, equalityMatrix, r, solution);
-                T violation = numOps.Abs(numOps.Subtract(rowValue, equalityBounds[r]));
-                primalFeasibility = Max(numOps, primalFeasibility, violation);
-            }
+            var violation = engine.TensorAbs(engine.TensorSubtract(
+                SolverTensorOps<T>.MatVec(equalityRows, x), SolverTensorOps<T>.AsTensor(equalityBounds)));
+            primalFeasibility = SolverTensorOps<T>.FoldMax(primalFeasibility, violation);
         }
 
         // Dual feasibility: inequality multipliers must be non-negative.
         T dualFeasibility = numOps.Zero;
-        if (inequalityMultipliers is not null)
+        if (inequalityMultipliers is not null && inequalityMultipliers.Length > 0)
         {
-            for (int r = 0; r < inequalityMultipliers.Length; r++)
-            {
-                if (numOps.LessThan(inequalityMultipliers[r], numOps.Zero))
-                {
-                    dualFeasibility = Max(
-                        numOps, dualFeasibility, numOps.Abs(inequalityMultipliers[r]));
-                }
-            }
+            // Only negative multipliers count; |m| of a negative m is never NaN, so the fold has no NaN to carry.
+            var multipliers = SolverTensorOps<T>.AsTensor(inequalityMultipliers);
+            var counted = engine.TensorWhere(
+                engine.TensorLessThan(multipliers, numOps.Zero),
+                engine.TensorAbs(multipliers),
+                Tensor<T>.CreateDefault(new[] { multipliers.Length }, numOps.Zero));
+            dualFeasibility = SolverTensorOps<T>.FoldMax(dualFeasibility, counted);
         }
 
         // Complementary slackness: each inequality is tight or priced at zero.
         T complementarySlackness = numOps.Zero;
-        if (inequalityMatrix is not null && inequalityBounds is not null
-            && inequalityMultipliers is not null)
+        if (inequalitySlack is not null && inequalityMultipliers is not null)
         {
-            for (int r = 0; r < inequalityMatrix.Rows; r++)
-            {
-                T slack = numOps.Subtract(
-                    RowDot(numOps, inequalityMatrix, r, solution), inequalityBounds[r]);
-                T product = numOps.Abs(numOps.Multiply(inequalityMultipliers[r], slack));
-                complementarySlackness = Max(numOps, complementarySlackness, product);
-            }
+            var product = engine.TensorAbs(engine.TensorMultiply(SolverTensorOps<T>.AsTensor(inequalityMultipliers), inequalitySlack));
+            complementarySlackness = SolverTensorOps<T>.FoldMax(complementarySlackness, product);
         }
 
         T worst = Max(numOps, Max(numOps, stationarity, primalFeasibility),
@@ -328,17 +299,7 @@ public static class KktConditions
         }
     }
 
-    private static T RowDot<T>(
-        INumericOperations<T> numOps, Matrix<T> matrix, int row, Vector<T> vector)
-    {
-        T sum = numOps.Zero;
-        for (int c = 0; c < matrix.Columns; c++)
-        {
-            sum = numOps.Add(sum, numOps.Multiply(matrix[row, c], vector[c]));
-        }
 
-        return sum;
-    }
 
     private static T Max<T>(INumericOperations<T> numOps, T left, T right)
     {

@@ -26,15 +26,15 @@ public class FClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _fScores;
-    private double[]? _pValues;
+    private Vector<T>? _fScores;
+    private Vector<T>? _pValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FScores => _fScores;
-    public double[]? PValues => _pValues;
+    public Vector<T>? FScores => _fScores;
+    public Vector<T>? PValues => _pValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,107 +68,46 @@ public class FClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         int n = data.Rows;
         int p = data.Columns;
 
-        // Group samples by class
-        var classGroups = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classGroups.ContainsKey(label))
-                classGroups[label] = new List<int>();
-            classGroups[label].Add(i);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        int k = classGroups.Count; // Number of classes
-        _fScores = new double[p];
-        _pValues = new double[p];
+        // Group samples by class (rounded target values)
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length; // Number of classes
+        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute overall mean
-            double overallMean = 0;
-            for (int i = 0; i < n; i++)
-                overallMean += NumOps.ToDouble(data[i, j]);
-            overallMean /= n;
+        // Between-group and within-group sums of squares
+        // Class sizes and means counted exactly (a Half sum of the 0/1 membership stops at 2048)
+        var groupMeans = FeatureScoringTensorOps.GroupMeans(membership, X, out var counts);
+        var countColumn = engine.TensorBroadcastTo(engine.Reshape(counts, new[] { k, 1 }), new[] { k, p });
+        var overallMean = engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { k, p });
+        var ssBetween = engine.ReduceSum(engine.TensorMultiply(
+            engine.TensorSquare(engine.TensorSubtract(groupMeans, overallMean)), countColumn), new[] { 0 }, false);
+        var ssWithin = engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(X,
+            engine.TensorIndexSelect(groupMeans, new Tensor<int>(classIndex, new[] { n }), 0))), new[] { 0 }, false);
 
-            // Compute between-group and within-group sum of squares
-            double ssBetween = 0;
-            double ssWithin = 0;
+        // Compute F-statistic (0 when the within-group mean square is not above 1e-10)
+        int dfBetween = k - 1;
+        int dfWithin = n - k;
+        var zeros = new Tensor<T>(new[] { p });
+        var msBetween = dfBetween > 0 ? engine.TensorDivideScalar(ssBetween, NumOps.FromDouble(dfBetween)) : zeros;
+        var msWithin = dfWithin > 0 ? engine.TensorDivideScalar(ssWithin, NumOps.FromDouble(dfWithin)) : zeros;
+        var usable = engine.TensorGreaterThan(msWithin, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var fScores = engine.TensorWhere(usable, engine.TensorDivide(msBetween,
+            engine.TensorWhere(usable, msWithin, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), zeros);
 
-            foreach (var group in classGroups.Values)
-            {
-                double groupMean = 0;
-                foreach (int idx in group)
-                    groupMean += NumOps.ToDouble(data[idx, j]);
-                groupMean /= group.Count;
-
-                // Between-group variance
-                ssBetween += group.Count * Math.Pow(groupMean - overallMean, 2);
-
-                // Within-group variance
-                foreach (int idx in group)
-                {
-                    double diff = NumOps.ToDouble(data[idx, j]) - groupMean;
-                    ssWithin += diff * diff;
-                }
-            }
-
-            // Compute F-statistic
-            double dfBetween = k - 1;
-            double dfWithin = n - k;
-
-            double msBetween = dfBetween > 0 ? ssBetween / dfBetween : 0;
-            double msWithin = dfWithin > 0 ? ssWithin / dfWithin : 0;
-
-            _fScores[j] = msWithin > 1e-10 ? msBetween / msWithin : 0;
-            _pValues[j] = ComputePValue(_fScores[j], (int)dfBetween, (int)dfWithin);
-        }
+        _fScores = fScores.ToVector();
+        // scipy.stats.f.sf; a degenerate split (one class, or no within-class degrees of freedom) keeps p = 1
+        _pValues = (dfBetween > 0 && dfWithin > 0
+            ? FilterStatisticTensorOps.FSurvival(fScores, dfBetween, dfWithin)
+            : PreprocessingTensorOps.Filled(new[] { p }, NumOps.One)).ToVector();
 
         // Select top features by F-score
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _fScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(fScores, numToSelect);
 
         IsFitted = true;
     }
-
-    private double ComputePValue(double fStatistic, int df1, int df2)
-    {
-        if (fStatistic <= 0 || df1 <= 0 || df2 <= 0) return 1.0;
-
-        // Approximation using normal distribution for large df
-        if (df2 >= 30)
-        {
-            double z = Math.Pow(fStatistic, 1.0 / 3.0) * (1 - 2.0 / (9.0 * df2)) - (1 - 2.0 / (9.0 * df1));
-            double se = Math.Sqrt(2.0 / (9.0 * df1) + 2.0 / (9.0 * df2));
-            double standardZ = z / se;
-
-            return 0.5 * (1 - Erf(standardZ / Math.Sqrt(2)));
-        }
-
-        return Math.Exp(-0.5 * fStatistic / Math.Max(1, df1));
-    }
-
-    private double Erf(double x)
-    {
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
-    }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -182,15 +121,7 @@ public class FClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("FClassification has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

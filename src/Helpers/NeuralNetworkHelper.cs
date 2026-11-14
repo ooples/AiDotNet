@@ -240,13 +240,10 @@ public static class NeuralNetworkHelper<T>
     /// <param name="tensor">The tensor to apply sigmoid to.</param>
     private static void ApplySigmoid(Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Shape[0]; i++)
+        // In-place overwrite of a [batch, outputs] tensor, kept off any active gradient tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                double value = Convert.ToDouble(tensor[i, j]);
-                tensor[i, j] = _numOps.FromDouble(1.0 / (1.0 + Math.Exp(-value)));
-            }
+            AiDotNetEngine.Current.SigmoidInPlace(tensor);
         }
     }
 
@@ -256,13 +253,10 @@ public static class NeuralNetworkHelper<T>
     /// <param name="tensor">The tensor to apply tanh to.</param>
     private static void ApplyTanh(Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Shape[0]; i++)
+        // In-place overwrite of a [batch, outputs] tensor, kept off any active gradient tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < tensor.Shape[1]; j++)
-            {
-                double value = Convert.ToDouble(tensor[i, j]);
-                tensor[i, j] = _numOps.FromDouble(Math.Tanh(value));
-            }
+            AiDotNetEngine.Current.TanhInPlace(tensor);
         }
     }
 

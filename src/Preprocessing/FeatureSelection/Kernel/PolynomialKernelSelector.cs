@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 
@@ -26,7 +27,7 @@ public class PolynomialKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _degree;
     private readonly double _coef0;
 
-    private double[]? _kernelScores;
+    private Vector<T>? _kernelScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -34,7 +35,7 @@ public class PolynomialKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int Degree => _degree;
     public double Coef0 => _coef0;
-    public double[]? KernelScores => _kernelScores;
+    public Vector<T>? KernelScores => _kernelScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,68 +73,34 @@ public class PolynomialKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var standardized = FeatureSelectionTensorOps.StandardizeColumnsOrKeep(Tensor<T>.FromMatrix(data));
 
-        _kernelScores = new double[p];
+        // Target similarity of each pair i < j: 1 - |y_i - y_j| / (1 + |y_i - y_j|)
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        var targetGap = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(y, new[] { n, n }), engine.TensorBroadcastTo(engine.TensorTranspose(y), new[] { n, n })));
+        var similarity = PreprocessingTensorOps.OneMinus(
+            engine.TensorDivide(targetGap, engine.TensorAddScalar(targetGap, NumOps.One)));
+        var upper = FeatureSelectionTensorOps.StrictUpperMask<T>(n);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Standardize feature
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-            if (std > 1e-10)
-                for (int i = 0; i < n; i++)
-                    col[i] = (col[i] - mean) / std;
-
-            // Compute polynomial kernel matrix for this feature
-            // k(x, y) = (x*y + coef0)^degree
-            var kernel = new double[n, n];
-            for (int i1 = 0; i1 < n; i1++)
-            {
-                for (int i2 = i1; i2 < n; i2++)
-                {
-                    double k = Math.Pow(col[i1] * col[i2] + _coef0, _degree);
-                    kernel[i1, i2] = k;
-                    kernel[i2, i1] = k;
-                }
-            }
-
-            // Kernel-target alignment
-            double alignmentNumerator = 0;
-            double alignmentDenominator = 0;
-
-            for (int i1 = 0; i1 < n; i1++)
-            {
-                for (int i2 = i1 + 1; i2 < n; i2++)
-                {
-                    double targetSimilarity = 1 - Math.Abs(y[i1] - y[i2]) / (1 + Math.Abs(y[i1] - y[i2]));
-                    alignmentNumerator += kernel[i1, i2] * targetSimilarity;
-                    alignmentDenominator += kernel[i1, i2] * kernel[i1, i2];
-                }
-            }
-
-            _kernelScores[j] = alignmentDenominator > 1e-10
-                ? alignmentNumerator / Math.Sqrt(alignmentDenominator)
-                : 0;
-        }
+        // Kernel-target alignment of each feature's polynomial kernel k(a, b) = (a b + coef0)^degree
+        T coef0 = NumOps.FromDouble(_coef0);
+        var sums = FeatureSelectionTensorOps.KernelWeightedSums(
+            standardized,
+            column => FeatureSelectionTensorOps.IntegerPower(
+                engine.TensorAddScalar(engine.TensorMatMul(column, engine.TensorTranspose(column)), coef0), _degree),
+            new[] { engine.TensorMultiply(upper, similarity) },
+            new[] { upper });
+        var numerator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p });
+        var denominator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p });
+        var defined = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var scores = engine.TensorWhere(defined, engine.TensorDivide(numerator, engine.TensorSqrt(safeDenominator)), new Tensor<T>(new[] { p }));
+        _kernelScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _kernelScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -151,15 +118,7 @@ public class PolynomialKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("PolynomialKernelSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

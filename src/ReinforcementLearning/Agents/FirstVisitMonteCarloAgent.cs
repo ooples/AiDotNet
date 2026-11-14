@@ -137,7 +137,18 @@ public partial class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
     private void UpdateFromEpisode()
     {
         T G = NumOps.Zero;
-        var visited = new HashSet<string>();
+        // First-visit MC (Sutton & Barto 2018, Figures 5.1 / 5.4 / 5.6): a pair's return is the
+        // one that follows its EARLIEST occurrence in the episode. A backward scan with a "seen"
+        // set would keep the LATEST occurrence instead, so record each pair's first index up front.
+        var firstVisit = new Dictionary<string, int>();
+        for (int step = 0; step < _episode.Count; step++)
+        {
+            string pairKey = $"{_episode[step].state}:{_episode[step].action}";
+            if (!firstVisit.ContainsKey(pairKey))
+            {
+                firstVisit[pairKey] = step;
+            }
+        }
 
         // Work backwards through episode
         for (int t = _episode.Count - 1; t >= 0; t--)
@@ -148,10 +159,9 @@ public partial class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
 
             string stateActionKey = $"{state}:{action}";
 
-            // First-visit: only update if not seen before in this episode
-            if (!visited.Contains(stateActionKey))
+            // First-visit: only the earliest occurrence of the pair contributes its return
+            if (firstVisit[stateActionKey] == t)
             {
-                visited.Add(stateActionKey);
 
                 EnsureStateExists(state);
                 if (!_returns.ContainsKey(state))
@@ -178,13 +188,7 @@ public partial class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
             return NumOps.Zero;
         }
 
-        T sum = NumOps.Zero;
-        foreach (var value in values)
-        {
-            sum = NumOps.Add(sum, value);
-        }
-
-        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
+        return RLTensorOps.Average(values);
     }
 
     /// <inheritdoc />
@@ -205,14 +209,7 @@ public partial class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
 
     private int GetActionIndex(Vector<T> action)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
-        }
-        return 0;
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)
@@ -230,23 +227,9 @@ public partial class FirstVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
     private int GetBestAction(string stateKey)
     {
         EnsureStateExists(stateKey);
-        int bestAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qValues = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int bestAction = RLTensorOps.ArgMax(qValues);
+        bool allEqual = RLTensorOps.AllEqual(qValues, NumOps);
         if (allEqual)
             bestAction = HashStateToAction(stateKey, _options.ActionSize);
         return bestAction;

@@ -124,15 +124,13 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
         var m = NumOps.FromDouble(_momentum);
         var oneMinusM = NumOps.FromDouble(1.0 - _momentum);
 
-        var newParams = new T[momentumParams.Length];
-        for (int i = 0; i < momentumParams.Length; i++)
-        {
-            newParams[i] = NumOps.Add(
-                NumOps.Multiply(m, momentumParams[i]),
-                NumOps.Multiply(oneMinusM, mainEncoderParams[i]));
-        }
+        // Detached, as master's fresh parameter array was
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var newParams = AiDotNetEngine.Current.TensorAdd(
+            AiDotNetEngine.Current.TensorMultiplyScalar(momentumParams.AsTensor(), m),
+            AiDotNetEngine.Current.TensorMultiplyScalar(mainEncoderParams.AsTensor(), oneMinusM));
 
-        _encoder.UpdateParameters(new Vector<T>(newParams));
+        _encoder.UpdateParameters(newParams.AsVector());
     }
 
     /// <inheritdoc />
@@ -184,11 +182,13 @@ public class MomentumEncoder<T> : IMomentumEncoder<T>
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var engine = AiDotNetEngine.Current;
+        var keep = NumOps.FromDouble(momentum);
+        var take = NumOps.FromDouble(1 - momentum);
         var updated = momentum == 0
             ? AiDotNet.Training.TensorCheckpoint<T>.Capture(from)
             : to.Select((tensor, i) => engine.TensorAdd(
-                engine.TensorMultiplyScalar(tensor, NumOps.FromDouble(momentum)),
-                engine.TensorMultiplyScalar(from[i], NumOps.FromDouble(1 - momentum)))).ToArray();
+                engine.TensorMultiplyScalar(tensor, keep),
+                engine.TensorMultiplyScalar(from[i], take))).ToArray();
         _encoder.SetParameterChunks(updated);
         return true;
 #endif

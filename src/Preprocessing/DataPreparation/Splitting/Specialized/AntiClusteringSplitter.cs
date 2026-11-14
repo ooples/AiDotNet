@@ -59,38 +59,13 @@ public class AntiClusteringSplitter<T> : DataSplitterBase<T>
         ValidateInputs(X, y);
 
         int nSamples = X.Rows;
-        int nFeatures = X.Columns;
         int targetTestSize = Math.Max(1, (int)(nSamples * _testSize));
 
-        // Compute feature centroids for diversity calculation
-        var centroids = new double[nFeatures];
-        for (int j = 0; j < nFeatures; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < nSamples; i++)
-            {
-                sum += Convert.ToDouble(X[i, j]);
-            }
-            centroids[j] = sum / nSamples;
-        }
-
-        // Calculate distance from centroid for each sample (for diversity scoring)
-        var distances = new double[nSamples];
-        for (int i = 0; i < nSamples; i++)
-        {
-            double dist = 0;
-            for (int j = 0; j < nFeatures; j++)
-            {
-                double diff = Convert.ToDouble(X[i, j]) - centroids[j];
-                dist += diff * diff;
-            }
-            distances[i] = Math.Sqrt(dist);
-        }
+        // Distance of each sample from the feature centroids (for diversity scoring)
+        var distances = PreprocessingTensorOps.CentroidDistances(X, standardize: false);
 
         // Sort samples by distance from centroid
-        var sortedIndices = Enumerable.Range(0, nSamples)
-            .OrderBy(i => distances[i])
-            .ToArray();
+        var sortedIndices = PreprocessingTensorOps.StableOrder(distances, descending: false);
 
         if (_shuffle)
         {

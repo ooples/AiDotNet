@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Options;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Engines;
 
@@ -153,22 +154,9 @@ public class ValidationCurveEngine<T>
     {
         if (curve.ParameterValues.Count == 0) return 0;
 
-        // Find parameter with best validation score (respecting metric direction)
-        int bestIdx = 0;
-        T bestScore = curve.ValidationScoreMeans[0];
-
-        for (int i = 1; i < curve.ValidationScoreMeans.Count; i++)
-        {
-            bool isBetter = higherIsBetter
-                ? NumOps.GreaterThan(curve.ValidationScoreMeans[i], bestScore)
-                : NumOps.LessThan(curve.ValidationScoreMeans[i], bestScore);
-
-            if (isBetter)
-            {
-                bestScore = curve.ValidationScoreMeans[i];
-                bestIdx = i;
-            }
-        }
+        // Find parameter with best validation score (respecting metric direction); the first best one wins
+        var scores = new Tensor<T>(curve.ValidationScoreMeans.ToArray(), new[] { curve.ValidationScoreMeans.Count });
+        int bestIdx = EvaluationTensorOps<T>.StrictScanBestIndex(scores, higherIsBetter);
 
         return curve.ParameterValues[bestIdx];
     }
@@ -177,25 +165,21 @@ public class ValidationCurveEngine<T>
     {
         if (values.Count == 0)
             throw new InvalidOperationException("Cannot compute mean of an empty sequence. No fold scores were recorded for this parameter value.");
-        T sum = NumOps.Zero;
-        foreach (var v in values)
-        {
-            sum = NumOps.Add(sum, v);
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
+        using var noGrad = new NoGradScope<T>();
+        return AiDotNetEngine.Current.TensorMean(new Tensor<T>(values.ToArray(), new[] { values.Count }));
     }
 
     private static T StandardDeviation(List<T> values)
     {
         if (values.Count <= 1) return NumOps.Zero;
         T mean = Mean(values);
-        T variance = NumOps.Zero;
-        foreach (var v in values)
+        T variance;
+        using (new NoGradScope<T>())
         {
-            T diff = NumOps.Subtract(v, mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            var engine = AiDotNetEngine.Current;
+            var deviations = engine.TensorSubtractScalar(new Tensor<T>(values.ToArray(), new[] { values.Count }), mean);
+            variance = NumOps.Divide(engine.TensorSumOfSquares(deviations), NumOps.FromDouble(values.Count - 1));
         }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(values.Count - 1));
         return NumOps.Sqrt(variance);
     }
 

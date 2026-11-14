@@ -195,18 +195,8 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
                 if (refinedDistributions.Length > 0)
                 {
-                    double sumConf = 0;
-                    for (int i = 0; i < refinedDistributions.Length; i++)
-                    {
-                        double d = NumOps.ToDouble(refinedDistributions[i]);
-                        sumConf += 0.5 + 0.5 / (1.0 + Math.Exp(-d));
-                    }
-                    double avgConf = sumConf / refinedDistributions.Length;
-                    var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgConf));
-                    ParamModel.SetParameters(modulatedParams);
+                    // Mean confidence 0.5 + 0.5 * sigmoid(d) over the refined distributions scales the backbone.
+                    ParamModel.SetParameters(Engine.Multiply(ParamModel.GetParameters(), MeanConfidence(refinedDistributions)));
                 }
             }
 
@@ -237,58 +227,50 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         // Compute pairwise edge weights (scaled dot-product similarity)
         // Edge params occupy the first portion of each layer's parameter block
         int edgeParamCount = nodeDim * edgeDim + edgeDim;
-        var edgeWeights = new double[n * n];
-        double maxW = double.MinValue;
-        for (int i = 0; i < n; i++)
+
+        // Edge (i, j) reads parameter offset + ((i * n + j) mod edgeParamCount), wrapped into the parameter vector.
+        var edgeIndex = new int[n * n];
+        for (int k = 0; k < n * n; k++)
         {
-            double fi = NumOps.ToDouble(nodes[i]);
-            for (int j = 0; j < n; j++)
-            {
-                double fj = NumOps.ToDouble(nodes[j]);
-                int pIdx = offset + ((i * n + j) % Math.Max(edgeParamCount, 1));
-                if (pIdx >= graphParams.Length) pIdx = pIdx % graphParams.Length;
-                double w = NumOps.ToDouble(graphParams[pIdx]);
-                double score = fi * fj * w / Math.Sqrt(Math.Max(n, 1));
-                edgeWeights[i * n + j] = score;
-                maxW = Math.Max(maxW, score);
-            }
+            int pIdx = offset + (k % Math.Max(edgeParamCount, 1));
+            edgeIndex[k] = pIdx >= graphParams.Length ? pIdx % graphParams.Length : pIdx;
         }
 
-        // Softmax normalization per node (row-wise)
-        for (int i = 0; i < n; i++)
-        {
-            double sumExp = 0;
-            for (int j = 0; j < n; j++)
-            {
-                edgeWeights[i * n + j] = Math.Exp(Math.Min(edgeWeights[i * n + j] - maxW, 10.0));
-                sumExp += edgeWeights[i * n + j];
-            }
-            for (int j = 0; j < n; j++)
-                edgeWeights[i * n + j] /= Math.Max(sumExp, 1e-10);
-        }
+        var w = Engine.Reshape(
+            Engine.TensorIndexSelect(Tensor<T>.FromVector(graphParams), new Tensor<int>(edgeIndex, new[] { n * n }), 0),
+            new[] { n, n });
+
+        // Scaled pairwise scores f_i * f_j * w_ij / sqrt(n), shifted by the global maximum, then a row softmax.
+        var x = Tensor<T>.FromVector(nodes);
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorOuter(x, x), w), NumOps.FromDouble(1.0 / Math.Sqrt(Math.Max(n, 1))));
+        var maxW = Engine.TensorBroadcastTo(Engine.ReduceMax(scores, new[] { 0, 1 }, true), new[] { n, n });
+        var exps = Engine.TensorExp(Engine.TensorMin(Engine.TensorSubtract(scores, maxW), NumOps.FromDouble(10.0)));
+        var sumExp = Engine.TensorMax(Engine.ReduceSum(exps, new[] { 1 }, true), NumOps.FromDouble(1e-10));
+        var edgeWeights = Engine.TensorDivide(exps, Engine.TensorBroadcastTo(sumExp, new[] { n, n }));
 
         // Message passing: aggregate neighbors, project through shared MLP, add residual
         // Standard GNN pattern: shared weights applied identically to each node's aggregated message
-        var updated = new Vector<T>(n);
         int projOffset = offset + edgeParamCount;
         if (projOffset >= graphParams.Length) projOffset = projOffset % graphParams.Length;
-        double wProj = NumOps.ToDouble(graphParams[projOffset % graphParams.Length]);
-        double bProj = NumOps.ToDouble(graphParams[(projOffset + 1) % graphParams.Length]);
-        for (int i = 0; i < n; i++)
-        {
-            double aggregated = 0;
-            for (int j = 0; j < n; j++)
-                aggregated += edgeWeights[i * n + j] * NumOps.ToDouble(nodes[j]);
+        T wProj = graphParams[projOffset % graphParams.Length];
+        T bProj = graphParams[(projOffset + 1) % graphParams.Length];
+        var aggregated = Engine.Reshape(
+            Engine.TensorMatMul(edgeWeights, Engine.Reshape(x, new[] { n, 1 })), new[] { n }).ToVector();
 
-            // Shared projection: ReLU(w * aggregated + b) — same weights for all nodes
-            double projected = Math.Max(0, wProj * aggregated + bProj);
-
-            // Residual connection
-            updated[i] = NumOps.Add(nodes[i], NumOps.FromDouble(projected));
-        }
-
-        return updated;
+        // Shared projection: ReLU(w * aggregated + b), the same weights for all nodes, plus the residual connection
+        var projected = Engine.TensorMax(
+            Tensor<T>.FromVector(Engine.Add(Engine.Multiply(aggregated, wProj), Engine.Fill(n, bProj))), NumOps.Zero);
+        return Engine.Add(nodes, projected.ToVector());
     }
+
+    /// <summary>
+    /// The mean confidence 0.5 + 0.5 * mean(sigmoid(d)) over the refined distributions. The sigmoids are taken in T
+    /// and their mean accumulated in double, as the scalar loop did: a Half running sum over more than 2048 nodes
+    /// stops growing.
+    /// </summary>
+    private T MeanConfidence(Vector<T> refinedDistributions)
+        => NumOps.FromDouble(0.5 + 0.5 * WideReduction.Mean(Engine, Engine.Sigmoid(refinedDistributions)));
 
     /// <summary>
     /// Performs multi-layer dual graph propagation: alternating point graph (feature refinement)
@@ -303,13 +285,8 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         int numLayers = _dpgnOptions.NumPropagationLayers;
 
         // Initialize working copies
-        var nodeFeatures = new Vector<T>(n);
-        var nodeDistributions = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            nodeFeatures[i] = features[i];
-            nodeDistributions[i] = NumOps.FromDouble(1.0 / Math.Max(n, 1)); // Uniform init
-        }
+        var nodeFeatures = features.Clone();
+        var nodeDistributions = Engine.Fill(n, NumOps.FromDouble(1.0 / Math.Max(n, 1))); // Uniform init
 
         // Multi-layer dual propagation
         for (int layer = 0; layer < numLayers; layer++)
@@ -343,16 +320,14 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Compute modulation factors from distribution confidence estimates
         // The distribution graph estimates per-node confidence — use as parameter modulation
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (refinedDistributions != null && refinedDistributions.Length > 0)
         {
-            modulationFactors = new double[refinedDistributions.Length];
-            for (int i = 0; i < refinedDistributions.Length; i++)
-            {
-                // Convert distribution to confidence via sigmoid, centered around 1.0
-                double d = NumOps.ToDouble(refinedDistributions[i]);
-                modulationFactors[i] = 0.5 + 0.5 / (1.0 + Math.Exp(-d));
-            }
+            // Convert distribution to confidence via sigmoid, centered around 1.0: 0.5 + 0.5 * sigmoid(d)
+            T half = NumOps.FromDouble(0.5);
+            modulationFactors = Engine.Add(
+                Engine.Multiply(Engine.Sigmoid(refinedDistributions), half),
+                Engine.Fill(refinedDistributions.Length, half));
         }
 
         return new DPGNModel<T, TInput, TOutput>(
@@ -370,12 +345,13 @@ public partial class DPGNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 /// </remarks>
 internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _refinedFeatures;
     private readonly Vector<T>? _refinedDistributions;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
@@ -384,14 +360,14 @@ internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     public Vector<T>? AdaptedSupportFeatures => _refinedFeatures;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     public DPGNModel(
         IFullModel<T, TInput, TOutput> model,
         Vector<T> backboneParams,
         Vector<T>? refinedFeatures,
         Vector<T>? refinedDistributions,
-        double[]? modulationFactors)
+        Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -408,12 +384,7 @@ internal class DPGNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
             // Apply distribution-confidence-based parameter modulation
-            var modulatedParams = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-            {
-                double mod = _modulationFactors[i % _modulationFactors.Length];
-                modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
-            }
+            var modulatedParams = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
         }
         else

@@ -171,58 +171,49 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         int taskCount = taskBatch.Tasks.Length;
         if (taskCount == 0) return NumOps.Zero;
 
-        var encoder = ToDoubles(_encoderParams);
-        var decoder = ToDoubles(_decoderParams);
-        var encoderGradient = new double[encoder.Length];
-        var decoderGradient = new double[decoder.Length];
-        var adapters = new List<double[]>(taskCount);
-        var taskVectors = new List<double[]>(taskCount);
+        var encoder = Tensor<T>.FromVector(_encoderParams.Clone());
+        var decoder = Tensor<T>.FromVector(_decoderParams.Clone());
+        var encoderGradient = new Tensor<T>(new[] { encoder.Length });
+        var decoderGradient = new Tensor<T>(new[] { decoder.Length });
+        var adapters = new List<Tensor<T>>(taskCount);
+        var taskVectors = new List<Tensor<T>>(taskCount);
         bool secondOrder = !_algoOptions.UseFirstOrder;
-        double totalLoss = 0;
+        var losses = new T[taskCount];
+        int index = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
             var firstNoise = SampleLatentNoise();
             var secondNoise = SampleLatentNoise();
-            totalLoss += TaskObjective(task, thetaStart, encoder, decoder, firstNoise, secondNoise, secondOrder,
-                encoderGradient, decoderGradient, frozenAdaptedAdapter: null,
-                out var adapter, out var taskVector, out _);
-            adapters.Add(adapter);
-            taskVectors.Add(taskVector);
+            var result = TaskObjective(task, thetaStart, encoder, decoder, firstNoise, secondNoise, secondOrder,
+                withGradient: true, frozenAdaptedAdapter: null);
+            losses[index++] = result.Loss;
+            if (result.EncoderGradient is not null) encoderGradient = Engine.TensorAdd(encoderGradient, result.EncoderGradient);
+            if (result.DecoderGradient is not null) decoderGradient = Engine.TensorAdd(decoderGradient, result.DecoderGradient);
+            adapters.Add(result.Adapter);
+            taskVectors.Add(result.TaskVector);
         }
 
         // Eqs. 13-14: one SGD step on the batch-mean meta-loss gradient, clipped as one vector.
-        var combined = new Vector<T>(encoder.Length + decoder.Length);
-        for (int i = 0; i < encoder.Length; i++)
-            combined[i] = NumOps.FromDouble(encoderGradient[i] / taskCount);
-        for (int i = 0; i < decoder.Length; i++)
-            combined[encoder.Length + i] = NumOps.FromDouble(decoderGradient[i] / taskCount);
-        combined = ClipGradients(combined);
-
-        double gamma = _algoOptions.OuterLearningRate;
-        for (int i = 0; i < encoder.Length; i++)
-        {
-            encoder[i] -= gamma * NumOps.ToDouble(combined[i]);
-            _encoderParams[i] = NumOps.FromDouble(encoder[i]);
-        }
-
-        for (int i = 0; i < decoder.Length; i++)
-        {
-            decoder[i] -= gamma * NumOps.ToDouble(combined[encoder.Length + i]);
-            _decoderParams[i] = NumOps.FromDouble(decoder[i]);
-        }
+        T count = NumOps.FromDouble(taskCount);
+        var combined = ClipGradients(Engine.TensorDivideScalar(
+            Engine.TensorConcatenate(new[] { encoderGradient, decoderGradient }, 0), count).ToVector());
+        var step = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(combined), NumOps.FromDouble(_algoOptions.OuterLearningRate));
+        encoder = Engine.TensorSubtract(encoder, Engine.TensorSlice(step, new[] { 0 }, new[] { encoder.Length }));
+        decoder = Engine.TensorSubtract(decoder, Engine.TensorSlice(step, new[] { encoder.Length }, new[] { decoder.Length }));
+        encoder.ToVector().AsSpan().CopyTo(_encoderParams.AsWritableSpan());
+        decoder.ToVector().AsSpan().CopyTo(_decoderParams.AsWritableSpan());
 
         // Fuse in latent space with the updated encoder, decode with the updated decoder.
         for (int t = 0; t < taskCount; t++)
         {
-            Encode(encoder, adapters[t], taskVectors[t], out var mean, out _, out _);
-            StoreComponent(mean, taskVectors[t]);
+            StoreComponent(Encode(encoder, adapters[t], taskVectors[t]).Mean, taskVectors[t]);
         }
 
-        FuseComponents(out var fusedLatent, out var fusedTaskVector);
-        ParamModel.SetParameters(PretrainedPlus(Decode(decoder, fusedLatent, fusedTaskVector)));
+        var fused = FuseComponents();
+        ParamModel.SetParameters(PretrainedPlus(Decode(decoder, fused.Latent, fused.TaskVector)));
 
-        return NumOps.FromDouble(totalLoss / taskCount);
+        return NumOps.Divide(Engine.TensorSum(new Tensor<T>(losses, new[] { taskCount })), count);
     }
 
     /// <inheritdoc/>
@@ -236,116 +227,146 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         if (task == null) throw new ArgumentNullException(nameof(task));
 
         var thetaStart = ParamModel.GetParameters();
-        var encoder = ToDoubles(_encoderParams);
-        var decoder = ToDoubles(_decoderParams);
+        var encoder = Tensor<T>.FromVector(_encoderParams.Clone());
+        var decoder = Tensor<T>.FromVector(_decoderParams.Clone());
 
         var thetaTask = ObtainTaskParameters(thetaStart, task);
         var adapter = CompressDifference(thetaTask, _pretrainedParams);
         var taskVector = CompressDifference(thetaTask, thetaStart);
-        Encode(encoder, adapter, taskVector, out var mean, out _, out _);
-        var refined = RefineAdapter(Decode(decoder, mean, taskVector), task, trajectory: null);
+        var encoded = Encode(encoder, adapter, taskVector);
+        var refined = RefineAdapter(Decode(decoder, encoded.Mean, taskVector), task, trajectory: null);
         var finalParams = PretrainedPlus(refined);
 
         ParamModel.SetParameters(thetaStart);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
+    /// <summary>One encoding (Algorithm 1, lines 6 and 10): the posterior mean and clamped log-variance.</summary>
+    private sealed class Encoding
+    {
+        public Encoding(Tensor<T> mean, Tensor<T> logVar, Tensor<T> clamped)
+        {
+            Mean = mean;
+            LogVar = logVar;
+            Clamped = clamped;
+        }
+
+        public Tensor<T> Mean { get; }
+
+        public Tensor<T> LogVar { get; }
+
+        /// <summary>1 where the raw log-variance fell outside the bound and was clamped (its gradient is zero).</summary>
+        public Tensor<T> Clamped { get; }
+    }
+
+    /// <summary>L_meta for one task, the quantities MetaTrain reuses, and its exact gradient when requested.</summary>
+    private sealed class ObjectiveResult
+    {
+        public ObjectiveResult(T loss, Tensor<T> adapter, Tensor<T> taskVector, Tensor<T> adaptedAdapter,
+            Tensor<T>? encoderGradient, Tensor<T>? decoderGradient)
+        {
+            Loss = loss;
+            Adapter = adapter;
+            TaskVector = taskVector;
+            AdaptedAdapter = adaptedAdapter;
+            EncoderGradient = encoderGradient;
+            DecoderGradient = decoderGradient;
+        }
+
+        public T Loss { get; }
+
+        public Tensor<T> Adapter { get; }
+
+        public Tensor<T> TaskVector { get; }
+
+        public Tensor<T> AdaptedAdapter { get; }
+
+        public Tensor<T>? EncoderGradient { get; }
+
+        public Tensor<T>? DecoderGradient { get; }
+    }
+
     /// <summary>
-    /// L_meta for one task (Algorithm 1, lines 4-14), accumulating its gradient into the supplied buffers when they
-    /// are given.
+    /// L_meta for one task (Algorithm 1, lines 4-14), with its gradient with respect to the encoder and decoder
+    /// when <paramref name="withGradient"/> is set.
     /// </summary>
-    private double TaskObjective(
+    private ObjectiveResult TaskObjective(
         IMetaLearningTask<T, TInput, TOutput> task,
         Vector<T> thetaStart,
-        double[] encoder,
-        double[] decoder,
-        double[] firstNoise,
-        double[] secondNoise,
+        Tensor<T> encoder,
+        Tensor<T> decoder,
+        Tensor<T> firstNoise,
+        Tensor<T> secondNoise,
         bool secondOrder,
-        double[]? encoderGradient,
-        double[]? decoderGradient,
-        double[]? frozenAdaptedAdapter,
-        out double[] adapter,
-        out double[] taskVector,
-        out double[] adaptedAdapter)
+        bool withGradient,
+        Tensor<T>? frozenAdaptedAdapter)
     {
         int c = _compressedDim, d = _latentDim;
-        double klWeight = _algoOptions.KLWeight;
+        T klWeight = NumOps.FromDouble(_algoOptions.KLWeight);
+        T half = NumOps.FromDouble(0.5);
 
         // Lines 4-5. Neither depends on the VAE.
         var thetaTask = ObtainTaskParameters(thetaStart, task);
-        adapter = CompressDifference(thetaTask, _pretrainedParams);
-        taskVector = CompressDifference(thetaTask, thetaStart);
+        var adapter = CompressDifference(thetaTask, _pretrainedParams);
+        var taskVector = CompressDifference(thetaTask, thetaStart);
 
         // Lines 6-8.
-        Encode(encoder, adapter, taskVector, out var firstMean, out var firstLogVar, out var firstClamped);
-        var firstLatent = Reparameterize(firstMean, firstLogVar, firstNoise);
+        var first = Encode(encoder, adapter, taskVector);
+        var firstLatent = Reparameterize(first, firstNoise);
         var initialAdapter = Decode(decoder, firstLatent, taskVector);
 
         // Line 9.
-        List<double[]>? trajectory = secondOrder && frozenAdaptedAdapter == null ? new List<double[]>() : null;
-        adaptedAdapter = frozenAdaptedAdapter ?? RefineAdapter(initialAdapter, task, trajectory);
+        List<Tensor<T>>? trajectory = secondOrder && frozenAdaptedAdapter == null ? new List<Tensor<T>>() : null;
+        var adaptedAdapter = frozenAdaptedAdapter ?? RefineAdapter(initialAdapter, task, trajectory);
 
         // Lines 10-14.
-        Encode(encoder, adaptedAdapter, taskVector, out var mean, out var logVar, out var clamped);
-        var latent = Reparameterize(mean, logVar, secondNoise);
+        var second = Encode(encoder, adaptedAdapter, taskVector);
+        var latent = Reparameterize(second, secondNoise);
         var reconstruction = Decode(decoder, latent, taskVector);
 
-        double recon = 0;
-        for (int j = 0; j < c; j++)
+        var residual = Engine.TensorSubtract(reconstruction, adapter);
+        T recon = NumOps.Divide(Engine.TensorSumOfSquares(residual), NumOps.FromDouble(c));
+        var variance = Engine.TensorExp(second.LogVar);
+        var klTerms = Engine.TensorSubtract(
+            Engine.TensorSubtract(Engine.TensorAddScalar(second.LogVar, NumOps.One), Engine.TensorMultiply(second.Mean, second.Mean)),
+            variance);
+        T kl = NumOps.Multiply(NumOps.FromDouble(-0.5), Engine.TensorSum(klTerms));
+        T loss = NumOps.Add(recon, NumOps.Multiply(klWeight, kl));
+
+        if (!withGradient)
         {
-            double diff = reconstruction[j] - adapter[j];
-            recon += diff * diff;
+            return new ObjectiveResult(loss, adapter, taskVector, adaptedAdapter, null, null);
         }
 
-        recon /= c;
-        double kl = 0;
-        for (int o = 0; o < d; o++)
-            kl += -0.5 * (1.0 + logVar[o] - mean[o] * mean[o] - Math.Exp(logVar[o]));
+        var zeros = new Tensor<T>(new[] { d });
+        var reconstructionGradient = Engine.TensorMultiplyScalar(residual, NumOps.FromDouble(2.0 / c));
+        var decoderGradient = DecoderGradient(reconstructionGradient, latent, taskVector);
+        var latentGradient = DecoderLatentBackward(decoder, reconstructionGradient);
 
-        if (encoderGradient is not null && decoderGradient is not null)
+        var meanGradient = Engine.TensorAdd(latentGradient, Engine.TensorMultiplyScalar(second.Mean, klWeight));
+        var pathGradient = Engine.TensorMultiply(Engine.TensorMultiply(latentGradient, secondNoise), HalfStd(second.LogVar));
+        var klGradient = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorNegate(variance), NumOps.One), NumOps.Multiply(klWeight, half));
+        var logVarGradient = Engine.TensorWhere(second.Clamped, zeros, Engine.TensorSubtract(pathGradient, klGradient));
+
+        var encoderGradient = EncoderGradient(meanGradient, logVarGradient, adaptedAdapter, taskVector);
+
+        if (trajectory is not null)
         {
-            var reconstructionGradient = new double[c];
-            for (int j = 0; j < c; j++)
-                reconstructionGradient[j] = 2.0 * (reconstruction[j] - adapter[j]) / c;
+            // dL/dl_adapt through the step-10 encoding, then back through every refinement step.
+            var adaptedGradient = EncoderAdapterBackward(encoder, meanGradient, logVarGradient);
+            var initialGradient = BackpropagateRefinement(adaptedGradient, trajectory, task);
 
-            AccumulateDecoderGradient(decoderGradient, reconstructionGradient, latent, taskVector);
-            var latentGradient = DecoderLatentBackward(decoder, reconstructionGradient);
+            decoderGradient = Engine.TensorAdd(decoderGradient, DecoderGradient(initialGradient, firstLatent, taskVector));
+            var firstLatentGradient = DecoderLatentBackward(decoder, initialGradient);
+            var firstLogVarGradient = Engine.TensorWhere(first.Clamped, zeros,
+                Engine.TensorMultiply(Engine.TensorMultiply(firstLatentGradient, firstNoise), HalfStd(first.LogVar)));
 
-            var meanGradient = new double[d];
-            var logVarGradient = new double[d];
-            for (int o = 0; o < d; o++)
-            {
-                meanGradient[o] = latentGradient[o] + klWeight * mean[o];
-                logVarGradient[o] = clamped[o]
-                    ? 0.0
-                    : latentGradient[o] * secondNoise[o] * 0.5 * Math.Exp(0.5 * logVar[o])
-                      - klWeight * 0.5 * (1.0 - Math.Exp(logVar[o]));
-            }
-
-            AccumulateEncoderGradient(encoderGradient, meanGradient, logVarGradient, adaptedAdapter, taskVector);
-
-            if (trajectory is not null)
-            {
-                // dL/dl_adapt through the step-10 encoding, then back through every refinement step.
-                var adaptedGradient = EncoderAdapterBackward(encoder, meanGradient, logVarGradient);
-                var initialGradient = BackpropagateRefinement(adaptedGradient, trajectory, task);
-
-                AccumulateDecoderGradient(decoderGradient, initialGradient, firstLatent, taskVector);
-                var firstLatentGradient = DecoderLatentBackward(decoder, initialGradient);
-                var firstLogVarGradient = new double[d];
-                for (int o = 0; o < d; o++)
-                {
-                    firstLogVarGradient[o] = firstClamped[o]
-                        ? 0.0
-                        : firstLatentGradient[o] * firstNoise[o] * 0.5 * Math.Exp(0.5 * firstLogVar[o]);
-                }
-
-                AccumulateEncoderGradient(encoderGradient, firstLatentGradient, firstLogVarGradient, adapter, taskVector);
-            }
+            encoderGradient = Engine.TensorAdd(encoderGradient,
+                EncoderGradient(firstLatentGradient, firstLogVarGradient, adapter, taskVector));
         }
 
-        return recon + klWeight * kl;
+        return new ObjectiveResult(loss, adapter, taskVector, adaptedAdapter, encoderGradient, decoderGradient);
     }
 
     /// <summary>ObtainLoRAParams: inner-loop fine-tuning of the current meta-model on the support set.</summary>
@@ -364,15 +385,15 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     }
 
     /// <summary>Eq. 8: K plain gradient steps on the adapter, recording each point the step was taken from.</summary>
-    private double[] RefineAdapter(double[] initialAdapter, IMetaLearningTask<T, TInput, TOutput> task, List<double[]>? trajectory)
+    private Tensor<T> RefineAdapter(Tensor<T> initialAdapter, IMetaLearningTask<T, TInput, TOutput> task, List<Tensor<T>>? trajectory)
     {
-        var current = (double[])initialAdapter.Clone();
-        double beta = _algoOptions.InnerLearningRate;
+        var current = initialAdapter;
+        T beta = NumOps.FromDouble(_algoOptions.InnerLearningRate);
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            trajectory?.Add((double[])current.Clone());
+            trajectory?.Add(current);
             var gradient = AdapterGradient(current, task);
-            for (int j = 0; j < current.Length; j++) current[j] -= beta * gradient[j];
+            current = Engine.TensorSubtract(current, Engine.TensorMultiplyScalar(gradient, beta));
         }
 
         return current;
@@ -381,293 +402,257 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <summary>
     /// Pulls dL/dl_K back to dL/dl_0 through l_{k+1} = l_k - beta g(l_k): a_k = a_{k+1} - beta H(l_k) a_{k+1}.
     /// </summary>
-    private double[] BackpropagateRefinement(double[] adaptedGradient, List<double[]> trajectory, IMetaLearningTask<T, TInput, TOutput> task)
+    private Tensor<T> BackpropagateRefinement(Tensor<T> adaptedGradient, List<Tensor<T>> trajectory, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var current = (double[])adaptedGradient.Clone();
-        double beta = _algoOptions.InnerLearningRate;
+        var current = adaptedGradient;
+        T beta = NumOps.FromDouble(_algoOptions.InnerLearningRate);
         for (int step = trajectory.Count - 1; step >= 0; step--)
         {
             var hessianVector = HessianVectorProduct(trajectory[step], current, task);
-            for (int j = 0; j < current.Length; j++) current[j] -= beta * hessianVector[j];
+            current = Engine.TensorSubtract(current, Engine.TensorMultiplyScalar(hessianVector, beta));
         }
 
         return current;
     }
 
     /// <summary>H(point) * direction as a central difference of task gradients along the direction.</summary>
-    private double[] HessianVectorProduct(double[] point, double[] direction, IMetaLearningTask<T, TInput, TOutput> task)
+    private Tensor<T> HessianVectorProduct(Tensor<T> point, Tensor<T> direction, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        double directionNorm = Norm(direction);
-        if (directionNorm == 0.0) return new double[direction.Length];
+        T directionNorm = NumOps.Sqrt(Engine.TensorSumOfSquares(direction));
+        if (NumOps.Equals(directionNorm, NumOps.Zero)) return new Tensor<T>(new[] { direction.Length });
 
-        double h = 1e-4 * (1.0 + Norm(point)) / directionNorm;
-        var plus = new double[point.Length];
-        var minus = new double[point.Length];
-        for (int j = 0; j < point.Length; j++)
-        {
-            plus[j] = point[j] + h * direction[j];
-            minus[j] = point[j] - h * direction[j];
-        }
-
-        var gradientPlus = AdapterGradient(plus, task);
-        var gradientMinus = AdapterGradient(minus, task);
-        var result = new double[point.Length];
-        for (int j = 0; j < point.Length; j++)
-            result[j] = (gradientPlus[j] - gradientMinus[j]) / (2.0 * h);
-        return result;
+        T h = NumOps.Divide(
+            NumOps.Multiply(NumOps.FromDouble(1e-4), NumOps.Add(NumOps.One, NumOps.Sqrt(Engine.TensorSumOfSquares(point)))),
+            directionNorm);
+        var offset = Engine.TensorMultiplyScalar(direction, h);
+        var gradientPlus = AdapterGradient(Engine.TensorAdd(point, offset), task);
+        var gradientMinus = AdapterGradient(Engine.TensorSubtract(point, offset), task);
+        return Engine.TensorDivideScalar(Engine.TensorSubtract(gradientPlus, gradientMinus), NumOps.Multiply(NumOps.FromDouble(2.0), h));
     }
 
     /// <summary>dL_task/dl at theta_pt + expand(l), summed per block.</summary>
-    private double[] AdapterGradient(double[] adapter, IMetaLearningTask<T, TInput, TOutput> task)
+    private Tensor<T> AdapterGradient(Tensor<T> adapter, IMetaLearningTask<T, TInput, TOutput> task)
     {
         ParamModel.SetParameters(PretrainedPlus(adapter));
         var full = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-        var result = new double[_compressedDim];
-        for (int block = 0; block < _compressedDim; block++)
-        {
-            BlockRange(block, out int start, out int end);
-            double sum = 0;
-            for (int p = start; p < end; p++) sum += NumOps.ToDouble(full[p]);
-            result[block] = sum;
-        }
-
-        return result;
+        return BlockSums(Tensor<T>.FromVector(full));
     }
 
-    private void Encode(double[] encoder, double[] adapter, double[] taskVector,
-        out double[] mean, out double[] logVar, out bool[] clamped)
+    /// <summary>E([l; v]): weights <c>[2d, 2c]</c> (mean rows, then log-variance rows) and a bias <c>[2d]</c>.</summary>
+    private Encoding Encode(Tensor<T> encoder, Tensor<T> adapter, Tensor<T> taskVector)
     {
         int c = _compressedDim, d = _latentDim, width = 2 * c;
-        int biasOffset = (2 * d) * width;
-        mean = new double[d];
-        logVar = new double[d];
-        clamped = new bool[d];
-        for (int o = 0; o < d; o++)
-        {
-            double sumMean = encoder[biasOffset + o];
-            double sumLogVar = encoder[biasOffset + d + o];
-            int meanRow = o * width, logVarRow = (d + o) * width;
-            for (int i = 0; i < c; i++)
-            {
-                sumMean += encoder[meanRow + i] * adapter[i] + encoder[meanRow + c + i] * taskVector[i];
-                sumLogVar += encoder[logVarRow + i] * adapter[i] + encoder[logVarRow + c + i] * taskVector[i];
-            }
+        var weights = EncoderWeights(encoder);
+        var bias = Engine.TensorSlice(encoder, new[] { 2 * d * width }, new[] { 2 * d });
+        var input = Engine.Reshape(Engine.TensorConcatenate(new[] { adapter, taskVector }, 0), new[] { width, 1 });
+        var output = Engine.TensorAdd(Engine.Reshape(Engine.TensorMatMul(weights, input), new[] { 2 * d }), bias);
 
-            mean[o] = sumMean;
-            clamped[o] = sumLogVar > LogVarianceBound || sumLogVar < -LogVarianceBound;
-            logVar[o] = Math.Max(-LogVarianceBound, Math.Min(LogVarianceBound, sumLogVar));
-        }
+        var mean = Engine.TensorSlice(output, new[] { 0 }, new[] { d });
+        var raw = Engine.TensorSlice(output, new[] { d }, new[] { d });
+        T bound = NumOps.FromDouble(LogVarianceBound);
+        var clamped = Engine.TensorGreaterThan(Engine.TensorAbs(raw), bound);
+        var logVar = Engine.TensorClamp(raw, NumOps.Negate(bound), bound);
+        return new Encoding(mean, logVar, clamped);
     }
 
-    private double[] Decode(double[] decoder, double[] latent, double[] taskVector)
+    /// <summary>D([z; v]): weights <c>[c, d + c]</c> and a bias <c>[c]</c>.</summary>
+    private Tensor<T> Decode(Tensor<T> decoder, Tensor<T> latent, Tensor<T> taskVector)
     {
         int c = _compressedDim, d = _latentDim, width = d + c;
-        int biasOffset = c * width;
-        var output = new double[c];
-        for (int o = 0; o < c; o++)
-        {
-            double sum = decoder[biasOffset + o];
-            int row = o * width;
-            for (int i = 0; i < d; i++) sum += decoder[row + i] * latent[i];
-            for (int i = 0; i < c; i++) sum += decoder[row + d + i] * taskVector[i];
-            output[o] = sum;
-        }
-
-        return output;
+        var weights = DecoderWeights(decoder);
+        var bias = Engine.TensorSlice(decoder, new[] { c * width }, new[] { c });
+        var input = Engine.Reshape(Engine.TensorConcatenate(new[] { latent, taskVector }, 0), new[] { width, 1 });
+        return Engine.TensorAdd(Engine.Reshape(Engine.TensorMatMul(weights, input), new[] { c }), bias);
     }
 
-    private void AccumulateDecoderGradient(double[] gradient, double[] outputGradient, double[] latent, double[] taskVector)
-    {
-        int c = _compressedDim, d = _latentDim, width = d + c;
-        int biasOffset = c * width;
-        for (int o = 0; o < c; o++)
-        {
-            int row = o * width;
-            for (int i = 0; i < d; i++) gradient[row + i] += outputGradient[o] * latent[i];
-            for (int i = 0; i < c; i++) gradient[row + d + i] += outputGradient[o] * taskVector[i];
-            gradient[biasOffset + o] += outputGradient[o];
-        }
-    }
-
-    private double[] DecoderLatentBackward(double[] decoder, double[] outputGradient)
-    {
-        int c = _compressedDim, d = _latentDim, width = d + c;
-        var latentGradient = new double[d];
-        for (int o = 0; o < c; o++)
-        {
-            int row = o * width;
-            for (int i = 0; i < d; i++) latentGradient[i] += decoder[row + i] * outputGradient[o];
-        }
-
-        return latentGradient;
-    }
-
-    private void AccumulateEncoderGradient(double[] gradient, double[] meanGradient, double[] logVarGradient,
-        double[] adapter, double[] taskVector)
+    private Tensor<T> EncoderWeights(Tensor<T> encoder)
     {
         int c = _compressedDim, d = _latentDim, width = 2 * c;
-        int biasOffset = (2 * d) * width;
-        for (int o = 0; o < d; o++)
-        {
-            int meanRow = o * width, logVarRow = (d + o) * width;
-            for (int i = 0; i < c; i++)
-            {
-                gradient[meanRow + i] += meanGradient[o] * adapter[i];
-                gradient[meanRow + c + i] += meanGradient[o] * taskVector[i];
-                gradient[logVarRow + i] += logVarGradient[o] * adapter[i];
-                gradient[logVarRow + c + i] += logVarGradient[o] * taskVector[i];
-            }
+        return Engine.Reshape(Engine.TensorSlice(encoder, new[] { 0 }, new[] { 2 * d * width }), new[] { 2 * d, width });
+    }
 
-            gradient[biasOffset + o] += meanGradient[o];
-            gradient[biasOffset + d + o] += logVarGradient[o];
-        }
+    private Tensor<T> DecoderWeights(Tensor<T> decoder)
+    {
+        int c = _compressedDim, d = _latentDim, width = d + c;
+        return Engine.Reshape(Engine.TensorSlice(decoder, new[] { 0 }, new[] { c * width }), new[] { c, width });
+    }
+
+    /// <summary>The decoder's gradient for one decoding: outer(g, [z; v]) for the weights, g for the bias.</summary>
+    private Tensor<T> DecoderGradient(Tensor<T> outputGradient, Tensor<T> latent, Tensor<T> taskVector)
+    {
+        int c = _compressedDim, d = _latentDim;
+        var input = Engine.TensorConcatenate(new[] { latent, taskVector }, 0);
+        var weights = Engine.Reshape(Engine.TensorOuter(outputGradient, input), new[] { c * (d + c) });
+        return Engine.TensorConcatenate(new[] { weights, outputGradient }, 0);
+    }
+
+    /// <summary>The gradient a decoding passes back to its latent input (the first d inputs).</summary>
+    private Tensor<T> DecoderLatentBackward(Tensor<T> decoder, Tensor<T> outputGradient)
+    {
+        int c = _compressedDim, d = _latentDim;
+        var latentWeights = Engine.TensorSlice(DecoderWeights(decoder), new[] { 0, 0 }, new[] { c, d });
+        return Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(outputGradient, new[] { 1, c }), latentWeights), new[] { d });
+    }
+
+    /// <summary>The encoder's gradient for one encoding: outer([g_mu; g_logvar], [l; v]) and the bias gradient.</summary>
+    private Tensor<T> EncoderGradient(Tensor<T> meanGradient, Tensor<T> logVarGradient, Tensor<T> adapter, Tensor<T> taskVector)
+    {
+        int c = _compressedDim, d = _latentDim;
+        var outputGradient = Engine.TensorConcatenate(new[] { meanGradient, logVarGradient }, 0);
+        var input = Engine.TensorConcatenate(new[] { adapter, taskVector }, 0);
+        var weights = Engine.Reshape(Engine.TensorOuter(outputGradient, input), new[] { (2 * d) * (2 * c) });
+        return Engine.TensorConcatenate(new[] { weights, outputGradient }, 0);
     }
 
     /// <summary>The gradient an encoding passes back to its adapter input (the first c inputs).</summary>
-    private double[] EncoderAdapterBackward(double[] encoder, double[] meanGradient, double[] logVarGradient)
+    private Tensor<T> EncoderAdapterBackward(Tensor<T> encoder, Tensor<T> meanGradient, Tensor<T> logVarGradient)
     {
-        int c = _compressedDim, d = _latentDim, width = 2 * c;
-        var adapterGradient = new double[c];
-        for (int o = 0; o < d; o++)
-        {
-            int meanRow = o * width, logVarRow = (d + o) * width;
-            for (int i = 0; i < c; i++)
-                adapterGradient[i] += meanGradient[o] * encoder[meanRow + i] + logVarGradient[o] * encoder[logVarRow + i];
-        }
-
-        return adapterGradient;
+        int c = _compressedDim, d = _latentDim;
+        var outputGradient = Engine.Reshape(Engine.TensorConcatenate(new[] { meanGradient, logVarGradient }, 0), new[] { 1, 2 * d });
+        var adapterWeights = Engine.TensorSlice(EncoderWeights(encoder), new[] { 0, 0 }, new[] { 2 * d, c });
+        return Engine.Reshape(Engine.TensorMatMul(outputGradient, adapterWeights), new[] { c });
     }
 
-    private static double[] Reparameterize(double[] mean, double[] logVar, double[] noise)
+    /// <summary>d sigma / d log sigma^2 = 0.5 exp(0.5 log sigma^2).</summary>
+    private Tensor<T> HalfStd(Tensor<T> logVar)
     {
-        var latent = new double[mean.Length];
-        for (int i = 0; i < mean.Length; i++)
-            latent[i] = mean[i] + Math.Exp(0.5 * logVar[i]) * noise[i];
-        return latent;
+        T half = NumOps.FromDouble(0.5);
+        return Engine.TensorMultiplyScalar(Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, half)), half);
     }
 
-    private double[] SampleLatentNoise()
+    private Tensor<T> Reparameterize(Encoding encoding, Tensor<T> noise)
+        => Engine.TensorAdd(encoding.Mean,
+            Engine.TensorMultiply(Engine.TensorExp(Engine.TensorMultiplyScalar(encoding.LogVar, NumOps.FromDouble(0.5))), noise));
+
+    /// <summary>Standard normal latent noise, one seeded engine draw from the learner's generator.</summary>
+    private Tensor<T> SampleLatentNoise()
     {
-        var noise = new double[_latentDim];
-        for (int i = 0; i < noise.Length; i++) noise[i] = SampleNormal();
+        var noise = new Tensor<T>(new[] { _latentDim });
+        Engine.TensorNormalInPlace(noise, 0.0, 1.0, RandomGenerator.Next());
         return noise;
     }
 
-    private void StoreComponent(double[] latent, double[] taskVector)
+    /// <summary>Writes one posterior mean and its task vector into the next slot of the circular history.</summary>
+    private void StoreComponent(Tensor<T> latent, Tensor<T> taskVector)
     {
         int slots = _algoOptions.NumFusionComponents;
         int slot = (int)NumOps.ToDouble(_fusionCursor[0]);
         int filled = (int)NumOps.ToDouble(_fusionCursor[1]);
-        for (int i = 0; i < _latentDim; i++)
-            _fusionLatents[slot * _latentDim + i] = NumOps.FromDouble(latent[i]);
-        for (int i = 0; i < _compressedDim; i++)
-            _fusionTaskVectors[slot * _compressedDim + i] = NumOps.FromDouble(taskVector[i]);
+        latent.ToVector().AsSpan().CopyTo(_fusionLatents.AsWritableSpan().Slice(slot * _latentDim, _latentDim));
+        taskVector.ToVector().AsSpan().CopyTo(_fusionTaskVectors.AsWritableSpan().Slice(slot * _compressedDim, _compressedDim));
         _fusionCursor[0] = NumOps.FromDouble((slot + 1) % slots);
         _fusionCursor[1] = NumOps.FromDouble(Math.Min(filled + 1, slots));
     }
 
     /// <summary>Latent-space task arithmetic: the newest component weighs 1, each older one FusionDecay times less.</summary>
-    private void FuseComponents(out double[] latent, out double[] taskVector)
+    private (Tensor<T> Latent, Tensor<T> TaskVector) FuseComponents()
+    {
+        int filled = (int)NumOps.ToDouble(_fusionCursor[1]);
+        if (filled == 0)
+        {
+            return (new Tensor<T>(new[] { _latentDim }), new Tensor<T>(new[] { _compressedDim }));
+        }
+
+        // Age weights 1, decay, decay^2, ... for the newest-first rows; the newest weighs 1, so the total is positive.
+        var factors = new Tensor<T>(new[] { filled });
+        factors.Fill(NumOps.FromDouble(_algoOptions.FusionDecay));
+        factors[0] = NumOps.One;
+        var weights = Engine.TensorCumProd(factors, 0);
+        T totalWeight = Engine.TensorSum(weights);
+        var row = Engine.Reshape(weights, new[] { 1, filled });
+
+        Tensor<T> Fuse(Vector<T> history, int width)
+        {
+            var newest = NewestFirst(history, width, filled);
+            var sum = Engine.Reshape(Engine.TensorMatMul(row, newest), new[] { width });
+            return Engine.TensorDivideScalar(sum, totalWeight);
+        }
+
+        return (Fuse(_fusionLatents, _latentDim), Fuse(_fusionTaskVectors, _compressedDim));
+    }
+
+    /// <summary>The <paramref name="count"/> newest rows of a circular history, newest first.</summary>
+    private Tensor<T> NewestFirst(Vector<T> history, int width, int count)
     {
         int slots = _algoOptions.NumFusionComponents;
         int next = (int)NumOps.ToDouble(_fusionCursor[0]);
-        int filled = (int)NumOps.ToDouble(_fusionCursor[1]);
-        latent = new double[_latentDim];
-        taskVector = new double[_compressedDim];
-        double weight = 1.0, totalWeight = 0.0;
-        for (int k = 0; k < filled; k++)
-        {
-            int slot = ((next - 1 - k) % slots + slots) % slots;
-            for (int i = 0; i < _latentDim; i++)
-                latent[i] += weight * NumOps.ToDouble(_fusionLatents[slot * _latentDim + i]);
-            for (int i = 0; i < _compressedDim; i++)
-                taskVector[i] += weight * NumOps.ToDouble(_fusionTaskVectors[slot * _compressedDim + i]);
-            totalWeight += weight;
-            weight *= _algoOptions.FusionDecay;
-        }
 
-        if (totalWeight <= 0.0) return;
-        for (int i = 0; i < _latentDim; i++) latent[i] /= totalWeight;
-        for (int i = 0; i < _compressedDim; i++) taskVector[i] /= totalWeight;
+        // Flipped, row p holds slot (slots - 1 - p); rolling by next brings slot next - 1 to row 0.
+        var rows = Engine.Reshape(Tensor<T>.FromVector(history), new[] { slots, width });
+        var ordered = Engine.TensorRoll(Engine.TensorFlip(rows, new[] { 0 }), new[] { next }, new[] { 0 });
+        return Engine.TensorSlice(ordered, new[] { 0, 0 }, new[] { count, width });
     }
 
-    private void BlockRange(int block, out int start, out int end)
+    /// <summary>Each block's entry count: <c>stride</c>, and the remainder for the last block.</summary>
+    private Tensor<T> BlockSizes()
     {
-        start = block * _stride;
-        end = block == _compressedDim - 1 ? _paramDim : (block + 1) * _stride;
+        var sizes = new Tensor<T>(new[] { _compressedDim });
+        sizes.Fill(NumOps.FromDouble(_stride));
+        sizes[_compressedDim - 1] = NumOps.FromDouble(_paramDim - (_compressedDim - 1) * (double)_stride);
+        return sizes;
     }
 
-    private double[] CompressDifference(Vector<T> minuend, Vector<T> subtrahend)
+    /// <summary>The sum of a full parameter-space vector over each contiguous block, <c>[c]</c>.</summary>
+    private Tensor<T> BlockSums(Tensor<T> full)
     {
-        var result = new double[_compressedDim];
-        for (int block = 0; block < _compressedDim; block++)
-        {
-            BlockRange(block, out int start, out int end);
-            double sum = 0;
-            for (int p = start; p < end; p++)
-                sum += NumOps.ToDouble(minuend[p]) - NumOps.ToDouble(subtrahend[p]);
-            result[block] = sum / (end - start);
-        }
+        int c = _compressedDim, head = (c - 1) * _stride;
+        var tail = Engine.ReduceSum(Engine.TensorSlice(full, new[] { head }, new[] { _paramDim - head }), new[] { 0 }, keepDims: true);
+        if (c == 1) return Engine.Reshape(tail, new[] { 1 });
 
-        return result;
+        var heads = Engine.ReduceSum(
+            Engine.Reshape(Engine.TensorSlice(full, new[] { 0 }, new[] { head }), new[] { c - 1, _stride }), new[] { 1 }, keepDims: false);
+        return Engine.TensorConcatenate(new[] { heads, Engine.Reshape(tail, new[] { 1 }) }, 0);
     }
 
-    private Vector<T> PretrainedPlus(double[] adapter)
+    /// <summary>A block vector written to every entry of its block, <c>[paramDim]</c>.</summary>
+    private Tensor<T> Expand(Tensor<T> adapter)
     {
-        var result = new Vector<T>(_paramDim);
-        for (int block = 0; block < _compressedDim; block++)
-        {
-            BlockRange(block, out int start, out int end);
-            for (int p = start; p < end; p++)
-                result[p] = NumOps.FromDouble(NumOps.ToDouble(_pretrainedParams[p]) + adapter[block]);
-        }
+        int c = _compressedDim, head = (c - 1) * _stride;
+        var tail = Engine.TensorTile(Engine.TensorSlice(adapter, new[] { c - 1 }, new[] { 1 }), new[] { _paramDim - head });
+        if (c == 1) return tail;
 
-        return result;
+        var heads = Engine.TensorRepeatInterleave(Engine.TensorSlice(adapter, new[] { 0 }, new[] { c - 1 }), _stride, 0);
+        return Engine.TensorConcatenate(new[] { heads, tail }, 0);
     }
 
-    private double[] ToDoubles(Vector<T> vector)
-    {
-        var result = new double[vector.Length];
-        for (int i = 0; i < vector.Length; i++) result[i] = NumOps.ToDouble(vector[i]);
-        return result;
-    }
+    private Tensor<T> CompressDifference(Vector<T> minuend, Vector<T> subtrahend)
+        => Engine.TensorDivide(
+            BlockSums(Engine.TensorSubtract(Tensor<T>.FromVector(minuend), Tensor<T>.FromVector(subtrahend))),
+            BlockSizes());
 
-    private static double Norm(double[] vector)
-    {
-        double sum = 0;
-        for (int i = 0; i < vector.Length; i++) sum += vector[i] * vector[i];
-        return Math.Sqrt(sum);
-    }
+    private Vector<T> PretrainedPlus(Tensor<T> adapter)
+        => Engine.TensorAdd(Tensor<T>.FromVector(_pretrainedParams), Expand(adapter)).ToVector();
 
     /// <summary>L_meta for one task under the given VAE parameters and noise; the meta-model is restored.</summary>
-    internal double MetaObjectiveForTesting(IMetaLearningTask<T, TInput, TOutput> task, double[] encoder, double[] decoder,
-        double[] firstNoise, double[] secondNoise, double[]? frozenAdaptedAdapter)
+    internal T MetaObjectiveForTesting(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> encoder, Vector<T> decoder,
+        Vector<T> firstNoise, Vector<T> secondNoise, Vector<T>? frozenAdaptedAdapter)
     {
         var thetaStart = ParamModel.GetParameters();
-        double loss = TaskObjective(task, thetaStart, encoder, decoder, firstNoise, secondNoise, secondOrder: false,
-            null, null, frozenAdaptedAdapter, out _, out _, out _);
+        var result = TaskObjective(task, thetaStart, Tensor<T>.FromVector(encoder.Clone()), Tensor<T>.FromVector(decoder.Clone()),
+            Tensor<T>.FromVector(firstNoise.Clone()), Tensor<T>.FromVector(secondNoise.Clone()), secondOrder: false,
+            withGradient: false,
+            frozenAdaptedAdapter is null ? null : Tensor<T>.FromVector(frozenAdaptedAdapter.Clone()));
         ParamModel.SetParameters(thetaStart);
-        return loss;
+        return result.Loss;
     }
 
     /// <summary>The analytic gradient of <see cref="MetaObjectiveForTesting"/> at the learner's current VAE.</summary>
-    internal (double[] Encoder, double[] Decoder, double[] AdaptedAdapter) MetaGradientForTesting(
-        IMetaLearningTask<T, TInput, TOutput> task, double[] firstNoise, double[] secondNoise, bool secondOrder)
+    internal (Vector<T> Encoder, Vector<T> Decoder, Vector<T> AdaptedAdapter) MetaGradientForTesting(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> firstNoise, Vector<T> secondNoise, bool secondOrder)
     {
         var thetaStart = ParamModel.GetParameters();
-        var encoder = ToDoubles(_encoderParams);
-        var decoder = ToDoubles(_decoderParams);
-        var encoderGradient = new double[encoder.Length];
-        var decoderGradient = new double[decoder.Length];
-        TaskObjective(task, thetaStart, encoder, decoder, firstNoise, secondNoise, secondOrder,
-            encoderGradient, decoderGradient, null, out _, out _, out var adapted);
+        var result = TaskObjective(task, thetaStart, Tensor<T>.FromVector(_encoderParams.Clone()),
+            Tensor<T>.FromVector(_decoderParams.Clone()), Tensor<T>.FromVector(firstNoise.Clone()),
+            Tensor<T>.FromVector(secondNoise.Clone()), secondOrder, withGradient: true, frozenAdaptedAdapter: null);
         ParamModel.SetParameters(thetaStart);
-        return (encoderGradient, decoderGradient, adapted);
+        var encoderGradient = result.EncoderGradient ?? new Tensor<T>(new[] { _encoderParams.Length });
+        var decoderGradient = result.DecoderGradient ?? new Tensor<T>(new[] { _decoderParams.Length });
+        return (encoderGradient.ToVector(), decoderGradient.ToVector(), result.AdaptedAdapter.ToVector());
     }
 
-    internal double[] EncoderParametersForTesting => ToDoubles(_encoderParams);
+    internal Vector<T> EncoderParametersForTesting => _encoderParams.Clone();
 
-    internal double[] DecoderParametersForTesting => ToDoubles(_decoderParams);
+    internal Vector<T> DecoderParametersForTesting => _decoderParams.Clone();
 
-    internal double[] PretrainedParametersForTesting() => ToDoubles(_pretrainedParams);
+    internal Vector<T> PretrainedParametersForTesting() => _pretrainedParams.Clone();
 }

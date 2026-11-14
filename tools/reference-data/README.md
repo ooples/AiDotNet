@@ -62,6 +62,15 @@ already lists what it needs.
 
 On macOS or Linux the interpreter is `.venv/bin/python`.
 
+`diffusers_diffusion_reference.py` runs in a separate environment pinned to diffusers 0.35.0, the release its
+scheduler and guidance references come from (`diffusers.guiders` first appears there):
+
+```
+python -m venv .venv-diffusers
+.venv-diffusers\Scripts\python -m pip install -r tools/reference-data/requirements-diffusers.txt --extra-index-url https://download.pytorch.org/whl/cpu
+.venv-diffusers\Scripts\python tools/reference-data/diffusers_diffusion_reference.py
+```
+
 Parler-TTS's code runs only on `transformers` 4.46 (it imports helpers that later versions removed), so
 `parler_tts_reference.py` needs an environment of its own:
 

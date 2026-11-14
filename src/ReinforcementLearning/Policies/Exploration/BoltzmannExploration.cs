@@ -81,13 +81,9 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             else
             {
                 // For continuous: add temperature-scaled Gaussian noise
-                var noisyAction = new Vector<T>(actionSpaceSize);
-                for (int i = 0; i < actionSpaceSize; i++)
-                {
-                    double noise = NumOps.ToDouble(BoxMullerSample(random)) * _temperature;
-                    double actionValue = NumOps.ToDouble(policyAction[i]) + noise;
-                    noisyAction[i] = NumOps.FromDouble(actionValue);
-                }
+                var engine = AiDotNetEngine.Current;
+                var noise = engine.Multiply(RLTensorOps.StandardNormal<T>(random, actionSpaceSize), NumOps.FromDouble(_temperature));
+                var noisyAction = engine.Add(RLTensorOps.Head(policyAction, actionSpaceSize), noise);
                 return ClampAction(noisyAction);
             }
         }
@@ -117,76 +113,36 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
 
         private Vector<T> SoftmaxWithTemperature(Vector<T> logits)
         {
-            var probabilities = new Vector<T>(logits.Length);
-            T maxLogit = logits[0];
-
             // Find max for numerical stability
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (NumOps.GreaterThan(logits[i], maxLogit))
-                {
-                    maxLogit = logits[i];
-                }
-            }
+            T maxLogit = RLTensorOps.Max(logits);
 
-            // Compute exp((logit - max) / temperature) and sum
-            T sumExp = NumOps.Zero;
-            for (int i = 0; i < logits.Length; i++)
-            {
-                double scaledLogit = (NumOps.ToDouble(logits[i]) - NumOps.ToDouble(maxLogit)) / _temperature;
-                var expValue = NumOps.FromDouble(Math.Exp(scaledLogit));
-                probabilities[i] = expValue;
-                sumExp = NumOps.Add(sumExp, expValue);
-            }
-
-            // Normalize
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                probabilities[i] = NumOps.Divide(probabilities[i], sumExp);
-            }
-
-            return probabilities;
+            // exp((logit - max) / temperature), normalized
+            var engine = AiDotNetEngine.Current;
+            var expValues = engine.TensorExp(engine.TensorDivideScalar(
+                engine.TensorSubtractScalar(logits.AsTensor(), maxLogit), NumOps.FromDouble(_temperature)));
+            return engine.TensorDivideScalar(expValues, engine.TensorSum(expValues)).ToVector();
         }
 
         private Vector<T> SampleCategorical(Vector<T> probabilities, Random random)
         {
+            // First index whose running probability reaches the draw; the last action when rounding falls short.
             double randomValue = random.NextDouble();
-            double cumulativeProbability = 0.0;
-
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                cumulativeProbability += NumOps.ToDouble(probabilities[i]);
-                if (randomValue <= cumulativeProbability)
-                {
-                    var action = new Vector<T>(probabilities.Length);
-                    action[i] = NumOps.One;
-                    return action;
-                }
-            }
-
-            // Fallback: select last action
-            var fallbackAction = new Vector<T>(probabilities.Length);
-            fallbackAction[probabilities.Length - 1] = NumOps.One;
-            return fallbackAction;
+            int index = RLTensorOps.SampleFromCdf(probabilities, randomValue, probabilities.Length - 1);
+            return RLTensorOps.OneHot<T>(probabilities.Length, index);
         }
 
         private bool IsOneHot(Vector<T> action)
         {
-            int onesCount = 0;
-            for (int i = 0; i < action.Length; i++)
-            {
-                double val = NumOps.ToDouble(action[i]);
-                if (Math.Abs(val - 1.0) < 1e-6)
-                {
-                    onesCount++;
-                }
-                else if (Math.Abs(val) > 1e-6)
-                {
-                    // Non-zero, non-one value found
-                    return false;
-                }
-            }
-            return onesCount == 1;
+            // One-hot: exactly one element within 1e-6 of one and no other element farther than 1e-6 from zero.
+            // Every near-one element is also non-zero, so that is one non-zero element which is the near-one one
+            // (a NaN is neither, as in the scalar test).
+            var engine = AiDotNetEngine.Current;
+            var values = action.AsTensor();
+            T tolerance = NumOps.FromDouble(1e-6);
+            var nearOne = engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtractScalar(values, NumOps.One)), tolerance);
+            var nonZero = engine.TensorGreaterThan(engine.TensorAbs(values), tolerance);
+            T one = NumOps.One;
+            return NumOps.Equals(engine.TensorSum(nearOne), one) && NumOps.Equals(engine.TensorSum(nonZero), one);
         }
     }
 }

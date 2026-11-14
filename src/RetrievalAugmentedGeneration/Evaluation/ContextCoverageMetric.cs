@@ -113,20 +113,9 @@ public class ContextCoverageMetric<T> : RAGMetricBase<T>
     {
         var docs = answer.SourceDocuments.ToList();
 
-        var sumRelevance = NumOps.Zero;
-        var countWithScores = 0;
-
-        foreach (var doc in docs)
-        {
-            if (doc.HasRelevanceScore)
-            {
-                sumRelevance = NumOps.Add(sumRelevance, doc.RelevanceScore);
-                countWithScores++;
-            }
-        }
-
-        var avgRelevance = countWithScores > 0
-            ? NumOps.Divide(sumRelevance, NumOps.FromDouble(countWithScores))
+        var scored = docs.Where(doc => doc.HasRelevanceScore).Select(doc => doc.RelevanceScore).ToArray();
+        var avgRelevance = scored.Length > 0
+            ? AiDotNetEngine.Current.TensorMean(new Tensor<T>(scored, [scored.Length]))
             : NumOps.FromDouble(0.5);
 
         var allWords = new HashSet<string>();

@@ -406,9 +406,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Indexes
 
         private float[] ToFloat(Vector<T> vector)
         {
-            var result = new float[vector.Length];
-            for (int i = 0; i < vector.Length; i++)
-                result[i] = (float)Convert.ToDouble(vector[i], CultureInfo.InvariantCulture);
+            // The ANN backend indexes float vectors; convert in one pass (Convert.ToDouble threw for Half).
+            var result = vector.Length == 0 ? new float[0] : Tensor<T>.FromVector(vector).Cast<float>().ToArray();
             if (_normalize) NormalizeInPlace(result);
             return result;
         }

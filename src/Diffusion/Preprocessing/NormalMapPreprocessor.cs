@@ -32,31 +32,23 @@ public class NormalMapPreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        if (!PreprocessorFilters.HasInterior(shape[2], shape[3]))
+            return new Tensor<T>(new[] { shape[0], 3, shape[2], shape[3] });
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    double center = NumOps.ToDouble(data[b, 0, h, w]);
-                    double dx = NumOps.ToDouble(data[b, 0, h, w + 1]) - NumOps.ToDouble(data[b, 0, h, w - 1]);
-                    double dy = NumOps.ToDouble(data[b, 0, h + 1, w]) - NumOps.ToDouble(data[b, 0, h - 1, w]);
+        // Central differences of channel 0 over the interior; normal = normalize(-dx, -dy, 1) mapped to [0, 1]
+        var differences = PreprocessorFilters.Interior3x3(PreprocessorFilters.Channel(data, 0), PreprocessorFilters.CentralDifferences);
+        var dx = PreprocessorFilters.Channel(differences, 0);
+        var dy = PreprocessorFilters.Channel(differences, 1);
+        var squared = engine.TensorSquare(differences);
+        var magnitude = engine.TensorSqrt(engine.TensorAddScalar(
+            engine.TensorAdd(PreprocessorFilters.Channel(squared, 0), PreprocessorFilters.Channel(squared, 1)), NumOps.One));
 
-                    // Normal = normalize(-dx, -dy, 1)
-                    double mag = Math.Sqrt(dx * dx + dy * dy + 1.0);
-                    result[b, 0, h, w] = NumOps.FromDouble((-dx / mag + 1.0) * 0.5); // X -> R
-                    result[b, 1, h, w] = NumOps.FromDouble((-dy / mag + 1.0) * 0.5); // Y -> G
-                    result[b, 2, h, w] = NumOps.FromDouble((1.0 / mag + 1.0) * 0.5); // Z -> B
-                }
-            }
-        }
-
-        return result;
+        var half = NumOps.FromDouble(0.5);
+        var red = engine.TensorMultiplyScalar(engine.ScalarMinusTensor(NumOps.One, engine.TensorDivide(dx, magnitude)), half);
+        var green = engine.TensorMultiplyScalar(engine.ScalarMinusTensor(NumOps.One, engine.TensorDivide(dy, magnitude)), half);
+        var blue = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorReciprocal(magnitude), NumOps.One), half);
+        return PreprocessorFilters.PadBorder(engine.TensorConcatenate(new[] { red, green, blue }, 1));
     }
 }

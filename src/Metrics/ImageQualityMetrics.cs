@@ -77,10 +77,8 @@ public class PeakSignalToNoiseRatio<T> where T : struct
         // PSNR = 10 * log10(MAX² / MSE) = 20 * log10(MAX) - 10 * log10(MSE)
         T maxSquared = _numOps.Multiply(_maxValue, _maxValue);
         T ratio = _numOps.Divide(maxSquared, mse);
-        double ratioDouble = _numOps.ToDouble(ratio);
-        double psnr = 10.0 * Math.Log10(ratioDouble);
-
-        return _numOps.FromDouble(psnr);
+        return _numOps.Multiply(_numOps.FromDouble(10.0),
+            _numOps.Divide(_numOps.Log(ratio), _numOps.Log(_numOps.FromDouble(10.0))));
     }
 
     /// <summary>
@@ -109,40 +107,20 @@ public class PeakSignalToNoiseRatio<T> where T : struct
                 $"Shape mismatch: predicted [{string.Join(",", predicted._shape)}] vs ground truth [{string.Join(",", groundTruth._shape)}]");
         }
 
-        int batchSize = predicted.Shape[0];
-        var results = new T[batchSize];
+        var engine = AiDotNetEngine.Current;
 
-        int h = predicted.Shape[1];
-        int w = predicted.Shape[2];
-        int c = predicted.Shape[3];
-        int imageSize = h * w * c;
+        // Per-image MSE over [H, W, C], then PSNR = 10 * log10(MAX² / MSE) per image.
+        var diff = engine.TensorSubtract(predicted, groundTruth);
+        var mse = engine.ReduceMean(engine.TensorMultiply(diff, diff), new[] { 1, 2, 3 }, false);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract single image from batch using proper 4D indexing
-            var predImage = new T[imageSize];
-            var gtImage = new T[imageSize];
+        T maxSquared = _numOps.Multiply(_maxValue, _maxValue);
+        var ratio = engine.TensorDivide(engine.TensorAddScalar(engine.TensorZerosLike(mse), maxSquared), mse);
+        var psnr = engine.TensorMultiplyScalar(engine.TensorLog10(ratio), _numOps.FromDouble(10.0));
 
-            for (int hi = 0; hi < h; hi++)
-            {
-                for (int wi = 0; wi < w; wi++)
-                {
-                    for (int ci = 0; ci < c; ci++)
-                    {
-                        int flatIdx = (hi * w + wi) * c + ci;
-                        predImage[flatIdx] = predicted[b, hi, wi, ci];
-                        gtImage[flatIdx] = groundTruth[b, hi, wi, ci];
-                    }
-                }
-            }
-
-            var predTensor = new Tensor<T>(new[] { h, w, c }, new Vector<T>(predImage));
-            var gtTensor = new Tensor<T>(new[] { h, w, c }, new Vector<T>(gtImage));
-
-            results[b] = Compute(predTensor, gtTensor);
-        }
-
-        return results;
+        // Near-perfect matches (MSE below 1e-10) report 100 dB, as Compute does.
+        var nearPerfect = engine.TensorLessThan(mse, _numOps.FromDouble(1e-10));
+        var capped = engine.TensorAddScalar(engine.TensorZerosLike(mse), _numOps.FromDouble(100.0));
+        return engine.TensorWhere(nearPerfect, capped, psnr).ToArray();
     }
 
     /// <summary>
@@ -150,16 +128,9 @@ public class PeakSignalToNoiseRatio<T> where T : struct
     /// </summary>
     private T ComputeMSE(Tensor<T> a, Tensor<T> b)
     {
-        T sum = _numOps.Zero;
-        int count = a.Length;
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = _numOps.Subtract(a[i], b[i]);
-            sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-        }
-
-        return _numOps.Divide(sum, _numOps.FromDouble(count));
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.TensorSubtract(a, b);
+        return _numOps.Divide(engine.TensorSumOfSquares(diff), _numOps.FromDouble(a.Length));
     }
 
     /// <summary>
@@ -218,14 +189,24 @@ public class StructuralSimilarity<T> where T : struct
     private readonly int _windowSize;
 
     /// <summary>
+    /// Standard deviation of the Gaussian weighting window.
+    /// </summary>
+    private readonly double _gaussianSigma;
+
+    /// <summary>
     /// Initializes a new instance of the SSIM metric.
     /// </summary>
     /// <param name="maxValue">Maximum possible pixel value. Default is 1.0.</param>
     /// <param name="k1">Constant for luminance stability. Default is 0.01.</param>
     /// <param name="k2">Constant for contrast stability. Default is 0.03.</param>
-    /// <param name="windowSize">Window size for local computation. Default is 11.</param>
-    public StructuralSimilarity(T? maxValue = null, double k1 = 0.01, double k2 = 0.03, int windowSize = 11)
+    /// <param name="windowSize">Window size for local computation. Default is 11 (Wang et al. 2004).</param>
+    /// <param name="gaussianSigma">Standard deviation of the Gaussian window. Default is 1.5 (Wang et al. 2004).</param>
+    public StructuralSimilarity(T? maxValue = null, double k1 = 0.01, double k2 = 0.03, int windowSize = 11,
+        double gaussianSigma = 1.5)
     {
+        if (windowSize <= 0) throw new ArgumentOutOfRangeException(nameof(windowSize), "Window size must be positive.");
+        if (gaussianSigma <= 0) throw new ArgumentOutOfRangeException(nameof(gaussianSigma), "Sigma must be positive.");
+
         _numOps = MathHelper.GetNumericOperations<T>();
         T L = maxValue ?? _numOps.FromDouble(1.0);
         double LDouble = _numOps.ToDouble(L);
@@ -233,6 +214,7 @@ public class StructuralSimilarity<T> where T : struct
         _c1 = _numOps.FromDouble(Math.Pow(k1 * LDouble, 2));
         _c2 = _numOps.FromDouble(Math.Pow(k2 * LDouble, 2));
         _windowSize = windowSize;
+        _gaussianSigma = gaussianSigma;
     }
 
     /// <summary>
@@ -241,128 +223,128 @@ public class StructuralSimilarity<T> where T : struct
     /// <param name="predicted">Predicted image tensor [H, W] or [H, W, C].</param>
     /// <param name="groundTruth">Ground truth image tensor with same shape.</param>
     /// <returns>SSIM value between -1 and 1. Higher is better.</returns>
+    /// <remarks>
+    /// Follows Wang et al. (2004): local statistics under a normalised Gaussian window (eq. 14-16) and the mean
+    /// SSIM over all window positions (MSSIM, eq. 17), as scikit-image's structural_similarity computes it with
+    /// gaussian_weights=True and use_sample_covariance=False. An image smaller than the window in either dimension
+    /// is a single window: the SSIM index of eq. 13 with the unweighted statistics of eq. 2-4 (N - 1 divisor).
+    /// Multi-channel images average the per-channel values.
+    /// </remarks>
     public T Compute(Tensor<T> predicted, Tensor<T> groundTruth)
     {
         if (predicted == null) throw new ArgumentNullException(nameof(predicted));
         if (groundTruth == null) throw new ArgumentNullException(nameof(groundTruth));
 
-        // For multi-channel images, compute SSIM per channel and average
-        if (predicted.Rank == 3)
-        {
-            int channels = predicted.Shape[2];
-            T sum = _numOps.Zero;
-
-            for (int c = 0; c < channels; c++)
-            {
-                var predChannel = ExtractChannel(predicted, c);
-                var gtChannel = ExtractChannel(groundTruth, c);
-                sum = _numOps.Add(sum, ComputeSingleChannel(predChannel, gtChannel));
-            }
-
-            return _numOps.Divide(sum, _numOps.FromDouble(channels));
-        }
-
-        return ComputeSingleChannel(predicted, groundTruth);
+        return ComputeChannelBatch(ToChannelBatch(predicted), ToChannelBatch(groundTruth));
     }
 
     /// <summary>
-    /// Computes SSIM for a single channel image using sliding window.
+    /// Mean SSIM over every frame and channel of a video [T, H, W, C] (or [T, C, H, W] when channels-first),
+    /// which equals the mean of the per-frame SSIM values because every frame has the same number of windows.
     /// </summary>
-    private T ComputeSingleChannel(Tensor<T> predicted, Tensor<T> groundTruth)
+    internal T ComputeFrames(Tensor<T> predicted, Tensor<T> groundTruth, bool isChannelsFirst)
     {
-        int height = predicted.Shape[0];
-        int width = predicted.Shape[1];
+        return ComputeChannelBatch(FramesToChannelBatch(predicted, isChannelsFirst),
+            FramesToChannelBatch(groundTruth, isChannelsFirst));
+    }
 
-        // For simplicity, use global statistics (faster but less accurate than windowed)
-        // Production implementation should use Gaussian-weighted windowed approach
+    /// <summary>
+    /// Mean SSIM of a [B, 1, H, W] batch of single-channel images.
+    /// </summary>
+    private T ComputeChannelBatch(Tensor<T> x, Tensor<T> y)
+    {
+        int height = x.Shape[2];
+        int width = x.Shape[3];
 
-        // Compute means
-        T meanX = ComputeMean(predicted);
-        T meanY = ComputeMean(groundTruth);
+        bool windowed = height >= _windowSize && width >= _windowSize;
+        Tensor<T> window = windowed ? GaussianWindow() : UniformWindow(height, width);
+        int n = height * width;
+        T covNorm = windowed ? _numOps.One : _numOps.FromDouble((double)n / (n - 1));
 
-        // Compute variances and covariance
-        T varX = _numOps.Zero;
-        T varY = _numOps.Zero;
-        T covXY = _numOps.Zero;
-        int n = predicted.Length;
+        var engine = AiDotNetEngine.Current;
+        var muX = engine.Conv2D(x, window, 1, 0, 1);
+        var muY = engine.Conv2D(y, window, 1, 0, 1);
+        var muXX = engine.TensorMultiply(muX, muX);
+        var muYY = engine.TensorMultiply(muY, muY);
+        var muXY = engine.TensorMultiply(muX, muY);
 
-        for (int i = 0; i < n; i++)
-        {
-            T diffX = _numOps.Subtract(predicted[i], meanX);
-            T diffY = _numOps.Subtract(groundTruth[i], meanY);
+        var varX = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(engine.Conv2D(engine.TensorMultiply(x, x), window, 1, 0, 1), muXX), covNorm);
+        var varY = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(engine.Conv2D(engine.TensorMultiply(y, y), window, 1, 0, 1), muYY), covNorm);
+        var covXY = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(engine.Conv2D(engine.TensorMultiply(x, y), window, 1, 0, 1), muXY), covNorm);
 
-            varX = _numOps.Add(varX, _numOps.Multiply(diffX, diffX));
-            varY = _numOps.Add(varY, _numOps.Multiply(diffY, diffY));
-            covXY = _numOps.Add(covXY, _numOps.Multiply(diffX, diffY));
-        }
-
-        T nT = _numOps.FromDouble(n - 1);
-        varX = _numOps.Divide(varX, nT);
-        varY = _numOps.Divide(varY, nT);
-        covXY = _numOps.Divide(covXY, nT);
-
-        // SSIM formula: ((2*μx*μy + C1)(2*σxy + C2)) / ((μx² + μy² + C1)(σx² + σy² + C2))
+        // SSIM map: ((2*μx*μy + C1)(2*σxy + C2)) / ((μx² + μy² + C1)(σx² + σy² + C2))
         T two = _numOps.FromDouble(2.0);
-        T meanXY = _numOps.Multiply(meanX, meanY);
-        T meanX2 = _numOps.Multiply(meanX, meanX);
-        T meanY2 = _numOps.Multiply(meanY, meanY);
+        var numerator = engine.TensorMultiply(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(muXY, two), _c1),
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(covXY, two), _c2));
+        var denominator = engine.TensorMultiply(
+            engine.TensorAddScalar(engine.TensorAdd(muXX, muYY), _c1),
+            engine.TensorAddScalar(engine.TensorAdd(varX, varY), _c2));
 
-        T numerator1 = _numOps.Add(_numOps.Multiply(two, meanXY), _c1);
-        T numerator2 = _numOps.Add(_numOps.Multiply(two, covXY), _c2);
-        T numerator = _numOps.Multiply(numerator1, numerator2);
-
-        T denominator1 = _numOps.Add(_numOps.Add(meanX2, meanY2), _c1);
-        T denominator2 = _numOps.Add(_numOps.Add(varX, varY), _c2);
-        T denominator = _numOps.Multiply(denominator1, denominator2);
-
-        return _numOps.Divide(numerator, denominator);
+        // Every channel has the same number of windows, so the mean of the map is the mean of per-channel MSSIMs.
+        return engine.TensorMean(engine.TensorDivide(numerator, denominator));
     }
 
     /// <summary>
-    /// Extracts a single channel from a multi-channel image.
+    /// Reshapes an image to a [channels, 1, H, W] batch: [H, W] is one channel, [H, W, C] (HWC) is split per channel,
+    /// and any other rank is treated as one flat channel.
     /// </summary>
-    /// <remarks>
-    /// Assumes image is in HWC (Height, Width, Channels) format.
-    /// </remarks>
-    private Tensor<T> ExtractChannel(Tensor<T> image, int channel)
+    private static Tensor<T> ToChannelBatch(Tensor<T> image)
     {
-        int height = image.Shape[0];
-        int width = image.Shape[1];
-        int channels = image.Shape[2];
-
-        if (channel < 0 || channel >= channels)
+        if (image.Rank == 2)
         {
-            throw new ArgumentOutOfRangeException(nameof(channel),
-                $"Channel index {channel} is out of range [0, {channels - 1}]");
+            return image.Reshape(new[] { 1, 1, image.Shape[0], image.Shape[1] });
         }
 
-        var data = new T[height * width];
-        for (int h = 0; h < height; h++)
+        if (image.Rank == 3)
         {
-            for (int w = 0; w < width; w++)
-            {
-                // HWC layout: index = (h * width + w) * channels + c
-                int pixelOffset = (h * width + w) * channels;
-                int channelIndex = pixelOffset + channel;
-                int destIndex = h * width + w;
-                data[destIndex] = image.GetFlat(channelIndex);
-            }
+            var channelsFirst = AiDotNetEngine.Current.TensorPermute(image, new[] { 2, 0, 1 });
+            return channelsFirst.Reshape(new[] { image.Shape[2], 1, image.Shape[0], image.Shape[1] });
         }
 
-        return new Tensor<T>(new[] { height, width }, new Vector<T>(data));
+        return image.Reshape(new[] { 1, 1, 1, image.Length });
     }
 
     /// <summary>
-    /// Computes the mean of a tensor.
+    /// Reshapes frames [T, H, W, C] (or [T, C, H, W]) to a [T * C, 1, H, W] batch.
     /// </summary>
-    private T ComputeMean(Tensor<T> tensor)
+    private static Tensor<T> FramesToChannelBatch(Tensor<T> frames, bool isChannelsFirst)
     {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < tensor.Length; i++)
+        var channelsFirst = isChannelsFirst
+            ? frames
+            : AiDotNetEngine.Current.TensorPermute(frames, new[] { 0, 3, 1, 2 });
+        return channelsFirst.Reshape(new[]
         {
-            sum = _numOps.Add(sum, tensor[i]);
-        }
-        return _numOps.Divide(sum, _numOps.FromDouble(tensor.Length));
+            channelsFirst.Shape[0] * channelsFirst.Shape[1], 1, channelsFirst.Shape[2], channelsFirst.Shape[3]
+        });
+    }
+
+    /// <summary>
+    /// Normalised 2D Gaussian window [1, 1, w, w] with the configured size and sigma.
+    /// </summary>
+    private Tensor<T> GaussianWindow()
+    {
+        var engine = AiDotNetEngine.Current;
+        double center = (_windowSize - 1) / 2.0;
+        var offsets = engine.TensorArange<T>(-center, center + 0.5, 1.0);
+        var exponent = engine.TensorMultiplyScalar(engine.TensorMultiply(offsets, offsets),
+            _numOps.FromDouble(-1.0 / (2.0 * _gaussianSigma * _gaussianSigma)));
+        var g = engine.TensorExp(exponent);
+        g = engine.TensorDivideScalar(g, engine.TensorSum(g));
+        return engine.TensorOuter(g, g).Reshape(new[] { 1, 1, _windowSize, _windowSize });
+    }
+
+    /// <summary>
+    /// Uniform window [1, 1, H, W] covering the whole image (weights 1 / (H * W)).
+    /// </summary>
+    private Tensor<T> UniformWindow(int height, int width)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ones = engine.TensorAddScalar(new Tensor<T>(new[] { 1, 1, height, width }), _numOps.One);
+        return engine.TensorDivideScalar(ones, _numOps.FromDouble((double)height * width));
     }
 }
 
@@ -424,56 +406,31 @@ public class MeanIntersectionOverUnion<T> where T : struct
         if (predicted == null) throw new ArgumentNullException(nameof(predicted));
         if (groundTruth == null) throw new ArgumentNullException(nameof(groundTruth));
 
-        // Compute confusion matrix
-        var intersection = new long[_numClasses];
-        var union = new long[_numClasses];
-        var predCount = new long[_numClasses];
-        var gtCount = new long[_numClasses];
+        // Accumulate counts in float for low-precision storage; a valid image can exceed Half's finite range.
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+            return _numOps.FromDouble(new MeanIntersectionOverUnion<float>(_numClasses, _ignoreBackground)
+                .Compute(predicted.Cast<float>(), groundTruth.Cast<float>()));
 
-        for (int i = 0; i < predicted.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        var (intersection, union) = ComputeIntersectionAndUnion(predicted, groundTruth);
+
+        // Average IoU over the classes that occur (union > 0), skipping class 0 when background is ignored.
+        var present = engine.TensorGreaterThan(union, _numOps.Zero);
+        if (_ignoreBackground)
         {
-            int predClass = (int)_numOps.ToDouble(predicted[i]);
-            int gtClass = (int)_numOps.ToDouble(groundTruth[i]);
-
-            if (predClass >= 0 && predClass < _numClasses)
-            {
-                predCount[predClass]++;
-            }
-
-            if (gtClass >= 0 && gtClass < _numClasses)
-            {
-                gtCount[gtClass]++;
-            }
-
-            if (predClass == gtClass && predClass >= 0 && predClass < _numClasses)
-            {
-                intersection[predClass]++;
-            }
+            var notBackground = engine.TensorGreaterThan(
+                engine.TensorArange<T>(0, _numClasses, 1), _numOps.Zero);
+            present = engine.TensorMultiply(present, notBackground);
         }
 
-        // Compute IoU per class and average
-        T sumIoU = _numOps.Zero;
-        int validClasses = 0;
-        int startClass = _ignoreBackground ? 1 : 0;
-
-        for (int c = startClass; c < _numClasses; c++)
-        {
-            long unionCount = predCount[c] + gtCount[c] - intersection[c];
-
-            if (unionCount > 0)
-            {
-                double iou = (double)intersection[c] / unionCount;
-                sumIoU = _numOps.Add(sumIoU, _numOps.FromDouble(iou));
-                validClasses++;
-            }
-        }
-
-        if (validClasses == 0)
+        T validClasses = engine.TensorSum(present);
+        if (!_numOps.GreaterThan(validClasses, _numOps.Zero))
         {
             return _numOps.Zero;
         }
 
-        return _numOps.Divide(sumIoU, _numOps.FromDouble(validClasses));
+        var iou = PerClassIoU(intersection, union);
+        return _numOps.Divide(engine.TensorSum(engine.TensorMultiply(iou, present)), validClasses);
     }
 
     /// <summary>
@@ -484,38 +441,70 @@ public class MeanIntersectionOverUnion<T> where T : struct
     /// <returns>Array of IoU values, one per class.</returns>
     public T[] ComputePerClass(Tensor<T> predicted, Tensor<T> groundTruth)
     {
-        var intersection = new long[_numClasses];
-        var predCount = new long[_numClasses];
-        var gtCount = new long[_numClasses];
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+            return Tensor<float>.FromVector(new Vector<float>(new MeanIntersectionOverUnion<float>(_numClasses, _ignoreBackground)
+                .ComputePerClass(predicted.Cast<float>(), groundTruth.Cast<float>()))).Cast<T>().ToArray();
 
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            int predClass = (int)_numOps.ToDouble(predicted[i]);
-            int gtClass = (int)_numOps.ToDouble(groundTruth[i]);
+        var (intersection, union) = ComputeIntersectionAndUnion(predicted, groundTruth);
+        return PerClassIoU(intersection, union).ToArray();
+    }
 
-            if (predClass >= 0 && predClass < _numClasses) predCount[predClass]++;
-            if (gtClass >= 0 && gtClass < _numClasses) gtCount[gtClass]++;
-            if (predClass == gtClass && predClass >= 0 && predClass < _numClasses)
-            {
-                intersection[predClass]++;
-            }
-        }
+    /// <summary>
+    /// Per-class intersection and union counts [numClasses] from the confusion matrix. Labels are truncated toward
+    /// zero; labels outside [0, numClasses) count for no class.
+    /// </summary>
+    /// <remarks>
+    /// The (numClasses + 1)^2 confusion matrix (the extra row and column collect out-of-range labels) is one
+    /// index-add (bincount) of ones at pred * (numClasses + 1) + target, so memory is O(pixels + classes^2) rather
+    /// than the O(pixels * classes) of one-hot masks. The intersection is its diagonal, the predicted and
+    /// ground-truth counts its row and column sums.
+    /// </remarks>
+    private (Tensor<T> Intersection, Tensor<T> Union) ComputeIntersectionAndUnion(
+        Tensor<T> predicted, Tensor<T> groundTruth)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = predicted.Length;
+        int bins = _numClasses + 1;
+        var predLabels = ClassIndex(predicted.Reshape(new[] { n }));
+        var gtLabels = ClassIndex(groundTruth.Reshape(new[] { n }));
 
-        var results = new T[_numClasses];
-        for (int c = 0; c < _numClasses; c++)
-        {
-            long unionCount = predCount[c] + gtCount[c] - intersection[c];
-            if (unionCount > 0)
-            {
-                results[c] = _numOps.FromDouble((double)intersection[c] / unionCount);
-            }
-            else
-            {
-                results[c] = _numOps.Zero;
-            }
-        }
+        var cell = engine.TensorAdd(engine.TensorMultiplyScalar(predLabels, _numOps.FromDouble(bins)), gtLabels);
+        var confusion = engine.TensorIndexAdd(
+            new Tensor<T>(new[] { bins * bins }), 0, cell.Cast<int>(),
+            Tensor<T>.CreateDefault(new[] { n }, _numOps.One));
 
-        return results;
+        var diagonal = engine.TensorMultiplyScalar(engine.TensorArange<T>(0, _numClasses, 1), _numOps.FromDouble(bins + 1));
+        var intersection = engine.TensorIndexSelect(confusion, diagonal.Cast<int>(), 0);
+        var matrix = confusion.Reshape(new[] { bins, bins });
+        var predCount = engine.ReduceSum(matrix, new[] { 1 }, false).Slice(0, 0, _numClasses).Contiguous();
+        var gtCount = engine.ReduceSum(matrix, new[] { 0 }, false).Slice(0, 0, _numClasses).Contiguous();
+        var union = engine.TensorSubtract(engine.TensorAdd(predCount, gtCount), intersection);
+        return (intersection, union);
+    }
+
+    /// <summary>
+    /// Class index [N] of each label: the label truncated toward zero when it lies in [0, numClasses), and
+    /// numClasses (no class) otherwise, including NaN.
+    /// </summary>
+    private Tensor<T> ClassIndex(Tensor<T> labels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var truncated = engine.TensorTrunc(labels);
+        var valid = engine.TensorMultiply(
+            engine.TensorGreaterThan(truncated, _numOps.FromDouble(-1.0)),
+            engine.TensorLessThan(truncated, _numOps.FromDouble(_numClasses)));
+        var noClass = Tensor<T>.CreateDefault(new[] { labels.Length }, _numOps.FromDouble(_numClasses));
+        return engine.TensorWhere(valid, truncated, noClass);
+    }
+
+    /// <summary>
+    /// IoU = intersection / union per class, 0 for classes with an empty union.
+    /// </summary>
+    private Tensor<T> PerClassIoU(Tensor<T> intersection, Tensor<T> union)
+    {
+        var engine = AiDotNetEngine.Current;
+        // An empty union has an empty intersection, so dividing by max(union, 1) gives 0 there.
+        return engine.TensorDivide(intersection, engine.TensorMax(union, _numOps.One));
     }
 }
 
@@ -554,18 +543,12 @@ public class OverallAccuracy<T> where T : struct
             throw new ArgumentException("Predicted and ground truth must have the same length");
         }
 
-        long correct = 0;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double pred = _numOps.ToDouble(predicted[i]);
-            double gt = _numOps.ToDouble(groundTruth[i]);
+        // A prediction is correct when it is within 0.5 of the integer class label.
+        var engine = AiDotNetEngine.Current;
+        int n = predicted.Length;
+        var diff = engine.TensorSubtract(predicted.Reshape(new[] { n }), groundTruth.Reshape(new[] { n }));
+        var correct = engine.TensorLessThan(engine.TensorAbs(diff), _numOps.FromDouble(0.5));
 
-            if (Math.Abs(pred - gt) < 0.5) // For integer class labels
-            {
-                correct++;
-            }
-        }
-
-        return _numOps.FromDouble((double)correct / predicted.Length);
+        return _numOps.Divide(engine.TensorSum(correct), _numOps.FromDouble(n));
     }
 }

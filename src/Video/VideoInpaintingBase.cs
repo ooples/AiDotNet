@@ -117,45 +117,40 @@ public abstract partial class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
         int height = frames.Shape[2];
         int width = frames.Shape[3];
 
-        var result = new Tensor<T>(frames._shape);
-
-        // Copy original frames
-        for (int i = 0; i < frames.Length; i++)
+        int pixels = height * width;
+        var maskFrames = MaskPlanes(masks, numFrames, height, width);
+        var current = new List<Tensor<T>>(numFrames);
+        for (int f = 0; f < numFrames; f++)
         {
-            result.Data.Span[i] = frames.Data.Span[i];
+            current.Add(Engine.TensorNarrow(frames, 0, f, 1));
         }
 
-        // Forward propagation: fill masked regions using previous frames
+        // Forward propagation: fill masked regions using previous frames (already filled ones included)
         for (int f = 1; f < numFrames; f++)
         {
             if (f - 1 < flows.Count)
             {
-                var prevFrame = ExtractFrame(result, f - 1);
-                var warped = WarpFeature(prevFrame, flows[f - 1]);
-
-                int frameOffset = f * channels * height * width;
-                int maskOffset = f * height * width;
-
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            double maskVal = NumOps.ToDouble(masks.Data.Span[maskOffset + h * width + w]);
-                            if (maskVal > 0.5)
-                            {
-                                int idx = frameOffset + c * height * width + h * width + w;
-                                int warpIdx = c * height * width + h * width + w;
-                                result.Data.Span[idx] = warped.Data.Span[warpIdx];
-                            }
-                        }
-                    }
-                }
+                var prevFrame = Engine.Reshape(current[f - 1], [channels, height, width]);
+                var warped = Engine.Reshape(WarpFeature(prevFrame, flows[f - 1]), [1, channels, height, width]);
+                var masked = Engine.TensorBroadcastTo(
+                    Engine.TensorGreaterThan(Engine.TensorNarrow(maskFrames, 0, f, 1), NumOps.FromDouble(0.5)),
+                    [1, channels, height, width]);
+                current[f] = Engine.TensorWhere(masked, warped, current[f]);
             }
         }
 
-        return result;
+        return Engine.TensorConcatenate(current.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// The per-frame masks as <c>[numFrames, 1, height, width]</c>: the first <c>numFrames x height x width</c>
+    /// values of <paramref name="masks"/>, one plane per frame.
+    /// </summary>
+    private Tensor<T> MaskPlanes(Tensor<T> masks, int numFrames, int height, int width)
+    {
+        int size = numFrames * height * width;
+        return Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(masks, [masks.Length]), 0, 0, size), [numFrames, 1, height, width]);
     }
 
     /// <summary>
@@ -167,43 +162,35 @@ public abstract partial class VideoInpaintingBase<T> : VideoNeuralNetworkBase<T>
     /// <returns>PSNR value in decibels for masked regions only.</returns>
     public double ComputeMaskedPSNR(Tensor<T> inpainted, Tensor<T> groundTruth, Tensor<T> masks)
     {
-        double sumSquaredError = 0;
-        int maskedPixelCount = 0;
-
         int numFrames = inpainted.Shape[0];
         int channels = inpainted.Shape[1];
         int height = inpainted.Shape[2];
         int width = inpainted.Shape[3];
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            int maskOffset = f * height * width;
-            int frameOffset = f * channels * height * width;
-
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double maskVal = NumOps.ToDouble(masks.Data.Span[maskOffset + h * width + w]);
-                    if (maskVal > 0.5)
-                    {
-                        for (int c = 0; c < channels; c++)
-                        {
-                            int idx = frameOffset + c * height * width + h * width + w;
-                            double pred = NumOps.ToDouble(inpainted.Data.Span[idx]);
-                            double gt = NumOps.ToDouble(groundTruth.Data.Span[idx]);
-                            double diff = pred - gt;
-                            sumSquaredError += diff * diff;
-                        }
-                        maskedPixelCount += channels;
-                    }
-                }
-            }
-        }
-
+        // Every channel of a pixel whose mask exceeds 0.5 counts
+        var masked = Engine.TensorBroadcastTo(
+            Engine.TensorGreaterThan(MaskPlanes(masks, numFrames, height, width), NumOps.FromDouble(0.5)),
+            [numFrames, channels, height, width]);
+        int maskedPixelCount = Engine.TensorCountNonzero(masked);
         if (maskedPixelCount == 0) return double.PositiveInfinity;
 
-        double mse = sumSquaredError / maskedPixelCount;
+        // In double, as the per-element loop was: a float difference such as 3e38 - (-3e38) overflows T
+        int size = numFrames * channels * height * width;
+        Tensor<double> Leading(Tensor<T> source) => TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(source, [source.Length]), 0, 0, size), masked._shape));
+        var diff = Engine.TensorSubtract(Leading(inpainted), Leading(groundTruth));
+        var maskedDiff = Engine.TensorWhere(
+            TensorCopyHelper.CastLogical<T, double>(masked), diff, Engine.TensorZerosLike(diff));
+
+        // Sum of squares scaled by the largest error so it cannot overflow
+        double scale = Engine.TensorMaxValue(Engine.TensorAbs(maskedDiff));
+        double mse = double.IsNaN(scale) || double.IsInfinity(scale) ? scale : 0;
+        if (scale > 0 && !double.IsInfinity(scale))
+        {
+            var scaled = Engine.TensorMultiplyScalar(maskedDiff, 1.0 / scale);
+            mse = Engine.TensorSum(Engine.TensorMultiply(scaled, scaled)) * scale * scale / maskedPixelCount;
+        }
+
         if (mse < 1e-10) return 100.0;
 
         return 10.0 * Math.Log10(1.0 / mse);

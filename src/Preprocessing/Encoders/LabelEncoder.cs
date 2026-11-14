@@ -29,8 +29,7 @@ namespace AiDotNet.Preprocessing.Encoders;
 public class LabelEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     // Fitted parameters: mapping from value to label for each column
-    private List<Dictionary<double, int>>? _valueToLabel;
-    private List<Dictionary<int, double>>? _labelToValue;
+    private List<Tensor<T>>? _categories;
 
     /// <summary>
     /// Gets the number of unique classes for each encoded column.
@@ -39,13 +38,7 @@ public class LabelEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         get
         {
-            if (_valueToLabel is null) return null;
-            var result = new int[_valueToLabel.Count];
-            for (int i = 0; i < _valueToLabel.Count; i++)
-            {
-                result[i] = _valueToLabel[i].Count;
-            }
-            return result;
+            return _categories?.Select(c => c.Length).ToArray();
         }
     }
 
@@ -70,129 +63,84 @@ public class LabelEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
+        var columnsToProcess = new HashSet<int>(GetColumnsToProcess(numColumns));
 
-        _valueToLabel = new List<Dictionary<double, int>>();
-        _labelToValue = new List<Dictionary<int, double>>();
-
+        // Sorted distinct values per processed column; the label of a value is its position
+        _categories = new List<Tensor<T>>();
         for (int col = 0; col < numColumns; col++)
         {
-            if (!columnsToProcess.Contains(col))
-            {
-                _valueToLabel.Add(new Dictionary<double, int>());
-                _labelToValue.Add(new Dictionary<int, double>());
-                continue;
-            }
-
-            var column = data.GetColumn(col);
-
-            // Collect unique values
-            var uniqueValues = new HashSet<double>();
-            for (int i = 0; i < column.Length; i++)
-            {
-                uniqueValues.Add(NumOps.ToDouble(column[i]));
-            }
-
-            // Sort and create mapping
-            var sortedValues = uniqueValues.OrderBy(v => v).ToList();
-            var valueToLabel = new Dictionary<double, int>();
-            var labelToValue = new Dictionary<int, double>();
-
-            for (int i = 0; i < sortedValues.Count; i++)
-            {
-                valueToLabel[sortedValues[i]] = i;
-                labelToValue[i] = sortedValues[i];
-            }
-
-            _valueToLabel.Add(valueToLabel);
-            _labelToValue.Add(labelToValue);
+            _categories.Add(CategoryValueMap<T>.Owned(columnsToProcess.Contains(col)
+                ? PreprocessingTensorOps.SortedUnique(PreprocessingTensorOps.Column(data, col))
+                : new Tensor<T>(new[] { 0 })));
         }
     }
 
     /// <summary>
-    /// Transforms the data by encoding categorical values as integers.
+    /// Transforms the data by replacing categorical values with their integer labels.
     /// </summary>
     /// <param name="data">The data to transform.</param>
-    /// <returns>The encoded data with integer labels.</returns>
+    /// <returns>The transformed data with integer labels.</returns>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
-        if (_valueToLabel is null)
+        if (_categories is null)
         {
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var unknown = PreprocessingTensorOps.Filled(new[] { numRows }, NumOps.FromDouble(-1));
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (processSet.Contains(j) && _categories[j].Length > 0)
             {
-                T value = data[i, j];
-
-                if (processSet.Contains(j) && _valueToLabel[j].Count > 0)
-                {
-                    double doubleValue = NumOps.ToDouble(value);
-                    if (_valueToLabel[j].TryGetValue(doubleValue, out int label))
-                    {
-                        value = NumOps.FromDouble(label);
-                    }
-                    else
-                    {
-                        // Unknown value - use -1 or handle error
-                        value = NumOps.FromDouble(-1);
-                    }
-                }
-
-                result[i, j] = value;
+                // Unknown values get -1
+                var labels = PreprocessingTensorOps.LookupSorted(_categories[j], column, out var found);
+                column = engine.TensorWhere(found, labels.Cast<T>(), unknown);
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
-    /// Reverses the label encoding to get original values.
+    /// Reverses the label encoding to recover original values.
     /// </summary>
-    /// <param name="data">The encoded data.</param>
-    /// <returns>The original categorical values.</returns>
+    /// <param name="data">The label-encoded data.</param>
+    /// <returns>The data with original categorical values.</returns>
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
-        if (_labelToValue is null)
+        if (_categories is null)
         {
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var column = PreprocessingTensorOps.Column(data, j);
+            if (processSet.Contains(j) && _categories[j].Length > 0)
             {
-                T value = data[i, j];
-
-                if (processSet.Contains(j) && _labelToValue[j].Count > 0)
-                {
-                    int label = (int)NumOps.ToDouble(value);
-                    if (_labelToValue[j].TryGetValue(label, out double originalValue))
-                    {
-                        value = NumOps.FromDouble(originalValue);
-                    }
-                    // Unknown label - keep as is
-                }
-
-                result[i, j] = value;
+                // The label is the value truncated toward zero; unknown labels keep their value
+                column = PreprocessingTensorOps.GatherCategories(_categories[j], column);
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>

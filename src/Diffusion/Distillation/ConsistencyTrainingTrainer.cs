@@ -83,19 +83,10 @@ public class ConsistencyTrainingTrainer<T>
     /// <returns>Pseudo-Huber consistency loss.</returns>
     public T ComputeConsistencyLoss(Vector<T> modelOutputAtT, Vector<T> targetOutputAtTPlusOne)
     {
+        // Pseudo-Huber loss sqrt(d^2 + c^2) - c with c = 0.00054 sqrt(dim), averaged over the common length
         var c = NumOps.FromDouble(0.00054 * Math.Sqrt(modelOutputAtT.Length));
-        var cSquared = NumOps.Multiply(c, c);
-        var loss = NumOps.Zero;
         int len = Math.Min(modelOutputAtT.Length, targetOutputAtTPlusOne.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(modelOutputAtT[i], targetOutputAtTPlusOne[i]);
-            var diffSquared = NumOps.Multiply(diff, diff);
-            var inner = NumOps.Add(diffSquared, cSquared);
-            loss = NumOps.Add(loss, NumOps.Subtract(NumOps.Sqrt(inner), c));
-        }
-
+        var loss = DiffusionVectorOps.PseudoHuberSum(modelOutputAtT, targetOutputAtTPlusOne, c);
         return NumOps.Divide(loss, NumOps.FromDouble(len));
     }
 

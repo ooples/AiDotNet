@@ -78,12 +78,7 @@ public class TemperatureScaling<T>
     /// </remarks>
     public Tensor<T> ScaleLogits(Tensor<T> logits)
     {
-        var scaled = new Tensor<T>(logits._shape);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            scaled[i] = _numOps.Divide(logits[i], _temperature);
-        }
-        return scaled;
+        return AiDotNetEngine.Current.TensorDivideScalar(logits, _temperature);
     }
 
     /// <summary>
@@ -111,97 +106,46 @@ public class TemperatureScaling<T>
         if (logits.Rows != labels.Length)
             throw new ArgumentException("Number of logit samples must match number of labels");
 
+        var engine = AiDotNetEngine.Current;
         var lr = _numOps.FromDouble(learningRate);
+        var floor = _numOps.FromDouble(0.01);
+        var sampleCount = _numOps.FromDouble(logits.Rows);
+
+        var z = Tensor<T>.FromMatrix(logits);
+        var labelIndex = Tensor<int>.FromVector(labels, new[] { labels.Length, 1 });
+
+        // sum_i z_{i, y_i} does not depend on T, so it is gathered once.
+        var trueLogitSum = engine.ReduceSum(engine.TensorTakeAlongDim(z, labelIndex, 1), new[] { 0, 1 }, keepDims: true);
+
+        // The temperature lives in a [1, 1] tensor during the fit so every update is an engine op.
+        var temperature = Tensor<T>.CreateDefault(new[] { 1, 1 }, _temperature);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            var gradient = ComputeGradient(logits, labels);
+            var gradient = engine.TensorDivideScalar(ComputeGradient(z, trueLogitSum, temperature), sampleCount);
 
-            // Update temperature using gradient descent
-            _temperature = _numOps.Subtract(_temperature, _numOps.Multiply(lr, gradient));
-
-            // Ensure temperature stays positive
-            if (_numOps.LessThan(_temperature, _numOps.FromDouble(0.01)))
-            {
-                _temperature = _numOps.FromDouble(0.01);
-            }
+            // Update temperature using gradient descent and keep it positive.
+            temperature = engine.TensorClampMin(
+                engine.TensorSubtract(temperature, engine.TensorMultiplyScalar(gradient, lr)), floor);
         }
+
+        _temperature = temperature[0, 0];
     }
 
     /// <summary>
-    /// Computes the gradient of negative log-likelihood with respect to temperature.
+    /// Computes the summed gradient of the negative log-likelihood with respect to temperature.
     /// </summary>
-    private T ComputeGradient(Matrix<T> logits, Vector<int> labels)
+    /// <remarks>
+    /// NLL_i = -z_y/T + log(sum_k exp(z_k/T)), so dNLL_i/dT = (1/T^2) (z_y - sum_k p_k z_k).
+    /// Returns the sum over samples as a [1, 1] tensor.
+    /// </remarks>
+    private static Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> trueLogitSum, Tensor<T> temperature)
     {
-        var gradient = _numOps.Zero;
-        var numSamples = logits.Rows;
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var logit = logits.GetRow(i);
-            var label = labels[i];
-
-            // Compute softmax probabilities with current temperature
-            var scaledLogits = new Vector<T>(logit.Length);
-            for (int j = 0; j < logit.Length; j++)
-            {
-                scaledLogits[j] = _numOps.Divide(logit[j], _temperature);
-            }
-
-            var probs = Softmax(scaledLogits);
-
-            // Compute gradient: ∂NLL/∂T = (1/T²) * (z_y - Σ_k(p_k * z_k))
-            // Derivation: NLL = -log(p_y) = -z_y/T + log(Σ exp(z_k/T))
-            // ∂NLL/∂T = z_y/T² - (1/T²)Σ p_k z_k = (1/T²)(z_y - Σ p_k z_k)
-            var trueClassLogit = logit[label];
-            var weightedSum = _numOps.Zero;
-
-            for (int k = 0; k < logit.Length; k++)
-            {
-                weightedSum = _numOps.Add(weightedSum, _numOps.Multiply(probs[k], logit[k]));
-            }
-
-            var diff = _numOps.Subtract(trueClassLogit, weightedSum);
-            var tempSquared = _numOps.Multiply(_temperature, _temperature);
-            var sampleGrad = _numOps.Divide(diff, tempSquared);
-
-            gradient = _numOps.Add(gradient, sampleGrad);
-        }
-
-        // Average gradient
-        gradient = _numOps.Divide(gradient, _numOps.FromDouble(numSamples));
-        return gradient;
-    }
-
-    /// <summary>
-    /// Computes softmax probabilities from logits.
-    /// </summary>
-    private Vector<T> Softmax(Vector<T> logits)
-    {
-        // Find max for numerical stability
-        var max = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (_numOps.GreaterThan(logits[i], max))
-                max = logits[i];
-        }
-
-        // Compute exp(logit - max)
-        var exps = new Vector<T>(logits.Length);
-        var sum = _numOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            exps[i] = _numOps.Exp(_numOps.Subtract(logits[i], max));
-            sum = _numOps.Add(sum, exps[i]);
-        }
-
-        // Normalize
-        var probs = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            probs[i] = _numOps.Divide(exps[i], sum);
-        }
-
-        return probs;
+        var engine = AiDotNetEngine.Current;
+        var broadcastTemperature = engine.TensorBroadcastTo(temperature, logits._shape);
+        var probs = engine.TensorSoftmax(engine.TensorDivide(logits, broadcastTemperature), 1);
+        var expectedLogitSum = engine.ReduceSum(engine.TensorMultiply(probs, logits), new[] { 0, 1 }, keepDims: true);
+        var diff = engine.TensorSubtract(trueLogitSum, expectedLogitSum);
+        return engine.TensorDivide(engine.TensorDivide(diff, temperature), temperature);
     }
 }

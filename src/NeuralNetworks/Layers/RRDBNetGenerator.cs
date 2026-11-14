@@ -480,21 +480,6 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Backward pass through LeakyReLU.
-    /// </summary>
-    private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
-    {
-        var output = TensorAllocator.Rent<T>(gradient._shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Multiply(
-                gradient.Data.Span[i],
-                _leakyReLU.Derivative(forwardInput.Data.Span[i]));
-        }
-        return output;
-    }
-
-    /// <summary>
     /// Adds two tensors element-wise.
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -555,14 +540,6 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
 
         offset = SetLayerParameters(_hrConv, parameters, offset);
         SetLayerParameters(_convLast, parameters, offset);
-    }
-
-    private static void AddParametersToList(List<T> list, Vector<T> parameters)
-    {
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            list.Add(parameters[i]);
-        }
     }
 
     private static int SetLayerParameters(ILayer<T> layer, Vector<T> parameters, int offset)

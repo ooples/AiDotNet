@@ -268,4 +268,20 @@ public class IQVFIComponentTests
         // A mask that does not tile the flows cannot gate them.
         Assert.Throws<ArgumentException>(() => d.MotionDistillationLoss(four, four, four, four, three));
     }
+
+    [Fact]
+    public void SpatialMaskGatesTheSamePixelInEveryFlowChannel()
+    {
+        // Channel-first flows [2, 1, 2] (dx plane, then dy plane) with a spatial mask [1, 2] = [1, 0]: pixel 0 counts in
+        // both channels and pixel 1 in neither. Repeating each mask entry in place gated [1, 1, 0, 0], i.e. both
+        // channels of pixel 0 in the dx plane only.
+        var d = new IQVFIDistillation<double>();
+        var mask = new Tensor<double>(new[] { 1.0, 0.0 }, new[] { 1, 2 });
+        var student = new Tensor<double>(new[] { 0.0, 0.0, 0.0, 0.0 }, new[] { 2, 1, 2 });
+        var teacher = new Tensor<double>(new[] { 1.0, 10.0, 2.0, 20.0 }, new[] { 2, 1, 2 });
+        var still = new Tensor<double>(new[] { 0.0, 0.0, 0.0, 0.0 }, new[] { 2, 1, 2 });
+
+        // Forward error at pixel 0: |1| (dx) + |2| (dy) = 3; backward flows agree. Mean over the 4 flow elements.
+        Assert.Equal(3.0 / 4, d.MotionDistillationLoss(student, teacher, still, still, mask), 12);
+    }
 }

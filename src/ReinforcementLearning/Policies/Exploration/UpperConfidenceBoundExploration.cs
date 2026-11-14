@@ -61,41 +61,20 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         {
             _totalSteps++;
 
-            // Interpret policyAction as Q-values for each action
-            double maxUcbValue = double.NegativeInfinity;
-            int bestAction = 0;
-
-            for (int i = 0; i < actionSpaceSize; i++)
-            {
-                double qValue = NumOps.ToDouble(policyAction[i]);
-
-                // Get action count, default to 0 if not seen
-                int actionCount = 0;
-                if (_actionCounts.ContainsKey(i))
-                {
-                    actionCount = _actionCounts[i];
-                }
-
-                // UCB bonus: c * √(ln(t) / N(a))
-                // If action never taken, give it maximum priority
-                double ucbBonus = 0.0;
-                if (actionCount == 0)
-                {
-                    ucbBonus = double.PositiveInfinity;
-                }
-                else
-                {
-                    ucbBonus = _explorationConstant * Math.Sqrt(Math.Log(_totalSteps) / actionCount);
-                }
-
-                double ucbValue = qValue + ucbBonus;
-
-                if (ucbValue > maxUcbValue)
-                {
-                    maxUcbValue = ucbValue;
-                    bestAction = i;
-                }
-            }
+            // Interpret policyAction as Q-values for each action; UCB = Q + c * sqrt(ln(t) / N(a)), and an action
+            // never taken gets +infinity (maximum priority). The first strictly greatest value wins, as the scan did
+            // from -infinity (so a NaN never wins and an all-NaN row picks action 0).
+            var engine = AiDotNetEngine.Current;
+            var qValues = RLTensorOps.Head(policyAction, actionSpaceSize);
+            var counts = RLTensorOps.CountsAs<T>(new Vector<int>(
+                Enumerable.Range(0, actionSpaceSize).Select(a => _actionCounts.TryGetValue(a, out int count) ? count : 0)));
+            var bonus = engine.Multiply(
+                engine.Sqrt(engine.Divide(Vector<T>.CreateDefault(actionSpaceSize, NumOps.FromDouble(Math.Log(_totalSteps))), counts)),
+                NumOps.FromDouble(_explorationConstant));
+            var unvisited = engine.TensorEquals(counts.AsTensor(), NumOps.Zero);
+            var infinite = engine.TensorFullLike(counts.AsTensor(), NumOps.FromDouble(double.PositiveInfinity));
+            var ucbBonus = engine.TensorWhere(unvisited, infinite, bonus.AsTensor()).ToVector();
+            int bestAction = RLTensorOps.ArgMaxAbove(engine.Add(qValues, ucbBonus), NumOps.FromDouble(double.NegativeInfinity), out _);
 
             // Update action count
             if (_actionCounts.ContainsKey(bestAction))
@@ -108,9 +87,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             }
 
             // Return one-hot encoded action
-            var action = new Vector<T>(actionSpaceSize);
-            action[bestAction] = NumOps.One;
-            return action;
+            return RLTensorOps.OneHot<T>(actionSpaceSize, bestAction);
         }
 
         /// <summary>

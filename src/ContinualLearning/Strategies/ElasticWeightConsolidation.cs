@@ -235,7 +235,9 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
             return NumOps.Zero;
 
         var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
-        T totalLoss = NumOps.Zero;
+        int n = currentParams.Length;
+        var current = currentParams.AsTensor();
+        Tensor<T>? weightedSum = null;
 
         // Sum over all previous tasks
         for (int task = 0; task < _taskParameters.Count; task++)
@@ -248,14 +250,12 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
                     $"Parameter dimension mismatch: current={currentParams.Length}, task{task}={optimalParams.Length}");
 
             // EWC loss for this task: (lambda/2) * sum_i F_i * (theta_i - theta*_i)^2
-            for (int i = 0; i < currentParams.Length; i++)
-            {
-                var diff = NumOps.Subtract(currentParams[i], optimalParams[i]);
-                var squaredDiff = NumOps.Multiply(diff, diff);
-                var weightedDiff = NumOps.Multiply(fisherInfo[i], squaredDiff);
-                totalLoss = NumOps.Add(totalLoss, weightedDiff);
-            }
+            var diff = Engine.TensorSubtract(current, optimalParams.AsTensor());
+            var weightedDiff = Engine.TensorMultiply(Head(fisherInfo, n), Engine.TensorMultiply(diff, diff));
+            weightedSum = weightedSum is null ? weightedDiff : Engine.TensorAdd(weightedSum, weightedDiff);
         }
+
+        T totalLoss = weightedSum is null ? NumOps.Zero : Engine.TensorSum(weightedSum);
 
         // Multiply by lambda/2
         var halfLambda = NumOps.Divide(_lambda, NumOps.FromDouble(2.0));
@@ -275,15 +275,10 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         if (currentParams.Length != _consolidatedParameters.Length)
             throw new InvalidOperationException("Parameter dimension mismatch");
 
-        T loss = NumOps.Zero;
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var diff = NumOps.Subtract(currentParams[i], _consolidatedParameters[i]);
-            var squaredDiff = NumOps.Multiply(diff, diff);
-            var weightedDiff = NumOps.Multiply(NumOps.Multiply(_onlineDecayFactor, _accumulatedFisher[i]), squaredDiff);
-            loss = NumOps.Add(loss, weightedDiff);
-        }
+        var diff = Engine.TensorSubtract(currentParams.AsTensor(), _consolidatedParameters.AsTensor());
+        var decayedFisher = Engine.TensorMultiplyScalar(Head(_accumulatedFisher, currentParams.Length), _onlineDecayFactor);
+        var weightedDiff = Engine.TensorMultiply(decayedFisher, Engine.TensorMultiply(diff, diff));
+        T loss = Engine.TensorSum(weightedDiff);
 
         var halfLambda = NumOps.Divide(_lambda, NumOps.FromDouble(2.0));
         return NumOps.Multiply(halfLambda, loss);
@@ -310,8 +305,10 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         {
             if (anchor.Length != current.Length)
                 throw new InvalidOperationException($"Parameter dimension mismatch: current={current.Length}, anchor={anchor.Length}");
-            for (int i = 0; i < current.Length; i++)
-                adjusted[i] = NumOps.Add(adjusted[i], NumOps.Multiply(_lambda, NumOps.Multiply(fisher[i], NumOps.Subtract(current[i], anchor[i]))));
+            var penaltyGrad = Engine.TensorMultiplyScalar(
+                Engine.TensorMultiply(Head(fisher, current.Length), Engine.TensorSubtract(current.AsTensor(), anchor.AsTensor())),
+                _lambda);
+            Engine.TensorAdd(adjusted.AsTensor(), penaltyGrad).AsSpan().CopyTo(adjusted.AsWritableSpan());
         }
         return adjusted;
     }
@@ -362,8 +359,12 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         {
             // Online EWC (Schwarz et al. 2018, "Progress & Compress", §4, Eq. 9): F*_i = γ F*_(i−1) + F_i, anchored at the
             // parameters reached on the latest task.
-            for (int i = 0; i < _accumulatedFisher.Length; i++)
-                _accumulatedFisher[i] = NumOps.Add(NumOps.Multiply(_onlineDecayFactor, _accumulatedFisher[i]), newFisher[i]);
+            int n = _accumulatedFisher.Length;
+            if (n > 0)
+            {
+                var decayedOldFisher = Engine.TensorMultiplyScalar(_accumulatedFisher.AsTensor(), _onlineDecayFactor);
+                Engine.TensorAdd(decayedOldFisher, Head(newFisher, n)).AsSpan().CopyTo(_accumulatedFisher.AsWritableSpan());
+            }
             _consolidatedParameters = CloneVector(currentParams);
         }
     }
@@ -388,13 +389,15 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
             var g = gradientModel.ComputeGradients(data.GetInput(index), data.GetOutput(index), LossFunction);
             if (g.Length != numParams)
                 throw new InvalidOperationException($"Expected {numParams} gradients, got {g.Length}.");
-            for (int i = 0; i < numParams; i++)
-                fisher[i] = NumOps.Add(fisher[i], NumOps.Multiply(g[i], g[i]));
+            if (numParams > 0)
+            {
+                var gTensor = g.AsTensor();
+                Engine.TensorAdd(fisher.AsTensor(), Engine.TensorMultiply(gTensor, gTensor))
+                    .AsSpan()
+                    .CopyTo(fisher.AsWritableSpan());
+            }
         }
-        var count = NumOps.FromDouble(samples);
-        for (int i = 0; i < numParams; i++)
-            fisher[i] = NumOps.Divide(fisher[i], count);
-        return fisher;
+        return Engine.Divide(fisher, NumOps.FromDouble(samples));
     }
 
     /// <summary>
@@ -461,12 +464,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     /// </summary>
     private double ComputeMean(Vector<T> vector)
     {
-        double sum = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum += Convert.ToDouble(vector[i]);
-        }
-        return sum / vector.Length;
+        return MeanAsDouble(vector);
     }
 
     /// <summary>
@@ -474,12 +472,6 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     /// </summary>
     private T ComputeMax(Vector<T> vector)
     {
-        T max = vector[0];
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (Convert.ToDouble(vector[i]) > Convert.ToDouble(max))
-                max = vector[i];
-        }
-        return max;
+        return Engine.TensorMaxValue(vector.AsTensor());
     }
 }

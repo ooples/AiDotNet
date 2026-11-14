@@ -270,21 +270,18 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private (Vector<T>, Vector<T>) CalculateGradients(Vector<T> y, Vector<T> residuals)
     {
-        Vector<T> gradAR = new Vector<T>(_arOrder);
-        Vector<T> gradMA = new Vector<T>(_maOrder);
-
-        for (int t = Math.Max(_arOrder, _maOrder); t < y.Length; t++)
+        // gradAR[i] = Σ_t r[t]·y[t-i-1] and gradMA[i] = Σ_t r[t]·r[t-i-1] over t >= max(p, q):
+        // transposed lag matrices times the residual tail.
+        int start = Math.Max(_arOrder, _maOrder);
+        int count = y.Length - start;
+        if (count <= 0)
         {
-            for (int i = 0; i < _arOrder; i++)
-            {
-                gradAR[i] = NumOps.Add(gradAR[i], NumOps.Multiply(residuals[t], y[t - i - 1]));
-            }
-            for (int i = 0; i < _maOrder; i++)
-            {
-                gradMA[i] = NumOps.Add(gradMA[i], NumOps.Multiply(residuals[t], residuals[t - i - 1]));
-            }
+            return (new Vector<T>(_arOrder), new Vector<T>(_maOrder));
         }
 
+        var tail = residuals.GetSubVector(start, count);
+        var gradAR = Engine.MatrixVectorMultiply(TimeSeriesEngineOps<T>.LagMatrix(y, _arOrder, start, count).Transpose(), tail);
+        var gradMA = Engine.MatrixVectorMultiply(TimeSeriesEngineOps<T>.LagMatrix(residuals, _maOrder, start, count).Transpose(), tail);
         return (gradAR, gradMA);
     }
 
@@ -722,18 +719,18 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
         if (_arCoefficients.Length > 0)
         {
             sb.AppendLine("AR Coefficients:");
-            for (int i = 0; i < _arOrder; i++)
+            foreach (var line in TimeSeriesEngineOps<T>.FormatCoefficients(_arCoefficients.GetSubVector(0, _arOrder), "AR"))
             {
-                sb.AppendLine($"  AR[{i + 1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
+                sb.AppendLine(line);
             }
         }
 
         if (_maCoefficients.Length > 0)
         {
             sb.AppendLine("MA Coefficients:");
-            for (int i = 0; i < _maOrder; i++)
+            foreach (var line in TimeSeriesEngineOps<T>.FormatCoefficients(_maCoefficients.GetSubVector(0, _maOrder), "MA"))
             {
-                sb.AppendLine($"  MA[{i + 1}] = {Convert.ToDouble(_maCoefficients[i]):F4}");
+                sb.AppendLine(line);
             }
         }
 
@@ -859,11 +856,7 @@ public partial class ARMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Create a matrix with a single row
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
+        Matrix<T> singleRowMatrix = Matrix<T>.CreateFromVector(input);
 
         // Use the existing Predict method
         Vector<T> predictions = Predict(singleRowMatrix);

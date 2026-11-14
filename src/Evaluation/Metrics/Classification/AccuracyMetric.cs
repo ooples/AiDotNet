@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -64,14 +65,8 @@ public class AccuracyMetric<T> : IClassificationMetric<T>
             return NumOps.Zero;
         }
 
-        int correct = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (NumOps.Compare(predictions[i], actuals[i]) == 0)
-            {
-                correct++;
-            }
-        }
+        int correct = EvaluationTensorOps<T>.Count(
+            EvaluationTensorOps<T>.PairEqualMask(EvaluationTensorOps<T>.ToTensor(predictions), EvaluationTensorOps<T>.ToTensor(actuals)));
 
         return NumOps.FromDouble((double)correct / predictions.Length);
     }
@@ -113,14 +108,8 @@ public class AccuracyMetric<T> : IClassificationMetric<T>
             return (NumOps.Zero, NumOps.One);
         }
 
-        int correct = 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.Compare(predictions[i], actuals[i]) == 0)
-            {
-                correct++;
-            }
-        }
+        int correct = EvaluationTensorOps<T>.Count(
+            EvaluationTensorOps<T>.PairEqualMask(EvaluationTensorOps<T>.ToTensor(predictions), EvaluationTensorOps<T>.ToTensor(actuals)));
 
         double p = (double)correct / n;
         double z = GetZScore(confidenceLevel);
@@ -153,25 +142,29 @@ public class AccuracyMetric<T> : IClassificationMetric<T>
             ? RandomHelper.CreateSeededRandom(randomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var bootstrapValues = new double[bootstrapSamples];
-        var predArray = predictions.ToArray();
-        var actualArray = actuals.ToArray();
+        // Correct counts per resample: the draws keep their order, the counting is an engine gather.
+        var correctCounts = new int[bootstrapSamples];
+        var correctMask = EvaluationTensorOps<T>.PairEqualMask(
+            EvaluationTensorOps<T>.ToTensor(predictions), EvaluationTensorOps<T>.ToTensor(actuals));
+        var engine = AiDotNetEngine.Current;
+        var sampleIndices = new int[n];
 
         for (int b = 0; b < bootstrapSamples; b++)
         {
-            int correct = 0;
             for (int i = 0; i < n; i++)
             {
-                int idx = random.Next(n);
-                if (NumOps.Compare(predArray[idx], actualArray[idx]) == 0)
-                {
-                    correct++;
-                }
+                sampleIndices[i] = random.Next(n);
             }
-            bootstrapValues[b] = (double)correct / n;
+
+            using (new NoGradScope<T>())
+            {
+                correctCounts[b] = engine.TensorCountNonzero(
+                    engine.TensorGather(correctMask, new Tensor<int>(sampleIndices, new[] { n }), 0));
+            }
         }
 
-        Array.Sort(bootstrapValues);
+        // The ratio correct / n is monotonic in the count, so sorting the counts sorts the ratios.
+        Array.Sort(correctCounts);
 
         double alpha = 1 - confidenceLevel;
         int lowerIdx = (int)Math.Floor(alpha / 2 * bootstrapSamples);
@@ -180,7 +173,7 @@ public class AccuracyMetric<T> : IClassificationMetric<T>
         lowerIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, lowerIdx));
         upperIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, upperIdx));
 
-        return (NumOps.FromDouble(bootstrapValues[lowerIdx]), NumOps.FromDouble(bootstrapValues[upperIdx]));
+        return (NumOps.FromDouble((double)correctCounts[lowerIdx] / n), NumOps.FromDouble((double)correctCounts[upperIdx] / n));
     }
 
     private static double GetZScore(double confidenceLevel)

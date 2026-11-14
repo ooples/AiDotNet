@@ -224,59 +224,27 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
     /// </summary>
     public override double EstimateNoiseLevel(Tensor<T> frame)
     {
-        // Median Absolute Deviation (MAD) estimator
-        var data = new List<double>();
-
         // Handle both 4D [N, C, H, W] and 3D [C, H, W] or 2D [H, W] tensors
-        int h, w, stride;
+        int h, w;
         if (frame.Rank == 4)
         {
-            // 4D tensor: [batch, channels, height, width]
             h = frame.Shape[2];
             w = frame.Shape[3];
-            stride = frame.Shape[3]; // Width stride for NCHW layout
-            // Use first batch, first channel for noise estimation
         }
         else if (frame.Rank == 3)
         {
-            // 3D tensor: [channels, height, width]
             h = frame.Shape[1];
             w = frame.Shape[2];
-            stride = frame.Shape[2];
         }
         else
         {
-            // 2D tensor: [height, width]
             h = frame.Shape[0];
             w = frame.Shape[1];
-            stride = w;
         }
 
-        // Compute Laplacian for high-frequency noise estimation
-        // For 4D tensors, use the first channel of the first batch element
-        for (int y = 1; y < h - 1; y++)
-        {
-            for (int x = 1; x < w - 1; x++)
-            {
-                // Proper indexing for any rank tensor (use first batch/channel)
-                double center = Convert.ToDouble(frame.Data.Span[y * stride + x]);
-                double laplacian = 4 * center
-                    - Convert.ToDouble(frame.Data.Span[(y - 1) * stride + x])
-                    - Convert.ToDouble(frame.Data.Span[(y + 1) * stride + x])
-                    - Convert.ToDouble(frame.Data.Span[y * stride + (x - 1)])
-                    - Convert.ToDouble(frame.Data.Span[y * stride + (x + 1)]);
-                data.Add(Math.Abs(laplacian));
-            }
-        }
-
-        if (data.Count == 0)
-            return 0.0;
-
-        data.Sort();
-        double median = data[data.Count / 2];
-
-        // Convert MAD to sigma estimate
-        return median / 0.6745;
+        // Laplacian MAD estimate on the first [height, width] plane (first batch element, first channel)
+        var plane = Engine.Reshape(Engine.TensorNarrow(Engine.Reshape(frame, [frame.Length]), 0, 0, h * w), [1, h, w]);
+        return LaplacianNoiseSigma(plane);
     }
 
     /// <summary>
@@ -285,17 +253,17 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
     public Tensor<T> AddGaussianNoise(Tensor<T> frame, double sigma)
     {
         var random = RandomHelper.CreateSecureRandom();
-        var noisy = new Tensor<T>(frame._shape);
 
-        for (int i = 0; i < frame.Length; i++)
+        // One Gaussian draw per element, in element order
+        double scale = sigma / 255.0;
+        var draws = new double[frame.Length];
+        for (int i = 0; i < draws.Length; i++)
         {
-            double noise = random.NextGaussian() * (sigma / 255.0);
-            double value = Convert.ToDouble(frame.Data.Span[i]) + noise;
-            value = MathHelper.Clamp(value, 0.0, 1.0);
-            noisy.Data.Span[i] = NumOps.FromDouble(value);
+            draws[i] = random.NextGaussian() * scale;
         }
 
-        return noisy;
+        var noise = new Tensor<double>(draws, frame._shape).Cast<T>();
+        return Engine.TensorClamp(Engine.TensorAdd(frame, noise), NumOps.Zero, NumOps.One);
     }
 
     #endregion
@@ -314,8 +282,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
 
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        var inputData = TensorCopyHelper.CastLogical<T, float>(input).ToArray();
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
@@ -323,8 +290,8 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
 
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        var outputData = new Tensor<float>(outputTensor.ToDenseTensor().Buffer.ToArray(), [(int)outputTensor.Length])
+            .Cast<T>().ToArray();
 
         return new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
     }
@@ -352,15 +319,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
             w = frame.Shape[1];
         }
 
-        var noiseMap = new Tensor<T>([1, 1, h, w]);
-        double normalizedNoise = noiseLevel / 255.0;
-
-        for (int i = 0; i < noiseMap.Length; i++)
-        {
-            noiseMap.Data.Span[i] = NumOps.FromDouble(normalizedNoise);
-        }
-
-        return noiseMap;
+        return Tensor<T>.CreateDefault([1, 1, h, w], NumOps.FromDouble(noiseLevel / 255.0));
     }
 
     private Tensor<T> StackFramesWithNoiseMap(List<Tensor<T>> frames, Tensor<T> noiseMap)

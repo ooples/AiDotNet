@@ -168,7 +168,7 @@ public partial class MegaTTS2<T>
     {
         Validation.Guard.NotNull(sample);
         var phones = Ids(sample.Tokens, nameof(sample));
-        var mel = sample.Mel ?? (sample.Audio is not null ? MelOf(Doubles(sample.Audio))
+        var mel = sample.Mel ?? (sample.Audio is not null ? MelOf(sample.Audio)
             : throw new ArgumentException($"{GetType().Name} trains on the mel spectrogram; set Mel or Audio.", nameof(sample)));
         if (mel.Shape.Length != 2 || mel.Shape[1] != _options.MelChannels)
             throw new ArgumentException($"The mel spectrogram is [frames, {_options.MelChannels}].", nameof(sample));
@@ -178,7 +178,7 @@ public partial class MegaTTS2<T>
         if (durations.Any(d => d < 0) || durations.Sum() != mel.Shape[0])
             throw new ArgumentException($"The durations sum to the mel spectrogram's {mel.Shape[0]} frames.", nameof(sample));
         var reference = sample.SpeakerReference is null ? mel
-            : sample.SpeakerReference.Shape.Length == 1 ? MelOf(Doubles(sample.SpeakerReference)) : sample.SpeakerReference;
+            : sample.SpeakerReference.Shape.Length == 1 ? MelOf(sample.SpeakerReference) : sample.SpeakerReference;
         if (reference.Shape.Length != 2 || reference.Shape[1] != _options.MelChannels)
             throw new ArgumentException($"The speaker reference is a recording or a [frames, {_options.MelChannels}] mel spectrogram.", nameof(sample));
         int limit = _options.TimbreReferenceFrames;

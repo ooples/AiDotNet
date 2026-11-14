@@ -2,53 +2,78 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Nonparametric;
 
 /// <summary>
-/// Maximal Information Coefficient (MIC) based Feature Selection.
+/// Maximal Information Coefficient (MIC) feature selection (Reshef et al. 2011, "Detecting Novel Associations in
+/// Large Data Sets", Science 334).
 /// </summary>
 /// <remarks>
 /// <para>
-/// Selects features based on their maximal information coefficient with the target,
-/// capturing many different types of relationships including nonlinear ones.
+/// Scores every feature by its MIC with the target and keeps the highest-scoring ones. MIC is the largest
+/// normalized mutual information <c>I(X; Y) / log(min(x, y))</c> over the x-by-y grids with <c>x y &lt;= B(n)</c>,
+/// where <c>B(n) = n^alpha</c>. It is computed with the paper's ApproxMaxMI heuristic exactly as minepy does
+/// (equipartitioned rows, at most <c>c x</c> superclumps per column, the OptimizeXAxis dynamic program, both axis
+/// orders).
 /// </para>
-/// <para><b>For Beginners:</b> MIC tries different ways of binning data to find
-/// the binning that maximizes mutual information. This makes it very good at
-/// detecting all kinds of relationships - linear, nonlinear, periodic, etc.
+/// <para><b>For Beginners:</b> MIC is like correlation but can detect any type
+/// of relationship, not just linear ones. It scores relationships on a scale
+/// of 0 to 1, where 1 means a perfect (possibly complex) relationship exists.
 /// </para>
 /// </remarks>
+/// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
 public class MaximalInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly int _maxBins;
+    private readonly double _alpha;
+    private readonly double _c;
 
-    private double[]? _micScores;
+    private Vector<T>? _micScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public int MaxBins => _maxBins;
-    public double[]? MICScores => _micScores;
+
+    /// <summary>The exponent of the grid budget <c>B(n) = n^alpha</c> (or B itself when it is at least 4).</summary>
+    public double Alpha => _alpha;
+
+    /// <summary>The clump factor: the x axis is split into at most <c>c</c> times as many superclumps as columns.</summary>
+    public double C => _c;
+
+    /// <summary>The MIC of every feature with the target.</summary>
+    public Vector<T>? MICScores => _micScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
+    /// <summary>
+    /// Creates a MIC feature selector.
+    /// </summary>
+    /// <param name="nFeaturesToSelect">The number of features to keep.</param>
+    /// <param name="alpha">The grid budget exponent: <c>B(n) = max(n^alpha, 4)</c> for alpha in (0, 1], or
+    /// <c>B = min(alpha, n)</c> for alpha of at least 4 (paper and minepy default 0.6).</param>
+    /// <param name="c">The clump factor (paper and minepy default 15).</param>
+    /// <param name="columnIndices">The columns to operate on, or null for all columns.</param>
     public MaximalInformationSelector(
         int nFeaturesToSelect = 10,
-        int maxBins = 15,
+        double alpha = MaximalInformationCoefficient.DefaultAlpha,
+        double c = MaximalInformationCoefficient.DefaultClumps,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        MaximalInformationCoefficient.Validate(alpha, c, nameof(alpha), nameof(c));
 
         _nFeaturesToSelect = nFeaturesToSelect;
-        _maxBins = maxBins;
+        _alpha = alpha;
+        _c = c;
     }
 
     /// <inheritdoc />
@@ -65,101 +90,11 @@ public class MaximalInformationSelector<T> : TransformerBase<T, Matrix<T>, Matri
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
-        int p = data.Columns;
-
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _micScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            _micScores[j] = ComputeMIC(col, y, n);
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _micScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        var scores = MaximalInformationCoefficient.Scores(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target), _alpha, _c);
+        _micScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, _nFeaturesToSelect);
 
         IsFitted = true;
-    }
-
-    private double ComputeMIC(double[] x, double[] y, int n)
-    {
-        double maxMI = 0;
-        int maxBinsX = Math.Min(_maxBins, (int)Math.Sqrt(n));
-        int maxBinsY = Math.Min(_maxBins, (int)Math.Sqrt(n));
-
-        double xMin = x.Min(), xMax = x.Max();
-        double yMin = y.Min(), yMax = y.Max();
-
-        // Try different grid sizes
-        for (int bX = 2; bX <= maxBinsX; bX++)
-        {
-            for (int bY = 2; bY <= maxBinsY; bY++)
-            {
-                if (bX * bY > n) continue; // Not enough samples
-
-                double mi = ComputeMIForGrid(x, y, n, bX, bY, xMin, xMax, yMin, yMax);
-                double normalizedMI = mi / Math.Log(Math.Min(bX, bY)) * Math.Log(2);
-
-                maxMI = Math.Max(maxMI, normalizedMI);
-            }
-        }
-
-        return maxMI;
-    }
-
-    private double ComputeMIForGrid(double[] x, double[] y, int n, int bX, int bY,
-        double xMin, double xMax, double yMin, double yMax)
-    {
-        double xBinWidth = (xMax - xMin) / bX + 1e-10;
-        double yBinWidth = (yMax - yMin) / bY + 1e-10;
-
-        var jointCounts = new int[bX, bY];
-        var xCounts = new int[bX];
-        var yCounts = new int[bY];
-
-        for (int i = 0; i < n; i++)
-        {
-            int xBin = Math.Min((int)((x[i] - xMin) / xBinWidth), bX - 1);
-            int yBin = Math.Min((int)((y[i] - yMin) / yBinWidth), bY - 1);
-
-            jointCounts[xBin, yBin]++;
-            xCounts[xBin]++;
-            yCounts[yBin]++;
-        }
-
-        double mi = 0;
-        for (int xb = 0; xb < bX; xb++)
-        {
-            for (int yb = 0; yb < bY; yb++)
-            {
-                if (jointCounts[xb, yb] > 0 && xCounts[xb] > 0 && yCounts[yb] > 0)
-                {
-                    double pxy = (double)jointCounts[xb, yb] / n;
-                    double px = (double)xCounts[xb] / n;
-                    double py = (double)yCounts[yb] / n;
-                    mi += pxy * Math.Log(pxy / (px * py) + 1e-10);
-                }
-            }
-        }
-
-        return Math.Max(0, mi);
     }
 
     /// <inheritdoc />
@@ -175,15 +110,7 @@ public class MaximalInformationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("MaximalInformationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

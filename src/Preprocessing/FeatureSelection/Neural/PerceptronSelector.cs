@@ -3,6 +3,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
@@ -28,7 +29,7 @@ public class PerceptronSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly double _learningRate;
     private readonly int? _randomState;
 
-    private double[]? _weightImportance;
+    private Vector<T>? _weightImportance;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -36,7 +37,7 @@ public class PerceptronSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int Epochs => _epochs;
     public double LearningRate => _learningRate;
-    public double[]? WeightImportance => _weightImportance;
+    public Vector<T>? WeightImportance => _weightImportance;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -75,82 +76,43 @@ public class PerceptronSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Standardize data
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += X[i, j];
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-                stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-
-        // Standardize target
-        double yMean = y.Average();
-        double yStd = Math.Sqrt(y.Select(v => (v - yMean) * (v - yMean)).Average());
-        if (yStd < 1e-10) yStd = 1;
-        for (int i = 0; i < n; i++)
-            y[i] = (y[i] - yMean) / yStd;
+        // Standardize data and target
+        var x = NeuralSelectorOps.StandardizePopulation(Tensor<T>.FromMatrix(data));
+        var y = engine.Reshape(
+            NeuralSelectorOps.StandardizePopulation(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 })), new[] { n });
 
         // Initialize weights
-        var weights = new double[p];
-        double bias = 0;
-        double scale = Math.Sqrt(1.0 / p);
-        for (int j = 0; j < p; j++)
-            weights[j] = (rand.NextDouble() - 0.5) * 2 * scale;
+        var weights = NeuralSelectorOps.SymmetricUniform<T>(rand, Math.Sqrt(1.0 / p), p);
+        var bias = new Tensor<T>(new[] { 1 });
+        T rate = NumOps.FromDouble(_learningRate);
+        var rows = NeuralSelectorOps.SplitRows(x);
+        var targets = NeuralSelectorOps.SplitValues(y);
 
-        // Train perceptron (gradient descent)
+        // Train the linear unit by per-sample gradient descent on the squared error (Widrow-Hoff)
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
             for (int i = 0; i < n; i++)
             {
-                // Forward pass
-                double prediction = bias;
-                for (int j = 0; j < p; j++)
-                    prediction += X[i, j] * weights[j];
-
-                // Error
-                double error = prediction - y[i];
-
-                // Update weights
-                for (int j = 0; j < p; j++)
-                    weights[j] -= _learningRate * error * X[i, j];
-                bias -= _learningRate * error;
+                var prediction = engine.TensorAdd(
+                    engine.ReduceSum(engine.TensorMultiply(rows[i], weights), new[] { 0 }, true), bias);
+                var error = engine.TensorSubtract(prediction, targets[i]);
+                weights = NeuralSelectorOps.Step(weights, PopulationSearchOps.Scale(rows[i], error), rate);
+                bias = NeuralSelectorOps.Step(bias, error, rate);
             }
         }
 
         // Feature importance based on absolute weight
-        _weightImportance = weights.Select(Math.Abs).ToArray();
+        var importance = engine.TensorAbs(weights);
+        _weightImportance = importance.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _weightImportance[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importance, numToSelect);
 
         IsFitted = true;
     }
@@ -168,15 +130,7 @@ public class PerceptronSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("PerceptronSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

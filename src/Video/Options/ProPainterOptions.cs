@@ -46,5 +46,14 @@ public class ProPainterOptions : VideoHyperparameterOptions
     public void Validate()
     {
         ValidateCore();
+
+        // The transformer splits its NumFeatures * 4 channels across NumHeads heads; a width that does not divide
+        // evenly would leave the remainder channels unattended (zero-filled), so it is rejected.
+        int width = NumFeatures * 4;
+        if (NumFeatures > 0 && NumHeads > 0 && width % NumHeads != 0)
+        {
+            throw new ArgumentException(
+                $"NumFeatures * 4 ({width}) must be a multiple of NumHeads ({NumHeads}).", nameof(NumHeads));
+        }
     }
 }

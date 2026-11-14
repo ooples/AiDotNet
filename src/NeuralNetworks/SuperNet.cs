@@ -262,13 +262,7 @@ namespace AiDotNet.NeuralNetworks
             {
                 var destination = _architectureGradients[node];
                 gradients.TryGetValue(sources[node], out var gradient);
-                for (int r = 0; r < destination.Rows; r++)
-                {
-                    for (int c = 0; c < destination.Columns; c++)
-                    {
-                        destination[r, c] = gradient is null ? NumOps.Zero : gradient[r, c];
-                    }
-                }
+                CopyGradient(gradient, destination.AsWritableSpan());
             }
         }
 
@@ -292,11 +286,20 @@ namespace AiDotNet.NeuralNetworks
             {
                 var destination = _weightGradients[keys[i]];
                 gradients.TryGetValue(sources[i], out var gradient);
-                for (int e = 0; e < destination.Length; e++)
-                {
-                    destination[e] = gradient is null ? NumOps.Zero : gradient.GetFlat(e);
-                }
+                CopyGradient(gradient, destination.AsWritableSpan());
             }
+        }
+
+        /// <summary>Copies a tape gradient into <paramref name="destination"/>, or zeroes it when there is none.</summary>
+        private void CopyGradient(Tensor<T>? gradient, Span<T> destination)
+        {
+            if (gradient is null)
+            {
+                destination.Fill(NumOps.Zero);
+                return;
+            }
+
+            gradient.ToVector().AsSpan().Slice(0, destination.Length).CopyTo(destination);
         }
 
         /// <summary>
@@ -334,6 +337,130 @@ namespace AiDotNet.NeuralNetworks
             return nodes[nodes.Count - 1];
         }
 
+        /// <summary>
+        /// The operation names a SuperNet over <paramref name="searchSpace"/> uses: the search space's, or the
+        /// default five when it lists none.
+        /// </summary>
+        internal static IReadOnlyList<string> OperationNamesOf(SearchSpaceBase<T> searchSpace)
+        {
+            if (searchSpace is null) throw new ArgumentNullException(nameof(searchSpace));
+            return searchSpace.Operations is { Count: > 0 } names ? names.ToArray() : DefaultOperationNames.ToArray();
+        }
+
+        /// <summary>Whether a search-space operation name denotes the zero operation (an absent edge).</summary>
+        internal static bool IsZeroOperationName(string? name)
+        {
+            string normalized = (name ?? string.Empty).Trim().ToLowerInvariant();
+            return normalized == "none" || normalized == "zero";
+        }
+
+        /// <summary>The tape view of one operation weight, for use as a gradient source.</summary>
+        internal Tensor<T> GetWeightTensor(string key) => WeightView(key);
+
+        /// <summary>
+        /// The task loss of the cell under PC-DARTS' partial channel connections (Xu et al. 2020, Sec. 3.2) and
+        /// edge normalization (Sec. 3.3), with the architecture given by <paramref name="alphas"/> and
+        /// <paramref name="betas"/> instead of this network's own alpha, on the active tape.
+        /// </summary>
+        /// <param name="input">The inputs; the last axis holds the features (channels).</param>
+        /// <param name="target">The targets, with the cell output's shape.</param>
+        /// <param name="alphas">The operation logits of every node, [node + 1, operations].</param>
+        /// <param name="betas">The edge logits of every node, [node + 1]; null for no edge normalization.</param>
+        /// <param name="k">The partial-channel factor K.</param>
+        internal Tensor<T> PartialChannelLoss(Tensor<T> input, Tensor<T> target, IReadOnlyList<Tensor<T>> alphas,
+            IReadOnlyList<Tensor<T>>? betas, int k)
+            => _defaultLossFunction.ComputeTapeLoss(PartialChannelForward(ToRows(input, out _), alphas, betas, k),
+                ToRows(target, out _));
+
+        /// <summary>
+        /// The cell's forward pass with partial channel connections: on every edge (i, j) only the first
+        /// C / K features of x_i go through the softmax(alpha_(i,j))-weighted operation mixture, the rest bypass
+        /// it, and the result is channel-shuffled with K groups; node j is the softmax(beta_j)-weighted sum of its
+        /// edges, or their plain sum without edge normalization (PC-DARTS Eq. 2 to 4 and the reference
+        /// implementation's MixedOp and channel_shuffle). The feature axis is this cell's channel axis.
+        /// </summary>
+        internal Tensor<T> PartialChannelForward(Tensor<T> rows, IReadOnlyList<Tensor<T>> alphas,
+            IReadOnlyList<Tensor<T>>? betas, int k)
+        {
+            if (rows is null) throw new ArgumentNullException(nameof(rows));
+            if (alphas is null) throw new ArgumentNullException(nameof(alphas));
+            if (alphas.Count != _numNodes)
+                throw new ArgumentException("There must be one alpha per node.", nameof(alphas));
+            if (betas is not null && betas.Count != _numNodes)
+                throw new ArgumentException("There must be one beta per node.", nameof(betas));
+            if (k < 1) throw new ArgumentOutOfRangeException(nameof(k), k, "K must be at least 1.");
+
+            int batch = rows.Shape[0];
+            int features = rows.Shape[1];
+            int sampled = Math.Max(1, features / k);
+            var nodes = new List<Tensor<T>>(_numNodes + 1) { rows };
+
+            for (int node = 0; node < _numNodes; node++)
+            {
+                var mixture = Engine.Softmax(alphas[node], axis: 1);
+                var edgeWeights = betas is null
+                    ? null
+                    : Engine.TensorSoftmax(Engine.Reshape(betas[node], new[] { node + 1, 1 }), 0);
+                Tensor<T>? output = null;
+                for (int from = 0; from <= node; from++)
+                {
+                    var source = nodes[from];
+                    var active = sampled == features
+                        ? source
+                        : Engine.TensorSlice(source, new[] { 0, 0 }, new[] { batch, sampled });
+                    Tensor<T>? mixed = null;
+                    for (int op = 0; op < _numOperations; op++)
+                    {
+                        // The zero operation takes its share of the softmax and contributes nothing.
+                        if (_operations[op].Kind == OperationKind.Zero) continue;
+
+                        var weight = Engine.TensorTile(
+                            Engine.TensorSlice(mixture, new[] { from, op }, new[] { 1, 1 }), new[] { batch, sampled });
+                        var term = Engine.TensorMultiply(weight, ApplyOperation(active, node, from, op));
+                        mixed = mixed is null ? term : Engine.TensorAdd(mixed, term);
+                    }
+
+                    var edge = mixed ?? new Tensor<T>(new[] { batch, sampled });
+                    if (sampled < features)
+                    {
+                        edge = Engine.TensorConcatenate(new[]
+                        {
+                            edge,
+                            Engine.TensorSlice(source, new[] { 0, sampled }, new[] { batch, features - sampled }),
+                        }, axis: 1);
+                    }
+
+                    edge = ChannelShuffle(edge, k);
+                    if (edgeWeights is not null)
+                    {
+                        edge = Engine.TensorMultiply(Engine.TensorTile(
+                            Engine.TensorSlice(edgeWeights, new[] { from, 0 }, new[] { 1, 1 }), new[] { batch, features }), edge);
+                    }
+
+                    output = output is null ? edge : Engine.TensorAdd(output, edge);
+                }
+
+                nodes.Add(output ?? new Tensor<T>(new[] { batch, features }));
+            }
+
+            return nodes[nodes.Count - 1];
+        }
+
+        /// <summary>
+        /// ShuffleNet's channel shuffle with <paramref name="groups"/> groups on a [batch, channels] tensor:
+        /// reshape to [batch, groups, channels / groups], swap the last two axes, flatten. Channels that do not
+        /// divide into the groups are left in order.
+        /// </summary>
+        private Tensor<T> ChannelShuffle(Tensor<T> x, int groups)
+        {
+            int batch = x.Shape[0];
+            int channels = x.Shape[1];
+            if (groups <= 1 || channels % groups != 0) return x;
+
+            var grouped = Engine.Reshape(x, new[] { batch, groups, channels / groups });
+            return Engine.Reshape(Engine.TensorPermute(grouped, new[] { 0, 2, 1 }), new[] { batch, channels });
+        }
+
         /// <summary>Flattens any input to [batch, features], remembering the caller's shape.</summary>
         private static Tensor<T> ToRows(Tensor<T> input, out int[] originalShape)
         {
@@ -367,11 +494,12 @@ namespace AiDotNet.NeuralNetworks
             Tensor<T> RegularizedLoss()
             {
                 var loss = Engine.Reshape(TaskLoss(input, target, _defaultLossFunction), new[] { 1 });
+                T halfDecay = NumOps.FromDouble(weightDecay / 2.0);
                 foreach (var parameter in sources)
                 {
                     var squares = Engine.ReduceSum(Engine.TensorMultiply(parameter, parameter), null, keepDims: false);
                     loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(
-                        Engine.Reshape(squares, new[] { 1 }), NumOps.FromDouble(weightDecay / 2.0)));
+                        Engine.Reshape(squares, new[] { 1 }), halfDecay));
                 }
                 return loss;
             }
@@ -482,27 +610,23 @@ namespace AiDotNet.NeuralNetworks
             BackwardWeights(input, target, effectiveLoss);
 
             // Collect all gradients into a single vector
-            var gradients = new List<T>();
+            var parts = new List<Tensor<T>>();
 
             // Add architecture parameter gradients as ZEROS (not computed in this method)
             // Architecture parameters are optimized separately in DARTS on validation data
             // We include zeros here to maintain consistent vector length with GetParameters()
-            var zero = NumOps.FromDouble(0.0);
-            foreach (var alpha in _architectureParams)
-            {
-                for (int i = 0; i < alpha.Rows; i++)
-                    for (int j = 0; j < alpha.Columns; j++)
-                        gradients.Add(zero);  // Zero gradient since not computed here
-            }
+            int architectureCount = _architectureParams.Sum(alpha => alpha.Rows * alpha.Columns);
+            if (architectureCount > 0)
+                parts.Add(Engine.TensorFullLike(new Tensor<T>(new[] { architectureCount }), NumOps.FromDouble(0.0)));
 
             // Add weight gradients (freshly computed by BackwardWeights above)
             foreach (var weightGrad in _weightGradients.Values)
             {
-                for (int i = 0; i < weightGrad.Length; i++)
-                    gradients.Add(weightGrad[i]);
+                if (weightGrad.Length > 0)
+                    parts.Add(Tensor<T>.FromVector(weightGrad));
             }
 
-            return new Vector<T>(gradients.ToArray());
+            return parts.Count == 0 ? new Vector<T>(0) : Engine.TensorConcatenate(parts.ToArray(), 0).ToVector();
         }
 
         /// <summary>
@@ -539,31 +663,40 @@ namespace AiDotNet.NeuralNetworks
                     nameof(gradients));
             }
 
+            var flatGradients = Tensor<T>.FromVector(gradients);
             int idx = 0;
 
-            // Update architecture parameters
-            foreach (var alpha in _architectureParams)
+            // Update architecture parameters: alpha -= lr * g, in place
+            for (int node = 0; node < _architectureParams.Count; node++)
             {
-                for (int i = 0; i < alpha.Rows; i++)
-                {
-                    for (int j = 0; j < alpha.Columns; j++)
-                    {
-                        T update = NumOps.Multiply(learningRate, gradients[idx++]);
-                        alpha[i, j] = NumOps.Subtract(alpha[i, j], update);
-                    }
-                }
+                var alpha = _architectureParams[node];
+                idx = SubtractScaledGradient(Tensor<T>.FromMatrix(alpha), alpha.AsWritableSpan(), flatGradients, idx, learningRate);
             }
 
-            // Update weights
+            // Update weights: w -= lr * g, in place
             foreach (var key in _weights.Keys.ToList())
             {
                 var weight = _weights[key];
-                for (int i = 0; i < weight.Length; i++)
-                {
-                    T update = NumOps.Multiply(learningRate, gradients[idx++]);
-                    weight[i] = NumOps.Subtract(weight[i], update);
-                }
+                idx = SubtractScaledGradient(Tensor<T>.FromVector(weight), weight.AsWritableSpan(), flatGradients, idx, learningRate);
             }
+        }
+
+        /// <summary>
+        /// Writes <paramref name="parameter"/> - learningRate * gradients[offset, offset + length) into
+        /// <paramref name="destination"/> and returns the offset past the consumed gradients.
+        /// </summary>
+        private int SubtractScaledGradient(
+            Tensor<T> parameter, Span<T> destination, Tensor<T> gradients, int offset, T learningRate)
+        {
+            int length = destination.Length;
+            if (length == 0)
+                return offset;
+
+            var gradient = Engine.TensorSlice(gradients, new[] { offset }, new[] { length });
+            var updated = Engine.TensorSubtract(
+                Engine.Reshape(parameter, new[] { length }), Engine.TensorMultiplyScalar(gradient, learningRate));
+            updated.AsSpan().CopyTo(destination);
+            return offset + length;
         }
 
         /// <summary>
@@ -573,27 +706,29 @@ namespace AiDotNet.NeuralNetworks
         {
             var architecture = new Architecture<T>();
 
+            // The candidate operations: every non-zero operation. The zero operation marks an absent edge, so it is
+            // only chosen when it is the only candidate.
+            var candidates = Enumerable.Range(0, _numOperations)
+                .Where(opIdx => _operations[opIdx].Kind != OperationKind.Zero)
+                .ToArray();
+            var candidateIndex = new Tensor<int>(candidates, new[] { candidates.Length });
+
             for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
             {
                 var alpha = _architectureParams[nodeIdx];
                 var softmaxWeights = ApplySoftmax(alpha);
 
+                // The strongest candidate per connection (Liu et al. 2019, section 2.4); ties keep the first.
+                int[] strongest = candidates.Length == 0
+                    ? new int[nodeIdx + 1]
+                    : Engine.TensorArgMax(
+                        Engine.TensorIndexSelect(Tensor<T>.FromMatrix(softmaxWeights), candidateIndex, 1), 1)
+                        .AsSpan().ToArray();
+
                 // For each previous node connection, select operation with highest weight
                 for (int prevNodeIdx = 0; prevNodeIdx <= nodeIdx; prevNodeIdx++)
                 {
-                    // The strongest non-zero operation (Liu et al. 2019, section 2.4). The zero operation marks
-                    // an absent edge, so it is only chosen when it is the only candidate.
-                    int bestOpIdx = -1;
-                    for (int opIdx = 0; opIdx < _numOperations; opIdx++)
-                    {
-                        if (_operations[opIdx].Kind == OperationKind.Zero) continue;
-                        if (bestOpIdx < 0 || NumOps.GreaterThan(softmaxWeights[prevNodeIdx, opIdx], softmaxWeights[prevNodeIdx, bestOpIdx]))
-                        {
-                            bestOpIdx = opIdx;
-                        }
-                    }
-
-                    if (bestOpIdx < 0) bestOpIdx = 0;
+                    int bestOpIdx = candidates.Length == 0 ? 0 : candidates[strongest[prevNodeIdx]];
 
                     // Add selected operation to architecture
                     var operation = GetOperationName(bestOpIdx);
@@ -609,35 +744,11 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         private Matrix<T> ApplySoftmax(Matrix<T> alpha)
         {
-            var result = new Matrix<T>(alpha.Rows, alpha.Columns);
+            if (alpha.Rows == 0)
+                return new Matrix<T>(alpha.Rows, alpha.Columns);
 
-            for (int row = 0; row < alpha.Rows; row++)
-            {
-                // Compute softmax for this row
-                T maxVal = alpha[row, 0];
-                for (int col = 1; col < alpha.Columns; col++)
-                {
-                    if (NumOps.GreaterThan(alpha[row, col], maxVal))
-                        maxVal = alpha[row, col];
-                }
-
-                // Compute exp(x - max) for numerical stability
-                T sumExp = NumOps.Zero;
-                var expValues = new T[alpha.Columns];
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    expValues[col] = NumOps.Exp(NumOps.Subtract(alpha[row, col], maxVal));
-                    sumExp = NumOps.Add(sumExp, expValues[col]);
-                }
-
-                // Normalize
-                for (int col = 0; col < alpha.Columns; col++)
-                {
-                    result[row, col] = NumOps.Divide(expValues[col], sumExp);
-                }
-            }
-
-            return result;
+            // Row-wise softmax with the row max subtracted for numerical stability.
+            return Engine.TensorSoftmax(Tensor<T>.FromMatrix(alpha), 1).ToMatrix();
         }
 
         /// <summary>
@@ -772,17 +883,16 @@ namespace AiDotNet.NeuralNetworks
             int features = x.Shape[1];
             int left = (kernelSize - 1) / 2;
             Tensor<T>? sum = null;
-            var reciprocal = new Tensor<T>(new[] { 1, features });
+
+            // Each feature's window count: the offsets in [-left, kernelSize - left) that stay inside the row.
+            var counts = new int[features];
             for (int f = 0; f < features; f++)
             {
-                int count = 0;
-                for (int offset = -left; offset < kernelSize - left; offset++)
-                {
-                    if (f + offset >= 0 && f + offset < features) count++;
-                }
-
-                reciprocal[0, f] = NumOps.FromDouble(1.0 / count);
+                counts[f] = Math.Max(0, Math.Min(features, f + kernelSize - left) - Math.Max(0, f - left));
             }
+
+            var countTensor = new Tensor<int>(counts, new[] { 1, features }).Cast<T>();
+            var reciprocal = Engine.TensorDivide(Engine.TensorOnesLike(countTensor), countTensor);
 
             for (int offset = -left; offset < kernelSize - left; offset++)
             {
@@ -1246,24 +1356,11 @@ namespace AiDotNet.NeuralNetworks
 
             // For SuperNet, we analyze operation importance rather than input feature importance
             // Each operation index represents a different architectural operation (identity, conv3x3, etc.)
+            // Aggregate importance across all nodes and connections: the summed absolute architecture parameters.
+            var totals = OperationColumnTotals(_architectureParams.Select(alpha => Tensor<T>.FromMatrix(alpha)), absolute: true);
             for (int opIdx = 0; opIdx < _numOperations; opIdx++)
             {
-                T sum = NumOps.Zero;
-
-                // Aggregate importance across all nodes and connections
-                foreach (var alpha in _architectureParams)
-                {
-                    // Sum absolute values of architecture parameters for this operation
-                    for (int i = 0; i < alpha.Rows; i++)
-                    {
-                        if (opIdx < alpha.Columns)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Abs(alpha[i, opIdx]));
-                        }
-                    }
-                }
-
-                importance[opIdx] = sum;
+                importance[opIdx] = totals.GetFlatIndexValue(opIdx);
             }
 
             return await Task.FromResult(importance);
@@ -1279,28 +1376,41 @@ namespace AiDotNet.NeuralNetworks
 
             // For local importance, we use softmax-transformed architecture parameters
             // to determine which operations are most active for this specific input
+            var totals = OperationColumnTotals(
+                _architectureParams.Select(alpha => Tensor<T>.FromMatrix(ApplySoftmax(alpha))), absolute: false);
             for (int opIdx = 0; opIdx < _numOperations; opIdx++)
             {
-                T sum = NumOps.Zero;
-
-                // Apply softmax and aggregate weights for each operation
-                foreach (var alpha in _architectureParams)
-                {
-                    var softmaxWeights = ApplySoftmax(alpha);
-
-                    for (int i = 0; i < softmaxWeights.Rows; i++)
-                    {
-                        if (opIdx < softmaxWeights.Columns)
-                        {
-                            sum = NumOps.Add(sum, softmaxWeights[i, opIdx]);
-                        }
-                    }
-                }
-
-                importance[opIdx] = sum;
+                importance[opIdx] = totals.GetFlatIndexValue(opIdx);
             }
 
             return await Task.FromResult(importance);
+        }
+
+        /// <summary>
+        /// Per-operation column sums (of absolute values when <paramref name="absolute"/>) over all the given
+        /// [rows, operations] matrices; columns past the operation count are ignored and missing ones count 0.
+        /// </summary>
+        private Tensor<T> OperationColumnTotals(IEnumerable<Tensor<T>> matrices, bool absolute)
+        {
+            var totals = new Tensor<T>(new[] { _numOperations });
+            foreach (var matrix in matrices)
+            {
+                int rows = matrix.Shape[0];
+                int columns = matrix.Shape[1];
+                int used = Math.Min(columns, _numOperations);
+                if (rows == 0 || used == 0)
+                    continue;
+
+                var values = absolute ? Engine.TensorAbs(matrix) : matrix;
+                var sums = Engine.ReduceSum(values, new[] { 0 }, keepDims: false);
+                if (used < columns)
+                    sums = Engine.TensorSlice(sums, new[] { 0 }, new[] { used });
+                if (used < _numOperations)
+                    sums = Engine.TensorConcatenate(new[] { sums, new Tensor<T>(new[] { _numOperations - used }) }, 0);
+                totals = Engine.TensorAdd(totals, sums);
+            }
+
+            return totals;
         }
 
         /// <summary>
@@ -1421,20 +1531,11 @@ namespace AiDotNet.NeuralNetworks
                 // Find the operation with highest weight
                 if (softmax.Rows > 0 && softmax.Columns > 0)
                 {
-                    int bestOp = 0;
-                    T bestWeight = softmax[0, 0];
-
-                    for (int i = 0; i < softmax.Rows; i++)
-                    {
-                        for (int j = 0; j < softmax.Columns; j++)
-                        {
-                            if (NumOps.GreaterThan(softmax[i, j], bestWeight))
-                            {
-                                bestWeight = softmax[i, j];
-                                bestOp = j;
-                            }
-                        }
-                    }
+                    // The column of the first largest weight in row-major order.
+                    int flatBest = Engine.TensorArgMax(
+                        Engine.Reshape(Tensor<T>.FromMatrix(softmax), new[] { softmax.Rows * softmax.Columns }), 0)
+                        .GetFlatIndexValue(0);
+                    int bestOp = flatBest % softmax.Columns;
 
                     explanation += $"- Node {nodeIdx}: {GetOperationName(bestOp)} operation is dominant\n";
                 }
@@ -1462,66 +1563,63 @@ namespace AiDotNet.NeuralNetworks
                     $"Received feature1Index={feature1Index}, feature2Index={feature2Index}.");
             }
 
-            // Calculate correlation between two operations across all architecture parameters
-            T sum1 = NumOps.Zero;
-            T sum2 = NumOps.Zero;
-            T sumProduct = NumOps.Zero;
-            T sumSquares1 = NumOps.Zero;
-            T sumSquares2 = NumOps.Zero;
-            int count = 0;
-
+            // Calculate correlation between two operations across all architecture parameters: the two operations'
+            // columns of every alpha that has both.
+            var firstColumns = new List<Tensor<T>>();
+            var secondColumns = new List<Tensor<T>>();
             foreach (var alpha in _architectureParams)
             {
-                for (int i = 0; i < alpha.Rows; i++)
+                if (alpha.Rows > 0 && feature1Index < alpha.Columns && feature2Index < alpha.Columns)
                 {
-                    if (feature1Index < alpha.Columns && feature2Index < alpha.Columns)
-                    {
-                        T val1 = alpha[i, feature1Index];
-                        T val2 = alpha[i, feature2Index];
-
-                        sum1 = NumOps.Add(sum1, val1);
-                        sum2 = NumOps.Add(sum2, val2);
-                        sumProduct = NumOps.Add(sumProduct, NumOps.Multiply(val1, val2));
-                        sumSquares1 = NumOps.Add(sumSquares1, NumOps.Multiply(val1, val1));
-                        sumSquares2 = NumOps.Add(sumSquares2, NumOps.Multiply(val2, val2));
-                        count++;
-                    }
+                    firstColumns.Add(Tensor<T>.FromVector(alpha.GetColumn(feature1Index)));
+                    secondColumns.Add(Tensor<T>.FromVector(alpha.GetColumn(feature2Index)));
                 }
             }
 
-            if (count == 0)
+            if (firstColumns.Count == 0)
             {
                 return NumOps.Zero;
             }
+
+            var first = Engine.TensorConcatenate(firstColumns.ToArray(), 0);
+            var second = Engine.TensorConcatenate(secondColumns.ToArray(), 0);
+            int count = first.Length;
+
+            // The sums of a narrow T (Half, BFloat16) are taken in float and the Pearson formula below in
+            // double: n * sum(x^2) and sum(x)^2 overflow Half past 65504.
+            var (sum1, sum2, sumProduct, sumSquares1, sumSquares2) =
+                typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+                    ? CorrelationSums(first.Cast<float>(), second.Cast<float>())
+                    : CorrelationSums(first, second);
 
             // Calculate correlation coefficient
-            T n = NumOps.FromDouble(count);
-            T numerator = NumOps.Subtract(
-                NumOps.Multiply(n, sumProduct),
-                NumOps.Multiply(sum1, sum2)
-            );
+            double n = count;
+            double numerator = n * sumProduct - sum1 * sum2;
+            double denom1 = n * sumSquares1 - sum1 * sum1;
+            double denom2 = n * sumSquares2 - sum2 * sum2;
+            double denominator = denom1 * denom2;
 
-            T denom1 = NumOps.Subtract(
-                NumOps.Multiply(n, sumSquares1),
-                NumOps.Multiply(sum1, sum1)
-            );
-
-            T denom2 = NumOps.Subtract(
-                NumOps.Multiply(n, sumSquares2),
-                NumOps.Multiply(sum2, sum2)
-            );
-
-            T denominator = NumOps.Multiply(denom1, denom2);
-
-            // Avoid division by zero
-            if (NumOps.Equals(denominator, NumOps.Zero))
+            if (denominator == 0)
             {
                 return NumOps.Zero;
             }
 
-            T correlation = NumOps.Divide(numerator, NumOps.Sqrt(denominator));
+            T correlation = NumOps.FromDouble(numerator / Math.Sqrt(denominator));
 
             return await Task.FromResult(correlation);
+        }
+
+        /// <summary>sum(x), sum(y), sum(xy), sum(x^2) and sum(y^2) as doubles.</summary>
+        private (double SumX, double SumY, double SumXY, double SumXX, double SumYY) CorrelationSums<TValue>(
+            Tensor<TValue> x, Tensor<TValue> y)
+        {
+            var ops = MathHelper.GetNumericOperations<TValue>();
+            return (
+                ops.ToDouble(Engine.TensorSum(x)),
+                ops.ToDouble(Engine.TensorSum(y)),
+                ops.ToDouble(Engine.TensorSum(Engine.TensorMultiply(x, y))),
+                ops.ToDouble(Engine.TensorSumOfSquares(x)),
+                ops.ToDouble(Engine.TensorSumOfSquares(y)));
         }
 
         /// <summary>

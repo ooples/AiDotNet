@@ -26,13 +26,13 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _uStatistics;
+    private Vector<T>? _uStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? UStatistics => _uStatistics;
+    public Vector<T>? UStatistics => _uStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -63,50 +63,20 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        var class0 = new List<int>();
-        var class1 = new List<int>();
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
+        // class 0 is target < 0.5
+        var class0 = FilterStatisticTensorOps.BelowMask(target, 0.5, out int n0);
+        int n1 = data.Rows - n0;
 
-        int n0 = class0.Count;
-        int n1 = class1.Count;
+        // U statistic for class 0 from tie-averaged ranks, normalised to [0, 1] as |U0 - n0 n1 / 2| / (n0 n1 / 2) in
+        // double before the cast to T (n0 n1 overflows int at 50000 rows per class, and U0 overflows Half at a few
+        // hundred); every feature scores 0 when a class is empty
+        _uStatistics = FeatureScoringTensorOps.RankSumSeparation(
+            FilterStatisticTensorOps.AsTensor(data), class0, n0, n1).ToVector();
 
-        _uStatistics = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Rank all values
-            var ranked = Enumerable.Range(0, n)
-                .Select(i => (Index: i, Value: NumOps.ToDouble(data[i, j])))
-                .OrderBy(x => x.Value)
-                .Select((x, rank) => (x.Index, Rank: rank + 1))
-                .ToDictionary(x => x.Index, x => x.Rank);
-
-            // Sum of ranks for class 0
-            double r0 = class0.Sum(i => ranked[i]);
-
-            // U statistic for class 0
-            double u0 = r0 - ((double)n0 * (n0 + 1)) / 2.0;
-
-            // Normalize U to [0, 1]
-            double maxU = (double)n0 * n1;
-            _uStatistics[j] = maxU > 0 ? Math.Abs(u0 - maxU / 2) / (maxU / 2) : 0;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _uStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            FilterStatisticTensorOps.AsTensor(_uStatistics), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -124,15 +94,7 @@ public class WilcoxonSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("WilcoxonSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

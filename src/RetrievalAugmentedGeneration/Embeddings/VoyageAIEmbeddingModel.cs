@@ -107,14 +107,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Voyage AI API returned an empty or invalid response.");
         }
 
-        var embedding = result.Data[0].Embedding;
-        var values = new T[embedding.Length];
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            values[i] = NumOps.FromDouble(embedding[i]);
-        }
-
-        return new Vector<T>(values);
+        return FromApiValues(result.Data[0]?.Embedding, _dimension, "Voyage AI");
     }
 
     /// <summary>
@@ -144,17 +137,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Voyage AI API returned an empty or mismatched response.");
         }
 
-        var matrix = new Matrix<T>(texts.Count, _dimension);
-        for (int i = 0; i < result.Data.Count; i++)
-        {
-            var embedding = result.Data[i].Embedding;
-            for (int j = 0; j < embedding.Length; j++)
-            {
-                matrix[i, j] = NumOps.FromDouble(embedding[j]);
-            }
-        }
-
-        return matrix;
+        return FromApiRows(result.Data.Select(d => d?.Embedding).ToList(), texts.Count, _dimension, "Voyage AI");
     }
 
     private async Task<VoyageEmbeddingResponse?> PostEmbeddingsAsync(IEnumerable<string> input)

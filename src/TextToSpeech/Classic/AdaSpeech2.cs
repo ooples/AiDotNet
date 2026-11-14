@@ -31,7 +31,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <item><b>Mel encoder aligning</b> (§2.2): the source model is frozen and only the mel encoder trains, with an L2 loss
 /// between its output and the phoneme encoder's hidden sequence expanded by the phoneme durations.</item>
 /// <item><b>Untranscribed speech adaptation</b> (§2.3): speech is reconstructed through the mel encoder and the mel
-/// decoder (<see cref="TrainUntranscribed(Tensor{T}, int, double[], double[])"/>), adapting only the parameters of the
+/// decoder (<see cref="TrainUntranscribed(Tensor{T}, int, Tensor{T}, Tensor{T})"/>), adapting only the parameters of the
 /// conditional layer normalizations (with the speaker embedding, as AdaSpeech adapts).</item>
 /// <item><b>Inference</b> (§2.4): the unadapted phoneme encoder with the adapted decoder — the ordinary synthesis path.</item>
 /// </list>
@@ -180,7 +180,7 @@ public partial class AdaSpeech2<T> : AdaSpeech<T>
     /// <param name="pitch">F0 per frame (Hz, 0 unvoiced); required when the model predicts pitch.</param>
     /// <param name="energy">Energy per frame; required when the model predicts energy.</param>
     /// <returns>The reconstruction loss of the step.</returns>
-    public T TrainUntranscribed(Tensor<T> mel, int speakerId, double[]? pitch = null, double[]? energy = null)
+    public T TrainUntranscribed(Tensor<T> mel, int speakerId, Tensor<T>? pitch = null, Tensor<T>? energy = null)
     {
         Guard.NotNull(mel);
         if (IsOnnxMode)
@@ -201,7 +201,7 @@ public partial class AdaSpeech2<T> : AdaSpeech<T>
     }
 
     /// <summary>The untranscribed reconstruction loss on <paramref name="mel"/>, without updating the model.</summary>
-    public T EvaluateUntranscribed(Tensor<T> mel, int speakerId, double[]? pitch = null, double[]? energy = null)
+    public T EvaluateUntranscribed(Tensor<T> mel, int speakerId, Tensor<T>? pitch = null, Tensor<T>? energy = null)
     {
         Guard.NotNull(mel);
         bool wasTraining = IsTrainingMode;
@@ -218,7 +218,7 @@ public partial class AdaSpeech2<T> : AdaSpeech<T>
     }
 
     private Func<Tensor<T>, Tensor<T>, Tensor<T>> ReconstructionObjective(
-        Tensor<T> mel, int speakerId, double[]? pitch, double[]? energy)
+        Tensor<T> mel, int speakerId, Tensor<T>? pitch, Tensor<T>? energy)
     {
         if (mel.Rank != 2 || mel.Shape[1] != AdaOptions.MelChannels)
             throw new ArgumentException(

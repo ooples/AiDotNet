@@ -38,12 +38,14 @@ internal static class ProjectorParameterTransfer<T>
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        var keep = ops.FromDouble(momentum);
+        var take = ops.FromDouble(1 - momentum);
         // Compute every source before writing: even aliased or reordered live tensors are safe.
         var updated = momentum == 0
             ? TensorCheckpoint<T>.Capture(from.Take(to.Count).ToArray())
             : to.Select((tensor, i) => engine.TensorAdd(
-                engine.TensorMultiplyScalar(tensor, ops.FromDouble(momentum)),
-                engine.TensorMultiplyScalar(from[i], ops.FromDouble(1 - momentum)))).ToArray();
+                engine.TensorMultiplyScalar(tensor, keep),
+                engine.TensorMultiplyScalar(from[i], take))).ToArray();
         TensorCheckpoint<T>.Restore(to, updated);
     }
 }

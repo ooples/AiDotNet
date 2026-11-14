@@ -25,12 +25,12 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 {
     private readonly double _vifThreshold;
 
-    private double[]? _vifScores;
+    private Vector<T>? _vifScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double VIFThreshold => _vifThreshold;
-    public double[]? VIFScores => _vifScores;
+    public Vector<T>? VIFScores => _vifScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -54,25 +54,21 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
 
-        // Standardize features
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-            for (int i = 0; i < n; i++) X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
+        // Standardize features (sample std + 1e-10)
+        var x = Tensor<T>.FromMatrix(data);
+        var centered = FilterStatisticTensorOps.CenterColumns(x);
+        var stds = engine.TensorAddScalar(
+            engine.TensorSqrt(engine.TensorDivideScalar(
+                SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))),
+            NumOps.FromDouble(1e-10));
+        var z = engine.TensorDivide(centered, engine.Reshape(stds, new[] { 1, p }));
 
-        _vifScores = new double[p];
+        var vifScores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
         var selected = new List<int>(Enumerable.Range(0, p));
+        T ridge = NumOps.FromDouble(1e-6);
+        T threshold = NumOps.FromDouble(_vifThreshold);
 
         // Iteratively remove features with highest VIF above threshold
         bool changed = true;
@@ -80,128 +76,58 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         {
             changed = false;
 
-            // Compute VIF for each remaining feature
-            int maxVifIdx = -1;
-            double maxVif = 0;
-
-            foreach (int j in selected)
-            {
-                double vif = ComputeVIF(X, selected, j, n);
-                _vifScores[j] = vif;
-
-                if (vif > maxVif)
-                {
-                    maxVif = vif;
-                    maxVifIdx = j;
-                }
-            }
+            // VIF of every remaining feature, regressed (ridge 1e-6, no intercept) on the others
+            var columns = new Tensor<int>(selected.ToArray(), new[] { selected.Count });
+            var vif = ComputeVIF(engine.TensorIndexSelect(z, columns, 1), ridge);
+            vifScores = engine.TensorIndexCopy(vifScores, 0, columns, vif);
 
             // Remove feature with highest VIF if above threshold
-            if (maxVif > _vifThreshold && maxVifIdx >= 0)
+            int maxPosition = PreprocessingTensorOps.FirstArgMax(vif);
+            if (PreprocessingTensorOps.IsAbove(engine.TensorMaxValue(vif), threshold))
             {
-                selected.Remove(maxVifIdx);
+                selected.RemoveAt(maxPosition);
                 changed = true;
             }
         }
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _vifScores = vifScores.ToVector();
+        _selectedIndices = selected.OrderBy(index => index).ToArray();
         IsFitted = true;
     }
 
-    private double ComputeVIF(double[,] X, List<int> features, int targetFeature, int n)
+    /// <summary>
+    /// Variance inflation factor of each column of <paramref name="z"/> ([n, k], k &gt;= 2): 1 / (1 - R^2) for the
+    /// ridge regression (penalty <paramref name="ridge"/> on the predictors, no intercept) of the column on the
+    /// other k - 1, with R^2 clamped to [0, 0.9999].
+    /// </summary>
+    /// <remarks>
+    /// With H = (Z'Z + ridge I)^-1, block inversion gives the ridge coefficients of column j as
+    /// beta = -H[-j, j] / H[j, j] and its residual sum of squares as
+    /// 1 / H[j, j] - ridge - ridge * |beta|^2, so one k x k inverse yields every column's fit.
+    /// </remarks>
+    private Tensor<T> ComputeVIF(Tensor<T> z, T ridge)
     {
-        // Regress targetFeature on all other features
-        var predictors = features.Where(f => f != targetFeature).ToList();
-        if (predictors.Count == 0)
-            return 1.0;
+        var engine = Engine;
+        int k = z.Shape[1];
+        var gram = engine.TensorAdd(
+            engine.TensorMatMul(engine.TensorTranspose(z), z), engine.TensorMultiplyScalar(engine.TensorEye<T>(k), ridge));
+        var inverse = PreprocessingTensorOps.Inverse(gram);
+        var diagonal = engine.TensorDiagonal(inverse);
+        var diagonalSquared = engine.TensorMultiply(diagonal, diagonal);
+        var offDiagonalSquared = engine.TensorSubtract(
+            engine.ReduceSum(engine.TensorMultiply(inverse, inverse), new[] { 0 }, false), diagonalSquared);
+        var betaNormSquared = engine.TensorDivide(offDiagonalSquared, diagonalSquared);
+        var ssRes = engine.TensorSubtract(
+            engine.TensorSubtractScalar(engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { k }, NumOps.One), diagonal), ridge),
+            engine.TensorMultiplyScalar(betaNormSquared, ridge));
+        var ssTot = SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(z));
 
-        // Get target column
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = X[i, targetFeature];
-
-        // Compute R-squared using simple linear regression approximation
-        int k = predictors.Count;
-        var XtX = new double[k, k];
-        var Xty = new double[k];
-
-        for (int j1 = 0; j1 < k; j1++)
-        {
-            int f1 = predictors[j1];
-            for (int j2 = 0; j2 < k; j2++)
-            {
-                int f2 = predictors[j2];
-                for (int i = 0; i < n; i++)
-                    XtX[j1, j2] += X[i, f1] * X[i, f2];
-            }
-            for (int i = 0; i < n; i++)
-                Xty[j1] += X[i, f1] * y[i];
-        }
-
-        // Regularization
-        for (int j = 0; j < k; j++)
-            XtX[j, j] += 1e-6;
-
-        var beta = SolveSystem(XtX, Xty, k);
-
-        // Compute R-squared
-        double ssTot = 0, ssRes = 0;
-        double yMean = y.Average();
-        for (int i = 0; i < n; i++)
-        {
-            double pred = 0;
-            for (int j = 0; j < k; j++)
-                pred += beta[j] * X[i, predictors[j]];
-            ssRes += (y[i] - pred) * (y[i] - pred);
-            ssTot += (y[i] - yMean) * (y[i] - yMean);
-        }
-
-        double rSquared = ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
-        rSquared = Math.Max(0, Math.Min(rSquared, 0.9999));
-
-        return 1.0 / (1 - rSquared);
-    }
-
-    private double[] SolveSystem(double[,] A, double[] b, int n)
-    {
-        var aug = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                aug[i, j] = A[i, j];
-            aug[i, n] = b[i];
-        }
-
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= n; j++)
-                    aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-                x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
+        var rSquared = SelectorTensorOps.ZeroUnless(
+            engine.TensorGreaterThan(ssTot, NumOps.FromDouble(1e-10)),
+            engine.TensorSubtract(PreprocessingTensorOps.Filled(new[] { k }, NumOps.One), engine.TensorDivide(ssRes, ssTot)));
+        rSquared = engine.TensorClamp(rSquared, NumOps.Zero, NumOps.FromDouble(0.9999));
+        return engine.TensorDivide(PreprocessingTensorOps.Filled(new[] { k }, NumOps.One),
+            PreprocessingTensorOps.OneMinus(rSquared));
     }
 
     /// <inheritdoc />
@@ -210,15 +136,7 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("VarianceInflationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

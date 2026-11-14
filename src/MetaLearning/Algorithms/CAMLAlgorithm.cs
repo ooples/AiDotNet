@@ -180,26 +180,11 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             if (supportFeatures != null && adaptedPrototypes != null)
             {
-                double sumRatio = 0;
-                int count = 0;
-                for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
+                var ratio = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, adaptedPrototypes, 0.5, 2.0, 1e-10);
+                if (ratio is not null)
                 {
-                    double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                    double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
-                    if (Math.Abs(rawVal) > 1e-10)
-                    {
-                        sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                        count++;
-                    }
-                }
-                if (count > 0)
-                {
-                    double avgRatio = sumRatio / count;
                     var currentParams = ParamModel.GetParameters();
-                    var modulatedParams = new Vector<T>(currentParams.Length);
-                    for (int i = 0; i < currentParams.Length; i++)
-                        modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ParamModel.SetParameters(modulatedParams);
+                    ParamModel.SetParameters(ParameterModulation.Apply(Engine, currentParams, ratio));
                 }
             }
 
@@ -221,39 +206,24 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         if (supportFeatures == null || supportFeatures.Length == 0)
             return supportFeatures;
 
-        int ctxDim = Math.Max(_camlOptions.ContextDimension, 1);
-        var adapted = new Vector<T>(supportFeatures.Length);
+        int n = supportFeatures.Length;
 
         // Aggregate support features into a context vector (mean pooling)
-        T contextSum = NumOps.Zero;
-        for (int i = 0; i < supportFeatures.Length; i++)
-            contextSum = NumOps.Add(contextSum, supportFeatures[i]);
-        double contextMean = NumOps.ToDouble(contextSum) / Math.Max(supportFeatures.Length, 1);
+        T contextMean = Engine.Mean(supportFeatures);
 
-        // Apply context-conditioned projection
-        int paramIdx = 0;
-        for (int i = 0; i < supportFeatures.Length; i++)
-        {
-            double featureVal = NumOps.ToDouble(supportFeatures[i]);
+        // Each feature reads four context parameters in order - gate weight, gate bias, projection weight,
+        // projection bias - and once the parameters run out every read takes its default (0.01, 0, 0.01, 0).
+        T small = NumOps.FromDouble(0.01);
+        var table = ParameterModulation.DefaultedTable(
+            Engine, _contextParams, n, new Vector<T>(new[] { small, NumOps.Zero, small, NumOps.Zero }));
+        Vector<T> Column(int column) => ParameterModulation.Column(Engine, table, column);
 
-            // Context gate: sigmoid(w * context + b)
-            double wCtx = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0.01;
-            double bCtx = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0;
-            double gate = 1.0 / (1.0 + Math.Exp(-(wCtx * contextMean + bCtx)));
+        // Context gate: sigmoid(w * context + b)
+        var gate = Engine.Sigmoid(Engine.Add(Engine.Multiply(Column(0), contextMean), Column(1)));
 
-            // Context-adapted feature: gate * projection(feature) + (1-gate) * feature
-            double wProj = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0.01;
-            double bProj = paramIdx < _contextParams.Length
-                ? NumOps.ToDouble(_contextParams[paramIdx++ % _contextParams.Length]) : 0;
-            double projected = featureVal * wProj + bProj;
-
-            adapted[i] = NumOps.FromDouble(gate * projected + (1.0 - gate) * featureVal);
-        }
-
-        return adapted;
+        // Context-adapted feature: gate * projection(feature) + (1-gate) * feature = f + gate * (projection - f)
+        var projected = Engine.Add(Engine.Multiply(supportFeatures, Column(2)), Column(3));
+        return Engine.Add(supportFeatures, Engine.Multiply(gate, Engine.Subtract(projected, supportFeatures)));
     }
 
     /// <inheritdoc/>
@@ -269,23 +239,10 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var adaptedPrototypes = ApplyContextModule(supportFeatures);
 
         // Compute modulation factors from adapted vs raw prototypes
-        double[]? modulationFactors = null;
+        Vector<T>? modulationFactors = null;
         if (supportFeatures != null && adaptedPrototypes != null)
         {
-            double sumRatio = 0;
-            int count = 0;
-            for (int i = 0; i < Math.Min(supportFeatures.Length, adaptedPrototypes.Length); i++)
-            {
-                double rawVal = NumOps.ToDouble(supportFeatures[i]);
-                double adaptedVal = NumOps.ToDouble(adaptedPrototypes[i]);
-                if (Math.Abs(rawVal) > 1e-10)
-                {
-                    sumRatio += Math.Max(0.5, Math.Min(2.0, adaptedVal / rawVal));
-                    count++;
-                }
-            }
-            if (count > 0)
-                modulationFactors = [sumRatio / count];
+            modulationFactors = ParameterModulation.MeanClampedRatio(Engine, supportFeatures, adaptedPrototypes, 0.5, 2.0, 1e-10);
         }
 
         return new CAMLModel<T, TInput, TOutput>(MetaModel, currentParams, adaptedPrototypes, modulationFactors);
@@ -302,23 +259,24 @@ public partial class CAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 /// </remarks>
 internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>, IAdaptedMetaModel<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IFullModel<T, TInput, TOutput> _model;
     private readonly Vector<T> _backboneParams;
     private readonly Vector<T>? _adaptedPrototypes;
-    private readonly double[]? _modulationFactors;
+    // Not readonly: a readonly Vector<T> field is not persisted by the generated model state, and these
+    // factors belong in the adapted model's checkpoint as the double[] they replace did.
+    private Vector<T>? _modulationFactors;
 
     /// <inheritdoc/>
     public Vector<T>? AdaptedSupportFeatures => _adaptedPrototypes;
 
     /// <inheritdoc/>
-    public double[]? ParameterModulationFactors => _modulationFactors;
+    public Vector<T>? ParameterModulationFactors => _modulationFactors;
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     public CAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> backboneParams,
-        Vector<T>? adaptedPrototypes, double[]? modulationFactors)
+        Vector<T>? adaptedPrototypes, Vector<T>? modulationFactors)
     {
         // Predict pushes the adapted parameters into this model, so it is a copy: holding the meta-learner's
         // MetaModel would let every prediction overwrite the meta-model.
@@ -333,10 +291,7 @@ internal class CAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMeta
     {
         if (_modulationFactors != null && _modulationFactors.Length > 0)
         {
-            var modulated = new Vector<T>(_backboneParams.Length);
-            for (int i = 0; i < _backboneParams.Length; i++)
-                modulated[i] = NumOps.Multiply(_backboneParams[i],
-                    NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
+            var modulated = ParameterModulation.Apply(AiDotNetEngine.Current, _backboneParams, _modulationFactors);
             InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else

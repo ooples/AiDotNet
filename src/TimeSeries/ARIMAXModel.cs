@@ -136,6 +136,9 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// 
     /// If all other factors were zero, the prediction would equal this intercept value.
     /// </remarks>
+    // Declared so the parameter surface carries it: the layout is [AR..., MA..., exogenous..., intercept],
+    // the declaration order of the fitted fields, and both the packed copy and ApplyParameters use it.
+    [AiDotNet.Attributes.FittedParameter]
     private T _intercept;
 
     /// <summary>
@@ -185,19 +188,17 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> xNew)
     {
-        Vector<T> predictions = new Vector<T>(xNew.Rows);
-
-        for (int t = 0; t < xNew.Rows; t++)
+        // prediction[t] = intercept + Σ_i x[t, i] · β_i over the columns that have a coefficient
+        int k = Math.Min(xNew.Columns, _exogenousCoefficients.Length);
+        Vector<T> predictions = Engine.Fill(xNew.Rows, _intercept);
+        if (k > 0 && xNew.Rows > 0)
         {
-            // Base prediction: intercept + exogenous contribution
-            T prediction = _intercept;
-            for (int i = 0; i < Math.Min(xNew.Columns, _exogenousCoefficients.Length); i++)
-                prediction = NumOps.Add(prediction, NumOps.Multiply(xNew[t, i], _exogenousCoefficients[i]));
-
-            predictions[t] = prediction;
+            var exogenous = Engine.MatrixVectorMultiply(
+                xNew.GetSubMatrix(0, 0, xNew.Rows, k), _exogenousCoefficients.GetSubVector(0, k));
+            predictions = Engine.Add(predictions, exogenous);
         }
 
-        // Reverse differencing if necessary
+        // Inverse difference if necessary
         if (_arimaxOptions.DifferenceOrder > 0)
         {
             predictions = InverseDifferenceTimeSeries(predictions, _differenced);
@@ -232,16 +233,11 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
         Vector<T> diffY = y;
         for (int d = 0; d < order; d++)
         {
-            Vector<T> temp = new Vector<T>(diffY.Length - 1);
-            for (int i = 0; i < temp.Length; i++)
-            {
-                temp[i] = NumOps.Subtract(diffY[i + 1], diffY[i]);
-            }
-            _differenced = new Vector<T>(order);
-            for (int i = 0; i < order; i++)
-            {
-                _differenced[i] = diffY[i];
-            }
+            Vector<T> temp = TimeSeriesEngineOps<T>.Difference(diffY, 1);
+
+            // Keep the first `order` values of the series at this level for inverse differencing
+            _differenced = diffY.GetSubVector(0, order);
+
             diffY = temp;
         }
 
@@ -271,16 +267,12 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     private Vector<T> InverseDifferenceTimeSeries(Vector<T> diffY, Vector<T> original)
     {
+        // Each level prepends its start value and continues with the running sum of the differences.
         Vector<T> y = diffY;
         for (int d = _arimaxOptions.DifferenceOrder - 1; d >= 0; d--)
         {
-            Vector<T> temp = new Vector<T>(y.Length + 1);
-            temp[0] = original[d];
-            for (int i = 1; i < temp.Length; i++)
-            {
-                temp[i] = NumOps.Add(temp[i - 1], y[i - 1]);
-            }
-            y = temp;
+            var start = original.GetSubVector(d, 1);
+            y = Vector<T>.Concatenate(start, TimeSeriesEngineOps<T>.Integrate(y, start));
         }
 
         return y;
@@ -307,60 +299,38 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     private void FitARIMAXModel(Matrix<T> x, Vector<T> y)
     {
-        // Validate inputs
         if (x == null)
             throw new ArgumentNullException(nameof(x), "Exogenous variables matrix cannot be null");
-
         if (y == null)
             throw new ArgumentNullException(nameof(y), "Time series vector cannot be null");
-
         if (x.Rows != y.Length)
             throw new ArgumentException($"Number of rows in exogenous variables matrix ({x.Rows}) must match the length of the time series vector ({y.Length})");
-
         if (x.Columns != _arimaxOptions.ExogenousVariables)
             throw new ArgumentException($"Number of columns in exogenous variables matrix ({x.Columns}) must match the number of exogenous variables ({_arimaxOptions.ExogenousVariables})");
 
-        // Fit exogenous variables with intercept: [1 | X] * [intercept; coefficients] = y
         int n = x.Rows;
         int k = x.Columns;
-        var xWithInt = new Matrix<T>(n, k + 1);
-        for (int i = 0; i < n; i++)
-        {
-            xWithInt[i, 0] = NumOps.One; // intercept column
-            for (int j = 0; j < k; j++)
-                xWithInt[i, j + 1] = x[i, j];
-        }
-        var xT = xWithInt.Transpose();
-        var xTx = xT * xWithInt;
-        var xTy = xT * y;
 
-        T regularizationFactor = NumOps.FromDouble(1e-6);
-        for (int i = 0; i < xTx.Rows; i++)
-            xTx[i, i] = NumOps.Add(xTx[i, i], regularizationFactor);
+        // Augment with an intercept column of ones: [1 | x]
+        var ones = Engine.TensorOnesLike(new Tensor<T>(new[] { n, 1 }));
+        var xWithInt = Engine.TensorConcatenate(new[] { ones, Tensor<T>.FromMatrix(x) }, 1).ToMatrix();
+
+        // OLS with a small ridge on the diagonal: (XᵀX + 1e-6·I) β = Xᵀy
+        var xT = xWithInt.Transpose();
+        var xTx = Engine.MatrixAdd(xT * xWithInt,
+            Engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(k + 1), NumOps.FromDouble(1e-6)));
+        var xTy = xT * y;
 
         var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaxOptions.DecompositionType);
         _intercept = solution[0]; // intercept from OLS
         _exogenousCoefficients = solution.Slice(1, k);
 
-        // Extract residuals
+        // Residuals with non-finite entries zeroed, then fit the ARMA part on them
         Vector<T> fitted = xWithInt * solution;
         Vector<T> residuals = (Vector<T>)Engine.Subtract(y, fitted);
+        residuals = Engine.TensorNanToNum(Tensor<T>.FromVector(residuals), 0.0, 0.0, 0.0).ToVector();
 
-        // Replace any invalid values in residuals with zeros
-        // This is more efficient than checking each value with try-catch
-        for (int i = 0; i < residuals.Length; i++)
-        {
-            double val = Convert.ToDouble(residuals[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                residuals[i] = NumOps.Zero;
-            }
-        }
-
-        // Fit ARMA model to residuals
         FitARMAModel(residuals);
-
-        // Intercept was already computed in the OLS fit above (with intercept column).
     }
 
     /// <summary>
@@ -387,29 +357,17 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
         int p = _arimaxOptions.AROrder;
         int q = _arimaxOptions.MAOrder;
 
-        // Calculate autocorrelations
-        T[] autocorrelations = CalculateAutocorrelations(residuals, Math.Max(p, q));
+        // Yule-Walker: R φ = r with the Toeplitz matrix R[i, j] = ρ(|i - j|) and r[i] = ρ(i + 1)
+        Vector<T> autocorrelations = CalculateAutocorrelations(residuals, Math.Max(p, q));
+        Matrix<T> R = TimeSeriesEngineOps<T>.Toeplitz(autocorrelations, p);
+        Vector<T> r = autocorrelations.GetSubVector(1, p);
 
-        // Update AR coefficients using Yule-Walker equations
-        Matrix<T> R = new Matrix<T>(p, p);
-        Vector<T> r = new Vector<T>(p);
-
-        for (int i = 0; i < p; i++)
-        {
-            r[i] = autocorrelations[i + 1];
-            for (int j = 0; j < p; j++)
-            {
-                R[i, j] = autocorrelations[Math.Abs(i - j)];
-            }
-        }
-
-        // Solve Yule-Walker equations
         _arCoefficients = MatrixSolutionHelper.SolveLinearSystem(R, r, _arimaxOptions.DecompositionType);
 
-        // Update MA coefficients using a simple method
-        for (int i = 0; i < q; i++)
+        // MA starting values: θ_i = 0.5 · ρ(i + 1), written into the existing coefficient vector
+        if (q > 0)
         {
-            _maCoefficients[i] = NumOps.Multiply(NumOps.FromDouble(0.5), autocorrelations[i + 1]);
+            Engine.Multiply(autocorrelations.GetSubVector(1, q), NumOps.FromDouble(0.5)).CopyTo(_maCoefficients.AsWritableSpan());
         }
     }
 
@@ -437,28 +395,9 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// 
     /// These autocorrelations are used to determine the AR and MA coefficients in the model.
     /// </remarks>
-    private T[] CalculateAutocorrelations(Vector<T> y, int maxLag)
+    private Vector<T> CalculateAutocorrelations(Vector<T> y, int maxLag)
     {
-        T[] autocorrelations = new T[maxLag + 1];
-        T mean = StatisticsHelper<T>.CalculateMean(y);
-        T variance = StatisticsHelper<T>.CalculateVariance(y);
-
-        for (int lag = 0; lag <= maxLag; lag++)
-        {
-            T sum = NumOps.Zero;
-            int n = y.Length - lag;
-
-            for (int t = 0; t < n; t++)
-            {
-                T diff1 = NumOps.Subtract(y[t], mean);
-                T diff2 = NumOps.Subtract(y[t + lag], mean);
-                sum = NumOps.Add(sum, NumOps.Multiply(diff1, diff2));
-            }
-
-            autocorrelations[lag] = NumOps.Divide(sum, NumOps.Multiply(NumOps.FromDouble(n), variance));
-        }
-
-        return autocorrelations;
+        return TimeSeriesEngineOps<T>.Autocorrelations(y, maxLag);
     }
 
     /// <summary>
@@ -477,17 +416,9 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     private void UpdateModelParameters()
     {
-        // Pack all coefficients into the base class ModelParameters vector
-        int totalParams = 1 + _exogenousCoefficients.Length + _arCoefficients.Length + _maCoefficients.Length;
-        ModelParameters = new Vector<T>(totalParams);
-        int idx = 0;
-        ModelParameters[idx++] = _intercept;
-        for (int i = 0; i < _exogenousCoefficients.Length; i++)
-            ModelParameters[idx++] = _exogenousCoefficients[i];
-        for (int i = 0; i < _arCoefficients.Length; i++)
-            ModelParameters[idx++] = _arCoefficients[i];
-        for (int i = 0; i < _maCoefficients.Length; i++)
-            ModelParameters[idx++] = _maCoefficients[i];
+        // [AR..., MA..., exogenous..., intercept]: the parameter-surface order ApplyParameters reads back
+        ModelParameters = Vector<T>.Concatenate(
+            _arCoefficients, _maCoefficients, _exogenousCoefficients, new Vector<T>(new[] { _intercept }));
     }
 
     /// <summary>
@@ -617,33 +548,20 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     {
         int index = 0;
 
-        // Get the number of base parameters (if any)
+        // Apply base parameters first
         int baseParamCount = 0;
         base.ApplyParameters(parameters);
-
-        // Skip base parameters
         index += baseParamCount;
 
-        // Extract the intercept
-        _intercept = parameters[index++];
-
-        // Extract the AR coefficients
-        for (int i = 0; i < _arCoefficients.Length; i++)
-        {
-            _arCoefficients[i] = parameters[index++];
-        }
-
-        // Extract the MA coefficients
-        for (int i = 0; i < _maCoefficients.Length; i++)
-        {
-            _maCoefficients[i] = parameters[index++];
-        }
-
-        // Extract the exogenous coefficients
-        for (int i = 0; i < _exogenousCoefficients.Length; i++)
-        {
-            _exogenousCoefficients[i] = parameters[index++];
-        }
+        // Apply ARIMAX-specific parameters into the existing coefficient vectors, in the
+        // [AR..., MA..., exogenous..., intercept] order GetParameters and UpdateModelParameters use
+        parameters.GetSubVector(index, _arCoefficients.Length).CopyTo(_arCoefficients.AsWritableSpan());
+        index += _arCoefficients.Length;
+        parameters.GetSubVector(index, _maCoefficients.Length).CopyTo(_maCoefficients.AsWritableSpan());
+        index += _maCoefficients.Length;
+        parameters.GetSubVector(index, _exogenousCoefficients.Length).CopyTo(_exogenousCoefficients.AsWritableSpan());
+        index += _exogenousCoefficients.Length;
+        _intercept = parameters[index];
     }
 
     /// <summary>
@@ -704,22 +622,9 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
-        // Select features with coefficients significantly different from zero
-        List<int> activeIndices = new List<int>();
-
-        // Define a threshold for "active" features
-        T threshold = NumOps.FromDouble(0.01);
-
-        // Check exogenous coefficients
-        for (int i = 0; i < _exogenousCoefficients.Length; i++)
-        {
-            if (NumOps.GreaterThan(NumOps.Abs(_exogenousCoefficients[i]), threshold))
-            {
-                activeIndices.Add(i);
-            }
-        }
-
-        return activeIndices;
+        // Features whose coefficient magnitude exceeds 0.01
+        var active = TimeSeriesEngineOps<T>.GreaterThan(Engine.Abs(_exogenousCoefficients), NumOps.FromDouble(0.01));
+        return Enumerable.Range(0, active.Length).Where(i => active[i]).ToList();
     }
 
     /// <summary>
@@ -761,32 +666,13 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     public Tensor<T> Predict(Tensor<T> input)
     {
-        // Convert tensor to matrix
         if (input.Rank != 2)
         {
             throw new ArgumentException("Input tensor must be 2-dimensional (equivalent to a matrix)");
         }
 
-        var matrix = new Matrix<T>(input.Shape[0], input.Shape[1]);
-        for (int i = 0; i < input.Shape[0]; i++)
-        {
-            for (int j = 0; j < input.Shape[1]; j++)
-            {
-                matrix[i, j] = input[i, j];
-            }
-        }
-
-        // Use the matrix-based predict method
-        var predictions = Predict(matrix);
-
-        // Convert predictions to tensor
-        var resultTensor = Tensor<T>.FromVector(predictions);
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            resultTensor[i] = predictions[i];
-        }
-
-        return resultTensor;
+        var predictions = Predict(input.ToMatrix());
+        return Tensor<T>.FromVector(predictions);
     }
 
     /// <summary>
@@ -802,35 +688,19 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// </remarks>
     public void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Convert input tensor to matrix
         if (input.Rank != 2)
         {
             throw new ArgumentException("Input tensor must be 2-dimensional (equivalent to a matrix)");
         }
 
-        var matrix = new Matrix<T>(input.Shape[0], input.Shape[1]);
-        for (int i = 0; i < input.Shape[0]; i++)
-        {
-            for (int j = 0; j < input.Shape[1]; j++)
-            {
-                matrix[i, j] = input[i, j];
-            }
-        }
+        var matrix = input.ToMatrix();
 
-        // Convert output tensor to vector
         if (expectedOutput.Rank != 1)
         {
             throw new ArgumentException("Expected output tensor must be 1-dimensional (equivalent to a vector)");
         }
 
-        var vector = new Vector<T>(expectedOutput.Shape[0]);
-        for (int i = 0; i < expectedOutput.Shape[0]; i++)
-        {
-            vector[i] = expectedOutput[i];
-        }
-
-        // Use the matrix-based train method
-        Train(matrix, vector);
+        Train(matrix, expectedOutput.ToVector());
     }
 
     /// <summary>
@@ -940,11 +810,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
         }
 
         // Create a matrix with a single row
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
+        Matrix<T> singleRowMatrix = Matrix<T>.CreateFromVector(input);
 
         // Use the existing Predict method
         Vector<T> predictions = Predict(singleRowMatrix);

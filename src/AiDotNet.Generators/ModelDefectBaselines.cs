@@ -346,6 +346,5 @@ internal static class ModelDefectBaselines
             "AiDotNet.PointCloud.Models.PointNet<T>._globalFeatures",
             "AiDotNet.PointCloud.Models.PointNetPlusPlus<T>._globalFeatures",
             "AiDotNet.PointCloud.Models.SetAbstractionLayer<T>._lastCentroidPositions",
-            "AiDotNet.Video.Matting.RVM<T>._hiddenState",
         };
 }

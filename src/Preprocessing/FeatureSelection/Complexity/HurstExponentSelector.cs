@@ -27,14 +27,14 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferTrending;
 
-    private double[]? _hurstValues;
+    private Vector<T>? _hurstValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferTrending => _preferTrending;
-    public double[]? HurstValues => _hurstValues;
+    public Vector<T>? HurstValues => _hurstValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -63,123 +63,87 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (n < 20)
             throw new ArgumentException("Need at least 20 samples for Hurst exponent estimation.");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _hurstValues = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            _hurstValues[j] = ComputeHurstRS(col);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        // Half and BFloat16 run in float and the exponents are cast back once: squared deviations pass Half's 65504
+        // once a value is 256 from its subseries mean, giving an infinite standard deviation and R/S = 0
+        var hurst = PreprocessingTensorOps.IsNarrowFloat<T>()
+            ? ComputeHurstRS(X.Cast<float>(), n, p).Cast<T>()
+            : ComputeHurstRS(X, n, p);
+        _hurstValues = hurst.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
 
         if (_preferTrending)
         {
             // Prefer features with H > 0.5 (trending/persistent)
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _hurstValues[j])
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hurst, numToSelect);
         }
         else
         {
             // Prefer features with H furthest from 0.5 (strong memory either way)
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => Math.Abs(_hurstValues[j] - 0.5))
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+                engine.TensorAbs(engine.TensorSubtractScalar(hurst, NumOps.FromDouble(0.5))), numToSelect);
         }
 
         IsFitted = true;
     }
 
-    private double ComputeHurstRS(double[] data)
+    private static Tensor<TC> ComputeHurstRS<TC>(Tensor<TC> X, int n, int p)
     {
-        int n = data.Length;
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
 
-        // Use rescaled range (R/S) method
+        // Use rescaled range (R/S) method, for every feature at once
         var lagSizes = new List<int>();
-        var rsValues = new List<double>();
+        var rsValues = new List<Tensor<TC>>();
+        var validValues = new List<Tensor<TC>>();
+        TC stdFloor = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        TC zero = ops.Zero;
 
         // Choose lag sizes from 10 to n/2
         for (int lag = 10; lag <= n / 2; lag = (int)(lag * 1.5))
         {
-            var rsForLag = new List<double>();
-
-            // Divide series into subseries
+            // Divide series into subseries: [numSubseries, lag, p]
             int numSubseries = n / lag;
-            for (int i = 0; i < numSubseries; i++)
-            {
-                int start = i * lag;
-                var subseries = new double[lag];
-                for (int k = 0; k < lag; k++)
-                    subseries[k] = data[start + k];
+            var subseries = engine.Reshape(
+                engine.TensorSlice(X, new[] { 0, 0 }, new[] { numSubseries * lag, p }), new[] { numSubseries, lag, p });
+            var deviations = engine.TensorSubtract(subseries, engine.TensorBroadcastTo(
+                engine.ReduceMean(subseries, new[] { 1 }, true), new[] { numSubseries, lag, p }));
 
-                double mean = subseries.Average();
+            // Range of the cumulative deviations
+            var cumDev = engine.TensorCumSum(deviations, 1);
+            var range = engine.TensorSubtract(
+                engine.ReduceMax(cumDev, new[] { 1 }, false),
+                engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(cumDev), new[] { 1 }, false)));
 
-                // Cumulative deviations
-                var cumDev = new double[lag];
-                double sum = 0;
-                for (int k = 0; k < lag; k++)
-                {
-                    sum += subseries[k] - mean;
-                    cumDev[k] = sum;
-                }
+            // Standard deviation (population)
+            var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(deviations), new[] { 1 }, false));
 
-                // Range
-                double range = cumDev.Max() - cumDev.Min();
-
-                // Standard deviation
-                double std = Math.Sqrt(subseries.Select(v => (v - mean) * (v - mean)).Average());
-
-                if (std > 1e-10)
-                    rsForLag.Add(range / std);
-            }
-
-            if (rsForLag.Count > 0)
-            {
-                lagSizes.Add(lag);
-                rsValues.Add(rsForLag.Average());
-            }
+            // Average R/S over the subseries whose standard deviation is above 1e-10
+            var usable = engine.TensorGreaterThan(std, stdFloor);
+            var rs = engine.TensorWhere(usable, engine.TensorDivide(range, std), new Tensor<TC>(new[] { numSubseries, p }));
+            // Counted in int: a Half sum of the 0/1 mask stops at 2048
+            var usableCount = engine.ReduceSum(usable.Cast<int>(), new[] { 0 }, false).Cast<TC>();
+            rsValues.Add(engine.TensorDivide(engine.ReduceSum(rs, new[] { 0 }, false), usableCount));
+            validValues.Add(engine.TensorGreaterThan(usableCount, zero));
+            lagSizes.Add(lag);
         }
 
-        if (lagSizes.Count < 2)
-            return 0.5; // Default to random walk
+        var randomWalk = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(0.5));
+        if (lagSizes.Count == 0)
+            return randomWalk;
 
-        // Linear regression of log(R/S) vs log(lag)
-        var logLag = lagSizes.Select(l => Math.Log(l)).ToArray();
-        var logRS = rsValues.Select(r => Math.Log(r)).ToArray();
+        // Linear regression of log(R/S) vs log(lag): H = slope, over each feature's usable lags
+        int count = lagSizes.Count;
+        var valid = engine.TensorStack(validValues.ToArray(), 0);
+        var logRS = engine.TensorWhere(valid, engine.TensorLog(engine.TensorStack(rsValues.ToArray(), 0)), new Tensor<TC>(new[] { count, p }));
+        var logLag = engine.TensorLog(new Tensor<int>(lagSizes.ToArray(), new[] { count }).Cast<TC>());
+        var slope = FeatureScoringTensorOps.MaskedSlope(logLag, logRS, valid, 1e-10, out var fitted);
 
-        // Simple linear regression: H = slope
-        double meanX = logLag.Average();
-        double meanY = logRS.Average();
-
-        double numerator = 0, denominator = 0;
-        for (int i = 0; i < logLag.Length; i++)
-        {
-            numerator += (logLag[i] - meanX) * (logRS[i] - meanY);
-            denominator += (logLag[i] - meanX) * (logLag[i] - meanX);
-        }
-
-        if (denominator < 1e-10)
-            return 0.5;
-
-        double hurst = numerator / denominator;
-
-        // Clamp to valid range [0, 1]
-        return Math.Max(0, Math.Min(1, hurst));
+        // Clamp to valid range [0, 1]; too few lags or a flat log(lag) gives 0.5 (random walk)
+        return engine.TensorWhere(fitted, engine.TensorClamp(slope, ops.Zero, ops.One), randomWalk);
     }
-
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
@@ -192,15 +156,7 @@ public class HurstExponentSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("HurstExponentSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -128,11 +128,11 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
 
         var body = ParamModel.GetParameters();
         Vector<T>? bodyGradient = null, relationGradient = null, transformGradient = null, poolingGradient = null, shotGradient = null;
-        T totalLoss = NumOps.Zero;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         foreach (var task in taskBatch.Tasks)
         {
             var (loss, taskBody, relation, transform, pooling, shots) = EpisodeGradient(task, training: true);
-            totalLoss = NumOps.Add(totalLoss, loss);
+            losses.Add(loss);
             bodyGradient = Accumulate(bodyGradient, taskBody);
             relationGradient = Accumulate(relationGradient, relation);
             transformGradient = Accumulate(transformGradient, transform);
@@ -147,8 +147,8 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         poolingGradient = Scale(poolingGradient ?? new Vector<T>(_poolingWeights.Length), batchSize);
         shotGradient = Scale(shotGradient ?? new Vector<T>(_shotWeights.Length), batchSize);
 
-        AddDecay(bodyGradient, body, _relationOptions.FeatureEncoderL2Reg);
-        AddDecay(relationGradient, _relationWeights, _relationOptions.RelationModuleL2Reg);
+        bodyGradient = AddDecay(bodyGradient, body, _relationOptions.FeatureEncoderL2Reg);
+        relationGradient = AddDecay(relationGradient, _relationWeights, _relationOptions.RelationModuleL2Reg);
 
         if (_relationOptions.GradientClipThreshold.HasValue && _relationOptions.GradientClipThreshold.Value > 0)
         {
@@ -168,7 +168,7 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         _poolingWeights = updated[3];
         _shotWeights = updated[4];
 
-        return NumOps.Divide(totalLoss, batchSize);
+        return NumOps.Divide(Engine.Sum(new Vector<T>(losses)), batchSize);
     }
 
     /// <inheritdoc/>
@@ -208,10 +208,18 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         var supportLabels = ReadLabels(task.SupportOutput);
         var episode = PrototypeEpisode<T>.Build(supportLabels, ReadLabels(task.QueryOutput));
         var slots = RelationScorer<T>.ShotSlots(supportLabels);
-        var target = RelationScorer<T>.OneHot(episode.QueryTarget, episode.ClassSlots.Length);
         var stackedInput = ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput);
         var stackedTarget = ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { episode.Rows, 1 }));
-        var scorer = CreateScorer(training);
+
+        // The target and the scorer's dropout masks are read again after ComputeGradients resets the step arena,
+        // which reissues arena tensors by element count under other shapes (a [4, 2] target came back as [2, 4]).
+        Tensor<T> target;
+        RelationScorer<T> scorer;
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        {
+            target = RelationScorer<T>.OneHot(episode.QueryTarget, episode.ClassSlots.Length);
+            scorer = CreateScorer(training);
+        }
 
         // The embedding module's gradient: every relation score rebuilt from the embeddings on the tape. The
         // comparison's weights are constants here.
@@ -293,8 +301,7 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         int d = _embeddingWidth;
         if (_relationOptions.ApplyFeatureTransform && _featureTransform.Length == 0)
         {
-            _featureTransform = new Vector<T>(d * d);
-            for (int i = 0; i < d; i++) _featureTransform[i * d + i] = NumOps.One;
+            _featureTransform = Engine.TensorEye<T>(d).ToVector();
         }
 
         if (_relationOptions.AggregationMethod == RelationAggregationMethod.Attention && _poolingWeights.Length == 0)
@@ -307,19 +314,16 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
             int shots = list.Max(t => RelationScorer<T>.ShotSlots(ReadLabels(t.SupportOutput)).DefaultIfEmpty(-1).Max()) + 1;
             if (shots > _shotWeights.Length)
             {
-                var grown = new Vector<T>(shots);
-                for (int i = 0; i < _shotWeights.Length; i++) grown[i] = _shotWeights[i];
-                _shotWeights = grown;
+                _shotWeights = Vector<T>.Concatenate(_shotWeights, new Vector<T>(shots - _shotWeights.Length));
             }
         }
     }
 
     private int[] ReadLabels(TOutput labels)
     {
+        // Round half to even, as Math.Round does, then read the class indices.
         var tensor = ClassifierOutputs<T>.Labels(labels, _relationOptions.NumClasses);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     #endregion
@@ -363,34 +367,36 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
 
     #region Helpers
 
-    private static void AddDecay(Vector<T> gradient, Vector<T> parameters, double strength)
+    /// <summary>The gradient plus the L2 decay term strength * parameters over their common length.</summary>
+    private static Vector<T> AddDecay(Vector<T> gradient, Vector<T> parameters, double strength)
     {
-        if (strength <= 0) return;
+        if (strength <= 0) return gradient;
+        var engine = AiDotNetEngine.Current;
         T s = NumOps.FromDouble(strength);
-        for (int i = 0; i < gradient.Length && i < parameters.Length; i++)
-        {
-            gradient[i] = NumOps.Add(gradient[i], NumOps.Multiply(s, parameters[i]));
-        }
+        int common = Math.Min(gradient.Length, parameters.Length);
+        if (common == 0) return gradient;
+        var head = engine.Add(
+            common == gradient.Length ? gradient : gradient.GetSubVector(0, common),
+            engine.Multiply(common == parameters.Length ? parameters : parameters.GetSubVector(0, common), s));
+        return common == gradient.Length
+            ? head
+            : Vector<T>.Concatenate(head, gradient.GetSubVector(common, gradient.Length - common));
     }
 
     private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
     private static Vector<T> Scale(Vector<T> values, T divisor)
     {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
+        return AiDotNetEngine.Current.Divide(values, divisor);
     }
 
     private static Vector<T> CloneVector(Vector<T> source)
     {
-        var clone = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
+        return source.Clone();
     }
 
     #endregion
@@ -480,18 +486,14 @@ internal sealed class RelationScorer<T>
         {
             case RelationAggregationMethod.Max:
             {
-                Tensor<T>? pooled = null;
-                for (int c = 0; c < classes; c++)
-                {
-                    var members = Enumerable.Range(0, supportRows).Where(s => Ops.ToDouble(membership[c * supportRows + s]) > 0.5).ToArray();
-                    var select = new Tensor<T>(new[] { supportRows, members.Length });
-                    for (int m = 0; m < members.Length; m++) select[members[m] * members.Length + m] = Ops.One;
-                    var best = engine.ReduceMax(engine.TensorMatMul(perShot, select), new[] { 1 }, keepDims: true, out _);
-                    var placed = engine.TensorMatMul(best, Unit(classes, c));
-                    pooled = pooled is null ? placed : engine.TensorAdd(pooled, placed);
-                }
-
-                return pooled ?? new Tensor<T>(new[] { queries, classes });
+                // Per class, the best of its own shots: every other shot is pushed to -MaxValue before the max.
+                if (classes == 0) return new Tensor<T>(new[] { queries, classes });
+                var exclusion = engine.TensorMultiplyScalar(
+                    engine.TensorAddScalar(membership, Ops.Negate(Ops.One)), Ops.MaxValue);
+                var candidates = engine.TensorAdd(
+                    engine.Reshape(perShot, new[] { queries, 1, supportRows }),
+                    engine.Reshape(exclusion, new[] { 1, classes, supportRows }));
+                return engine.ReduceMax(candidates, new[] { 2 }, keepDims: false, out _);
             }
             case RelationAggregationMethod.Attention:
             {
@@ -521,11 +523,13 @@ internal sealed class RelationScorer<T>
                 }
                 else
                 {
-                    var slotSelect = new Tensor<T>(new[] { _shots.Length, supportRows });
-                    for (int s = 0; s < supportRows; s++)
-                    {
-                        if (shotSlots[s] < _shots.Length) slotSelect[shotSlots[s] * supportRows + s] = Ops.One;
-                    }
+                    // slotSelect[slot, s] = 1 for each support row's shot slot; a slot past the learned weights
+                    // selects nothing (it is sent to an extra one-hot row that is then dropped).
+                    int learned = _shots.Length;
+                    var slotRows = shotSlots.Take(supportRows).Select(slot => slot >= 0 && slot < learned ? slot : learned).ToArray();
+                    var slotSelect = engine.TensorSlice(
+                        engine.TensorTranspose(engine.TensorOneHot<T>(PrototypeEpisode<T>.IndexTensor(slotRows), learned + 1)),
+                        new[] { 0, 0 }, new[] { learned, supportRows });
 
                     weights = engine.TensorExp(engine.TensorMatMul(engine.Reshape(_shots, new[] { 1, _shots.Length }), slotSelect));
                 }
@@ -534,15 +538,9 @@ internal sealed class RelationScorer<T>
             }
             default:
             {
-                var mean = new Tensor<T>(new[] { classes, supportRows });
-                for (int c = 0; c < classes; c++)
-                {
-                    double count = Enumerable.Range(0, supportRows).Sum(s => Ops.ToDouble(membership[c * supportRows + s]));
-                    for (int s = 0; s < supportRows; s++)
-                    {
-                        mean[c * supportRows + s] = Ops.FromDouble(Ops.ToDouble(membership[c * supportRows + s]) / Math.Max(1.0, count));
-                    }
-                }
+                // mean[c, s] = membership[c, s] / max(1, |class c|)
+                var counts = engine.ReduceSum(membership, new[] { 1 }, keepDims: true);
+                var mean = engine.TensorDivide(membership, engine.TensorClampMin(counts, Ops.One));
 
                 return engine.TensorMatMul(perShot, engine.TensorTranspose(mean));
             }
@@ -577,14 +575,14 @@ internal sealed class RelationScorer<T>
     /// <summary>The match indicators <c>1(y == c)</c>, <c>[rows, classes]</c>, for class columns.</summary>
     internal static Tensor<T> OneHot(Tensor<T> columns, int classes)
     {
-        var target = new Tensor<T>(new[] { columns.Length, classes });
-        for (int i = 0; i < columns.Length; i++)
-        {
-            int c = (int)Math.Round(Ops.ToDouble(columns[i]));
-            if (c >= 0 && c < classes) target[i * classes + c] = Ops.One;
-        }
-
-        return target;
+        // A column outside [0, classes) matches nothing: it is sent to an extra one-hot column that is dropped.
+        if (columns.Length == 0) return new Tensor<T>(new[] { 0, classes });
+        var engine = AiDotNetEngine.Current;
+        var indices = engine.TensorRound(columns).Cast<int>().ToArray()
+            .Select(c => c >= 0 && c < classes ? c : classes).ToArray();
+        return engine.TensorSlice(
+            engine.TensorOneHot<T>(PrototypeEpisode<T>.IndexTensor(indices), classes + 1),
+            new[] { 0, 0 }, new[] { columns.Length, classes });
     }
 
     /// <summary>
@@ -596,14 +594,24 @@ internal sealed class RelationScorer<T>
         var labels = ClassifierOutputs<T>.Labels(expected, numClasses);
         if (predictions is Vector<T> predictedClasses)
         {
-            int wrong = 0;
-            for (int i = 0; i < labels.Length; i++)
+            // Wrong when the prediction is missing or more than 0.5 from the label.
+            int n = labels.Length;
+            if (n == 0) return Ops.Zero;
+            var engine = AiDotNetEngine.Current;
+            int compared = Math.Min(n, predictedClasses.Length);
+            T wrong = Ops.FromDouble(n - compared);
+            if (compared > 0)
             {
-                if (i >= predictedClasses.Length || Math.Abs(Ops.ToDouble(predictedClasses[i]) - Ops.ToDouble(labels[i])) > 0.5)
-                    wrong++;
+                var predicted = Tensor<T>.FromVector(
+                    compared == predictedClasses.Length ? predictedClasses : predictedClasses.GetSubVector(0, compared));
+                var target = engine.Reshape(labels, new[] { n });
+                if (compared < n) target = engine.TensorSlice(target, new[] { 0 }, new[] { compared });
+                var misses = engine.TensorGreaterThan(
+                    engine.TensorAbs(engine.TensorSubtract(predicted, target)), Ops.FromDouble(0.5));
+                wrong = Ops.Add(wrong, engine.TensorSum(misses));
             }
 
-            return Ops.FromDouble(labels.Length == 0 ? 0 : (double)wrong / labels.Length);
+            return Ops.Divide(wrong, Ops.FromDouble(n));
         }
 
         var scores = ClassifierOutputs<T>.ScoreRows(predictions, labels.Length);
@@ -616,15 +624,22 @@ internal sealed class RelationScorer<T>
     {
         var engine = AiDotNetEngine.Current;
         int rows = samples.Shape[0], q = queries.Shape[0], pairs = rows * q;
-        var pickSample = new Tensor<T>(new[] { pairs, rows });
-        var pickQuery = new Tensor<T>(new[] { pairs, q });
-        for (int qi = 0; qi < q; qi++)
+        // Pair row qi * rows + i picks sample row i (the identity tiled q times) and query row qi (each identity row
+        // repeated rows times).
+        Tensor<T> pickSample, pickQuery;
+        if (pairs == 0)
         {
-            for (int i = 0; i < rows; i++)
-            {
-                pickSample[(qi * rows + i) * rows + i] = Ops.One;
-                pickQuery[(qi * rows + i) * q + qi] = Ops.One;
-            }
+            pickSample = new Tensor<T>(new[] { pairs, rows });
+            pickQuery = new Tensor<T>(new[] { pairs, q });
+        }
+        else
+        {
+            pickSample = engine.Reshape(
+                engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye<T>(rows), new[] { 1, rows, rows }), new[] { q, rows, rows }),
+                new[] { pairs, rows });
+            pickQuery = engine.Reshape(
+                engine.TensorBroadcastTo(engine.Reshape(engine.TensorEye<T>(q), new[] { q, 1, q }), new[] { q, rows, q }),
+                new[] { pairs, q });
         }
 
         var pairedSamples = engine.TensorMatMul(pickSample, samples);
@@ -673,20 +688,13 @@ internal sealed class RelationScorer<T>
     private static void Copy(Dictionary<Tensor<T>, Tensor<T>> gradients, Tensor<T>? leaf, Vector<T> into)
     {
         if (leaf is null || !gradients.TryGetValue(leaf, out var gradient)) return;
-        for (int i = 0; i < into.Length; i++) into[i] = gradient[i];
+        gradient.ToVector().AsSpan().Slice(0, into.Length).CopyTo(into.AsWritableSpan());
     }
 
     private static Tensor<T> Ones(int rows, int columns)
     {
         var ones = new Tensor<T>(new[] { rows, columns });
-        for (int i = 0; i < ones.Length; i++) ones[i] = Ops.One;
+        ones.Fill(Ops.One);
         return ones;
-    }
-
-    private static Tensor<T> Unit(int columns, int column)
-    {
-        var unit = new Tensor<T>(new[] { 1, columns });
-        unit[column] = Ops.One;
-        return unit;
     }
 }

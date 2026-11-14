@@ -144,13 +144,12 @@ public static class DataAggregationHelper
         int totalLength = vectors.Sum(v => v.Length);
 
         var result = new Vector<T>(totalLength);
+        var destination = result.AsWritableSpan();
         int currentIdx = 0;
         foreach (var vector in vectors)
         {
-            for (int i = 0; i < vector.Length; i++)
-            {
-                result[currentIdx++] = vector[i];
-            }
+            vector.AsSpan().CopyTo(destination.Slice(currentIdx, vector.Length));
+            currentIdx += vector.Length;
         }
         return result;
     }

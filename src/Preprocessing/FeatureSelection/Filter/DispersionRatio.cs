@@ -28,17 +28,17 @@ public class DispersionRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     private readonly int _nFeaturesToSelect;
     private readonly double _minRatio;
 
-    private double[]? _dispersionRatios;
-    private double[]? _betweenClassVariances;
-    private double[]? _withinClassVariances;
+    private Vector<T>? _dispersionRatios;
+    private Vector<T>? _betweenClassVariances;
+    private Vector<T>? _withinClassVariances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DispersionRatios => _dispersionRatios;
-    public double[]? BetweenClassVariances => _betweenClassVariances;
-    public double[]? WithinClassVariances => _withinClassVariances;
+    public Vector<T>? DispersionRatios => _dispersionRatios;
+    public Vector<T>? BetweenClassVariances => _betweenClassVariances;
+    public Vector<T>? WithinClassVariances => _withinClassVariances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -74,98 +74,52 @@ public class DispersionRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         int n = data.Rows;
         int p = data.Columns;
 
-        // Group samples by class
-        var classGroups = new Dictionary<int, List<int>>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)Math.Round(NumOps.ToDouble(target[i]));
-            if (!classGroups.ContainsKey(label))
-                classGroups[label] = new List<int>();
-            classGroups[label].Add(i);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        int k = classGroups.Count;
+        // Group samples by class (rounded target values)
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
         if (k < 2)
             throw new ArgumentException("At least 2 classes are required.");
 
-        _dispersionRatios = new double[p];
-        _betweenClassVariances = new double[p];
-        _withinClassVariances = new double[p];
+        // Between-class variance sum_c n_c (mean_c - mean)^2 / n and within-class variance sum (x - mean_class)^2 / n
+        T count = NumOps.FromDouble(n);
+        var classMeans = FeatureScoringTensorOps.GroupMeans(PreprocessingTensorOps.ClassOneHot<T>(classIndex, k), X, out var classCounts);
+        var overallMean = engine.TensorBroadcastTo(engine.ReduceMean(X, new[] { 0 }, true), new[] { k, p });
+        var betweenVar = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorMultiply(
+            engine.TensorSquare(engine.TensorSubtract(classMeans, overallMean)),
+            engine.TensorBroadcastTo(engine.Reshape(classCounts, new[] { k, 1 }), new[] { k, p })), new[] { 0 }, false), count);
+        var withinVar = engine.TensorDivideScalar(engine.ReduceSum(engine.TensorSquare(engine.TensorSubtract(X,
+            engine.TensorIndexSelect(classMeans, new Tensor<int>(classIndex, new[] { n }), 0))), new[] { 0 }, false), count);
+        _betweenClassVariances = betweenVar.ToVector();
+        _withinClassVariances = withinVar.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            // Overall mean
-            double overallMean = 0;
-            for (int i = 0; i < n; i++)
-                overallMean += NumOps.ToDouble(data[i, j]);
-            overallMean /= n;
-
-            // Compute class means
-            var classMeans = new Dictionary<int, double>();
-            foreach (var kvp in classGroups)
-            {
-                double classMean = 0;
-                foreach (int i in kvp.Value)
-                    classMean += NumOps.ToDouble(data[i, j]);
-                classMeans[kvp.Key] = classMean / kvp.Value.Count;
-            }
-
-            // Between-class variance
-            double betweenVar = 0;
-            foreach (var kvp in classGroups)
-            {
-                double diff = classMeans[kvp.Key] - overallMean;
-                betweenVar += kvp.Value.Count * diff * diff;
-            }
-            betweenVar /= n;
-            _betweenClassVariances[j] = betweenVar;
-
-            // Within-class variance
-            double withinVar = 0;
-            foreach (var kvp in classGroups)
-            {
-                double classMean = classMeans[kvp.Key];
-                foreach (int i in kvp.Value)
-                {
-                    double diff = NumOps.ToDouble(data[i, j]) - classMean;
-                    withinVar += diff * diff;
-                }
-            }
-            withinVar /= n;
-            _withinClassVariances[j] = withinVar;
-
-            // Dispersion ratio
-            _dispersionRatios[j] = withinVar > 1e-10 ? betweenVar / withinVar : 0;
-        }
+        // Dispersion ratio (0 when the within-class variance is not above 1e-10)
+        var usable = engine.TensorGreaterThan(withinVar, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var dispersionRatios = engine.TensorWhere(usable, engine.TensorDivide(betweenVar,
+            engine.TensorWhere(usable, withinVar, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))), new Tensor<T>(new[] { p }));
+        _dispersionRatios = dispersionRatios.ToVector();
 
         // Select features above threshold or top by ratio
-        var candidates = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (_dispersionRatios[j] >= _minRatio)
-                candidates.Add(j);
+        var candidates = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.AtLeast(dispersionRatios, NumOps.FromDouble(_minRatio))));
 
         if (candidates.Count >= _nFeaturesToSelect)
         {
-            _selectedIndices = candidates
-                .OrderByDescending(j => _dispersionRatios[j])
+            _selectedIndices = PreprocessingTensorOps.StableOrder(dispersionRatios, descending: true)
+                .Where(j => candidates.Contains(j))
                 .Take(_nFeaturesToSelect)
                 .OrderBy(x => x)
                 .ToArray();
         }
         else
         {
-            _selectedIndices = _dispersionRatios
-                .Select((dr, idx) => (DR: dr, Index: idx))
-                .OrderByDescending(x => x.DR)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(dispersionRatios, Math.Min(_nFeaturesToSelect, p));
         }
 
         IsFitted = true;
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -179,15 +133,7 @@ public class DispersionRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("DispersionRatio has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

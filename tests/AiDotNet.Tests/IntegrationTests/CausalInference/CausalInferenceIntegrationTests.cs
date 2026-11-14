@@ -73,7 +73,7 @@ public class CausalInferenceIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
-        var learner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var learner = new SLearner<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         learner.Fit(features, treatment, outcome);
         Assert.True(learner.IsTrained);
@@ -98,7 +98,7 @@ public class CausalInferenceIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
-        var learner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var learner = new SLearner<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         var treatmentInt = ToIntTreatment(treatment);
         learner.Fit(features, treatment, outcome);
@@ -120,7 +120,7 @@ public class CausalInferenceIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
-        var learner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var learner = new TLearner<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         learner.Fit(features, treatment, outcome);
         Assert.True(learner.IsTrained);
@@ -137,7 +137,7 @@ public class CausalInferenceIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
-        var learner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var learner = new TLearner<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         var treatmentInt = ToIntTreatment(treatment);
         learner.Fit(features, treatment, outcome);
@@ -156,7 +156,7 @@ public class CausalInferenceIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task XLearner_EstimateTreatmentEffect_DetectsPositiveEffect()
     {
-        var learner = new XLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var learner = new XLearner<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         learner.Fit(features, treatment, outcome);
         Assert.True(learner.IsTrained);
@@ -173,7 +173,7 @@ public class CausalInferenceIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task XLearner_EstimateATE_ReturnsPositiveWithStandardError()
     {
-        var learner = new XLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var learner = new XLearner<double>();
         var (features, treatment, outcome) = CreateSyntheticData();
         var treatmentInt = ToIntTreatment(treatment);
         learner.Fit(features, treatment, outcome);
@@ -379,11 +379,11 @@ public class CausalInferenceIntegrationTests
         var treatmentInt = ToIntTreatment(treatment);
 
         // All estimators should agree that the treatment effect is positive
-        var slearner = new SLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var slearner = new SLearner<double>();
         slearner.Fit(features, treatment, outcome);
         var sEffects = slearner.EstimateTreatmentEffect(features);
 
-        var tlearner = new TLearner<double>(maxIterations: 100, learningRate: 0.01);
+        var tlearner = new TLearner<double>();
         tlearner.Fit(features, treatment, outcome);
         var tEffects = tlearner.EstimateTreatmentEffect(features);
 

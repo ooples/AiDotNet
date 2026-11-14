@@ -313,39 +313,18 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         int batchSize = input.Shape[0];
         int dimension = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
 
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, dimension);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dimension; j++)
-            {
-                inputMatrix[i, j] = input[i * dimension + j];
-            }
-        }
+        Tensor<T> inputMatrix = Engine.Reshape(input, [batchSize, dimension]);
 
-        Matrix<T> compressed = inputMatrix.Multiply(_compressionMatrix);
+        Tensor<T> compressed = Engine.TensorMatMul(inputMatrix, Tensor<T>.FromMatrix(_compressionMatrix));
 
-        Matrix<T> transformed = compressed.Multiply(_matrixM.ToMatrix());
-        Matrix<T> decompressed = transformed.Multiply(_decompressionMatrix);
+        Tensor<T> transformed = Engine.TensorMatMul(compressed, _matrixM);
+        Tensor<T> decompressed = Engine.TensorMatMul(transformed, Tensor<T>.FromMatrix(_decompressionMatrix));
 
         T scalingFactor = NumOps.FromDouble(Alpha);
-        decompressed = decompressed.Multiply(scalingFactor);
+        Tensor<T> moraOutput = Engine.Reshape(
+            Engine.TensorMultiplyScalar(decompressed, scalingFactor), baseOutput.Shape.ToArray());
 
-        Tensor<T> moraOutput = new Tensor<T>(baseOutput._shape);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dimension; j++)
-            {
-                moraOutput[idx] = decompressed[i, j];
-                idx++;
-            }
-        }
-
-        Tensor<T> result = new Tensor<T>(baseOutput._shape);
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], moraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, moraOutput);
 
         return result;
     }
@@ -358,14 +337,9 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        for (int i = 0; i < _matrixM.Shape[0]; i++)
-        {
-            for (int j = 0; j < _matrixM.Shape[1]; j++)
-            {
-                T update = NumOps.Multiply(_matrixMGradient[i, j], learningRate);
-                _matrixM[i, j] = NumOps.Subtract(_matrixM[i, j], update);
-            }
-        }
+        // M -= learningRate * dM
+        Engine.TensorSubtractInPlace(
+            _matrixM, Tensor<T>.FromMatrix(Engine.MatrixMultiplyScalar(_matrixMGradient, learningRate)));
 
         if (!_freezeBaseLayer)
         {
@@ -377,12 +351,12 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// <inheritdoc />
     public override ILayer<T> MergeToOriginalLayer()
     {
-        // Compute full MoRA adaptation: R_d * M * R_c^T
-        Matrix<T> temp = _matrixM.ToMatrix().Multiply(_compressionMatrix.Transpose());
-        Matrix<T> fullAdaptation = _decompressionMatrix.Multiply(temp);
+        // Compute full MoRA adaptation in [inputSize, outputSize] form, matching the forward pass
+        // (input * R_c * M * R_d): ΔW = α * R_c * M * R_d
+        Matrix<T> temp = Engine.MatrixMultiply(_matrixM.ToMatrix(), _decompressionMatrix);
+        Matrix<T> fullAdaptation = Engine.MatrixMultiplyScalar(
+            Engine.MatrixMultiply(_compressionMatrix, temp), NumOps.FromDouble(Alpha));
 
-        T scalingFactor = NumOps.FromDouble(Alpha);
-        fullAdaptation = fullAdaptation.Multiply(scalingFactor);
 
         int inputSize = GetInputShape()[0];
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
@@ -400,20 +374,12 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         Vector<T> baseParams = _baseLayer.GetParameters();
         int weightCount = inputSize * outputSize;
 
-        // Create merged parameters starting with base layer parameters
-        Vector<T> mergedParams = baseParams.Clone();
-
-        // Transpose fullAdaptation to get [outputSize, inputSize]
-        Matrix<T> adaptationWeights = fullAdaptation.Transpose();
-
-        // Add MoRA adaptation to the weight portion: W_merged = W_base + α * ΔW
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row = i / inputSize;
-            int col = i % inputSize;
-            mergedParams[i] = NumOps.Add(mergedParams[i], adaptationWeights[row, col]);
-        }
-        // Note: Biases remain unchanged (indices weightCount to end)
+        // Add MoRA adaptation to the weight portion: W_merged = W_base + α * ΔW. DenseLayer stores
+        // its weights input-major and FullyConnectedLayer output-major ([outputSize, inputSize]),
+        // so the latter uses the transpose. Biases remain unchanged.
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? fullAdaptation.Transpose() : fullAdaptation, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

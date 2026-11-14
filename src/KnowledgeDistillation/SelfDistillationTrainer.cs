@@ -236,9 +236,8 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
             {
                 // Use dictionary to map input instances to their predictions
                 var newPredictions = new Dictionary<Vector<T>, Vector<T>>();
-                for (int i = 0; i < trainInputs.Length; i++)
+                foreach (var input in trainInputs)
                 {
-                    var input = trainInputs[i];
                     newPredictions[input] = modelForward(input);
                 }
 
@@ -253,17 +252,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
 
                         if (_cachedTeacherPredictions.TryGetValue(input, out var oldPred))
                         {
-                            var blended = new Vector<T>(newPred.Length);
-                            for (int j = 0; j < newPred.Length; j++)
-                            {
-                                var oldValue = NumOps.Multiply(
-                                    oldPred[j],
-                                    NumOps.FromDouble(EMADecay));
-                                var newValue = NumOps.Multiply(
-                                    newPred[j],
-                                    NumOps.FromDouble(1.0 - EMADecay));
-                                blended[j] = NumOps.Add(oldValue, newValue);
-                            }
+                            var blended = BlendWithEma(oldPred, newPred);
                             blendedPredictions[input] = blended;
                         }
                         else
@@ -281,8 +270,7 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
             }
 
             // Train using base class Train method
-            T generationLoss = NumOps.Zero;
-            int epochCount = 0;
+            var epochLosses = new List<T>();
 
             Train(
                 modelForward,
@@ -291,15 +279,32 @@ public class SelfDistillationTrainer<T> : KnowledgeDistillationTrainerBase<T, Ve
                 trainLabels,
                 epochs,
                 batchSize,
-                onEpochComplete: (epoch, loss) =>
-                {
-                    generationLoss = NumOps.Add(generationLoss, loss);
-                    epochCount++;
-                });
+                onEpochComplete: (epoch, loss) => epochLosses.Add(loss));
 
-            var avgGenLoss = NumOps.Divide(generationLoss, NumOps.FromDouble(epochCount));
+            var avgGenLoss = AverageLoss(epochLosses);
             onGenerationComplete?.Invoke(generation, avgGenLoss);
         }
+    }
+
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// EMA blend of teacher predictions: decay * old + (1 - decay) * new (reads the current EMADecay).
+    /// </summary>
+    private Vector<T> BlendWithEma(Vector<T> oldPred, Vector<T> newPred)
+    {
+        return Engine.Add(
+            Engine.Multiply(oldPred, NumOps.FromDouble(EMADecay)),
+            Engine.Multiply(newPred, NumOps.FromDouble(1.0 - EMADecay)));
+    }
+
+    /// <summary>
+    /// Average of the per-epoch losses reported for one generation.
+    /// </summary>
+    private T AverageLoss(List<T> epochLosses)
+    {
+        T generationLoss = Engine.Sum(new Vector<T>(epochLosses));
+        return NumOps.Divide(generationLoss, NumOps.FromDouble(epochLosses.Count));
     }
 }
 

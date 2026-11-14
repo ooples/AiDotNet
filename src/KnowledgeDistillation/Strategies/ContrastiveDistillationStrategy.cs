@@ -145,43 +145,12 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
-
-            // Standard distillation loss (scaled by 1 - contrastiveWeight)
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss;
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, trueLabels);
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                var combinedLoss = NumOps.Add(
-                    NumOps.Multiply(alphaT, hardLoss),
-                    NumOps.Multiply(oneMinusAlpha, softLoss));
-
-                // Scale by (1 - contrastiveWeight) to make room for contrastive loss
-                sampleLoss = NumOps.Multiply(combinedLoss, NumOps.FromDouble(1.0 - _contrastiveWeight));
-            }
-            else
-            {
-                sampleLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(1.0 - _contrastiveWeight));
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        // Standard distillation loss (scaled by 1 - contrastiveWeight to make room for contrastive loss)
+        var sampleLosses = Engine.Multiply(
+            DistillationHelper<T>.StandardSampleLosses(studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha),
+            NumOps.FromDouble(1.0 - _contrastiveWeight));
+        T totalLoss = Engine.Sum(sampleLosses);
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -195,62 +164,17 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         ValidateLabelDimensions(studentBatchOutput, trueLabelsBatch);
 
         int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var gradientBatch = new Matrix<T>(batchSize, outputDim);
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentOutput = studentBatchOutput.GetRow(r);
-            Vector<T> teacherOutput = teacherBatchOutput.GetRow(r);
-            Vector<T>? trueLabels = trueLabelsBatch?.GetRow(r);
+        var gradientBatch = DistillationHelper<T>.StandardSampleGradients(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
 
-            var gradient = new Vector<T>(outputDim);
-
-            var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
-
-            for (int i = 0; i < outputDim; i++)
-            {
-                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
-            }
-
-            if (trueLabels != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardGradient = new Vector<T>(outputDim);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    hardGradient[i] = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                }
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                for (int i = 0; i < outputDim; i++)
-                {
-                    gradient[i] = NumOps.Add(
-                        NumOps.Multiply(alphaT, hardGradient[i]),
-                        NumOps.Multiply(oneMinusAlpha, gradient[i]));
-                }
-            }
-
-            // Scale by (1 - contrastiveWeight)
-            var scale = NumOps.FromDouble(1.0 - _contrastiveWeight);
-            for (int i = 0; i < outputDim; i++)
-            {
-                gradient[i] = NumOps.Multiply(gradient[i], scale);
-            }
-
-            gradientBatch.SetRow(r, gradient);
-        }
+        // Scale by (1 - contrastiveWeight)
+        var scale = NumOps.FromDouble(1.0 - _contrastiveWeight);
+        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, scale);
 
         // Average gradients over the batch
         T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
+        gradientBatch = Engine.MatrixMultiplyScalar(gradientBatch, oneOverBatch);
 
         return gradientBatch;
     }
@@ -367,34 +291,38 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
     private T ComputeInfoNCELoss(Vector<T>[] studentEmbs, Vector<T>[] teacherEmbs, int[] labels)
     {
         int batchSize = studentEmbs.Length;
-        T totalLoss = NumOps.Zero;
+        if (batchSize == 0)
+            return NumOps.Zero;
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Positive: teacher-student pair for same sample
-            double positiveSim = VectorHelper.CosineSimilarity(teacherEmbs[i], studentEmbs[i]);
-            double positiveScore = Math.Exp(positiveSim / Temperature);
+        var teachers = DistillationHelper<T>.StackRows(teacherEmbs);
+        var students = DistillationHelper<T>.StackRows(studentEmbs);
+        double inverseTemperature = 1.0 / Temperature;
 
-            // Negatives: all other samples
-            double negativeSum = 0;
-            int negativeCount = 0;
+        // Positive logit per anchor, row-wise: cos(teacher_i, student_i) / τ -> [B, 1]
+        var positive = Engine.Reshape(Engine.TensorMultiplyScalar(
+            DistillationHelper<T>.RowwiseCosineSimilarityWide(teachers, students), inverseTemperature), [batchSize, 1]);
 
-            for (int j = 0; j < Math.Min(batchSize, _negativesSampleSize); j++)
-            {
-                if (i != j)
-                {
-                    double negativeSim = VectorHelper.CosineSimilarity(teacherEmbs[i], studentEmbs[j]);
-                    negativeSum += Math.Exp(negativeSim / Temperature);
-                    negativeCount++;
-                }
-            }
+        // Negative logits only against the first min(batchSize, negativesSampleSize) students, so the
+        // working set is [B, negativeLimit] rather than [B, B]; each anchor's own student is excluded.
+        int negativeLimit = Math.Min(batchSize, _negativesSampleSize);
+        var negatives = Engine.TensorMultiplyScalar(
+            DistillationHelper<T>.CosineSimilarityMatrixWide(teachers, Engine.TensorNarrow(students, 0, 0, negativeLimit)),
+            inverseTemperature);
+        var rowIndex = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<double>(0, batchSize, 1), [batchSize, 1]), [batchSize, negativeLimit]);
+        var columnIndex = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<double>(0, negativeLimit, 1), [1, negativeLimit]), [batchSize, negativeLimit]);
+        negatives = Engine.TensorWhere(
+            Engine.TensorEquals(rowIndex, columnIndex),
+            Tensor<double>.CreateDefault([batchSize, negativeLimit], double.NegativeInfinity),
+            negatives);
 
-            // InfoNCE loss
-            double loss = -Math.Log(positiveScore / (positiveScore + negativeSum + Epsilon));
-            totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
-        }
+        // -log(e^pos / (e^pos + Σ e^neg + ε)) = log(e^pos + Σ e^neg + ε) - pos, as a shifted log-sum-exp
+        var logits = Engine.TensorConcatenate([positive, negatives], 1);
+        var losses = Engine.TensorSubtract(
+            DistillationHelper<T>.RowLogSumExp(logits, Epsilon), Engine.Reshape(positive, [batchSize]));
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return NumOps.FromDouble(Engine.TensorSum(losses) / batchSize);
     }
 
     /// <summary>
@@ -403,8 +331,8 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
     private T ComputeTripletLoss(Vector<T>[] studentEmbs, Vector<T>[] teacherEmbs, int[] labels)
     {
         int batchSize = studentEmbs.Length;
-        T totalLoss = NumOps.Zero;
-        int tripletCount = 0;
+        var anchors = new List<int>();
+        var negatives = new List<int>();
 
         double margin = 0.1;
 
@@ -436,21 +364,38 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
 
             if (negativeIdx == -1) continue;
 
-            // Teacher-guided triplet loss:
-            // Positive distance: student to its corresponding teacher
-            // Negative distance: student to teacher of different class
-            // This ensures student embeddings align with teacher's embedding space
-            double posDist = NumOps.ToDouble(VectorHelper.EuclideanDistance(studentEmbs[i], teacherEmbs[i]));
-            double negDist = NumOps.ToDouble(VectorHelper.EuclideanDistance(studentEmbs[i], teacherEmbs[negativeIdx]));
-            double loss = Math.Max(0, posDist - negDist + margin);
-
-            totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
-            tripletCount++;
+            anchors.Add(i);
+            negatives.Add(negativeIdx);
         }
 
-        return tripletCount > 0 ?
-            NumOps.Divide(totalLoss, NumOps.FromDouble(tripletCount)) :
-            NumOps.Zero;
+        int tripletCount = anchors.Count;
+        if (tripletCount == 0)
+            return NumOps.Zero;
+
+        // Teacher-guided triplet loss:
+        // Positive distance: student to its corresponding teacher
+        // Negative distance: student to teacher of different class
+        // This ensures student embeddings align with teacher's embedding space
+        var anchorIndices = new Tensor<int>(anchors.ToArray(), [tripletCount]);
+        var negativeIndices = new Tensor<int>(negatives.ToArray(), [tripletCount]);
+        var students = Engine.TensorIndexSelect(DistillationHelper<T>.StackRows(studentEmbs), anchorIndices, 0);
+        var teachers = DistillationHelper<T>.StackRows(teacherEmbs);
+        var posDist = RowDistances(students, Engine.TensorIndexSelect(teachers, anchorIndices, 0));
+        var negDist = RowDistances(students, Engine.TensorIndexSelect(teachers, negativeIndices, 0));
+        var losses = Engine.TensorMax(
+            new Tensor<T>([tripletCount]),
+            Engine.TensorAddScalar(Engine.TensorSubtract(posDist, negDist), NumOps.FromDouble(margin)));
+
+        return NumOps.Divide(Engine.TensorSum(losses), NumOps.FromDouble(tripletCount));
+    }
+
+    /// <summary>
+    /// Euclidean distance between corresponding rows of two [k, d] tensors.
+    /// </summary>
+    private Tensor<T> RowDistances(Tensor<T> a, Tensor<T> b)
+    {
+        var diff = Engine.TensorSubtract(a, b);
+        return Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), [1], keepDims: false));
     }
 
     /// <summary>
@@ -459,30 +404,23 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
     private T ComputeNTXentLoss(Vector<T>[] studentEmbs, Vector<T>[] teacherEmbs)
     {
         int batchSize = studentEmbs.Length;
-        T totalLoss = NumOps.Zero;
+        if (batchSize == 0)
+            return NumOps.Zero;
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Positive: corresponding teacher embedding
-            double positiveSim = VectorHelper.CosineSimilarity(studentEmbs[i], teacherEmbs[i]) / Temperature;
+        var students = DistillationHelper<T>.StackRows(studentEmbs);
+        var teachers = DistillationHelper<T>.StackRows(teacherEmbs);
+        double inverseTemperature = 1.0 / Temperature;
 
-            // Denominator: sum over ALL pairs (including positive)
-            double denominator = Math.Exp(positiveSim); // Include positive pair
-            for (int j = 0; j < batchSize; j++)
-            {
-                if (i != j)
-                {
-                    double sim = VectorHelper.CosineSimilarity(studentEmbs[i], teacherEmbs[j]) / Temperature;
-                    denominator += Math.Exp(sim);
-                }
-            }
+        // sims[i, j] = cos(student_i, teacher_j) / τ in double; positive pairs on the diagonal
+        var sims = Engine.TensorMultiplyScalar(
+            DistillationHelper<T>.CosineSimilarityMatrixWide(students, teachers), inverseTemperature);
+        var positiveSim = Engine.TensorMultiplyScalar(
+            DistillationHelper<T>.RowwiseCosineSimilarityWide(students, teachers), inverseTemperature);
 
-            // NT-Xent: -log(exp(pos)/sum_all) = -pos + log(sum_all)
-            double loss = -positiveSim + Math.Log(denominator + Epsilon);
-            totalLoss = NumOps.Add(totalLoss, NumOps.FromDouble(loss));
-        }
+        // NT-Xent: -log(exp(pos) / (Σ_all exp + ε)) = log(Σ_all exp + ε) - pos, as a shifted log-sum-exp
+        var losses = Engine.TensorSubtract(DistillationHelper<T>.RowLogSumExp(sims, Epsilon), positiveSim);
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return NumOps.FromDouble(Engine.TensorSum(losses) / batchSize);
     }
 
 
@@ -531,8 +469,6 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         if (batchSize == 0)
             return gradients;
 
-        int embeddingDim = studentMatrix.Columns;
-
         // Convert matrices to vector arrays for gradient computation
         var studentEmbeddings = new Vector<T>[batchSize];
         var teacherEmbeddings = new Vector<T>[batchSize];
@@ -544,141 +480,70 @@ public class ContrastiveDistillationStrategy<T> : DistillationStrategyBase<T>, I
         }
 
         // Compute NT-Xent gradients for each sample
-        var gradientMatrix = new Matrix<T>(batchSize, embeddingDim);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            var sampleGradient = ComputeNTXentGradient(studentEmbeddings, teacherEmbeddings, i);
-            gradientMatrix.SetRow(i, sampleGradient);
-        }
+        var gradientMatrix = ComputeNTXentGradients(studentEmbeddings, teacherEmbeddings);
 
         // Average over batch
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < embeddingDim; c++)
-            {
-                gradientMatrix[r, c] = NumOps.Divide(gradientMatrix[r, c], NumOps.FromDouble(batchSize));
-            }
-        }
+        gradientMatrix = Engine.TensorDivideScalar(gradientMatrix, NumOps.FromDouble(batchSize));
 
         // Scale by contrastive weight
-        for (int r = 0; r < batchSize; r++)
-        {
-            for (int c = 0; c < embeddingDim; c++)
-            {
-                gradientMatrix[r, c] = NumOps.Multiply(gradientMatrix[r, c], NumOps.FromDouble(_contrastiveWeight));
-            }
-        }
+        gradientMatrix = Engine.TensorMultiplyScalar(gradientMatrix, NumOps.FromDouble(_contrastiveWeight));
 
-        gradients.Add(_embeddingLayerName, gradientMatrix);
+        gradients.Add(_embeddingLayerName, gradientMatrix.ToMatrix());
         return gradients;
     }
 
     /// <summary>
-    /// Computes NT-Xent gradient for a single sample.
+    /// Computes the NT-Xent gradient for every anchor sample.
     /// </summary>
     /// <param name="studentEmbeddings">All student embeddings in the batch.</param>
     /// <param name="teacherEmbeddings">All teacher embeddings in the batch.</param>
-    /// <param name="anchorIdx">Index of the anchor sample to compute gradient for.</param>
-    /// <returns>Gradient vector with respect to student embedding at anchorIdx.</returns>
+    /// <returns>[batch, dim] gradient; row i is the gradient with respect to student embedding i.</returns>
     /// <remarks>
     /// <para>NT-Xent loss for sample i: L_i = -sim(s_i, t_i)/τ + log(Σ_j exp(sim(s_i, t_j)/τ))</para>
     ///
     /// <para>Gradient: ∂L_i/∂s_i = (-∂sim(s_i, t_i)/∂s_i + Σ_j softmax_j * ∂sim(s_i, t_j)/∂s_i) / τ</para>
     ///
-    /// <para>Where softmax_j = exp(sim(s_i, t_j)/τ) / Σ_k exp(sim(s_i, t_k)/τ)</para>
+    /// <para>Where softmax_j = exp(sim(s_i, t_j)/τ) / Σ_k exp(sim(s_i, t_k)/τ), and
+    /// ∂sim(s, t)/∂s = t / (||s|| ||t||) - dot(s, t) s / (||s||³ ||t||) with ε-padded norms.</para>
     /// </remarks>
-    private Vector<T> ComputeNTXentGradient(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings, int anchorIdx)
+    private Tensor<T> ComputeNTXentGradients(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
     {
         int batchSize = studentEmbeddings.Length;
-        int embeddingDim = studentEmbeddings[anchorIdx].Length;
-        var gradient = new Vector<T>(embeddingDim);
+        var studentRows = DistillationHelper<T>.StackRows(studentEmbeddings);
+        var teacherRows = DistillationHelper<T>.StackRows(teacherEmbeddings);
+        var students = studentRows.Cast<double>();
+        var teachers = teacherRows.Cast<double>();
+        double epsilon = Epsilon;
 
-        var studentAnchor = studentEmbeddings[anchorIdx];
+        // Softmax weights exp(sim/τ) / (Σ exp(sim/τ) + ε), evaluated as exp(sim/τ - logSumExp) so
+        // small temperatures cannot overflow the exponentials.
+        var sims = Engine.TensorMultiplyScalar(
+            DistillationHelper<T>.CosineSimilarityMatrixWide(studentRows, teacherRows), 1.0 / Temperature);
+        var logNormalizer = Engine.Reshape(DistillationHelper<T>.RowLogSumExp(sims, Epsilon), [batchSize, 1]);
+        var softmaxWeights = Engine.TensorExp(
+            Engine.TensorSubtract(sims, Engine.TensorBroadcastTo(logNormalizer, [batchSize, batchSize])));
 
-        // Compute similarities and softmax weights for all teacher embeddings
-        double[] similarities = new double[batchSize];
-        double[] expSims = new double[batchSize];
-        double sumExpSims = 0;
+        // -∂sim(s_i, t_i)/∂s_i + Σ_j softmax_j ∂sim(s_i, t_j)/∂s_i = Σ_j (softmax_ij - δ_ij) ∂sim(s_i, t_j)/∂s_i
+        var pairWeights = Engine.TensorSubtract(softmaxWeights, Tensor<double>.FromMatrix(Matrix<double>.CreateIdentity(batchSize)));
 
-        for (int j = 0; j < batchSize; j++)
-        {
-            similarities[j] = VectorHelper.CosineSimilarity(studentAnchor, teacherEmbeddings[j]);
-            expSims[j] = Math.Exp(similarities[j] / Temperature);
-            sumExpSims += expSims[j];
-        }
+        var dots = Engine.TensorMatMul(students, Engine.TensorTranspose(teachers));                       // [B, B]
+        var normS = Engine.TensorAddScalar(
+            Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(students, students), [1], keepDims: true)), epsilon); // [B, 1]
+        var normT = Engine.TensorAddScalar(
+            Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(teachers, teachers), [1], keepDims: true)), epsilon); // [B, 1]
+        var normTRow = Engine.TensorTranspose(normT);                                                       // [1, B]
+        var normProduct = Engine.TensorMatMul(normS, normTRow);                                             // ||s_i|| ||t_j||
+        var cubedProduct = Engine.TensorMatMul(Engine.TensorMultiply(Engine.TensorMultiply(normS, normS), normS), normTRow);
 
-        // Compute softmax weights
-        double[] softmaxWeights = new double[batchSize];
-        for (int j = 0; j < batchSize; j++)
-        {
-            softmaxWeights[j] = expSims[j] / (sumExpSims + Epsilon);
-        }
-
-        // Compute gradient: -∂sim(s_i, t_i)/∂s_i + Σ_j softmax_j * ∂sim(s_i, t_j)/∂s_i
-        // Gradient of positive term (i == anchorIdx)
-        var positiveGrad = ComputeCosineSimilarityGradient(studentAnchor, teacherEmbeddings[anchorIdx]);
-
-        // Negate for the positive term contribution
-        for (int d = 0; d < embeddingDim; d++)
-        {
-            gradient[d] = NumOps.Multiply(positiveGrad[d], NumOps.FromDouble(-1.0));
-        }
-
-        // Add weighted gradients from all pairs
-        for (int j = 0; j < batchSize; j++)
-        {
-            var pairGrad = ComputeCosineSimilarityGradient(studentAnchor, teacherEmbeddings[j]);
-
-            for (int d = 0; d < embeddingDim; d++)
-            {
-                var weightedGrad = NumOps.Multiply(pairGrad[d], NumOps.FromDouble(softmaxWeights[j]));
-                gradient[d] = NumOps.Add(gradient[d], weightedGrad);
-            }
-        }
+        // Σ_j w_ij t_j / (||s_i|| ||t_j||)  -  s_i Σ_j w_ij dot_ij / (||s_i||³ ||t_j||)
+        var teacherTerm = Engine.TensorMatMul(Engine.TensorDivide(pairWeights, normProduct), teachers);
+        var selfCoefficient = Engine.ReduceSum(
+            Engine.TensorDivide(Engine.TensorMultiply(pairWeights, dots), cubedProduct), [1], keepDims: true);
+        var gradient = Engine.TensorSubtract(
+            teacherTerm, Engine.TensorMultiply(students, Engine.TensorBroadcastTo(selfCoefficient, students.Shape.ToArray())));
 
         // Scale by 1/temperature
-        for (int d = 0; d < embeddingDim; d++)
-        {
-            gradient[d] = NumOps.Divide(gradient[d], NumOps.FromDouble(Temperature));
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Computes gradient of cosine similarity with respect to the first vector.
-    /// </summary>
-    /// <param name="student">Student embedding (variable with respect to which we compute gradient).</param>
-    /// <param name="teacher">Teacher embedding (constant).</param>
-    /// <returns>Gradient ∂sim(student, teacher)/∂student.</returns>
-    /// <remarks>
-    /// <para>For cosine similarity sim(s, t) = dot(s, t) / (||s|| * ||t||),
-    /// the gradient is: ∂sim/∂s_i = (t_i / (||s|| * ||t||)) - (dot(s, t) * s_i) / (||s||³ * ||t||)</para>
-    /// </remarks>
-    private Vector<T> ComputeCosineSimilarityGradient(Vector<T> student, Vector<T> teacher)
-    {
-        int dim = student.Length;
-        var gradient = new Vector<T>(dim);
-
-        // Compute dot product and norms using IEngine
-        var engine = AiDotNetEngine.Current;
-        double dotVal = NumOps.ToDouble(engine.DotProduct(student, teacher));
-        double normS = Math.Sqrt(Math.Max(0, NumOps.ToDouble(engine.DotProduct(student, student)))) + Epsilon;
-        double normT = Math.Sqrt(Math.Max(0, NumOps.ToDouble(engine.DotProduct(teacher, teacher)))) + Epsilon;
-
-        // Compute gradient for each dimension
-        for (int i = 0; i < dim; i++)
-        {
-            double s_i = Convert.ToDouble(student[i]);
-            double t_i = Convert.ToDouble(teacher[i]);
-
-            // ∂sim/∂s_i = (t_i / (||s|| * ||t||)) - (dot * s_i) / (||s||³ * ||t||)
-            double grad = (t_i / (normS * normT)) - (dotVal * s_i) / (normS * normS * normS * normT);
-            gradient[i] = NumOps.FromDouble(grad);
-        }
-
-        return gradient;
+        return Engine.TensorMultiplyScalar(gradient, 1.0 / Temperature).Cast<T>();
     }
 
 }

@@ -35,30 +35,20 @@ public class MLSDPreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 1, height, width });
+        if (!PreprocessorFilters.HasInterior(shape[2], shape[3]))
+            return new Tensor<T>(new[] { shape[0], 1, shape[2], shape[3] });
 
-        for (int b = 0; b < batch; b++)
-        {
-            // Detect strong gradients in horizontal and vertical directions
-            for (int h = 1; h < height - 1; h++)
-            {
-                for (int w = 1; w < width - 1; w++)
-                {
-                    double dx = Math.Abs(NumOps.ToDouble(data[b, 0, h, w + 1]) - NumOps.ToDouble(data[b, 0, h, w - 1]));
-                    double dy = Math.Abs(NumOps.ToDouble(data[b, 0, h + 1, w]) - NumOps.ToDouble(data[b, 0, h - 1, w]));
+        // Detect strong gradients in horizontal and vertical directions (central differences of channel 0)
+        var differences = engine.TensorAbs(PreprocessorFilters.Interior3x3(PreprocessorFilters.Channel(data, 0), PreprocessorFilters.CentralDifferences));
+        var dx = PreprocessorFilters.Channel(differences, 0);
+        var dy = PreprocessorFilters.Channel(differences, 1);
 
-                    // Suppress non-line features (keep mostly horizontal or vertical edges)
-                    double lineScore = Math.Max(dx, dy) - Math.Min(dx, dy) * 0.5;
-                    lineScore = Math.Max(0, lineScore);
-                    result[b, 0, h, w] = NumOps.FromDouble(Math.Min(1.0, lineScore * 4.0));
-                }
-            }
-        }
-
-        return result;
+        // Suppress non-line features (keep mostly horizontal or vertical edges):
+        // min(1, 4 max(0, max(dx, dy) - 0.5 min(dx, dy)))
+        var lineScore = engine.TensorSubtract(engine.TensorMax(dx, dy), engine.TensorMultiplyScalar(engine.TensorMin(dx, dy), NumOps.FromDouble(0.5)));
+        lineScore = engine.TensorMax(lineScore, NumOps.Zero);
+        return PreprocessorFilters.PadBorder(engine.TensorMin(engine.TensorMultiplyScalar(lineScore, NumOps.FromDouble(4.0)), NumOps.One));
     }
 }

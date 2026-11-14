@@ -311,8 +311,11 @@ public class GraphRAG<T>
 
         // Step 4: Enrich vector results with graph information
         var enrichedResults = new List<Document<T>>();
+        var boostedScores = new List<double>();
+        var boostedDocuments = new List<Document<T>>();
+        var originalScores = RagScoreConversion<T>.ToDouble(vectorResults.Select(d => d.RelevanceScore));
 
-        foreach (var doc in vectorResults)
+        foreach (var (doc, rawScore) in vectorResults.Zip(originalScores, (d, s) => (d, s)))
         {
             var enrichedContent = doc.Content;
 
@@ -332,9 +335,7 @@ public class GraphRAG<T>
                 enrichedContent = doc.Content + graphContext;
 
                 // Boost relevance score by fixed 1.5x factor for documents that match graph entities
-                var originalScore = doc.HasRelevanceScore
-                    ? Convert.ToDouble(doc.RelevanceScore)
-                    : 0.5;
+                var originalScore = doc.HasRelevanceScore ? rawScore : 0.5;
                 var boostedScore = Math.Min(1.0, originalScore * GraphBoostFactor);
 
                 // Calculate the minimum hop distance among mentioned entities
@@ -345,7 +346,7 @@ public class GraphRAG<T>
                     .DefaultIfEmpty(0)
                     .Min();
 
-                enrichedResults.Add(new Document<T>
+                var boosted = new Document<T>
                 {
                     Id = doc.Id,
                     Content = enrichedContent,
@@ -355,14 +356,22 @@ public class GraphRAG<T>
                         ["graph_boosted"] = true,
                         ["graph_hop_count"] = minHopDistance
                     },
-                    RelevanceScore = NumOps.FromDouble(boostedScore),
                     HasRelevanceScore = true
-                });
+                };
+                enrichedResults.Add(boosted);
+                boostedDocuments.Add(boosted);
+                boostedScores.Add(boostedScore);
             }
             else
             {
                 enrichedResults.Add(doc);
             }
+        }
+
+        var convertedBoosts = RagScoreConversion<T>.FromDouble(boostedScores);
+        for (int i = 0; i < boostedDocuments.Count; i++)
+        {
+            boostedDocuments[i].RelevanceScore = convertedBoosts[i];
         }
 
         // Step 5: Return top-K enriched results sorted by boosted scores

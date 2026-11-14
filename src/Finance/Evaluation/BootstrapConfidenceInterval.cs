@@ -65,7 +65,7 @@ public static class BootstrapConfidenceInterval<T>
             return NumOps.Zero;
         }
 
-        return AiDotNetEngine.Current.TensorMean(Tensor<T>.FromVector(sample));
+        return NumOps.FromDouble(AiDotNetEngine.Current.TensorMean(Tensor<T>.FromVector(sample).Cast<double>()));
     }
 
     /// <summary>Per-observation Sharpe ratio (mean / sample-stdev) of a return sample.</summary>
@@ -83,11 +83,11 @@ public static class BootstrapConfidenceInterval<T>
         }
 
         var engine = AiDotNetEngine.Current;
-        var values = Tensor<T>.FromVector(sample);
-        T mean = engine.TensorMean(values);
-        T sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, mean));
-        T std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(n - 1)));
-        return NumOps.GreaterThan(std, NumOps.Zero) ? NumOps.Divide(mean, std) : NumOps.Zero;
+        var values = Tensor<T>.FromVector(sample).Cast<double>();
+        double mean = engine.TensorMean(values);
+        double sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, mean));
+        double std = Math.Sqrt(sse / (n - 1));
+        return std > 0 ? NumOps.FromDouble(mean / std) : NumOps.Zero;
     }
 
     /// <summary>
@@ -216,6 +216,8 @@ public static class BootstrapConfidenceInterval<T>
         }
 
         double frac = rank - lo;
-        return NumOps.Add(sorted[lo], NumOps.Multiply(NumOps.FromDouble(frac), NumOps.Subtract(sorted[hi], sorted[lo])));
+        double lower = NumOps.ToDouble(sorted[lo]);
+        double upper = NumOps.ToDouble(sorted[hi]);
+        return NumOps.FromDouble(lower + frac * (upper - lower));
     }
 }

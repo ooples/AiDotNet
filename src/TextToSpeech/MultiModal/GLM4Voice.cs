@@ -357,15 +357,15 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
     // Each call samples from a generator seeded afresh, so a call's output depends on its input and the seed only.
     private Random SamplingRandom => _samplingRandom ?? throw new InvalidOperationException("Sampling happens inside an inference call.");
 
-    /// <summary>Transformers' sampling (<see cref="NucleusSampling.Sample"/>).</summary>
-    internal static int Sample(double[] logits, double temperature, double topP, Func<int, bool>? allowed, Random random) =>
-        NucleusSampling.Sample(logits, temperature, topP, allowed, random);
+    /// <summary>Transformers' sampling (<see cref="NucleusSampling{T}.Sample(Tensor{T}, double, double, Func{int, bool}, Random)"/>).</summary>
+    internal static int Sample(Tensor<T> logits, double temperature, double topP, Func<int, bool>? allowed, Random random) =>
+        NucleusSampling<T>.Sample(logits, temperature, topP, allowed, random);
 
     private sealed class Session
     {
         public Session(GlmDecoder<T> lm) => Cache = lm.NewCache();
         public GlmDecoder<T>.Cache Cache { get; }
-        public double[]? Logits { get; set; }
+        public Tensor<T>? Logits { get; set; }
     }
 
     // Feeds ids, keeping the logits of the last.
@@ -375,10 +375,7 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
         if (session.Cache.Length + ids.Count > _options.MaxTextLength)
             throw new InvalidOperationException($"The sequence would exceed {_options.MaxTextLength} tokens.");
         var hidden = LanguageModel.Forward(LanguageModel.Embed(ids), session.Cache);
-        var logits = LanguageModel.Logits(Engine.TensorNarrow(hidden, 0, ids.Count - 1, 1));
-        var values = new double[logits.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = Ops.ToDouble(logits.GetFlat(i));
-        session.Logits = values;
+        session.Logits = LanguageModel.Logits(Engine.TensorNarrow(hidden, 0, ids.Count - 1, 1));
     }
 
     private int Draw(Session session, Func<int, bool>? allowed) =>
@@ -539,10 +536,9 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
 
     private int[] TokenIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"Token ids lie in [0, {_options.VocabSize}).");
         }

@@ -26,13 +26,13 @@ public class BayesianModelAveraging<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nModels;
     private readonly double _priorInclusion;
 
-    private double[]? _inclusionProbabilities;
+    private Vector<T>? _inclusionProbabilities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? InclusionProbabilities => _inclusionProbabilities;
+    public Vector<T>? InclusionProbabilities => _inclusionProbabilities;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,99 +71,71 @@ public class BayesianModelAveraging<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int p = data.Columns;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
 
-        // Track inclusion counts and model weights
-        var inclusionCounts = new double[p];
-        double totalWeight = 0;
-
+        // Sample every model (subset of features) up front; the draw order matches one model at a time.
+        var included = new bool[_nModels * p];
         for (int m = 0; m < _nModels; m++)
         {
-            // Sample a model (subset of features)
-            var included = new bool[p];
-            var selectedFeatures = new List<int>();
+            bool any = false;
             for (int j = 0; j < p; j++)
             {
                 if (rand.NextDouble() < _priorInclusion)
                 {
-                    included[j] = true;
-                    selectedFeatures.Add(j);
+                    included[m * p + j] = true;
+                    any = true;
                 }
             }
 
-            if (selectedFeatures.Count == 0)
-            {
-                selectedFeatures.Add(rand.Next(p));
-                included[selectedFeatures[0]] = true;
-            }
-
-            // Compute model likelihood (using R-squared as proxy)
-            double modelWeight = ComputeModelWeight(X, y, selectedFeatures, n);
-            totalWeight += modelWeight;
-
-            // Accumulate weighted inclusion
-            for (int j = 0; j < p; j++)
-                if (included[j])
-                    inclusionCounts[j] += modelWeight;
+            if (!any)
+                included[m * p + rand.Next(p)] = true;
         }
 
-        // Compute posterior inclusion probabilities
-        _inclusionProbabilities = new double[p];
-        for (int j = 0; j < p; j++)
-            _inclusionProbabilities[j] = inclusionCounts[j] / (totalWeight + 1e-10);
+        var ones = PreprocessingTensorOps.Filled(new[] { _nModels * p }, NumOps.One);
+        var inclusion = engine.Reshape(
+            engine.TensorWhere(included, ones, new Tensor<T>(new[] { _nModels * p })), new[] { _nModels, p });
+
+        // Model likelihood (R-squared proxy from per-feature squared correlations) with a BIC-like penalty.
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        Tensor<T> modelWeights;
+        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y)));
+        if (PreprocessingTensorOps.IsBelow(ssTot, eps))
+        {
+            modelWeights = PreprocessingTensorOps.Filled(new[] { _nModels, 1 }, eps);
+        }
+        else
+        {
+            var rSquaredPerFeature = engine.Reshape(
+                engine.TensorSquare(PreprocessingTensorOps.TargetCorrelations(X, y)), new[] { p, 1 });
+            var modelSizes = engine.TensorMatMul(inclusion, PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.One));
+            var rSquared = engine.TensorMin(
+                engine.TensorDivide(engine.TensorMatMul(inclusion, rSquaredPerFeature), modelSizes), NumOps.FromDouble(0.99));
+            // BIC = n log(1 - R^2 + 1e-10) + k log n, kept divided by n (bicPerSample) so it stays finite in T.
+            var bicPerSample = engine.TensorAdd(
+                engine.TensorLog(engine.TensorAddScalar(engine.TensorNegate(rSquared), NumOps.FromDouble(1 + 1e-10))),
+                engine.TensorMultiplyScalar(modelSizes, NumOps.FromDouble(Math.Log(n) / n)));
+
+            // Model weights exp(-BIC / 2) relative to the best model, exp(-n (bicPerSample - best) / 2): the weights only
+            // enter as ratios, and the absolute exp(-BIC / 2) overflows (n log(1 - R^2) is about -4.6 n for
+            // R^2 = 0.99) or underflows to 0 for every model, which made the inclusion probabilities NaN or all zero.
+            T bestBic = engine.TensorMinValue(bicPerSample);
+            modelWeights = engine.TensorExp(engine.TensorMultiplyScalar(
+                engine.TensorSubtractScalar(bicPerSample, bestBic), NumOps.FromDouble(-0.5 * n)));
+        }
+
+        // Posterior inclusion probabilities: weighted inclusion over the total model weight
+        T totalWeight = engine.TensorSum(modelWeights);
+        var inclusionCounts = engine.Reshape(
+            engine.TensorMatMul(engine.TensorTranspose(inclusion), modelWeights), new[] { p });
+        var probabilities = engine.TensorDivideScalar(inclusionCounts, NumOps.Add(totalWeight, eps));
+        _inclusionProbabilities = probabilities.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _inclusionProbabilities[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(probabilities, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double ComputeModelWeight(double[,] X, double[] y, List<int> features, int n)
-    {
-        if (features.Count == 0) return 1e-10;
-
-        // Simple linear regression R-squared
-        double yMean = y.Average();
-        double ssTot = y.Sum(yi => (yi - yMean) * (yi - yMean));
-        if (ssTot < 1e-10) return 1e-10;
-
-        // Use correlation-based approximation
-        double totalCorr = 0;
-        foreach (int j in features)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xd = X[i, j] - xMean;
-                double yd = y[i] - yMean;
-                sxy += xd * yd;
-                sxx += xd * xd;
-                syy += yd * yd;
-            }
-            double r = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-            totalCorr += r * r;
-        }
-
-        double rSquared = Math.Min(totalCorr / features.Count, 0.99);
-
-        // BIC-like penalty
-        double bic = n * Math.Log(1 - rSquared + 1e-10) + features.Count * Math.Log(n);
-        return Math.Exp(-0.5 * bic);
     }
 
     /// <inheritdoc />
@@ -179,15 +151,7 @@ public class BayesianModelAveraging<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("BayesianModelAveraging has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

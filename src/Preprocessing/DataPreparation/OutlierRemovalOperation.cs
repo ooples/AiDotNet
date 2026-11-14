@@ -190,16 +190,11 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
                 $"Outlier handling mode '{_mode}' is not supported for tensor data. Only 'Remove' mode is available.");
         }
 
-        // Count inliers
-        T one = NumOps.FromDouble(1);
-        int inlierCount = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (NumOps.Equals(predictions[i], one))
-            {
-                inlierCount++;
-            }
-        }
+        // Inliers are the samples predicted as 1
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var inliers = PreprocessingTensorOps.MaskPositions(
+            engine.TensorEquals(Tensor<T>.FromVector(predictions), NumOps.FromDouble(1)));
+        int inlierCount = inliers.Length;
 
         // If no outliers, return original data
         if (inlierCount == nSamples)
@@ -209,23 +204,22 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
         }
 
         // Create new tensors with only inliers
-        int[] newXShape = (int[])X._shape;
-        newXShape[0] = inlierCount;
-        var newX = new Tensor<T>(newXShape);
-
-        int[] newYShape = (int[])y._shape;
-        newYShape[0] = inlierCount;
-        var newY = new Tensor<T>(newYShape);
-
-        int destIdx = 0;
-        for (int i = 0; i < nSamples; i++)
+        Tensor<T> newX;
+        Tensor<T> newY;
+        if (inlierCount == 0)
         {
-            if (NumOps.Equals(predictions[i], one))
-            {
-                CopyTensorSample(X, newX, i, destIdx);
-                CopyTensorSample(y, newY, i, destIdx);
-                destIdx++;
-            }
+            int[] newXShape = (int[])X._shape;
+            newXShape[0] = 0;
+            newX = new Tensor<T>(newXShape);
+            int[] newYShape = (int[])y._shape;
+            newYShape[0] = 0;
+            newY = new Tensor<T>(newYShape);
+        }
+        else
+        {
+            var inlierIndex = new Tensor<int>(inliers, new[] { inlierCount });
+            newX = engine.TensorIndexSelect(X, inlierIndex, 0);
+            newY = engine.TensorIndexSelect(y, inlierIndex, 0);
         }
 
         _isFitted = true;
@@ -260,129 +254,67 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
         }
     }
 
-    private void CopyTensorSample(Tensor<T> source, Tensor<T> dest, int srcIdx, int destIdx)
-    {
-        if (source.Rank == 1)
-        {
-            dest[destIdx] = source[srcIdx];
-            return;
-        }
-
-        int[] srcIndices = new int[source.Rank];
-        int[] destIndices = new int[dest.Rank];
-        srcIndices[0] = srcIdx;
-        destIndices[0] = destIdx;
-        CopyRecursive(source, dest, srcIndices, destIndices, 1);
-    }
-
-    private void CopyRecursive(Tensor<T> source, Tensor<T> dest, int[] srcIndices, int[] destIndices, int dim)
-    {
-        if (dim == source.Rank)
-        {
-            dest[destIndices] = source[srcIndices];
-            return;
-        }
-
-        for (int i = 0; i < source.Shape[dim]; i++)
-        {
-            srcIndices[dim] = i;
-            destIndices[dim] = i;
-            CopyRecursive(source, dest, srcIndices, destIndices, dim + 1);
-        }
-    }
-
     private void CalculateStatistics(Matrix<T> X)
     {
+        int n = X.Rows;
         int nFeatures = X.Columns;
-        _columnMedians = new Vector<T>(nFeatures);
-        _columnMeans = new Vector<T>(nFeatures);
-
-        for (int j = 0; j < nFeatures; j++)
+        if (n == 0)
         {
-            var column = X.GetColumn(j);
-            var (mean, _) = StatisticsHelper<T>.CalculateMeanAndStandardDeviation(column);
-            _columnMeans[j] = mean;
-            _columnMedians[j] = CalculateMedian(column);
+            _columnMeans = new Vector<T>(nFeatures);
+            _columnMedians = new Vector<T>(nFeatures);
+            return;
         }
-    }
 
-    private T CalculateMedian(Vector<T> values)
-    {
-        var sorted = values.ToArray();
-        Array.Sort(sorted, (a, b) => NumOps.LessThan(a, b) ? -1 : (NumOps.GreaterThan(a, b) ? 1 : 0));
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var x = Tensor<T>.FromMatrix(X);
+        _columnMeans = engine.ReduceMean(x, new[] { 0 }, false).ToVector();
 
-        int n = sorted.Length;
-        if (n == 0) return NumOps.Zero;
-
-        if (n % 2 == 0)
-        {
-            return NumOps.Divide(
-                NumOps.Add(sorted[n / 2 - 1], sorted[n / 2]),
-                NumOps.FromDouble(2));
-        }
-        return sorted[n / 2];
+        // Column medians: the middle order statistic, or the mean of the two middle ones for even counts
+        var sorted = engine.TensorSort(x, 0).Item1;
+        var upperMiddle = engine.TensorSlice(sorted, new[] { n / 2, 0 }, new[] { 1, nFeatures });
+        var median = n % 2 == 0
+            ? engine.TensorDivideScalar(
+                engine.TensorAdd(engine.TensorSlice(sorted, new[] { n / 2 - 1, 0 }, new[] { 1, nFeatures }), upperMiddle),
+                NumOps.FromDouble(2))
+            : upperMiddle;
+        _columnMedians = engine.Reshape(median, new[] { nFeatures }).ToVector();
     }
 
     private (Matrix<T> X, Vector<T> y) RemoveOutliers(Matrix<T> X, Vector<T> y, Vector<T> predictions)
     {
-        T one = NumOps.FromDouble(1);
-
-        // Count inliers (predictions == 1)
-        int inlierCount = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            if (NumOps.Equals(predictions[i], one))
-            {
-                inlierCount++;
-            }
-        }
+        // Inliers are the samples predicted as 1
+        var inliers = PreprocessingTensorOps.MaskPositions(
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorEquals(Tensor<T>.FromVector(predictions), NumOps.FromDouble(1)));
 
         // If no outliers, return original data
-        if (inlierCount == X.Rows)
+        if (inliers.Length == X.Rows)
         {
             return (X, y);
         }
 
-        // Create new arrays with only inliers
-        var newX = new T[inlierCount, X.Columns];
-        var newY = new T[inlierCount];
-        int rowIdx = 0;
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            if (NumOps.Equals(predictions[i], one))
-            {
-                for (int j = 0; j < X.Columns; j++)
-                {
-                    newX[rowIdx, j] = X[i, j];
-                }
-                newY[rowIdx] = y[i];
-                rowIdx++;
-            }
-        }
-
-        return (new Matrix<T>(newX), new Vector<T>(newY));
+        // Keep only inliers
+        return (PreprocessingTensorOps.SelectRows(X, inliers), PreprocessingTensorOps.SelectElements(y, inliers));
     }
 
     private (Matrix<T> X, Vector<T> y) ReplaceOutliers(
         Matrix<T> X, Vector<T> y, Vector<T> predictions, Vector<T> replacementValues)
     {
-        T minusOne = NumOps.FromDouble(-1);
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        int rows = X.Rows;
+        int columns = X.Columns;
+        if (rows == 0 || columns == 0)
+            return (new Matrix<T>(rows, columns), y);
 
-        var newX = new T[X.Rows, X.Columns];
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            bool isOutlier = NumOps.Equals(predictions[i], minusOne);
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                newX[i, j] = isOutlier ? replacementValues[j] : X[i, j];
-            }
-        }
+        // Outlier rows (predicted -1) take the replacement values
+        var shape = new[] { rows, columns };
+        var isOutlier = engine.TensorEquals(Tensor<T>.FromVector(predictions), NumOps.FromDouble(-1));
+        var newX = engine.TensorWhere(
+            engine.TensorBroadcastTo(engine.Reshape(isOutlier, new[] { rows, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromVector(replacementValues), new[] { 1, columns }), shape),
+            Tensor<T>.FromMatrix(X));
 
         // y is unchanged for replacement modes
-        return (new Matrix<T>(newX), y);
+        return (newX.ToMatrix(), y);
     }
 
     /// <summary>
@@ -399,11 +331,12 @@ public class OutlierRemovalOperation<T> : IRowOperation<T>
 
         var predictions = _detector.Predict(X);
         var mask = new bool[X.Rows];
-        T minusOne = NumOps.FromDouble(-1);
+        var isOutlier = AiDotNet.Tensors.Engines.AiDotNetEngine.Current
+            .TensorEquals(Tensor<T>.FromVector(predictions), NumOps.FromDouble(-1)).Cast<int>().AsSpan().ToArray();
 
-        for (int i = 0; i < predictions.Length; i++)
+        for (int i = 0; i < isOutlier.Length; i++)
         {
-            mask[i] = NumOps.Equals(predictions[i], minusOne);
+            mask[i] = isOutlier[i] != 0;
         }
 
         return mask;

@@ -223,14 +223,8 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         {
             // Add exploration noise
             var noise = _noise.Sample();
-            for (int i = 0; i < action.Length; i++)
-            {
-                action[i] = MathHelper.Clamp<T>(
-                    NumOps.Add(action[i], noise[i]),
-                    NumOps.FromDouble(-1.0),
-                    NumOps.FromDouble(1.0)
-                );
-            }
+            var engine = AiDotNetEngine.Current;
+            action = engine.Clamp(engine.Add(action, RLTensorOps.Head(noise, action.Length)), NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
         }
 
         return action;
@@ -261,10 +255,8 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
         var action = SelectAction(state, training: true);
 
-        T reward = NumOps.Zero;
-        for (int i = 0; i < target.Length; i++)
-            reward = NumOps.Add(reward, target[i]);
-        reward = NumOps.Divide(reward, NumOps.FromDouble(target.Length));
+        // mean of the supervised target
+        T reward = NumOps.Divide(AiDotNetEngine.Current.Sum(target), NumOps.FromDouble(target.Length));
 
         // Treat this one-shot supervised transition as terminal: nextState is fabricated as `state`, so
         // done: false would inject a γQ'(s, μ'(s)) bootstrap and optimize against an invented target.
@@ -312,14 +304,11 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
         // --- Critic update (Lillicrap et al. 2015) ---
         // y = r + gamma*(1-done)*Q'(s', mu'(s')); regress the critic toward y.
-        var saInputs = new Tensor<T>([n, saDim]);
-        var yTargets = new Tensor<T>([n, 1]);
-        for (int i = 0; i < n; i++)
+        // Validate replay-sample shapes before any tensor write: StoreExperience() is a public
+        // input boundary, so a malformed transition would otherwise corrupt the critic inputs
+        // (saInputs) or throw deep inside the target-network forwards. Reject it with a clear message.
+        foreach (var exp in batch)
         {
-            var exp = batch[i];
-            // Validate replay-sample shapes before any tensor write: StoreExperience() is a public
-            // input boundary, so a malformed transition would otherwise corrupt the critic inputs
-            // (saInputs) or throw deep inside the target-network forwards. Reject it with a clear message.
             if (exp.State.Length != stateDim || exp.NextState.Length != stateDim || exp.Action.Length != actionDim)
             {
                 throw new InvalidOperationException(
@@ -327,17 +316,20 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
                     $"NextState={stateDim}, Action={actionDim} but got State={exp.State.Length}, " +
                     $"NextState={exp.NextState.Length}, Action={exp.Action.Length}.");
             }
-            var nextA = _actorTargetNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
-            var nextSA = Tensor<T>.FromVector(ConcatenateStateAction(exp.NextState, nextA));
-            T qNext = _criticTargetNetwork.Predict(nextSA).ToVector()[0];
-
-            T y = exp.Reward;
-            if (!exp.Done) y = NumOps.Add(y, NumOps.Multiply(gamma, qNext));
-
-            var saVec = ConcatenateStateAction(exp.State, exp.Action);
-            for (int j = 0; j < saDim; j++) saInputs[i, j] = saVec[j];
-            yTargets[i, 0] = y;
         }
+
+        // Q'(s', mu'(s')) for the whole batch: the target actor and target critic each run once on it.
+        var nextStates = RLTensorOps.Batch(batch.Select(exp => exp.NextState), stateDim);
+        var nextActions = RLTensorOps.Rows(_actorTargetNetwork.Predict(nextStates), n);
+        var nextSA = RLTensorOps.Batch(batch.Select((exp, row) => ConcatenateStateAction(exp.NextState, nextActions[row])), saDim);
+        var qNext = RLTensorOps.FirstColumn(_criticTargetNetwork.Predict(nextSA), n);
+
+        var rewards = Vector<T>.FromEnumerable(batch.Select(exp => exp.Reward));
+        var done = batch.Select(exp => exp.Done).ToArray();
+        var y = RLTensorOps.TdTargets(rewards, qNext, done, gamma);
+
+        var saInputs = RLTensorOps.Batch(batch.Select(exp => ConcatenateStateAction(exp.State, exp.Action)), saDim);
+        var yTargets = new Tensor<T>([n, 1], y);
         _criticNetwork.Train(saInputs, yTargets);
         T criticLoss = _criticNetwork.GetLastLoss();
 
@@ -346,25 +338,24 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         // gradient for gradient ASCENT on Q); the Q-ascending action target is therefore
         // a − step·(−∇a Q) = a + step·∇a Q. Training the actor toward it realises the chain rule
         // ∇θ mu through the network's MSE Train.
-        var actorInputs = new Tensor<T>([n, stateDim]);
-        var actorTargets = new Tensor<T>([n, actionDim]);
         // DPG action-space ascent step for building the actor's regression target (Lillicrap et al.
         // 2015). Named constant rather than a magic literal; deliberately distinct from the actor
         // NETWORK's optimizer learning rate (_options.ActorLearningRate, already wired into
         // _actorNetwork) — they play different roles and must not be conflated.
         const double actorPolicyGradientStep = 0.05;
         T stepSize = NumOps.FromDouble(actorPolicyGradientStep);
-        for (int i = 0; i < n; i++)
-        {
-            var s = batch[i].State;
-            var a = _actorNetwork.Predict(Tensor<T>.FromVector(s)).ToVector();
-            var negGrad = ComputeDDPGPolicyGradient(s, a);
-            for (int j = 0; j < stateDim; j++) actorInputs[i, j] = s[j];
-            for (int k = 0; k < actionDim; k++)
-                actorTargets[i, k] = MathHelper.Clamp<T>(
-                    NumOps.Subtract(a[k], NumOps.Multiply(stepSize, negGrad[k])),
-                    NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-        }
+        var engine = AiDotNetEngine.Current;
+        var actorInputs = RLTensorOps.Batch(batch.Select(exp => exp.State), stateDim);
+        var currentActions = RLTensorOps.Rows(_actorNetwork.Predict(actorInputs), n);
+
+        // clip(a - step * (-dQ/da), -1, 1) per sample
+        T lowerBound = NumOps.FromDouble(-1.0);
+        T upperBound = NumOps.FromDouble(1.0);
+        var actorTargets = RLTensorOps.Batch(
+            batch.Select((exp, row) => engine.Clamp(
+                engine.Subtract(currentActions[row], engine.Multiply(ComputeDDPGPolicyGradient(exp.State, currentActions[row]), stepSize)),
+                lowerBound, upperBound)),
+            actionDim);
         _actorNetwork.Train(actorInputs, actorTargets);
         T actorLoss = _actorNetwork.GetLastLoss();
 
@@ -383,53 +374,30 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         // DDPG uses deterministic policy gradient: ∇θ J = E[∇a Q(s,a)|a=μ(s) * ∇θ μ(s)]
         //
         // Step 1: Compute ∇a Q(s,a) - gradient of Q-value w.r.t. actions
-        // We approximate this using finite differences since we don't have direct access to critic gradients
+        // We approximate this using central finite differences, ∂Q/∂a_i ≈ (Q(s,a+ε e_i) - Q(s,a-ε e_i)) / (2ε),
+        // evaluating all 2 * |a| perturbed state-actions in one batched critic forward.
         //
         // Step 2: This gradient is then backpropagated through the actor network
         // to compute ∇θ μ(s) via the chain rule
-
-        var gradient = new Vector<T>(action.Length);
-        T epsilon = NumOps.FromDouble(0.001); // Small perturbation for finite differences
-
-        // Compute gradient of Q w.r.t. each action dimension using finite differences
-        for (int i = 0; i < action.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        int width = action.Length;
+        if (width == 0)
         {
-            // Create perturbed action: a + ε
-            var actionPlus = new Vector<T>(action.Length);
-            for (int j = 0; j < action.Length; j++)
-            {
-                actionPlus[j] = action[j];
-            }
-            actionPlus[i] = NumOps.Add(action[i], epsilon);
-
-            // Create perturbed action: a - ε
-            var actionMinus = new Vector<T>(action.Length);
-            for (int j = 0; j < action.Length; j++)
-            {
-                actionMinus[j] = action[j];
-            }
-            actionMinus[i] = NumOps.Subtract(action[i], epsilon);
-
-            // Compute Q(s, a+ε)
-            var stateActionPlus = ConcatenateStateAction(state, actionPlus);
-            var qPlus = _criticNetwork.Predict(Tensor<T>.FromVector(stateActionPlus)).ToVector()[0];
-
-            // Compute Q(s, a-ε)
-            var stateActionMinus = ConcatenateStateAction(state, actionMinus);
-            var qMinus = _criticNetwork.Predict(Tensor<T>.FromVector(stateActionMinus)).ToVector()[0];
-
-            // Finite difference approximation: ∂Q/∂a_i ≈ (Q(s,a+ε) - Q(s,a-ε)) / (2ε)
-            var dQda = NumOps.Divide(
-                NumOps.Subtract(qPlus, qMinus),
-                NumOps.Multiply(NumOps.FromDouble(2.0), epsilon)
-            );
-
-            // This gradient will be backpropagated through the actor network
-            // We negate because we want to maximize Q (gradient ascent)
-            gradient[i] = NumOps.Negate(dQda);
+            return new Vector<T>(0);
         }
 
-        return gradient;
+        T epsilon = NumOps.FromDouble(0.001); // Small perturbation for finite differences
+        var perturbations = Enumerable.Range(0, width).Select(dim => engine.Multiply(RLTensorOps.OneHot<T>(width, dim), epsilon)).ToList();
+        var probes = perturbations.Select(delta => ConcatenateStateAction(state, engine.Add(action, delta)))
+            .Concat(perturbations.Select(delta => ConcatenateStateAction(state, engine.Subtract(action, delta))))
+            .ToList();
+        var q = RLTensorOps.FirstColumn(_criticNetwork.Predict(RLTensorOps.StackRows(probes)), 2 * width);
+        var dQda = engine.Divide(
+            engine.Subtract(q.GetSubVector(0, width), q.GetSubVector(width, width)),
+            NumOps.Multiply(NumOps.FromDouble(2.0), epsilon));
+
+        // We negate because we want to maximize Q (gradient ascent)
+        return engine.Negate(dQda);
     }
 
     private void SoftUpdateTargets()
@@ -443,28 +411,13 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         var sourceParams = source.GetParameters();
         var targetParams = target.GetParameters();
 
-        var tau = _options.TargetUpdateTau;
-        var oneMinusTau = NumOps.Subtract(NumOps.One, tau);
-
-        for (int i = 0; i < targetParams.Length; i++)
-        {
-            targetParams[i] = NumOps.Add(
-                NumOps.Multiply(tau, sourceParams[i]),
-                NumOps.Multiply(oneMinusTau, targetParams[i])
-            );
-        }
-
-        target.UpdateParameters(targetParams);
+        // theta_target <- tau * theta + (1 - tau) * theta_target
+        target.UpdateParameters(RLTensorOps.SoftUpdate(sourceParams, targetParams, _options.TargetUpdateTau));
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {
-        var combined = new Vector<T>(state.Length + action.Length);
-        for (int i = 0; i < state.Length; i++)
-            combined[i] = state[i];
-        for (int i = 0; i < action.Length; i++)
-            combined[state.Length + i] = action[i];
-        return combined;
+        return RLTensorOps.Concat(state, action);
     }
 
     /// <inheritdoc/>
@@ -551,20 +504,12 @@ internal class OrnsteinUhlenbeckNoise<T>
 
     public Vector<T> Sample()
     {
-        var noise = new Vector<T>(_size);
-
-        for (int i = 0; i < _size; i++)
-        {
-            var drift = _numOps.Multiply(_numOps.FromDouble(-_theta), _state[i]);
-            var diffusion = _numOps.Multiply(_numOps.FromDouble(_sigma),
-                MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.One, _random));
-            var dx = _numOps.Add(drift, diffusion);
-
-            _state[i] = _numOps.Add(_state[i], dx);
-            noise[i] = _state[i];
-        }
-
-        return noise;
+        // dx = -theta x + sigma N(0, 1), one draw per dimension in index order
+        var engine = AiDotNetEngine.Current;
+        var drift = engine.Multiply(_state, _numOps.FromDouble(-_theta));
+        var diffusion = engine.Multiply(RLTensorOps.NormalRandom<T>(_random, _size), _numOps.FromDouble(_sigma));
+        _state = engine.Add(_state, engine.Add(drift, diffusion));
+        return _state.Clone();
     }
 
     public void Reset()

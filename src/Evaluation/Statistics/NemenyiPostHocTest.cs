@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Statistics;
 
@@ -61,68 +62,30 @@ public class NemenyiPostHocTest<T>
         double cd = q * Math.Sqrt(k * (k + 1) / (6.0 * n));
 
         // Calculate average ranks (same as Friedman)
-        var ranks = new double[k];
-        for (int i = 0; i < n; i++)
-        {
-            var datasetScores = new double[k];
-            for (int j = 0; j < k; j++)
-                datasetScores[j] = NumOps.ToDouble(samples[j][i]);
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var results = engine.TensorPermute(EvaluationTensorOps<T>.StackRows(samples, n), new[] { 1, 0 });
+        var datasetRanks = EvaluationTensorOps<T>.RowRanksDescending(results, 1e-10);
+        var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), (double)n);
 
-            var datasetRanks = RankWithTies(datasetScores, ascending: false);
-            for (int j = 0; j < k; j++)
-                ranks[j] += datasetRanks[j];
-        }
-        for (int j = 0; j < k; j++)
-            ranks[j] /= n;
-
-        // Perform pairwise comparisons
+        // Perform pairwise comparisons: |rank_i - rank_j| > CD (the diagonal difference is 0, never above CD)
+        var shape = new[] { k, k };
+        var rankDifferences = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(ranks, new[] { k, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(ranks, new[] { 1, k }), shape)));
+        var significant = engine.TensorGreaterThan(rankDifferences, cd).Cast<bool>().ToArray();
         var pairwise = new bool[k, k];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = i + 1; j < k; j++)
-            {
-                pairwise[i, j] = Math.Abs(ranks[i] - ranks[j]) > cd;
-                pairwise[j, i] = pairwise[i, j];
-            }
-        }
+        Buffer.BlockCopy(significant, 0, pairwise, 0, k * k * sizeof(bool));
 
         return new NemenyiResult<T>
         {
             CriticalDifference = cd,
-            AverageRanks = ranks,
+            AverageRanks = ranks.ToArray(),
             SignificantDifferences = pairwise,
             Alpha = alpha,
             NumAlgorithms = k,
             NumDatasets = n
         };
-    }
-
-    private static double[] RankWithTies(double[] values, bool ascending = true)
-    {
-        int n = values.Length;
-        var indexed = values.Select((v, i) => (value: v, index: i)).ToList();
-
-        if (ascending)
-            indexed = indexed.OrderBy(x => x.value).ToList();
-        else
-            indexed = indexed.OrderByDescending(x => x.value).ToList();
-
-        var ranks = new double[n];
-        int i = 0;
-        while (i < n)
-        {
-            int j = i;
-            while (j < n - 1 && Math.Abs(indexed[j].value - indexed[j + 1].value) < 1e-10)
-                j++;
-
-            double avgRank = (i + j + 2.0) / 2.0;
-            for (int m = i; m <= j; m++)
-                ranks[indexed[m].index] = avgRank;
-
-            i = j + 1;
-        }
-
-        return ranks;
     }
 }
 
@@ -188,8 +151,9 @@ public class NemenyiResult<T>
             "Average Ranks:"
         };
 
+        var averageRanks = AverageRanks.ToArray();
         for (int i = 0; i < NumAlgorithms; i++)
-            lines.Add($"  Algorithm {i + 1}: {AverageRanks[i]:F4}");
+            lines.Add($"  Algorithm {i + 1}: {averageRanks[i]:F4}");
 
         var sigPairs = GetSignificantPairs().ToList();
         if (sigPairs.Count > 0)

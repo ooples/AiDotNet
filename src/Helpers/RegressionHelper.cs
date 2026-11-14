@@ -46,31 +46,44 @@ public static class RegressionHelper<T>
     /// </remarks>
     public static (Matrix<T> xScaled, Vector<T> yScaled, Vector<T> xMean, Vector<T> xStd, T yMean, T yStd) CenterAndScale(Matrix<T> x, Vector<T> y)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        int columns = x.Columns;
+        var xTensor = Tensor<T>.FromMatrix(x);
+        var columnAxis = new[] { 0 };
+
         // Calculate mean for each feature column
-        Vector<T> xMean = new(x.Columns);
-        for (int j = 0; j < x.Columns; j++)
-        {
-            xMean[j] = x.GetColumn(j).Mean();
-        }
+        Vector<T> xMean = engine.ReduceMean(xTensor, columnAxis, false).ToVector();
 
         // Calculate mean for target values
         T yMean = y.Mean();
 
-        // Calculate standard deviation for each feature column
-        Vector<T> xStd = new(x.Columns);
-        for (int j = 0; j < x.Columns; j++)
-        {
-            xStd[j] = StatisticsHelper<T>.CalculateStandardDeviation(x.GetColumn(j));
-            double scale = _numOps.ToDouble(xStd[j]);
-            if (double.IsNaN(scale) || double.IsInfinity(scale))
-            {
-                throw new ArgumentException($"Feature {j} has a non-finite standard deviation.", nameof(x));
-            }
+        // Calculate the sample (n - 1) standard deviation of each feature column. Fewer than two rows
+        // give zero spread, matching CalculateStandardDeviation.
+        Tensor<T> columnStd = x.Rows < 2
+            ? new Tensor<T>(new[] { columns })
+            : engine.TensorStdMean(xTensor, columnAxis, 1, false).Item1;
 
-            // A constant feature is already centered to zero. Using unit scale keeps it zero and
-            // lets callers retain harmless constant columns instead of manufacturing NaN values.
-            if (scale == 0.0) xStd[j] = _numOps.One;
+        if (columns > 0)
+        {
+            // Report the first non-finite column: score non-finite columns columns - j (unique, so
+            // argmax is the lowest such j) and finite columns zero.
+            var descending = engine.TensorArange<T>(columns, 0, -1);
+            var badScore = engine.TensorWhere(engine.TensorIsFinite(columnStd),
+                new Tensor<T>(new[] { columns }), descending);
+            int first = engine.TensorArgMax(badScore, 0).GetFlat(0);
+            double firstScale = _numOps.ToDouble(columnStd.GetFlat(first));
+            if (double.IsNaN(firstScale) || double.IsInfinity(firstScale))
+            {
+                throw new ArgumentException($"Feature {first} has a non-finite standard deviation.", nameof(x));
+            }
         }
+
+        // A constant feature is already centered to zero. Using unit scale keeps it zero and
+        // lets callers retain harmless constant columns instead of manufacturing NaN values.
+        var unitScale = engine.TensorAddScalar(new Tensor<T>(new[] { columns }), _numOps.One);
+        Vector<T> xStd = engine.TensorWhere(engine.TensorEquals(columnStd, _numOps.Zero), unitScale, columnStd)
+            .ToVector();
 
         // Calculate standard deviation for target values
         T yStd = StatisticsHelper<T>.CalculateStandardDeviation(y);
@@ -85,14 +98,12 @@ public static class RegressionHelper<T>
         if (targetScale == 0.0) yStd = _numOps.One;
 
         // Standardize feature matrix: (x - mean) / std
-        Matrix<T> xScaled = new(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                xScaled[i, j] = _numOps.Divide(_numOps.Subtract(x[i, j], xMean[j]), xStd[j]);
-            }
-        }
+        var fullShape = new[] { x.Rows, columns };
+        var rowShape = new[] { 1, columns };
+        var centered = engine.TensorSubtract(xTensor,
+            engine.TensorBroadcastTo(Tensor<T>.FromVector(xMean, rowShape), fullShape));
+        Matrix<T> xScaled = engine.TensorDivide(centered,
+            engine.TensorBroadcastTo(Tensor<T>.FromVector(xStd, rowShape), fullShape)).ToMatrix();
 
         // Standardize target values: (y - mean) / std
         Vector<T> yScaled = y.Transform(yi => _numOps.Divide(_numOps.Subtract(yi, yMean), yStd));

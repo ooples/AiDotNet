@@ -200,13 +200,7 @@ namespace AiDotNet.NeuralNetworks
                 throw new ArgumentException($"Requested dimension {dimension} exceeds max dimension {EmbeddingDimension}");
 
             var fullEmbedding = Embed(text);
-            var resizedValues = new T[dimension];
-            for (int i = 0; i < dimension; i++)
-            {
-                resizedValues[i] = fullEmbedding[i];
-            }
-
-            return new Vector<T>(resizedValues).SafeNormalize();
+            return fullEmbedding.GetSubVector(0, dimension).SafeNormalize();
         }
 
         /// <inheritdoc/>

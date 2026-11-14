@@ -112,32 +112,25 @@ public static class TensorCopyHelper
             return;
         }
 
-        // Calculate elements per sample (product of dimensions after the first)
-        int elementsPerSample = 1;
-        for (int d = 1; d < source.Shape.Length; d++)
-        {
-            elementsPerSample *= source.Shape[d];
-        }
+        // Trailing shapes were validated above, so the sample is one bulk slice copy along dim 0. GetSlice is a
+        // view over the source's whole storage, which SetSlice would copy from its start, so the sample's own
+        // elements are taken first (ToArray reads a view logically).
+        var sample = source.GetSlice(sourceIndex);
+        dest.SetSlice(destIndex, new Tensor<T>(sample.ToArray(), sample._shape));
+    }
 
-        // Create index arrays for multi-dimensional access
-        var sourceIndices = new int[source.Shape.Length];
-        var destIndices = new int[dest.Shape.Length];
-        sourceIndices[0] = sourceIndex;
-        destIndices[0] = destIndex;
-
-        // Copy all elements for this sample
-        for (int i = 0; i < elementsPerSample; i++)
-        {
-            // Convert flat index to multi-dimensional indices
-            int remaining = i;
-            for (int d = source.Shape.Length - 1; d >= 1; d--)
-            {
-                sourceIndices[d] = remaining % source.Shape[d];
-                destIndices[d] = remaining % dest.Shape[d];
-                remaining /= source.Shape[d];
-            }
-
-            dest[destIndices] = source[sourceIndices];
-        }
+    /// <summary>
+    /// Converts <paramref name="source"/> to <typeparamref name="TOut"/> element by element in LOGICAL order.
+    /// </summary>
+    /// <remarks>
+    /// AiDotNet.Tensors' <c>Tensor.Cast</c> reads the backing storage from index 0, ignoring a view's storage offset
+    /// and strides and not realizing a pending lazy result: a narrowed, sliced or permuted view converts the wrong
+    /// elements while every shape check still passes. <c>ToArray</c> realizes the tensor and walks the view in
+    /// logical order, so the cast runs on a fresh row-major copy.
+    /// </remarks>
+    internal static Tensor<TOut> CastLogical<T, TOut>(Tensor<T> source)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        return new Tensor<T>(source.ToArray(), source.Shape.ToArray()).Cast<TOut>();
     }
 }

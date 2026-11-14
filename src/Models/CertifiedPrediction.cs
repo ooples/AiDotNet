@@ -1,3 +1,5 @@
+using AiDotNet.Helpers;
+
 namespace AiDotNet.Models;
 
 /// <summary>
@@ -27,17 +29,17 @@ public class CertifiedPrediction<T>
     /// <summary>
     /// Gets or sets the confidence score for the prediction.
     /// </summary>
-    public double Confidence { get; set; }
+    public T Confidence { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the lower bound on the probability of the predicted class.
     /// </summary>
-    public double LowerBound { get; set; }
+    public T LowerBound { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the upper bound on the probability of the predicted class.
     /// </summary>
-    public double UpperBound { get; set; }
+    public T UpperBound { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets additional certification information.

@@ -258,8 +258,7 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_forgetGateWeights);
         InitializeTensor2D(_inputGateWeights);
         // Forget gate bias ~ 2 so sigmoid(2) ~ 0.88 -> strong initial memory retention
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(2.0);
+        _forgetGateBias.Fill(NumOps.FromDouble(2.0));
         _inputGateBias.Fill(NumOps.FromDouble(0.1));
         InitializeSlots();
         InitializeTensor2D(_outputGateWeights);
@@ -347,11 +346,12 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         // receive identical dynamic updates. Aggregate those slots into the
         // square per-head state consumed by the fused GLA scan, then add the
         // learned initial-state contribution decayed by cumulative forget.
-        var slotCounts = new T[_headDimension];
-        for (int slot = 0; slot < _numSlots; slot++)
-            slotCounts[slot % _headDimension] = NumOps.Add(
-                slotCounts[slot % _headDimension], NumOps.One);
-        var countTensor = new Tensor<T>(slotCounts, new[] { 1, 1, 1, _headDimension });
+        // Key index j receives floor(numSlots / D) slots, plus one more when j < numSlots mod D.
+        var countTensor = Engine.Reshape(
+            Engine.TensorAddScalar(
+                Engine.TensorLessThan(Engine.TensorArange<T>(0, _headDimension, 1), NumOps.FromDouble(_numSlots % _headDimension)),
+                NumOps.FromDouble(_numSlots / _headDimension)),
+            new[] { 1, 1, 1, _headDimension });
         var kHeads = Engine.Reshape(
             k,
             new[] { batchSize, seqLen, _numHeads, _headDimension });
@@ -418,113 +418,6 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>, IShapeContract
         outputShape[rank - 2] = seqLen;
         outputShape[rank - 1] = _modelDimension;
         return Engine.Reshape(result, outputShape);
-    }
-
-    /// <summary>
-    /// Slot recurrence forward: gated write to slots and query-based read from slots.
-    /// </summary>
-    /// <remarks>
-    /// For each timestep t and each head h:
-    ///   S_t[h] = forget_gate[t,h] * S_{t-1}[h] + input_gate[t,h] * v_t[h] outer k_t[h]
-    ///   o_t[h] = S_t[h] * q_t[h]
-    ///
-    /// The slot matrix S has shape [numSlots, headDim] per head. The outer product v*k^T
-    /// writes a rank-1 update into the slot space. Because numSlots is fixed, this bounds
-    /// memory independent of sequence length.
-    /// </remarks>
-    private Tensor<T> SlotRecurrenceForward(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        Tensor<T> forgetGate, Tensor<T> inputGate,
-        int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // Slot state per head: [batch, numHeads, numSlots, headDim]
-        var slotState = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });
-
-        // Initialize slots from learned initial embeddings
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int hi = 0; hi < _numHeads; hi++)
-                for (int si = 0; si < _numSlots; si++)
-                    for (int di = 0; di < _headDimension; di++)
-                        slotState[new[] { bi, hi, si, di }] = _initialSlots[new[] { hi, si, di }];
-
-        // Save all slot states for backward pass: [batch, seqLen+1, numHeads, numSlots, headDim]
-        var allStates = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _numSlots, _headDimension });
-
-        // Save initial state at t=0
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int hi = 0; hi < _numHeads; hi++)
-                for (int si = 0; si < _numSlots; si++)
-                    for (int di = 0; di < _headDimension; di++)
-                        allStates[new[] { bi, 0, hi, si, di }] = slotState[new[] { bi, hi, si, di }];
-
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T fGate = forgetGate[new[] { bi, t, hi }];
-                    T iGate = inputGate[new[] { bi, t, hi }];
-
-                    // Slot update: S_t = fGate * S_{t-1} + iGate * (v_t outer k_t)
-                    // v_t is [headDim], k_t is [headDim] (mapped to slots via outer product)
-                    // For GSA, the slot dimension maps keys to slots, so:
-                    //   S[si, di] += iGate * v[di] * k_scaled[si % headDim]
-                    // The numSlots can differ from headDim, so we use modular indexing
-                    // to map the key space onto the slot space.
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        // Key index for this slot (maps slots to key dimensions)
-                        int kIdx = si % _headDimension;
-                        int flatKIdx = dimStart + kIdx;
-                        T kVal = NumOps.Multiply(k[new[] { bi, t, flatKIdx }], keyScale);
-
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            T prevS = slotState[new[] { bi, hi, si, di }];
-                            T vVal = v[new[] { bi, t, flatDi }];
-
-                            // S_t[si,di] = fGate * S_{t-1}[si,di] + iGate * v[di] * k[kIdx]
-                            T update = NumOps.Multiply(iGate, NumOps.Multiply(vVal, kVal));
-                            T newS = NumOps.Add(NumOps.Multiply(fGate, prevS), update);
-                            slotState[new[] { bi, hi, si, di }] = newS;
-                        }
-                    }
-
-                    // Slot read: o_t[di] = sum_si S_t[si, di] * q_scaled[si % headDim]
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T oVal = NumOps.Zero;
-                        for (int si = 0; si < _numSlots; si++)
-                        {
-                            int qIdx = si % _headDimension;
-                            int flatQIdx = dimStart + qIdx;
-                            T qVal = q[new[] { bi, t, flatQIdx }];
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(slotState[new[] { bi, hi, si, di }], qVal));
-                        }
-                        output[new[] { bi, t, flatDi }] = oVal;
-                    }
-                }
-            }
-
-            // Save slot state snapshot for backward pass
-            for (int bi = 0; bi < batchSize; bi++)
-                for (int hi = 0; hi < _numHeads; hi++)
-                    for (int si = 0; si < _numSlots; si++)
-                        for (int di = 0; di < _headDimension; di++)
-                            allStates[new[] { bi, t + 1, hi, si, di }] = slotState[new[] { bi, hi, si, di }];
-        }
-
-        return output;
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)

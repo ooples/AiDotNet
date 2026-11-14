@@ -194,6 +194,70 @@ public class AdvancedMetaTests
         Assert.NotNull(algorithm.Adapt(task).Predict(task.QuerySetX));
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void BayTransProto_MetaTrain_RejectsNonpositiveSampleCountBeforeUpdatingTheModel(int samples)
+    {
+        var model = new LinearVectorModel(3);
+        var options = new BayTransProtoOptions<double, Matrix<double>, Vector<double>>(model)
+        { InnerLearningRate = 0.01, OuterLearningRate = 0.01 };
+        var algorithm = new BayTransProtoAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        options.NumPosteriorSamples = samples;
+        var paramsBefore = model.GetParameters().Clone();
+
+        var batch = new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { CreateTask(7354) });
+        Assert.Throws<InvalidOperationException>(() => algorithm.MetaTrain(batch));
+        Assert.Equal(paramsBefore.ToArray(), model.GetParameters().ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BayTransProto_MetaTrain_LearnsPosteriorLogVarianceTowardKLOptimum()
+    {
+        // q(theta) = N(mean, diag exp(logVar)) is regularized by KL(q || N(theta_init, I)), whose per-dimension
+        // log-variance part 0.5 * (exp(lv) - lv) is minimized at lv = 0. With a dominant KL weight and lv = 3, the
+        // SPSA step on the variational objective must lower that part. Three parameters (two features plus a
+        // bias) keep every Rademacher direction's component sum odd, so the KL directional derivative is never 0.
+        var model = new LinearVectorModel(2);
+        var options = new BayTransProtoOptions<double, Matrix<double>, Vector<double>>(model)
+        {
+            InnerLearningRate = 0.01, OuterLearningRate = 0.01,
+            InitialLogVar = 3.0, KLWeight = 1000.0, RandomSeed = 42
+        };
+        var algorithm = new BayTransProtoAlgorithm<double, Matrix<double>, Vector<double>>(options);
+        var before = algorithm.PosteriorLogVariance.Clone();
+
+        var x = new Matrix<double>(4, 2);
+        var y = new Vector<double>(4);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7355);
+        for (int i = 0; i < 4; i++)
+        {
+            x[i, 0] = rng.NextDouble() - 0.5;
+            x[i, 1] = rng.NextDouble() - 0.5;
+            y[i] = i % 2;
+        }
+
+        var task = new MetaLearningTask<double, Matrix<double>, Vector<double>>
+        {
+            SupportSetX = x, SupportSetY = y, QuerySetX = x, QuerySetY = y,
+            NumWays = 2, NumShots = 2, NumQueryPerClass = 2
+        };
+        var loss = algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task }));
+        var after = algorithm.PosteriorLogVariance;
+
+        Assert.False(double.IsNaN(loss) || double.IsInfinity(loss), "BayTransProto loss is not finite");
+        Assert.True(ParamsChanged(before, after), "The posterior log-variance got no update signal");
+        double KlPart(Vector<double> logVar)
+        {
+            double sum = 0;
+            for (int d = 0; d < logVar.Length; d++) sum += Math.Exp(logVar[d]) - logVar[d];
+            return sum;
+        }
+
+        Assert.True(KlPart(after) < KlPart(before),
+            $"KL log-variance term should decrease: before {KlPart(before)}, after {KlPart(after)}");
+    }
+
     [Fact(Timeout = 120000)]
     public async Task JMP_FiniteLossAndParamChange()
     {

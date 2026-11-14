@@ -47,10 +47,6 @@ public sealed class DPMSolverV3Scheduler<T> : NoiseSchedulerBase<T>
         double dt = t - tNext;
         var dtT = NumOps.FromDouble(dt);
 
-        var result = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
-            result[i] = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
-
-        return result;
+        return Engine.Subtract(sample, Engine.Multiply(modelOutput, dtT));
     }
 }

@@ -214,17 +214,13 @@ public static class InputHelper<T, TInput>
                 $"Index {outOfRangeIndex} is out of range for matrix with {matrix.Rows} rows.");
         }
 
-        // Create result and populate in a single pass
-        var result = new Matrix<T>(indices.Length, matrix.Columns);
-        for (int i = 0; i < indices.Length; i++)
+        // Gather the selected rows in one index-select
+        if (indices.Length == 0)
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i, j] = matrix[indices[i], j];
-            }
+            return new Matrix<T>(0, matrix.Columns);
         }
 
-        return result;
+        return SelectAlongFirstAxis(Tensor<T>.FromMatrix(matrix), indices).ToMatrix();
     }
 
     /// <summary>
@@ -250,14 +246,13 @@ public static class InputHelper<T, TInput>
                 $"Index {outOfRangeIndex} is out of range for vector with length {vector.Length}.");
         }
 
-        // Create result and populate in a single pass
-        var result = new Vector<T>(indices.Length);
-        for (int i = 0; i < indices.Length; i++)
+        // Gather the selected elements in one index-select
+        if (indices.Length == 0)
         {
-            result[i] = vector[indices[i]];
+            return new Vector<T>(0);
         }
 
-        return result;
+        return SelectAlongFirstAxis(Tensor<T>.FromVector(vector), indices).ToVector();
     }
 
     /// <summary>
@@ -293,52 +288,29 @@ public static class InputHelper<T, TInput>
         int[] newShape = new int[tensor.Shape.Length];
         newShape[0] = indices.Length;
 
-        // Calculate slice size once
-        int sliceSize = 1;
         for (int i = 1; i < tensor.Shape.Length; i++)
         {
             newShape[i] = tensor.Shape[i];
-            sliceSize *= tensor.Shape[i];
         }
 
-        // Create a new tensor with the selected slices
-        var result = new Tensor<T>(newShape);
-
-        // Use optimized approach based on tensor rank
-        if (tensor.Shape.Length == 1)
+        // Gather the selected slices along the first axis in one index-select
+        if (indices.Length == 0)
         {
-            // Most efficient approach for 1D tensors - direct indexing
-            for (int i = 0; i < indices.Length; i++)
-            {
-                result[i] = tensor[indices[i]];
-            }
-        }
-        else if (tensor.Shape.Length == 2)
-        {
-            // Efficient approach for 2D tensors - row-wise copying
-            for (int i = 0; i < indices.Length; i++)
-            {
-                int sourceIndex = indices[i];
-                for (int j = 0; j < tensor.Shape[1]; j++)
-                {
-                    result[i, j] = tensor[sourceIndex, j];
-                }
-            }
-        }
-        else
-        {
-            // Optimized block transfer for higher-dimensional tensors
-            // Get internal data arrays using the most efficient API
-            // This assumes direct access to the underlying data
-            for (int i = 0; i < indices.Length; i++)
-            {
-                // Use tensor.GetSlice with proper offset calculation
-                var sourceSlice = tensor.GetSlice(indices[i]);
-                result.SetSlice(i, sourceSlice);
-            }
+            return new Tensor<T>(newShape);
         }
 
-        return result;
+        return SelectAlongFirstAxis(tensor, indices);
+    }
+
+    /// <summary>
+    /// Gathers the entries (rows, slices) at <paramref name="indices"/> along axis 0 as a fresh
+    /// tensor, kept off any active gradient tape like the element copies it replaces.
+    /// </summary>
+    private static Tensor<T> SelectAlongFirstAxis(Tensor<T> source, int[] indices)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var indexTensor = new Tensor<int>((int[])indices.Clone(), new[] { indices.Length });
+        return AiDotNetEngine.Current.TensorIndexSelect(source, indexTensor, 0);
     }
 
     /// <summary>
@@ -420,11 +392,8 @@ public static class InputHelper<T, TInput>
             }
             else
             {
-                // Fall back to element-by-element copying
-                for (int i = 0; i < vector.Length; i++)
-                {
-                    batchMatrix[0, i] = vector[i];
-                }
+                // Fall back to a bulk span copy into the single row
+                vector.AsSpan().CopyTo(batchMatrix.AsWritableSpan());
             }
 
             return (TInput)(object)batchMatrix;
@@ -455,22 +424,15 @@ public static class InputHelper<T, TInput>
 
             if (matrix.Columns == 1)
             {
+                // A single column is contiguous in row-major storage: copy it as one row.
                 var batchMatrix = new Matrix<T>(1, matrix.Rows);
-
-                for (int i = 0; i < matrix.Rows; i++)
-                {
-                    batchMatrix[0, i] = matrix[i, 0];
-                }
+                matrix.AsSpan().CopyTo(batchMatrix.AsWritableSpan());
 
                 return (TInput)(object)batchMatrix;
             }
 
             var singleRow = new Matrix<T>(1, matrix.Columns);
-
-            for (int i = 0; i < matrix.Columns; i++)
-            {
-                singleRow[0, i] = matrix[0, i];
-            }
+            singleRow.SetRow(0, matrix.GetRow(0));
 
             return (TInput)(object)singleRow;
         }
@@ -512,10 +474,7 @@ public static class InputHelper<T, TInput>
                 // 1D tensor with shape [n] - create 2D tensor with shape [1, n]
                 int[] newShape = new[] { 1, tensor.Shape[0] };
                 var batchTensor = new Tensor<T>(newShape);
-                for (int i = 0; i < tensor.Shape[0]; i++)
-                {
-                    batchTensor[0, i] = tensor[i];
-                }
+                tensor.CopyLogicalTo(batchTensor.AsWritableSpan());
                 // Cast through object is required for unconstrained generic TInput conversion
                 return (TInput)(object)batchTensor;
             }
@@ -656,10 +615,7 @@ public static class InputHelper<T, TInput>
 
             // Return a single row as a 1-row Matrix<T> to maintain TInput type consistency
             var rowMatrix = new Matrix<T>(1, matrix.Columns);
-            for (int i = 0; i < matrix.Columns; i++)
-            {
-                rowMatrix[0, i] = matrix[index, i];
-            }
+            rowMatrix.SetRow(0, matrix.GetRow(index));
 
             return (TInput)(object)rowMatrix;
         }

@@ -313,12 +313,9 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
         var filterHiddenStates = new Tensor<T>[_order];
 
         // Create positional encodings: [seqLen, 1] with values t/seqLen
-        var posEnc = new Tensor<T>(new[] { seqLen, 1 });
         T seqLenT = NumOps.FromDouble(seqLen);
-        for (int t = 0; t < seqLen; t++)
-        {
-            posEnc[new[] { t, 0 }] = NumOps.Divide(NumOps.FromDouble(t), seqLenT);
-        }
+        var posEnc = Engine.Reshape(
+            Engine.TensorDivideScalar(Engine.TensorArange<T>(0, seqLen, 1), seqLenT), new[] { seqLen, 1 });
 
         for (int i = 0; i < _order; i++)
         {

@@ -4,8 +4,6 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Helpers;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.TimeSeries;
 
@@ -106,9 +104,9 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
     /// </summary>
     private class IntervalTree
     {
-        public int IntervalStart { get; set; }
-        public int IntervalEnd { get; set; }
-        public int ChannelIdx { get; set; }
+        public int[] IntervalStarts { get; set; } = Array.Empty<int>();
+        public int[] IntervalEnds { get; set; } = Array.Empty<int>();
+        public int[] ChannelIndices { get; set; } = Array.Empty<int>();
         public DecisionTreeNode? Root { get; set; }
     }
 
@@ -118,12 +116,11 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
     private class DecisionTreeNode
     {
         public int FeatureIndex { get; set; } = -1;
-        public double Threshold { get; set; }
-        public bool IsLeaf { get; set; }
 #pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-        public T PredictedClass { get; set; } = default;
+        public T Threshold { get; set; } = default;
 #pragma warning restore CS8601, CS8618
-        public double[]? ClassProbabilities { get; set; }
+        public bool IsLeaf { get; set; }
+        public Vector<T>? ClassProbabilities { get; set; }
         public DecisionTreeNode? Left { get; set; }
         public DecisionTreeNode? Right { get; set; }
     }
@@ -172,26 +169,29 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
 
         _trees = new List<IntervalTree>(_options.NumTrees);
 
+        // Deng et al. 2013: each tree sees sqrt(m) random intervals, summarized by mean, standard deviation and
+        // slope, and is grown with the entropy gain on those 3 sqrt(m) features.
+        int intervalsPerTree = Math.Max(1, (int)Math.Sqrt(seqLen));
+        var oneHotLabels = OneHotLabels(labels);
+
         for (int t = 0; t < _options.NumTrees; t++)
         {
-            // Randomly select interval and channel
-            int intervalLength = _random.Next(minInterval, maxInterval + 1);
-            int start = _random.Next(0, seqLen - intervalLength + 1);
-            int end = start + intervalLength;
-            int channel = _random.Next(0, NumChannels);
-
-            // Extract features for all samples
-            var features = ExtractIntervalFeatures(sequences, start, end, channel);
-
-            // Build decision tree
-            var tree = new IntervalTree
+            var starts = new int[intervalsPerTree];
+            var ends = new int[intervalsPerTree];
+            var channels = new int[intervalsPerTree];
+            for (int k = 0; k < intervalsPerTree; k++)
             {
-                IntervalStart = start,
-                IntervalEnd = end,
-                ChannelIdx = channel,
-                Root = BuildTree(features, labels, 0)
-            };
+                // Randomly select interval and channel
+                int intervalLength = _random.Next(minInterval, maxInterval + 1);
+                starts[k] = _random.Next(0, seqLen - intervalLength + 1);
+                ends[k] = starts[k] + intervalLength;
+                channels[k] = _random.Next(0, NumChannels);
+            }
 
+            var tree = new IntervalTree { IntervalStarts = starts, IntervalEnds = ends, ChannelIndices = channels };
+            var features = TreeFeatures(sequences, tree);
+            var rows = new Tensor<int>(Enumerable.Range(0, numSamples).ToArray(), new[] { numSamples });
+            tree.Root = BuildTree(features, oneHotLabels, rows, 0);
             _trees.Add(tree);
         }
 
@@ -201,65 +201,20 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
     /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        // Convert matrix to 2D tensor [samples, sequence_length] for single-channel time series
-        var tensor = new Tensor<T>(new[] { x.Rows, x.Columns });
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                tensor[new[] { i, j }] = x[i, j];
-            }
-        }
-
-        TrainOnSequences(tensor, y);
+        // A matrix is a 2D tensor [samples, sequence_length] of single-channel time series.
+        TrainOnSequences(new Tensor<T>(new[] { x.Rows, x.Columns }, x), y);
     }
 
     /// <summary>
-    /// Predicts class labels for time series sequences.
+    /// Predicts class labels for time series sequences: the class with the highest mean tree probability.
     /// </summary>
     public Vector<T> PredictSequences(Tensor<T> sequences)
     {
-        ValidateSequenceInput(sequences, null);
-
-        int numSamples = sequences.Shape[0];
-        var predictions = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            // Ensemble voting
-            var votes = new Dictionary<int, int>();
-            for (int c = 0; c < NumClasses; c++)
-            {
-                votes[c] = 0;
-            }
-
-            foreach (var tree in (_trees ?? throw new InvalidOperationException("_trees is null where it is required.")))
-            {
-                var features = ExtractIntervalFeaturesForSample(sequences, i,
-                    tree.IntervalStart, tree.IntervalEnd, tree.ChannelIdx);
-                var pred = PredictTree((tree.Root ?? throw new InvalidOperationException("tree.Root is null where it is required.")), features);
-                int classIdx = GetClassIndexFromLabel(pred);
-                if (classIdx >= 0)
-                {
-                    votes[classIdx]++;
-                }
-            }
-
-            // Find class with most votes
-            int bestClass = 0;
-            int maxVotes = int.MinValue;
-            foreach (var kv in votes)
-            {
-                if (kv.Value > maxVotes)
-                {
-                    maxVotes = kv.Value;
-                    bestClass = kv.Key;
-                }
-            }
-            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[bestClass];
-        }
-
-        return predictions;
+        var probabilities = PredictSequenceProbabilities(sequences);
+        var classes = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+        var engine = AiDotNetEngine.Current;
+        var rows = new Tensor<T>(new[] { probabilities.Rows, probabilities.Columns }, probabilities);
+        return engine.TensorTake(classes.AsTensor(), FirstArgMaxPerRow(rows)).ToVector();
     }
 
     /// <summary>
@@ -270,48 +225,25 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         ValidateSequenceInput(sequences, null);
 
         int numSamples = sequences.Shape[0];
-        var probabilities = new Matrix<T>(numSamples, NumClasses);
+        var trees = _trees ?? throw new InvalidOperationException("_trees is null where it is required.");
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < numSamples; i++)
+        // The forest's probability is the mean of its trees' leaf class distributions (scikit-learn / sktime
+        // predict_proba).
+        var total = new Tensor<T>(new[] { numSamples, NumClasses });
+        foreach (var tree in trees)
         {
-            var voteCounts = new double[NumClasses];
-
-            foreach (var tree in (_trees ?? throw new InvalidOperationException("_trees is null where it is required.")))
-            {
-                var features = ExtractIntervalFeaturesForSample(sequences, i,
-                    tree.IntervalStart, tree.IntervalEnd, tree.ChannelIdx);
-                var pred = PredictTree((tree.Root ?? throw new InvalidOperationException("tree.Root is null where it is required.")), features);
-                int classIdx = GetClassIndexFromLabel(pred);
-                if (classIdx >= 0)
-                {
-                    voteCounts[classIdx]++;
-                }
-            }
-
-            // Convert votes to probabilities
-            double total = _trees.Count;
-            for (int c = 0; c < NumClasses; c++)
-            {
-                probabilities[i, c] = NumOps.FromDouble(voteCounts[c] / total);
-            }
+            var root = tree.Root ?? throw new InvalidOperationException("tree.Root is null where it is required.");
+            total = engine.TensorAdd(total, PredictTree(root, TreeFeatures(sequences, tree)));
         }
 
-        return probabilities;
+        return engine.TensorDivideScalar(total, NumOps.FromDouble(trees.Count)).ToMatrix();
     }
 
     /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var tensor = new Tensor<T>(new[] { input.Rows, input.Columns });
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < input.Columns; j++)
-            {
-                tensor[new[] { i, j }] = input[i, j];
-            }
-        }
-
-        return PredictSequences(tensor);
+        return PredictSequences(new Tensor<T>(new[] { input.Rows, input.Columns }, input));
     }
 
     /// <inheritdoc />
@@ -327,167 +259,96 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         return clone;
     }
 
-    private Dictionary<string, object?> SerializeTreeNode(DecisionTreeNode node)
+    /// <summary>The number of random intervals each fitted tree summarizes (0 before fitting).</summary>
+    internal int IntervalsPerTree => _trees is { Count: > 0 } ? _trees[0].IntervalStarts.Length : 0;
+
+    /// <summary>The 3 features (mean, standard deviation, slope) of every interval of a tree: [samples, 3 * intervals].</summary>
+    private Matrix<T> TreeFeatures(Tensor<T> sequences, IntervalTree tree)
     {
-        var dict = new Dictionary<string, object?>
+        var pieces = new Tensor<T>[tree.IntervalStarts.Length];
+        for (int k = 0; k < pieces.Length; k++)
         {
-            ["FeatureIndex"] = node.FeatureIndex,
-            ["Threshold"] = node.Threshold,
-            ["IsLeaf"] = node.IsLeaf,
-            ["PredictedClass"] = node.PredictedClass is not null ? NumOps.ToDouble(node.PredictedClass) : (double?)null,
-            ["ClassProbabilities"] = node.ClassProbabilities
-        };
-        if (node.Left is not null)
-            dict["Left"] = SerializeTreeNode(node.Left);
-        if (node.Right is not null)
-            dict["Right"] = SerializeTreeNode(node.Right);
-        return dict;
+            pieces[k] = ExtractIntervalFeatures(sequences, tree.IntervalStarts[k], tree.IntervalEnds[k], tree.ChannelIndices[k]);
+        }
+
+        return (pieces.Length == 1 ? pieces[0] : AiDotNetEngine.Current.TensorConcatenate(pieces, 1)).ToMatrix();
     }
 
-    private DecisionTreeNode DeserializeTreeNode(JObject obj)
+    /// <summary>Mean, population standard deviation and least-squares slope of one interval: [samples, 3].</summary>
+    internal Tensor<T> ExtractIntervalFeatures(Tensor<T> sequences, int start, int end, int channel)
     {
-        var node = new DecisionTreeNode
-        {
-            FeatureIndex = obj["FeatureIndex"]?.Value<int>() ?? -1,
-            Threshold = obj["Threshold"]?.Value<double>() ?? 0,
-            IsLeaf = obj["IsLeaf"]?.Value<bool>() ?? false
-        };
-
-        var predClass = obj["PredictedClass"];
-        if (predClass is not null && predClass.Type != JTokenType.Null)
-        {
-            node.PredictedClass = NumOps.FromDouble(predClass.Value<double>());
-        }
-
-        var probs = obj["ClassProbabilities"];
-        if (probs is JArray probsArr)
-        {
-            node.ClassProbabilities = probsArr.Select(p => p.Value<double>()).ToArray();
-        }
-
-        var left = obj["Left"];
-        if (left is JObject leftObj)
-        {
-            node.Left = DeserializeTreeNode(leftObj);
-        }
-
-        var right = obj["Right"];
-        if (right is JObject rightObj)
-        {
-            node.Right = DeserializeTreeNode(rightObj);
-        }
-
-        return node;
-    }
-
-    private Matrix<T> ExtractIntervalFeatures(Tensor<T> sequences, int start, int end, int channel)
-    {
+        var engine = AiDotNetEngine.Current;
         int numSamples = sequences.Shape[0];
-        int numFeatures = 3; // mean, std, slope
-        var features = new Matrix<T>(numSamples, numFeatures);
-
-        for (int s = 0; s < numSamples; s++)
-        {
-            var intervalFeatures = ExtractIntervalFeaturesForSample(sequences, s, start, end, channel);
-            for (int f = 0; f < numFeatures; f++)
-            {
-                features[s, f] = intervalFeatures[f];
-            }
-        }
-
-        return features;
-    }
-
-    private Vector<T> ExtractIntervalFeaturesForSample(Tensor<T> sequences, int sampleIdx,
-        int start, int end, int channel)
-    {
         int seqLen = sequences.Shape[1];
         int actualStart = Math.Max(0, Math.Min(start, seqLen - 1));
         int actualEnd = Math.Max(actualStart + 1, Math.Min(end, seqLen));
         int length = actualEnd - actualStart;
 
-        // Calculate mean
-        double sum = 0;
-        for (int t = actualStart; t < actualEnd; t++)
-        {
-            int[] indices = NumChannels > 1
-                ? new[] { sampleIdx, t, channel }
-                : new[] { sampleIdx, t };
-            sum += NumOps.ToDouble(sequences[indices]);
-        }
-        double mean = sum / length;
+        // By rank, not channel count: a [samples, length, 1] input has one channel and still needs the 3-D slice.
+        var values = sequences.Shape.Length > 2
+            ? engine.Reshape(
+                engine.TensorSlice(sequences, new[] { 0, actualStart, channel }, new[] { numSamples, length, 1 }),
+                new[] { numSamples, length })
+            : engine.TensorSlice(sequences, new[] { 0, actualStart }, new[] { numSamples, length });
+        var shape = new[] { numSamples, length };
+        var mean = engine.ReduceMean(values, new[] { 1 }, true);
+        var centered = engine.TensorSubtract(values, engine.TensorBroadcastTo(mean, shape));
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 1 }, true));
 
-        // Calculate std
-        double sqSum = 0;
-        for (int t = actualStart; t < actualEnd; t++)
-        {
-            int[] indices = NumChannels > 1
-                ? new[] { sampleIdx, t, channel }
-                : new[] { sampleIdx, t };
-            double val = NumOps.ToDouble(sequences[indices]);
-            sqSum += (val - mean) * (val - mean);
-        }
-        double std = Math.Sqrt(sqSum / length);
-
-        // Calculate slope using linear regression
-        double slope = 0;
+        // slope = sum((x - xbar) (y - ybar)) / sum((x - xbar)^2) over x = 0..length-1; 0 for a single point.
+        Tensor<T> slope;
         if (length > 1)
         {
-            double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-            for (int t = actualStart; t < actualEnd; t++)
-            {
-                int[] indices = NumChannels > 1
-                    ? new[] { sampleIdx, t, channel }
-                    : new[] { sampleIdx, t };
-                double x = t - actualStart;
-                double y = NumOps.ToDouble(sequences[indices]);
-                sumX += x;
-                sumY += y;
-                sumXY += x * y;
-                sumX2 += x * x;
-            }
-            double denom = length * sumX2 - sumX * sumX;
-            if (Math.Abs(denom) > 1e-10)
-            {
-                slope = (length * sumXY - sumX * sumY) / denom;
-            }
+            var positions = engine.TensorArange<T>(0, length, 1);
+            var centeredPositions = engine.TensorSubtractScalar(positions, NumOps.FromDouble((length - 1) / 2.0));
+            T spread = engine.TensorSum(engine.TensorMultiply(centeredPositions, centeredPositions));
+            slope = engine.TensorDivideScalar(
+                engine.TensorMatMul(values, engine.Reshape(centeredPositions, new[] { length, 1 })), spread);
+        }
+        else
+        {
+            slope = new Tensor<T>(new[] { numSamples, 1 });
         }
 
-        return new Vector<T>(3)
-        {
-            [0] = NumOps.FromDouble(mean),
-            [1] = NumOps.FromDouble(std),
-            [2] = NumOps.FromDouble(slope)
-        };
+        return engine.TensorConcatenate(new[] { mean, std, slope }, 1);
     }
 
-    private DecisionTreeNode BuildTree(Matrix<T> features, Vector<T> labels, int depth)
+    /// <summary>The labels as one-hot rows over <see cref="ClassifierBase{T}.ClassLabels"/>: [samples, classes].</summary>
+    private Tensor<T> OneHotLabels(Vector<T> labels)
     {
-        int n = features.Rows;
+        var engine = AiDotNetEngine.Current;
+        var classes = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+        var shape = new[] { labels.Length, classes.Length };
+        return engine.TensorEquals(
+            engine.TensorBroadcastTo(engine.Reshape(labels.AsTensor(), new[] { labels.Length, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(classes.AsTensor(), new[] { 1, classes.Length }), shape));
+    }
+
+    private DecisionTreeNode BuildTree(Matrix<T> features, Tensor<T> oneHot, Tensor<int> rows, int depth)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Length;
+        var x = engine.TensorGather(new Tensor<T>(new[] { features.Rows, features.Columns }, features), rows, 0);
+        var y = engine.TensorGather(oneHot, rows, 0);
 
         // Check stopping conditions
         if (n < _options.MinSamplesSplit ||
             (_options.MaxDepth > 0 && depth >= _options.MaxDepth) ||
-            IsHomogeneous(labels))
+            IsHomogeneous(y))
         {
-            return CreateLeafNode(labels);
+            return CreateLeafNode(y);
         }
 
-        // Find best split
-        var (bestFeature, bestThreshold, bestGain) = FindBestSplit(features, labels);
-
-        if (bestGain <= 0)
+        var (bestFeature, bestThreshold, found) = FindBestSplit(x, y);
+        if (!found)
         {
-            return CreateLeafNode(labels);
+            return CreateLeafNode(y);
         }
 
-        // Split data
-        var (leftFeatures, leftLabels, rightFeatures, rightLabels) =
-            SplitData(features, labels, bestFeature, bestThreshold);
-
-        if (leftLabels.Length == 0 || rightLabels.Length == 0)
+        var (left, right) = Partition(x, rows, bestFeature, bestThreshold);
+        if (left.Length == 0 || right.Length == 0)
         {
-            return CreateLeafNode(labels);
+            return CreateLeafNode(y);
         }
 
         return new DecisionTreeNode
@@ -495,229 +356,254 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
             FeatureIndex = bestFeature,
             Threshold = bestThreshold,
             IsLeaf = false,
-            Left = BuildTree(leftFeatures, leftLabels, depth + 1),
-            Right = BuildTree(rightFeatures, rightLabels, depth + 1)
+            Left = BuildTree(features, oneHot, left, depth + 1),
+            Right = BuildTree(features, oneHot, right, depth + 1)
         };
     }
 
-    private DecisionTreeNode CreateLeafNode(Vector<T> labels)
+    /// <summary>
+    /// A leaf predicting the majority class (ties go to the class seen first) with the node's class frequencies.
+    /// </summary>
+    private DecisionTreeNode CreateLeafNode(Tensor<T> oneHot)
     {
-        // Find majority class
-        var classCounts = new Dictionary<int, int>();
-        for (int i = 0; i < labels.Length; i++)
-        {
-            int classIdx = GetClassIndexFromLabel(labels[i]);
-            if (!classCounts.ContainsKey(classIdx))
-            {
-                classCounts[classIdx] = 0;
-            }
-            classCounts[classIdx]++;
-        }
+        var engine = AiDotNetEngine.Current;
+        int n = oneHot.Shape[0], classes = oneHot.Shape[1];
 
-        int majorityClass = 0;
-        int maxCount = int.MinValue;
-        foreach (var kv in classCounts)
-        {
-            if (kv.Value > maxCount)
-            {
-                maxCount = kv.Value;
-                majorityClass = kv.Key;
-            }
-        }
+        // Counted in int: a 0/1 sum in a narrow T stops at 2048 (Half), which gave every class of a larger leaf the
+        // same count.
+        var labels = oneHot.Cast<int>();
+        var counts = engine.ReduceSum(labels, new[] { 0 }, false);
 
-        // Calculate class probabilities
-        var probs = new double[NumClasses];
-        foreach (var kv in classCounts)
-        {
-            probs[kv.Key] = (double)kv.Value / labels.Length;
-        }
+        // The largest count, then the class whose first row comes earliest: lateness n - row, maximized per class.
+        var lateness = engine.TensorBroadcastTo(
+            new Tensor<int>(Enumerable.Range(0, n).Select(row => n - row).ToArray(), new[] { n, 1 }), new[] { n, classes });
+        var countValues = counts.ToArray();
+        var earliness = engine.ReduceMax(engine.TensorMultiply(labels, lateness), new[] { 0 }, false).ToArray();
+        int majority = Enumerable.Range(0, classes)
+            .OrderByDescending(c => countValues[c]).ThenByDescending(c => earliness[c]).First();
 
+        int shift = ScaleShift(Math.Max(1, n));
         return new DecisionTreeNode
         {
             IsLeaf = true,
-            PredictedClass = (ClassLabels ?? throw new InvalidOperationException("Model has not been fitted."))[majorityClass],
-            ClassProbabilities = probs
+            FeatureIndex = majority,
+            ClassProbabilities = engine.TensorDivideScalar(ScaledCounts(counts, shift), ScaledCount(Math.Max(1, n), shift)).ToVector()
         };
     }
 
-    private bool IsHomogeneous(Vector<T> labels)
-    {
-        if (labels.Length <= 1) return true;
+    /// <summary>Integers up to 2^11 are exact in every supported T, Half included.</summary>
+    private const int ExactIntegerBits = 11;
 
-        T first = labels[0];
-        for (int i = 1; i < labels.Length; i++)
-        {
-            if (NumOps.Compare(labels[i], first) != 0)
-            {
-                return false;
-            }
-        }
-        return true;
+    /// <summary>The power of two that brings counts up to <paramref name="largest"/> under 2^11.</summary>
+    private static int ScaleShift(int largest)
+    {
+        int bits = 0;
+        while (bits < 31 && (largest >> bits) != 0) bits++;
+        return Math.Max(0, bits - ExactIntegerBits);
     }
 
-    private (int Feature, double Threshold, double Gain) FindBestSplit(Matrix<T> features, Vector<T> labels)
+    /// <summary>
+    /// <paramref name="counts"/> / 2^<paramref name="shift"/> in T as quotient + remainder * 2^-shift: both parts are
+    /// small, so no count overflows a narrow T (Half tops out at 65504), and a ratio of two counts scaled alike is the
+    /// ratio of the counts.
+    /// </summary>
+    private static Tensor<T> ScaledCounts(Tensor<int> counts, int shift)
     {
-        int bestFeature = -1;
-        double bestThreshold = 0;
-        double bestGain = 0;
+        if (shift == 0)
+            return counts.Cast<T>();
 
-        double parentEntropy = CalculateEntropy(labels);
-
-        for (int f = 0; f < features.Columns; f++)
-        {
-            // Get sorted unique values for this feature
-            var values = new List<double>();
-            for (int i = 0; i < features.Rows; i++)
-            {
-                values.Add(NumOps.ToDouble(features[i, f]));
-            }
-            values.Sort();
-
-            // Try midpoints as thresholds
-            for (int i = 0; i < values.Count - 1; i++)
-            {
-                if (Math.Abs(values[i] - values[i + 1]) < 1e-10) continue;
-
-                double threshold = (values[i] + values[i + 1]) / 2;
-
-                // Calculate information gain
-                var (leftLabels, rightLabels) = SplitLabels(features, labels, f, threshold);
-
-                if (leftLabels.Length == 0 || rightLabels.Length == 0) continue;
-
-                double leftWeight = (double)leftLabels.Length / labels.Length;
-                double rightWeight = (double)rightLabels.Length / labels.Length;
-
-                double gain = parentEntropy -
-                    leftWeight * CalculateEntropy(leftLabels) -
-                    rightWeight * CalculateEntropy(rightLabels);
-
-                if (gain > bestGain)
-                {
-                    bestGain = gain;
-                    bestFeature = f;
-                    bestThreshold = threshold;
-                }
-            }
-        }
-
-        return (bestFeature, bestThreshold, bestGain);
+        var engine = AiDotNetEngine.Current;
+        int mask = (1 << shift) - 1;
+        var values = counts.ToArray();
+        var quotient = new Tensor<int>(values.Select(c => c >> shift).ToArray(), counts.Shape.ToArray());
+        var remainder = new Tensor<int>(values.Select(c => c & mask).ToArray(), counts.Shape.ToArray());
+        return engine.TensorAdd(
+            quotient.Cast<T>(),
+            engine.TensorMultiplyScalar(remainder.Cast<T>(), MathHelper.GetNumericOperations<T>().FromDouble(1.0 / (1 << shift))));
     }
 
-    private double CalculateEntropy(Vector<T> labels)
+    /// <summary>One count / 2^<paramref name="shift"/> in T.</summary>
+    private static T ScaledCount(int count, int shift)
+        => MathHelper.GetNumericOperations<T>().FromDouble(count / (double)(1 << shift));
+
+    private bool IsHomogeneous(Tensor<T> oneHot)
     {
-        var counts = new Dictionary<int, int>();
-        for (int i = 0; i < labels.Length; i++)
-        {
-            int classIdx = GetClassIndexFromLabel(labels[i]);
-            if (!counts.ContainsKey(classIdx))
-            {
-                counts[classIdx] = 0;
-            }
-            counts[classIdx]++;
-        }
-
-        double entropy = 0;
-        foreach (var count in counts.Values)
-        {
-            double p = (double)count / labels.Length;
-            if (p > 0)
-            {
-                entropy -= p * (Math.Log(p) / Math.Log(2));
-            }
-        }
-
-        return entropy;
+        if (oneHot.Shape[0] <= 1) return true;
+        var engine = AiDotNetEngine.Current;
+        var present = engine.TensorGreaterThan(engine.ReduceSum(oneHot, new[] { 0 }, false), NumOps.Zero);
+        return NumOps.LessThanOrEquals(engine.TensorSum(present), NumOps.One);
     }
 
-    private (Vector<T> Left, Vector<T> Right) SplitLabels(Matrix<T> features, Vector<T> labels,
-        int featureIdx, double threshold)
+    /// <summary>
+    /// The split with the largest entropy gain over every feature and every midpoint between consecutive distinct
+    /// sorted values (the first such split on ties, features in order then thresholds ascending).
+    /// </summary>
+    internal static (int Feature, T Threshold, bool Found) FindBestSplit(Tensor<T> x, Tensor<T> oneHot)
     {
-        var leftList = new List<T>();
-        var rightList = new List<T>();
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0], featureCount = x.Shape[1], classes = oneHot.Shape[1];
+        int candidates = n - 1;
+        if (candidates <= 0) return (-1, numOps.Zero, false);
 
-        for (int i = 0; i < features.Rows; i++)
-        {
-            if (NumOps.ToDouble(features[i, featureIdx]) <= threshold)
-            {
-                leftList.Add(labels[i]);
-            }
-            else
-            {
-                rightList.Add(labels[i]);
-            }
-        }
+        // Sort every feature column; carry the class labels into each column's order: [features, n, classes]. The
+        // class counts are integers: a running 0/1 sum in a narrow T stops at 2048 (Half).
+        var (sorted, order) = engine.TensorSort(x, 0, false);
+        var sortedT = engine.TensorTranspose(sorted);
+        var labels = oneHot.Cast<int>();
+        var labelsByFeature = engine.Reshape(
+            engine.TensorGather(labels, engine.Reshape(engine.TensorTranspose(order), new[] { featureCount * n }), 0),
+            new[] { featureCount, n, classes });
 
-        return (new Vector<T>(leftList.ToArray()), new Vector<T>(rightList.ToArray()));
+        // Left side of candidate i holds the first i + 1 sorted rows.
+        var leftCounts = engine.TensorSlice(
+            engine.TensorCumSum(labelsByFeature, 1), new[] { 0, 0, 0 }, new[] { featureCount, candidates, classes });
+        var totals = engine.ReduceSum(labels, new[] { 0 }, false);
+        var rightCounts = engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(totals, new[] { 1, 1, classes }), new[] { featureCount, candidates, classes }),
+            leftCounts);
+        var leftSizes = engine.TensorArange<int>(1, n, 1);
+        var rightSizes = new Tensor<int>(Enumerable.Range(1, candidates).Select(size => n - size).ToArray(), new[] { candidates });
+
+        // Counts enter T scaled alike by a power of two, so every one is representable and their ratios are kept.
+        int shift = ScaleShift(n);
+        T scaledTotal = ScaledCount(n, shift);
+        var scaledLeftSizes = ScaledCounts(leftSizes, shift);
+        var scaledRightSizes = ScaledCounts(rightSizes, shift);
+        T parentEntropy = Entropy(
+            ScaledCounts(engine.Reshape(totals, new[] { 1, 1, classes }), shift), new Tensor<T>(new[] { scaledTotal }, new[] { 1 })).GetFlat(0);
+        var gain = engine.TensorSubtract(
+            Filled(new[] { featureCount, candidates }, parentEntropy),
+            engine.TensorAdd(
+                engine.TensorMultiply(
+                    Entropy(ScaledCounts(leftCounts, shift), scaledLeftSizes),
+                    Row(engine.TensorDivideScalar(scaledLeftSizes, scaledTotal), featureCount)),
+                engine.TensorMultiply(
+                    Entropy(ScaledCounts(rightCounts, shift), scaledRightSizes),
+                    Row(engine.TensorDivideScalar(scaledRightSizes, scaledTotal), featureCount))));
+
+        // A candidate exists only between two distinct values: a gap of at least 1e-10 and, since 1e-10 rounds to zero
+        // in Half, above zero (equal neighbours were otherwise scored as a split no threshold can make).
+        var gaps = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorSlice(sortedT, new[] { 0, 1 }, new[] { featureCount, candidates }),
+            engine.TensorSlice(sortedT, new[] { 0, 0 }, new[] { featureCount, candidates })));
+        var distinct = engine.TensorMultiply(
+            engine.TensorGreaterEqual(gaps, Filled(new[] { featureCount, candidates }, numOps.FromDouble(1e-10))),
+            engine.TensorGreaterThan(gaps, numOps.Zero));
+        var usable = engine.TensorWhere(distinct, gain, new Tensor<T>(new[] { featureCount, candidates }));
+
+        T best = engine.TensorMaxValue(usable);
+        if (!numOps.GreaterThan(best, numOps.Zero)) return (-1, numOps.Zero, false);
+
+        int flat = FirstArgMaxPerRow(engine.Reshape(usable, new[] { 1, featureCount * candidates })).GetFlat(0);
+        int feature = flat / candidates, position = flat % candidates;
+        var pair = engine.TensorSlice(sortedT, new[] { feature, position }, new[] { 1, 2 });
+        // scikit-learn's splitter: the midpoint as a/2 + b/2 (no overflow near the type's maximum), and the lower value
+        // when rounding lands the midpoint on the upper one, which would send both sides of the gap left.
+        T lower = pair.GetFlat(0), upper = pair.GetFlat(1);
+        T half = numOps.FromDouble(0.5);
+        T threshold = numOps.Add(numOps.Multiply(lower, half), numOps.Multiply(upper, half));
+        if (!numOps.LessThan(threshold, upper)) threshold = lower;
+        return (feature, threshold, true);
     }
 
-    private (Matrix<T>, Vector<T>, Matrix<T>, Vector<T>) SplitData(Matrix<T> features, Vector<T> labels,
-        int featureIdx, double threshold)
+    /// <summary>Entropy in bits of the class counts [.., classes] over sizes broadcast on the candidate axis.</summary>
+    private static Tensor<T> Entropy(Tensor<T> counts, Tensor<T> sizes)
     {
-        var leftFeatures = new List<T[]>();
-        var leftLabels = new List<T>();
-        var rightFeatures = new List<T[]>();
-        var rightLabels = new List<T>();
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int featureCount = counts.Shape[0], candidates = counts.Shape[1], classes = counts.Shape[2];
+        var shape = new[] { featureCount, candidates, classes };
+        var p = engine.TensorDivide(counts, engine.TensorBroadcastTo(engine.Reshape(sizes, new[] { 1, candidates, 1 }), shape));
+        var positive = engine.TensorGreaterThan(p, numOps.Zero);
+        var safe = engine.TensorWhere(positive, p, engine.TensorOnesLike(p));
+        var terms = engine.TensorMultiply(p, engine.TensorMultiplyScalar(engine.TensorLog(safe), numOps.FromDouble(1.0 / Math.Log(2.0))));
+        return engine.TensorNegate(engine.ReduceSum(terms, new[] { 2 }, false));
+    }
 
-        for (int i = 0; i < features.Rows; i++)
-        {
-            var row = new T[features.Columns];
-            for (int j = 0; j < features.Columns; j++)
-            {
-                row[j] = features[i, j];
-            }
+    private static Tensor<T> Filled(int[] shape, T value)
+    {
+        var tensor = new Tensor<T>(shape);
+        AiDotNetEngine.Current.TensorFill(tensor, value);
+        return tensor;
+    }
 
-            if (NumOps.ToDouble(features[i, featureIdx]) <= threshold)
-            {
-                leftFeatures.Add(row);
-                leftLabels.Add(labels[i]);
-            }
-            else
-            {
-                rightFeatures.Add(row);
-                rightLabels.Add(labels[i]);
-            }
-        }
+    private static Tensor<T> Row(Tensor<T> values, int rows)
+        => AiDotNetEngine.Current.TensorBroadcastTo(
+            AiDotNetEngine.Current.Reshape(values, new[] { 1, values.Length }), new[] { rows, values.Length });
 
+    /// <summary>
+    /// Splits <paramref name="rows"/> into those whose feature is at most the threshold and the rest, each in its
+    /// original order.
+    /// </summary>
+    private static (Tensor<int> Left, Tensor<int> Right) Partition(Tensor<T> x, Tensor<int> rows, int feature, T threshold)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Length;
+        var column = engine.Reshape(engine.TensorSlice(x, new[] { 0, feature }, new[] { n, 1 }), new[] { n });
+        var goesRight = engine.TensorGreaterThan(column, threshold);
+        // Counted and keyed in int: T may not hold the row count or n + position exactly (Half is exact only to 2048),
+        // which miscounts the right rows and lets a right row's key collide with a left row's.
+        var goesRightIndex = goesRight.Cast<int>();
+        int rightCount = engine.TensorSum(goesRightIndex);
+        var none = new Tensor<int>(new[] { 0 });
+        if (rightCount == 0) return (rows, none);
+        if (rightCount == n) return (none, rows);
+
+        // key = goesRight * n + position orders the left rows first, then the right rows, each by position.
+        var key = engine.TensorAdd(engine.TensorMultiplyScalar(goesRightIndex, n), engine.TensorArange<int>(0, n, 1));
+        var order = engine.TensorArgsort(key, 0, false);
+        var arranged = engine.TensorGather(rows, order, 0);
+        int leftCount = n - rightCount;
         return (
-            ListToMatrix(leftFeatures, features.Columns),
-            new Vector<T>(leftLabels.ToArray()),
-            ListToMatrix(rightFeatures, features.Columns),
-            new Vector<T>(rightLabels.ToArray())
-        );
+            engine.TensorSlice(arranged, new[] { 0 }, new[] { leftCount }),
+            engine.TensorSlice(arranged, new[] { leftCount }, new[] { rightCount }));
     }
 
-    private Matrix<T> ListToMatrix(List<T[]> list, int cols)
+    /// <summary>Routes every row through the tree and returns each row's leaf class distribution: [rows, classes].</summary>
+    private Tensor<T> PredictTree(DecisionTreeNode node, Matrix<T> features)
     {
-        if (list.Count == 0) return new Matrix<T>(0, cols);
+        var engine = AiDotNetEngine.Current;
+        int n = features.Rows;
+        var x = new Tensor<T>(new[] { n, features.Columns }, features);
+        var blocks = new List<Tensor<T>>();
+        var positions = new List<Tensor<int>>();
+        Route(node, x, new Tensor<int>(Enumerable.Range(0, n).ToArray(), new[] { n }), blocks, positions);
 
-        var matrix = new Matrix<T>(list.Count, cols);
-        for (int i = 0; i < list.Count; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                matrix[i, j] = list[i][j];
-            }
-        }
-        return matrix;
+        var leafRows = engine.TensorConcatenate(blocks.ToArray(), 0);
+        var placed = positions.Count == 1 ? positions[0] : engine.TensorConcatenate(positions.ToArray(), 0);
+        return engine.TensorGather(leafRows, engine.TensorArgsort(placed, 0, false), 0);
     }
 
-    private T PredictTree(DecisionTreeNode node, Vector<T> features)
+    private void Route(DecisionTreeNode node, Tensor<T> x, Tensor<int> rows, List<Tensor<T>> blocks, List<Tensor<int>> positions)
     {
+        if (rows.Length == 0) return;
+        var engine = AiDotNetEngine.Current;
         if (node.IsLeaf)
         {
-            return node.PredictedClass;
+            var probabilities = node.ClassProbabilities ?? throw new InvalidOperationException("A leaf has no class distribution.");
+            blocks.Add(engine.TensorBroadcastTo(
+                engine.Reshape(probabilities.AsTensor(), new[] { 1, probabilities.Length }), new[] { rows.Length, probabilities.Length }));
+            positions.Add(rows);
+            return;
         }
 
-        double value = NumOps.ToDouble(features[node.FeatureIndex]);
-        if (value <= node.Threshold)
-        {
-            return PredictTree((node.Left ?? throw new InvalidOperationException("node.Left is null where it is required.")), features);
-        }
-        else
-        {
-            return PredictTree((node.Right ?? throw new InvalidOperationException("node.Right is null where it is required.")), features);
-        }
+        var (left, right) = Partition(engine.TensorGather(x, rows, 0), rows, node.FeatureIndex, node.Threshold);
+        Route(node.Left ?? throw new InvalidOperationException("node.Left is null where it is required."), x, left, blocks, positions);
+        Route(node.Right ?? throw new InvalidOperationException("node.Right is null where it is required."), x, right, blocks, positions);
+    }
+
+    /// <summary>The index of each row's first maximum: the earliest maximal entry carries the largest weight.</summary>
+    private static Tensor<int> FirstArgMaxPerRow(Tensor<T> rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int count = rows.Shape[0], width = rows.Shape[1];
+        var shape = new[] { count, width };
+        var rowMax = engine.TensorBroadcastTo(engine.ReduceMax(rows, new[] { 1 }, true), shape);
+        var descending = engine.TensorAddScalar(engine.TensorNegate(engine.TensorArange<T>(0, width, 1)), numOps.FromDouble(width));
+        var weights = engine.TensorBroadcastTo(engine.Reshape(descending, new[] { 1, width }), shape);
+        return engine.TensorArgMax(engine.TensorMultiply(engine.TensorEquals(rows, rowMax), weights), 1);
     }
 
     private void ValidateSequenceInput(Tensor<T> sequences, Vector<T>? labels)

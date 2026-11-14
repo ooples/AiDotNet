@@ -274,6 +274,55 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Throws<ArgumentException>(() => cached.EmbedBatch(new List<string>()));
         }
 
+        /// <summary>Reports dimension 2 but returns three columns per batch row.</summary>
+        private sealed class WideBatchModel : IEmbeddingModel<double>
+        {
+            public int EmbeddingDimension => 2;
+            public int MaxTokens => 512;
+            public Vector<double> Embed(string text) => new Vector<double>(new[] { 1.0, 2.0 });
+            public Task<Vector<double>> EmbedAsync(string text) => Task.FromResult(Embed(text));
+            public Matrix<double> EmbedBatch(IEnumerable<string> texts) => new Matrix<double>(texts.Count(), 3);
+            public Task<Matrix<double>> EmbedBatchAsync(IEnumerable<string> texts) => Task.FromResult(EmbedBatch(texts));
+        }
+
+        /// <summary>
+        /// A batch whose width disagrees with the inner model's dimension is rejected before anything is cached;
+        /// the cache used to keep the three-wide vectors, so every later read of those texts failed again.
+        /// </summary>
+        [Fact(Timeout = 60000)]
+        public async Task EmbedBatch_WrongWidthFromInnerModel_ThrowsWithoutCaching()
+        {
+            await Task.Yield();
+            var cache = new InMemoryEmbeddingCache<double>();
+            var cached = new CacheBackedEmbeddings<double>(new WideBatchModel(), cache);
+
+            Assert.Throws<InvalidOperationException>(() => cached.EmbedBatch(new List<string> { "a", "b" }));
+            await Assert.ThrowsAsync<InvalidOperationException>(() => cached.EmbedBatchAsync(new List<string> { "a", "b" }));
+            Assert.Equal(0, cache.Count);
+        }
+
+        /// <summary>
+        /// Provider embeddings are checked against the configured dimension before conversion: Cohere's
+        /// {"embeddings":[[]]} used to pass as an empty vector, and a null batch row threw NullReferenceException.
+        /// </summary>
+        [Fact]
+        public void ProviderEmbeddings_AreValidatedAgainstConfiguredDimension()
+        {
+            var vector = EmbeddingModelBase<double>.FromApiValues(new[] { 0.5, -1.0, 2.0 }, 3, "Test");
+            Assert.Equal(new[] { 0.5, -1.0, 2.0 }, vector.ToArray());
+
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiValues(new double[0], 3, "Test"));
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiValues(new[] { 1.0, 2.0 }, 3, "Test"));
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiValues(null, 3, "Test"));
+
+            var rows = new List<double[]> { new[] { 1.0, 2.0 }, null };
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiRows(rows, 2, 2, "Test"));
+
+            var matrix = EmbeddingModelBase<double>.FromApiRows(
+                new List<double[]> { new[] { 1.0, 2.0 }, new[] { 3.0, 4.0 } }, 2, 2, "Test");
+            Assert.Equal(4.0, matrix[1, 1]);
+        }
+
         // ---------- (c) Model identity / dimension isolation ----------
 
         [Fact]

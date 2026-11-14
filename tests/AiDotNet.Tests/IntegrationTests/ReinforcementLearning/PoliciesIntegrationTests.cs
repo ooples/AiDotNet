@@ -37,6 +37,37 @@ public class PoliciesIntegrationTests
         policy.Dispose();
     }
 
+    // SAC (Haarnoja et al. 2018, Appendix C): a squashed action a = tanh(u), u ~ N(mu, sigma), has
+    // log pi(a) = log N(u; mu, sigma) - sum_i log(1 - a_i^2) with u = atanh(a). The Gaussian part is the unsquashed
+    // policy's log-density of u on the same network, so the two policies must differ by exactly that correction.
+    [Fact(Timeout = 120000)]
+    public async Task ContinuousPolicy_TanhSquashedLogProb_IsGaussianAtAtanhMinusJacobian()
+    {
+        var network = CreateNetwork(StateSize, ContinuousActionSize * 2);
+        var squashed = new ContinuousPolicy<double>(
+            network, ContinuousActionSize, new NoExploration<double>(), useTanhSquashing: true,
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5));
+        var gaussian = new ContinuousPolicy<double>(
+            network, ContinuousActionSize, new NoExploration<double>(), useTanhSquashing: false,
+            random: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5));
+
+        var state = CreateState(StateSize, 0.2);
+        var action = new Vector<double>(ContinuousActionSize);
+        var preSquash = new Vector<double>(ContinuousActionSize);
+        double jacobian = 0;
+        for (int i = 0; i < ContinuousActionSize; i++)
+        {
+            action[i] = 0.7 - 0.5 * i;
+            preSquash[i] = 0.5 * Math.Log((1 + action[i]) / (1 - action[i]));
+            jacobian += Math.Log(1 - action[i] * action[i] + 1e-6);
+        }
+
+        double expected = gaussian.ComputeLogProb(state, preSquash) - jacobian;
+
+        Assert.Equal(expected, squashed.ComputeLogProb(state, action), 9);
+        await Task.CompletedTask;
+    }
+
     [Fact(Timeout = 120000)]
     public async Task ContinuousPolicy_SelectActionAndLogProb_ReturnValidOutputs()
     {

@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Audio;
 
@@ -44,7 +46,6 @@ public class MaskingVoiceProtector<T> : AudioSafetyModuleBase<T>
 {
 
     private readonly T _maskingStrength;
-    private readonly FastFourierTransform<T> _fft;
 
     /// <inheritdoc />
     public override string ModuleName => "MaskingVoiceProtector";
@@ -61,7 +62,6 @@ public class MaskingVoiceProtector<T> : AudioSafetyModuleBase<T>
         : base(sampleRate)
     {
         _maskingStrength = NumOps.FromDouble(maskingStrength);
-        _fft = new FastFourierTransform<T>();
     }
 
     /// <summary>
@@ -71,149 +71,142 @@ public class MaskingVoiceProtector<T> : AudioSafetyModuleBase<T>
     {
         if (audioSamples.Length < 512) return audioSamples;
 
+        using var noGrad = new NoGradScope<T>();
+        var engine = SafetyTensorOps<T>.Engine;
         int frameSize = 512;
         int hopSize = 256;
-        double strength = NumOps.ToDouble(_maskingStrength);
+        int length = audioSamples.Length;
+        int numFrames = (length - frameSize) / hopSize + 1;
+        var audio = SafetyTensorOps<T>.AsTensor(audioSamples);
 
-        var result = new Vector<T>(audioSamples.Length);
-        var windowSum = new Vector<T>(audioSamples.Length);
+        // Window every frame: [numFrames, frameSize]
+        var window = SafetyTensorOps<T>.SymmetricHann(frameSize);
+        var frames = engine.TensorMultiply(SafetyTensorOps<T>.Frames(audio, frameSize, hopSize, numFrames), window);
 
-        for (int start = 0; start + frameSize <= audioSamples.Length; start += hopSize)
-        {
-            // Window the frame
-            var frame = new Vector<T>(frameSize);
-            for (int i = 0; i < frameSize; i++)
-            {
-                double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (frameSize - 1)));
-                frame[i] = NumOps.Multiply(audioSamples[start + i], NumOps.FromDouble(w));
-            }
+        SafetyTensorOps<T>.Dft(frames, out var real, out var imag);
+        int halfLen = frameSize / 2;
 
-            var spectrum = _fft.Forward(frame);
-            int halfLen = spectrum.Length / 2;
+        // Compute magnitude spectrum and the simplified masking curve
+        var magnitudes = engine.TensorNarrow(
+            engine.TensorSqrt(engine.TensorAdd(engine.TensorSquare(real), engine.TensorSquare(imag))), 1, 0, halfLen);
+        var maskingThresholds = ComputeMaskingCurve(magnitudes, halfLen, sampleRate, frameSize);
 
-            // Compute magnitude spectrum
-            var magnitudes = new double[halfLen];
-            for (int k = 0; k < halfLen; k++)
-            {
-                magnitudes[k] = NumOps.ToDouble(spectrum[k].Magnitude);
-            }
+        // Add masking noise in speaker-embedding-critical bands (bins 1 .. halfLen-1).
+        // Focus on formant region (300-3400 Hz) and speaker-characteristic region (1-6 kHz)
+        int bins = halfLen - 1;
+        var freq = engine.TensorMultiplyScalar(
+            engine.TensorAddScalar(SafetyTensorOps<T>.Range(bins), NumOps.One),
+            NumOps.FromDouble((double)sampleRate / frameSize));
+        var outside = SafetyTensorOps<T>.Or(SafetyTensorOps<T>.Lt(freq, 300), SafetyTensorOps<T>.Gt(freq, 6000));
+        var core = SafetyTensorOps<T>.And(SafetyTensorOps<T>.Ge(freq, 1000), SafetyTensorOps<T>.Le(freq, 4000));
+        var bandWeight = SafetyTensorOps<T>.Where(outside, 0.2, SafetyTensorOps<T>.Where(core, 1.0, 0.6));
 
-            // Compute simplified masking curve
-            var maskingThresholds = ComputeMaskingCurve(magnitudes, halfLen, sampleRate, frameSize);
+        // Noise amplitude = masking threshold * strength * band weight
+        var noiseAmp = engine.TensorMultiply(
+            engine.TensorMultiplyScalar(engine.TensorNarrow(maskingThresholds, 1, 1, bins), _maskingStrength),
+            bandWeight);
 
-            // Add masking noise in speaker-embedding-critical bands
-            for (int k = 1; k < halfLen; k++)
-            {
-                double freq = (double)k * sampleRate / frameSize;
+        // Pseudo-random phase from the hash of (start * 1000 + k)
+        var hash = SafetyTensorOps<T>.HashInt(SafetyTensorOps<T>.HashKeys(numFrames, hopSize * 1000, 1, bins));
+        var phase = engine.TensorDivideScalar(SafetyTensorOps<T>.ModuloAsT(hash, 6283), NumOps.FromDouble(1000.0));
+        var noiseReal = engine.TensorMultiply(noiseAmp, engine.TensorCos(phase));
+        var noiseImag = engine.TensorMultiply(noiseAmp, engine.TensorSin(phase));
 
-                // Focus on formant region (300-3400 Hz) and speaker-characteristic region (1-6 kHz)
-                double bandWeight = 1.0;
-                if (freq < 300 || freq > 6000) bandWeight = 0.2;
-                else if (freq >= 1000 && freq <= 4000) bandWeight = 1.0;
-                else bandWeight = 0.6;
+        // Only the positive-frequency bins 1 .. halfLen-1 receive noise.
+        var dc = Tensor<T>.CreateZeros(numFrames, 1);
+        var upper = Tensor<T>.CreateZeros(numFrames, frameSize - halfLen);
+        real = engine.TensorAdd(real, engine.TensorConcatenate(new[] { dc, noiseReal, upper }, 1));
+        imag = engine.TensorAdd(imag, engine.TensorConcatenate(new[] { dc, noiseImag, upper }, 1));
 
-                // Noise amplitude = masking threshold * strength * band weight
-                double noiseAmp = maskingThresholds[k] * strength * bandWeight;
+        // Inverse transform (real part), then window for overlap-add
+        engine.IFFT(real, imag, out var protectedFrames, out _);
+        var weighted = engine.TensorMultiply(protectedFrames, window);
+        var windowEnergy = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorSquare(window), new[] { 1, frameSize }), new[] { numFrames, frameSize });
 
-                // Pseudo-random phase
-                int hash = HashInt(start * 1000 + k);
-                double phase = (hash % 6283) / 1000.0;
-
-                T noiseReal = NumOps.FromDouble(noiseAmp * Math.Cos(phase));
-                T noiseImag = NumOps.FromDouble(noiseAmp * Math.Sin(phase));
-
-                spectrum[k] = new Complex<T>(
-                    NumOps.Add(spectrum[k].Real, noiseReal),
-                    NumOps.Add(spectrum[k].Imaginary, noiseImag));
-            }
-
-            var protectedFrame = _fft.Inverse(spectrum);
-
-            // Overlap-add
-            for (int i = 0; i < frameSize; i++)
-            {
-                double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (frameSize - 1)));
-                T windowed = NumOps.Multiply(protectedFrame[i], NumOps.FromDouble(w));
-                result[start + i] = NumOps.Add(result[start + i], windowed);
-                windowSum[start + i] = NumOps.Add(windowSum[start + i], NumOps.FromDouble(w * w));
-            }
-        }
+        // Overlap-add
+        var (current, previous) = SafetyTensorOps<T>.HalfOverlapParts(weighted, length);
+        var result = engine.TensorAdd(previous, current);
+        var (currentWeight, previousWeight) = SafetyTensorOps<T>.HalfOverlapParts(windowEnergy, length);
+        var windowSum = engine.TensorAdd(previousWeight, currentWeight);
 
         // Normalize
-        for (int i = 0; i < result.Length; i++)
-        {
-            double ws = NumOps.ToDouble(windowSum[i]);
-            if (ws > 1e-10)
-                result[i] = NumOps.Divide(result[i], windowSum[i]);
-            else
-                result[i] = audioSamples[i];
-        }
-
-        return result;
+        var covered = SafetyTensorOps<T>.Gt(windowSum, 1e-10);
+        var normalized = engine.TensorDivide(result, SafetyTensorOps<T>.Where(covered, windowSum, 1.0));
+        return SafetyTensorOps<T>.Where(covered, normalized, audio).ToVector();
     }
 
     /// <summary>
     /// Computes a simplified psychoacoustic masking curve.
     /// Based on the spreading function model from MPEG psychoacoustic analysis.
     /// </summary>
-    private static double[] ComputeMaskingCurve(double[] magnitudes, int halfLen,
+    private static Tensor<T> ComputeMaskingCurve(Tensor<T> magnitudes, int halfLen,
         int sampleRate, int frameSize)
     {
-        var thresholds = new double[halfLen];
+        var engine = SafetyTensorOps<T>.Engine;
+        int frameCount = magnitudes.Shape[0];
 
         // Convert to dB scale
-        var dB = new double[halfLen];
-        for (int k = 0; k < halfLen; k++)
+        var audible = SafetyTensorOps<T>.Gt(magnitudes, 1e-20);
+        var dB = SafetyTensorOps<T>.Where(audible,
+            engine.TensorMultiplyScalar(
+                engine.TensorLog(SafetyTensorOps<T>.Where(audible, magnitudes, 1.0)),
+                NumOps.FromDouble(20.0 / Math.Log(10.0))),
+            -100.0);
+
+        // Simultaneous masking: each spectral peak masks nearby frequencies.
+        // maxMask[k] = max(-100, max over j in [k - spread, k + spread) of dB[j] - 2|k - j|);
+        // the padding (-1000) never beats the -100 floor.
+        int spreadRange = Math.Min(32, halfLen / 4);
+        var pad = SafetyTensorOps<T>.Full(new[] { frameCount, spreadRange }, NumOps.FromDouble(-1000.0));
+        var padded = engine.TensorConcatenate(new[] { pad, dB, pad }, 1);
+        var maxMask = SafetyTensorOps<T>.Full(new[] { frameCount, halfLen }, NumOps.FromDouble(-100.0));
+        // Simplified spreading function: -10 dB per critical band (2 dB per bin of distance)
+        var penalty = engine.TensorMultiplyScalar(
+            engine.TensorAbs(engine.TensorArange<T>(-spreadRange, spreadRange, 1)), NumOps.FromDouble(2.0));
+        for (int offset = -spreadRange; offset < spreadRange; offset++)
         {
-            dB[k] = magnitudes[k] > 1e-20 ? 20 * Math.Log10(magnitudes[k]) : -100;
+            var neighbour = engine.TensorNarrow(padded, 1, spreadRange + offset, halfLen);
+            var spreading = engine.TensorSubtract(neighbour, engine.TensorNarrow(penalty, 0, spreadRange + offset, 1));
+            maxMask = engine.TensorMax(maxMask, spreading);
         }
 
-        // Simultaneous masking: each spectral peak masks nearby frequencies
-        for (int k = 0; k < halfLen; k++)
-        {
-            double maxMask = -100;
+        // Absolute hearing threshold (simplified) — varies by frequency
+        var freq = engine.TensorMultiplyScalar(SafetyTensorOps<T>.Range(halfLen),
+            NumOps.FromDouble((double)sampleRate / frameSize));
+        var absThreshold = engine.TensorBroadcastTo(
+            engine.Reshape(ComputeAbsoluteThreshold(freq), new[] { 1, halfLen }), new[] { frameCount, halfLen });
 
-            // Each nearby bin contributes masking
-            int spreadRange = Math.Min(32, halfLen / 4);
-            for (int j = Math.Max(0, k - spreadRange); j < Math.Min(halfLen, k + spreadRange); j++)
-            {
-                double distance = Math.Abs(k - j);
-                // Simplified spreading function: -10 dB per critical band
-                double spreading = dB[j] - distance * 2.0;
-                if (spreading > maxMask) maxMask = spreading;
-            }
+        // Masking threshold = max of simultaneous masking and absolute threshold
+        // Subtract offset (masking is ~15 dB below masker for tonal, ~5 dB for noise)
+        T maskingOffset = NumOps.FromDouble(10.0); // dB below masker
+        var maskedThreshold = engine.TensorMax(engine.TensorSubtractScalar(maxMask, maskingOffset), absThreshold);
 
-            // Absolute hearing threshold (simplified) — varies by frequency
-            double freq = (double)k * sampleRate / frameSize;
-            double absThreshold = ComputeAbsoluteThreshold(freq);
-
-            // Masking threshold = max of simultaneous masking and absolute threshold
-            // Subtract offset (masking is ~15 dB below masker for tonal, ~5 dB for noise)
-            double maskingOffset = 10.0; // dB below masker
-            double maskedThreshold = Math.Max(maxMask - maskingOffset, absThreshold);
-
-            // Convert back to linear
-            thresholds[k] = Math.Pow(10, maskedThreshold / 20);
-        }
-
-        return thresholds;
+        // Convert back to linear: 10^(dB / 20)
+        return engine.TensorExp(engine.TensorMultiplyScalar(maskedThreshold, NumOps.FromDouble(Math.Log(10.0) / 20.0)));
     }
 
     /// <summary>
     /// Simplified absolute hearing threshold (ISO 226).
     /// </summary>
-    private static double ComputeAbsoluteThreshold(double freq)
+    private static Tensor<T> ComputeAbsoluteThreshold(Tensor<T> freq)
     {
-        if (freq < 20) return 80;
-        if (freq > 20000) return 80;
+        var engine = SafetyTensorOps<T>.Engine;
+        var outOfRange = SafetyTensorOps<T>.Or(SafetyTensorOps<T>.Lt(freq, 20), SafetyTensorOps<T>.Gt(freq, 20000));
 
         // Simplified approximation of the minimum audibility curve
-        double f = freq / 1000.0; // kHz
-        double threshold = 3.64 * Math.Pow(f, -0.8)
-                          - 6.5 * Math.Exp(-0.6 * (f - 3.3) * (f - 3.3))
-                          + 0.001 * Math.Pow(f, 4);
+        var f = engine.TensorDivideScalar(SafetyTensorOps<T>.Where(outOfRange, 1000.0, freq), NumOps.FromDouble(1000.0)); // kHz
+        var shifted = engine.TensorSubtractScalar(f, NumOps.FromDouble(3.3));
+        var threshold = engine.TensorAdd(
+            engine.TensorSubtract(
+                engine.TensorMultiplyScalar(engine.TensorPower(f, NumOps.FromDouble(-0.8)), NumOps.FromDouble(3.64)),
+                engine.TensorMultiplyScalar(
+                    engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(shifted), NumOps.FromDouble(-0.6))),
+                    NumOps.FromDouble(6.5))),
+            engine.TensorMultiplyScalar(engine.TensorPower(f, NumOps.FromDouble(4)), NumOps.FromDouble(0.001)));
 
-        return Math.Max(-60, Math.Min(80, threshold));
+        var clamped = engine.TensorMax(engine.TensorMin(threshold, NumOps.FromDouble(80)), NumOps.FromDouble(-60));
+        return SafetyTensorOps<T>.Where(outOfRange, 80.0, clamped);
     }
 
     /// <inheritdoc />
@@ -225,10 +218,11 @@ public class MaskingVoiceProtector<T> : AudioSafetyModuleBase<T>
         if (audioSamples.Length < 1024) return findings;
 
         // Look for noise below masking threshold (unusual for natural audio)
-        double protectionScore = DetectMaskingProtection(audioSamples, sampleRate);
+        T protectionScoreT = DetectMaskingProtection(audioSamples, sampleRate);
 
-        if (protectionScore >= 0.5)
+        if (NumOps.GreaterThanOrEquals(protectionScoreT, NumOps.FromDouble(0.5)))
         {
+            double protectionScore = NumOps.ToDouble(protectionScoreT);
             findings.Add(new SafetyFinding
             {
                 Category = SafetyCategory.AIGenerated,
@@ -244,55 +238,36 @@ public class MaskingVoiceProtector<T> : AudioSafetyModuleBase<T>
         return findings;
     }
 
-    private double DetectMaskingProtection(Vector<T> audio, int sampleRate)
+    private static T DetectMaskingProtection(Vector<T> audio, int sampleRate)
     {
         int frameSize = 512;
-        if (audio.Length < frameSize) return 0;
+        if (audio.Length < frameSize) return NumOps.Zero;
+
+        using var noGrad = new NoGradScope<T>();
+        var engine = SafetyTensorOps<T>.Engine;
 
         // Analyze noise floor in typically quiet frequency regions
-        var frame = new Vector<T>(frameSize);
         int mid = (audio.Length - frameSize) / 2;
-        for (int i = 0; i < frameSize; i++)
-        {
-            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (frameSize - 1)));
-            frame[i] = NumOps.Multiply(audio[mid + i], NumOps.FromDouble(w));
-        }
+        var frame = engine.TensorMultiply(
+            engine.Reshape(engine.TensorNarrow(SafetyTensorOps<T>.AsTensor(audio), 0, mid, frameSize), new[] { 1, frameSize }),
+            SafetyTensorOps<T>.SymmetricHann(frameSize));
 
-        var spectrum = _fft.Forward(frame);
-        int halfLen = spectrum.Length / 2;
+        int halfLen = frameSize / 2;
+        var magnitudes = engine.TensorNarrow(SafetyTensorOps<T>.FftMagnitude(frame), 1, 0, halfLen);
 
-        var magnitudes = new double[halfLen];
-        for (int k = 0; k < halfLen; k++)
-        {
-            magnitudes[k] = NumOps.ToDouble(spectrum[k].Magnitude);
-        }
-
-        // Check if energy in masking-threshold-level regions is higher than expected
+        // Check if energy in masking-threshold-level regions is higher than expected (bins 5 ..)
         var maskCurve = ComputeMaskingCurve(magnitudes, halfLen, sampleRate, frameSize);
-        int nearThresholdBins = 0;
-        int totalBins = 0;
+        var curve = engine.TensorNarrow(maskCurve, 1, 5, halfLen - 5);
+        var mags = engine.TensorNarrow(magnitudes, 1, 5, halfLen - 5);
+        var counted = SafetyTensorOps<T>.Gt(curve, 1e-10);
+        var ratio = engine.TensorDivide(mags, SafetyTensorOps<T>.Where(counted, curve, 1.0));
+        var near = SafetyTensorOps<T>.And(counted,
+            SafetyTensorOps<T>.And(SafetyTensorOps<T>.Gt(ratio, 0.5), SafetyTensorOps<T>.Lt(ratio, 2.0)));
+        T nearThresholdBins = engine.TensorSum(near);
+        T totalBins = engine.TensorSum(counted);
 
-        for (int k = 5; k < halfLen; k++)
-        {
-            if (maskCurve[k] > 1e-10)
-            {
-                double ratio = magnitudes[k] / maskCurve[k];
-                if (ratio > 0.5 && ratio < 2.0) nearThresholdBins++;
-                totalBins++;
-            }
-        }
-
-        return totalBins > 0 ? Math.Min(1.0, (double)nearThresholdBins / totalBins * 3) : 0;
-    }
-
-    private static int HashInt(int x)
-    {
-        unchecked
-        {
-            x = ((x >> 16) ^ x) * 0x45d9f3b;
-            x = ((x >> 16) ^ x) * 0x45d9f3b;
-            x = (x >> 16) ^ x;
-            return x & 0x7FFFFFFF;
-        }
+        return NumOps.GreaterThan(totalBins, NumOps.Zero)
+            ? SafetyTensorOps<T>.MinOne(NumOps.Multiply(NumOps.Divide(nearThresholdBins, totalBins), NumOps.FromDouble(3)))
+            : NumOps.Zero;
     }
 }

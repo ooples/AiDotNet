@@ -479,23 +479,15 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
     /// </summary>
     private Vector<T> ExtractNormalizedLookbackWindow(Matrix<T> x, Vector<T> yNorm, int sampleIdx)
     {
-        var input = new Vector<T>(_options.LookbackWindow);
         if (x.Columns >= _options.LookbackWindow)
         {
             // Multi-variate: normalize each element
-            for (int j = 0; j < _options.LookbackWindow; j++)
-                input[j] = NumOps.Divide(NumOps.Subtract(x[sampleIdx, j], _normMean), _normStd);
+            return TimeSeriesEngineOps<T>.Standardize(
+                x.GetRow(sampleIdx).GetSubVector(0, _options.LookbackWindow), _normMean, _normStd);
         }
-        else
-        {
-            // Univariate: use preceding normalized y values
-            for (int j = 0; j < _options.LookbackWindow; j++)
-            {
-                int yIdx = sampleIdx - _options.LookbackWindow + j;
-                input[j] = yIdx >= 0 ? yNorm[yIdx] : NumOps.Zero;
-            }
-        }
-        return input;
+
+        // Univariate: use preceding normalized y values (zero before the series start)
+        return TimeSeriesEngineOps<T>.PrecedingWindow(yNorm, sampleIdx, _options.LookbackWindow);
     }
 
     /// <inheritdoc />
@@ -526,14 +518,12 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
                 // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
                 // the caller has open (whose tensors may still be live).
                 using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-                var data = new T[rows * lookback];
-                for (int r = 0; r < rows; r++)
-                    for (int t = 0; t < lookback; t++)
-                        data[r * lookback + t] = NumOps.Divide(NumOps.Subtract(input[c0 + r, t], _normMean), _normStd);
-                var outNorm = RunForwardStack(new Tensor<T>(new[] { rows, lookback }, new Vector<T>(data))); // [rows, H]
-                var outSpan = outNorm.IsContiguous ? outNorm.AsSpan() : outNorm.Contiguous().AsSpan();
-                for (int r = 0; r < rows; r++)
-                    predictions[c0 + r] = NumOps.Add(NumOps.Multiply(outSpan[r * horizon], _normStd), _normMean);
+                var chunk = Tensor<T>.FromMatrix(input.GetSubMatrix(c0, 0, rows, lookback));
+                var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(chunk, _normMean), _normStd);
+                var outNorm = RunForwardStack(normalized); // [rows, H]
+                var firstStep = Engine.StridedGather(outNorm.Contiguous().ToVector(), 0, horizon);
+                var chunkPredictions = TimeSeriesEngineOps<T>.Destandardize(firstStep, _normStd, _normMean);
+                chunkPredictions.AsSpan().CopyTo(predictions.AsWritableSpan().Slice(c0, rows));
             }
             return predictions;
         }
@@ -619,23 +609,13 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
     /// </summary>
     private Vector<T> ExtractLookbackWindow(Matrix<T> x, Vector<T> y, int sampleIdx)
     {
-        var input = new Vector<T>(_options.LookbackWindow);
         if (x.Columns >= _options.LookbackWindow)
         {
-            for (int j = 0; j < _options.LookbackWindow; j++)
-                input[j] = x[sampleIdx, j];
-        }
-        else
-        {
-            // Univariate: construct lookback window from preceding y values
-            for (int j = 0; j < _options.LookbackWindow; j++)
-            {
-                int yIdx = sampleIdx - _options.LookbackWindow + j;
-                input[j] = yIdx >= 0 ? y[yIdx] : NumOps.Zero;
-            }
+            return x.GetRow(sampleIdx).GetSubVector(0, _options.LookbackWindow);
         }
 
-        return input;
+        // Univariate: construct lookback window from preceding y values (zero before the series start)
+        return TimeSeriesEngineOps<T>.PrecedingWindow(y, sampleIdx, _options.LookbackWindow);
     }
 
     /// <summary>
@@ -654,11 +634,8 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         // If input is shorter than lookback window, construct from training series tail
         if (input.Length < _options.LookbackWindow && _trainingSeries.Length >= _options.LookbackWindow)
         {
-            var lookback = new Vector<T>(_options.LookbackWindow);
             int start = _trainingSeries.Length - _options.LookbackWindow;
-            for (int j = 0; j < _options.LookbackWindow; j++)
-                lookback[j] = _trainingSeries[start + j];
-            input = lookback;
+            input = _trainingSeries.GetSubVector(start, _options.LookbackWindow);
         }
 
         if (input.Length != _options.LookbackWindow)
@@ -669,9 +646,7 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         }
 
         // Normalize input using training statistics
-        Vector<T> normalizedInput = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-            normalizedInput[i] = NumOps.Divide(NumOps.Subtract(input[i], _normMean), _normStd);
+        Vector<T> normalizedInput = TimeSeriesEngineOps<T>.Standardize(input, _normMean, _normStd);
 
         Vector<T> residual = normalizedInput;
         Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
@@ -728,9 +703,7 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         }
 
         // Normalize input
-        Vector<T> normalizedInput = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-            normalizedInput[i] = NumOps.Divide(NumOps.Subtract(input[i], _normMean), _normStd);
+        Vector<T> normalizedInput = TimeSeriesEngineOps<T>.Standardize(input, _normMean, _normStd);
 
         Vector<T> residual = normalizedInput;
         Vector<T> aggregatedForecast = new Vector<T>(_options.ForecastHorizon);
@@ -745,10 +718,7 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         }
 
         // Denormalize forecast
-        for (int i = 0; i < aggregatedForecast.Length; i++)
-            aggregatedForecast[i] = NumOps.Add(NumOps.Multiply(aggregatedForecast[i], _normStd), _normMean);
-
-        return aggregatedForecast;
+        return TimeSeriesEngineOps<T>.Destandardize(aggregatedForecast, _normStd, _normMean);
     }
 
     /// <summary>

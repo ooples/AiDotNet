@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.AdversarialRobustness.CertifiedRobustness;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -90,72 +91,117 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
 
         _random = options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(options.Seed.Value)
-            : RandomHelper.CreateSeededRandom(Environment.TickCount);
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The noise level depends on the input, so the fixed-sigma certificate of Cohen et al. does not apply. The
+    /// smoothed classifier here is the whole two-step mechanism: a reference query and k probe queries
+    /// x + N(0, sigma_min^2 I) choose sigma from the fraction of probes whose class differs from the reference,
+    /// then one query x + N(0, sigma^2 I) is classified. Every Monte Carlo sample runs both steps with fresh
+    /// noise, so the counts estimate the probabilities of that mechanism and not those of one realized sigma.
+    /// The reference is itself a noisy query: comparing the probes with the clean prediction f(x) made sigma
+    /// depend on a noiseless evaluation of the input, which no Gaussian mechanism bound covers.
+    /// </para>
+    /// <para>
+    /// The steps are Gaussian mechanisms whose noise is chosen adaptively, so their composition (Gaussian
+    /// differential privacy, Dong et al. 2019) holds only with a bound valid for every probe outcome (fully
+    /// adaptive composition, Smith and Thakurta 2022; Lyu et al. 2024, Adaptive Randomized Smoothing, Theorem 2.3):
+    /// sigma is at least sigma_min, so the k + 2 queries make the
+    /// mechanism r sqrt(k + 2) / sigma_min-GDP for inputs at L2 distance r, which gives the certified radius
+    /// sigma_eff * Phi^-1(p_A_lower) with sigma_eff = sigma_min / sqrt(k + 2). The realized sigma(x) is not a
+    /// sound substitute, because a nearby input can realize a smaller sigma. c_A is chosen from separate
+    /// selection samples and p_A_lower is the one-sided Clopper-Pearson bound, as in CERTIFY.
+    /// </para>
+    /// </remarks>
     public CertifiedPrediction<T> CertifyPrediction(TInput input, IFullModel<T, TInput, TOutput> model)
     {
         if (input == null) throw new ArgumentNullException(nameof(input));
         if (model == null) throw new ArgumentNullException(nameof(model));
 
-        // Step 1: Estimate local sensitivity to adapt sigma
-        double adaptiveSigma = EstimateAdaptiveSigma(input, model);
-        var sigma = NumOps.FromDouble(adaptiveSigma);
-
-        // Step 2: Convert input to vector for noise operations
         var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
 
-        // Step 3: Sample predictions with adapted Gaussian noise
-        var classCounts = new Dictionary<int, int>();
+        // CERTIFY over the two-step mechanism: selection samples pick c_A, fresh samples estimate p_A.
+        var selection = SampleMechanism(vectorInput, input, model, _options.SelectionSamples);
+        int topClassLabel = selection.Counts
+            .OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).Select(kv => kv.Key).FirstOrDefault();
+        var estimation = SampleMechanism(vectorInput, input, model, _options.NumSamples);
+        int topCount = estimation.Counts.TryGetValue(topClassLabel, out int observed) ? observed : 0;
 
-        for (int i = 0; i < _options.NumSamples; i++)
-        {
-            var noisyVector = AddGaussianNoise(vectorInput, sigma);
-            var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(noisyVector, input);
-            var output = model.Predict(noisyInput);
-            var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
-            var sampledClass = ArgMax(outputVector);
-
-            if (!classCounts.ContainsKey(sampledClass))
-                classCounts[sampledClass] = 0;
-            classCounts[sampledClass]++;
-        }
-
-        // Step 4: Find the most frequently predicted class
-        int topClassLabel = -1;
-        int topCount = -1;
-        foreach (var kv in classCounts)
-        {
-            if (kv.Value > topCount)
-            {
-                topClassLabel = kv.Key;
-                topCount = kv.Value;
-            }
-        }
-
-        // Step 5: Compute certified radius using adapted sigma
-        double pA = (double)topCount / _options.NumSamples;
-        double pALower = ComputeLowerBound(pA, _options.NumSamples, _options.ConfidenceLevel);
-        double pAUpper = ComputeUpperBound(pA, _options.NumSamples, _options.ConfidenceLevel);
-        double certifiedRadius = ComputeRadius(pALower, adaptiveSigma);
+        // Bounds and radius in double: counts above 2048 are not exact in Half, and a bound near 1 rounds to 1.
+        double pALower = SmoothingStatistics.ClopperPearsonLower(topCount, _options.NumSamples, _options.ConfidenceLevel);
+        double pAUpper = SmoothingStatistics.ClopperPearsonUpper(topCount, _options.NumSamples, _options.ConfidenceLevel);
+        double effectiveSigma = EffectiveSigma();
+        bool certified = pALower >= 0.5;
+        double certifiedRadius = certified ? SmoothingStatistics.Radius(pALower, effectiveSigma) : 0.0;
 
         var result = new CertifiedPrediction<T>
         {
             PredictedClass = topClassLabel,
-            CertifiedRadius = NumOps.FromDouble(certifiedRadius),
-            IsCertified = certifiedRadius > 0,
-            Confidence = pA,
-            LowerBound = pALower,
-            UpperBound = pAUpper
+            CertifiedRadius = CertificationMath<T>.RoundDown(certifiedRadius),
+            IsCertified = certified,
+            Confidence = NumOps.FromDouble((double)topCount / _options.NumSamples),
+            LowerBound = CertificationMath<T>.RoundDown(pALower),
+            UpperBound = CertificationMath<T>.RoundUp(pAUpper)
         };
 
         result.CertificationDetails["SampleCount"] = _options.NumSamples;
-        result.CertificationDetails["AdaptiveSigma"] = adaptiveSigma;
+        result.CertificationDetails["SelectionSampleCount"] = _options.SelectionSamples;
+        result.CertificationDetails["AdaptiveSigma"] = estimation.MeanSigma;
+        result.CertificationDetails["EffectiveSigma"] = effectiveSigma;
         result.CertificationDetails["TopClassCount"] = topCount;
-        result.CertificationDetails["Method"] = "AdaptiveRandomizedSmoothing";
+        result.CertificationDetails["Abstained"] = !certified;
+        result.CertificationDetails["Method"] = CertifiedDefenseMethod.AdaptiveRandomizedSmoothing;
 
         return result;
+    }
+
+    /// <summary>
+    /// The single-Gaussian noise level that bounds the probe step (a reference and k probes, k + 1 queries at
+    /// sigma_min) composed with the classification step (one query at a sigma of at least sigma_min) for every
+    /// probe outcome: sigma_min / sqrt(k + 2).
+    /// </summary>
+    internal double EffectiveSigma() => _minSigma / Math.Sqrt(_sensitivitySamples + 2.0);
+
+    /// <summary>
+    /// Runs the two-step mechanism <paramref name="count"/> times and counts the classes; also returns the mean
+    /// noise level the probes chose.
+    /// </summary>
+    private (Dictionary<int, int> Counts, double MeanSigma) SampleMechanism(
+        Vector<T> vectorInput,
+        TInput referenceInput,
+        IFullModel<T, TInput, TOutput> model,
+        int count)
+    {
+        // sigma takes one of k + 1 levels, one per number of changed probes: convert them to T once.
+        var levels = new double[_sensitivitySamples + 1];
+        for (int changed = 0; changed <= _sensitivitySamples; changed++)
+        {
+            levels[changed] = _minSigma + (double)changed / _sensitivitySamples * (_maxSigma - _minSigma);
+        }
+
+        var sigmaLevels = new Tensor<double>(levels, new[] { levels.Length }).Cast<T>().ToArray();
+        T probeSigma = NumOps.FromDouble(_minSigma);
+        var counts = new Dictionary<int, int>();
+        double sigmaSum = 0.0;
+        for (int i = 0; i < count; i++)
+        {
+            int reference = ClassifyNoisy(vectorInput, referenceInput, model, probeSigma);
+            int changed = ChangedProbes(vectorInput, referenceInput, model, reference, probeSigma);
+            sigmaSum += levels[changed];
+            int sampledClass = ClassifyNoisy(vectorInput, referenceInput, model, sigmaLevels[changed]);
+            counts[sampledClass] = counts.TryGetValue(sampledClass, out int seen) ? seen + 1 : 1;
+        }
+
+        return (counts, count > 0 ? sigmaSum / count : _minSigma);
+    }
+
+    private int ClassifyNoisy(Vector<T> vectorInput, TInput referenceInput, IFullModel<T, TInput, TOutput> model, T sigma)
+    {
+        var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(AddGaussianNoise(vectorInput, sigma), referenceInput);
+        return ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(noisyInput)));
     }
 
     /// <inheritdoc/>
@@ -190,46 +236,38 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         if (testData.Length != labels.Length)
             throw new ArgumentException("Number of labels must match number of test samples.", nameof(labels));
 
-        var metrics = new CertifiedAccuracyMetrics<T>();
         int cleanCorrect = 0, certified = 0;
-        var certifiedRadii = new List<double>();
+        var radii = new List<T>();
+        int certifiedCount = 0;
 
         for (int i = 0; i < testData.Length; i++)
         {
-            var labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(labels[i]);
-            int trueClass = ArgMax(labelVector);
-
-            // Clean accuracy
-            var cleanOutput = model.Predict(testData[i]);
-            var cleanVector = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
-            if (ArgMax(cleanVector) == trueClass) cleanCorrect++;
-
-            // Certified prediction
-            var certResult = CertifyPrediction(testData[i], model);
-            if (certResult.PredictedClass == trueClass && NumOps.GreaterThanOrEquals(certResult.CertifiedRadius, radius))
-                certified++;
-
-            if (certResult.IsCertified)
-                certifiedRadii.Add(NumOps.ToDouble(certResult.CertifiedRadius));
+            var (clean, certifiedAtRadius, result) = EvaluateOne(testData[i], labels[i], model, radius);
+            cleanCorrect += clean ? 1 : 0;
+            certified += certifiedAtRadius ? 1 : 0;
+            certifiedCount += result.IsCertified ? 1 : 0;
+            radii.Add(result.IsCertified ? result.CertifiedRadius : NumOps.Zero);
         }
 
-        metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
-        metrics.CertifiedAccuracy = (double)certified / testData.Length;
-        metrics.CertificationRadius = radius;
-        metrics.CertificationRate = (double)certifiedRadii.Count / testData.Length;
+        return CertificationMath<T>.Summarize(cleanCorrect, certified, certifiedCount, radius, radii);
+    }
 
-        if (certifiedRadii.Count > 0)
-        {
-            metrics.AverageCertifiedRadius = NumOps.FromDouble(certifiedRadii.Average());
-            certifiedRadii.Sort();
-            int count = certifiedRadii.Count;
-            int mid = count / 2;
-            metrics.MedianCertifiedRadius = count % 2 == 0
-                ? NumOps.FromDouble((certifiedRadii[mid - 1] + certifiedRadii[mid]) / 2.0)
-                : NumOps.FromDouble(certifiedRadii[mid]);
-        }
-
-        return metrics;
+    /// <summary>
+    /// Clean and certified correctness for one input; an abstained prediction is never certified correct.
+    /// </summary>
+    private (bool Clean, bool Certified, CertifiedPrediction<T> Result) EvaluateOne(
+        TInput input,
+        TOutput label,
+        IFullModel<T, TInput, TOutput> model,
+        T radius)
+    {
+        int trueClass = ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(label));
+        bool clean = ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(input))) == trueClass;
+        var result = CertifyPrediction(input, model);
+        bool certifiedCorrect = result.IsCertified
+            && result.PredictedClass == trueClass
+            && NumOps.GreaterThanOrEquals(result.CertifiedRadius, radius);
+        return (clean, certifiedCorrect, result);
     }
 
     /// <inheritdoc/>
@@ -321,83 +359,31 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         }
     }
 
-    private double EstimateAdaptiveSigma(TInput input, IFullModel<T, TInput, TOutput> model)
+    /// <summary>
+    /// The probe step: k queries x + N(0, sigma_min^2 I), counting those whose class differs from the noisy
+    /// reference prediction. sigma grows linearly from sigma_min to sigma_max with that fraction (near a boundary,
+    /// more noise).
+    /// </summary>
+    private int ChangedProbes(Vector<T> vectorInput, TInput input, IFullModel<T, TInput, TOutput> model, int referenceClass, T probeSigma)
     {
-        // Estimate local sensitivity by probing model response to small perturbations
-        var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
-
-        // Get base prediction
-        var baseOutput = model.Predict(input);
-        var baseVector = ConversionsHelper.ConvertToVector<T, TOutput>(baseOutput);
-        int baseClass = ArgMax(baseVector);
-
-        // Count how many perturbed inputs change the prediction
         int changedPredictions = 0;
-        double probeSigma = _minSigma;
-
         for (int i = 0; i < _sensitivitySamples; i++)
         {
-            var noisy = AddGaussianNoise(vectorInput, NumOps.FromDouble(probeSigma));
-            var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(noisy, input);
-            var noisyOutput = model.Predict(noisyInput);
-            var noisyVector = ConversionsHelper.ConvertToVector<T, TOutput>(noisyOutput);
-
-            if (ArgMax(noisyVector) != baseClass)
+            if (ClassifyNoisy(vectorInput, input, model, probeSigma) != referenceClass)
             {
                 changedPredictions++;
             }
         }
 
-        // Sensitivity: fraction of predictions that changed
-        double sensitivity = (double)changedPredictions / _sensitivitySamples;
-
-        // Adapt sigma: high sensitivity (near boundary) → use more noise
-        // Low sensitivity (far from boundary) → use less noise
-        double adaptedSigma = _minSigma + sensitivity * (_maxSigma - _minSigma);
-
-        return adaptedSigma;
+        return changedPredictions;
     }
 
     private Vector<T> AddGaussianNoise(Vector<T> input, T sigma)
     {
+        // x + N(0, sigma^2 I), unclipped: the certificate is for the Gaussian-smoothed base classifier.
         var noise = Engine.GenerateGaussianNoise<T>(input.Length, NumOps.Zero, sigma, _random.Next());
-        var noisy = Engine.Add<T>(input, noise);
-        return Engine.Clamp<T>(noisy, NumOps.Zero, NumOps.One);
+        return Engine.Add<T>(input, noise);
     }
 
-    private double ComputeRadius(double pA, double sigma)
-    {
-        if (pA <= 0.5) return 0.0;
-        double inverseNormal = NumOps.ToDouble(StatisticsHelper<T>.CalculateInverseNormalCDF(NumOps.FromDouble(pA)));
-        return Math.Max(sigma * inverseNormal, 0.0);
-    }
-
-    private double ComputeLowerBound(double pA, int n, double confidence)
-    {
-        int successes = (int)Math.Round(pA * n);
-        var interval = StatisticsHelper<T>.CalculateClopperPearsonInterval(successes, n, NumOps.FromDouble(confidence));
-        return NumOps.ToDouble(interval.Lower);
-    }
-
-    private double ComputeUpperBound(double pA, int n, double confidence)
-    {
-        int successes = (int)Math.Round(pA * n);
-        var interval = StatisticsHelper<T>.CalculateClopperPearsonInterval(successes, n, NumOps.FromDouble(confidence));
-        return NumOps.ToDouble(interval.Upper);
-    }
-
-    private static int ArgMax(Vector<T> vector)
-    {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
-    }
+    private static int ArgMax(Vector<T> vector) => CertificationMath<T>.ArgMax(vector);
 }

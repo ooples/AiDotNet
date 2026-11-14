@@ -41,7 +41,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     private readonly int _nFeaturesToSelect;
 
     // Fitted parameters
-    private double[]? _scores;
+    private Vector<T>? _scores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -53,7 +53,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     /// <summary>
     /// Gets the computed Fisher Scores for each feature.
     /// </summary>
-    public double[]? Scores => _scores;
+    public Vector<T>? Scores => _scores;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -108,103 +108,32 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        var y = new double[n];
+        var engine = Engine;
+        var y = Tensor<T>.FromVector(target);
 
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        // Group by class (distinct target values)
+        var classLabels = PreprocessingTensorOps.SortedUnique(y);
+        var classIndex = PreprocessingTensorOps.LookupSorted(classLabels, y, out _);
 
-        // Group by class
-        var classLabels = y.Distinct().ToArray();
-        var classIndices = new Dictionary<double, List<int>>();
-
-        foreach (double c in classLabels)
-        {
-            classIndices[c] = new List<int>();
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            classIndices[y[i]].Add(i);
-        }
-
-        _scores = new double[p];
-
-        // Compute Fisher Score for each feature
-        for (int j = 0; j < p; j++)
-        {
-            // Global mean
-            double globalMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                globalMean += X[i, j];
-            }
-            globalMean /= n;
-
-            // Between-class and within-class sums
-            double betweenClassSum = 0;
-            double withinClassSum = 0;
-
-            foreach (double c in classLabels)
-            {
-                var indices = classIndices[c];
-                int nc = indices.Count;
-
-                if (nc == 0) continue;
-
-                // Class mean
-                double classMean = 0;
-                foreach (int i in indices)
-                {
-                    classMean += X[i, j];
-                }
-                classMean /= nc;
-
-                // Between-class contribution
-                betweenClassSum += nc * Math.Pow(classMean - globalMean, 2);
-
-                // Class variance (within-class)
-                double classVariance = 0;
-                foreach (int i in indices)
-                {
-                    classVariance += Math.Pow(X[i, j] - classMean, 2);
-                }
-
-                withinClassSum += classVariance;
-            }
-
-            // Fisher Score = between-class / within-class
-            if (withinClassSum > 1e-10)
-            {
-                _scores[j] = betweenClassSum / withinClassSum;
-            }
-            else
-            {
-                // All values are the same within classes
-                _scores[j] = betweenClassSum > 1e-10 ? double.MaxValue : 0;
-            }
-        }
+        // Fisher Score = between-class / within-class sum of squares; when within is not above 1e-10 the score is
+        // T.MaxValue if between exceeds 1e-10 (classes perfectly separated) and 0 otherwise
+        var betweenClassSum = FeatureScoringTensorOps.ClassScatter(Tensor<T>.FromMatrix(data), classIndex,
+            classLabels.Length, out var withinClassSum);
+        var shape = new[] { p };
+        T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        var usable = engine.TensorGreaterThan(withinClassSum, epsilon);
+        var degenerate = engine.TensorWhere(engine.TensorGreaterThan(betweenClassSum, epsilon),
+            PreprocessingTensorOps.Filled(shape, NumOps.MaxValue), new Tensor<T>(shape));
+        var scores = engine.TensorWhere(usable, engine.TensorDivide(betweenClassSum,
+            engine.TensorWhere(usable, withinClassSum, PreprocessingTensorOps.Filled(shape, NumOps.One))), degenerate);
+        _scores = scores.ToVector();
 
         // Select top features
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _scores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, nToSelect);
 
         IsFitted = true;
     }
-
     /// <summary>
     /// Fits and transforms the data.
     /// </summary>
@@ -224,19 +153,7 @@ public class FisherScore<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new InvalidOperationException("FisherScore has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>

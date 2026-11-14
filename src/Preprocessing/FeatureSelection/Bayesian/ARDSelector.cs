@@ -31,15 +31,15 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _alphas;
-    private double[]? _coefficients;
+    private Vector<T>? _alphas;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? Alphas => _alphas;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Alphas => _alphas;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -90,120 +90,112 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
                 nameof(data));
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
-        int p = data.Columns;
+        int numToSelect = Math.Min(_nFeaturesToSelect, data.Columns);
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
 
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
         {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            // diag(X^T X), and with it the posterior precision alpha + beta diag(X^T X), passes Half's 65504 once a
+            // column's values pass 256 / sqrt(n) (no rescaling helps: the EM is not scale-equivariant, since alpha
+            // and beta start at 1), and the 1e8 alpha threshold and 1e10 cap are not finite in Half at all. The EM
+            // runs in float and its results are cast back once.
+            var (floatAlphas, floatCoefficients, floatSelected) = RunEm(X.Cast<float>(), y.Cast<float>(), numToSelect);
+            _alphas = floatAlphas.Cast<T>().ToVector();
+            _coefficients = floatCoefficients.Cast<T>().ToVector();
+            _selectedIndices = floatSelected;
         }
+        else
+        {
+            var (alphas, coefficients, selected) = RunEm(X, y, numToSelect);
+            _alphas = alphas.ToVector();
+            _coefficients = coefficients.ToVector();
+            _selectedIndices = selected;
+        }
+
+        IsFitted = true;
+    }
+
+    /// <summary>
+    /// The ARD EM iterations on X [n, p] and y [n] in <typeparamref name="TC"/>: returns the precisions alpha, the
+    /// posterior mean coefficients and the selected feature indices.
+    /// </summary>
+    private (Tensor<TC> Alphas, Tensor<TC> Coefficients, int[] Selected) RunEm<TC>(Tensor<TC> X, Tensor<TC> target, int numToSelect)
+    {
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TC>();
+        int n = X.Shape[0];
+        int p = X.Shape[1];
+        var y = engine.Reshape(target, new[] { n, 1 });
+
+        TC eps = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        TC tolerance = ops.FromDouble(_tolerance);
+        var thresholdFill = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(_alphaThreshold));
+        var largeFill = PreprocessingTensorOps.Filled(new[] { p }, ops.FromDouble(1e10));
+
+        // diag(X^T X) (the diagonal posterior approximation only reads the diagonal) and X^T y.
+        var xtxDiag = engine.ReduceSum(engine.TensorSquare(X), new[] { 0 }, false);
+        var xty = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(X), y), new[] { p });
 
         // Initialize alphas (precision parameters)
-        _alphas = new double[p];
-        _coefficients = new double[p];
-        for (int j = 0; j < p; j++)
-            _alphas[j] = 1.0;
-
-        double beta = 1.0; // Noise precision
-
-        // Precompute X^T X and X^T y
-        var XtX = new double[p, p];
-        var Xty = new double[p];
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            for (int i = 0; i < n; i++)
-                Xty[j1] += X[i, j1] * y[i];
-
-            for (int j2 = j1; j2 < p; j2++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += X[i, j1] * X[i, j2];
-                XtX[j1, j2] = sum;
-                XtX[j2, j1] = sum;
-            }
-        }
+        var alphas = PreprocessingTensorOps.Filled(new[] { p }, ops.One);
+        var coefficients = new Tensor<TC>(new[] { p });
+        TC beta = ops.One; // Noise precision
 
         // EM iterations
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            var oldAlphas = (double[])_alphas.Clone();
+            var oldAlphas = alphas;
 
-            // Compute posterior covariance (simplified diagonal approximation)
-            var sigma = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                double denom = _alphas[j] + beta * XtX[j, j];
-                sigma[j] = denom > 1e-10 ? 1.0 / denom : 1e10;
-            }
+            // Posterior covariance (diagonal approximation): 1 / (alpha + beta * diag(X^T X))
+            var denom = engine.TensorAdd(alphas, engine.TensorMultiplyScalar(xtxDiag, beta));
+            var sigma = engine.TensorWhere(engine.TensorGreaterThan(denom, eps), engine.TensorReciprocal(denom), largeFill);
 
-            // Compute posterior mean (coefficients)
-            for (int j = 0; j < p; j++)
-                _coefficients[j] = beta * sigma[j] * Xty[j];
+            // Posterior mean (coefficients)
+            coefficients = engine.TensorMultiplyScalar(engine.TensorMultiply(sigma, xty), beta);
 
-            // Compute gamma (effective number of parameters per feature)
-            var gamma = new double[p];
-            for (int j = 0; j < p; j++)
-                gamma[j] = 1 - _alphas[j] * sigma[j];
+            // gamma = 1 - alpha * sigma (effective number of parameters per feature), formed as the equal
+            // beta * diag(X^T X) * sigma where sigma = 1 / denom: when beta * diag(X^T X) is below the rounding unit
+            // of alpha, 1 - alpha * sigma cancels to 0 in float (and the feature's alpha is pinned at the threshold)
+            var invertible = engine.TensorGreaterThan(denom, eps);
+            var gamma = engine.TensorWhere(invertible,
+                engine.TensorMultiply(engine.TensorMultiplyScalar(xtxDiag, beta), sigma),
+                engine.TensorAddScalar(engine.TensorNegate(engine.TensorMultiply(alphas, sigma)), ops.One));
 
             // Update alphas
-            for (int j = 0; j < p; j++)
-            {
-                double w2 = _coefficients[j] * _coefficients[j];
-                if (w2 > 1e-10 && gamma[j] > 1e-10)
-                    _alphas[j] = gamma[j] / w2;
-                else
-                    _alphas[j] = _alphaThreshold;
-            }
+            var w2 = engine.TensorSquare(coefficients);
+            var valid = engine.TensorMultiply(engine.TensorGreaterThan(w2, eps), engine.TensorGreaterThan(gamma, eps));
+            alphas = engine.TensorWhere(valid, engine.TensorDivide(gamma, w2), thresholdFill);
 
             // Update beta (noise precision)
-            double residualSum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double pred = 0;
-                for (int j = 0; j < p; j++)
-                    pred += X[i, j] * _coefficients[j];
-                residualSum += (y[i] - pred) * (y[i] - pred);
-            }
-            double gammaSum = gamma.Sum();
-            beta = Math.Max((n - gammaSum) / (residualSum + 1e-10), 1e-10);
+            var residual = engine.TensorSubtract(y, engine.TensorMatMul(X, engine.Reshape(coefficients, new[] { p, 1 })));
+            beta = UpdateNoisePrecision(n, engine.TensorSum(gamma), engine.TensorSumOfSquares(residual));
 
             // Check convergence
-            double maxChange = 0;
-            for (int j = 0; j < p; j++)
-            {
-                double change = Math.Abs(_alphas[j] - oldAlphas[j]) / (Math.Abs(oldAlphas[j]) + 1e-10);
-                maxChange = Math.Max(maxChange, change);
-            }
-            if (maxChange < _tolerance)
+            var change = engine.TensorDivide(
+                engine.TensorAbs(engine.TensorSubtract(alphas, oldAlphas)),
+                engine.TensorAddScalar(engine.TensorAbs(oldAlphas), eps));
+            if (PreprocessingTensorOps.IsBelow(engine.TensorMaxValue(change), tolerance))
                 break;
         }
 
         // Select features with low alpha (high relevance)
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => _alphas[j] < _alphaThreshold)
-            .OrderBy(j => _alphas[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        var relevant = engine.TensorLessThan(alphas, ops.FromDouble(_alphaThreshold));
+        int relevantCount = PreprocessingTensorOps.CountNonZero(relevant);
+        int[] selected = relevantCount >= numToSelect
+            ? PreprocessingTensorOps.BottomKIndicesSorted(alphas, numToSelect)
+            // Not enough features below threshold: take top by coefficient magnitude
+            : PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(coefficients), numToSelect);
 
-        // If not enough features below threshold, take top by coefficient magnitude
-        if (_selectedIndices.Length < numToSelect)
-        {
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => Math.Abs(_coefficients[j]))
-                .Take(numToSelect)
-                .OrderBy(x => x)
-                .ToArray();
-        }
+        return (alphas, coefficients, selected);
+    }
 
-        IsFitted = true;
+    private static TC UpdateNoisePrecision<TC>(int n, TC gammaSum, TC residualSum)
+    {
+        var ops = MathHelper.GetNumericOperations<TC>();
+        TC eps = PreprocessingTensorOps.Tolerance<TC>(1e-10);
+        TC value = ops.Divide(ops.Subtract(ops.FromDouble(n), gammaSum), ops.Add(residualSum, eps));
+        return PreprocessingTensorOps.ScalarMax(value, eps);
     }
 
     /// <inheritdoc />
@@ -222,15 +214,7 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new ArgumentException(
                 $"Expected {_nInputFeatures} columns but got {data.Columns}.", nameof(data));
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

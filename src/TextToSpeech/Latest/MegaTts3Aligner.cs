@@ -45,12 +45,9 @@ internal sealed class MegaTts3Aligner<T>
     public Tensor<T> LogMel(double[] audio)
     {
         var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(audio, Network.Dimensions.Mels);
-        int mels = mel.GetLength(0), frames = mel.GetLength(1) / FrameMultiple * FrameMultiple;
+        int mels = mel.Shape[0], frames = mel.Shape[1] / FrameMultiple * FrameMultiple;
         if (frames == 0) throw new ArgumentException("The audio is shorter than one latent frame.", nameof(audio));
-        var result = new Tensor<T>(new[] { mels, frames });
-        for (int m = 0; m < mels; m++)
-            for (int t = 0; t < frames; t++) result[m, t] = NumOps.FromDouble(mel[m, t]);
-        return result;
+        return AiDotNetEngine.Current.TensorSlice(mel, new[] { 0, 0 }, new[] { mels, frames }).Contiguous();
     }
 
     /// <summary>Greedy decoding from <see cref="Start"/> until <see cref="End"/> or <see cref="MaxTokens"/> steps: the tokens

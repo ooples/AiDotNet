@@ -7,6 +7,7 @@ using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -115,6 +116,27 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private readonly ExternalMemory<T> _memory;
     private readonly MANNMemoryStatistics _memoryStats;
 
+    // Santoro et al. 2016's learned parameters beside the controller: the output layer over
+    // [controller output; read vector] and the write gate logit alpha. Both are trained by MetaTrain, so both are
+    // part of the parameter surface; leaving them out made GetParameters/SetParameters cover only the controller,
+    // and a restore silently kept the untrained classifier and gate.
+
+    /// <summary>
+    /// The output layer packed as its row-major weights <c>[inputs x NumClasses]</c> followed by its bias
+    /// <c>[NumClasses]</c>, where inputs = controller width + MemoryValueSize. Empty until the controller's width
+    /// is known (the first episode) or a restore supplies it.
+    /// </summary>
+    /// <remarks>
+    /// One field rather than two so the layer is a single variable-width slot: a fresh instance learns its width
+    /// from the restored slice (Availability = Fit gives a resizable source), and inputs follows from the length.
+    /// </remarks>
+    [AiDotNet.Attributes.TrainableParameter(Availability = AiDotNet.Models.Parameters.ParameterAvailability.Fit)]
+    private Vector<T> _outputLayer = new Vector<T>(0);
+
+    /// <summary>The write gate logit alpha, one element; eq. 7's gate is sigmoid(alpha).</summary>
+    [AiDotNet.Attributes.TrainableParameter]
+    private Vector<T> _writeGateLogit;
+
     /// <summary>
     /// Initializes a new instance of the MANNAlgorithm class.
     /// </summary>
@@ -159,15 +181,22 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             throw new ArgumentException("MANN configuration is invalid. Check all parameters.", nameof(options));
         }
 
-        // Initialize external memory
+        // Initialize the LRUA external memory (Santoro et al. 2016): usage decay gamma, the initial write gate
+        // sigmoid(alpha) (alpha is learned), and one least-used slot per read head.
         _memory = new ExternalMemory<T>(
             options.MemorySize,
             options.MemoryKeySize,
             options.MemoryValueSize,
-            NumOps);
+            NumOps,
+            options.UsageDecay,
+            1.0 / (1.0 + Math.Exp(-options.WriteGateLogit)),
+            options.NumReadHeads);
 
         // Initialize memory statistics
         _memoryStats = new MANNMemoryStatistics();
+
+        // The learned write gate starts at sigmoid(WriteGateLogit).
+        _writeGateLogit = new Vector<T>(new[] { NumOps.FromDouble(options.WriteGateLogit) });
 
         // Pre-initialize memory if configured
         if (_mannOptions.UseMemoryPreInitialization)
@@ -190,17 +219,14 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <exception cref="ArgumentException">Thrown when the task batch is null or empty.</exception>
     /// <remarks>
     /// <para>
-    /// MANN training involves writing support examples to memory and using memory
-    /// reads to classify query examples:
-    /// </para>
-    /// <para>
     /// <b>For each task in the batch:</b>
     /// 1. Optionally clear recent memories (based on configuration)
-    /// 2. Write support set examples to external memory
-    /// 3. Process query set using memory-augmented predictions
-    /// 4. Compute cross-entropy loss
-    /// 5. Update controller network
+    /// 2. Write the support examples to the external memory one LRUA time step at a time
+    /// 3. Read the memory for each query and classify <c>[controller output; read vector]</c> with the output layer
+    /// 4. Differentiate the query cross-entropy through the reads and writes, to the controller, the output layer
+    ///    and the write gate logit alpha (Santoro et al. 2016 train the whole system end to end)
     /// </para>
+    /// <para>The batch-mean gradients update all three with the outer learning rate.</para>
     /// </remarks>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
@@ -209,9 +235,8 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             throw new ArgumentException("Task batch cannot be null or empty.", nameof(taskBatch));
         }
 
-        T totalLoss = NumOps.Zero;
-        Vector<T>? accumulatedGradients = null;
-
+        var losses = new List<T>();
+        var sums = new Vector<T>?[4];
         foreach (var task in taskBatch.Tasks)
         {
             // Clear recent memory for new task (if configured)
@@ -220,44 +245,37 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 _memory.ClearRecent(_mannOptions.MemoryRetentionRatio);
             }
 
-            // Compute episode loss and gradients
-            var (episodeLoss, episodeGradients) = TrainEpisode(task);
-            totalLoss = NumOps.Add(totalLoss, episodeLoss);
-
-            // Accumulate gradients
-            if (accumulatedGradients == null)
-            {
-                accumulatedGradients = episodeGradients;
-            }
-            else
-            {
-                for (int i = 0; i < accumulatedGradients.Length; i++)
-                {
-                    accumulatedGradients[i] = NumOps.Add(accumulatedGradients[i], episodeGradients[i]);
-                }
-            }
+            var gradient = EpisodeGradient(task, commit: true);
+            losses.Add(gradient.Loss);
+            sums[0] = Accumulate(sums[0], gradient.Body);
+            sums[1] = Accumulate(sums[1], gradient.OutputWeights);
+            sums[2] = Accumulate(sums[2], gradient.OutputBias);
+            sums[3] = Accumulate(sums[3], gradient.GateLogit);
         }
 
-        if (accumulatedGradients != null)
+        T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
+        Vector<T> BatchMean(Vector<T>? sum, int length)
         {
-            // Average gradients
-            T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-            for (int i = 0; i < accumulatedGradients.Length; i++)
+            var mean = sum is null ? new Vector<T>(length) : Engine.Divide(sum, batchSizeT);
+            if (_mannOptions.GradientClipThreshold.HasValue && _mannOptions.GradientClipThreshold.Value > 0 && mean.Length > 0)
             {
-                accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], batchSizeT);
+                mean = ClipGradients(mean, _mannOptions.GradientClipThreshold.Value);
             }
 
-            // Apply gradient clipping if configured
-            if (_mannOptions.GradientClipThreshold.HasValue && _mannOptions.GradientClipThreshold.Value > 0)
-            {
-                accumulatedGradients = ClipGradients(accumulatedGradients, _mannOptions.GradientClipThreshold.Value);
-            }
-
-            // Update controller parameters
-            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-            var updatedParams = ApplyOuterGradients(currentParams, accumulatedGradients, _mannOptions.OuterLearningRate);
-            InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
+            return mean;
         }
+
+        var layer = OutputLayer();
+        var body = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
+        var updated = ApplyOuterGradients(_mannOptions.OuterLearningRate,
+            (body, BatchMean(sums[0], body.Length)),
+            (layer.Weights, BatchMean(sums[1], layer.Weights.Length)),
+            (layer.Bias, BatchMean(sums[2], layer.Bias.Length)),
+            (_writeGateLogit, BatchMean(sums[3], _writeGateLogit.Length)));
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updated[0]);
+        _outputLayer = Vector<T>.Concatenate(updated[1], updated[2]);
+        _writeGateLogit = updated[3];
+        SyncWriteGate();
 
         // Apply memory consolidation if configured
         if (_mannOptions.UseMemoryConsolidation)
@@ -266,26 +284,10 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         }
 
         // Return average loss
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(taskBatch.BatchSize));
+        T totalLoss = Engine.TensorSum(new Tensor<T>(losses.ToArray(), new[] { losses.Count }));
+        return NumOps.Divide(totalLoss, batchSizeT);
     }
 
-    /// <summary>
-    /// Adapts to a new task by writing support examples to memory.
-    /// </summary>
-    /// <param name="task">The new task containing support set examples.</param>
-    /// <returns>A MANNModel that can classify using the populated memory.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when task is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// MANN adaptation is fast - it just writes support examples to memory.
-    /// The returned model can then classify new examples by reading from memory.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> When you have a new task with labeled examples,
-    /// MANN stores them in its "notebook" (memory). Then it can classify new
-    /// examples by looking up similar stored examples.
-    /// </para>
-    /// </remarks>
     /// <inheritdoc/>
     /// <remarks>
     /// The adapted model returns one score per class for each example, so this is the configured loss of their
@@ -296,7 +298,23 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
         => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Adapts to a new task by writing support examples to a copy of the memory.
+    /// </summary>
+    /// <param name="task">The new task containing support set examples.</param>
+    /// <returns>A MANNModel that can classify using the populated memory.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when task is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// MANN adaptation is fast - it just writes support examples to memory with the learned write gate.
+    /// The returned model classifies new examples by reading from memory through the learned output layer.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> When you have a new task with labeled examples,
+    /// MANN stores them in its "notebook" (memory). Then it can classify new
+    /// examples by looking up similar stored examples.
+    /// </para>
+    /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
@@ -308,261 +326,286 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var adaptedMemory = _memory.Clone();
 
         // Write support examples to memory
-        WriteSupportSetToMemory(task.SupportInput, task.SupportOutput, adaptedMemory);
+        var features = ClassifierOutputs<T>.AsRows(MetaModel.Predict(task.SupportInput));
+        EnsureOutputLayer(features.Shape[1]);
+        int count = features.Shape[0];
+        var keys = MannRows<T>.Keys(features, _mannOptions.MemoryKeySize);
+        var values = MannRows<T>.OneHot(MannRows<T>.Labels(task.SupportOutput, count), _mannOptions.MemoryValueSize);
+        for (int i = 0; i < count; i++)
+        {
+            adaptedMemory.WriteAndRead(keys.GetSlice(i).ToVector(), values.GetSlice(i).ToVector());
+            _memoryStats.RecordWrite();
+        }
 
-        // Return adapted model
+        var layer = OutputLayer();
         return new MANNModel<T, TInput, TOutput>(
             MetaModel,
             adaptedMemory,
             _mannOptions,
-            NumOps);
+            NumOps,
+            MannRows<T>.Owned(layer.Weights, layer.Inputs, _mannOptions.NumClasses),
+            MannRows<T>.Owned(layer.Bias, 1, _mannOptions.NumClasses));
+    }
+
+    /// <summary>One task's constants: its support and query sizes, the written label rows and the query targets.</summary>
+    private sealed class Episode
+    {
+        public Episode(int support, int query, Tensor<T> supportValues, Tensor<T> queryTargets, TInput stacked,
+            TOutput stackedTarget)
+        {
+            Support = support;
+            Query = query;
+            SupportValues = supportValues;
+            QueryTargets = queryTargets;
+            Stacked = stacked;
+            StackedTarget = stackedTarget;
+        }
+
+        public int Support { get; }
+        public int Query { get; }
+
+        /// <summary>The one-hot support labels written as memory values, <c>[support, MemoryValueSize]</c>.</summary>
+        public Tensor<T> SupportValues { get; }
+
+        /// <summary>The one-hot query labels, <c>[query, NumClasses]</c>.</summary>
+        public Tensor<T> QueryTargets { get; }
+
+        /// <summary>The support rows followed by the query rows, embedded in one controller pass.</summary>
+        public TInput Stacked { get; }
+
+        /// <summary>A placeholder target with one row per stacked example (its values are not read).</summary>
+        public TOutput StackedTarget { get; }
+    }
+
+    private Episode EpisodeOf(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        // The episode is read again after ComputeGradients resets the step arena, which reissues arena tensors by
+        // element count under other shapes ([4, 2] targets came back as [8]). Build it on the heap.
+        using var heapOwned = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        int support = GetBatchSize(task.SupportInput), query = GetBatchSize(task.QueryInput);
+        var supportValues = MannRows<T>.OneHot(MannRows<T>.Labels(task.SupportOutput, support), _mannOptions.MemoryValueSize);
+        var queryTargets = MannRows<T>.OneHot(MannRows<T>.Labels(task.QueryOutput, query), _mannOptions.NumClasses);
+        var stacked = ClassifierOutputs<T>.StackRows(task.SupportInput, task.QueryInput);
+        var stackedTarget = ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { support + query, 1 }));
+        return new Episode(support, query, supportValues, queryTargets, stacked, stackedTarget);
+    }
+
+    /// <summary>The controller's features for the stacked support and query rows, <c>[support + query, width]</c>.</summary>
+    private Tensor<T> Embed(Episode episode)
+    {
+        var embeddings = ClassifierOutputs<T>.AsRows(MetaModel.Predict(episode.Stacked));
+        if (embeddings.Shape[0] != episode.Support + episode.Query)
+        {
+            throw new InvalidOperationException(
+                $"The controller produced {embeddings.Shape[0]} rows for {episode.Support + episode.Query} examples.");
+        }
+
+        return embeddings;
+    }
+
+    /// <summary>The trainable output layer and write gate logit as tape leaves.</summary>
+    private sealed class MannWeights
+    {
+        public MannWeights(Tensor<T> output, Tensor<T> bias, Tensor<T> gateLogit)
+        {
+            Output = output;
+            Bias = bias;
+            GateLogit = gateLogit;
+            Leaves = new[] { output, bias, gateLogit };
+        }
+
+        /// <summary>The output layer's weights, <c>[controller width + MemoryValueSize, NumClasses]</c>.</summary>
+        public Tensor<T> Output { get; }
+
+        /// <summary>The output layer's bias, <c>[1, NumClasses]</c>.</summary>
+        public Tensor<T> Bias { get; }
+
+        /// <summary>The write gate logit alpha, <c>[1, 1]</c>.</summary>
+        public Tensor<T> GateLogit { get; }
+
+        public IReadOnlyList<Tensor<T>> Leaves { get; }
+    }
+
+    private MannWeights Weights()
+    {
+        var layer = OutputLayer();
+        return new MannWeights(
+            MannRows<T>.Owned(layer.Weights, layer.Inputs, _mannOptions.NumClasses),
+            MannRows<T>.Owned(layer.Bias, 1, _mannOptions.NumClasses),
+            MannRows<T>.Owned(_writeGateLogit, 1, 1));
+    }
+
+    private sealed class EpisodeGradients
+    {
+        public EpisodeGradients(T loss, Vector<T> body, Vector<T> outputWeights, Vector<T> outputBias, Vector<T> gateLogit)
+        {
+            Loss = loss;
+            Body = body;
+            OutputWeights = outputWeights;
+            OutputBias = outputBias;
+            GateLogit = gateLogit;
+        }
+
+        public T Loss { get; }
+        public Vector<T> Body { get; }
+        public Vector<T> OutputWeights { get; }
+        public Vector<T> OutputBias { get; }
+        public Vector<T> GateLogit { get; }
     }
 
     /// <summary>
-    /// Trains the controller on a single episode.
+    /// One episode's loss and its exact gradients. The controller's gradient comes from the whole episode rebuilt
+    /// from its features on the tape (output layer and gate held constant); the output layer's and the gate's from
+    /// the same episode on fixed features. With <paramref name="commit"/> the memory keeps the episode's final
+    /// state, as a recurrent memory does.
     /// </summary>
-    private (T loss, Vector<T> gradients) TrainEpisode(IMetaLearningTask<T, TInput, TOutput> task)
+    private EpisodeGradients EpisodeGradient(IMetaLearningTask<T, TInput, TOutput> task, bool commit)
     {
-        // Step 1: Write support set to memory
-        WriteSupportSetToMemory(task.SupportInput, task.SupportOutput, _memory);
+        var episode = EpisodeOf(task);
+        var start = _memory.Snapshot();
+        var embeddings = Embed(episode);
+        EnsureOutputLayer(embeddings.Shape[1]);
 
-        // Step 2: Process query set using memory
-        var queryPredictions = ProcessQuerySetWithMemory(task.QueryInput);
+        var frozen = Weights();
+        var composed = new EmbeddingObjectiveLoss<T>(rows => Objective(start, rows, episode, frozen, out _));
+        var body = ComputeGradients(MetaModel, episode.Stacked, episode.StackedTarget, composed);
 
-        // Step 3: Compute loss
-        T episodeLoss = ComputeLoss(queryPredictions, task.QueryOutput);
+        var weights = Weights();
+        var output = new Vector<T>(weights.Output.Length);
+        var bias = new Vector<T>(weights.Bias.Length);
+        var gate = new Vector<T>(weights.GateLogit.Length);
+        ExternalMemory<T>.State? end = null;
+        T loss = AiDotNet.Training.TapeGradients<T>.Of(
+            () =>
+            {
+                var objective = Objective(start, embeddings, episode, weights, out var final);
+                end = final;
+                return objective;
+            },
+            weights.Leaves,
+            gradients =>
+            {
+                CopyGradient(gradients, weights.Output, output);
+                CopyGradient(gradients, weights.Bias, bias);
+                CopyGradient(gradients, weights.GateLogit, gate);
+                if (commit && end is not null)
+                {
+                    _memory.Commit(end);
+                }
+            });
 
-        // Step 4: Add memory regularization
+        for (int i = 0; i < episode.Support; i++) _memoryStats.RecordWrite();
+        for (int q = 0; q < episode.Query; q++) _memoryStats.RecordRead();
+        return new EpisodeGradients(loss, body, output, bias, gate);
+    }
+
+    /// <summary>
+    /// The episode on the tape: each support example is one LRUA step (write its key and label through the gated
+    /// write weights, then read with the key), each query reads the memory, and the output layer classifies
+    /// <c>[controller output; read vector]</c>. Returns <c>-mean_q y_q^T log softmax(o_q)</c> plus the usage penalty.
+    /// </summary>
+    private Tensor<T> Objective(ExternalMemory<T>.State start, Tensor<T> embeddings, Episode episode, MannWeights weights,
+        out ExternalMemory<T>.State end)
+    {
+        int width = embeddings.Shape[1], keySize = _mannOptions.MemoryKeySize, valueSize = _mannOptions.MemoryValueSize;
+        var gate = Engine.TensorSigmoid(weights.GateLogit);
+        var state = start;
+
+        if (episode.Support > 0)
+        {
+            var supportKeys = MannRows<T>.Keys(
+                Engine.TensorSlice(embeddings, new[] { 0, 0 }, new[] { episode.Support, width }), keySize);
+            for (int i = 0; i < episode.Support; i++)
+            {
+                var key = Engine.Reshape(Engine.TensorSlice(supportKeys, new[] { i, 0 }, new[] { 1, keySize }), new[] { keySize });
+                var value = Engine.Reshape(
+                    Engine.TensorSlice(episode.SupportValues, new[] { i, 0 }, new[] { 1, valueSize }), new[] { valueSize });
+                state = _memory.Step(state, key, value, gate, out _);
+            }
+        }
+
+        var objective = new Tensor<T>(new[] { 1 });
+        if (episode.Query > 0)
+        {
+            var query = Engine.TensorSlice(embeddings, new[] { episode.Support, 0 }, new[] { episode.Query, width });
+            var readWeights = _memory.ContentWeightRows(state.Keys, MannRows<T>.Keys(query, keySize));
+            state = _memory.AfterReads(state, readWeights, out var reads);
+            var logits = MannRows<T>.Logits(Engine.TensorConcatenate(new[] { query, reads }, 1), weights.Output, weights.Bias);
+            var picked = Engine.TensorMultiply(episode.QueryTargets, Engine.TensorLogSoftmax(logits, 1));
+            objective = Engine.TensorMultiplyScalar(Sum(picked), NumOps.FromDouble(-1.0 / episode.Query));
+        }
+
         if (_mannOptions.MemoryRegularization > 0.0)
         {
-            T memoryPenalty = _memory.ComputeUsagePenalty();
-            T regWeight = NumOps.FromDouble(_mannOptions.MemoryRegularization);
-            episodeLoss = NumOps.Add(episodeLoss, NumOps.Multiply(memoryPenalty, regWeight));
+            var penalty = Engine.TensorMultiplyScalar(Sum(state.Usage), NumOps.FromDouble(1.0 / _memory.Size));
+            objective = Engine.TensorAdd(objective,
+                Engine.TensorMultiplyScalar(penalty, NumOps.FromDouble(_mannOptions.MemoryRegularization)));
         }
 
-        // Step 5: Compute gradients
-        var gradients = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
-
-        return (episodeLoss, gradients);
+        end = state;
+        return objective;
     }
 
-    /// <summary>
-    /// Writes support set examples to external memory.
-    /// </summary>
-    private void WriteSupportSetToMemory(TInput supportInputs, TOutput supportOutputs, ExternalMemory<T> memory)
-    {
-        int numSupport = GetBatchSize(supportInputs);
+    private Tensor<T> Sum(Tensor<T> value) => Engine.Reshape(Engine.ReduceSum(value, null), new[] { 1 });
 
-        for (int i = 0; i < numSupport; i++)
+    private static void CopyGradient(Dictionary<Tensor<T>, Tensor<T>> gradients, Tensor<T> leaf, Vector<T> into)
+    {
+        if (!gradients.TryGetValue(leaf, out var gradient)) return;
+        gradient.ToVector().AsSpan().Slice(0, leaf.Length).CopyTo(into.AsWritableSpan());
+    }
+
+    private Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
+        => sum is null ? new Vector<T>(values.AsSpan().ToArray()) : Engine.Add(sum, values);
+
+    /// <summary>
+    /// Creates the output layer the first time the controller's width is known: Glorot-uniform weights over
+    /// <c>[controller output; read vector]</c> and a zero bias.
+    /// </summary>
+    private void EnsureOutputLayer(int controllerWidth)
+    {
+        int inputs = controllerWidth + _mannOptions.MemoryValueSize;
+        if (_outputLayer.Length > 0)
         {
-            // Generate memory key from input
-            var memoryKey = GenerateMemoryKey(supportInputs, i);
-
-            // Generate memory value from label
-            var memoryValue = GenerateMemoryValue(supportOutputs, i);
-
-            // Find where to write (least recently used)
-            int writeLocation = memory.FindLeastRecentlyUsedSlot();
-
-            // Write to memory
-            memory.Write(writeLocation, memoryKey, memoryValue);
-
-            // Update statistics
-            _memoryStats.RecordWrite();
-        }
-    }
-
-    /// <summary>
-    /// Processes query set using memory-augmented computation.
-    /// </summary>
-    private Matrix<T> ProcessQuerySetWithMemory(TInput queryInputs)
-    {
-        int numQueries = GetBatchSize(queryInputs);
-        var predictions = new List<Vector<T>>();
-
-        for (int q = 0; q < numQueries; q++)
-        {
-            // Generate memory key for reading
-            var readKey = GenerateMemoryKey(queryInputs, q);
-
-            // Read from memory using attention
-            var readContent = ReadFromMemory(readKey);
-
-            // Process through controller
-            var controllerOutput = ProcessWithController(queryInputs, q);
-
-            // Combine controller output with memory content
-            var combined = CombineWithMemory(controllerOutput, readContent);
-
-            // Generate prediction
-            var prediction = GeneratePrediction(combined);
-            predictions.Add(prediction);
-        }
-
-        // Convert to matrix
-        return StackPredictions(predictions);
-    }
-
-    /// <summary>
-    /// Reads relevant content from external memory using attention.
-    /// </summary>
-    private Vector<T> ReadFromMemory(Vector<T> readKey)
-    {
-        // Compute attention weights over memory
-        var attentionWeights = ComputeAttentionWeights(readKey);
-
-        // Read weighted sum of memory values
-        var readContent = _memory.Read(attentionWeights);
-
-        // Update statistics
-        _memoryStats.RecordRead();
-
-        return readContent;
-    }
-
-    /// <summary>
-    /// Computes attention weights using cosine similarity.
-    /// </summary>
-    private Vector<T> ComputeAttentionWeights(Vector<T> queryKey)
-    {
-        var weights = new Vector<T>(_mannOptions.MemorySize);
-
-        // Compute cosine similarity with each memory key
-        for (int i = 0; i < _mannOptions.MemorySize; i++)
-        {
-            var memoryKey = _memory.GetKey(i);
-            T similarity = NumOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
-            weights[i] = similarity;
-        }
-
-        // Apply softmax
-        return ApplySoftmax(weights);
-    }
-
-    /// <summary>
-    /// Applies softmax to a vector.
-    /// </summary>
-    private Vector<T> ApplySoftmax(Vector<T> values) => Softmax(values);
-
-    /// <summary>
-    /// Generates a memory key from input at specified index.
-    /// </summary>
-    private Vector<T> GenerateMemoryKey(TInput input, int index)
-    {
-        // Process input through controller to get features
-        var features = ProcessWithController(input, index);
-
-        // Project to key dimension
-        var key = new Vector<T>(_mannOptions.MemoryKeySize);
-        int copyLen = Math.Min(features.Length, _mannOptions.MemoryKeySize);
-        for (int i = 0; i < copyLen; i++)
-        {
-            key[i] = features[i];
-        }
-
-        return key;
-    }
-
-    /// <summary>
-    /// Generates a memory value from output label at specified index.
-    /// </summary>
-    private Vector<T> GenerateMemoryValue(TOutput output, int index)
-    {
-        int classLabel = GetClassLabel(output, index);
-
-        // Create one-hot encoding
-        var value = new Vector<T>(_mannOptions.MemoryValueSize);
-        if (classLabel >= 0 && classLabel < _mannOptions.MemoryValueSize)
-        {
-            value[classLabel] = NumOps.One;
-        }
-
-        return value;
-    }
-
-    /// <summary>
-    /// Processes input through the controller network.
-    /// </summary>
-    private Vector<T> ProcessWithController(TInput input, int index)
-    {
-        // Get prediction from model
-        var prediction = MetaModel.Predict(input);
-
-        // Extract features for the specific index
-        return ExtractFeatureVector(prediction, index);
-    }
-
-    /// <summary>
-    /// Combines controller output with memory content.
-    /// </summary>
-    private Vector<T> CombineWithMemory(Vector<T> controllerOutput, Vector<T> memoryContent)
-    {
-        // Concatenate controller output and memory content
-        var combined = new Vector<T>(controllerOutput.Length + memoryContent.Length);
-
-        for (int i = 0; i < controllerOutput.Length; i++)
-        {
-            combined[i] = controllerOutput[i];
-        }
-
-        for (int i = 0; i < memoryContent.Length; i++)
-        {
-            combined[controllerOutput.Length + i] = memoryContent[i];
-        }
-
-        return combined;
-    }
-
-    /// <summary>
-    /// Generates final prediction from combined features.
-    /// </summary>
-    private Vector<T> GeneratePrediction(Vector<T> combinedFeatures)
-    {
-        // Simple linear projection to num classes
-        var prediction = new Vector<T>(_mannOptions.NumClasses);
-
-        int stride = combinedFeatures.Length / _mannOptions.NumClasses;
-        for (int c = 0; c < _mannOptions.NumClasses; c++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = c * stride; i < Math.Min((c + 1) * stride, combinedFeatures.Length); i++)
+            int existing = OutputLayer().Inputs;
+            if (inputs != existing)
             {
-                sum = NumOps.Add(sum, combinedFeatures[i]);
+                throw new InvalidOperationException(
+                    $"The controller's output width changed from {existing - _mannOptions.MemoryValueSize} to {controllerWidth}.");
             }
-            prediction[c] = sum;
+
+            return;
         }
 
-        // Apply softmax if configured
-        if (_mannOptions.UseOutputSoftmax)
-        {
-            prediction = ApplySoftmax(prediction);
-        }
-
-        return prediction;
+        var (weights, bias) = MannRows<T>.GlorotLayer(inputs, _mannOptions.NumClasses, _mannOptions.RandomSeed);
+        _outputLayer = Vector<T>.Concatenate(weights.ToVector(), bias.ToVector());
     }
 
     /// <summary>
-    /// Computes cross-entropy loss.
+    /// Unpacks <see cref="_outputLayer"/> into its weights <c>[inputs x NumClasses]</c> and bias <c>[NumClasses]</c>.
     /// </summary>
-    private T ComputeLoss(Matrix<T> predictions, TOutput trueLabels)
+    private (Vector<T> Weights, Vector<T> Bias, int Inputs) OutputLayer()
     {
-        T totalLoss = NumOps.Zero;
-        int numExamples = predictions.Rows;
-
-        for (int i = 0; i < numExamples; i++)
+        if (_outputLayer.Length == 0)
         {
-            int trueClass = GetClassLabel(trueLabels, i);
-            if (trueClass >= 0 && trueClass < predictions.Columns)
-            {
-                T predictedProb = predictions[i, trueClass];
-                predictedProb = NumOps.Add(predictedProb, NumOps.FromDouble(1e-8));
-                T logProb = NumOps.Log(predictedProb);
-                totalLoss = NumOps.Subtract(totalLoss, logProb);
-            }
+            throw new InvalidOperationException("The output layer is created on the first episode.");
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(numExamples));
+        int classes = _mannOptions.NumClasses;
+        int inputs = _outputLayer.Length / classes - 1;
+        if (_outputLayer.Length % classes != 0 || inputs <= _mannOptions.MemoryValueSize)
+        {
+            throw new InvalidOperationException(
+                $"The output layer holds {_outputLayer.Length} values, which is not (controller width + " +
+                $"{_mannOptions.MemoryValueSize}) x {classes} weights plus {classes} biases.");
+        }
+
+        int weightCount = inputs * classes;
+        return (_outputLayer.GetSubVector(0, weightCount), _outputLayer.GetSubVector(weightCount, classes), inputs);
     }
+
+    /// <summary>Hands the memory the current gate <c>sigmoid(alpha)</c> for the writes outside training.</summary>
+    private void SyncWriteGate()
+        => _memory.SetWriteGate(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(_writeGateLogit[0]))));
 
     /// <summary>
     /// Applies memory consolidation to prune rarely-used memories.
@@ -599,29 +642,6 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     }
 
     /// <summary>
-    /// Stacks prediction vectors into a matrix.
-    /// </summary>
-    private Matrix<T> StackPredictions(List<Vector<T>> predictions)
-    {
-        if (predictions.Count == 0)
-            return new Matrix<T>(0, 0);
-
-        int numRows = predictions.Count;
-        int numCols = predictions[0].Length;
-        var matrix = new Matrix<T>(numRows, numCols);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                matrix[i, j] = predictions[i][j];
-            }
-        }
-
-        return matrix;
-    }
-
-    /// <summary>
     /// Gets batch size from input.
     /// </summary>
     private int GetBatchSize(TInput input)
@@ -635,125 +655,253 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         return 1;
     }
 
-    /// <summary>
-    /// Extracts feature vector from output at specified index.
-    /// </summary>
-    private Vector<T> ExtractFeatureVector(TOutput output, int index)
+    /// <summary>One episode's loss and gradients, without changing the memory, for tests.</summary>
+    internal (T Loss, Vector<T> Body, Vector<T> OutputWeights, Vector<T> OutputBias, Vector<T> GateLogit)
+        EpisodeGradientForTesting(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        if (output is Vector<T> vector)
-            return vector;
-
-        if (output is Matrix<T> matrix)
-        {
-            var row = new Vector<T>(matrix.Columns);
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                row[j] = matrix[index % matrix.Rows, j];
-            }
-            return row;
-        }
-
-        if (output is Tensor<T> tensor)
-        {
-            if (tensor.Shape.Length == 1)
-            {
-                var result = new Vector<T>(tensor.Shape[0]);
-                for (int j = 0; j < tensor.Shape[0]; j++)
-                {
-                    result[j] = tensor[new int[] { j }];
-                }
-                return result;
-            }
-            else if (tensor.Shape.Length >= 2)
-            {
-                int cols = tensor.Shape[1];
-                var result = new Vector<T>(cols);
-                for (int j = 0; j < cols; j++)
-                {
-                    result[j] = tensor[new int[] { index % tensor.Shape[0], j }];
-                }
-                return result;
-            }
-        }
-
-        return new Vector<T>(1);
+        var g = EpisodeGradient(task, commit: false);
+        return (g.Loss, g.Body, g.OutputWeights, g.OutputBias, g.GateLogit);
     }
 
     /// <summary>
-    /// Gets class label from output at specified index.
+    /// One episode's loss from the memory as the next <see cref="MetaTrain"/> would start it (cleared first when
+    /// configured), without changing the memory, for tests.
     /// </summary>
-    private int GetClassLabel(TOutput output, int index)
+    internal T EpisodeLossForTesting(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        if (output is Vector<T> vector)
+        var memory = _memory.Clone();
+        if (_mannOptions.ClearMemoryBetweenTasks)
         {
-            if (index < vector.Length)
-                return (int)NumOps.ToDouble(vector[index]);
-            return 0;
+            memory.ClearRecent(_mannOptions.MemoryRetentionRatio);
         }
 
-        if (output is Matrix<T> matrix)
+        var episode = EpisodeOf(task);
+        var embeddings = Embed(episode);
+        EnsureOutputLayer(embeddings.Shape[1]);
+        return Objective(memory.Snapshot(), embeddings, episode, Weights(), out _)[0];
+    }
+
+    /// <summary>The output layer's weights, row-major <c>[inputs, classes]</c>, for tests.</summary>
+    // A view over state the registry already persists, not state of its own: the generator must not serialize it.
+    [AiDotNet.Attributes.Scratch]
+    internal Vector<T> OutputWeightsForTesting
+    {
+        get => OutputLayer().Weights;
+        set => _outputLayer = Vector<T>.Concatenate(value, OutputLayer().Bias);
+    }
+
+    /// <summary>The output layer's bias, for tests.</summary>
+    // A view over state the registry already persists, not state of its own: the generator must not serialize it.
+    [AiDotNet.Attributes.Scratch]
+    internal Vector<T> OutputBiasForTesting
+    {
+        get => OutputLayer().Bias;
+        set => _outputLayer = Vector<T>.Concatenate(OutputLayer().Weights, value);
+    }
+
+    /// <summary>The write gate logit alpha, for tests.</summary>
+    // A view over state the registry already persists, not state of its own: the generator must not serialize it.
+    [AiDotNet.Attributes.Scratch]
+    internal Vector<T> GateLogitForTesting
+    {
+        get => _writeGateLogit;
+        set
         {
-            if (matrix.Columns == 1)
-                return (int)NumOps.ToDouble(matrix[index % matrix.Rows, 0]);
-
-            // One-hot: find argmax
-            int maxIdx = 0;
-            T maxVal = matrix[index % matrix.Rows, 0];
-            for (int c = 1; c < matrix.Columns; c++)
-            {
-                if (NumOps.GreaterThan(matrix[index % matrix.Rows, c], maxVal))
-                {
-                    maxVal = matrix[index % matrix.Rows, c];
-                    maxIdx = c;
-                }
-            }
-            return maxIdx;
+            _writeGateLogit = value;
+            SyncWriteGate();
         }
-
-        if (output is Tensor<T> tensor)
-        {
-            if (tensor.Shape.Length >= 1 && index < tensor.Shape[0])
-            {
-                return (int)NumOps.ToDouble(tensor[new int[] { index }]);
-            }
-        }
-
-        return 0;
     }
 }
 
 /// <summary>
-/// External memory matrix for MANN.
+/// The row arithmetic MANN's learner and adapted model share, as whole-tensor engine ops.
+/// </summary>
+internal static class MannRows<T>
+{
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>Rows <c>0 .. count - 1</c> of <paramref name="rows"/> taken cyclically, <c>[count, width]</c>.</summary>
+    private static Tensor<T> CycleRows(Tensor<T> rows, int count)
+    {
+        int available = rows.Shape[0], width = rows.Shape[1];
+        if (available == count) return rows;
+        if (available == 0) return new Tensor<T>(new[] { count, width });
+        int repeats = (count + available - 1) / available;
+        var tiled = repeats > 1 ? Engine.TensorTile(rows, new[] { repeats, 1 }) : rows;
+        return Engine.TensorSlice(tiled, new[] { 0, 0 }, new[] { count, width });
+    }
+
+    /// <summary>Each feature row truncated or zero-padded to the memory's key width, <c>[count, keySize]</c>.</summary>
+    internal static Tensor<T> Keys(Tensor<T> features, int keySize)
+    {
+        int count = features.Shape[0], width = features.Shape[1];
+        if (width == keySize) return features;
+        if (width > keySize) return Engine.TensorSlice(features, new[] { 0, 0 }, new[] { count, keySize });
+        return Engine.TensorConcatenate(new[] { features, new Tensor<T>(new[] { count, keySize - width }) }, 1);
+    }
+
+    /// <summary>
+    /// The class label of each of <paramref name="count"/> examples, <c>[count]</c>, truncated toward zero as an
+    /// integer cast would. A vector or rank-1 tensor holds one label per example (0 past its end); a one-column
+    /// matrix holds labels, a wider one one-hot rows whose first maximum is the label; rows repeat cyclically.
+    /// </summary>
+    internal static Tensor<T> Labels(object? output, int count)
+    {
+        switch (output)
+        {
+            case Vector<T> vector:
+                return Truncate(Prefix(Tensor<T>.FromVector(vector), count));
+            case Tensor<T> tensor when tensor.Shape.Length == 1:
+                return Truncate(Prefix(tensor, count));
+            case Matrix<T> matrix:
+                return Truncate(CycleRows(RowLabels(Tensor<T>.FromMatrix(matrix)), count).Reshape(count));
+            case Tensor<T> tensor when tensor.Shape.Length >= 2:
+                return Truncate(CycleRows(RowLabels(ClassifierOutputs<T>.AsRows(tensor)), count).Reshape(count));
+            default:
+                return new Tensor<T>(new[] { count });
+        }
+    }
+
+    /// <summary>The first <paramref name="count"/> values, zero-padded past the end.</summary>
+    private static Tensor<T> Prefix(Tensor<T> values, int count)
+    {
+        if (values.Length == count) return values;
+        if (values.Length > count) return Engine.TensorSlice(values, new[] { 0 }, new[] { count });
+        return Engine.TensorConcatenate(new[] { values, new Tensor<T>(new[] { count - values.Length }) }, 0);
+    }
+
+    /// <summary>A one-column matrix's values, or each wider row's first maximum's column, <c>[rows, 1]</c>.</summary>
+    private static Tensor<T> RowLabels(Tensor<T> rows)
+    {
+        int count = rows.Shape[0], width = rows.Shape[1];
+        if (width == 1 || count == 0) return width == 1 ? rows : new Tensor<T>(new[] { 0, 1 });
+
+        var maximum = Engine.TensorBroadcastTo(Engine.ReduceMax(rows, new[] { 1 }, true), new[] { count, width });
+        var isMaximum = Engine.TensorEquals(rows, maximum);
+        var first = Engine.TensorMultiply(isMaximum, Engine.TensorEquals(Engine.TensorCumSum(isMaximum, 1), Ops.One));
+        var columns = Engine.Reshape(Engine.TensorArange<T>(0, width, 1), new[] { width, 1 });
+        return Engine.TensorMatMul(first, columns);
+    }
+
+    private static Tensor<T> Truncate(Tensor<T> values) => Engine.TensorTrunc(values);
+
+    /// <summary>One-hot rows of <paramref name="labels"/>, <c>[count, width]</c>; a label outside [0, width) is a zero row.</summary>
+    internal static Tensor<T> OneHot(Tensor<T> labels, int width)
+    {
+        int count = labels.Length;
+        var labelColumn = Engine.TensorBroadcastTo(Engine.Reshape(labels, new[] { count, 1 }), new[] { count, width });
+        var classRow = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorArange<T>(0, width, 1), new[] { 1, width }), new[] { count, width });
+        return Engine.TensorEquals(labelColumn, classRow);
+    }
+
+    /// <summary>
+    /// Santoro et al. 2016's output layer: the logits <c>o = [h; r] W + b</c> of each combined row, <c>[count, classes]</c>.
+    /// </summary>
+    internal static Tensor<T> Logits(Tensor<T> combined, Tensor<T> weights, Tensor<T> bias)
+    {
+        var ones = new Tensor<T>(new[] { combined.Shape[0], 1 });
+        ones.Fill(Ops.One);
+        return Engine.TensorAdd(Engine.TensorMatMul(combined, weights), Engine.TensorMatMul(ones, bias));
+    }
+
+    /// <summary>
+    /// A Glorot-uniform weight matrix <c>[inputs, classes]</c>, limit <c>sqrt(6 / (inputs + classes))</c>, and a zero
+    /// bias <c>[1, classes]</c>. Seeded draws are reproducible; without a seed the draw seed is secure-random.
+    /// </summary>
+    internal static (Tensor<T> Weights, Tensor<T> Bias) GlorotLayer(int inputs, int classes, int? seed)
+    {
+        double limit = Math.Sqrt(6.0 / (inputs + classes));
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+        var weights = Engine.TensorRandomUniformRange<T>(new[] { inputs, classes },
+            Ops.FromDouble(-limit), Ops.FromDouble(limit), random.Next());
+        return (Owned(weights.ToVector(), inputs, classes), new Tensor<T>(new[] { 1, classes }));
+    }
+
+    /// <summary>An owned <c>[rows, columns]</c> copy of a row-major vector.</summary>
+    internal static Tensor<T> Owned(Vector<T> values, int rows, int columns)
+    {
+        var matrix = new Tensor<T>(new[] { rows, columns });
+        values.AsSpan().Slice(0, matrix.Length).CopyTo(matrix.AsWritableSpan());
+        return matrix;
+    }
+}
+
+/// <summary>
+/// The external memory of a MANN with least-recently-used access (LRUA), Santoro et al. 2016, section 3.2.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
-/// Stores key-value pairs that can be read and written by the MANN controller.
-/// Uses attention-based reading and LRU-based writing.
+/// The memory <c>M</c> holds one key row per slot; alongside it, a value row per slot carries what was written with
+/// that key (the label of the example in MANN's classification setting), written with the same weights. Per time
+/// step, with key <c>k_t</c>:
+/// </para>
+/// <code>
+///   w^lu_{t-1}(i) = 1 for the n smallest usages (n = number of reads), else 0
+///   w^w_t        = sigmoid(alpha) w^r_{t-1} + (1 - sigmoid(alpha)) w^lu_{t-1}
+///   M_t(i)       = M_{t-1}(i) + w^w_t(i) k_t                     after the least-used slot is zeroed
+///   w^r_t(i)     = softmax_i(K(k_t, M_t(i))),  K the cosine similarity
+///   r_t          = sum_i w^r_t(i) M_t(i)       (here: the value rows)
+///   w^u_t        = gamma w^u_{t-1} + w^r_t + w^w_t
+/// </code>
+/// <para>
+/// Ties in usage go to the lower slot index, so the least-used slot and the n least used are deterministic. Every
+/// step is made of engine ops, so on a gradient tape the reads and writes are differentiable in the keys, the
+/// values and the gate; the least-used selection is piecewise constant, as in the paper.
 /// </para>
 /// </remarks>
 public class ExternalMemory<T>
 {
-    private readonly Matrix<T> _memoryKeys;
-    private readonly Matrix<T> _memoryValues;
-    private readonly Vector<T> _usageCounts;
-    private readonly double[] _accessTimes;
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    // Owned buffers, updated in place: engine results may live in a step arena, so state is copied into these.
+    private readonly Tensor<T> _memoryKeys;
+    private readonly Tensor<T> _memoryValues;
+    private readonly Tensor<T> _usage;
+    private readonly Tensor<T> _previousReadWeights;
     private readonly INumericOperations<T> _numOps;
+
+    /// <summary>
+    /// Initializes a new instance of the ExternalMemory with the default LRUA settings: usage decay 0.95, write gate
+    /// 0.5 and one read.
+    /// </summary>
+    public ExternalMemory(int size, int keySize, int valueSize, INumericOperations<T> numOps)
+        : this(size, keySize, valueSize, numOps, usageDecay: 0.95, writeGate: 0.5, numReads: 1)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the ExternalMemory.
     /// </summary>
-    public ExternalMemory(int size, int keySize, int valueSize, INumericOperations<T> numOps)
+    /// <param name="size">The number of slots.</param>
+    /// <param name="keySize">The key width.</param>
+    /// <param name="valueSize">The value width.</param>
+    /// <param name="numOps">The numeric operations for <typeparamref name="T"/>.</param>
+    /// <param name="usageDecay">The usage decay gamma, in [0, 1].</param>
+    /// <param name="writeGate">The write gate sigmoid(alpha), in [0, 1].</param>
+    /// <param name="numReads">The number of reads n: how many least-used slots w^lu marks.</param>
+    public ExternalMemory(int size, int keySize, int valueSize, INumericOperations<T> numOps,
+        double usageDecay, double writeGate, int numReads)
     {
+        if (usageDecay < 0 || usageDecay > 1) throw new ArgumentOutOfRangeException(nameof(usageDecay));
+        if (writeGate < 0 || writeGate > 1) throw new ArgumentOutOfRangeException(nameof(writeGate));
+        if (numReads <= 0) throw new ArgumentOutOfRangeException(nameof(numReads));
+
         Size = size;
         KeySize = keySize;
         ValueSize = valueSize;
+        UsageDecay = usageDecay;
+        WriteGate = writeGate;
+        NumReads = Math.Min(numReads, size);
         _numOps = numOps;
 
-        _memoryKeys = new Matrix<T>(size, keySize);
-        _memoryValues = new Matrix<T>(size, valueSize);
-        _usageCounts = new Vector<T>(size);
-        _accessTimes = new double[size];
+        _memoryKeys = new Tensor<T>(new[] { size, keySize });
+        _memoryValues = new Tensor<T>(new[] { size, valueSize });
+        _usage = new Tensor<T>(new[] { size });
+        _previousReadWeights = new Tensor<T>(new[] { size });
 
         InitializeMemory();
     }
@@ -767,48 +915,204 @@ public class ExternalMemory<T>
     /// <summary>Gets the value dimension.</summary>
     public int ValueSize { get; }
 
+    /// <summary>Gets the usage decay gamma.</summary>
+    public double UsageDecay { get; }
+
+    /// <summary>Gets the write gate sigmoid(alpha) used by <see cref="WriteAndRead"/>; MANN keeps it at its learned value.</summary>
+    public double WriteGate { get; private set; }
+
+    /// <summary>Gets the number of reads n, the number of slots the least-used weights mark.</summary>
+    public int NumReads { get; }
+
     /// <summary>
-    /// Writes to memory at specified location.
+    /// One memory state: the key and value rows, the usage weights and the last read weights. Steps build new
+    /// states from engine ops, so a state built on a gradient tape is differentiable.
+    /// </summary>
+    internal sealed class State
+    {
+        public State(Tensor<T> keys, Tensor<T> values, Tensor<T> usage, Tensor<T> previousRead)
+        {
+            Keys = keys;
+            Values = values;
+            Usage = usage;
+            PreviousRead = previousRead;
+        }
+
+        /// <summary>The key rows, <c>[Size, KeySize]</c>.</summary>
+        public Tensor<T> Keys { get; }
+
+        /// <summary>The value rows, <c>[Size, ValueSize]</c>.</summary>
+        public Tensor<T> Values { get; }
+
+        /// <summary>The usage weights w^u, <c>[Size]</c>.</summary>
+        public Tensor<T> Usage { get; }
+
+        /// <summary>The last read weights w^r, <c>[Size]</c>.</summary>
+        public Tensor<T> PreviousRead { get; }
+    }
+
+    /// <summary>Sets the write gate sigmoid(alpha), in [0, 1].</summary>
+    internal void SetWriteGate(double writeGate)
+    {
+        if (writeGate < 0 || writeGate > 1 || double.IsNaN(writeGate))
+            throw new ArgumentOutOfRangeException(nameof(writeGate));
+        WriteGate = writeGate;
+    }
+
+    /// <summary>A copy of the current state, independent of later changes to the memory.</summary>
+    internal State Snapshot()
+        => new State(_memoryKeys.Clone(), _memoryValues.Clone(), _usage.Clone(), _previousReadWeights.Clone());
+
+    /// <summary>Makes <paramref name="state"/>'s values the memory's own.</summary>
+    internal void Commit(State state)
+    {
+        Assign(_memoryKeys, state.Keys);
+        Assign(_memoryValues, state.Values);
+        Assign(_usage, state.Usage);
+        Assign(_previousReadWeights, state.PreviousRead);
+    }
+
+    private State Current => new State(_memoryKeys, _memoryValues, _usage, _previousReadWeights);
+
+    /// <summary>
+    /// Writes a key and value straight into one slot, as a write whose weight is 1 at <paramref name="location"/>:
+    /// the slot's leading entries are replaced and its usage grows by 1.
     /// </summary>
     public void Write(int location, Vector<T> key, Vector<T> value)
     {
         if (location < 0 || location >= Size)
             return;
 
-        for (int i = 0; i < KeySize && i < key.Length; i++)
-        {
-            _memoryKeys[location, i] = key[i];
-        }
+        int keyCount = Math.Min(KeySize, key.Length);
+        key.AsSpan().Slice(0, keyCount).CopyTo(_memoryKeys.AsWritableSpan().Slice(location * KeySize, keyCount));
+        int valueCount = Math.Min(ValueSize, value.Length);
+        value.AsSpan().Slice(0, valueCount).CopyTo(_memoryValues.AsWritableSpan().Slice(location * ValueSize, valueCount));
 
-        for (int i = 0; i < ValueSize && i < value.Length; i++)
-        {
-            _memoryValues[location, i] = value[i];
-        }
-
-        _usageCounts[location] = _numOps.Add(_usageCounts[location], _numOps.One);
-        _accessTimes[location] = DateTime.UtcNow.Ticks;
+        _usage[location] = _numOps.Add(_usage[location], _numOps.One);
     }
 
     /// <summary>
-    /// Reads from memory using attention weights.
+    /// One LRUA time step: writes <paramref name="key"/> and <paramref name="value"/> through the write weights,
+    /// then reads with the same key. Returns the read content.
+    /// </summary>
+    public Vector<T> WriteAndRead(Vector<T> key, Vector<T> value)
+    {
+        var gate = new Tensor<T>(new[] { 1, 1 });
+        gate[0] = _numOps.FromDouble(WriteGate);
+        var next = Step(Current, Fit(key, KeySize), Fit(value, ValueSize), gate, out var read);
+        var content = read.ToVector();
+        Commit(next);
+        return content;
+    }
+
+    /// <summary>
+    /// One LRUA read without a write: content weights for <paramref name="key"/>, which update the usage and become
+    /// the next write's read weights. Returns the read content.
+    /// </summary>
+    public Vector<T> ReadAndUpdate(Vector<T> key)
+    {
+        var keys = Engine.Reshape(Fit(key, KeySize), new[] { 1, KeySize });
+        var next = AfterReads(Current, ContentWeightRows(_memoryKeys, keys), out var reads);
+        var content = Engine.Reshape(reads, new[] { ValueSize }).ToVector();
+        Commit(next);
+        return content;
+    }
+
+    /// <summary>
+    /// One LRUA step on <paramref name="state"/>: the write weights <c>gate w^r_{t-1} + (1 - gate) w^lu_{t-1}</c>,
+    /// the least-used slot zeroed, the key and value rows added with the write weights, then the read with the same
+    /// key and the usage update. <paramref name="key"/> is <c>[KeySize]</c>, <paramref name="value"/>
+    /// <c>[ValueSize]</c> and <paramref name="gate"/> <c>[1, 1]</c>; <paramref name="read"/> is <c>[ValueSize]</c>.
+    /// </summary>
+    internal State Step(State state, Tensor<T> key, Tensor<T> value, Tensor<T> gate, out Tensor<T> read)
+    {
+        Tensor<T> leastUsed, keep;
+        using (new NoGradScope<T>())
+        {
+            leastUsed = Engine.Reshape(LeastUsed(state.Usage, NumReads), new[] { Size, 1 });
+            keep = Engine.Reshape(
+                Engine.TensorAddScalar(Engine.TensorNegate(LeastUsed(state.Usage, 1)), _numOps.One), new[] { Size, 1 });
+        }
+
+        var closedGate = Engine.TensorAddScalar(Engine.TensorNegate(gate), _numOps.One);
+        var write = Engine.TensorAdd(
+            Engine.TensorMatMul(Engine.Reshape(state.PreviousRead, new[] { Size, 1 }), gate),
+            Engine.TensorMatMul(leastUsed, closedGate));
+
+        var keyRow = Engine.Reshape(key, new[] { 1, KeySize });
+        var keys = Engine.TensorAdd(Engine.TensorMultiply(state.Keys, keep), Engine.TensorMatMul(write, keyRow));
+        var values = Engine.TensorAdd(Engine.TensorMultiply(state.Values, keep),
+            Engine.TensorMatMul(write, Engine.Reshape(value, new[] { 1, ValueSize })));
+
+        var readWeights = ContentWeightRows(keys, keyRow);
+        read = Engine.Reshape(Engine.TensorMatMul(readWeights, values), new[] { ValueSize });
+        var readColumn = Engine.Reshape(readWeights, new[] { Size });
+        var usage = Engine.TensorAdd(
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(state.Usage, _numOps.FromDouble(UsageDecay)), readColumn),
+            Engine.Reshape(write, new[] { Size }));
+        return new State(keys, values, usage, readColumn);
+    }
+
+    /// <summary>
+    /// Reads in sequence with the read weight rows <paramref name="readWeights"/> <c>[n, Size]</c>, each read updating
+    /// the usage: <c>w^u = gamma^n w^u + sum_q gamma^(n-1-q) w^r_q</c>, and the last row becomes the previous read.
+    /// <paramref name="reads"/> are the read contents, <c>[n, ValueSize]</c>.
+    /// </summary>
+    internal State AfterReads(State state, Tensor<T> readWeights, out Tensor<T> reads)
+    {
+        int count = readWeights.Shape[0];
+        reads = Engine.TensorMatMul(readWeights, state.Values);
+        if (count == 0) return state;
+
+        Tensor<T> decay;
+        using (new NoGradScope<T>())
+        {
+            // gamma^(n-1-q) for q = 0 .. n-1.
+            var steps = Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorArange<T>(0, count, 1)),
+                _numOps.FromDouble(count - 1));
+            decay = UsageDecay <= 0.0
+                ? Engine.TensorEquals(steps, _numOps.Zero)
+                : Engine.TensorExp(Engine.TensorMultiplyScalar(steps, _numOps.FromDouble(Math.Log(UsageDecay))));
+            decay = Engine.Reshape(decay, new[] { 1, count });
+        }
+
+        var usage = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(state.Usage, _numOps.FromDouble(Math.Pow(UsageDecay, count))),
+            Engine.Reshape(Engine.TensorMatMul(decay, readWeights), new[] { Size }));
+        var last = Engine.Reshape(Engine.TensorSlice(readWeights, new[] { count - 1, 0 }, new[] { 1, Size }), new[] { Size });
+        return new State(state.Keys, state.Values, usage, last);
+    }
+
+    /// <summary>The read weights <c>softmax_i(cosine(key, M(i)))</c> for a key, without changing the memory.</summary>
+    public Vector<T> ContentWeights(Vector<T> key)
+        => ContentWeightRows(_memoryKeys, Engine.Reshape(Fit(key, KeySize), new[] { 1, KeySize })).ToVector();
+
+    /// <summary>The least-used weights <c>w^lu</c>: 1 for the <see cref="NumReads"/> least-used slots, else 0.</summary>
+    public Vector<T> LeastUsedWeights() => LeastUsed(_usage, NumReads).ToVector();
+
+    /// <summary>A copy of the usage weights <c>w^u</c>.</summary>
+    public Vector<T> GetUsage() => _usage.ToVector();
+
+    /// <summary>
+    /// Reads from memory using attention weights: <c>sum_i w(i) V(i)</c> over the first slots the weights cover.
     /// </summary>
     public Vector<T> Read(Vector<T> attentionWeights)
     {
-        var readContent = new Vector<T>(ValueSize);
+        int slots = Math.Min(Size, attentionWeights.Length);
+        if (slots == 0) return new Vector<T>(ValueSize);
 
-        for (int v = 0; v < ValueSize; v++)
-        {
-            T weightedSum = _numOps.Zero;
-            for (int m = 0; m < Size && m < attentionWeights.Length; m++)
-            {
-                T weightedValue = _numOps.Multiply(_memoryValues[m, v], attentionWeights[m]);
-                weightedSum = _numOps.Add(weightedSum, weightedValue);
-            }
-            readContent[v] = weightedSum;
-        }
-
-        return readContent;
+        var weights = Engine.Reshape(
+            Engine.TensorSlice(Tensor<T>.FromVector(attentionWeights), new[] { 0 }, new[] { slots }), new[] { 1, slots });
+        var values = Engine.TensorSlice(_memoryValues, new[] { 0, 0 }, new[] { slots, ValueSize });
+        return Engine.Reshape(Engine.TensorMatMul(weights, values), new[] { ValueSize }).ToVector();
     }
+
+    /// <summary>
+    /// Reads for many keys at once without changing the memory: content weights per key row, then the weighted
+    /// value rows, <c>[keys, ValueSize]</c>.
+    /// </summary>
+    internal Tensor<T> ReadRows(Tensor<T> keys)
+        => Engine.TensorMatMul(ContentWeightRows(_memoryKeys, keys), _memoryValues);
 
     /// <summary>
     /// Gets memory key at specified index.
@@ -818,48 +1122,24 @@ public class ExternalMemory<T>
         var key = new Vector<T>(KeySize);
         if (index >= 0 && index < Size)
         {
-            for (int i = 0; i < KeySize; i++)
-            {
-                key[i] = _memoryKeys[index, i];
-            }
+            _memoryKeys.AsSpan().Slice(index * KeySize, KeySize).CopyTo(key.AsWritableSpan());
         }
         return key;
     }
 
     /// <summary>
-    /// Finds the least recently used memory slot.
+    /// Finds the least-used memory slot (the lowest index among equal usages).
     /// </summary>
     public int FindLeastRecentlyUsedSlot()
-    {
-        int lruIndex = 0;
-        double minTime = _accessTimes[0];
-
-        for (int i = 1; i < Size; i++)
-        {
-            if (_accessTimes[i] < minTime)
-            {
-                minTime = _accessTimes[i];
-                lruIndex = i;
-            }
-        }
-
-        return lruIndex;
-    }
+        => Engine.TensorArgMax(LeastUsed(_usage, 1), 0).GetFlat(0);
 
     /// <summary>
-    /// Finds rarely used memory slots.
+    /// Finds the slots whose usage is below <paramref name="threshold"/>.
     /// </summary>
     public List<int> FindRarelyUsedSlots(double threshold)
     {
-        var rarelyUsed = new List<int>();
-        for (int i = 0; i < Size; i++)
-        {
-            if (_numOps.ToDouble(_usageCounts[i]) < threshold)
-            {
-                rarelyUsed.Add(i);
-            }
-        }
-        return rarelyUsed;
+        var flags = Engine.TensorLessThan(_usage, _numOps.FromDouble(threshold)).Cast<int>().ToArray();
+        return Enumerable.Range(0, Size).Where(slot => flags[slot] != 0).ToList();
     }
 
     /// <summary>
@@ -870,93 +1150,121 @@ public class ExternalMemory<T>
         if (location < 0 || location >= Size)
             return;
 
-        for (int i = 0; i < KeySize; i++)
-        {
-            _memoryKeys[location, i] = _numOps.Zero;
-        }
-
-        for (int i = 0; i < ValueSize; i++)
-        {
-            _memoryValues[location, i] = _numOps.Zero;
-        }
-
-        _usageCounts[location] = _numOps.Zero;
-        _accessTimes[location] = 0;
+        var mask = new Tensor<T>(new[] { Size });
+        mask.Fill(_numOps.One);
+        mask[location] = _numOps.Zero;
+        ClearWhere(mask);
     }
 
     /// <summary>
-    /// Clears recent memories based on retention ratio.
+    /// Keeps the <paramref name="retentionRatio"/> most-used slots and clears the rest (ties keep the lower index).
     /// </summary>
     public void ClearRecent(double retentionRatio)
     {
-        var sortedSlots = Enumerable.Range(0, Size)
-            .OrderByDescending(i => _accessTimes[i])
-            .ToList();
-
         int numToKeep = (int)(Size * retentionRatio);
-        for (int i = numToKeep; i < sortedSlots.Count; i++)
-        {
-            ClearSlot(sortedSlots[i]);
-        }
+        var keep = Engine.TensorLessThan(Ranks(_usage, descending: true), _numOps.FromDouble(numToKeep));
+        ClearWhere(keep);
     }
 
     /// <summary>
-    /// Computes memory usage penalty for regularization.
+    /// Computes memory usage penalty for regularization: the mean usage weight.
     /// </summary>
     public T ComputeUsagePenalty()
-    {
-        T totalUsage = _numOps.Zero;
-        for (int i = 0; i < Size; i++)
-        {
-            totalUsage = _numOps.Add(totalUsage, _usageCounts[i]);
-        }
-        return _numOps.Divide(totalUsage, _numOps.FromDouble(Size));
-    }
+        => _numOps.Divide(Engine.TensorSum(_usage), _numOps.FromDouble(Size));
 
     /// <summary>
     /// Clones the external memory.
     /// </summary>
     public ExternalMemory<T> Clone()
     {
-        var cloned = new ExternalMemory<T>(Size, KeySize, ValueSize, _numOps);
-
-        for (int i = 0; i < Size; i++)
-        {
-            for (int j = 0; j < KeySize; j++)
-            {
-                cloned._memoryKeys[i, j] = _memoryKeys[i, j];
-            }
-
-            for (int j = 0; j < ValueSize; j++)
-            {
-                cloned._memoryValues[i, j] = _memoryValues[i, j];
-            }
-
-            cloned._usageCounts[i] = _usageCounts[i];
-            cloned._accessTimes[i] = _accessTimes[i];
-        }
-
+        var cloned = new ExternalMemory<T>(Size, KeySize, ValueSize, _numOps, UsageDecay, WriteGate, NumReads);
+        cloned.Commit(Current);
         return cloned;
     }
 
+    /// <summary>Small uniform keys in [-0.005, 0.005), one seeded engine draw; zero values and usage.</summary>
     private void InitializeMemory()
     {
-        var random = RandomHelper.CreateSeededRandom(0);
-        for (int i = 0; i < Size; i++)
+        int seed = RandomHelper.CreateSeededRandom(0).Next();
+        Assign(_memoryKeys, Engine.TensorRandomUniformRange<T>(new[] { Size, KeySize },
+            _numOps.FromDouble(-0.005), _numOps.FromDouble(0.005), seed));
+    }
+
+    /// <summary>Copies <paramref name="source"/>'s values into the owned buffer <paramref name="target"/>.</summary>
+    private static void Assign(Tensor<T> target, Tensor<T> source)
+        => source.ToVector().AsSpan().CopyTo(target.AsWritableSpan());
+
+    /// <summary>
+    /// Zeroes every slot where <paramref name="keep"/> is 0: its key, value, usage and last read weight.
+    /// </summary>
+    private void ClearWhere(Tensor<T> keep)
+    {
+        var rows = Engine.Reshape(keep, new[] { Size, 1 });
+        Assign(_memoryKeys, Engine.TensorMultiply(_memoryKeys, rows));
+        Assign(_memoryValues, Engine.TensorMultiply(_memoryValues, rows));
+        Assign(_usage, Engine.TensorMultiply(_usage, keep));
+        Assign(_previousReadWeights, Engine.TensorMultiply(_previousReadWeights, keep));
+    }
+
+    /// <summary>
+    /// <c>softmax_i(cosine(key, M(i)))</c> per key row of <paramref name="keys"/> against <paramref name="memoryKeys"/>,
+    /// <c>[keys, Size]</c>. A pair whose norm product is at most 1e-20 (norms' product at most 1e-10) has similarity
+    /// 0, and similarities are clamped to [-1, 1]. The undefined pairs are kept off the square root and the division,
+    /// so their gradient is 0 rather than NaN.
+    /// </summary>
+    internal Tensor<T> ContentWeightRows(Tensor<T> memoryKeys, Tensor<T> keys)
+    {
+        var dots = Engine.TensorMatMul(keys, Engine.TensorTranspose(memoryKeys));
+        var keyNorms = Engine.ReduceSum(Engine.TensorMultiply(keys, keys), new[] { 1 }, true);
+        var slotNorms = Engine.ReduceSum(Engine.TensorMultiply(memoryKeys, memoryKeys), new[] { 1 }, true);
+        var normProducts = Engine.TensorMatMul(keyNorms, Engine.TensorTranspose(slotNorms));
+
+        Tensor<T> defined, guard;
+        using (new NoGradScope<T>())
         {
-            for (int j = 0; j < KeySize; j++)
-            {
-                _memoryKeys[i, j] = _numOps.FromDouble((random.NextDouble() - 0.5) * 0.01);
-            }
-
-            for (int j = 0; j < ValueSize; j++)
-            {
-                _memoryValues[i, j] = _numOps.Zero;
-            }
-
-            _usageCounts[i] = _numOps.Zero;
-            _accessTimes[i] = 0;
+            defined = Engine.TensorGreaterThan(normProducts, _numOps.FromDouble(1e-20));
+            guard = Engine.TensorAddScalar(Engine.TensorNegate(defined), _numOps.One);
         }
+
+        var denominator = Engine.TensorSqrt(Engine.TensorAdd(normProducts, guard));
+        var similarity = Engine.TensorClamp(Engine.TensorDivide(dots, denominator), _numOps.FromDouble(-1.0), _numOps.One);
+        return Engine.TensorSoftmax(Engine.TensorMultiply(similarity, defined), 1);
+    }
+
+    /// <summary>
+    /// 1 for the <paramref name="count"/> least-used slots of <paramref name="usage"/> (ascending usage, the lower
+    /// index first among equal usages), else 0.
+    /// </summary>
+    private Tensor<T> LeastUsed(Tensor<T> usage, int count)
+        => Engine.TensorLessThan(Ranks(usage, descending: false), _numOps.FromDouble(count));
+
+    /// <summary>
+    /// Each slot's position when the values are sorted (ascending, or descending), ties broken by the lower index:
+    /// the number of values strictly before it plus the equal values at lower indices.
+    /// </summary>
+    private Tensor<T> Ranks(Tensor<T> values, bool descending)
+    {
+        var square = new[] { Size, Size };
+
+        // others[i, j] = values[j], own[i, j] = values[i].
+        var others = Engine.TensorBroadcastTo(Engine.Reshape(values, new[] { 1, Size }), square);
+        var own = Engine.TensorBroadcastTo(Engine.Reshape(values, new[] { Size, 1 }), square);
+        var before = descending ? Engine.TensorGreaterThan(others, own) : Engine.TensorLessThan(others, own);
+
+        var ones = new Tensor<T>(square);
+        ones.Fill(_numOps.One);
+        var lowerIndex = Engine.TensorTril(ones, -1);
+        var tiedBefore = Engine.TensorMultiply(Engine.TensorEquals(others, own), lowerIndex);
+        return Engine.ReduceSum(Engine.TensorAdd(before, tiedBefore), new[] { 1 }, false);
+    }
+
+    /// <summary>A vector's first entries as a tensor of exactly <paramref name="width"/>, zero-padded.</summary>
+    private static Tensor<T> Fit(Vector<T> vector, int width)
+    {
+        var tensor = Tensor<T>.FromVector(vector);
+        if (vector.Length == width) return tensor;
+        if (vector.Length > width) return Engine.TensorSlice(tensor, new[] { 0 }, new[] { width });
+        return Engine.TensorConcatenate(new[] { tensor, new Tensor<T>(new[] { width - vector.Length }) }, 0);
     }
 }
 
@@ -986,14 +1294,16 @@ public class MANNMemoryStatistics
 /// <typeparam name="TOutput">The output data type.</typeparam>
 public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly IFullModel<T, TInput, TOutput> _controller;
     private readonly ExternalMemory<T> _memory;
     private readonly MANNOptions<T, TInput, TOutput> _options;
-    private readonly INumericOperations<T> _numOps;
+    private Tensor<T>? _outputWeights;
+    private Tensor<T>? _outputBias;
 
     /// <summary>
-    /// Initializes a new instance of the MANNModel.
+    /// Initializes a new instance of the MANNModel. Its output layer is created Glorot-uniform (seeded by
+    /// <c>options.RandomSeed</c>) on the first prediction; a model adapted by <see cref="MANNAlgorithm{T, TInput, TOutput}"/>
+    /// carries the learned one instead.
     /// </summary>
     public MANNModel(
         IFullModel<T, TInput, TOutput> controller,
@@ -1008,43 +1318,60 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
         Guard.NotNull(options);
         _options = options;
         Guard.NotNull(numOps);
-        _numOps = numOps;
+    }
+
+    /// <summary>Initializes a MANNModel with a learned output layer, <c>[inputs, classes]</c> weights and <c>[1, classes]</c> bias.</summary>
+    internal MANNModel(
+        IFullModel<T, TInput, TOutput> controller,
+        ExternalMemory<T> memory,
+        MANNOptions<T, TInput, TOutput> options,
+        INumericOperations<T> numOps,
+        Tensor<T> outputWeights,
+        Tensor<T> outputBias)
+        : this(controller, memory, options, numOps)
+    {
+        Guard.NotNull(outputWeights);
+        Guard.NotNull(outputBias);
+        _outputWeights = outputWeights;
+        _outputBias = outputBias;
     }
 
     /// <summary>Gets the model metadata.</summary>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
-    /// Makes predictions using memory-augmented classification.
+    /// Makes predictions using memory-augmented classification: one row per example, the output layer applied to
+    /// the example's own controller features and a read of the memory with them as the key - softmax
+    /// probabilities, or logits when <c>UseOutputSoftmax</c> is off. Prediction does not change the memory.
     /// </summary>
     public TOutput Predict(TInput input)
     {
-        // One score row per example. ExtractVector reads row 0 of a batched controller output, so this used
-        // to answer for the FIRST example only and return a single row of class scores however many query
-        // examples it was handed.
-        var rows = ClassifierOutputs<T>.AsRows(_controller.Predict(input));
-        int count = rows.Shape[0], width = rows.Shape[1];
-        var scores = new Tensor<T>(new[] { count, _options.NumClasses });
+        var engine = AiDotNetEngine.Current;
+        var features = ClassifierOutputs<T>.AsRows(_controller.Predict(input));
+        var reads = _memory.ReadRows(MannRows<T>.Keys(features, _options.MemoryKeySize));
+        var combined = engine.TensorConcatenate(new[] { features, reads }, 1);
+        var (weights, bias) = Layer(combined.Shape[1]);
+        var logits = MannRows<T>.Logits(combined, weights, bias);
+        var scores = _options.UseOutputSoftmax && logits.Shape[0] > 0 ? engine.TensorSoftmax(logits, 1) : logits;
+        return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
+    }
 
-        for (int r = 0; r < count; r++)
+    private (Tensor<T> Weights, Tensor<T> Bias) Layer(int inputs)
+    {
+        if (_outputWeights is null || _outputBias is null)
         {
-            var features = new Vector<T>(width);
-            for (int i = 0; i < width; i++) features[i] = rows[r * width + i];
-
-            // The read key is this example's own features, truncated to the memory's key width - what
-            // GenerateReadKey does for a single output.
-            var readKey = new Vector<T>(_options.MemoryKeySize);
-            for (int i = 0; i < Math.Min(width, _options.MemoryKeySize); i++) readKey[i] = features[i];
-
-            var readContent = _memory.Read(ComputeAttentionWeights(readKey));
-            var prediction = GeneratePrediction(CombineWithMemory(features, readContent));
-            for (int c = 0; c < _options.NumClasses && c < prediction.Length; c++)
-            {
-                scores[r * _options.NumClasses + c] = prediction[c];
-            }
+            var (weights, bias) = MannRows<T>.GlorotLayer(inputs, _options.NumClasses, _options.RandomSeed);
+            _outputWeights = weights;
+            _outputBias = bias;
         }
 
-        return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
+        if (_outputWeights.Shape[0] != inputs)
+        {
+            throw new InvalidOperationException(
+                $"The output layer takes {_outputWeights.Shape[0]} inputs, but the controller and memory give {inputs}.");
+        }
+
+        return (_outputWeights, _outputBias);
     }
 
     /// <summary>
@@ -1064,151 +1391,22 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
     }
 
     /// <summary>
-    /// Gets controller parameters.
+    /// Gets the controller's parameters followed by the output layer's weights and bias (once the layer exists).
     /// </summary>
-    public Vector<T> GetParameters() => InterfaceGuard.Parameterizable(_controller).GetParameters();
+    public Vector<T> GetParameters()
+    {
+        var controller = InterfaceGuard.Parameterizable(_controller).GetParameters();
+        if (_outputWeights is null || _outputBias is null) return controller;
+        return AiDotNetEngine.Current.TensorConcatenate(new[]
+        {
+            Tensor<T>.FromVector(controller),
+            _outputWeights.Reshape(_outputWeights.Length),
+            _outputBias.Reshape(_outputBias.Length),
+        }, 0).ToVector();
+    }
 
     /// <summary>
     /// Gets model metadata.
     /// </summary>
     public ModelMetadata<T> GetModelMetadata() => Metadata;
-
-    private Vector<T> GenerateReadKey(TOutput output)
-    {
-        var features = ExtractVector(output);
-        var key = new Vector<T>(_options.MemoryKeySize);
-        int copyLen = Math.Min(features.Length, _options.MemoryKeySize);
-        for (int i = 0; i < copyLen; i++)
-        {
-            key[i] = features[i];
-        }
-        return key;
-    }
-
-    private Vector<T> ExtractVector(TOutput output)
-    {
-        if (output is Vector<T> vector)
-            return vector;
-
-        if (output is Matrix<T> matrix)
-        {
-            var row = new Vector<T>(matrix.Columns);
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                row[j] = matrix[0, j];
-            }
-            return row;
-        }
-
-        if (output is Tensor<T> tensor)
-        {
-            return tensor.ToVector();
-        }
-
-        return new Vector<T>(1);
-    }
-
-    private Vector<T> ComputeAttentionWeights(Vector<T> queryKey)
-    {
-        var weights = new Vector<T>(_options.MemorySize);
-
-        for (int i = 0; i < _options.MemorySize; i++)
-        {
-            var memoryKey = _memory.GetKey(i);
-            T similarity = _numOps.FromDouble(VectorHelper.CosineSimilarity(queryKey, memoryKey));
-            weights[i] = similarity;
-        }
-
-        return ApplySoftmax(weights);
-    }
-
-    private Vector<T> ApplySoftmax(Vector<T> values)
-    {
-        var result = new Vector<T>(values.Length);
-
-        T maxVal = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (_numOps.ToDouble(values[i]) > _numOps.ToDouble(maxVal))
-            {
-                maxVal = values[i];
-            }
-        }
-
-        T sumExp = _numOps.Zero;
-        var expValues = new T[values.Length];
-        for (int i = 0; i < values.Length; i++)
-        {
-            T shifted = _numOps.Subtract(values[i], maxVal);
-            expValues[i] = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            sumExp = _numOps.Add(sumExp, expValues[i]);
-        }
-
-        for (int i = 0; i < values.Length; i++)
-        {
-            result[i] = _numOps.Divide(expValues[i], sumExp);
-        }
-
-        return result;
-    }
-
-    private Vector<T> CombineWithMemory(Vector<T> controllerOutput, Vector<T> memoryContent)
-    {
-        var combined = new Vector<T>(controllerOutput.Length + memoryContent.Length);
-
-        for (int i = 0; i < controllerOutput.Length; i++)
-        {
-            combined[i] = controllerOutput[i];
-        }
-
-        for (int i = 0; i < memoryContent.Length; i++)
-        {
-            combined[controllerOutput.Length + i] = memoryContent[i];
-        }
-
-        return combined;
-    }
-
-    private Vector<T> GeneratePrediction(Vector<T> combinedFeatures)
-    {
-        var prediction = new Vector<T>(_options.NumClasses);
-
-        int stride = combinedFeatures.Length / _options.NumClasses;
-        for (int c = 0; c < _options.NumClasses; c++)
-        {
-            T sum = _numOps.Zero;
-            for (int i = c * stride; i < Math.Min((c + 1) * stride, combinedFeatures.Length); i++)
-            {
-                sum = _numOps.Add(sum, combinedFeatures[i]);
-            }
-            prediction[c] = sum;
-        }
-
-        if (_options.UseOutputSoftmax)
-        {
-            prediction = ApplySoftmax(prediction);
-        }
-
-        return prediction;
-    }
-
-    private TOutput ConvertToOutput(Vector<T> prediction)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)prediction;
-        }
-
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            var tensor = new Tensor<T>(new int[] { prediction.Length });
-            for (int i = 0; i < prediction.Length; i++)
-            {
-                tensor[new int[] { i }] = prediction[i];
-            }
-            return (TOutput)(object)tensor;
-        }
-
-        throw new NotSupportedException($"Output type {typeof(TOutput).Name} is not supported.");
-    }
 }

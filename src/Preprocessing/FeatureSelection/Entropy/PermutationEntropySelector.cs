@@ -27,7 +27,7 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _embeddingDimension;
     private readonly int _delay;
 
-    private double[]? _entropyValues;
+    private Vector<T>? _entropyValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public int Delay => _delay;
-    public double[]? EntropyValues => _entropyValues;
+    public Vector<T>? EntropyValues => _entropyValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,70 +71,75 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (n < minLength)
             throw new ArgumentException($"Need at least {minLength} samples for embedding dimension {_embeddingDimension} and delay {_delay}.");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _entropyValues = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        int m = _embeddingDimension;
 
         // Maximum entropy for m! possible permutations
         int factorial = 1;
-        for (int i = 2; i <= _embeddingDimension; i++)
+        for (int i = 2; i <= m; i++)
             factorial *= i;
         double maxEntropy = Math.Log(factorial) / Math.Log(2);
 
+        // Pattern of a window = the stable rank of every position (equal values rank by position), which
+        // identifies its stable argsort permutation one to one
+        int totalPatterns = n - (m - 1) * _delay;
+        var pairShape = new[] { totalPatterns, m, m };
+        var earlier = engine.TensorBroadcastTo(engine.Reshape(engine.TensorTranspose(
+            engine.TensorTriu(PreprocessingTensorOps.Filled(new[] { m, m }, NumOps.One), 1)), new[] { 1, m, m }), pairShape);
+
+        var entropyValues = new Tensor<T>[p];
         for (int j = 0; j < p; j++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
+            // Extract embedded vectors [patterns, m]: position d of window i is col[i + d * delay]
+            var col = PreprocessingTensorOps.ColumnVector(X, j);
+            var lags = new Tensor<T>[m];
+            for (int d = 0; d < m; d++)
+                lags[d] = engine.Reshape(engine.TensorSlice(col, new[] { d * _delay }, new[] { totalPatterns }), new[] { totalPatterns, 1 });
+            var embedded = engine.TensorConcatenate(lags, 1);
 
-            // Count permutation patterns
-            var patternCounts = new Dictionary<string, int>();
-            int totalPatterns = n - (_embeddingDimension - 1) * _delay;
+            // rank_d = #{e : v_e < v_d} + #{e < d : v_e == v_d}
+            var self = engine.TensorBroadcastTo(engine.Reshape(embedded, new[] { totalPatterns, m, 1 }), pairShape);
+            var other = engine.TensorBroadcastTo(engine.Reshape(embedded, new[] { totalPatterns, 1, m }), pairShape);
+            var ranks = engine.ReduceSum(engine.TensorAdd(engine.TensorLessThan(other, self),
+                engine.TensorMultiply(engine.TensorEquals(other, self), earlier)), new[] { 2 }, false);
 
-            for (int i = 0; i <= n - minLength; i++)
+            // Count permutation patterns (ids in order of first appearance)
+            var rankValues = ranks.Cast<int>().AsSpan().ToArray();
+            var patternIds = new Dictionary<long, int>();
+            var windowPattern = new int[totalPatterns];
+            for (int i = 0; i < totalPatterns; i++)
             {
-                // Extract embedded vector
-                var embedded = new double[_embeddingDimension];
-                for (int d = 0; d < _embeddingDimension; d++)
-                    embedded[d] = col[i + d * _delay];
+                long code = 0;
+                for (int d = 0; d < m; d++)
+                    code = code * m + rankValues[i * m + d];
+                if (!patternIds.TryGetValue(code, out int id))
+                {
+                    id = patternIds.Count;
+                    patternIds[code] = id;
+                }
 
-                // Get permutation pattern (argsort)
-                var indices = Enumerable.Range(0, _embeddingDimension)
-                    .OrderBy(idx => embedded[idx])
-                    .ToArray();
-                string pattern = string.Join(",", indices);
-
-                if (!patternCounts.ContainsKey(pattern))
-                    patternCounts[pattern] = 0;
-                patternCounts[pattern]++;
+                windowPattern[i] = id;
             }
 
-            // Compute entropy
-            double entropy = 0;
-            foreach (var count in patternCounts.Values)
-            {
-                double prob = (double)count / totalPatterns;
-                if (prob > 0)
-                    entropy -= prob * Math.Log(prob) / Math.Log(2);
-            }
+            // Counted in int (a Half sum of the 0/1 one-hot stops at 2048)
+            var patternCounts = engine.Reshape(PreprocessingTensorOps.CategoryCounts<double>(
+                new Tensor<int>(windowPattern, new[] { totalPatterns }), patternIds.Count), new[] { 1, patternIds.Count });
 
-            // Normalize by maximum entropy
-            _entropyValues[j] = maxEntropy > 0 ? entropy / maxEntropy : 0;
+            // Compute entropy (bits) normalized by maximum entropy
+            entropyValues[j] = maxEntropy > 0
+                ? engine.TensorDivideScalar(FeatureScoringTensorOps.EntropyBits(patternCounts, totalPatterns), maxEntropy).Cast<T>()
+                : new Tensor<T>(new[] { 1 });
         }
 
+        var entropies = p == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(entropyValues, 0);
+        _entropyValues = entropies.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _entropyValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(entropies, numToSelect);
 
         IsFitted = true;
     }
-
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
@@ -147,15 +152,7 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("PermutationEntropySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

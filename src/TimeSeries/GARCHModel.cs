@@ -381,16 +381,14 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize parameters with small positive values
+        // Initialize omega (constant term) to a small positive value
         _omega[0] = NumOps.FromDouble(0.01);
-        for (int i = 0; i < _alpha.Length; i++)
-        {
-            _alpha[i] = NumOps.FromDouble(0.05);
-        }
-        for (int i = 0; i < _beta.Length; i++)
-        {
-            _beta[i] = NumOps.FromDouble(0.85);
-        }
+
+        // Initialize alpha (ARCH) coefficients to small positive values
+        Engine.Fill(_alpha.Length, NumOps.FromDouble(0.05)).CopyTo(_alpha.AsWritableSpan());
+
+        // Initialize beta (GARCH) coefficients to larger positive values
+        Engine.Fill(_beta.Length, NumOps.FromDouble(0.85)).CopyTo(_beta.AsWritableSpan());
     }
 
     /// <summary>
@@ -422,88 +420,110 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         int maxIterations = 10000;
         T initialLearningRate = NumOps.FromDouble(0.01);
-        T minLearningRate = NumOps.FromDouble(1e-6);
-        T convergenceThreshold = NumOps.FromDouble(1e-6);
-        T momentumFactor = NumOps.FromDouble(0.9);
-
-        Vector<T> previousOmega = _omega.Clone();
-        Vector<T> previousAlpha = _alpha.Clone();
-        Vector<T> previousBeta = _beta.Clone();
-
-        Vector<T> velocityOmega = new Vector<T>(_omega.Length);
-        Vector<T> velocityAlpha = new Vector<T>(_alpha.Length);
-        Vector<T> velocityBeta = new Vector<T>(_beta.Length);
-
-        T previousLogLikelihood = CalculateLogLikelihood(y);
-        T currentLearningRate = initialLearningRate;
+        var state = new MomentumState(
+            learningRate: initialLearningRate,
+            minLearningRate: NumOps.FromDouble(1e-6),
+            convergenceThreshold: NumOps.FromDouble(1e-6),
+            momentumFactor: NumOps.FromDouble(0.9),
+            previousLogLikelihood: CalculateLogLikelihood(y),
+            omega: _omega,
+            alpha: _alpha,
+            beta: _beta);
 
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            Vector<T> gradientOmega = CalculateGradient(y, GradientType.Omega);
-            Vector<T> gradientAlpha = CalculateGradient(y, GradientType.Alpha);
-            Vector<T> gradientBeta = CalculateGradient(y, GradientType.Beta);
-
-            // Update velocities (momentum)
-            var momentumVecOmega = new Vector<T>(velocityOmega.Length);
-            for (int i = 0; i < momentumVecOmega.Length; i++) momentumVecOmega[i] = momentumFactor;
-            var lrVecOmega = new Vector<T>(gradientOmega.Length);
-            for (int i = 0; i < lrVecOmega.Length; i++) lrVecOmega[i] = currentLearningRate;
-            velocityOmega = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityOmega, momentumVecOmega),
-                                                  (Vector<T>)Engine.Multiply(gradientOmega, lrVecOmega));
-
-            var momentumVecAlpha = new Vector<T>(velocityAlpha.Length);
-            for (int i = 0; i < momentumVecAlpha.Length; i++) momentumVecAlpha[i] = momentumFactor;
-            var lrVecAlpha = new Vector<T>(gradientAlpha.Length);
-            for (int i = 0; i < lrVecAlpha.Length; i++) lrVecAlpha[i] = currentLearningRate;
-            velocityAlpha = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityAlpha, momentumVecAlpha),
-                                                  (Vector<T>)Engine.Multiply(gradientAlpha, lrVecAlpha));
-
-            var momentumVecBeta = new Vector<T>(velocityBeta.Length);
-            for (int i = 0; i < momentumVecBeta.Length; i++) momentumVecBeta[i] = momentumFactor;
-            var lrVecBeta = new Vector<T>(gradientBeta.Length);
-            for (int i = 0; i < lrVecBeta.Length; i++) lrVecBeta[i] = currentLearningRate;
-            velocityBeta = (Vector<T>)Engine.Add((Vector<T>)Engine.Multiply(velocityBeta, momentumVecBeta),
-                                                 (Vector<T>)Engine.Multiply(gradientBeta, lrVecBeta));
-
-            // Update parameters
-            _omega = (Vector<T>)Engine.Subtract(_omega, velocityOmega);
-            _alpha = (Vector<T>)Engine.Subtract(_alpha, velocityAlpha);
-            _beta = (Vector<T>)Engine.Subtract(_beta, velocityBeta);
-
-            // Ensure parameters stay within valid ranges
-            ConstrainParameters();
-
-            // Check for convergence
-            T currentLogLikelihood = CalculateLogLikelihood(y);
-            T improvement = NumOps.Subtract(currentLogLikelihood, previousLogLikelihood);
-
-            if (NumOps.LessThan(NumOps.Abs(improvement), convergenceThreshold))
+            if (!MomentumStep(y, state))
             {
                 break;
             }
-
-            // Adaptive learning rate
-            if (NumOps.GreaterThan(improvement, NumOps.Zero))
-            {
-                currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(1.05)); // Increase learning rate
-                previousOmega = _omega.Clone();
-                previousAlpha = _alpha.Clone();
-                previousBeta = _beta.Clone();
-                previousLogLikelihood = currentLogLikelihood;
-            }
-            else
-            {
-                currentLearningRate = NumOps.Multiply(currentLearningRate, NumOps.FromDouble(0.5)); // Decrease learning rate
-                _omega = previousOmega.Clone();
-                _alpha = previousAlpha.Clone();
-                _beta = previousBeta.Clone();
-
-                if (NumOps.LessThan(currentLearningRate, minLearningRate))
-                {
-                    break; // Stop if learning rate becomes too small
-                }
-            }
         }
+    }
+
+    /// <summary>Mutable state of the momentum gradient search in <see cref="EstimateParameters"/>.</summary>
+    private sealed class MomentumState
+    {
+        public MomentumState(T learningRate, T minLearningRate, T convergenceThreshold, T momentumFactor,
+            T previousLogLikelihood, Vector<T> omega, Vector<T> alpha, Vector<T> beta)
+        {
+            LearningRate = learningRate;
+            MinLearningRate = minLearningRate;
+            ConvergenceThreshold = convergenceThreshold;
+            MomentumFactor = momentumFactor;
+            PreviousLogLikelihood = previousLogLikelihood;
+            PreviousOmega = omega.Clone();
+            PreviousAlpha = alpha.Clone();
+            PreviousBeta = beta.Clone();
+            VelocityOmega = new Vector<T>(omega.Length);
+            VelocityAlpha = new Vector<T>(alpha.Length);
+            VelocityBeta = new Vector<T>(beta.Length);
+        }
+
+        public T MinLearningRate { get; }
+        public T ConvergenceThreshold { get; }
+        public T MomentumFactor { get; }
+        public T LearningRate { get; set; }
+        public T PreviousLogLikelihood { get; set; }
+        public Vector<T> PreviousOmega { get; set; }
+        public Vector<T> PreviousAlpha { get; set; }
+        public Vector<T> PreviousBeta { get; set; }
+        public Vector<T> VelocityOmega { get; set; }
+        public Vector<T> VelocityAlpha { get; set; }
+        public Vector<T> VelocityBeta { get; set; }
+    }
+
+    /// <summary>
+    /// One momentum step: v ← μ·v + lr·∇, θ ← θ - v, constrain, then accept (grow lr) or roll back
+    /// (shrink lr). Returns false when the search should stop.
+    /// </summary>
+    private bool MomentumStep(Vector<T> y, MomentumState state)
+    {
+        // Calculate gradients
+        Vector<T> gradientOmega = CalculateGradient(y, GradientType.Omega);
+        Vector<T> gradientAlpha = CalculateGradient(y, GradientType.Alpha);
+        Vector<T> gradientBeta = CalculateGradient(y, GradientType.Beta);
+
+        // Update velocities (momentum)
+        state.VelocityOmega = Engine.Add(Engine.Multiply(state.VelocityOmega, state.MomentumFactor),
+                                         Engine.Multiply(gradientOmega, state.LearningRate));
+        state.VelocityAlpha = Engine.Add(Engine.Multiply(state.VelocityAlpha, state.MomentumFactor),
+                                         Engine.Multiply(gradientAlpha, state.LearningRate));
+        state.VelocityBeta = Engine.Add(Engine.Multiply(state.VelocityBeta, state.MomentumFactor),
+                                        Engine.Multiply(gradientBeta, state.LearningRate));
+
+        // Update parameters
+        _omega = Engine.Subtract(_omega, state.VelocityOmega);
+        _alpha = Engine.Subtract(_alpha, state.VelocityAlpha);
+        _beta = Engine.Subtract(_beta, state.VelocityBeta);
+
+        // Apply constraints
+        ConstrainParameters();
+
+        // Check for convergence
+        T currentLogLikelihood = CalculateLogLikelihood(y);
+        T improvement = NumOps.Subtract(currentLogLikelihood, state.PreviousLogLikelihood);
+        if (NumOps.LessThan(NumOps.Abs(improvement), state.ConvergenceThreshold))
+        {
+            return false;
+        }
+
+        // Adaptive learning rate
+        if (NumOps.GreaterThan(improvement, NumOps.Zero))
+        {
+            state.LearningRate = NumOps.Multiply(state.LearningRate, NumOps.FromDouble(1.05)); // Increase learning rate
+            state.PreviousOmega = _omega.Clone();
+            state.PreviousAlpha = _alpha.Clone();
+            state.PreviousBeta = _beta.Clone();
+            state.PreviousLogLikelihood = currentLogLikelihood;
+            return true;
+        }
+
+        state.LearningRate = NumOps.Multiply(state.LearningRate, NumOps.FromDouble(0.5)); // Decrease learning rate
+        _omega = state.PreviousOmega.Clone();
+        _alpha = state.PreviousAlpha.Clone();
+        _beta = state.PreviousBeta.Clone();
+
+        // Stop if learning rate becomes too small
+        return !NumOps.LessThan(state.LearningRate, state.MinLearningRate);
     }
 
     /// <summary>
@@ -537,7 +557,6 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         T epsilon = NumOps.FromDouble(1e-6); // Small value for numerical differentiation
         T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2));
-        T logLikelihood = CalculateLogLikelihood(y);
 
         if (gradientType == GradientType.Omega)
         {
@@ -555,42 +574,46 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
 
             return gradient;
         }
-        else if (gradientType == GradientType.Alpha)
+
+        if (gradientType == GradientType.Alpha)
         {
-            Vector<T> gradient = new Vector<T>(_garchOptions.ARCHOrder);
-            for (int i = 0; i < _garchOptions.ARCHOrder; i++)
-            {
-                T originalAlpha = _alpha[i];
-
-                _alpha[i] = NumOps.Add(originalAlpha, epsilon);
-                T logLikelihoodPlus = CalculateLogLikelihood(y);
-
-                _alpha[i] = NumOps.Subtract(originalAlpha, epsilon);
-                T logLikelihoodMinus = CalculateLogLikelihood(y);
-
-                gradient[i] = NumOps.Divide(NumOps.Subtract(logLikelihoodPlus, logLikelihoodMinus), twoEpsilon);
-                _alpha[i] = originalAlpha; // Restore original value
-            }
+            var original = _alpha;
+            var gradient = CentralDifferences(y, original, _garchOptions.ARCHOrder, epsilon, twoEpsilon, v => _alpha = v);
+            _alpha = original; // Restore original values
             return gradient;
         }
-        else // beta
+
+        // beta
+        var originalBeta = _beta;
+        var betaGradient = CentralDifferences(y, originalBeta, _garchOptions.GARCHOrder, epsilon, twoEpsilon, v => _beta = v);
+        _beta = originalBeta; // Restore original values
+        return betaGradient;
+    }
+
+    /// <summary>
+    /// Central-difference gradient of the log-likelihood over the first <paramref name="count"/>
+    /// coordinates of a parameter vector, installed through <paramref name="install"/> for each probe.
+    /// </summary>
+    private Vector<T> CentralDifferences(Vector<T> y, Vector<T> original, int count, T epsilon, T twoEpsilon,
+        Action<Vector<T>> install)
+    {
+        var plus = new List<T>(count);
+        var minus = new List<T>(count);
+        for (int i = 0; i < count; i++)
         {
-            Vector<T> gradient = new Vector<T>(_garchOptions.GARCHOrder);
-            for (int i = 0; i < _garchOptions.GARCHOrder; i++)
-            {
-                T originalBeta = _beta[i];
-
-                _beta[i] = NumOps.Add(originalBeta, epsilon);
-                T logLikelihoodPlus = CalculateLogLikelihood(y);
-
-                _beta[i] = NumOps.Subtract(originalBeta, epsilon);
-                T logLikelihoodMinus = CalculateLogLikelihood(y);
-
-                gradient[i] = NumOps.Divide(NumOps.Subtract(logLikelihoodPlus, logLikelihoodMinus), twoEpsilon);
-                _beta[i] = originalBeta; // Restore original value
-            }
-            return gradient;
+            var step = Engine.Multiply(Vector<T>.CreateStandardBasis(original.Length, i), epsilon);
+            install(Engine.Add(original, step));
+            plus.Add(CalculateLogLikelihood(y));
+            install(Engine.Subtract(original, step));
+            minus.Add(CalculateLogLikelihood(y));
         }
+
+        if (count == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.Divide(Engine.Subtract(new Vector<T>(plus), new Vector<T>(minus)), twoEpsilon);
     }
 
     /// <summary>
@@ -621,19 +644,21 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private T CalculateLogLikelihood(Vector<T> y)
     {
-        T logLikelihood = NumOps.Zero;
         int n = y.Length;
         Vector<T> conditionalVariances = CalculateConditionalVariances(y);
 
-        for (int t = Math.Max(_garchOptions.ARCHOrder, _garchOptions.GARCHOrder); t < n; t++)
+        // -0.5 · Σ_{t >= max(p, q)} (log σ²_t + y_t² / σ²_t), assuming zero mean residuals
+        int start = Math.Max(_garchOptions.ARCHOrder, _garchOptions.GARCHOrder);
+        int count = n - start;
+        if (count <= 0)
         {
-            T variance = conditionalVariances[t];
-            T residual = y[t]; // Assuming zero mean for simplicity
-            T term = NumOps.Add(NumOps.Log(variance), NumOps.Divide(NumOps.Multiply(residual, residual), variance));
-            logLikelihood = NumOps.Add(logLikelihood, term);
+            return NumOps.Multiply(NumOps.FromDouble(-0.5), NumOps.Zero);
         }
 
-        return NumOps.Multiply(NumOps.FromDouble(-0.5), logLikelihood);
+        var variances = conditionalVariances.GetSubVector(start, count);
+        var residuals = y.GetSubVector(start, count);
+        var terms = Engine.Add(Engine.Log(variances), Engine.Divide(Engine.Multiply(residuals, residuals), variances));
+        return NumOps.Multiply(NumOps.FromDouble(-0.5), Engine.Sum(terms));
     }
 
     /// <summary>
@@ -719,32 +744,34 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void ConstrainParameters()
     {
-        // Ensure all parameters are non-negative
-        _omega[0] = MathHelper.Max(_omega[0], NumOps.Zero);
-        for (int i = 0; i < _alpha.Length; i++)
-        {
-            _alpha[i] = MathHelper.Max(_alpha[i], NumOps.Zero);
-        }
-        for (int i = 0; i < _beta.Length; i++)
-        {
-            _beta[i] = MathHelper.Max(_beta[i], NumOps.Zero);
-        }
+        // Ensure omega, alpha and beta are non-negative (max(x, 0), NaN → 0)
+        _omega = PositivePart(_omega);
+        _alpha = PositivePart(_alpha);
+        _beta = PositivePart(_beta);
 
-        // Ensure the sum of ARCH and GARCH coefficients is less than 1 for stationarity
+        // Ensure sum of alpha and beta is less than 1 for stationarity
         T alphaSum = Engine.Sum(_alpha);
         T betaSum = Engine.Sum(_beta);
         T sum = NumOps.Add(alphaSum, betaSum);
+
         if (NumOps.GreaterThan(sum, NumOps.One))
         {
             T scaleFactor = NumOps.Divide(NumOps.FromDouble(0.99), sum);
-            var scaleVecAlpha = new Vector<T>(_alpha.Length);
-            for (int i = 0; i < scaleVecAlpha.Length; i++) scaleVecAlpha[i] = scaleFactor;
-            _alpha = (Vector<T>)Engine.Multiply(_alpha, scaleVecAlpha);
-
-            var scaleVecBeta = new Vector<T>(_beta.Length);
-            for (int i = 0; i < scaleVecBeta.Length; i++) scaleVecBeta[i] = scaleFactor;
-            _beta = (Vector<T>)Engine.Multiply(_beta, scaleVecBeta);
+            _alpha = Engine.Multiply(_alpha, scaleFactor);
+            _beta = Engine.Multiply(_beta, scaleFactor);
         }
+    }
+
+    /// <summary><c>v &gt; 0 ? v : 0</c> element-wise.</summary>
+    private Vector<T> PositivePart(Vector<T> v)
+    {
+        if (v.Length == 0)
+        {
+            return v;
+        }
+
+        var t = Tensor<T>.FromVector(v);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(t, NumOps.Zero), t, Engine.TensorZerosLike(t)).ToVector();
     }
 
     /// <summary>
@@ -1077,15 +1104,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
 
         // Store learned GARCH parameters as ModelParameters for GetParameters() / serialization
         // Layout: [omega_0, alpha_0..alpha_p, beta_0..beta_q]
-        int totalParams = _omega.Length + _alpha.Length + _beta.Length;
-        ModelParameters = new Vector<T>(totalParams);
-        int idx = 0;
-        for (int i = 0; i < _omega.Length; i++)
-            ModelParameters[idx++] = _omega[i];
-        for (int i = 0; i < _alpha.Length; i++)
-            ModelParameters[idx++] = _alpha[i];
-        for (int i = 0; i < _beta.Length; i++)
-            ModelParameters[idx++] = _beta[i];
+        ModelParameters = Vector<T>.Concatenate(_omega, _alpha, _beta);
     }
 
     /// <summary>
@@ -1116,13 +1135,6 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Create a matrix with a single row for the prediction
-        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputMatrix[0, i] = input[i];
-        }
-
         // Make sure we have some volatility estimate to work with
         if (_conditionalVariances.Length == 0)
         {

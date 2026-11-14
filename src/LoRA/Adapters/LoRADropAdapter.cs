@@ -274,19 +274,25 @@ public partial class LoRADropAdapter<T> : LoRAAdapterBase<T>
             // This compensates for the components we're dropping
             T invKeepProb = NumOps.Divide(NumOps.One, NumOps.FromDouble(1.0 - _dropoutRate));
 
-            for (int i = 0; i < loraOutput.Length; i++)
+            Tensor<T> scaledOutput = Engine.TensorMultiplyScalar(loraOutput, invKeepProb);
+            if (_dropoutMask != null)
             {
-                if (_dropoutMask != null && !_dropoutMask[i % _dropoutMask.Length])
-                {
-                    // Drop this component
-                    loraOutput[i] = NumOps.Zero;
-                }
-                else
-                {
-                    // Keep this component and scale it
-                    loraOutput[i] = NumOps.Multiply(loraOutput[i], invKeepProb);
-                }
+                // The mask covers the trailing (component) axis and repeats over the leading rows.
+                // Kept components are scaled, dropped components become exactly zero.
+                int maskLength = _dropoutMask.Length;
+                int[] rowsShape = [loraOutput.Length / maskLength, maskLength];
+                Tensor<T> keep = Engine.TensorBroadcastTo(
+                    Engine.TensorWhere(
+                        _dropoutMask,
+                        Tensor<T>.CreateDefault([maskLength], NumOps.One),
+                        new Tensor<T>([maskLength])),
+                    rowsShape);
+                Tensor<T> masked = Engine.TensorWhere(
+                    keep, Engine.Reshape(scaledOutput, rowsShape), new Tensor<T>(rowsShape));
+                scaledOutput = Engine.Reshape(masked, loraOutput.Shape.ToArray());
             }
+
+            loraOutput = scaledOutput;
         }
         else
         {
@@ -351,36 +357,13 @@ public partial class LoRADropAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputLayerShape().RequireConcrete("Sizing a LoRA adapter's low-rank factors")[0];
         int weightCount = inputSize * outputSize;
 
-        // Create new parameters with merged weights
-        Vector<T> mergedParams = new Vector<T>(baseParams.Length);
-
         // Merge weights — loraWeights from MergeWeights() is [inputSize, outputSize].
         // DenseLayer stores weights as [inputSize, outputSize] (input-major).
         // FullyConnectedLayer stores weights as [outputSize, inputSize] (output-major).
+        // Biases are kept unchanged.
         bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
-        for (int i = 0; i < weightCount; i++)
-        {
-            int row, col;
-            if (isOutputMajor)
-            {
-                int outputIdx = i / inputSize;
-                int inputIdx = i % inputSize;
-                row = inputIdx;
-                col = outputIdx;
-            }
-            else
-            {
-                row = i / outputSize;
-                col = i % outputSize;
-            }
-            mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
-        }
-
-        // Copy biases unchanged
-        for (int i = weightCount; i < baseParams.Length; i++)
-        {
-            mergedParams[i] = baseParams[i];
-        }
+        Vector<T> mergedParams = AddFlatWeightsToParameters(
+            baseParams, isOutputMajor ? loraWeights.Transpose() : loraWeights, weightCount);
 
         // Use helper method to clone base layer and preserve activation function
         return CreateMergedLayerWithClone(mergedParams);

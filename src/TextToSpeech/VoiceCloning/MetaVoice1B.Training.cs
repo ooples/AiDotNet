@@ -71,8 +71,11 @@ public partial class MetaVoice1B<T>
         }
         var logits = model.Forward(new[] { input }, speaker, training: IsTrainingMode,
             speakerDropoutDraw: TrainingSpeakerDrawForAudit).Logits[0];
-        var weights = new Tensor<T>(logits.Shape.ToArray());
-        for (int i = 0; i < target.Length; i++) weights[i, target[i]] = NumOps.FromDouble(-1.0 / target.Length);
+        // -1/N on each position's target class
+        var weights = Engine.TensorMultiplyScalar(
+            Engine.TensorOneHot<T>(new Tensor<int>(target, new[] { target.Length }), logits.Shape[1]), NumOps.FromDouble(-1.0 / target.Length));
+        if (logits.Shape[0] > target.Length)
+            weights = Engine.TensorConcatenate(new[] { weights, new Tensor<T>(new[] { logits.Shape[0] - target.Length, logits.Shape[1] }) }, 0);
         // Text and repeated EOA padding remain in the original fine-tuning objective.
         return Engine.Reshape(Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(logits, 1), weights), new[] { 0, 1 }, true), new[] { 1 });
     }

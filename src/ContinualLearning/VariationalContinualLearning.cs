@@ -53,6 +53,7 @@ namespace AiDotNet.ContinualLearning;
 public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
 {
     private readonly INumericOperations<T> _numOps;
+    private static IEngine Engine => AiDotNetEngine.Current;
     private Vector<T> _priorMean;           // Prior mean (posterior from previous task)
     private Vector<T> _priorLogVar;         // Prior log-variance
     private Vector<T> _posteriorMean;       // Current posterior mean
@@ -120,15 +121,9 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         if (_priorMean.Length == 0)
         {
             // First task: initialize prior with standard normal and given variance
-            _priorMean = new Vector<T>(paramCount);
-            _priorLogVar = new Vector<T>(paramCount);
-
             var initialLogVarT = _numOps.FromDouble(_initialLogVar);
-            for (int i = 0; i < paramCount; i++)
-            {
-                _priorMean[i] = _numOps.Zero;
-                _priorLogVar[i] = initialLogVarT;
-            }
+            _priorMean = Engine.Fill(paramCount, _numOps.Zero);
+            _priorLogVar = Engine.Fill(paramCount, initialLogVarT);
         }
         else
         {
@@ -154,12 +149,8 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         // For simplicity, we update based on gradient variance
         if (_posteriorLogVar.Length == 0)
         {
-            _posteriorLogVar = new Vector<T>(checked((int)network.ParameterCount));
             var initialLogVarT = _numOps.FromDouble(_initialLogVar);
-            for (int i = 0; i < _posteriorLogVar.Length; i++)
-            {
-                _posteriorLogVar[i] = initialLogVarT;
-            }
+            _posteriorLogVar = Engine.Fill(checked((int)network.ParameterCount), initialLogVarT);
         }
 
         // Per the VCL reference implementation (Nguyen et al., ICLR 2018):
@@ -184,38 +175,32 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         // Compute KL divergence: KL(q||p) for Gaussians
         // KL(N(μ_q, σ_q²) || N(μ_p, σ_p²)) =
         //   log(σ_p/σ_q) + (σ_q² + (μ_q - μ_p)²)/(2σ_p²) - 0.5
-        var klDiv = _numOps.Zero;
+        int n = currentMean.Length;
+        var half = _numOps.FromDouble(0.5);
+        var two = _numOps.FromDouble(2.0);
 
-        for (int i = 0; i < currentMean.Length; i++)
-        {
-            var meanDiff = _numOps.Subtract(currentMean[i], _priorMean[i]);
-            var meanDiffSq = _numOps.Multiply(meanDiff, meanDiff);
+        var meanDiff = Engine.TensorSubtract(currentMean.AsTensor(), Head(_priorMean, n));
+        var meanDiffSq = Engine.TensorMultiply(meanDiff, meanDiff);
 
-            // For simplicity, use the stored log-variances
-            var qLogVar = _posteriorLogVar[i];
-            var pLogVar = _priorLogVar[i];
+        // For simplicity, use the stored log-variances
+        var qLogVar = Head(_posteriorLogVar, n);
+        var pLogVar = Head(_priorLogVar, n);
 
-            // σ² = exp(logVar)
-            var qVar = Exp(qLogVar);
-            var pVar = Exp(pLogVar);
+        // σ² = exp(logVar)
+        var qVar = Engine.TensorExp(qLogVar);
+        var pVar = Engine.TensorExp(pLogVar);
 
-            // log(σ_p) - log(σ_q) = 0.5 * (logVar_p - logVar_q)
-            var logRatio = _numOps.Multiply(
-                _numOps.FromDouble(0.5),
-                _numOps.Subtract(pLogVar, qLogVar));
+        // log(σ_p) - log(σ_q) = 0.5 * (logVar_p - logVar_q)
+        var logRatio = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pLogVar, qLogVar), half);
 
-            // (σ_q² + (μ_q - μ_p)²) / (2σ_p²)
-            var numerator = _numOps.Add(qVar, meanDiffSq);
-            var denominator = _numOps.Multiply(_numOps.FromDouble(2.0), pVar);
-            var fraction = _numOps.Divide(numerator, denominator);
+        // (σ_q² + (μ_q - μ_p)²) / (2σ_p²)
+        var numerator = Engine.TensorAdd(qVar, meanDiffSq);
+        var denominator = Engine.TensorMultiplyScalar(pVar, two);
+        var fraction = Engine.TensorDivide(numerator, denominator);
 
-            // KL for this weight
-            var kl_i = _numOps.Subtract(
-                _numOps.Add(logRatio, fraction),
-                _numOps.FromDouble(0.5));
-
-            klDiv = _numOps.Add(klDiv, kl_i);
-        }
+        // KL for each weight, summed
+        var klPerWeight = Engine.TensorSubtractScalar(Engine.TensorAdd(logRatio, fraction), half);
+        var klDiv = Engine.TensorSum(klPerWeight);
 
         // Scale by lambda
         var lambdaT = _numOps.FromDouble(_lambda);
@@ -238,20 +223,15 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
 
         // Add gradient of KL divergence w.r.t. mean
         // ∂KL/∂μ_q = (μ_q - μ_p) / σ_p²
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            var meanDiff = _numOps.Subtract(currentMean[i], _priorMean[i]);
-            var pVar = Exp(_priorLogVar[i]);
+        int n = gradients.Length;
+        var meanDiff = Engine.TensorSubtract(Head(currentMean, n), Head(_priorMean, n));
 
-            // Add small epsilon to prevent division by zero
-            var epsilon = _numOps.FromDouble(1e-8);
-            pVar = _numOps.Add(pVar, epsilon);
+        // Add small epsilon to prevent division by zero
+        var epsilon = _numOps.FromDouble(1e-8);
+        var pVar = Engine.TensorAddScalar(Engine.TensorExp(Head(_priorLogVar, n)), epsilon);
 
-            var klGrad = _numOps.Divide(meanDiff, pVar);
-            klGrad = _numOps.Multiply(lambdaT, klGrad);
-
-            gradients[i] = _numOps.Add(gradients[i], klGrad);
-        }
+        var klGrad = Engine.TensorMultiplyScalar(Engine.TensorDivide(meanDiff, pVar), lambdaT);
+        Engine.TensorAdd(gradients.AsTensor(), klGrad).AsSpan().CopyTo(gradients.AsWritableSpan());
 
         return gradients;
     }
@@ -320,19 +300,35 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         // Higher gradients indicate more uncertainty
         var lr = _numOps.FromDouble(learningRate);
 
-        for (int i = 0; i < _posteriorLogVar.Length; i++)
-        {
-            var gradSq = _numOps.Multiply(gradients[i], gradients[i]);
-            var logGradSq = Log(_numOps.Add(gradSq, _numOps.FromDouble(1e-8)));
+        // log(max(g^2 + 1e-8, 1e-10)), master's floored log. The floor still matters: 1e-8 rounds to zero
+        // in Half, so a zero gradient reaches the log as 0. It is applied in the log domain because
+        // 1e-10 is not representable in Half while log 1e-10 is.
+        var g = gradients.AsTensor();
+        var gradSq = Engine.TensorMultiply(g, g);
+        var argument = Engine.TensorAddScalar(gradSq, _numOps.FromDouble(1e-8));
+        var logGradSq = Engine.TensorWhere(
+            Engine.TensorGreaterThan(argument, _numOps.FromDouble(1e-10)),
+            Engine.TensorLog(argument),
+            Engine.TensorFullLike(argument, _numOps.FromDouble(Math.Log(1e-10))));
 
-            // Exponential moving average
-            var alpha = _numOps.FromDouble(0.1);
-            var oneMinusAlpha = _numOps.FromDouble(0.9);
+        // Exponential moving average, written back in place
+        var alpha = _numOps.FromDouble(0.1);
+        var oneMinusAlpha = _numOps.FromDouble(0.9);
+        var logVar = _posteriorLogVar.AsTensor();
+        var updated = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(logVar, oneMinusAlpha),
+            Engine.TensorMultiplyScalar(logGradSq, alpha));
+        updated.AsSpan().CopyTo(_posteriorLogVar.AsWritableSpan());
+    }
 
-            _posteriorLogVar[i] = _numOps.Add(
-                _numOps.Multiply(oneMinusAlpha, _posteriorLogVar[i]),
-                _numOps.Multiply(alpha, logGradSq));
-        }
+    /// <summary>
+    /// Zero-copy rank-1 tensor view over the first <paramref name="count"/> elements of a vector.
+    /// </summary>
+    private static Tensor<T> Head(Vector<T> vector, int count)
+    {
+        return count == vector.Length
+            ? vector.AsTensor()
+            : Tensor<T>.FromMemory(vector.AsWritableMemory().Slice(0, count), new[] { count });
     }
 
     /// <summary>
@@ -360,15 +356,6 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     {
         var xDouble = _numOps.ToDouble(x);
         return _numOps.FromDouble(Math.Exp(xDouble));
-    }
-
-    /// <summary>
-    /// Computes log(x) for a value.
-    /// </summary>
-    private T Log(T x)
-    {
-        var xDouble = _numOps.ToDouble(x);
-        return _numOps.FromDouble(Math.Log(Math.Max(xDouble, 1e-10)));
     }
 
     /// <summary>

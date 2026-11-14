@@ -29,6 +29,8 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
 {
     private protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private protected static IEngine Engine => AiDotNetEngine.Current;
+
     private protected T[][] _entityEmbeddings = [];
     private protected T[][] _relationEmbeddings = [];
     private protected Dictionary<string, int> _entityIndex = [];
@@ -87,6 +89,7 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
             {
                 int batchEnd = Math.Min(batchStart + batchSize, triples.Count);
                 double batchLoss = 0.0;
+                OnBatchStart();
 
                 for (int i = batchStart; i < batchEnd; i++)
                 {
@@ -202,6 +205,33 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
     private protected virtual void OnPostEpoch(int epoch) { }
 
     /// <summary>
+    /// Called before each mini-batch is processed (Bordes et al. 2013, Algorithm 1 renormalizes entities here).
+    /// </summary>
+    private protected virtual void OnBatchStart() { }
+
+    /// <summary>Views an embedding row as a vector without copying.</summary>
+    private protected static Vector<T> Row(T[] values) => Vector<T>.Wrap(values);
+
+    /// <summary>Views <paramref name="length"/> entries of an embedding row starting at <paramref name="offset"/>.</summary>
+    private protected static Vector<T> Row(T[] values, int offset, int length) => Vector<T>.Wrap(values, offset, length);
+
+    /// <summary>Writes <paramref name="value"/> into <paramref name="target"/> starting at <paramref name="offset"/>.</summary>
+    private protected static void Store(Vector<T> value, T[] target, int offset = 0)
+        => value.AsSpan().CopyTo(target.AsSpan(offset, value.Length));
+
+    /// <summary>target += delta, reading the row's current contents (so aliased rows accumulate).</summary>
+    private protected static void AddTo(T[] target, Vector<T> delta, int offset = 0)
+        => Store(Engine.Add(Row(target, offset, delta.Length), delta), target, offset);
+
+    /// <summary>target -= delta, reading the row's current contents (so aliased rows accumulate).</summary>
+    private protected static void SubtractFrom(T[] target, Vector<T> delta, int offset = 0)
+        => Store(Engine.Subtract(Row(target, offset, delta.Length), delta), target, offset);
+
+    /// <summary>diff / ||diff||, or the zero vector when the norm is zero (the L2 norm's subgradient at 0).</summary>
+    private protected static Vector<T> UnitDirection(Vector<T> diff, T norm)
+        => NumOps.GreaterThan(norm, NumOps.Zero) ? Engine.Divide(diff, norm) : new Vector<T>(diff.Length);
+
+    /// <summary>
     /// Computes the score for a triple given entity/relation indices.
     /// </summary>
     private protected abstract T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx);
@@ -216,6 +246,26 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
         double learningRate, KGEmbeddingOptions options);
 
     // --- Shared helpers ---
+
+    /// <summary>
+    /// Loads fixed embeddings (entities named "e0", "e1", ..., relations "r0", ...) so a single scoring or
+    /// SGD step can be checked against the paper's formulas.
+    /// </summary>
+    internal void LoadEmbeddings(T[][] entities, T[][] relations, int embeddingDimension)
+    {
+        _embeddingDimension = embeddingDimension;
+        _entityEmbeddings = entities;
+        _relationEmbeddings = relations;
+        _entityIds = Enumerable.Range(0, entities.Length).Select(i => "e" + i).ToArray();
+        _entityIndex = Enumerable.Range(0, entities.Length).ToDictionary(i => "e" + i, i => i);
+        _relationIndex = Enumerable.Range(0, relations.Length).ToDictionary(i => "r" + i, i => i);
+        IsTrained = true;
+    }
+
+    /// <summary>Runs one loss / SGD step on a positive and a corrupted triple of the loaded embeddings.</summary>
+    internal double TrainingStep(int posHead, int relation, int posTail, int negHead, int negTail,
+        double learningRate, KGEmbeddingOptions options)
+        => ComputeLossAndUpdateGradients(posHead, relation, posTail, negHead, negTail, learningRate, options);
 
     private List<(int head, int relation, int tail)> BuildVocabularyAndTriples(KnowledgeGraph<T> graph)
     {
@@ -281,17 +331,11 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
 
     private protected static void NormalizeL2(T[] vector)
     {
-        var vec = new Vector<T>(vector);
-        T sumSq = AiDotNetEngine.Current.DotProduct(vec, vec);
+        var vec = Row(vector);
+        T norm = Engine.Norm(vec);
+        if (!NumOps.GreaterThan(norm, NumOps.Zero)) return;
 
-        double norm = NumOps.ToDouble(NumOps.Sqrt(sumSq));
-        if (norm < 1e-12) return;
-
-        T invNorm = NumOps.FromDouble(1.0 / norm);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            vector[i] = NumOps.Multiply(vector[i], invNorm);
-        }
+        Store(Engine.Divide(vec, norm), vector);
     }
 
     private void ApplyL2Regularization(double learningRate, double l2Reg)
@@ -301,14 +345,12 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
 
         foreach (var emb in _entityEmbeddings)
         {
-            for (int d = 0; d < emb.Length; d++)
-                emb[d] = NumOps.Multiply(emb[d], scaleFactor);
+            Store(Engine.Multiply(Row(emb), scaleFactor), emb);
         }
 
         foreach (var emb in _relationEmbeddings)
         {
-            for (int d = 0; d < emb.Length; d++)
-                emb[d] = NumOps.Multiply(emb[d], scaleFactor);
+            Store(Engine.Multiply(Row(emb), scaleFactor), emb);
         }
     }
 

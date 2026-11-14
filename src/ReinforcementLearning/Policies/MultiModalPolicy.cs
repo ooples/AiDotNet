@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -220,71 +221,30 @@ namespace AiDotNet.ReinforcementLearning.Policies
                         output.Length, outputSize));
             }
 
-            var mixingCoefficients = new Vector<T>(_numComponents);
-            var means = new List<Vector<T>>();
-            var logStds = new List<Vector<T>>();
+            // Output layout: [mixing logits (K) | means (K x A) | log standard deviations (K x A)].
+            int meanOffset = _numComponents;
+            int logStdOffset = _numComponents + _numComponents * _actionSize;
+            var mixingCoefficients = Softmax(output.GetSubVector(0, _numComponents));
+            var means = Enumerable.Range(0, _numComponents)
+                .Select(component => output.GetSubVector(meanOffset + component * _actionSize, _actionSize)).ToList();
+            var logStds = Enumerable.Range(0, _numComponents)
+                .Select(component => output.GetSubVector(logStdOffset + component * _actionSize, _actionSize)).ToList();
 
-            int offset = 0;
-            for (int k = 0; k < _numComponents; k++)
-            {
-                mixingCoefficients[k] = output[offset++];
-            }
-
-            mixingCoefficients = Softmax(mixingCoefficients);
-
-            for (int k = 0; k < _numComponents; k++)
-            {
-                var mean = new Vector<T>(_actionSize);
-                for (int i = 0; i < _actionSize; i++)
-                {
-                    mean[i] = output[offset++];
-                }
-                means.Add(mean);
-            }
-
-            for (int k = 0; k < _numComponents; k++)
-            {
-                var logStd = new Vector<T>(_actionSize);
-                for (int i = 0; i < _actionSize; i++)
-                {
-                    logStd[i] = output[offset++];
-                }
-                logStds.Add(logStd);
-            }
-
-            var action = new Vector<T>(_actionSize);
             if (!training)
             {
                 // Inference takes the mixture's mode: the highest-density point of the whole weighted mixture, which
                 // need not be the heaviest component's mean (a broad heavy component can peak below a narrow light one).
-                var weights = new double[_numComponents];
-                var componentMeans = new double[_numComponents][];
-                var componentLogStds = new double[_numComponents][];
-                for (int k = 0; k < _numComponents; k++)
-                {
-                    weights[k] = NumOps.ToDouble(mixingCoefficients[k]);
-                    componentMeans[k] = new double[_actionSize];
-                    componentLogStds[k] = new double[_actionSize];
-                    for (int i = 0; i < _actionSize; i++)
-                    {
-                        componentMeans[k][i] = NumOps.ToDouble(means[k][i]);
-                        componentLogStds[k][i] = NumOps.ToDouble(logStds[k][i]);
-                    }
-                }
+                // MixtureMode is the double-precision mean-shift solver; the parameters cross into it in bulk.
+                var weights = ToDoubles(mixingCoefficients);
+                var componentMeans = means.Select(ToDoubles).ToArray();
+                var componentLogStds = logStds.Select(ToDoubles).ToArray();
                 var mode = MixtureMode(weights, componentMeans, componentLogStds);
-                for (int i = 0; i < _actionSize; i++) action[i] = NumOps.FromDouble(mode[i]);
-                return action;
+                return Vector<double>.FromArray(mode).AsTensor().Cast<T>().ToVector();
             }
 
             // Training samples a component, then its Gaussian.
             int selectedComponent = SampleCategoricalIndex(mixingCoefficients);
-            for (int i = 0; i < _actionSize; i++)
-            {
-                double meanValue = NumOps.ToDouble(means[selectedComponent][i]);
-                double stdValue = Math.Exp(NumOps.ToDouble(logStds[selectedComponent][i]));
-
-                action[i] = NumOps.FromDouble(meanValue + stdValue * _random.NextGaussian());
-            }
+            var action = RLTensorOps.SampleGaussian(means[selectedComponent], logStds[selectedComponent], _random);
 
             return _explorationStrategy.GetExplorationAction(state, action, _actionSize, _random);
         }
@@ -299,59 +259,25 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var outputTensor = _policyNetwork.Predict(stateTensor);
             var output = outputTensor.ToVector();
 
-            var mixingCoefficients = new Vector<T>(_numComponents);
-            var means = new List<Vector<T>>();
-            var logStds = new List<Vector<T>>();
+            // Output layout: [mixing logits (K) | means (K x A) | log standard deviations (K x A)].
+            int components = _numComponents;
+            int width = _actionSize;
+            var engine = AiDotNetEngine.Current;
+            var mixingCoefficients = Softmax(output.GetSubVector(0, components));
+            var means = engine.Reshape(output.GetSubVector(components, components * width).AsTensor(), [components, width]);
+            var logStds = engine.Reshape(
+                output.GetSubVector(components + components * width, components * width).AsTensor(), [components, width]);
+            var actions = engine.TensorTile(engine.Reshape(action.AsTensor(), [1, width]), [components, 1]);
 
-            int offset = 0;
-            for (int k = 0; k < _numComponents; k++)
-            {
-                mixingCoefficients[k] = output[offset++];
-            }
+            // log N(a; mu_k, sigma_k) = sum_i [-0.5 ((a_i - mu_ki) / sigma_ki)^2 - log sigma_ki] - 0.5 A log(2 pi)
+            var z = engine.TensorDivide(engine.TensorSubtract(actions, means), engine.TensorExp(logStds));
+            var perDimension = engine.TensorSubtract(engine.TensorMultiplyScalar(engine.TensorMultiply(z, z), NumOps.FromDouble(-0.5)), logStds);
+            var componentLogProb = engine.TensorSubtractScalar(
+                engine.ReduceSum(perDimension, [1], false), NumOps.FromDouble(0.5 * Math.Log(2.0 * Math.PI) * width));
 
-            mixingCoefficients = Softmax(mixingCoefficients);
-
-            for (int k = 0; k < _numComponents; k++)
-            {
-                var mean = new Vector<T>(_actionSize);
-                for (int i = 0; i < _actionSize; i++)
-                {
-                    mean[i] = output[offset++];
-                }
-                means.Add(mean);
-            }
-
-            for (int k = 0; k < _numComponents; k++)
-            {
-                var logStd = new Vector<T>(_actionSize);
-                for (int i = 0; i < _actionSize; i++)
-                {
-                    logStd[i] = output[offset++];
-                }
-                logStds.Add(logStd);
-            }
-
-            double totalProb = 0.0;
-            for (int k = 0; k < _numComponents; k++)
-            {
-                double componentWeight = NumOps.ToDouble(mixingCoefficients[k]);
-                double componentLogProb = 0.0;
-
-                for (int i = 0; i < _actionSize; i++)
-                {
-                    double meanValue = NumOps.ToDouble(means[k][i]);
-                    double logStdValue = NumOps.ToDouble(logStds[k][i]);
-                    double stdValue = Math.Exp(logStdValue);
-                    double actionValue = NumOps.ToDouble(action[i]);
-
-                    double diff = (actionValue - meanValue) / stdValue;
-                    componentLogProb += -0.5 * diff * diff - Math.Log(stdValue) - 0.5 * Math.Log(2.0 * Math.PI);
-                }
-
-                totalProb += componentWeight * Math.Exp(componentLogProb);
-            }
-
-            return NumOps.FromDouble(Math.Log(totalProb + 1e-8));
+            // log(sum_k w_k exp(log N_k) + 1e-8), the floored log in double (1e-8 rounds to zero in Half)
+            T totalProb = engine.TensorSum(engine.TensorMultiply(mixingCoefficients.AsTensor(), engine.TensorExp(componentLogProb)));
+            return RLTensorOps.LogWithFloor(totalProb, 1e-8);
         }
 
         /// <inheritdoc />
@@ -368,48 +294,20 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
         private Vector<T> Softmax(Vector<T> logits)
         {
-            var probabilities = new Vector<T>(logits.Length);
-            T maxLogit = logits[0];
+            // exp(z - max z) / sum exp(z - max z)
+            return RLTensorOps.StableSoftmax(logits);
+        }
 
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (NumOps.GreaterThan(logits[i], maxLogit))
-                {
-                    maxLogit = logits[i];
-                }
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int i = 0; i < logits.Length; i++)
-            {
-                var expValue = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
-                probabilities[i] = expValue;
-                sumExp = NumOps.Add(sumExp, expValue);
-            }
-
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                probabilities[i] = NumOps.Divide(probabilities[i], sumExp);
-            }
-
-            return probabilities;
+        private static double[] ToDoubles(Vector<T> values)
+        {
+            return values.AsTensor().Cast<double>().ToVector().ToArray();
         }
 
         private int SampleCategoricalIndex(Vector<T> probabilities)
         {
+            // First index whose running probability reaches the uniform draw; the last when rounding falls short.
             double randomValue = _random.NextDouble();
-            double cumulativeProbability = 0.0;
-
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                cumulativeProbability += NumOps.ToDouble(probabilities[i]);
-                if (randomValue <= cumulativeProbability)
-                {
-                    return i;
-                }
-            }
-
-            return probabilities.Length - 1;
+            return RLTensorOps.SampleFromCdf(probabilities, randomValue, probabilities.Length - 1);
         }
     }
 }

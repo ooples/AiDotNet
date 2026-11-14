@@ -31,8 +31,6 @@ namespace AiDotNet.Diffusion.MaskUtilities;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class MaskFromPoints<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly int _pointRadius;
     private readonly (int y, int x)[] _positivePoints;
     private readonly (int y, int x)[]? _negativePoints;
@@ -100,50 +98,19 @@ public class MaskFromPoints<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     public Tensor<T> Generate(int height, int width,
         (int y, int x)[] positivePoints, (int y, int x)[]? negativePoints = null)
     {
+        var engine = AiDotNetEngine.Current;
         var mask = new Tensor<T>(new[] { height, width });
-        int radiusSq = _pointRadius * _pointRadius;
-
-        // Apply positive points
+        // Each point computes distances only over its disk's clipped bounding square
         foreach (var (py, px) in positivePoints)
-        {
-            int yStart = Math.Max(0, py - _pointRadius);
-            int yEnd = Math.Min(height, py + _pointRadius + 1);
-            int xStart = Math.Max(0, px - _pointRadius);
-            int xEnd = Math.Min(width, px + _pointRadius + 1);
-
-            for (int y = yStart; y < yEnd; y++)
-            {
-                for (int x = xStart; x < xEnd; x++)
-                {
-                    int dy = y - py;
-                    int dx = x - px;
-                    if (dy * dy + dx * dx <= radiusSq)
-                        mask[y, x] = NumOps.One;
-                }
-            }
-        }
+            mask = MaskVectorOps.UnionDisk(mask, py, px, _pointRadius);
 
         // Apply negative points
         if (negativePoints != null)
         {
+            var erased = new Tensor<T>(new[] { height, width });
             foreach (var (py, px) in negativePoints)
-            {
-                int yStart = Math.Max(0, py - _pointRadius);
-                int yEnd = Math.Min(height, py + _pointRadius + 1);
-                int xStart = Math.Max(0, px - _pointRadius);
-                int xEnd = Math.Min(width, px + _pointRadius + 1);
-
-                for (int y = yStart; y < yEnd; y++)
-                {
-                    for (int x = xStart; x < xEnd; x++)
-                    {
-                        int dy = y - py;
-                        int dx = x - px;
-                        if (dy * dy + dx * dx <= radiusSq)
-                            mask[y, x] = NumOps.Zero;
-                    }
-                }
-            }
+                erased = MaskVectorOps.UnionDisk(erased, py, px, _pointRadius);
+            mask = engine.TensorWhere(erased, new Tensor<T>(new[] { height, width }), mask);
         }
 
         return mask;

@@ -140,13 +140,16 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
         //    is genuinely scoped to the query. Paper §6.3 uses BM25 here;
         //    a dense mean-pool gets us paper-equivalent first-stage retrieval
         //    when a BM25 index isn't available.
-        var meanQuery = new Vector<T>(_documentStore.VectorDimension);
-        int effDim = Math.Min(embedDim, _documentStore.VectorDimension);
-        for (int t = 0; t < queryTokens; t++)
-            for (int d = 0; d < effDim; d++)
-                meanQuery[d] = NumOps.Add(meanQuery[d], queryEmb[t, d]);
-        for (int d = 0; d < effDim; d++)
-            meanQuery[d] = NumOps.Divide(meanQuery[d], NumOps.FromDouble(queryTokens));
+        if (queryTokens == 0)
+            return Enumerable.Empty<Document<T>>();
+
+        var queryMatrix = Engine.TensorNarrow(queryEmb, 0, 0, queryTokens);
+        int storeDim = _documentStore.VectorDimension;
+        int effDim = Math.Min(embedDim, storeDim);
+        var meanTokens = Engine.ReduceMean(Engine.TensorNarrow(queryMatrix, 1, 0, effDim), [0], false);
+        if (storeDim > effDim)
+            meanTokens = Engine.TensorConcatenate(new[] { meanTokens, new Tensor<T>([storeDim - effDim]) }, 0);
+        var meanQuery = meanTokens.ToVector();
 
         // Oversample so MaxSim has room to reorder — Khattab & Zaharia
         // §4.2 fetch K' = ~1000 with K = 100; ratio ≈ 10×.
@@ -157,6 +160,7 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
 
         // 3. Score each candidate with MaxSim against the query's per-token
         //    embeddings.
+        var noMatch = NumOps.FromDouble(double.NegativeInfinity);
         var scored = candidates.Select(doc =>
         {
             string content = doc.Content ?? string.Empty;
@@ -164,22 +168,13 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
             int docTokens = Math.Min(docEmb.Shape[0], _maxDocLength);
             // Score = Σ_q max_d cos(E_q, E_d). Embeddings are L2-normalised
             // by IColBertEmbedder contract, so cosine == dot product.
-            T total = NumOps.Zero;
-            for (int q = 0; q < queryTokens; q++)
-            {
-                T best = NumOps.FromDouble(double.NegativeInfinity);
-                for (int d = 0; d < docTokens; d++)
-                {
-                    T dot = NumOps.Zero;
-                    for (int k = 0; k < embedDim; k++)
-                    {
-                        dot = NumOps.Add(dot,
-                            NumOps.Multiply(queryEmb[q, k], docEmb[d, k]));
-                    }
-                    if (NumOps.GreaterThan(dot, best)) best = dot;
-                }
-                total = NumOps.Add(total, best);
-            }
+            // A document without tokens has no match for any query token.
+            if (docTokens == 0)
+                return (doc, score: noMatch);
+
+            var similarities = Engine.TensorMatMul(
+                queryMatrix, Engine.TensorTranspose(Engine.TensorNarrow(docEmb, 0, 0, docTokens)));
+            T total = Engine.TensorSum(Engine.ReduceMax(similarities, [1], false));
             return (doc, score: total);
         }).ToList();
 

@@ -23,6 +23,28 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 internal static class ObjectiveOps
 {
     /// <summary>
+    /// The guard <paramref name="epsilon"/> in <typeparamref name="T"/>, or the smallest positive normal
+    /// value of <typeparamref name="T"/> when <paramref name="epsilon"/> does not survive conversion.
+    /// </summary>
+    /// <remarks>
+    /// 1e-8 and 1e-12 round to zero in Half, which turns sqrt(0 + eps) into a division by zero and
+    /// log(0 + eps) into -inf. The normal floor (2^-14 in Half) keeps 1 / eps finite as well.
+    /// </remarks>
+    internal static T Epsilon<T>(double epsilon)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T value = ops.FromDouble(epsilon);
+        if (ops.ToDouble(value) >= epsilon * 0.5)
+        {
+            return value;
+        }
+
+        // float's smallest normal, then Half's.
+        value = ops.FromDouble(1.1754943508222875e-38);
+        return ops.ToDouble(value) > 0 ? value : ops.FromDouble(6.103515625e-05);
+    }
+
+    /// <summary>
     /// L2-normalizes each row, differentiably.
     /// </summary>
     /// <remarks>
@@ -34,7 +56,7 @@ internal static class ObjectiveOps
         var engine = AiDotNetEngine.Current;
         var squared = engine.TensorMultiply(x, x);
         var sumSq = engine.ReduceSum(squared, new[] { x.Shape.Length - 1 }, keepDims: true);
-        var safe = engine.TensorAddScalar(sumSq, MathHelper.GetNumericOperations<T>().FromDouble(epsilon));
+        var safe = engine.TensorAddScalar(sumSq, Epsilon<T>(epsilon));
         var norm = engine.TensorSqrt(safe);
         // norm is [rows, 1] against x's [rows, cols]; this engine does not broadcast implicitly.
         return engine.TensorDivide(x, norm);
@@ -80,10 +102,7 @@ internal static class ObjectiveOps
     /// </summary>
     internal static Tensor<T> Identity<T>(int n)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var identity = new Tensor<T>(new[] { n, n });
-        for (int i = 0; i < n; i++) identity[i, i] = ops.One;
-        return identity;
+        return AiDotNetEngine.Current.TensorEye<T>(n);
     }
 
     /// <summary>
