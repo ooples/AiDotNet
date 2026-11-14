@@ -816,7 +816,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         var b = bVec[0];
 
         // Platt (1999): p1' = sigmoid(a * logit(p1) + b), with p1 kept inside (0, 1) so the logit is finite.
-        var p1 = ClampProbability(PositiveClassProbabilities(probsTensor, batch));
+        var p1 = ClampForLogit(PositiveClassProbabilities(probsTensor, batch));
         var logit = ResultEngine.TensorLog(ResultEngine.TensorDivide(p1, ResultEngine.TensorSubtract(ResultEngine.TensorOnesLike(p1), p1)));
         var calibratedPositive = ResultEngine.TensorSigmoid(ResultEngine.TensorAddScalar(ResultEngine.TensorMultiplyScalar(logit, a), b));
         return ConvertFromTensor(TwoClassProbabilities(calibratedPositive, batch, probsTensor._shape));
@@ -838,7 +838,10 @@ public partial class AiModelResult<T, TInput, TOutput>
         }
 
         // The calibrated value is y[i] for the first breakpoint i with p1 <= x[i], or the last y when p1 exceeds them all.
-        var p1 = ClampProbability(PositiveClassProbabilities(probsTensor, batch));
+        // p1 is clamped to [1e-12, 1 - 1e-12] as represented in T (no logit is taken, so no wider clamp is needed).
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var p1 = ResultEngine.TensorClamp(
+            PositiveClassProbabilities(probsTensor, batch), numOps.FromDouble(1e-12), numOps.FromDouble(1.0 - 1e-12));
         int points = x.Length;
         var shape = new[] { batch, points };
         var below = ResultEngine.TensorLessEqual(
@@ -871,15 +874,17 @@ public partial class AiModelResult<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Clamps probabilities to [eps, 1 - eps] with eps = 1e-12 for double, and the spacing just below 1 for float
-    /// (2^-24) and Half (2^-11), whose 1 - 1e-12 rounds back to 1 and would give an infinite logit.
+    /// Clamps probabilities into (0, 1) so their logit is finite: [1e-12, 1 - 1e-12] for double. The lower bound is
+    /// 1e-12 or, for Half, its smallest positive value 2^-24 (1e-12 rounds to 0). The upper bound is 1 - 1e-12 or,
+    /// for float and Half, the value just below 1 (1 - 2^-24 and 1 - 2^-11), since 1 - 1e-12 rounds back to 1. Only
+    /// the bounds a type cannot represent move; every other probability keeps its own logit.
     /// </summary>
-    private static Tensor<T> ClampProbability(Tensor<T> probabilities)
+    private static Tensor<T> ClampForLogit(Tensor<T> probabilities)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        double epsilon = typeof(T) == typeof(Half) ? 4.8828125e-4 : typeof(T) == typeof(float) ? 5.9604644775390625e-8 : 1e-12;
-        T eps = numOps.FromDouble(epsilon);
-        return ResultEngine.TensorClamp(probabilities, eps, numOps.Subtract(numOps.One, eps));
+        double lower = typeof(T) == typeof(Half) ? 5.9604644775390625e-8 : 1e-12;
+        double upperGap = typeof(T) == typeof(Half) ? 4.8828125e-4 : typeof(T) == typeof(float) ? 5.9604644775390625e-8 : 1e-12;
+        return ResultEngine.TensorClamp(probabilities, numOps.FromDouble(lower), numOps.Subtract(numOps.One, numOps.FromDouble(upperGap)));
     }
 
     private static Tensor<T> SoftmaxTensor(Tensor<T> tensor, int batch, int classes)
@@ -1026,7 +1031,8 @@ public partial class AiModelResult<T, TInput, TOutput>
         // Elementwise mean and population variance over the samples.
         var stacked = ResultEngine.TensorStack(
             samples.Select(sample => ResultEngine.Reshape(sample, new[] { length })).ToArray(), 0);
-        var mean = ResultEngine.TensorDivideScalar(ResultEngine.ReduceSum(stacked, new[] { 0 }, false), count);
+        // Each sample is divided by the count before summing so the sum cannot overflow in low precision.
+        var mean = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(stacked, count), new[] { 0 }, false);
         var deviations = ResultEngine.TensorSubtract(stacked, ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(mean, new[] { 1, length }), new[] { samples.Count, length }));
 
         // Divide the deviations by their largest finite magnitude before squaring so the squares cannot overflow
@@ -1042,7 +1048,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         else
         {
             var scaled = ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(deviations, scale));
-            var scaledVariance = ResultEngine.TensorDivideScalar(ResultEngine.ReduceSum(scaled, new[] { 0 }, false), count);
+            var scaledVariance = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(scaled, count), new[] { 0 }, false);
             variance = ResultEngine.TensorMultiplyScalar(ResultEngine.TensorMultiplyScalar(scaledVariance, scale), scale);
         }
 
