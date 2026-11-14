@@ -122,6 +122,23 @@ public class FederatedFloatRangeReviewTests
     }
 
     [Fact]
+    public void OneShotWeightedAverage_TotalsSampleCountsAboveTheIntRange()
+    {
+        // 1e9 + 2e9 samples is past int.MaxValue: the total is a double, not a checked int sum.
+        var trainer = new OneShotFederatedTrainer<float>(aggregationMode: OneShotAggregationMode.WeightedAverage);
+        var clients = new Dictionary<int, Dictionary<string, float[]>>
+        {
+            [0] = new Dictionary<string, float[]> { ["w"] = new[] { 3f } },
+            [1] = new Dictionary<string, float[]> { ["w"] = new[] { 6f } }
+        };
+
+        var merged = trainer.Aggregate(clients, new Dictionary<int, int> { [0] = 1_000_000_000, [1] = 2_000_000_000 });
+
+        // (1e9 * 3 + 2e9 * 6) / 3e9
+        AssertRelative(5.0, merged["w"][0]);
+    }
+
+    [Fact]
     public void SemiAsyncBarrier_NormalizesSampleCountsBeforeWeighting()
     {
         var trainer = new SemiAsyncFederatedTrainer<float>();

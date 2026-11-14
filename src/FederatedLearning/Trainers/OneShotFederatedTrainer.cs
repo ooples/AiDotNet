@@ -107,7 +107,7 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
         Dictionary<int, Dictionary<string, T[]>> clientModels,
         Dictionary<int, int> clientSampleCounts)
     {
-        double totalSamples = clientSampleCounts.Values.Sum();
+        double totalSamples = clientSampleCounts.Values.Sum(count => (double)count);
         var result = new Dictionary<string, T[]>();
 
         // Use first client as template for layer structure.

@@ -184,7 +184,7 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
         }
 
         // FedAvg-style weighted average at the barrier using client sample counts.
-        double totalSamples = clientSampleCounts.Values.Sum();
+        double totalSamples = clientSampleCounts.Values.Sum(count => (double)count);
         if (totalSamples <= 0) totalSamples = clientModels.Count;
         var result = new Dictionary<string, T[]>();
 
