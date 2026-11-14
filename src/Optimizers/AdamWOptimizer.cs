@@ -673,6 +673,45 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVMax = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
+    /// <summary>
+    /// Returns the moment state for <paramref name="param"/>, allocating it on first use.
+    /// </summary>
+    /// <remarks>
+    /// A parameter whose element count changed (a lazy layer replacing its placeholder weights) gets
+    /// fresh zero state, since the old moments describe different elements. A parameter that only
+    /// changed its dimensions (same element count, e.g. <c>[2, 3]</c> to <c>[3, 2]</c>) still holds the
+    /// same elements in the same flat order, so its accumulated moments are carried over into the new
+    /// shape rather than being zeroed while <c>_tapeStep</c> (and so the bias correction) keeps
+    /// counting.
+    /// </remarks>
+    private static Tensor<T> GetOrCreateTapeMomentState(
+        ConcurrentDictionary<Tensor<T>, Tensor<T>> states,
+        Tensor<T> param,
+        bool onDevice)
+    {
+        if (states.TryGetValue(param, out var state))
+        {
+            if (state._shape.SequenceEqual(param._shape))
+            {
+                return state;
+            }
+
+            if (state.Length == param.Length)
+            {
+                // Host tensor: the device step promotes host-resident moments on its next use, and
+                // reading the old state here downloads it if it was device-resident.
+                var reshaped = CreateOptimizerStateTensor(param._shape, onDevice: false);
+                state.AsSpan().CopyTo(reshaped.AsWritableSpan());
+                states[param] = reshaped;
+                return reshaped;
+            }
+        }
+
+        state = CreateOptimizerStateTensor(param._shape, onDevice);
+        states[param] = state;
+        return state;
+    }
+
     /// <inheritdoc />
     protected override void StepCore(TapeStepContext<T> context)
     {
@@ -720,7 +759,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // advance bias-correction time and distort the next real update.
         if (TryGetClippedAheadGradNormSq(out double preNormSq))
         {
-            if (double.IsNaN(preNormSq) || (double.IsInfinity(preNormSq) && (typeof(T) == typeof(float) || HasAnomalousTapeGradients(context))))
+            // +Infinity can be a single-precision reduction of finite gradients overflowing, so it
+            // is settled by the exact element check for every T, float included.
+            if (double.IsNaN(preNormSq) || (double.IsInfinity(preNormSq) && HasAnomalousTapeGradients(context)))
                 return;
         }
         else if (HasAnomalousTapeGradients(context))
@@ -782,16 +823,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 continue;
             }
 
-            if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
-            {
-                m = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeM[param] = m;
-            }
-            if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
-            {
-                v = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeV[param] = v;
-            }
+            var m = GetOrCreateTapeMomentState(_tapeM, param, gpuAdam);
+            var v = GetOrCreateTapeMomentState(_tapeV, param, gpuAdam);
 
             // Sparse-embedding scatter path (Tensors#553). Same rationale as the
             // AdamOptimizer path — only the ~16 accessed rows of a 250 002-vocab
@@ -867,11 +900,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             Tensor<T> vHatEffective;
             if (_options.UseAMSGrad)
             {
-                if (!_tapeVMax.TryGetValue(param, out var vMax))
-                {
-                    vMax = new Tensor<T>(param._shape);
-                    _tapeVMax[param] = vMax;
-                }
+                // Same shape policy as m and v, so the three states never disagree on shape.
+                var vMax = GetOrCreateTapeMomentState(_tapeVMax, param, onDevice: false);
                 var vMaxNew = Engine.TensorMax(vMax, v);   // max of the RAW v (PyTorch), corrected at use
                 Engine.TensorCopy(vMaxNew, vMax);
                 vHatEffective = Engine.TensorDivideScalar(vMax, biasCorrection2);

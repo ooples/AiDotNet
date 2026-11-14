@@ -831,8 +831,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // Any NaN or infinite gradient makes the sum of squares non-finite. NaN can only come from a NaN
         // gradient; +Infinity can also be a finite gradient whose square overflowed T, so that case alone
         // is settled by the exact element check.
+        // No shortcut for float: the device and engine reductions sum in single precision, so a
+        // finite gradient near 1e20 squares to +Infinity there. Treating that as an anomaly would
+        // skip every such step instead of letting clipping recompute the norm exactly in double.
         if (guardActive && !IsFiniteDouble(globalNormSq)
-            && (typeof(T) == typeof(float) || double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
+            && (double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
         {
             return;
         }
