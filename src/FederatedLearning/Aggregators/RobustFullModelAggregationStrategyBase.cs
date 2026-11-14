@@ -63,6 +63,17 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
     {
         var rows = clientIds.Select(id => clientParameters[id].AsTensor()).ToArray();
         var stacked = Engine.TensorStack(rows, 0);
+
+        // A Byzantine client may send NaN. Array.Sort (the per-coordinate sort this replaced) orders NaN below
+        // every number, so it falls in the trimmed lower tail; the engine sort gives NaN no defined position.
+        // NaN is therefore sorted as -Infinity. (A NaN anywhere makes the total NaN, so the common all-finite
+        // case pays one reduction and no copy.)
+        if (NumOps.IsNaN(Engine.TensorSum(stacked)))
+        {
+            stacked = Engine.TensorNanToNum(
+                stacked, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
+        }
+
         return Engine.TensorSort(stacked, 0, false).Values;
     }
 
@@ -78,8 +89,33 @@ public abstract class RobustFullModelAggregationStrategyBase<T, TInput, TOutput>
     /// Means and clamped (winsorized) means are formed with the 1/count factor folded into the row weights, and
     /// a narrow T (Half, BFloat16) is combined in float, so a client average cannot overflow or saturate.
     /// </summary>
+    /// <remarks>
+    /// Rows with weight 0 are the trimmed order statistics. They are removed before the product rather than
+    /// multiplied by 0: a Byzantine client's +/-Infinity (or NaN) sorts into exactly those rows, and
+    /// 0 * Infinity is NaN, which would poison every coordinate the robust aggregator exists to protect.
+    /// </remarks>
     private protected static Vector<T> CombineOrderStatisticRows(Tensor<T> sorted, double[] rowWeights)
-        => FederatedReductions.WeightedRowSum(sorted, rowWeights);
+    {
+        if (rowWeights.Length != sorted.Shape[0])
+        {
+            throw new ArgumentException(
+                $"Expected {sorted.Shape[0]} row weights, got {rowWeights.Length}.", nameof(rowWeights));
+        }
+
+        int[] kept = Enumerable.Range(0, rowWeights.Length).Where(r => rowWeights[r] != 0.0).ToArray();
+        if (kept.Length == rowWeights.Length)
+        {
+            return FederatedReductions.WeightedRowSum(sorted, rowWeights);
+        }
+
+        if (kept.Length == 0)
+        {
+            return new Vector<T>(sorted.Shape[1]);
+        }
+
+        var keptRows = Engine.TensorIndexSelect(sorted, Vector<int>.Wrap(kept).AsTensor(), 0);
+        return FederatedReductions.WeightedRowSum(keptRows, kept.Select(r => rowWeights[r]).ToArray());
+    }
 
     /// <summary>Row weights that average rows [<paramref name="start"/>, <paramref name="start"/> + <paramref name="count"/>) of <paramref name="rows"/> rows.</summary>
     private protected static double[] BlockMeanWeights(int rows, int start, int count)
