@@ -134,6 +134,14 @@ $script:SelectionControlPaths = @(
     '.github/workflows/test-impact-map.yml',
     '.github/workflows/ci-shard-closure-policy.yml'
 )
+# Workflows that take part in the validation pipeline without choosing shards: full validation.
+#   - resume-deferred-ci.yml re-runs the deferred jobs of a Build & SonarCloud run once the pull request run it
+#     waits for completes, so it decides when post-merge validation executes.
+# Every file under .github/workflows is in exactly one of SelectionControlPaths, this list and
+# NonRuntimeWorkflowPaths; Assert-WorkflowsClassified fails the self-test for a file in none of them.
+$script:PipelineWorkflowPaths = @(
+    '.github/workflows/resume-deferred-ci.yml'
+)
 # Build-time code: the source generators the test project loads as an analyzer. It runs inside the
 # compiler, so runtime coverage never records it, yet one edit can rewrite thousands of generated
 # test classes across every ModelFamily shard. No coverage-derived routing can bound that.
@@ -170,11 +178,35 @@ $script:IndependentToolPaths = @(
     'tools/TestImpact/Test-RequiredArtifactResume.ps1',
     'tools/TestImpact/Test-CiImpactWorkflow.ps1'
 )
+# Workflows independent of the test pipeline: not sonarcloud.yml or the map workflow, not called by them
+# (workflow_call), defining nothing the test jobs run, and producing neither the coverage map nor a selection
+# input. Each has its own triggers, so changing one cannot change what a shard executes. Read before listing:
+#   - deploys, release, website and docs: azure-functions-deploy, deploy-serving, deploy-website, docs, docs-wiki,
+#     release-please, samples, ci-website, website-alert, website-claims, website-e2e, website-health, and the three
+#     *.yml.disabled release files (GitHub does not load them at all; re-enabling one is a rename to a new path,
+#     which is unclassified until listed).
+#   - linting and review: codacy, commitlint, commitlint-fix, pr-title-lint, dotnet-format-autofix,
+#     copilot-review-gate.
+#   - code scanning: codeql.yml. It is not in this tree yet: #2585 moves both CodeQL jobs out of sonarcloud.yml
+#     into it (push to master, nightly, manual dispatch; no pull-request trigger, no workflow_call, only
+#     third-party actions). Listed ahead of time, as read on that branch, so the two changes can merge in either
+#     order; a listed path with no file is allowed.
+#   - cancel and report helpers: cancel-on-pr-close and cancel-superseded-merged-runs only cancel runs;
+#     cancellation-report runs after a cancelled run and explains it. None can make a shard pass or be skipped.
+#   - separate checks with their own jobs and triggers: layer-factory-architecture, recurrent-foundations,
+#     tts-paper-contracts, test-attribution-canary, self-hosted-routing-check (manual dispatch).
+#   - nightlies: cross-isa-agreement-nightly, heavy-timeout-nightly, paper-fidelity-nightly,
+#     model-performance-census.
+# The scripts they run stay classified by their own paths (.github/scripts, .github/actions, tools/TestImpact).
 $script:NonRuntimeWorkflowPaths = @(
+    '.github/workflows/automated-release.yml.disabled',
     '.github/workflows/azure-functions-deploy.yml',
     '.github/workflows/cancel-on-pr-close.yml',
+    '.github/workflows/cancel-superseded-merged-runs.yml',
+    '.github/workflows/cancellation-report.yml',
     '.github/workflows/ci-website.yml',
     '.github/workflows/codacy.yml',
+    '.github/workflows/codeql.yml',
     '.github/workflows/commitlint-fix.yml',
     '.github/workflows/commitlint.yml',
     '.github/workflows/copilot-review-gate.yml',
@@ -185,10 +217,22 @@ $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/docs.yml',
     '.github/workflows/dotnet-format-autofix.yml',
     '.github/workflows/heavy-timeout-nightly.yml',
+    '.github/workflows/layer-factory-architecture.yml',
     '.github/workflows/model-performance-census.yml',
+    '.github/workflows/paper-fidelity-nightly.yml',
     '.github/workflows/pr-title-lint.yml',
+    '.github/workflows/publish.yml.disabled',
+    '.github/workflows/recurrent-foundations.yml',
     '.github/workflows/release-please.yml',
-    '.github/workflows/samples.yml'
+    '.github/workflows/release.yml.disabled',
+    '.github/workflows/samples.yml',
+    '.github/workflows/self-hosted-routing-check.yml',
+    '.github/workflows/test-attribution-canary.yml',
+    '.github/workflows/tts-paper-contracts.yml',
+    '.github/workflows/website-alert.yml',
+    '.github/workflows/website-claims.yml',
+    '.github/workflows/website-e2e.yml',
+    '.github/workflows/website-health.yml'
 )
 
 function Test-SelectionControl {
@@ -456,6 +500,46 @@ function Assert-NonRuntimeDirectories {
         if ($compilable) {
             throw ("$entry is treated as non-runtime but now contains compilable code " +
                 "($($compilable.FullName)); remove it from NonRuntimeDirectories or move the code.")
+        }
+    }
+}
+
+<#
+.SYNOPSIS
+Fails when a file under .github/workflows has not been classified, or a classification is contradicted by the tree.
+
+.DESCRIPTION
+Every workflow file belongs to exactly one list: selection control (SelectionControlPaths), pipeline
+(PipelineWorkflowPaths) or independent (NonRuntimeWorkflowPaths). An unlisted file escalates, which is safe but
+silent and permanent, and a file listed as independent that the pipeline calls would be skipped wrongly. So a new
+or renamed workflow fails this check until someone reads it and lists it, and an independent workflow that a
+pipeline workflow calls as a reusable workflow is rejected.
+#>
+function Assert-WorkflowsClassified {
+    param([string] $Root = (Get-Location).Path)
+    $directory = Join-Path $Root '.github/workflows'
+    if (-not (Test-Path -LiteralPath $directory)) { return }
+    $pipeline = @($script:SelectionControlPaths | Where-Object { $_.StartsWith('.github/workflows/', [StringComparison]::Ordinal) }) +
+        @($script:PipelineWorkflowPaths)
+    $unclassified = [System.Collections.Generic.List[string]]::new()
+    foreach ($file in @(Get-ChildItem -LiteralPath $directory -File -Recurse | Sort-Object FullName)) {
+        $relative = '.github/workflows/' + $file.FullName.Substring($directory.Length).TrimStart('\', '/').Replace('\', '/')
+        $lists = @(@($relative -cin $pipeline), @($relative -cin $script:NonRuntimeWorkflowPaths) | Where-Object { $_ }).Count
+        if ($lists -eq 0) { [void] $unclassified.Add($relative) }
+        elseif ($lists -gt 1) { throw "$relative is listed both as a pipeline workflow and as an independent one." }
+    }
+    if ($unclassified.Count -gt 0) {
+        throw ("unclassified workflow file(s): $($unclassified -join ', '). Read each one and add it to " +
+            'NonRuntimeWorkflowPaths (independent of the test pipeline) or PipelineWorkflowPaths (takes part in it) in Select-Shards.ps1.')
+    }
+    foreach ($caller in $pipeline) {
+        $path = Join-Path $Root $caller
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        foreach ($match in [regex]::Matches((Get-Content -LiteralPath $path -Raw), '(?m)^\s*(?:-\s*)?uses:\s*["'']?\./(\.github/workflows/[^\s"''@#]+)')) {
+            $callee = $match.Groups[1].Value
+            if ($callee -cin $script:NonRuntimeWorkflowPaths) {
+                throw "$callee is listed as independent, but the pipeline workflow $caller calls it."
+            }
         }
     }
 }
@@ -2386,6 +2470,68 @@ if ($SelfTest) {
         }
     } finally {
         Remove-Item -LiteralPath $tripwire -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # Every workflow file is classified. Against this checkout first: a workflow added without being read and
+    # listed fails here, so it is neither silently independent nor escalating for ever.
+    try { Assert-WorkflowsClassified -Root $repositoryRoot } catch {
+        [void] $failures.Add("workflow classification: $_")
+    }
+    foreach ($workflow in $script:NonRuntimeWorkflowPaths) {
+        Assert-True ((Get-ChangedPathImpact -Path $workflow) -eq [ChangedPathImpact]::NonRuntime) `
+            "an independent workflow is not classified non-runtime: $workflow"
+        $r = Select-ImpactedShards -Map $map -Changed @{ $workflow = @(1, 2) }
+        Assert-True (-not $r.Escalate -and -not $r.RequiresValidation -and $r.Shards.Count -eq 0) `
+            "an independent workflow selected shards or escalated: $workflow"
+    }
+    foreach ($workflow in @($script:PipelineWorkflowPaths) + @($script:SelectionControlPaths)) {
+        $r = Select-ImpactedShards -Map $map -Changed @{ $workflow = @(1, 2) }
+        Assert-True ($r.Escalate -and $r.RequiresValidation) "a pipeline workflow did not escalate: $workflow"
+    }
+    Assert-True ((Get-ChangedPathImpact -Path '.github/workflows/resume-deferred-ci.yml') -eq [ChangedPathImpact]::FullValidation) `
+        'the deferred-validation reconciler is not full validation'
+    foreach ($lookalike in '.github/workflows/release.yml', '.github/workflows/publish.yml', '.github/workflows/website-e2e.yml.bak',
+        '.github/workflows/nested/website-health.yml') {
+        Assert-True ((Get-ChangedPathImpact -Path $lookalike) -eq [ChangedPathImpact]::FullValidation) `
+            "a workflow that is not on the list was treated as independent: $lookalike"
+    }
+    # And proved to fire: a tree holding exactly the classified files passes, one more file fails, a re-enabled
+    # release workflow fails, and an independent workflow the pipeline calls fails.
+    $workflowRoot = Join-Path ([IO.Path]::GetTempPath()) ("workflows-" + [Guid]::NewGuid().ToString('n'))
+    try {
+        [void] (New-Item -ItemType Directory -Path (Join-Path $workflowRoot '.github/workflows') -Force)
+        foreach ($workflow in @($script:NonRuntimeWorkflowPaths) + @($script:PipelineWorkflowPaths) + @($script:SelectionControlPaths)) {
+            Set-Content -LiteralPath (Join-Path $workflowRoot $workflow) -Value 'name: fixture'
+        }
+        try { Assert-WorkflowsClassified -Root $workflowRoot } catch {
+            [void] $failures.Add("workflow classification rejected a fully classified tree: $_")
+        }
+        foreach ($added in 'brand-new.yml', 'release.yml', 'notes.txt') {
+            $addedPath = Join-Path $workflowRoot ".github/workflows/$added"
+            Set-Content -LiteralPath $addedPath -Value 'name: unread'
+            $message = ''
+            try { Assert-WorkflowsClassified -Root $workflowRoot } catch { $message = [string] $_ }
+            Assert-True ($message -like "*unclassified workflow file(s): .github/workflows/$added*") `
+                "a workflow file added without being classified was accepted: $added"
+            Remove-Item -LiteralPath $addedPath -Force
+        }
+        # A listed workflow whose file is not there (codeql.yml until #2585 lands) is not an error, and a change
+        # to it selects nothing from the day it appears.
+        Remove-Item -LiteralPath (Join-Path $workflowRoot '.github/workflows/codeql.yml') -Force
+        try { Assert-WorkflowsClassified -Root $workflowRoot } catch {
+            [void] $failures.Add("workflow classification rejected a listed workflow with no file yet: $_")
+        }
+        Assert-True ((Get-ChangedPathImpact -Path '.github/workflows/codeql.yml') -eq [ChangedPathImpact]::NonRuntime -and
+            (Get-ChangedPathImpact -Path '.github/workflows/codeql-analysis.yml') -eq [ChangedPathImpact]::FullValidation) `
+            'the planned code-scanning workflow is not independent, or a workflow named like it is'
+        Set-Content -LiteralPath (Join-Path $workflowRoot '.github/workflows/sonarcloud.yml') -Value @(
+            'jobs:', '  e2e:', '    uses: ./.github/workflows/website-e2e.yml')
+        $message = ''
+        try { Assert-WorkflowsClassified -Root $workflowRoot } catch { $message = [string] $_ }
+        Assert-True ($message -like '*website-e2e.yml is listed as independent, but the pipeline workflow*') `
+            'an independent workflow called by the pipeline was accepted'
+    } finally {
+        Remove-Item -LiteralPath $workflowRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 
     # A build-only directory is trusted only while nothing outside it consumes it. Proved against
