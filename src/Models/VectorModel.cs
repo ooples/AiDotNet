@@ -326,8 +326,14 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         var predictionGradient = Tensor<T>.FromVector(loss.ComputeGradient(predictions, target));
 
         // ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred and ∂L/∂intercept = (1/n) * sum(∂L/∂y_pred). The 1/n is
-        // applied before the sums, so the gradient cannot overflow in low precision when the sums would.
-        var scaledGradient = Engine.TensorDivideScalar(predictionGradient, NumOps.FromDouble(input.Rows));
+        // applied before the sums, so the gradient cannot overflow in low precision when the sums would. The
+        // per-row gradients are first divided by their largest magnitude and that scale is restored after the sums:
+        // dividing small gradients by n directly rounds them to zero in a narrow type (2^-12 / 8192 in Half), and
+        // the sum of those zeros lost the whole gradient.
+        T peak = Engine.TensorMaxValue(Engine.TensorAbs(predictionGradient));
+        bool rescale = NumOps.GreaterThan(peak, NumOps.Zero) && !NumOps.IsInfinity(peak);
+        var normalized = rescale ? Engine.TensorDivideScalar(predictionGradient, peak) : predictionGradient;
+        var scaledGradient = Engine.TensorDivideScalar(normalized, NumOps.FromDouble(input.Rows));
         var weightGradient = Engine.Reshape(
             Engine.TensorMatMul(
                 Engine.TensorTranspose(Tensor<T>.FromMatrix(input)),
@@ -335,7 +341,8 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             new[] { Coefficients.Length });
         var interceptGradient = new Tensor<T>(new[] { 1 });
         Engine.TensorFill(interceptGradient, Engine.TensorSum(scaledGradient));
-        return Engine.TensorConcatenate(new[] { weightGradient, interceptGradient }, 0).ToVector();
+        var gradient = Engine.TensorConcatenate(new[] { weightGradient, interceptGradient }, 0);
+        return (rescale ? Engine.TensorMultiplyScalar(gradient, peak) : gradient).ToVector();
     }
 
     /// <summary>
@@ -1113,7 +1120,17 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         // PD(x_j) = coefficient_j * x_j (for a linear model with no intercept)
         //
         // Each feature's grid spans [-1, 1] (no training data is retained); a one-point grid is its start, -1.
-        var grid = Engine.TensorLinspace(NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0), gridResolution);
+        // The engine's linspace needs at least two points, so the one-point grid is built directly.
+        Tensor<T> grid;
+        if (gridResolution == 1)
+        {
+            grid = new Tensor<T>(new[] { 1 });
+            Engine.TensorFill(grid, NumOps.FromDouble(-1.0));
+        }
+        else
+        {
+            grid = Engine.TensorLinspace(NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0), gridResolution);
+        }
         var gridValues = new Dictionary<int, Vector<T>>();
         foreach (int feature in features)
         {

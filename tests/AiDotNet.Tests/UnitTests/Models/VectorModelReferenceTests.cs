@@ -89,6 +89,31 @@ public class VectorModelReferenceTests
     }
 
     [Fact]
+    public void ComputeGradients_Half_SmallGradientsSurviveTheAverage()
+    {
+        // 8192 rows of x = 1 predicting 0 against a target of -1. The MSE gradient is 2 * 1 / 8192 = 2^-12 per row,
+        // and (1/n) X^T g = 2^-12 as well. Dividing each row's 2^-12 by 8192 first gives 2^-25, which is 0 in Half,
+        // so the whole gradient came back as 0.
+        const int rows = 8192;
+        var x = new Matrix<Half>(rows, 1);
+        var target = new Vector<Half>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            x[i, 0] = (Half)1;
+            target[i] = (Half)(-1);
+        }
+
+        using var model = new VectorModel<Half>(new Vector<Half>(new[] { (Half)0 }));
+
+        var gradients = model.ComputeGradients(x, target);
+
+        double expected = 1.0 / 4096;
+        Assert.Equal(2, gradients.Length);
+        Assert.Equal(expected, (double)gradients[0], expected * 0.02);
+        Assert.Equal(expected, (double)gradients[1], expected * 0.02);
+    }
+
+    [Fact]
     public void Train_Half_SingularValueBelowHalfPrecision_IsTruncated()
     {
         // X = [diag(1, 1e-4); -diag(1, 1e-4)] has orthogonal, already-centred columns, so its singular values are
