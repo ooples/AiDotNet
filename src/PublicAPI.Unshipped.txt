@@ -22949,6 +22949,7 @@ AiDotNet.Enums.AutoAttackVersion.Standard = 0 -> AiDotNet.Enums.AutoAttackVersio
 AiDotNet.Enums.AutoAttackVersion.Plus = 1 -> AiDotNet.Enums.AutoAttackVersion
 AiDotNet.Models.Options.AutoAttackOptions<T>
 AiDotNet.Models.Options.AutoAttackOptions<T>.AutoAttackOptions() -> void
+AiDotNet.Models.Options.AutoAttackOptions<T>.AutoAttackOptions(AiDotNet.Models.Options.AutoAttackOptions<T>! other) -> void
 AiDotNet.Models.Options.AutoAttackOptions<T>.Version.get -> AiDotNet.Enums.AutoAttackVersion
 AiDotNet.Models.Options.AutoAttackOptions<T>.Version.set -> void
 AiDotNet.Models.Options.AutoAttackOptions<T>.TargetClasses.get -> int
