@@ -329,8 +329,12 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         if (p <= 0) return next;
         if (!IsTrainingMode)
             return Engine.TensorAdd(Engine.TensorMultiplyScalar(previous, NumOps.FromDouble(p)), Engine.TensorMultiplyScalar(next, NumOps.FromDouble(1 - p)));
-        var mask = new Tensor<T>(next._shape);
-        for (int i = 0; i < mask.Length; i++) mask[i] = _zoneoutRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        // A per-step draw: a compiled training plan refills the zoneout mask before every replay.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(next._shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = _zoneoutRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        });
         var keep = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, previous), Engine.TensorMultiply(keep, next));
     }

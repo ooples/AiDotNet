@@ -403,8 +403,11 @@ public class SyntheticTabularGeneratorIntegrationTests
         AssertAuxLayerListPreserved<FullyConnectedLayer<double>>(generator, restored, "_studentLayers");
         AssertNestedAuxLayerListsPreserved<FullyConnectedLayer<double>>(
             generator, restored, "_teacherLayers");
-        Assert.Equal(GetPrivateField<double[]>(generator, "_columnMin"), GetPrivateField<double[]>(restored, "_columnMin"));
-        Assert.Equal(GetPrivateField<double[]>(generator, "_columnMax"), GetPrivateField<double[]>(restored, "_columnMax"));
+        // The fitted column bounds are held in T since #2465.
+        Assert.Equal(GetPrivateField<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(generator, "_columnMin").ToArray(),
+            GetPrivateField<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(restored, "_columnMin").ToArray());
+        Assert.Equal(GetPrivateField<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(generator, "_columnMax").ToArray(),
+            GetPrivateField<AiDotNet.Tensors.LinearAlgebra.Vector<double>>(restored, "_columnMax").ToArray());
         var originalParameters = generator.GetParameters();
         var restoredParameters = restored.GetParameters();
         Assert.Equal(originalParameters.Length, restoredParameters.Length);

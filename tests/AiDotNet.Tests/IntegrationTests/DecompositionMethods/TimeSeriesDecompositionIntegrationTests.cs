@@ -477,9 +477,11 @@ public class TimeSeriesDecompositionIntegrationTests
     {
         // With s < 2 the sum over seasonal frequencies j = 1 .. s - 1 is empty, so the filter is
         // zero; scaling it by 1 / (s - 1) gave 0 * Infinity = NaN for s = 1.
-        var decomp = new SEATSDecomposition<double>(CreateSeasonalTimeSeries());
-        var model = new AiDotNet.TimeSeries.SARIMAModel<double>(
-            new SARIMAOptions<double> { SeasonalPeriod = seasonalPeriod });
+        var decomp = new SEATSDecomposition<double>(
+            CreateSeasonalTimeSeries(),
+            new SARIMAOptions<double> { SeasonalPeriod = seasonalPeriod },
+            SEATSAlgorithmType.Canonical);
+        var model = decomp.CreateSarimaModel();
         var design = typeof(SEATSDecomposition<double>).GetMethod(
             "DesignCanonicalSeasonalFilter",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -491,6 +493,13 @@ public class TimeSeriesDecompositionIntegrationTests
         for (int i = 0; i < filter.Length; i++)
         {
             Assert.Equal(0.0, filter[i]);
+        }
+
+        // A series with no seasonal frequencies decomposes into trend and irregular only.
+        var seasonal = decomp.GetComponentAsVector(DecompositionComponentType.Seasonal);
+        for (int i = 0; i < seasonal.Length; i++)
+        {
+            Assert.Equal(0.0, seasonal[i]);
         }
     }
 

@@ -47,10 +47,53 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         : base(timeSeries)
     {
         _ = forecastHorizon; // kept for API compatibility
-        _sarimaOptions = sarimaOptions ?? new();
+        _sarimaOptions = NormalizeSeasonality(sarimaOptions ?? new());
         _algorithm = algorithm;
         Decompose();
     }
+
+    /// <summary>
+    /// Returns the SARIMA specification SEATS fits for the given options.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A seasonal period below 2 means the series has no seasonal frequencies: period 1 is annual (or
+    /// otherwise non-seasonal) data, which X-13ARIMA-SEATS decomposes into trend and irregular only.
+    /// SARIMA itself rejects period 1 (statsmodels: "Seasonal periodicity must be greater than 1."), so
+    /// such a series is fitted with a non-seasonal ARIMA: the period and the seasonal orders are zeroed.
+    /// The caller's options are not modified.
+    /// </para>
+    /// </remarks>
+    private static SARIMAOptions<T> NormalizeSeasonality(SARIMAOptions<T> options)
+    {
+        if (options.SeasonalPeriod < 0)
+        {
+            throw new ArgumentException("Seasonal period must be non-negative.", nameof(options));
+        }
+
+        if (options.SeasonalPeriod >= 2)
+        {
+            return options;
+        }
+
+        return new SARIMAOptions<T>(options)
+        {
+            SeasonalPeriod = 0,
+            SeasonalP = 0,
+            SeasonalD = 0,
+            SeasonalQ = 0
+        };
+    }
+
+    /// <summary>
+    /// Gets whether the decomposed series has seasonal frequencies (a seasonal period of at least 2).
+    /// </summary>
+    private bool IsSeasonal => _sarimaOptions.SeasonalPeriod >= 2;
+
+    /// <summary>
+    /// Creates the (untrained) SARIMA model SEATS fits to the series.
+    /// </summary>
+    internal SARIMAModel<T> CreateSarimaModel() => new SARIMAModel<T>(_sarimaOptions);
 
     /// <summary>
     /// Performs the time series decomposition based on the selected algorithm.
@@ -84,7 +127,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeStandard()
     {
         // Step 1: Fit SARIMA model
-        var sarimaModel = new SARIMAModel<T>(_sarimaOptions);
+        var sarimaModel = CreateSarimaModel();
         sarimaModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
         // Step 2: Extract components
@@ -109,7 +152,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeCanonical()
     {
         // Step 1: Fit SARIMA model
-        var sarimaModel = new SARIMAModel<T>(_sarimaOptions);
+        var sarimaModel = CreateSarimaModel();
         sarimaModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
         // Step 2: Extract components using canonical decomposition
@@ -134,7 +177,7 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeBurman()
     {
         // Step 1: Fit SARIMA model
-        var sarimaModel = new SARIMAModel<T>(_sarimaOptions);
+        var sarimaModel = CreateSarimaModel();
         sarimaModel.Train(new Matrix<T>(TimeSeries.Length, 1), TimeSeries);
 
         // Step 2: Extract components using Burman's method
@@ -501,6 +544,12 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
         // Design the Burman seasonal filter:
         // coeff[k] = (1 / 2pi) * integral_0^2pi cos(k f) / S_s(f) df, as a 1000-step left Riemann sum.
         int _filterLength = _seasonalPeriod * (Math.Max(_seasonalArOrder, _seasonalMaOrder) + 1);
+        if (_seasonalPeriod < 2)
+        {
+            // No seasonal frequencies: the seasonal filter is empty and passes no signal.
+            return new Vector<T>(0);
+        }
+
         const int steps = 1000;
         T stepSize = NumOps.Divide(NumOps.FromDouble(2 * Math.PI), NumOps.FromDouble(steps));
         var grid = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, steps, 1), stepSize);
@@ -632,6 +681,12 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A vector representing the seasonal component.</returns>
     private Vector<T> ExtractSeasonalComponent(SARIMAModel<T> model)
     {
+        if (!IsSeasonal)
+        {
+            // A non-seasonal series has no seasonal component.
+            return new Vector<T>(TimeSeries.Length);
+        }
+
         // Extract seasonal component using the seasonal part of the SARIMA model
         var _seasonalOptions = new SARIMAOptions<T>
         {

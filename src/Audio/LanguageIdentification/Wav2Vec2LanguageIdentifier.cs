@@ -405,6 +405,13 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => ForwardNative(PreprocessAudio(input));
 
+    /// <summary>
+    /// The training forward draws its dropout masks and LayerDrop decisions on the host from the model's
+    /// generator every step, which a compiled plan would freeze at the traced step's draws; identically seeded
+    /// models trained through the plan to different weights.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

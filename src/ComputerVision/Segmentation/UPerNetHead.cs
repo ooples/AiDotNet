@@ -195,9 +195,8 @@ internal sealed class SegmentationClassifier<T>
         if (training && Dropout > 0)
         {
             // nn.Dropout2d: whole channels.
-            var mask = new Tensor<T>(new[] { x.Shape[0], x.Shape[1], 1, 1 });
-            var keep = NumOps.FromDouble(1.0 / (1.0 - Dropout));
-            for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < Dropout ? NumOps.Zero : keep;
+            // A per-step draw, so a compiled training plan redraws it on every replay.
+            var mask = AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(new[] { x.Shape[0], x.Shape[1], 1, 1 }, random, Dropout);
             x = _engine.TensorMultiply(x, _engine.TensorBroadcastTo(mask, x.Shape.ToArray()));
         }
         return Conv.Forward(x);

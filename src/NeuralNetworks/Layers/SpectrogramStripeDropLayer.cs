@@ -68,12 +68,21 @@ public partial class SpectrogramStripeDropLayer<T> : LayerBase<T>
                 $"SpectrogramStripeDropLayer expects [batch, channels, time, frequency]; got rank {input.Rank}.", nameof(input));
         if (!IsTrainingMode || (_timeStripes == 0 && _freqStripes == 0)) return input;
 
+        // The mask is a per-step draw, so a compiled training plan refills it before every replay instead of
+        // replaying the traced step's stripes for the whole run.
+        int batch = input.Shape[0], channels = input.Shape[1], time = input.Shape[2], freq = input.Shape[3];
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(input._shape, m => FillMask(m, batch, channels, time, freq));
+        return Engine.TensorMultiply(input, mask);
+    }
+
+    // The seed comes from RandomSeed and a counter that advances per fill: once per eager forward and once per
+    // compiled replay alike, so identically seeded layers draw identical stripes at the same step.
+    private void FillMask(Tensor<T> mask, int batch, int channels, int time, int freq)
+    {
         long counter = System.Threading.Interlocked.Increment(ref _forwardCounter);
         var random = RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
             : RandomHelper.CreateSecureRandom();
-
-        int batch = input.Shape[0], channels = input.Shape[1], time = input.Shape[2], freq = input.Shape[3];
         var keepTime = new bool[batch, time];
         var keepFreq = new bool[batch, freq];
         for (int b = 0; b < batch; b++)
@@ -83,14 +92,13 @@ public partial class SpectrogramStripeDropLayer<T> : LayerBase<T>
             Drop(random, _timeDropWidth, _timeStripes, time, b, keepTime);
             Drop(random, _freqDropWidth, _freqStripes, freq, b, keepFreq);
         }
-
-        var mask = new Tensor<T>(input._shape);
+        var span = mask.AsWritableSpan();
+        int i = 0;
         for (int b = 0; b < batch; b++)
             for (int c = 0; c < channels; c++)
                 for (int t = 0; t < time; t++)
-                    for (int f = 0; f < freq; f++)
-                        if (keepTime[b, t] && keepFreq[b, f]) mask[b, c, t, f] = NumOps.One;
-        return Engine.TensorMultiply(input, mask);
+                    for (int f = 0; f < freq; f++, i++)
+                        span[i] = keepTime[b, t] && keepFreq[b, f] ? NumOps.One : NumOps.Zero;
     }
 
     private static void Drop(Random random, int dropWidth, int stripes, int length, int b, bool[,] keep)

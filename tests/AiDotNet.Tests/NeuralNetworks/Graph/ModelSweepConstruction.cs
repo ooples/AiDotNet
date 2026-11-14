@@ -16,6 +16,46 @@ namespace AiDotNet.Tests.NeuralNetworks.Graph;
 /// </remarks>
 internal static class ModelSweepConstruction
 {
+    /// <summary>
+    /// The architecture-first constructor a sweep builds <paramref name="closed"/> through: every other parameter has a
+    /// default or is an options type the generator can bound, preferring the overload that takes the most bounded options.
+    /// </summary>
+    /// <remarks>
+    /// A model that pairs <c>(architecture)</c> with <c>(architecture, options)</c>, as RS0026 requires once another public
+    /// overload also has optional parameters, has no options parameter with a default. Taking the first all-defaults
+    /// overload then built Vevo, NaturalSpeech3 and the TTS AudioPaLM at paper scale through <c>(architecture)</c>, past
+    /// the sweep's construction timeout, while the options overload builds them bounded.
+    /// </remarks>
+    internal static ConstructorInfo? FindArchitectureConstructor(Type closed, Type architectureType)
+    {
+        ConstructorInfo? best = null;
+        int bestOptions = -1;
+        foreach (var ctor in closed.GetConstructors())
+        {
+            var ps = ctor.GetParameters();
+            if (ps.Length == 0 || ps[0].ParameterType != architectureType) continue;
+            int bounded = 0;
+            bool usable = true;
+            for (int i = 1; i < ps.Length && usable; i++)
+            {
+                if (IsBoundable(ps[i].ParameterType)) bounded++;
+                else usable = ps[i].HasDefaultValue;
+            }
+            if (usable && bounded > bestOptions)
+            {
+                best = ctor;
+                bestOptions = bounded;
+            }
+        }
+        return best;
+    }
+
+    private static bool IsBoundable(Type parameterType)
+    {
+        var type = Nullable.GetUnderlyingType(parameterType) ?? parameterType;
+        return type.IsClass && type != typeof(string) && AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(type) is not null;
+    }
+
     /// <summary>The arguments for an architecture-first constructor whose other parameters all have defaults.</summary>
     internal static object?[] Arguments(ParameterInfo[] parameters, object architecture)
     {

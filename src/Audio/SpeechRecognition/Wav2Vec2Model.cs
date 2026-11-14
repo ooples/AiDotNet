@@ -597,10 +597,8 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         var hidden = output.Hidden;
         if (training && _options.FinalDropout > 0)
         {
-            var mask = new Tensor<T>(hidden._shape);
-            var keep = NumOps.FromDouble(1.0 / (1.0 - _options.FinalDropout));
-            for (int i = 0; i < mask.Length; i++) mask[i] = _random.NextDouble() < _options.FinalDropout ? NumOps.Zero : keep;
-            hidden = Engine.TensorMultiply(hidden, mask);
+            // A per-step draw, so a compiled training plan redraws it on every replay.
+            hidden = Engine.TensorMultiply(hidden, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(hidden._shape, _random, _options.FinalDropout));
         }
         int batch = hidden.Shape[0], frames = hidden.Shape[1];
         var logits = Engine.Reshape(_ctcHead.Forward(Engine.Reshape(hidden, new[] { batch * frames, hidden.Shape[2] })), new[] { batch, frames, _vocabSize });

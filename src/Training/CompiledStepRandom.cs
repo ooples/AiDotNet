@@ -98,6 +98,38 @@ public static class CompiledStepRandom<T>
         return tensor;
     }
 
+    /// <summary>
+    /// An inverted-dropout mask of <paramref name="shape"/>, redrawn on every compiled replay: each entry is 0 with
+    /// probability <paramref name="rate"/>, otherwise <c>1 / (1 - rate)</c>, one <see cref="Random.NextDouble"/> per
+    /// entry in row-major order, as an eager host loop draws it.
+    /// </summary>
+    internal static Tensor<T> InvertedDropoutMask(int[] shape, Random random, double rate)
+    {
+        Guard.NotNull(random);
+        T keep = NumOps.FromDouble(1.0 / (1.0 - rate));
+        return Draw(shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        });
+    }
+
+    /// <summary>
+    /// A per-step 0/1 gate (shape <c>[1]</c>) that is 0 with probability <paramref name="dropProbability"/>, redrawn on
+    /// every compiled replay: LayerDrop as <c>gate * layer(x) + (1 - gate) * x</c>, which is exactly <c>layer(x)</c> or
+    /// <c>x</c>, keeps every layer in the traced graph instead of baking the traced step's choice of layers into it.
+    /// </summary>
+    internal static Tensor<T> KeepGate(Random random, double dropProbability)
+    {
+        Guard.NotNull(random);
+        return Draw(new[] { 1 }, g => g.AsWritableSpan()[0] = random.NextDouble() < dropProbability ? NumOps.Zero : NumOps.One);
+    }
+
+    /// <summary><c>gate * kept + (1 - gate) * skipped</c> for a <see cref="KeepGate"/> gate.</summary>
+    internal static Tensor<T> Gated(IEngine engine, Tensor<T> gate, Tensor<T> kept, Tensor<T> skipped)
+        => engine.TensorAdd(engine.TensorMultiply(kept, gate),
+            engine.TensorMultiply(skipped, engine.ScalarMinusTensor(NumOps.One, gate)));
+
     /// <summary>Suppresses draws on this thread for a forward run only to resolve shapes; dispose to restore.</summary>
     internal static SuppressionScope SuppressDraws() => new SuppressionScope();
 

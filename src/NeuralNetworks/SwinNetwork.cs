@@ -274,8 +274,13 @@ internal sealed class SwinNetwork<T>
     {
         if (!Training || rate <= 0) return x;
         int b = x.Shape[0];
-        var keep = new Tensor<T>(new[] { b, 1, 1 });
-        for (int i = 0; i < b; i++) keep[i, 0, 0] = NumOps.FromDouble(_dropPathRandom.NextDouble() < 1 - rate ? 1.0 / (1 - rate) : 0.0);
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
+        var random = _dropPathRandom;
+        var keep = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { b, 1, 1 }, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(random.NextDouble() < 1 - rate ? 1.0 / (1 - rate) : 0.0);
+        });
         return _engine.TensorMultiply(x, _engine.TensorBroadcastTo(keep, x.Shape.ToArray()));
     }
 

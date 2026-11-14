@@ -55,7 +55,10 @@ public class CoordinateDescentSweepTests
         var initialize = type.GetMethod("InitializeAdaptiveParameters", Private, null,
             new[] { typeof(IFullModel<double, Matrix<double>, Vector<double>>) }, null);
         var derivative = type.GetMethod("CalculatePartialDerivative", Private);
-        var update = type.GetMethod("UpdateSolution", Private);
+        // Typed lookup: the optimizer also inherits GradientBasedOptimizerBase's protected
+        // UpdateSolution(IFullModel, Vector<T>), so a name-only GetMethod is ambiguous.
+        var update = type.GetMethod("UpdateSolution", Private, null,
+            new[] { typeof(IFullModel<double, Matrix<double>, Vector<double>>), inputData.GetType() }, null);
         Assert.NotNull(initialize);
         Assert.NotNull(derivative);
         Assert.NotNull(update);

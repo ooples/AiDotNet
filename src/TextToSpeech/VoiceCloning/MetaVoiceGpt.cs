@@ -127,8 +127,20 @@ internal sealed class MetaVoiceGpt<T>
             if (_speaker is null || speaker.Rank != 2 || speaker.Shape[1] != _config.SpeakerDimension ||
                 (speaker.Shape[0] != 1 && speaker.Shape[0] != time)) throw new ArgumentException("Expected global or per-token speaker features.", nameof(speaker));
             var projected = ForwardLayer(_speaker, speaker);
-            if (training && _config.SpeakerDropout > 0 && (speakerDropoutDraw ?? _random.NextDouble()) < _config.SpeakerDropout)
-                projected = _engine.TensorMultiplyScalar(projected, MathHelper.GetNumericOperations<T>().Zero);
+            if (training && _config.SpeakerDropout > 0)
+            {
+                if (speakerDropoutDraw is double draw)
+                {
+                    if (draw < _config.SpeakerDropout)
+                        projected = _engine.TensorMultiplyScalar(projected, MathHelper.GetNumericOperations<T>().Zero);
+                }
+                else
+                {
+                    // The speaker drop is a per-step 0/1 gate, so a compiled training plan redraws it on every replay
+                    // instead of baking the traced step's choice into its graph.
+                    projected = _engine.TensorMultiply(projected, AiDotNet.Training.CompiledStepRandom<T>.KeepGate(_random, _config.SpeakerDropout));
+                }
+            }
             if (projected.Shape[0] == 1) projected = _engine.TensorTile(projected, new[] { time, 1 });
             hidden = _engine.TensorAdd(hidden, projected);
         }
@@ -185,12 +197,15 @@ internal sealed class MetaVoiceGpt<T>
     {
         if (!training || _config.Dropout == 0) return input;
         var values = masks?.Invoke(name, input.Shape.ToArray());
-        if (values is not null && values.Length != input.Length) throw new ArgumentException("Dropout mask dimensions differ.", nameof(masks));
+        // Without supplied masks the mask is a per-step draw: a compiled training plan refills it before every replay.
+        if (values is null)
+            return _engine.TensorMultiply(input, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(input.Shape.ToArray(), _random, _config.Dropout));
+        if (values.Length != input.Length) throw new ArgumentException("Dropout mask dimensions differ.", nameof(masks));
         var numeric = MathHelper.GetNumericOperations<T>();
         var mask = new Tensor<T>(input.Shape.ToArray()); double keepScale = 1 / (1 - _config.Dropout);
         for (int i = 0; i < mask.Length; i++)
         {
-            double value = values is null ? (_random.NextDouble() < _config.Dropout ? 0 : keepScale) : values[i];
+            double value = values[i];
             if (value != 0 && Math.Abs(value - keepScale) > 1e-12) throw new ArgumentException("Expected a Bernoulli dropout mask with inverse keep scaling.", nameof(masks));
             mask[i] = numeric.FromDouble(value);
         }

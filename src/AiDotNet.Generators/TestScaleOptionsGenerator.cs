@@ -845,8 +845,18 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            if (divides) continue;");
         sb.AppendLine("            int divisor = count;");
         sb.AppendLine("            foreach (int width in widths) divisor = Gcd(divisor, width);");
+        sb.AppendLine("            // Rotary position embeddings rotate dimension pairs, so they reject an odd head width; every paper");
+        sb.AppendLine("            // default has even ones. Halve an even divisor until each width splits into even heads (Vevo's");
+        sb.AppendLine("            // 60- and 48-wide transformers took 4 heads of 15 and 12; 2 heads of 30 and 24 build).");
+        sb.AppendLine("            while (divisor > 1 && divisor % 2 == 0 && !SplitsIntoEvenHeads(widths, divisor)) divisor /= 2;");
         sb.AppendLine("            if (divisor >= 1) head.SetValue(instance, divisor);");
         sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static bool SplitsIntoEvenHeads(global::System.Collections.Generic.List<int> widths, int heads)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        foreach (int width in widths) if (width / heads % 2 != 0) return false;");
+        sb.AppendLine("        return true;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.AppendLine("    private static int Gcd(int a, int b)");
