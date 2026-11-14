@@ -7942,15 +7942,62 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (!mpSkipStep)
             {
                 var fullParams = selectedParameters.ToList();
-                var context = new TapeStepContext<T>(
-                    fullParams,
-                    singleRankGrads,
-                    avgLossT,
-                    lastMb.Input,
-                    lastAlignedTarget,
-                    (inp, _) => ForwardForTraining(inp),
-                    (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, AlignTargetToOutputShape(pred, tgt)), pred),
-                    parameterBuffer: null);
+
+                // Re-evaluation (line search, trust-region ratio tests) recomputes the loss and
+                // gradients through the context's callbacks and compares them with avgLossT and the
+                // accumulated gradients, which cover the whole logical batch. Binding the callbacks
+                // to the last micro-batch alone would make that comparison one micro-batch against
+                // all of them, so with several micro-batches the callbacks replay every one and
+                // return the same token-weighted mean that avgLossT holds.
+                TapeStepContext<T> context;
+                if (count == 1)
+                {
+                    context = new TapeStepContext<T>(
+                        fullParams,
+                        singleRankGrads,
+                        avgLossT,
+                        lastMb.Input,
+                        lastAlignedTarget,
+                        (inp, _) => ForwardForTraining(inp),
+                        (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, AlignTargetToOutputShape(pred, tgt)), pred),
+                        parameterBuffer: null);
+                }
+                else
+                {
+                    var replayBatches = preparedMicroBatches;
+                    Tensor<T> ReplayAccumulatedObjective()
+                    {
+                        Tensor<T>? weightedSum = null;
+                        long replayTokens = 0L;
+                        for (int m = 0; m < replayBatches.Count; m++)
+                        {
+                            var (mbLoss, mbAligned) = ComputeAccumulationMicroBatchObjective(
+                                replayBatches[m].Input, replayBatches[m].Target, loss);
+                            long mbTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(mbAligned);
+                            if (mbTokens <= 0) continue;
+                            var weighted = mbTokens == 1L
+                                ? mbLoss
+                                : ScaleLossByTokenCount(mbLoss, mbTokens);
+                            weightedSum = weightedSum is null ? weighted : Engine.TensorAdd(weightedSum, weighted);
+                            replayTokens += mbTokens;
+                        }
+
+                        return weightedSum is null
+                            ? new Tensor<T>(new[] { 1 })
+                            : Engine.TensorMultiplyScalar(weightedSum, NumOps.FromDouble(1.0 / replayTokens));
+                    }
+
+                    var replayPlaceholder = new Tensor<T>(new[] { 1 });
+                    context = new TapeStepContext<T>(
+                        fullParams,
+                        singleRankGrads,
+                        avgLossT,
+                        replayPlaceholder,
+                        replayPlaceholder,
+                        (_, _) => ReplayAccumulatedObjective(),
+                        (value, _) => value,
+                        parameterBuffer: null);
+                }
                 MarkTrainMutationStarted();
                 resolvedOptimizer.Step(context);
                 InvalidateResidentGpuBuffersForHostStep(selectedParameters);
@@ -7963,6 +8010,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
             if (!wasTraining) SetTrainingMode(false);
         }
+    }
+
+    /// <summary>Weights a micro-batch's scalar loss tensor by its valid-token count (stays on the tape).</summary>
+    private Tensor<T> ScaleLossByTokenCount(Tensor<T> lossTensor, long tokenCount)
+    {
+        return Engine.TensorMultiplyScalar(lossTensor, NumOps.FromDouble(tokenCount));
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ResolveAccumulatedOptimizer(
@@ -8043,9 +8096,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             using var noGrad = new NoGradScope<T>();
             ForwardForTraining(sampleInput);
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
         {
-            // Best-effort warmup; training forward surfaces actionable errors.
+            // Best-effort warmup: the training forward that follows runs the same code and surfaces
+            // the actionable error. Record the cause so a failed initialization is not invisible.
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] {GetType().Name}: lazy-layer warmup forward failed ({ex.GetType().Name}: {ex.Message}); " +
+                "continuing with the training forward.");
         }
         finally
         {
@@ -8929,12 +8986,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             bool hasOverflow = UnscaleAndCheckMixedPrecisionGradients(mpCtx, sources, grads);
             RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
 
+            // Gradient publication goes through the retention gate only. Publishing `grads` directly
+            // as well would copy a full gradient set onto the layer surface even for models above
+            // MaxRetainedGradientScalars, which is the copy that limit exists to prevent.
             if (hasOverflow)
             {
                 foreach (var kvp in grads)
                     RetainStreamingGradient(kvp.Key, kvp.Value);
                 EndStreamingGradientRetention();
-                PublishParameterGradients(grads);
                 return;
             }
 
@@ -8951,7 +9010,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             foreach (var kvp in grads)
                 RetainStreamingGradient(kvp.Key, kvp.Value);
             EndStreamingGradientRetention();
-            PublishParameterGradients(grads);
 
             var ctx = new TapeStepContext<T>(sources, grads, lossValue);
             ApplyStreamingOptimizerFullStep(ctx, resolvedOptimizer, useStreamingDefaults);
@@ -16525,6 +16583,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <see cref="GenerativeAdversarialNetwork{T,TI,TO}.Train"/>) and should not
     /// appear on the public API surface. (PR #1389 CodeRabbit review.)
     /// </remarks>
+    /// <summary>
+    /// Broadcasts Rank 0's initial parameters to this rank if distributed training is active and that
+    /// has not happened yet. Callers of <see cref="BackwardAndStepOnPrecomputedLoss"/> must call this
+    /// before recording their forward: otherwise the first step's forward (and reported loss) on a
+    /// non-root rank uses that rank's own initial weights, while backward and the update apply to the
+    /// weights received from Rank 0.
+    /// </summary>
+    internal void EnsureDistributedInitialParametersSynchronized()
+    {
+        if (_distributedCoordinator is { } coordinator)
+        {
+            coordinator.EnsureInitialParametersSynchronized(
+                CollectModelTrainableTensors(),
+                InvalidateLayerWeightCaches);
+        }
+    }
+
     internal T BackwardAndStepOnPrecomputedLoss(
         GradientTape<T> tape,
         Tensor<T> lossTensor,
@@ -16550,6 +16625,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (_distributedCoordinator is { } precompDistCoord)
         {
+            // Callers synchronize before recording their forward (see
+            // EnsureDistributedInitialParametersSynchronized); for the same parameter list this is
+            // then a no-op. It stays here so a caller that forgot still ends up synchronized.
             precompDistCoord.EnsureInitialParametersSynchronized(trainableParams, InvalidateLayerWeightCaches);
             var distGrads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
             double localLoss = ReadScalarLossAsDouble(lossTensor);
@@ -16563,7 +16641,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 trainableParams,
                 distGrads,
                 opt,
-                _mixedPrecisionContext,
+                // The caller recorded the forward on full-precision weights and the loss was not
+                // multiplied by the loss scale, exactly as on the single-process path below. Passing
+                // the mixed-precision context would make the coordinator divide these gradients by
+                // a scale that was never applied.
+                mixedPrecisionContext: null,
                 restoreFp32Masters: null,
                 syncFp32MastersFromWorking: null,
                 OptimizerRegularizer(opt),

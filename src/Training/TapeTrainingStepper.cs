@@ -802,7 +802,11 @@ internal sealed class TapeTrainingStepper<T>
             parameters,
             accumulated,
             optimizer,
-            ownerNet.ActiveMixedPrecisionContext,
+            // The micro-objectives were differentiated on full-precision weights without loss
+            // scaling (as on the single-process path of EagerAccumulatedObjectiveStep). Passing the
+            // mixed-precision context would make the coordinator divide these gradients by a loss
+            // scale that was never applied.
+            mixedPrecisionContext: null,
             restoreFp32Masters: null,
             syncFp32MastersFromWorking: null,
             regularizer,
@@ -890,9 +894,13 @@ internal sealed class TapeTrainingStepper<T>
                 using var noGrad = new NoGradScope<T>();
                 recomputeForward(input, target);
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
             {
-                // Best-effort warmup; training objective below surfaces actionable failures.
+                // Best-effort warmup: the training objective below runs the same forward and surfaces
+                // the actionable failure. Record the cause so a failed initialization is visible.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[AiDotNet] {distNet.GetType().Name}: lazy-layer warmup forward failed before distributed parameter " +
+                    $"synchronization ({ex.GetType().Name}: {ex.Message}); continuing with the training objective.");
             }
             finally
             {
@@ -1015,9 +1023,13 @@ internal sealed class TapeTrainingStepper<T>
                 using var noGrad = new NoGradScope<T>();
                 recomputeForward(input, target);
             }
-            catch
+            catch (Exception ex) when (ex is not OutOfMemoryException and not OperationCanceledException)
             {
-                // Best-effort warmup.
+                // Best-effort warmup: the training objective below runs the same forward and surfaces
+                // the actionable failure. Record the cause so a failed initialization is visible.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[AiDotNet] {mpNet.GetType().Name}: lazy-layer warmup forward failed before the mixed-precision step " +
+                    $"({ex.GetType().Name}: {ex.Message}); continuing with the training objective.");
             }
             finally
             {

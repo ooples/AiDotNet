@@ -791,6 +791,8 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 }
             }
 
+            // Distributed runs: receive Rank 0's initial weights before the forward is recorded.
+            EnsureDistributedInitialParametersSynchronized();
             using var tape = new GradientTape<T>();
             var (mean, logVar) = EncoderForwardTape(input);
             var z = ReparameterizeTape(mean, logVar);

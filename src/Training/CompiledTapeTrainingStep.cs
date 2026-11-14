@@ -2090,6 +2090,15 @@ public static class CompiledTapeTrainingStep<T>
         INumericOperations<T> numOps,
         AiDotNet.Tensors.Engines.IEngine engine)
     {
+        if (distNet.ActiveMixedPrecisionContext is not null)
+        {
+            // The compiled plan differentiates the unscaled loss on full-precision weights, so it
+            // cannot take part in mixed precision. Every rank sees the same setting, so every rank
+            // takes the eager step, which prepares working weights, scales the loss, and lets the
+            // coordinator unscale the reduced gradients.
+            return StepDistributedEagerSgd(distNet, layers, input, target, learningRate, forward, computeLoss, engine);
+        }
+
         bool collectivesStarted = false;
         try
         {
@@ -2120,7 +2129,8 @@ public static class CompiledTapeTrainingStep<T>
                     idleParameters,
                     emptyGrads,
                     optimizer: null,
-                    distNet.ActiveMixedPrecisionContext,
+                    // Mixed precision never reaches the compiled step (see the top of this method).
+                    mixedPrecisionContext: null,
                     restoreFp32Masters: null,
                     syncFp32MastersFromWorking: null,
                     regularizeGradients: null,
@@ -2203,7 +2213,8 @@ public static class CompiledTapeTrainingStep<T>
                 parameters,
                 gradMap,
                 optimizer: null,
-                distNet.ActiveMixedPrecisionContext,
+                // The plan's gradients come from the unscaled loss; there is nothing to unscale.
+                mixedPrecisionContext: null,
                 restoreFp32Masters: null,
                 syncFp32MastersFromWorking: null,
                 regularizeGradients: null,
@@ -2215,13 +2226,48 @@ public static class CompiledTapeTrainingStep<T>
 
             return globalLossT;
         }
-        catch when (!collectivesStarted)
+        catch (Exception ex) when (!collectivesStarted)
         {
-            return TapeTrainingStepper<T>.EagerSgdObjectiveStep(
-                () => CollectDeduplicatedParameters(layers),
-                () => computeLoss(forward(input), target),
-                learningRate);
+            // Compilation or the plan's step failed on this rank before any of this step's
+            // collectives. The other ranks are (or will be) waiting in those collectives, so the
+            // fallback must be the coordinated eager step: a local-only update would leave them
+            // blocked and this rank's weights diverged.
+            System.Diagnostics.Trace.TraceWarning(
+                $"CompiledTapeTrainingStep.StepDistributedCompiledSgd failed, falling back to the coordinated eager step: {ex}");
+            return StepDistributedEagerSgd(distNet, layers, input, target, learningRate, forward, computeLoss, engine);
         }
+    }
+
+    /// <summary>
+    /// The distributed plain-SGD step on the eager tape: same collectives, in the same order, as the
+    /// compiled distributed step (step metadata, bucketed gradient reduction, coordinated update), so
+    /// a rank can take it while its peers take the compiled one.
+    /// </summary>
+    private static T StepDistributedEagerSgd(
+        NeuralNetworks.NeuralNetworkBase<T> distNet,
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        T learningRate,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        AiDotNet.Tensors.Engines.IEngine engine)
+    {
+        T loss = TapeTrainingStepper<T>.EagerTapeStep(
+            () => computeLoss(forward(input), target),
+            () => CollectDeduplicatedParameters(layers),
+            ctx => ApplyCompiledSgdContextUpdate(ctx, learningRate, engine),
+            input,
+            target,
+            (inp, _) => forward(inp),
+            (pred, tgt) => computeLoss(pred, tgt),
+            new TapeTrainingStepper<T>.EagerStepHooks
+            {
+                Owner = distNet,
+                ModelGradientClip = distNet.MaxGradNormValue,
+            });
+        distNet.FinalizeDistributedStepPostUpdate(null);
+        return loss;
     }
 
     private static bool TryStepDistributedCompiledPlan(
@@ -2247,6 +2293,15 @@ public static class CompiledTapeTrainingStep<T>
         if (eagerOptimizer is null)
         {
             Fd("distributed compiled step requires an eagerOptimizer instance");
+            return false;
+        }
+
+        if (distNet.ActiveMixedPrecisionContext is not null)
+        {
+            // The compiled plan differentiates the unscaled loss on full-precision weights. Decline on
+            // every rank (the setting is the same on all of them) so the eager step, which scales the
+            // loss and lets the coordinator unscale the reduced gradients, handles mixed precision.
+            Fd("distributed compiled step declined: mixed precision active (requires eager tape loss scaling)");
             return false;
         }
 
@@ -2276,7 +2331,8 @@ public static class CompiledTapeTrainingStep<T>
                     idleParameters,
                     emptyGrads,
                     eagerOptimizer,
-                    distNet.ActiveMixedPrecisionContext,
+                    // Mixed precision never reaches the compiled step (declined above).
+                    mixedPrecisionContext: null,
                     restoreFp32Masters: null,
                     syncFp32MastersFromWorking: null,
                     distNet.GetDistributedOptimizerRegularizer(eagerOptimizer),
@@ -2367,7 +2423,8 @@ public static class CompiledTapeTrainingStep<T>
                 parameters,
                 gradMap,
                 eagerOptimizer,
-                distNet.ActiveMixedPrecisionContext,
+                // The plan's gradients come from the unscaled loss; there is nothing to unscale.
+                mixedPrecisionContext: null,
                 restoreFp32Masters: null,
                 syncFp32MastersFromWorking: null,
                 distNet.GetDistributedOptimizerRegularizer(eagerOptimizer),
@@ -2416,6 +2473,20 @@ public static class CompiledTapeTrainingStep<T>
                 _persistentTarget = pair.Target;
                 return false;
             }
+        }
+
+        if (list.Count >= MaxBatchShapesPerLifecycle)
+        {
+            // Same bound as SwitchPersistentShape: a workload with ever-changing batch shapes
+            // (variable sequence lengths) would otherwise keep one batch-sized input/target pair,
+            // and the compiled plan whose leaves point at it, for every shape it has seen. The
+            // distributed step keeps no optimizer state in the plan, so the plans are simply
+            // dropped and recompiled on demand. The cache object itself is kept, so the reference
+            // the caller already holds stays valid.
+            _cache?.Invalidate();
+            list.Clear();
+            _configuredPlan = null;
+            CurrentState.cachedCompositeShapeKey = null;
         }
 
         var createdIn = new Tensor<T>((int[])inputShape.Clone());
