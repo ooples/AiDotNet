@@ -1045,8 +1045,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions",
             "AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions",
             "AiDotNet.ComputerVision.Segmentation.PointCloud.ConcertoOptions",
-            "AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Options",
-            "AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions",
             "AiDotNet.ComputerVision.Segmentation.Referring.LISAOptions",
             "AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVAOptions",
             "AiDotNet.ComputerVision.Segmentation.Referring.PixelLMOptions",

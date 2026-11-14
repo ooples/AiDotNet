@@ -8938,6 +8938,27 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "new[] { 24, 32, 32 } }, ClassifierChannels = new[] { 32, 16 }, " +
                     "UseDropout = false })";
             }
+            else if ((model.ClassName == "PointTransformerV3" || model.ClassName == "Sonata") && model.TypeParameterCount == 1
+                && model.FullyQualifiedName.IndexOf("Segmentation.PointCloud.", System.StringComparison.Ordinal) >= 0)
+            {
+                // PTv3 (46M) and Sonata (108M) are paper scale by default. Two stages of 8/16
+                // channels with 16-point patches keep serialization, xCPE, attention, pooling and
+                // the head on the generated path at CI scale; inputs are [points, 9], xyz first.
+                string optionsType = model.ClassName == "Sonata" ? "SonataOptions" : "PointTransformerV3Options";
+                string inputChannels = model.ClassName == "Sonata" ? "9" : "6";
+                string tail = model.ClassName == "Sonata"
+                    ? "UpCastLevel = 1, HeadHiddenChannels = 16, HeadEmbedChannels = 8, PrototypeCount = 16"
+                    : "DecoderDepths = new[] { 1 }, DecoderChannels = new[] { 8 }, DecoderNumHeads = new[] { 2 }, " +
+                      "DecoderPatchSizes = new[] { 16 }";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    $"options: new AiDotNet.ComputerVision.Segmentation.PointCloud.{optionsType} {{ " +
+                    $"NumClasses = 4, InputChannels = {inputChannels}, GridSize = 0.05, Strides = new[] {{ 2 }}, " +
+                    "EncoderDepths = new[] { 1, 1 }, EncoderChannels = new[] { 8, 16 }, EncoderNumHeads = new[] { 2, 2 }, " +
+                    $"EncoderPatchSizes = new[] {{ 16, 16 }}, {tail}, Seed = 7 }})";
+            }
             else if (model.ClassName == "OnlinePassiveAggressiveRegressor" && model.TypeParameterCount == 1)
             {
                 // Keep the paper's one-pass default for online PartialFit and the default
@@ -15665,6 +15686,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+        }
+        else if ((model.ClassName == "PointTransformerV3" || model.ClassName == "Sonata")
+            && model.FullyQualifiedName.IndexOf("Segmentation.PointCloud.", System.StringComparison.Ordinal) >= 0)
+        {
+            // PTv3 and Sonata segment a point cloud [points, 9] (xyz then features) into per-point
+            // logits [points, classes]; the generic vision branch's [3, H, W] is not a point cloud.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 24, 9 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 24, 4 };");
         }
         else if (model.ClassName == "PointNetPlusPlus")
         {

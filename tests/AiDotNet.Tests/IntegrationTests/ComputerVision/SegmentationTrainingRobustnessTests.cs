@@ -569,8 +569,8 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task PointTransformerV3_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new PointTransformerV3<float>(Arch(), options: new PointTransformerV3Options { NumClasses = 5, ModelSize = PointTransformerV3ModelSize.Base });
-        var input = Rand(42, 1, 3, 32, 32);
+        using var model = new PointTransformerV3<float>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallPtv3(5));
+        var input = Rand(42, 1, 24, 9);
         var predicted = model.Predict(input);
 
         for (int step = 0; step < 3; step++)
@@ -583,8 +583,8 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task Sonata_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new Sonata<float>(Arch(), options: new SonataOptions { NumClasses = 5, ModelSize = SonataModelSize.Base });
-        var input = Rand(42, 1, 3, 32, 32);
+        using var model = new Sonata<float>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallSonata(5));
+        var input = Rand(42, 1, 24, 9);
         var predicted = model.Predict(input);
 
         for (int step = 0; step < 3; step++)

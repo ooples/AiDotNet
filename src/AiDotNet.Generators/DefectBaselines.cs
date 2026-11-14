@@ -371,8 +371,6 @@ internal static class DefectBaselines
             "global::AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>",
             "global::AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>",
             "global::AiDotNet.ComputerVision.Segmentation.PointCloud.Concerto<T>",
-            "global::AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>",
-            "global::AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>",
             "global::AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>",
             "global::AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>",
             "global::AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>",

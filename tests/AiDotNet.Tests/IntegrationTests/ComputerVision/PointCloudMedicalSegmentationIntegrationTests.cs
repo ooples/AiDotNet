@@ -34,7 +34,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PointTransformerV3_Construction_Succeeds()
     {
-        var model = new PointTransformerV3<double>(Arch(), options: new PointTransformerV3Options { ModelSize = PointTransformerV3ModelSize.Base });
+        var model = new PointTransformerV3<double>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallPtv3());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -42,10 +42,9 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PointTransformerV3_Predict_ReturnsOutput()
     {
-        var model = new PointTransformerV3<double>(Arch(), options: new PointTransformerV3Options { ModelSize = PointTransformerV3ModelSize.Base });
-        var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        var model = new PointTransformerV3<double>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallPtv3());
+        var output = model.Predict(Rand(1, 24, 9));
+        Assert.Equal(new[] { 1, 24, 20 }, output.Shape.ToArray());
     }
 
     [Fact(Timeout = 120000)]
@@ -62,7 +61,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Sonata_Construction_Succeeds()
     {
-        var model = new Sonata<double>(Arch(), options: new SonataOptions { ModelSize = SonataModelSize.Base });
+        var model = new Sonata<double>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallSonata());
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -70,10 +69,9 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Sonata_Predict_ReturnsOutput()
     {
-        var model = new Sonata<double>(Arch(), options: new SonataOptions { ModelSize = SonataModelSize.Base });
-        var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        var model = new Sonata<double>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallSonata());
+        var output = model.Predict(Rand(1, 24, 9));
+        Assert.Equal(new[] { 1, 24, 20 }, output.Shape.ToArray());
     }
 
     [Fact(Timeout = 120000)]
