@@ -105,7 +105,7 @@ public class DiversityReranker<T> : RerankerBase<T>
     /// <param name="documents">The validated list of documents to rerank.</param>
     /// <returns>Documents reranked to balance relevance and diversity.</returns>
     protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
-        {
+    {
         var docList = documents.ToList();
         if (docList.Count <= 1)
         {

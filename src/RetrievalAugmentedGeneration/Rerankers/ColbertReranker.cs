@@ -123,7 +123,7 @@ public class ColbertReranker<T> : RerankerBase<T>
     /// <param name="docTokens">The L2-normalised document token embeddings.</param>
     /// <returns>The summed maximum-similarity score.</returns>
     internal static T MaxSim(IReadOnlyList<Vector<T>> queryTokens, IReadOnlyList<Vector<T>> docTokens)
-        {
+    {
         if (queryTokens.Count == 0 || docTokens.Count == 0)
             return NumOps.Zero;
 

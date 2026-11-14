@@ -440,7 +440,7 @@ public class NeuralGenerator<T> : IGenerator<T>
     }
 
     private double[] ApplyTemperatureAndSoftmax(T[] logits, double temperature)
-        {
+    {
         // softmax(logits / temperature); the sampler draws from it in double.
         var engine = AiDotNetEngine.Current;
         var scaled = engine.TensorDivideScalar(new Tensor<T>(logits, [logits.Length]), NumOps.FromDouble(temperature));

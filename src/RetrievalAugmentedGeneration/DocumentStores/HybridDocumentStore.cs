@@ -186,7 +186,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         /// </para>
         /// </remarks>
         protected override IEnumerable<Document<T>> GetSimilarCore(Vector<T> queryVector, int topK, Dictionary<string, object> metadataFilters)
-                {
+        {
             var vectorResults = _vectorStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters).ToList();
             var keywordResults = _keywordStore.GetSimilarWithFilters(queryVector, topK * 2, metadataFilters).ToList();
 

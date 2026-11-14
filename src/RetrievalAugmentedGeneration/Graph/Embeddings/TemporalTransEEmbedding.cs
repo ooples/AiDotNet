@@ -177,7 +177,7 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
     }
 
     private T ScoreTripleWithTime(int headIdx, int relationIdx, int tailIdx, int timeBin)
-        {
+    {
         // ||h + r + t_time - t||
         return Engine.Norm(Residual(headIdx, relationIdx, tailIdx, timeBin));
     }
@@ -205,7 +205,7 @@ public class TemporalTransEEmbedding<T> : KGEmbeddingBase<T>
         int posHead, int relation, int posTail,
         int negHead, int negTail,
         double learningRate, KGEmbeddingOptions options)
-        {
+    {
         double margin = options.GetEffectiveMargin();
 
         // Look up the time bin for this positive triple from edge temporal data

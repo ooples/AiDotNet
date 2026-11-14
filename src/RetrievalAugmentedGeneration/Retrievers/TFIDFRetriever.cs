@@ -46,7 +46,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
-                {
+        {
             var candidatesList = _documentStore.GetAll().ToList();
 
             // Use cached term statistics or build them if the cache is stale
@@ -117,7 +117,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         }
 
         private TermIndex GetOrBuildIndex(List<Document<T>> documents)
-                {
+        {
             var currentDocCount = documents.Count;
 
             lock (_cacheLock)

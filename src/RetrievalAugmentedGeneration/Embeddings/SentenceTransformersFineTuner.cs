@@ -269,23 +269,23 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
     }
 
     private double CalculateDistance(Vector<T> v1, Vector<T> v2)
-        {
+    {
         // Euclidean distance
         return NumOps.ToDouble(Engine.Norm(Engine.Subtract(v1, v2)));
     }
 
     private Vector<T> CreateAdjustmentVector(Vector<T> anchor, Vector<T> positive, double learningRate)
-        {
+    {
         return Engine.Multiply(Engine.Subtract(positive, anchor), NumOps.FromDouble(learningRate));
     }
 
     private Vector<T> AverageVectors(Vector<T> v1, Vector<T> v2)
-        {
+    {
         return Engine.Divide(Engine.Add(v1, v2), NumOps.FromDouble(2.0));
     }
 
     private Vector<T> ApplyAdjustment(Vector<T> baseEmb, Vector<T> adjustment)
-        {
+    {
         return Engine.Add(baseEmb, adjustment).Normalize();
     }
 

@@ -39,7 +39,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// <param name="documents">The documents to rerank.</param>
         /// <returns>A reranked list of documents.</returns>
         protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
-                {
+        {
             var (index, scores) = ReciprocalRankScores(new[] { documents });
 
             var reranked = documents
@@ -62,7 +62,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
         /// <param name="topK">The number of top documents to return.</param>
         /// <returns>A fused and reranked list of documents.</returns>
         public List<Document<T>> FuseRankings(List<List<Document<T>>> rankingLists, int topK)
-                {
+        {
             if (rankingLists == null || rankingLists.Count == 0)
                 throw new ArgumentException("Ranking lists cannot be null or empty", nameof(rankingLists));
             if (topK <= 0) throw new ArgumentOutOfRangeException(nameof(topK));

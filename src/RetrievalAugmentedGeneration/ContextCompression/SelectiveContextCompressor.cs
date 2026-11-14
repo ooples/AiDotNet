@@ -87,7 +87,7 @@ public class SelectiveContextCompressor<T> : ContextCompressorBase<T>
     }
 
     private T[] CalculateRelevance(string query, List<string> sentences)
-        {
+    {
         // Simple relevance using word overlap - in production would use embeddings:
         // |distinct query words found in the sentence| / |distinct query words|
         var separators = new[] { ' ', ',', '.', '!', '?' };

@@ -34,7 +34,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
-                {
+        {
             var candidates = _documentStore.GetAll().ToList();
             if (candidates.Count == 0)
                 return Enumerable.Empty<Document<T>>();

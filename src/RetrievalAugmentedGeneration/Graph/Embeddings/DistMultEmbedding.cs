@@ -33,7 +33,7 @@ public class DistMultEmbedding<T> : KGEmbeddingBase<T>
     public override bool IsDistanceBased => false;
 
     private protected override T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx)
-        {
+    {
         // Σ(h_k · r_k · t_k)
         return Engine.Sum(Engine.Multiply(
             Engine.Multiply(Row(_entityEmbeddings[headIdx]), Row(_relationEmbeddings[relationIdx])),
@@ -67,7 +67,7 @@ public class DistMultEmbedding<T> : KGEmbeddingBase<T>
     }
 
     private void UpdateTripleGradients(int headIdx, int relationIdx, int tailIdx, double step)
-        {
+    {
         var h = _entityEmbeddings[headIdx];
         var r = _relationEmbeddings[relationIdx];
         var t = _entityEmbeddings[tailIdx];

@@ -245,7 +245,7 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     /// Extracts a single row of a matrix as a vector.
     /// </summary>
     private static Vector<T> GetRow(Matrix<T> matrix, int row)
-        {
+    {
         return new Vector<T>(matrix.GetRowReadOnlySpan(row).ToArray());
     }
 
@@ -253,7 +253,7 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     /// Combines the ordered result vectors into a matrix, one row per input text.
     /// </summary>
     private Matrix<T> BuildMatrix(Vector<T>[] results)
-        {
+    {
         var cols = EmbeddingDimension;
         var mismatch = Array.FindIndex(results, vector => vector.Length != cols);
         if (mismatch >= 0)
@@ -267,7 +267,7 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
     /// Creates a defensive copy of a vector so that cached data cannot be mutated by callers or the inner model.
     /// </summary>
     private static Vector<T> Clone(Vector<T> vector)
-        {
+    {
         return new Vector<T>(vector.ToArray());
     }
 }

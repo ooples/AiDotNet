@@ -268,7 +268,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     /// <param name="scores">Each matched vector's position in its document and its query similarity.</param>
     /// <param name="method">How to combine them.</param>
     internal static T AggregateScores(IReadOnlyList<(int position, T score)> scores, MultiVectorAggregation method)
-        {
+    {
         if (scores.Count == 0)
             return NumOps.Zero;
 

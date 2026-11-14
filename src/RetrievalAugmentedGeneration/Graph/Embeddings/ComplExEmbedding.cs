@@ -40,7 +40,7 @@ public class ComplExEmbedding<T> : KGEmbeddingBase<T>
     // and relation embeddings at GetRelationEmbeddingSize() (2*dim) automatically.
 
     private protected override T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx)
-        {
+    {
         // Re(⟨h, r, conj(t)⟩) per Trouillon et al. (2016)
         // = Σ(hRe*rRe*tRe + hRe*rIm*tIm + hIm*rRe*tIm - hIm*rIm*tRe)
         var p = new ComplexParts(this, headIdx, relationIdx, tailIdx);
@@ -75,7 +75,7 @@ public class ComplExEmbedding<T> : KGEmbeddingBase<T>
     }
 
     private void UpdateTripleGradients(int headIdx, int relationIdx, int tailIdx, double step)
-        {
+    {
         var p = new ComplexParts(this, headIdx, relationIdx, tailIdx);
         T scale = NumOps.FromDouble(step);
 

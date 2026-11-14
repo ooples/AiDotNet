@@ -42,7 +42,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
-                {
+        {
             // CombSUM over the generated queries: a document's score is the sum of its scores for every query
             // that retrieved it (the latest returned instance of the document is kept).
             var position = new Dictionary<string, int>();

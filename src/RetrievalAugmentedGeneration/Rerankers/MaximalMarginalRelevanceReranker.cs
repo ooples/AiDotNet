@@ -128,7 +128,7 @@ public class MaximalMarginalRelevanceReranker<T> : RerankerBase<T>
     /// Reranks documents using Maximal Marginal Relevance.
     /// </summary>
     protected override IEnumerable<Document<T>> RerankCore(string query, IList<Document<T>> documents)
-        {
+    {
         var docList = documents.ToList();
 
         if (docList.Count == 0)

@@ -930,7 +930,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// Converts a Vector&lt;T&gt; to a double array for WAL serialization.
     /// </summary>
     private double[] VectorToDoubleArray(Vector<T> vector)
-        {
+    {
         // The on-disk format stores doubles; convert in one pass.
         if (vector.Length == 0)
             return Array.Empty<double>();
@@ -941,7 +941,7 @@ public class FileDocumentStore<T> : DocumentStoreBase<T>, IDisposable
     /// Converts a double array back to a Vector&lt;T&gt;.
     /// </summary>
     private Vector<T> DoubleArrayToVector(double[] data)
-        {
+    {
         if (data.Length == 0)
             return new Vector<T>(0);
         return new Tensor<double>(data, [data.Length]).Cast<T>().ToVector();
