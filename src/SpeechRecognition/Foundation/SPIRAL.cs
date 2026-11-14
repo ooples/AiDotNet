@@ -233,9 +233,12 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         int frames = features.GetLength(0), bins = features.GetLength(1), stride = network.TotalStride;
         int most = Math.Max(0, Math.Min(_options.MaxTeacherPaddingUnits, frames / 2 / stride));
         int left = random.Next(most + 1), right = random.Next(most + 1);
+        // The padded frames hold the mask embedding, as the reference's RandomShift fills them.
+        var embedding = MaskEmbedding(bins);
         var padded = new double[frames + (left + right) * stride, bins];
-        for (int t = 0; t < frames; t++)
-            for (int b = 0; b < bins; b++) padded[left * stride + t, b] = features[t, b];
+        for (int t = 0; t < padded.GetLength(0); t++)
+            for (int b = 0; b < bins; b++)
+                padded[t, b] = t >= left * stride && t < left * stride + frames ? features[t - left * stride, b] : embedding[b];
         using var _ = new NoGradScope<T>();
         var projected = teacher.Project(teacher.Encode(teacher.ToTensor(padded), training, random));
         int length = network.EncodedLength(frames);
@@ -245,22 +248,41 @@ public partial class SPIRAL<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     // Adaptive SpecAugment (section 3.3): a proportion of the time steps start masks of TimeMaskLength frames filled with
-    // N(0, 1) noise, and a proportion of the bins start masks of FrequencyMaskLength bins filled with zeros.
+    // the Gaussian mask embedding, and a proportion of the bins start masks of FrequencyMaskLength bins filled with zeros.
     private double[,] Perturb(double[,] features, Random random)
     {
         int frames = features.GetLength(0), bins = features.GetLength(1);
         var perturbed = (double[,])features.Clone();
+        var embedding = MaskEmbedding(bins);
         foreach (int start in Starts(frames, _options.TimeMaskProbability, random))
             for (int t = start; t < Math.Min(frames, start + _options.TimeMaskLength); t++)
-                for (int b = 0; b < bins; b++)
-                {
-                    double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-                    perturbed[t, b] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-                }
+                for (int b = 0; b < bins; b++) perturbed[t, b] = embedding[b];
         foreach (int start in Starts(bins, _options.FrequencyMaskProbability, random))
             for (int b = start; b < Math.Min(bins, start + _options.FrequencyMaskLength); b++)
                 for (int t = 0; t < frames; t++) perturbed[t, b] = 0.0;
         return perturbed;
+    }
+
+    // The "Gaussian noise" a time mask is filled with (section 3.3): in the reference (mask_emb_type 'gaussian') one fixed
+    // vector of per-bin N(0, 0.01²) values, the same for every masked frame and every step, which keeps a masked frame
+    // from being exactly constant for the layer norms while carrying almost no energy. Filling the frames with fresh
+    // N(0, 1) samples instead put noise as loud as the standardized speech into every masked frame. Drawn once from a
+    // fixed seed, as the reference's vector is a constant independent of the model's seed.
+    private const double MaskEmbeddingStd = 0.01;
+    private double[]? _maskEmbedding;
+
+    private double[] MaskEmbedding(int bins)
+    {
+        if (_maskEmbedding is not null && _maskEmbedding.Length == bins) return _maskEmbedding;
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+        var embedding = new double[bins];
+        for (int b = 0; b < bins; b++)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            embedding[b] = MaskEmbeddingStd * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+        }
+        _maskEmbedding = embedding;
+        return embedding;
     }
 
     // ⌊p·n + U(0, 1)⌋ distinct start indices drawn uniformly from n: a proportion p of the steps, rounded at random.

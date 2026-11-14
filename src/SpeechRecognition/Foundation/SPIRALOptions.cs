@@ -141,7 +141,7 @@ public class SPIRALOptions : ModelOptions
     /// <summary>Most padding added at each end of the teacher's input for position randomization, in units of the encoder's total stride (16 in the released configuration, capped at half the utterance).</summary>
     public int MaxTeacherPaddingUnits { get; set; } = 16;
 
-    /// <summary>Proportion of time steps that start a SpecAugment time mask, filled with Gaussian noise (section 4.2: 0.025).</summary>
+    /// <summary>Proportion of time steps that start a SpecAugment time mask, filled with the fixed Gaussian mask embedding (section 4.2: 0.025).</summary>
     public double TimeMaskProbability { get; set; } = 0.025;
 
     /// <summary>Length of each time mask in frames (section 4.2: 20).</summary>
