@@ -17,6 +17,32 @@ namespace AiDotNet.Tests.AdversarialRobustness;
 /// </summary>
 public class DefenseReferenceTests
 {
+    [Fact(Timeout = 60000)]
+    public async Task HalfPreferredCentroid_DoesNotOverflowItsSum()
+    {
+        await Task.Yield();
+
+        // Three preferred rows of (30000, 0.5): the centroid is (30000, 0.5), but the running sum of the first
+        // entry (90000) passed Half's 65504 and the centroid became infinite.
+        var outputs = new Matrix<Half>(4, 2);
+        for (int r = 0; r < 4; r++)
+        {
+            outputs[r, 0] = (Half)(r < 3 ? 30000.0 : 0.0);
+            outputs[r, 1] = (Half)0.5;
+        }
+
+        var feedback = new AiDotNet.Models.AlignmentFeedbackData<Half>
+        {
+            Outputs = outputs,
+            Preferences = new[] { (0, 3), (1, 3), (2, 3) }
+        };
+
+        var centroid = AdversarialPreferenceAlignment<Half>.PreferredCentroid(feedback);
+
+        Assert.Equal(30000.0, (double)centroid[0], 0);
+        Assert.Equal(0.5, (double)centroid[1], 6);
+    }
+
     private sealed class LengthCheckingModel : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _inputs;
