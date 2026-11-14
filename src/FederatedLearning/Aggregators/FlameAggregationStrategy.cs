@@ -154,11 +154,27 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         var deltas = Engine.TensorSubtract(
             models, Engine.TensorBroadcastTo(previousGlobal.Reshape(new[] { 1, totalParams }), new[] { n, totalParams }));
         var distances = Infrastructure.FederatedTensorMath<T>.NormalizeRows(deltas).Norms;
-        var sortedDistances = (double[])distances.Clone();
+
+        // A model with a NaN or infinite parameter has a non-finite distance. It cannot be clipped to S_t (every
+        // comparison with NaN is false, so its factor would stay 1) and a single such row makes the mean NaN, so
+        // it is never admitted and takes no part in the median. If no model is finite there is nothing to keep.
+        var finiteAdmitted = admitted.Where(i => IsFinite(distances[i])).ToArray();
+        if (finiteAdmitted.Length > 0)
+        {
+            admitted = finiteAdmitted;
+        }
+
+        var sortedDistances = distances.Where(IsFinite).ToArray();
+        if (sortedDistances.Length == 0)
+        {
+            sortedDistances = (double[])distances.Clone();
+        }
+
         Array.Sort(sortedDistances);
-        double clipBound = n % 2 == 1
-            ? sortedDistances[n / 2]
-            : (sortedDistances[n / 2 - 1] + sortedDistances[n / 2]) / 2.0;
+        int finiteCount = sortedDistances.Length;
+        double clipBound = finiteCount % 2 == 1
+            ? sortedDistances[finiteCount / 2]
+            : (sortedDistances[finiteCount / 2 - 1] + sortedDistances[finiteCount / 2]) / 2.0;
 
         // Clip factors min(1, S_t / e_i) of the admitted models; a model at distance 0 is not scaled.
         var admittedFactors = new double[admitted.Length];
@@ -335,9 +351,24 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             return Array.Empty<int>();
         }
 
-        // Every edge at or below the critical distance joins the cluster at the same level.
-        T criticalWeight = sortedWeights[criticalRank];
-        int edgesAtOrBelow = edgeCount - Engine.TensorCountNonzero(Engine.TensorGreaterThan(weights, criticalWeight));
+        // Every edge at or below the critical distance joins the cluster at the same level. The sort is ascending
+        // with NaN last, so those edges are the critical one and the ties that follow it. (Counting them as
+        // "not greater than the critical distance" also counted every NaN edge, which pulled the models behind
+        // those edges, i.e. the clients that sent NaN or Infinity, into the admitted cluster.)
+        double[] sortedDistances = sortedWeights.Cast<double>().ToArray();
+        double criticalDistance = sortedDistances[criticalRank];
+        if (double.IsNaN(criticalDistance))
+        {
+            // The required size is only reached through a NaN edge: no finite threshold forms the cluster.
+            return Array.Empty<int>();
+        }
+
+        int edgesAtOrBelow = criticalRank + 1;
+        while (edgesAtOrBelow < edgeCount && sortedDistances[edgesAtOrBelow] <= criticalDistance)
+        {
+            edgesAtOrBelow++;
+        }
+
         parent = Enumerable.Range(0, n).ToArray();
         size = Enumerable.Repeat(1, n).ToArray();
         for (int r = 0; r < edgesAtOrBelow; r++)
@@ -349,6 +380,8 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         int root = Find(parent, edgeU[edgeOrder[criticalRank]]);
         return Enumerable.Range(0, n).Where(i => Find(parent, i) == root).ToArray();
     }
+
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static int Find(int[] parent, int x)
     {
