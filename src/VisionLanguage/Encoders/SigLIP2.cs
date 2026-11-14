@@ -356,7 +356,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
 
         int maxLen = _options.MaxCaptionLength;
         if (maxLen <= 0)
-            return new Tensor<T>([0, _options.VocabSize]);
+            return new Tensor<T>([0, Math.Max(0, _options.VocabSize)]);
 
         var start = _captionStartEmbedding ?? throw new InvalidOperationException("The captioning decoder is not initialized.");
         var memory = CaptionMemory(preprocessed);
@@ -369,7 +369,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
             var hidden = DecodeCaption(sequence, memory);
             int positions = hidden.Shape[0];
             var last = Engine.TensorSlice(hidden, [positions - 1, 0], [1, hidden.Shape[1]]);
-            // FitLength is rank one; each step is a [1, VocabSize] row so the result is [MaxCaptionLength, VocabSize].
+            // FitLength returns a flat [VocabSize] run; each step is one [1, VocabSize] row of the result.
             var logits = FitLength(VocabularyProjection().Forward(last), _options.VocabSize).Reshape([1, _options.VocabSize]);
             stepLogits.Add(logits);
 
