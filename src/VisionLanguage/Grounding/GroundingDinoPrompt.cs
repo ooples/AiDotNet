@@ -32,9 +32,10 @@ public sealed record GroundingDetection<T>(T X1, T Y1, T X2, T Y2, T Score, stri
 
     /// <summary>
     /// The model's box (cx, cy, w, h) the corners came from, or <c>null</c> for a detection built outside the model. Grounded
-    /// SAM 2 scales the corners from it in double, rounding to T once, as the official transform_boxes does.
+    /// SAM 2 scales the corners from it in double, rounding to T once, as the official transform_boxes does. A value
+    /// tuple rather than an array so that two equal detections stay equal under record equality.
     /// </summary>
-    internal T[]? CenterSize { get; init; }
+    internal (T Cx, T Cy, T W, T H)? CenterSize { get; init; }
 }
 
 /// <summary>
@@ -179,7 +180,7 @@ internal sealed class GroundingDinoPrompt
             for (int j = 1; j < tokens; j++)
                 if (!comparer.Equals(above[q * width + j], zero)) ids.Add(Ids[j]);
             result.Add(new GroundingDetection<T>(corners[4 * q], corners[4 * q + 1], corners[4 * q + 2], corners[4 * q + 3], scores[q],
-                Decode(ids).Replace(".", "")) { Logit = maxLogits[q], CenterSize = centreSize.AsSpan(4 * q, 4).ToArray() });
+                Decode(ids).Replace(".", "")) { Logit = maxLogits[q], CenterSize = (centreSize[4 * q], centreSize[4 * q + 1], centreSize[4 * q + 2], centreSize[4 * q + 3]) });
         }
         return result;
     }

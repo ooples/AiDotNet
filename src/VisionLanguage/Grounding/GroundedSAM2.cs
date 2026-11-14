@@ -230,7 +230,7 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         int n = detections.Count;
         // Rows of (cx, cy, w, h) where the model's box is known, else the detection's own corners.
         var values = new Tensor<T>(new[] { n, 4 }, Vector<T>.FromArray(
-            detections.SelectMany(d => d.CenterSize ?? new[] { d.X1, d.Y1, d.X2, d.Y2 }).ToArray())).Cast<double>();
+            detections.SelectMany(d => d.CenterSize is { } c ? new[] { c.Cx, c.Cy, c.W, c.H } : new[] { d.X1, d.Y1, d.X2, d.Y2 }).ToArray())).Cast<double>();
         var fromBox = new Tensor<double>(new[] { n, 1 }, Vector<double>.FromArray(
             detections.Select(d => d.CenterSize is null ? 0.0 : 1.0).ToArray()));
         var centre = engine.TensorSlice(values, new[] { 0, 0 }, new[] { n, 2 });
