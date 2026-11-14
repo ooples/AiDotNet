@@ -89,7 +89,28 @@ public sealed class MonotonicAlignmentSearchTests
     [Fact]
     public void NonFiniteScoresInTheBand_AreRejected()
     {
-        var scores = new double[,] { { 0, double.NaN }, { 0, 0 } };
-        Assert.Throws<ArgumentException>(() => TtsModelBase<double>.MonotonicDurations(AiDotNetEngine.Current, ToTensor(scores, v => v)));
+        // Two tokens over three frames: frame 1 can hold either token, so (token 0, frame 1) is in the band.
+        foreach (double bad in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+        {
+            var scores = new double[,] { { 0, bad, 0 }, { 0, 0, 0 } };
+            Assert.Throws<ArgumentException>(() => MonotonicAlignment.MaximumPath(scores));
+            Assert.Throws<ArgumentException>(() => TtsModelBase<double>.MonotonicDurations(AiDotNetEngine.Current, ToTensor(scores, v => v)));
+            Assert.Throws<ArgumentException>(() => TtsModelBase<float>.MonotonicDurations(AiDotNetEngine.Current, ToTensor(scores, v => (float)v)));
+        }
+    }
+
+    [Fact]
+    public void NonFiniteScoresOutsideTheBand_AreNotRead()
+    {
+        // Two tokens over two frames leave one path, the diagonal: (token 0, frame 1) and (token 1, frame 0) are
+        // never read, so a non-finite score there changes nothing, exactly as in MonotonicAlignment.MaximumPath.
+        foreach (double bad in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+        {
+            var scores = new double[,] { { 0, bad }, { bad, 0 } };
+            var expected = MonotonicAlignment.MaximumPath(scores);
+            Assert.Equal(new[] { 1, 1 }, expected);
+            Assert.Equal(expected, TtsModelBase<double>.MonotonicDurations(AiDotNetEngine.Current, ToTensor(scores, v => v)));
+            Assert.Equal(expected, TtsModelBase<float>.MonotonicDurations(AiDotNetEngine.Current, ToTensor(scores, v => (float)v)));
+        }
     }
 }
