@@ -14,7 +14,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// tape release each intermediate gradient after its last use. Restricted sources once dropped leaves reached through
 /// views and recurrent-weight permutes. These tests check that every parameter gets the same gradient from the
 /// restricted walk as from the full walk (sources: null). Each tape holds more than 100 entries, so the tape's
-/// source-relevance pruning is active.
+/// source-relevance pruning is active on every Tensors build. How many entries the layer itself records depends on the
+/// build (one that fuses the recurrence records a handful), so the output is padded with exact identity adds.
 /// </summary>
 [Collection("NonParallelIntegration")]
 public sealed class RestrictedBackwardSourcesParityTests
@@ -22,6 +23,7 @@ public sealed class RestrictedBackwardSourcesParityTests
     private const int Batch = 2;
     private const int SequenceLength = 48;
     private const int Features = 3;
+    private const int IdentityPadding = 128;
 
     public static IEnumerable<object[]> RecurrentLayers()
     {
@@ -68,6 +70,9 @@ public sealed class RestrictedBackwardSourcesParityTests
         layer.ResetState();   // both walks start from the same recurrent state
         using var tape = new GradientTape<float>();
         var output = layer.Forward(input);
+        var zeros = new Tensor<float>(output.Shape.ToArray());
+        for (int k = 0; k < IdentityPadding; k++)
+            output = AiDotNetEngine.Current.TensorAdd(output, zeros);   // x + 0 is exact: gradients are unchanged
         var axes = new int[output.Shape.Length];
         for (int i = 0; i < axes.Length; i++) axes[i] = i;
         var loss = AiDotNetEngine.Current.ReduceSum(AiDotNetEngine.Current.TensorMultiply(output, output), axes, keepDims: false);
