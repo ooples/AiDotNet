@@ -22921,3 +22921,20 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+static AiDotNet.TextToSpeech.TtsModelBase<T>.IdTensor(System.Collections.Generic.IReadOnlyList<int>! ids) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.RoundedIds(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> int[]!
+AiDotNet.TextToSpeech.TtsModelBase<T>.NormalizeL2(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor, double eps) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.FirstArgMax(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! values) -> int
+static AiDotNet.TextToSpeech.TtsModelBase<T>.FrameMajorCodes(int[,]! codes, int levels) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.LevelMajorCodes(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> int[,]!
+AiDotNet.TextToSpeech.TtsModelBase<T>.PaddedFrameMask(int frames, int padded) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.CeilScaledDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! logDurations, double lengthScale) -> int[]!
+AiDotNet.TextToSpeech.TtsModelBase<T>.LogDurationTarget(int[]! durations, double eps) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.TextToSpeech.TtsModelBase<T>.IntMatrixTensor(int[,]! values) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.RoundedIdMatrix(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> int[,]!
+AiDotNet.TextToSpeech.TtsModelBase<T>.BatchRow(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! batch, int index) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.PadAndStack(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! outputs, int columns) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.RowMask(System.Collections.Generic.IReadOnlyList<bool>! flags, int columns) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.DurationAlignment(int[]! durations) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.AlignmentScores(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! means, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.MonotonicDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scores) -> int[]!

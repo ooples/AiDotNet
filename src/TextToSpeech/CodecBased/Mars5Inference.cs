@@ -398,75 +398,111 @@ internal sealed class Mars5Diffusion
 internal sealed record Mars5ArSampling(double Temperature = 0.7, int TopK = 200, double TopP = 0.2, double TypicalP = 1.0, double FrequencyPenalty = 3,
     double PresencePenalty = 0.4, int PenaltyWindow = 80, double EosPenaltyDecay = 0.5, double EosPenaltyFactor = 1, int MaxLength = 2000);
 
-/// <summary>MARS5's logit processors (<c>mars5/samplers.py</c>) and the AR decoding loop (<c>ar_generate</c>, beam width 1).</summary>
-internal static class Mars5Sampler
+/// <summary>MARS5's logit processors (<c>mars5/samplers.py</c>) and the AR decoding loop (<c>ar_generate</c>, beam width 1),
+/// as engine ops on a <c>[n]</c> logit tensor. Sorts keep master's tie order: equal values in ascending index order
+/// (<see cref="TtsSampling{T}.StableOrder"/>).</summary>
+internal static class Mars5Sampler<T>
 {
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
+    private static T NegativeInfinity => Ops.FromDouble(double.NegativeInfinity);
+
     /// <summary><c>freq_rep_penalty</c>: each logit less α_f times its count among the last tokens and α_p if present.</summary>
-    public static void FrequencyPenalty(double[] logits, IReadOnlyList<int> previous, double frequency, double presence, int window)
+    public static Tensor<T> FrequencyPenalty(Tensor<T> logits, IReadOnlyList<int> previous, double frequency, double presence, int window)
     {
-        var counts = new Dictionary<int, int>();
-        foreach (int id in previous.Skip(Math.Max(0, previous.Count - window))) counts[id] = counts.TryGetValue(id, out int c) ? c + 1 : 1;
-        foreach (var kv in counts) logits[kv.Key] -= kv.Value * frequency + presence;
+        var engine = AiDotNetEngine.Current;
+        int n = logits.Length;
+        var counts = new int[n];
+        var present = new int[n];
+        foreach (int id in previous.Skip(Math.Max(0, previous.Count - window)))
+        {
+            if (id < 0 || id >= n) throw new IndexOutOfRangeException($"Token {id} is outside the {n} logits.");
+            counts[id]++;
+            present[id] = 1;
+        }
+        var penalty = engine.TensorAdd(
+            engine.TensorMultiplyScalar(new Tensor<int>(counts, new[] { n }).Cast<T>(), Ops.FromDouble(frequency)),
+            engine.TensorMultiplyScalar(new Tensor<int>(present, new[] { n }).Cast<T>(), Ops.FromDouble(presence)));
+        return engine.TensorSubtract(engine.Reshape(logits, new[] { n }), penalty);
     }
 
     /// <summary><c>early_eos_penalty</c>: the end token's logit less factor·max(est − n, 1)^decay while n ≤ est.</summary>
-    public static void EosPenalty(double[] logits, int generated, int estimated, double decay, double factor, int eos)
+    public static Tensor<T> EosPenalty(Tensor<T> logits, int generated, int estimated, double decay, double factor, int eos)
     {
-        if (generated > estimated) return;
-        logits[eos] -= factor * Math.Pow(Math.Max(estimated - generated, 1), decay);
+        int n = logits.Length;
+        var flat = AiDotNetEngine.Current.Reshape(logits, new[] { n });
+        if (generated > estimated) return flat;
+        var delta = new Tensor<T>(new[] { n });
+        delta[eos] = Ops.FromDouble(factor * Math.Pow(Math.Max(estimated - generated, 1), decay));
+        return AiDotNetEngine.Current.TensorSubtract(flat, delta);
+    }
+
+    /// <summary><c>filtered_logits[..., :valid_start-1] = -inf; filtered_logits[..., valid_end:] = -inf</c>.</summary>
+    public static Tensor<T> Mask(Tensor<T> logits, int validStart, int validEnd)
+    {
+        int n = logits.Length;
+        var mask = new bool[n];
+        for (int i = 0; i < Math.Min(validStart - 1, n); i++) mask[i] = true;
+        for (int i = Math.Max(0, validEnd); i < n; i++) mask[i] = true;
+        return TtsSampling<T>.Fill(AiDotNetEngine.Current.Reshape(logits, new[] { n }), mask, NegativeInfinity);
     }
 
     /// <summary><c>top_k_top_p_filtering</c> (min_tokens 1).</summary>
-    public static void TopKTopP(double[] logits, int topK, double topP)
+    public static Tensor<T> TopKTopP(Tensor<T> logits, int topK, double topP)
     {
+        var engine = AiDotNetEngine.Current;
+        int n = logits.Length;
+        var scores = engine.Reshape(logits, new[] { n });
         if (topK > 0)
         {
-            int k = Math.Min(Math.Max(topK, 1), logits.Length);
-            double kth = logits.OrderByDescending(v => v).ElementAt(k - 1);
-            for (int i = 0; i < logits.Length; i++) if (logits[i] < kth) logits[i] = double.NegativeInfinity;
+            int k = Math.Min(Math.Max(topK, 1), n);
+            var largest = engine.TensorTopK(scores, k, 0, out _);
+            T kth = engine.TensorSlice(largest, new[] { k - 1 }, new[] { 1 }).ToArray()[0];
+            scores = engine.TensorWhere(engine.TensorLessThan(scores, kth), Tensor<T>.CreateDefault(new[] { n }, NegativeInfinity), scores);
         }
         if (topP < 1.0)
         {
             // A stable descending sort, as torch.sort ties keep their order on CPU.
-            var order = Enumerable.Range(0, logits.Length).OrderByDescending(i => logits[i]).ToArray();
-            double max = logits[order[0]], sum = 0;
-            foreach (int i in order) sum += Math.Exp(logits[i] - max);
-            double cumulative = 0;
-            var remove = new bool[order.Length];
-            for (int r = 0; r < order.Length; r++)
-            {
-                cumulative += Math.Exp(logits[order[r]] - max) / sum;
-                remove[r] = cumulative > topP;
-            }
+            var order = TtsSampling<T>.StableOrder(scores, descending: true);
+            var weights = TtsSampling<T>.UnnormalizedProbabilities(Select(engine, scores, order));
+            var cumulative = engine.TensorDivideScalar(engine.TensorCumSum(weights, 0), engine.TensorSum(weights));
+            var above = engine.TensorGreaterThan(cumulative, Ops.FromDouble(topP)).Cast<int>().ToArray();
             // Shift right: the first token above the threshold stays.
-            for (int r = order.Length - 1; r >= 1; r--) remove[r] = remove[r - 1];
-            remove[0] = false;
-            for (int r = 0; r < order.Length; r++) if (remove[r]) logits[order[r]] = double.NegativeInfinity;
+            var remove = new bool[n];
+            for (int r = 1; r < n; r++) remove[order[r]] = above[r - 1] != 0;
+            scores = TtsSampling<T>.Fill(scores, remove, NegativeInfinity);
         }
+        return scores;
     }
 
     /// <summary><c>apply_typical_p</c> (Meister et al. 2022): keep the tokens whose surprisal is closest to the entropy up
     /// to the mass.</summary>
-    public static void TypicalP(double[] logits, double mass)
+    public static Tensor<T> TypicalP(Tensor<T> logits, double mass)
     {
-        if (mass > 0.999) return;
-        double max = logits.Max(), sum = logits.Sum(v => Math.Exp(v - max));
-        var normalized = logits.Select(v => v - max - Math.Log(sum)).ToArray();
-        double entropy = 0;
-        foreach (var v in normalized) if (!double.IsNegativeInfinity(v)) entropy -= v * Math.Exp(v);
-        var shifted = normalized.Select(v => Math.Abs(-v - entropy)).ToArray();
-        var order = Enumerable.Range(0, logits.Length).OrderBy(i => shifted[i]).ToArray();
-        double sMax = order.Max(i => logits[i]), sSum = order.Sum(i => Math.Exp(logits[i] - sMax));
-        double cumulative = 0;
-        int last = 0;
-        foreach (int i in order)
-        {
-            cumulative += Math.Exp(logits[i] - sMax) / sSum;
-            if (cumulative < mass) last++;
-        }
-        double threshold = shifted[order[Math.Min(last, order.Length - 1)]];
-        for (int i = 0; i < logits.Length; i++) if (shifted[i] > threshold) logits[i] = double.NegativeInfinity;
+        var engine = AiDotNetEngine.Current;
+        int n = logits.Length;
+        var scores = engine.Reshape(logits, new[] { n });
+        if (mass > 0.999) return scores;
+        var weights = TtsSampling<T>.UnnormalizedProbabilities(scores);
+        T sum = engine.TensorSum(weights);
+        T max = engine.TensorMaxValue(scores);
+        var normalized = engine.TensorAddScalar(scores, Ops.Negate(Ops.Add(max, Ops.Log(sum))));
+        var probabilities = engine.TensorDivideScalar(weights, sum);
+        // −Σ v·e^v over the tokens still present (a removed token's −∞ · 0 is left out, not NaN).
+        var removed = engine.TensorEquals(normalized, NegativeInfinity);
+        var terms = engine.TensorWhere(removed, Tensor<T>.CreateDefault(new[] { n }, Ops.Zero),
+            engine.TensorMultiply(normalized, probabilities));
+        T entropy = Ops.Negate(engine.TensorSum(terms));
+        var shifted = engine.TensorAbs(engine.TensorAddScalar(engine.TensorNegate(normalized), Ops.Negate(entropy)));
+        var order = TtsSampling<T>.StableOrder(shifted, descending: false);
+        var cumulative = engine.TensorDivideScalar(engine.TensorCumSum(Select(engine, weights, order), 0), sum);
+        int last = engine.TensorLessThan(cumulative, Ops.FromDouble(mass)).Cast<int>().ToArray().Sum();
+        T threshold = engine.TensorSlice(shifted, new[] { order[Math.Min(last, n - 1)] }, new[] { 1 }).ToArray()[0];
+        return engine.TensorWhere(engine.TensorGreaterThan(shifted, threshold), Tensor<T>.CreateDefault(new[] { n }, NegativeInfinity), scores);
     }
+
+    private static Tensor<T> Select(IEngine engine, Tensor<T> values, int[] positions) =>
+        engine.TensorIndexSelect(values, new Tensor<int>((int[])positions.Clone(), new[] { positions.Length }), 0);
 }
 
 /// <summary>

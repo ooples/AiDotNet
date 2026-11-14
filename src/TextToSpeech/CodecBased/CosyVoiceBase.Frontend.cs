@@ -38,13 +38,9 @@ public abstract partial class CosyVoiceBase<T>
         var audio = ResampleAudio(recording, sampleRate, 16000);
         if (audio.Length > Settings.MaxReferenceSeconds * 16000L)
             throw new ArgumentException($"The reference recording may be at most {Settings.MaxReferenceSeconds} seconds.", nameof(recording));
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
-        var logMel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(samples, 128);
-        int bands = logMel.GetLength(0), frames = logMel.GetLength(1);
-        var features = new Tensor<T>(new[] { 1, bands, frames });
-        for (int m = 0; m < bands; m++)
-            for (int f = 0; f < frames; f++) features[0, m, f] = NumOps.FromDouble(logMel[m, f]);
+        var logMel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(audio, 128);
+        int bands = logMel.Shape[0], frames = logMel.Shape[1];
+        var features = Engine.Reshape(logMel, new[] { 1, bands, frames });
         var length = new Tensor<T>(new[] { 1 }); length[0] = NumOps.FromDouble(frames);
         var inputs = _releasedSpeechTokenizer.Metadata.Inputs.Select(x => x.Name).ToArray();
         if (inputs.Length != 2) throw new InvalidDataException("The speech tokenizer requires features and feature lengths.");

@@ -85,10 +85,7 @@ public class OpenAiWhisperTests
     private static Tensor<double> Window(double[] audio, int mels)
     {
         var mel = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(audio, mels, OpenAiWhisperTranscriber<double>.ChunkSamples);
-        var window = new Tensor<double>(new[] { mels, OpenAiWhisperTranscriber<double>.ChunkFrames });
-        for (int m = 0; m < mels; m++)
-            for (int t = 0; t < OpenAiWhisperTranscriber<double>.ChunkFrames; t++) window[m, t] = mel[m, t];
-        return window;
+        return OpenAiWhisperTranscriber<double>.Window(mel, 0, OpenAiWhisperTranscriber<double>.ChunkFrames);
     }
 
     private static void SameWords(JToken expected, IReadOnlyList<WhisperWordTiming> actual, string what)
@@ -111,10 +108,8 @@ public class OpenAiWhisperTests
         var f = Reference();
         int mels = (int)f["dims"]!["n_mels"]!;
         var mel = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(Floats(f["short_audio"]!), mels);
-        var flat = new double[mel.Length];
-        int frames = mel.GetLength(1);
-        for (int m = 0; m < mels; m++) for (int t = 0; t < frames; t++) flat[m * frames + t] = mel[m, t];
-        Close(Values(f["short_mel"]!), flat, "mel");
+        Assert.Equal(mels, mel.Shape[0]);
+        Close(Values(f["short_mel"]!), mel.Contiguous().ToArray(), "mel");
     }
 
     [Fact(Timeout = 600000)]
@@ -217,5 +212,21 @@ public class OpenAiWhisperTests
                 new[] { a.AvgLogprob, a.NoSpeechProb, a.CompressionRatio }, $"segment {i}");
             SameWords(e["words"]!, a.Words, $"segment {i}");
         }
+    }
+
+    // whisper clamps the mel power at 1e-10 before log10, so silence reads (log10(1e-10) + 4) / 4 = -1.5 in every
+    // frame. In Half the scaled floor 1e-10 / s^2 rounds to 0 and log10(0) is -inf, so the floor must be applied as
+    // -10 after the log; the double result is the same.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_SilenceReadsWhispersFloor_InHalfAndDouble()
+    {
+        await Task.Yield();
+        var half = OpenAiWhisperTranscriber<Half>.LogMelSpectrogram(new double[1600], 80);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(80, half.Shape[0]);
+        Assert.Equal(10, half.Shape[1]);
+        foreach (var v in half.Contiguous().ToArray()) Assert.Equal(-1.5, ops.ToDouble(v));
+        var full = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(new double[1600], 80);
+        foreach (var v in full.Contiguous().ToArray()) Assert.Equal(-1.5, v);
     }
 }

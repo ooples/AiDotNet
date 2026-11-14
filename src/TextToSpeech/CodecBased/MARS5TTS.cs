@@ -282,7 +282,7 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
     protected override Tensor<T> PreprocessText(string text)
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
-        return Wave(TextTokens(text.Trim()).Select(t => (double)t).ToArray());
+        return IdTensor(TextTokens(text.Trim()));
     }
 
     /// <inheritdoc />
@@ -310,9 +310,8 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
         if (!HasPaperLayers) return base.PredictCore(input);
         int vocabulary = TextTokenizer.VocabSize;
         var tokens = new List<int>();
-        for (int i = 0; i < input.Length; i++)
+        foreach (int id in RoundedIds(input))
         {
-            int id = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (id < 0 || id >= vocabulary) throw new ArgumentOutOfRangeException(nameof(input), $"Text tokens lie in [0, {vocabulary}).");
             tokens.Add(id);
         }
@@ -394,39 +393,22 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
         var cache = new LlamaCache<T>();
         while (x.Count < o.MaxGenerationLength)
         {
-            var logitsTensor = ar.NextLogits(x, speaker, cache);
-            var logits = new double[vocab];
-            for (int i = 0; i < vocab; i++) logits[i] = Ops.ToDouble(logitsTensor.GetFlat(i));
-            if (previous.Count > 1) Mars5Sampler.FrequencyPenalty(logits, previous, o.FrequencyPenalty, o.PresencePenalty, o.PenaltyWindow);
-            Mask(logits, validStart, validEnd);
-            Mars5Sampler.EosPenalty(logits, previous.Count, estimatedLength, o.EosPenaltyDecay, o.EosPenaltyFactor, eos);
-            for (int i = 0; i < vocab; i++) logits[i] /= o.Temperature;
-            Mars5Sampler.TopKTopP(logits, o.TopK, o.TopP);
-            Mars5Sampler.TypicalP(logits, o.TypicalP);
-            Mask(logits, validStart, validEnd);
-            // multinomial over softmax(logits)
-            double max = logits.Max(), sum = 0;
-            var p = logits.Select(v => Math.Exp(v - max)).ToArray();
-            foreach (var v in p) sum += v;
-            double u = random.NextDouble() * sum, acc = 0;
-            int next = vocab - 1;
-            for (int i = 0; i < vocab; i++)
-            {
-                acc += p[i];
-                if (u < acc) { next = i; break; }
-            }
+            var step = ar.NextLogits(x, speaker, cache);
+            var logits = Engine.TensorSlice(Engine.Reshape(step, new[] { step.Length }), new[] { 0 }, new[] { vocab });
+            if (previous.Count > 1) logits = Mars5Sampler<T>.FrequencyPenalty(logits, previous, o.FrequencyPenalty, o.PresencePenalty, o.PenaltyWindow);
+            logits = Mars5Sampler<T>.Mask(logits, validStart, validEnd);
+            logits = Mars5Sampler<T>.EosPenalty(logits, previous.Count, estimatedLength, o.EosPenaltyDecay, o.EosPenaltyFactor, eos);
+            logits = Engine.TensorDivideScalar(logits, Ops.FromDouble(o.Temperature));
+            logits = Mars5Sampler<T>.TopKTopP(logits, o.TopK, o.TopP);
+            logits = Mars5Sampler<T>.TypicalP(logits, o.TypicalP);
+            logits = Mars5Sampler<T>.Mask(logits, validStart, validEnd);
+            // multinomial over softmax(logits): the first token whose running weight exceeds u · Σ weights
+            int next = TtsSampling<T>.DrawPosition(TtsSampling<T>.UnnormalizedProbabilities(logits), random.NextDouble(), inclusive: false);
             if (next == eos) break;
             previous.Add(next);
             x.Add(next);
         }
         return x;
-    }
-
-    // filtered_logits[..., :valid_start-1] = -inf; filtered_logits[..., valid_end:] = -inf
-    private static void Mask(double[] logits, int validStart, int validEnd)
-    {
-        for (int i = 0; i < Math.Min(validStart - 1, logits.Length); i++) logits[i] = double.NegativeInfinity;
-        for (int i = validEnd; i < logits.Length; i++) logits[i] = double.NegativeInfinity;
     }
 
     /// <inheritdoc />
