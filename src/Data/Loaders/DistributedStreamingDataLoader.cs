@@ -224,7 +224,10 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         bool dropLast = false,
         int? seed = null)
     {
-        EnsureBatchPlanSynchronized();
+        // Every rank exchanges its batch size at every enumeration boundary, whatever its local plan state: a
+        // rank-local "already synchronized" flag would let one rank skip the AllGather another rank enters after a
+        // BatchSize change, and the collective sequences would no longer match.
+        ExchangeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
@@ -262,7 +265,10 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         int? seed = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        EnsureBatchPlanSynchronized();
+        // Every rank exchanges its batch size at every enumeration boundary, whatever its local plan state: a
+        // rank-local "already synchronized" flag would let one rank skip the AllGather another rank enters after a
+        // BatchSize change, and the collective sequences would no longer match.
+        ExchangeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
@@ -366,7 +372,6 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         rankCount = counts[rank];
     }
 
-    [AiDotNet.Attributes.ScalarKernel("One-time WorldSize batch-size metadata unpack")]
     private void EnsureBatchPlanSynchronized()
     {
         if (_batchPlanSynchronized)
@@ -374,6 +379,12 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             return;
         }
 
+        ExchangeBatchPlan();
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Per-enumeration WorldSize batch-size metadata unpack")]
+    private void ExchangeBatchPlan()
+    {
         if (!_backend.IsInitialized)
         {
             _backend.Initialize();
