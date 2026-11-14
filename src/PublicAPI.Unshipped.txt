@@ -22937,10 +22937,6 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreatePointTransformerV3EncoderLayers(int inputChannels, int inputHeight, int inputWidth, int[]! channelDims, int[]! depths, double dropRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateSonataDecoderLayers(int encoderOutputChannels, int decoderDim, int numClasses, int featureHeight, int featureWidth) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateSonataEncoderLayers(int inputChannels, int inputHeight, int inputWidth, int[]! channelDims, int[]! depths, double dropRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve
-AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve.Encode(int x, int y, int z, int depth) -> long
-AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve.HilbertCurve() -> void
-AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve.Name.get -> string!
 AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataDistillationLoss<T>
 AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataDistillationLoss<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! studentScores, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targets, double studentTemperature, int[]! sampleOfMatch) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataFeatureRegularizer<T>
@@ -22952,7 +22948,8 @@ AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve.Encode(int x,
 AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve.Name.get -> string!
 AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>
 AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! embeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>.KoLeoRegularizer() -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>.BlockSize.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>.KoLeoRegularizer(int blockSize = 1024) -> void
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.InputChannels.get -> int
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.InputWidthChannels.get -> int
@@ -23072,14 +23069,6 @@ AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.UpCastLevel.set ->
 AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.WeightDecay.get -> double
 AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.WeightDecay.set -> void
 AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves
-AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve
-AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve.Encode(int x, int y, int z, int depth) -> long
-AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve.Name.get -> string!
-AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve.TransposedSpaceFillingCurve(AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve! inner) -> void
-AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve
-AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve.Encode(int x, int y, int z, int depth) -> long
-AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve.Name.get -> string!
-AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve.ZOrderCurve() -> void
 AiDotNet.Enums.PointSerializationOrder
 AiDotNet.Enums.PointSerializationOrder.Hilbert = 2 -> AiDotNet.Enums.PointSerializationOrder
 AiDotNet.Enums.PointSerializationOrder.HilbertTransposed = 3 -> AiDotNet.Enums.PointSerializationOrder
@@ -23124,3 +23113,5 @@ AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.SaveState()
 AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.SpaceFillingCurveSet() -> void
 AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.SpaceFillingCurveSet(System.Collections.Generic.IEnumerable<AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!>! curves) -> void
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.IsRegistered(AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve! curve) -> bool
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultPointTransformerV3Layers(AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Options! options, int numClasses) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSonataLayers(AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions! options, int numClasses) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!

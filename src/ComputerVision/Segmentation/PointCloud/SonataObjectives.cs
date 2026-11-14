@@ -55,9 +55,11 @@ public interface ISonataFeatureRegularizer<T>
 /// <remarks>
 /// <para>
 /// Runs in single precision regardless of <typeparamref name="T"/>, as Sonata does
-/// (<c>feat = feat.float()</c>): <c>exp(1 / 0.04)</c> is beyond half precision. The global maximum is
-/// subtracted before the exponential, which the first normalisation cancels exactly. The result
-/// carries no gradient: it is the teacher's target.
+/// (<c>feat = feat.float()</c>): <c>exp(1 / 0.04)</c> is beyond half precision. The iteration runs in
+/// log space: each normalisation is a log-softmax along its axis minus the log of the axis' target
+/// mass, and the result is exponentiated once at the end. That is algebraically Sonata's linear
+/// update, but a prototype whose every <c>exp(score / temperature)</c> underflows to zero no longer
+/// divides 0 by 0 into NaN. The result carries no gradient: it is the teacher's target.
 /// </para>
 /// </remarks>
 public sealed class SinkhornKnoppCentering<T> : ISonataTargetCentering<T>
@@ -95,20 +97,20 @@ public sealed class SinkhornKnoppCentering<T> : ISonataTargetCentering<T>
         var engine = AiDotNetEngine.Current;
         using var noGrad = new NoGradScope<float>();
         int n = scores.Shape[0], k = scores.Shape[1];
-        var shape = new[] { n, k };
         float max = engine.TensorMaxValue(scores);
-        var q = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSubtractScalar(scores, max), (float)(1.0 / temperature)));
-        q = engine.TensorDivideScalar(q, engine.TensorSum(q));
+        // log Q = (s - max) / temperature; the global normaliser of Sonata's Q /= sum(Q) is a constant
+        // shift that the first log-softmax over prototypes cancels exactly.
+        var logQ = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(scores, max), (float)(1.0 / temperature));
+        float logK = (float)Math.Log(k), logN = (float)Math.Log(n);
         for (int i = 0; i < iterations; i++)
         {
             // Each prototype (column) to total mass 1 / k, then each sample (row) to 1 / n.
-            var perPrototype = engine.TensorMultiplyScalar(engine.ReduceSum(q, new[] { 0 }, true), (float)k);
-            q = engine.TensorDivide(q, engine.TensorBroadcastTo(perPrototype, shape));
-            var perSample = engine.TensorMultiplyScalar(engine.ReduceSum(q, new[] { 1 }, true), (float)n);
-            q = engine.TensorDivide(q, engine.TensorBroadcastTo(perSample, shape));
+            logQ = engine.TensorSubtractScalar(engine.TensorLogSoftmax(logQ, 0), logK);
+            logQ = engine.TensorSubtractScalar(engine.TensorLogSoftmax(logQ, 1), logN);
         }
 
-        return engine.TensorMultiplyScalar(q, (float)n);
+        // Q * n: every row sums to one.
+        return engine.TensorExp(engine.TensorAddScalar(logQ, logN));
     }
 }
 
@@ -160,12 +162,32 @@ public sealed class SonataClusterCrossEntropyLoss<T> : ISonataDistillationLoss<T
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
+/// <para>
 /// The official Sonata v1m1 configuration does not use it, so <see cref="SonataOptions.KoLeoWeight"/>
 /// defaults to zero; it is provided for the DINOv2-style variant.
+/// </para>
+/// <para>
+/// DINOv2 picks the neighbours from the full <c>[points, points]</c> cosine matrix, which for a 65,536-point
+/// view is 4.3 billion entries. Here the matrix is scanned in <see cref="BlockSize"/>-square tiles that
+/// keep each query's best score and global index (the first index on ties, as <c>argmax</c>), so memory
+/// is bounded by one tile while the selected neighbours are the same. The selection carries no
+/// gradient; the distance to the selected neighbour does.
+/// </para>
 /// </remarks>
 public sealed class KoLeoRegularizer<T> : ISonataFeatureRegularizer<T>
 {
     private const double Epsilon = 1e-8;
+
+    /// <summary>Creates the regulariser.</summary>
+    /// <param name="blockSize">Rows and columns of each nearest-neighbour tile (default 1024).</param>
+    public KoLeoRegularizer(int blockSize = 1024)
+    {
+        if (blockSize < 1) throw new ArgumentOutOfRangeException(nameof(blockSize), blockSize, "The block size must be positive.");
+        BlockSize = blockSize;
+    }
+
+    /// <summary>Rows and columns of each tile of the cosine matrix scanned for nearest neighbours.</summary>
+    public int BlockSize { get; }
 
     /// <inheritdoc />
     public Tensor<T> Compute(Tensor<T> embeddings)
@@ -179,20 +201,59 @@ public sealed class KoLeoRegularizer<T> : ISonataFeatureRegularizer<T>
         var shape = new[] { n, c };
         var x = engine.TensorDivide(embeddings, engine.TensorBroadcastTo(L2Norm(engine, embeddings, numOps), shape));
 
-        Tensor<int> nearest;
-        using (new NoGradScope<T>())
-        {
-            // dots with the diagonal pushed below -1, the smallest cosine, so a point never picks itself.
-            var dots = engine.TensorMatMul(x, engine.TensorPermute(x, new[] { 1, 0 }));
-            var self = engine.TensorMultiplyScalar(engine.TensorEye<T>(n), numOps.FromDouble(3.0));
-            nearest = engine.TensorArgMax(engine.TensorSubtract(dots, self), 1);
-        }
-
+        var nearest = NearestNeighbours(engine, numOps, x, n, c);
         var difference = engine.TensorAddScalar(
-            engine.TensorSubtract(x, engine.TensorIndexSelect(x, nearest, 0)), numOps.FromDouble(Epsilon));
+            engine.TensorSubtract(x, engine.TensorIndexSelect(x, PtOps.Indices(nearest), 0)), numOps.FromDouble(Epsilon));
         var distance = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(difference), new[] { 1 }, false));
         var logs = engine.TensorLog(engine.TensorAddScalar(distance, numOps.FromDouble(Epsilon)));
         return engine.Reshape(engine.TensorNegate(engine.ReduceMean(logs, new[] { 0 }, false)), new[] { 1 });
+    }
+
+    /// <summary>
+    /// For every row of the normalised <paramref name="x"/>, the index of the other row with the largest
+    /// cosine, scanning <see cref="BlockSize"/>-square tiles.
+    /// </summary>
+    internal int[] NearestNeighbours(IEngine engine, INumericOperations<T> numOps, Tensor<T> x, int n, int c)
+    {
+        var nearest = new int[n];
+        var bestScore = new T[n];
+        var found = new bool[n];
+        int block = BlockSize;
+        using (new NoGradScope<T>())
+        {
+            for (int queryStart = 0; queryStart < n; queryStart += block)
+            {
+                int queryCount = Math.Min(block, n - queryStart);
+                var queries = engine.TensorSlice(x, new[] { queryStart, 0 }, new[] { queryCount, c });
+                for (int referenceStart = 0; referenceStart < n; referenceStart += block)
+                {
+                    int referenceCount = Math.Min(block, n - referenceStart);
+                    var references = engine.TensorSlice(x, new[] { referenceStart, 0 }, new[] { referenceCount, c });
+                    var dots = engine.TensorMatMul(queries, engine.TensorPermute(references, new[] { 1, 0 }));
+                    if (referenceStart == queryStart)
+                    {
+                        // Tiles share one grid, so only the diagonal tile holds self pairs; push them below
+                        // -1, the smallest cosine, so a point never picks itself.
+                        var self = engine.TensorMultiplyScalar(engine.TensorEye<T>(queryCount), numOps.FromDouble(3.0));
+                        dots = engine.TensorSubtract(dots, self);
+                    }
+
+                    var tileBest = engine.ReduceMax(dots, new[] { 1 }, false).ToArray();
+                    var tileIndex = engine.TensorArgMax(dots, 1).ToArray();
+                    for (int i = 0; i < queryCount; i++)
+                    {
+                        int row = queryStart + i;
+                        // Strictly greater keeps the earliest index on ties, as one argmax over the row would.
+                        if (found[row] && !numOps.GreaterThan(tileBest[i], bestScore[row])) continue;
+                        found[row] = true;
+                        bestScore[row] = tileBest[i];
+                        nearest[row] = referenceStart + tileIndex[i];
+                    }
+                }
+            }
+        }
+
+        return nearest;
     }
 
     private static Tensor<T> L2Norm(IEngine engine, Tensor<T> x, INumericOperations<T> numOps)

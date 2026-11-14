@@ -64,6 +64,35 @@ internal sealed class SonataViewSet
 /// </summary>
 internal static class SonataPretraining
 {
+    // Pointcept pretrain-sonata-v1m1-0-base, transform of every view (MultiViewGenerator view_keys):
+    // RandomScale(scale=[0.9, 1.1]).
+    private const double ScaleMin = 0.9;
+    private const double ScaleMax = 1.1;
+
+    // RandomRotate(angle=[-1, 1], axis="z", p=0.8); angles are multiples of pi.
+    private const double RotateZProbability = 0.8;
+    private const double RotateZMaxAngle = 1.0;
+
+    // RandomRotate(angle=[-1/64, 1/64], axis="x", p=0.8) and the same about "y".
+    private const double TiltProbability = 0.8;
+    private const double TiltMaxAngle = 1.0 / 64;
+
+    // RandomFlip(p=0.5), applied to x and y independently.
+    private const double FlipProbability = 0.5;
+
+    // RandomJitter(sigma=0.005, clip=0.02).
+    private const double JitterSigma = 0.005;
+    private const double JitterClip = 0.02;
+
+    // ChromaticTranslation(p=0.95, ratio=0.05) on colours normalised to [-1, 1].
+    private const double ChromaticTranslationProbability = 0.95;
+    private const double ChromaticTranslationRatio = 0.05;
+
+    // Draws of the crop size before falling back, and the fallback size when every draw of
+    // U(min, max) * limit truncates to zero (still capped at the limit).
+    private const int MaxCropDraws = 10;
+    private const int MinimumFallbackCrop = 10;
+
     /// <summary>
     /// Builds the global and local crops of a <c>[points, width]</c> scene whose first three channels
     /// are xyz, following Pointcept's <c>MultiViewGenerator</c>: the major global view is centred on
@@ -117,10 +146,11 @@ internal static class SonataPretraining
     {
         int n = coordinates.Length / 3;
         int size = 0;
-        for (int attempt = 0; attempt < 10 && size <= 0; attempt++)
+        for (int attempt = 0; attempt < MaxCropDraws && size <= 0; attempt++)
             size = (int)((min + (max - min) * random.NextDouble()) * limit);
-        if (size <= 0) size = Math.Max(10, (int)(max * limit));
-        size = Math.Min(size, n);
+        if (size <= 0) size = Math.Max(MinimumFallbackCrop, (int)(max * limit));
+        // limit is min(MaxViewSize, scene size): the fallback must not exceed the configured maximum.
+        size = Math.Min(size, limit);
         double cx = reference[center * 3], cy = reference[center * 3 + 1], cz = reference[center * 3 + 2];
         var distance = new double[n];
         var order = new int[n];
@@ -164,7 +194,9 @@ internal static class SonataPretraining
             }
 
             double sx = (minX + maxX) / 2, sy = (minY + maxY) / 2;
-            double brightness = random.NextDouble() < 0.95 ? (random.NextDouble() - 0.5) * 2 * 0.05 : 0.0;
+            double brightness = random.NextDouble() < ChromaticTranslationProbability
+                ? (random.NextDouble() - 0.5) * 2 * ChromaticTranslationRatio
+                : 0.0;
             foreach (int i in index)
             {
                 double x = (coordinates[i * 3] - sx) * scale, y = (coordinates[i * 3 + 1] - sy) * scale,
@@ -172,8 +204,7 @@ internal static class SonataPretraining
                 var p = Apply(transform, x, y, z);
                 for (int a = 0; a < 3; a++)
                 {
-                    // RandomJitter(sigma=0.005, clip=0.02).
-                    double jitter = Math.Max(-0.02, Math.Min(0.02, 0.005 * Gaussian(random)));
+                    double jitter = Math.Max(-JitterClip, Math.Min(JitterClip, JitterSigma * Gaussian(random)));
                     augmented[row * 3 + a] = p[a] + jitter;
                     origin[row * 3 + a] = coordinates[i * 3 + a];
                     features[row * width + a] = (float)augmented[row * 3 + a];
@@ -208,12 +239,12 @@ internal static class SonataPretraining
     /// </summary>
     private static double[] RandomTransform(Random random, out double scale)
     {
-        scale = 0.9 + 0.2 * random.NextDouble();
-        double az = random.NextDouble() < 0.8 ? (random.NextDouble() * 2 - 1) * Math.PI : 0.0;
-        double ax = random.NextDouble() < 0.8 ? (random.NextDouble() * 2 - 1) / 64 * Math.PI : 0.0;
-        double ay = random.NextDouble() < 0.8 ? (random.NextDouble() * 2 - 1) / 64 * Math.PI : 0.0;
+        scale = ScaleMin + (ScaleMax - ScaleMin) * random.NextDouble();
+        double az = random.NextDouble() < RotateZProbability ? (random.NextDouble() * 2 - 1) * RotateZMaxAngle * Math.PI : 0.0;
+        double ax = random.NextDouble() < TiltProbability ? (random.NextDouble() * 2 - 1) * TiltMaxAngle * Math.PI : 0.0;
+        double ay = random.NextDouble() < TiltProbability ? (random.NextDouble() * 2 - 1) * TiltMaxAngle * Math.PI : 0.0;
         var m = Multiply(Rotation(ay, 1), Multiply(Rotation(ax, 0), Rotation(az, 2)));
-        double fx = random.NextDouble() < 0.5 ? -1 : 1, fy = random.NextDouble() < 0.5 ? -1 : 1;
+        double fx = random.NextDouble() < FlipProbability ? -1 : 1, fy = random.NextDouble() < FlipProbability ? -1 : 1;
         for (int c = 0; c < 3; c++)
         {
             m[c] *= fx;

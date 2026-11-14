@@ -266,6 +266,32 @@ public class SonataOptions : PointTransformerV3EncoderOptions
     public void Validate()
     {
         ValidateBackbone(encoderOnly: true);
+        // NaN passes every "x < bound" test below (all NaN comparisons are false), so reject non-finite values first.
+        RequireFinite(GlobalViewScaleMin, nameof(GlobalViewScaleMin));
+        RequireFinite(GlobalViewScaleMax, nameof(GlobalViewScaleMax));
+        RequireFinite(LocalViewScaleMin, nameof(LocalViewScaleMin));
+        RequireFinite(LocalViewScaleMax, nameof(LocalViewScaleMax));
+        RequireFinite(MaskSizeStart, nameof(MaskSizeStart));
+        RequireFinite(MaskSizeBase, nameof(MaskSizeBase));
+        RequireFinite(MaskSizeWarmupRatio, nameof(MaskSizeWarmupRatio));
+        RequireFinite(MaskRatioStart, nameof(MaskRatioStart));
+        RequireFinite(MaskRatioBase, nameof(MaskRatioBase));
+        RequireFinite(MaskRatioWarmupRatio, nameof(MaskRatioWarmupRatio));
+        RequireFinite(MaskJitter, nameof(MaskJitter));
+        RequireFinite(TeacherTemperatureStart, nameof(TeacherTemperatureStart));
+        RequireFinite(TeacherTemperatureBase, nameof(TeacherTemperatureBase));
+        RequireFinite(TeacherTemperatureWarmupRatio, nameof(TeacherTemperatureWarmupRatio));
+        RequireFinite(StudentTemperature, nameof(StudentTemperature));
+        RequireFinite(MaskLossWeight, nameof(MaskLossWeight));
+        RequireFinite(RollMaskLossWeight, nameof(RollMaskLossWeight));
+        RequireFinite(UnmaskLossWeight, nameof(UnmaskLossWeight));
+        RequireFinite(MomentumBase, nameof(MomentumBase));
+        RequireFinite(MomentumFinal, nameof(MomentumFinal));
+        RequireFinite(MatchMaxRadius, nameof(MatchMaxRadius));
+        RequireFinite(KoLeoWeight, nameof(KoLeoWeight));
+        RequireFinite(LearningRate, nameof(LearningRate));
+        RequireFinite(WeightDecay, nameof(WeightDecay));
+        RequireFinite(GradientClip, nameof(GradientClip));
         if (InputChannels < 3) throw new ArgumentException("Sonata feeds xyz as features, so InputChannels must be at least 3.");
         if (UpCastLevel < 0 || UpCastLevel >= EncoderDepths.Length)
             throw new ArgumentException("UpCastLevel must be between 0 and the number of poolings.");
@@ -297,5 +323,10 @@ public class SonataOptions : PointTransformerV3EncoderOptions
         if (SinkhornIterations < 1) throw new ArgumentException("SinkhornIterations must be at least 1.");
         if (!(LearningRate > 0) || WeightDecay < 0 || GradientClip < 0) throw new ArgumentException("Optimizer settings are invalid.");
         if (PretrainingEpochs < 1) throw new ArgumentException("PretrainingEpochs must be at least 1.");
+    }
+
+    private static void RequireFinite(double value, string name)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentException($"{name} must be a finite number.");
     }
 }
