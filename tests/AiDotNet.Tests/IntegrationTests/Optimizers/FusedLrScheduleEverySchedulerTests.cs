@@ -24,6 +24,9 @@ public class FusedLrScheduleEverySchedulerTests
         yield return new object[] { "Noam", new Func<ILearningRateScheduler>(() => new NoamSchedule(256, 20)) };
         yield return new object[] { "LinearWarmup", new Func<ILearningRateScheduler>(() => new LinearWarmupScheduler(0.1, 10, 80, 1e-3, LinearWarmupScheduler.DecayMode.Cosine, 1e-4)) };
         yield return new object[] { "Step", new Func<ILearningRateScheduler>(() => new StepLRScheduler(0.1, 7, 0.5)) };
+        // Floors the Tensors schedules lack: 0.1 * 0.97^n falls below 0.01 at n = 76, 0.1 * 0.5^(n/7) at n = 28.
+        yield return new object[] { "ExponentialFloor", new Func<ILearningRateScheduler>(() => new ExponentialLRScheduler(0.1, 0.97, 0.01)) };
+        yield return new object[] { "StepFloor", new Func<ILearningRateScheduler>(() => new StepLRScheduler(0.1, 7, 0.5, 0.01)) };
         yield return new object[] { "Cyclic", new Func<ILearningRateScheduler>(() => new CyclicLRScheduler(0.001, 0.1, 10, 10)) };
         yield return new object[] { "CyclicTriangular2Asym", new Func<ILearningRateScheduler>(() => new CyclicLRScheduler(0.001, 0.1, 5, 13, CyclicLRScheduler.CyclicMode.Triangular2)) };
         yield return new object[] { "CyclicExpRange", new Func<ILearningRateScheduler>(() => new CyclicLRScheduler(0.001, 0.1, 6, 9, CyclicLRScheduler.CyclicMode.ExponentialRange, 0.99)) };
@@ -46,8 +49,6 @@ public class FusedLrScheduleEverySchedulerTests
                 new StepLRScheduler(0.01, 3, 0.5),
             },
             new[] { 12, 40 })) };
-        yield return new object[] { "Lambda", new Func<ILearningRateScheduler>(() => new LambdaLRScheduler(0.1, s => 1.0 / (1 + 0.1 * s))) };
-        yield return new object[] { "PureSubclass", new Func<ILearningRateScheduler>(() => new HalvingScheduler(0.1)) };
     }
 
     private static LrSchedule? Map(ILearningRateScheduler scheduler, SchedulerStepMode mode = SchedulerStepMode.StepPerBatch)
@@ -81,8 +82,9 @@ public class FusedLrScheduleEverySchedulerTests
     public void BuiltInSchedulers_Checkpoint_AndCustomOnesSayTheyCannot(string name, Func<ILearningRateScheduler> make)
     {
         var fused = Map(make())!;
-        bool custom = name is "Lambda" or "PureSubclass";
-        if (custom) { Assert.Null(fused.TryCaptureCheckpoint()); return; }
+        // A floored schedule reads the eager formula live, so it has no checkpoint form.
+        bool formula = name is "ExponentialFloor" or "StepFloor";
+        if (formula) { Assert.Null(fused.TryCaptureCheckpoint()); return; }
         var restored = fused.TryCaptureCheckpoint()!.ToSchedule();
         for (int n = 1; n <= 300; n++)
             Assert.Equal(BitConverter.DoubleToInt64Bits(fused.GetLr(n)), BitConverter.DoubleToInt64Bits(restored.GetLr(n)));
@@ -92,6 +94,11 @@ public class FusedLrScheduleEverySchedulerTests
     {
         yield return new object[] { "ReduceOnPlateau", new Func<ILearningRateScheduler>(() => new ReduceOnPlateauScheduler(0.1, patience: 2)), SchedulerStepMode.StepPerBatch };
         yield return new object[] { "AdaptiveFitness", new Func<ILearningRateScheduler>(() => new AdaptiveFitnessScheduler(0.1)), SchedulerStepMode.StepPerBatch };
+        // Custom formulas run on the external rate: the batch-end Step() already calls them once per step, and a
+        // delegate or override may keep state (this one counts its calls), so the plan must not call them again.
+        yield return new object[] { "Lambda", new Func<ILearningRateScheduler>(() => new LambdaLRScheduler(0.1, s => 1.0 / (1 + 0.1 * s))), SchedulerStepMode.StepPerBatch };
+        yield return new object[] { "StatefulLambda", new Func<ILearningRateScheduler>(() => { int calls = 0; return new LambdaLRScheduler(0.1, _ => 1.0 / ++calls); }), SchedulerStepMode.StepPerBatch };
+        yield return new object[] { "PureSubclass", new Func<ILearningRateScheduler>(() => new HalvingScheduler(0.1)), SchedulerStepMode.StepPerBatch };
         yield return new object[] { "StatefulSubclass", new Func<ILearningRateScheduler>(() => new CountingScheduler(0.1)), SchedulerStepMode.StepPerBatch };
         yield return new object[] { "AlreadyStepped", new Func<ILearningRateScheduler>(() => { var s = new StepLRScheduler(0.1, 2); s.Step(); return s; }), SchedulerStepMode.StepPerBatch };
         yield return new object[] { "SequentialWithAStatefulChild", new Func<ILearningRateScheduler>(() => new SequentialLRScheduler(

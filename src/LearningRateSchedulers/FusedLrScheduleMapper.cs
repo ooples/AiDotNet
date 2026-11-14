@@ -9,10 +9,11 @@ namespace AiDotNet.LearningRateSchedulers;
 /// </summary>
 /// <remarks>
 /// Built-in schedulers map to the Tensors schedule of the same formula, which a plan checkpoint can save and restore.
-/// A scheduler whose stepping is its pure formula (a <see cref="LambdaLRScheduler"/>, or a subclass that only
-/// overrides <c>ComputeLearningRate</c>) maps to an adapter that reads the formula. Anything else - a schedule that
-/// reacts to a metric, keeps state across steps, or was already stepped - is declined here; the optimizer then gives
-/// the plan an external rate that its batch-end step keeps current.
+/// An exponential or step schedule with a nonzero floor maps to an adapter that reads its floored formula, since the
+/// Tensors schedule has no floor. Anything else - a custom formula or delegate (a <see cref="LambdaLRScheduler"/>
+/// delegate may keep state, so re-reading it per query need not match one call per step), a schedule that reacts to
+/// a metric, keeps state across steps, or was already stepped - is declined here; the optimizer then gives the plan
+/// an external rate that its batch-end step keeps current.
 /// </remarks>
 internal static class FusedLrScheduleMapper
 {
@@ -22,7 +23,7 @@ internal static class FusedLrScheduleMapper
         // A plan counts its steps from 1; a scheduler already part-way through would be replayed from its start.
         if (scheduler is not LearningRateSchedulerBase stepped || stepped.CurrentStep != 0)
             return false;
-        schedule = MapBuiltIn(scheduler) ?? MapPureFormula(stepped);
+        schedule = MapBuiltIn(scheduler);
         return schedule is not null;
     }
 
@@ -37,7 +38,10 @@ internal static class FusedLrScheduleMapper
                 // The eager formula operation for operation: Cosine(lr, tMax + 1, etaMin) matches it only to the last bit.
                 return LrSchedule.CosineAnnealing(cosine.BaseLearningRate, cosine.TMax, cosine.EtaMin);
             case ExponentialLRScheduler expo when Is<ExponentialLRScheduler>(expo):
-                return LrSchedule.Exponential(expo.BaseLearningRate, expo.Gamma);
+                // LrSchedule.Exponential has no floor; a floored schedule reads the eager formula instead.
+                return expo.MinLearningRate == 0
+                    ? LrSchedule.Exponential(expo.BaseLearningRate, expo.Gamma)
+                    : new FormulaLrSchedule(expo, expo.CurrentLearningRate);
             case NoamSchedule noam when Is<NoamSchedule>(noam):
                 return LrSchedule.Noam(noam.ModelDimension, noam.WarmupSteps, noam.Factor);
             case LinearWarmupScheduler warmup when Is<LinearWarmupScheduler>(warmup):
@@ -51,7 +55,9 @@ internal static class FusedLrScheduleMapper
                     },
                     warmup.EndLr);
             case StepLRScheduler stepLr when Is<StepLRScheduler>(stepLr):
-                return LrSchedule.Step(stepLr.BaseLearningRate, stepLr.StepSize, stepLr.Gamma);
+                return stepLr.MinLearningRate == 0
+                    ? LrSchedule.Step(stepLr.BaseLearningRate, stepLr.StepSize, stepLr.Gamma)
+                    : new FormulaLrSchedule(stepLr, stepLr.CurrentLearningRate);
             case CyclicLRScheduler cyclic when Is<CyclicLRScheduler>(cyclic):
                 return LrSchedule.Cyclic(cyclic.BaseLearningRate, cyclic.MaxLearningRate, cyclic.StepSizeUp, cyclic.StepSizeDown,
                     cyclic.Mode switch
@@ -88,8 +94,11 @@ internal static class FusedLrScheduleMapper
                 // Each child steps only while active, from its own start, so each must be unstepped and mappable.
                 var children = new LrSchedule[sequential.Schedulers.Count];
                 for (int k = 0; k < children.Length; k++)
-                    if (!TryMap(sequential.Schedulers[k], out children[k]!) || children[k] is null)
+                {
+                    if (!TryMap(sequential.Schedulers[k], out var child) || child is null)
                         return null;
+                    children[k] = child;
+                }
                 return LrSchedule.Sequential(children, sequential.Milestones.ToArray());
             }
             default:
@@ -99,22 +108,10 @@ internal static class FusedLrScheduleMapper
 
     private static bool Is<TScheduler>(ILearningRateScheduler scheduler) => scheduler.GetType() == typeof(TScheduler);
 
-    // A scheduler whose Step() is the base class's - advance the count, take the floored formula - is a pure function
-    // of the step count, so the plan can read it directly.
-    private static LrSchedule? MapPureFormula(LearningRateSchedulerBase scheduler)
-    {
-        var type = scheduler.GetType();
-        var step = type.GetMethod(nameof(LearningRateSchedulerBase.Step), Type.EmptyTypes);
-        var stepWithMetric = type.GetMethod(nameof(LearningRateSchedulerBase.Step), new[] { typeof(double) });
-        if (step?.DeclaringType != typeof(LearningRateSchedulerBase) || stepWithMetric?.DeclaringType != typeof(LearningRateSchedulerBase))
-            return null;
-        return new FormulaLrSchedule(scheduler, scheduler.CurrentLearningRate);
-    }
-
     /// <summary>
     /// Reads a pure scheduler's formula: step 1 at its starting rate, step N at <c>GetLearningRateAtStep(N - 1)</c>,
-    /// which is what its <c>Step()</c> returns the (N - 1)th time. It has no checkpoint form (the formula may be a
-    /// delegate), so a plan using it cannot be serialized; the optimizer's own scheduler state still is.
+    /// which is what its <c>Step()</c> returns the (N - 1)th time. It has no checkpoint form (the formula is read live),
+    /// so a plan using it cannot be serialized; the optimizer's own scheduler state still is.
     /// </summary>
     private sealed class FormulaLrSchedule : LrSchedule
     {
