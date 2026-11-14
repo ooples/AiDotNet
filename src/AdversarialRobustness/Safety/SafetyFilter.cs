@@ -384,7 +384,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <summary>
     /// Merges a classifier verdict into the pattern result: each category keeps the larger of the two scores.
     /// </summary>
-    [ScalarKernel("Reads one score per harm category from a dictionary; there is no tensor to vectorize over.")]
+    [AiDotNet.Attributes.ScalarKernel("Reads one score per harm category from a dictionary; there is no tensor to vectorize over.")]
     private static void MergeClassifierScores(HarmfulContentResult<T> result, ContentClassificationResult<T> classification)
     {
         if (!classification.IsHarmful)
