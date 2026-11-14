@@ -362,22 +362,7 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     public Tensor<T> ComputeCorrelationMatrix(Tensor<T> returns)
     {
-        var covariance = ComputeCovarianceMatrix(returns);
-        int assets = covariance.Shape[0];
-        var data = new T[assets * assets];
-
-        for (int i = 0; i < assets; i++)
-        {
-            T varI = covariance.Data.Span[i * assets + i];
-            for (int j = 0; j < assets; j++)
-            {
-                T varJ = covariance.Data.Span[j * assets + j];
-                T denom = NumOps.Multiply(NumOps.Sqrt(varI), NumOps.Sqrt(varJ));
-                data[(i * assets) + j] = NumOps.Divide(covariance.Data.Span[(i * assets) + j], denom);
-            }
-        }
-
-        return new Tensor<T>(new[] { assets, assets }, new Vector<T>(data));
+        return VolatilityStatistics<T>.Correlation(returns);
     }
 
     /// <summary>
@@ -388,36 +373,7 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     public Tensor<T> ComputeCovarianceMatrix(Tensor<T> returns)
     {
-        GetReturnMatrixShape(returns, out int samples, out int assets);
-        var means = new T[assets];
-
-        for (int a = 0; a < assets; a++)
-        {
-            T sum = NumOps.Zero;
-            for (int s = 0; s < samples; s++)
-                sum = NumOps.Add(sum, GetReturnAt(returns, s, a, assets));
-            means[a] = NumOps.Divide(sum, NumOps.FromDouble(samples));
-        }
-
-        var cov = new T[assets * assets];
-        double denom = Math.Max(1, samples - 1);
-
-        for (int i = 0; i < assets; i++)
-        {
-            for (int j = 0; j < assets; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < samples; s++)
-                {
-                    T xi = NumOps.Subtract(GetReturnAt(returns, s, i, assets), means[i]);
-                    T xj = NumOps.Subtract(GetReturnAt(returns, s, j, assets), means[j]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(xi, xj));
-                }
-                cov[(i * assets) + j] = NumOps.Divide(sum, NumOps.FromDouble(denom));
-            }
-        }
-
-        return new Tensor<T>(new[] { assets, assets }, new Vector<T>(cov));
+        return VolatilityStatistics<T>.Covariance(returns);
     }
 
     /// <summary>
@@ -428,22 +384,7 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     public Tensor<T> CalculateRealizedVolatility(Tensor<T> highFrequencyReturns)
     {
-        GetReturnMatrixShape(highFrequencyReturns, out int samples, out int assets);
-        var data = new T[assets];
-
-        for (int a = 0; a < assets; a++)
-        {
-            T sumSq = NumOps.Zero;
-            for (int s = 0; s < samples; s++)
-            {
-                T r = GetReturnAt(highFrequencyReturns, s, a, assets);
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(r, r));
-            }
-            T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(samples));
-            data[a] = NumOps.Sqrt(meanSq);
-        }
-
-        return new Tensor<T>(new[] { assets }, new Vector<T>(data));
+        return VolatilityStatistics<T>.RealizedVolatility(highFrequencyReturns);
     }
 
     /// <summary>
@@ -508,67 +449,7 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     private Tensor<T> EnsureHorizonShape(Tensor<T> forecast, int horizon)
     {
-        if (forecast.Rank == 2 && forecast.Shape[0] == horizon && forecast.Shape[1] == _numAssets)
-            return forecast;
-
-        var vector = forecast.ToVector();
-        var data = new T[horizon * _numAssets];
-        int count = Math.Min(_numAssets, vector.Length);
-
-        for (int h = 0; h < horizon; h++)
-        {
-            for (int a = 0; a < _numAssets; a++)
-            {
-                data[(h * _numAssets) + a] = vector[a % count];
-            }
-        }
-
-        return new Tensor<T>(new[] { horizon, _numAssets }, new Vector<T>(data));
-    }
-
-    /// <summary>
-    /// Gets the sample and asset dimensions for return tensors.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This converts 3D batches into a simple list of samples.</para>
-    /// </remarks>
-    private static void GetReturnMatrixShape(Tensor<T> returns, out int samples, out int assets)
-    {
-        if (returns.Rank == 2)
-        {
-            samples = returns.Shape[0];
-            assets = returns.Shape[1];
-            return;
-        }
-
-        if (returns.Rank == 3)
-        {
-            samples = returns.Shape[0] * returns.Shape[1];
-            assets = returns.Shape[2];
-            return;
-        }
-
-        throw new ArgumentException("Returns tensor must be 2D or 3D.");
-    }
-
-    /// <summary>
-    /// Reads a return value at the given sample and asset index.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This handles both 2D and 3D return tensors.</para>
-    /// </remarks>
-    private static T GetReturnAt(Tensor<T> returns, int sampleIndex, int assetIndex, int assets)
-    {
-        if (returns.Rank == 2)
-        {
-            return returns.Data.Span[(sampleIndex * assets) + assetIndex];
-        }
-
-        int seqLen = returns.Shape[1];
-        int batch = sampleIndex / seqLen;
-        int step = sampleIndex % seqLen;
-        int idx = (batch * seqLen * assets) + (step * assets) + assetIndex;
-        return returns.Data.Span[idx];
+        return VolatilityStatistics<T>.TileToHorizon(forecast, horizon, _numAssets);
     }
 
     #endregion
