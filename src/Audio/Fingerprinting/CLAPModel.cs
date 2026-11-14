@@ -913,6 +913,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 ExtraParameters = allParams,
                 OnGradients = gradients => PublishParameterGradients(gradients),
                 VerifyReplayAgreement = true,
+                GraphBreakReason = HostDrawnTrainingRandomness(),
             });
         }
         finally
@@ -921,6 +922,21 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Why the training forward cannot be compiled once and replayed, or null when it can: the Swin blocks' drop-path
+    /// masks, the SpecAugment stripes and the feature-fusion crop offsets are drawn on the host every step, and a
+    /// compiled plan would keep the traced step's draws. Two identically seeded models then trained to different
+    /// weights, because whether the traced step's plan update was kept depended on that plan, not on the seed.
+    /// </summary>
+    private string? HostDrawnTrainingRandomness()
+    {
+        bool stripes = _options.SpecAugmentTimeStripes > 0 && _options.SpecAugmentTimeDropWidth > 0
+            || _options.SpecAugmentFreqStripes > 0 && _options.SpecAugmentFreqDropWidth > 0;
+        return _options.AudioDropPathRate > 0 || stripes || _options.EnableFeatureFusion
+            ? "CLAP's training forward draws drop-path masks, SpecAugment stripes and fusion crops on the host each step"
+            : null;
     }
 
     /// <summary>
