@@ -498,7 +498,7 @@ public class CertificationReferenceTests
         public Vector<TNum> Predict(Vector<TNum> input)
         {
             Calls++;
-            var ops = AiDotNet.Helpers.MathHelper.GetNumericOperations<TNum>();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TNum>();
             int cls = _classOf(input.ToArray());
             return new Vector<TNum>(Enumerable.Range(0, _classes).Select(c => c == cls ? ops.One : ops.Zero).ToArray());
         }
@@ -737,7 +737,7 @@ public class CertificationReferenceTests
 
     private static (double Lower, double Upper) WideL2Bounds<TNum>()
     {
-        var ops = AiDotNet.Helpers.MathHelper.GetNumericOperations<TNum>();
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TNum>();
         var layer = new DenseLayer<TNum>(outputSize: 2, biasMode: BiasMode.Always);
         var architecture = new NeuralNetworkArchitecture<TNum>(
             inputType: InputType.OneDimensional,
