@@ -301,6 +301,28 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
             Assert.Equal(0, cache.Count);
         }
 
+        /// <summary>
+        /// Provider embeddings are checked against the configured dimension before conversion: Cohere's
+        /// {"embeddings":[[]]} used to pass as an empty vector, and a null batch row threw NullReferenceException.
+        /// </summary>
+        [Fact]
+        public void ProviderEmbeddings_AreValidatedAgainstConfiguredDimension()
+        {
+            var vector = EmbeddingModelBase<double>.FromApiValues(new[] { 0.5, -1.0, 2.0 }, 3, "Test");
+            Assert.Equal(new[] { 0.5, -1.0, 2.0 }, vector.ToArray());
+
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiValues(new double[0], 3, "Test"));
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiValues(new[] { 1.0, 2.0 }, 3, "Test"));
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiValues(null, 3, "Test"));
+
+            var rows = new List<double[]> { new[] { 1.0, 2.0 }, null };
+            Assert.Throws<InvalidOperationException>(() => EmbeddingModelBase<double>.FromApiRows(rows, 2, 2, "Test"));
+
+            var matrix = EmbeddingModelBase<double>.FromApiRows(
+                new List<double[]> { new[] { 1.0, 2.0 }, new[] { 3.0, 4.0 } }, 2, 2, "Test");
+            Assert.Equal(4.0, matrix[1, 1]);
+        }
+
         // ---------- (c) Model identity / dimension isolation ----------
 
         [Fact]

@@ -107,7 +107,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Voyage AI API returned an empty or invalid response.");
         }
 
-        return FromApiValues(result.Data[0].Embedding);
+        return FromApiValues(result.Data[0]?.Embedding, _dimension, "Voyage AI");
     }
 
     /// <summary>
@@ -137,7 +137,7 @@ public class VoyageAIEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Voyage AI API returned an empty or mismatched response.");
         }
 
-        return FromApiRows(result.Data.Select(d => d.Embedding).ToList(), texts.Count, _dimension, "Voyage AI");
+        return FromApiRows(result.Data.Select(d => d?.Embedding).ToList(), texts.Count, _dimension, "Voyage AI");
     }
 
     private async Task<VoyageEmbeddingResponse?> PostEmbeddingsAsync(IEnumerable<string> input)

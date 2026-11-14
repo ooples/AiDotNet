@@ -119,7 +119,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 throw new InvalidOperationException("OpenAI API returned an empty or mismatched response.");
             }
 
-            return FromApiRows(result.Data.Select(d => d.Embedding).ToList(), texts.Count, _dimension, "OpenAI");
+            return FromApiRows(result.Data.Select(d => d?.Embedding).ToList(), texts.Count, _dimension, "OpenAI");
         }
 
         /// <summary>
@@ -154,7 +154,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 throw new InvalidOperationException("OpenAI API returned an empty or invalid response.");
             }
 
-            return FromApiValues(result.Data[0].Embedding);
+            return FromApiValues(result.Data[0]?.Embedding, _dimension, "OpenAI");
         }
 
         private class OpenAIEmbeddingResponse

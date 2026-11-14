@@ -152,7 +152,7 @@ public class CohereEmbeddingModel<T> : EmbeddingModelBase<T>
             throw new InvalidOperationException("Cohere API returned an empty or invalid response.");
         }
 
-        return FromApiValues(result.Embeddings[0]);
+        return FromApiValues(result.Embeddings[0], _dimension, "Cohere");
     }
 
     private class CohereEmbeddingResponse

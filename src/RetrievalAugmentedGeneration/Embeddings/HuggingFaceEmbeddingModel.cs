@@ -96,7 +96,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
                 throw new InvalidOperationException("HuggingFace API returned an empty or invalid response.");
             }
 
-            return FromApiValues(result[0]);
+            return FromApiValues(result[0], _dimension, "HuggingFace");
         }
 
         /// <summary>

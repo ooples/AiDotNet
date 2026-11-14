@@ -195,29 +195,46 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     }
 
     /// <summary>
-    /// Converts embedding values received from a provider API (JSON doubles) to <typeparamref name="T"/> in one pass.
+    /// Converts one embedding received from a provider API (JSON doubles) to <typeparamref name="T"/> in one pass,
+    /// after checking that the provider returned an embedding of the configured dimension.
     /// </summary>
-    private protected static Vector<T> FromApiValues(double[] values)
-        => values.Length == 0 ? new Vector<T>(0) : new Tensor<double>(values, [values.Length]).Cast<T>().ToVector();
+    /// <exception cref="InvalidOperationException">The embedding is missing or has the wrong length.</exception>
+    internal static Vector<T> FromApiValues(double[]? values, int dimension, string provider)
+    {
+        if (values is null)
+            throw new InvalidOperationException($"{provider} returned no embedding values.");
+        if (values.Length != dimension)
+            throw new InvalidOperationException(
+                $"{provider} returned an embedding of dimension {values.Length}; expected {dimension}.");
+
+        return values.Length == 0 ? new Vector<T>(0) : new Tensor<double>(values, [values.Length]).Cast<T>().ToVector();
+    }
 
     /// <summary>
     /// Builds the batch matrix from a provider API's embeddings, one row per input text, after checking that the
     /// provider returned exactly one embedding of the configured dimension per text.
     /// </summary>
-    private protected static Matrix<T> FromApiRows(IReadOnlyList<double[]> rows, int expectedRows, int dimension, string provider)
+    /// <exception cref="InvalidOperationException">The row count is wrong, or a row is missing or has the wrong length.</exception>
+    internal static Matrix<T> FromApiRows(IReadOnlyList<double[]?> rows, int expectedRows, int dimension, string provider)
     {
         if (rows.Count != expectedRows)
             throw new InvalidOperationException(
                 $"{provider} returned {rows.Count} embeddings for {expectedRows} input texts.");
 
+        var vectors = new Vector<T>[rows.Count];
         for (int i = 0; i < rows.Count; i++)
         {
-            if (rows[i].Length != dimension)
+            var row = rows[i];
+            if (row is null)
+                throw new InvalidOperationException($"{provider} returned no embedding values at index {i}.");
+            if (row.Length != dimension)
                 throw new InvalidOperationException(
-                    $"{provider} returned an embedding of dimension {rows[i].Length} at index {i}; expected {dimension}.");
+                    $"{provider} returned an embedding of dimension {row.Length} at index {i}; expected {dimension}.");
+
+            vectors[i] = FromApiValues(row, dimension, provider);
         }
 
-        return Matrix<T>.FromRowVectors(rows.Select(FromApiValues));
+        return Matrix<T>.FromRowVectors(vectors);
     }
 
     /// <summary>
