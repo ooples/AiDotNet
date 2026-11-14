@@ -1049,6 +1049,7 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Document.LayoutAware.LayoutLMv3`1::ImageSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.LayoutAware.LayoutLMv3`1::ImageWidth", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.LayoutAware.LayoutLMv3`1::MaxGradNorm", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Document.LayoutAware.LayoutLMv3`1::MaxSequenceLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.LayoutAware.LayoutLMv3`1::NumClasses", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.LayoutAware.LayoutLMv3`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.LayoutAware.LayoutLMv3`1::NumEncoderLayers", OptionSensitivityOutcome.Insensitive },
