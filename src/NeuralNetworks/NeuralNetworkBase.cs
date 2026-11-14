@@ -8352,6 +8352,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// <paramref name="forward"/>, freeing its GPU intermediates when it ends for a model that keeps none between calls
+    /// (<see cref="ReleasesInferenceIntermediates"/>) and only on an untaped, untraced call: the compiled step's one
+    /// inference-mode lazy-initialization forward. Its results are discarded, yet left to finalization they stayed
+    /// resident through training (DenseNet-121 b64: about 630 MB of batch-norm, convolution and concatenation outputs). A taped or
+    /// traced forward is returned unchanged: its intermediates are the backward's inputs and the plan's nodes.
+    /// </summary>
+    private Func<Tensor<T>, Tensor<T>> ReleasingEagerIntermediates(Func<Tensor<T>, Tensor<T>> forward)
+    {
+        if (!ReleasesInferenceIntermediates) return forward;
+        return x =>
+        {
+            if (Tensors.Engines.Compilation.GraphMode.IsActive
+                || AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AnyTapeActive()
+                || Graph.LayerForwardObserver<T>.Current is not null)
+                return forward(x);
+            using var scope = TensorScope.Begin();
+            return scope.Keep(forward(x));
+        };
+    }
+
+    /// <summary>
     /// The training objective from the readout's input: the fused readout loss when the readout supports this loss and
     /// target, else the readout's forward and <paramref name="loss"/> (the same value either way).
     /// </summary>
@@ -14616,7 +14637,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Layers = trainableLayers,
             Input = input,
             Target = expected,
-            Forward = fusedReadoutHead is null ? ForwardForTraining : ForwardForTrainingToReadout,
+            Forward = ReleasingEagerIntermediates(fusedReadoutHead is null ? ForwardForTraining : ForwardForTrainingToReadout),
             ComputeLoss = fusedReadoutHead is null
                 ? (pred, tgt) =>
                 {
