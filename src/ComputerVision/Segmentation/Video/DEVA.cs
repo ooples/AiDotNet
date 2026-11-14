@@ -504,7 +504,11 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
             if (_corrections.TryGetValue(_objectIds[i], out var correction))
             {
                 if (correction.Rank != 2 || correction.Shape[0] != hm || correction.Shape[1] != wm)
+                {
+                    // The rejected correction is dropped first: left queued, it threw again on every later frame.
+                    _corrections.Remove(_objectIds[i]);
                     throw new ArgumentException($"A correction mask must be [{hm}, {wm}].");
+                }
                 rows[i] = Engine.Reshape(correction, new[] { 1, hm, wm });
                 correctedIds.Add(_objectIds[i]);
             }
