@@ -335,4 +335,500 @@ public class AttackReferenceTests
 
         Assert.Throws<InvalidOperationException>(() => result.EvaluateRobustness(inputs, labels, attack));
     }
+
+    /// <summary>
+    /// A Half view of <see cref="LinearLogitModel"/>: the logits are computed in double and rounded to Half.
+    /// </summary>
+    private sealed class HalfLinearLogitModel : IFullModel<Half, Vector<Half>, Vector<Half>>
+    {
+        private readonly LinearLogitModel _inner;
+        private List<int> _activeFeatures;
+
+        public HalfLinearLogitModel(LinearLogitModel inner)
+        {
+            _inner = inner;
+            _activeFeatures = Enumerable.Range(0, inner.Inputs).ToList();
+        }
+
+        public double[] Logits(Vector<Half> x) => _inner.Logits(x.ToArray().Select(v => (double)v).ToArray());
+
+        public ILossFunction<Half> DefaultLossFunction => new MeanSquaredErrorLoss<Half>();
+
+        public Vector<Half> Predict(Vector<Half> input) => new Vector<Half>(Logits(input).Select(z => (Half)z).ToArray());
+
+        public void Train(Vector<Half> input, Vector<Half> expectedOutput) { }
+        public ModelMetadata<Half> GetModelMetadata() => new();
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public IFullModel<Half, Vector<Half>, Vector<Half>> Clone() => new HalfLinearLogitModel(_inner);
+        public IFullModel<Half, Vector<Half>, Vector<Half>> DeepCopy() => new HalfLinearLogitModel(_inner);
+        public Vector<Half> ComputeGradients(Vector<Half> input, Vector<Half> target, ILossFunction<Half>? lossFunction = null) => new Vector<Half>(_inner.Inputs);
+        public void ApplyGradients(Vector<Half> gradients, Half learningRate) { }
+        public Vector<Half> GetParameters() => new Vector<Half>(_inner.Inputs * _inner.Classes);
+        public void SetParameters(Vector<Half> parameters) { }
+        public IFullModel<Half, Vector<Half>, Vector<Half>> WithParameters(Vector<Half> parameters) => new HalfLinearLogitModel(_inner);
+        public long ParameterCount => _inner.Inputs * _inner.Classes;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+        public Dictionary<string, Half> GetFeatureImportance() => Enumerable.Range(0, _inner.Inputs).ToDictionary(i => $"Feature{i}", i => (Half)(1.0 / _inner.Inputs));
+        public Vector<Half> SanitizeParameters(Vector<Half> parameters) => parameters;
+        public void Dispose() { }
+    }
+
+    /// <summary>
+    /// Exposes the base-class numerics of the attacks for Half.
+    /// </summary>
+    private sealed class HalfNumericsProbe : AdversarialAttackBase<Half, Vector<Half>, Vector<Half>>
+    {
+        public HalfNumericsProbe()
+            : base(new AdversarialAttackOptions<Half>())
+        {
+        }
+
+        public Half L2Norm(Vector<Half> vector) => ComputeL2Norm(vector);
+
+        public Half MeanSquaredError(Vector<Half> output, Vector<Half> target) => ComputeMeanSquaredError(output, target);
+
+        public override Vector<Half> GenerateAdversarialExample(
+            Vector<Half> input, Vector<Half> trueLabel, IFullModel<Half, Vector<Half>, Vector<Half>> targetModel)
+            => input;
+
+        public override Vector<Half> CalculatePerturbation(Vector<Half> original, Vector<Half> adversarial)
+            => new Vector<Half>(original.Length);
+    }
+
+    /// <summary>
+    /// A defense whose preprocessing is a fixed transformation of the input.
+    /// </summary>
+    private sealed class ScriptedDefense : IAdversarialDefense<double, Vector<double>, Vector<double>>
+    {
+        private readonly Func<Vector<double>, Vector<double>> _preprocess;
+
+        public ScriptedDefense(Func<Vector<double>, Vector<double>> preprocess)
+        {
+            _preprocess = preprocess;
+        }
+
+        public IFullModel<double, Vector<double>, Vector<double>> ApplyDefense(
+            Vector<double>[] trainingData, Vector<double>[] labels, IFullModel<double, Vector<double>, Vector<double>> model) => model;
+
+        public Vector<double> PreprocessInput(Vector<double> input) => _preprocess(input);
+
+        public RobustnessMetrics<double> EvaluateRobustness(
+            IFullModel<double, Vector<double>, Vector<double>> model,
+            Vector<double>[] testData,
+            Vector<double>[] labels,
+            IAdversarialAttack<double, Vector<double>, Vector<double>> attack) => new();
+
+        public AdversarialDefenseOptions<double> GetOptions() => new();
+
+        public void Reset() { }
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+    }
+
+    private static Vector<Half> HalfVector(params double[] values) => new Vector<Half>(values.Select(v => (Half)v).ToArray());
+
+    [Fact(Timeout = 60000)]
+    public async Task HalfL2Norm_StaysFiniteAboveTheSquareRootOfHalfMax()
+    {
+        // ||(300, 300, 300, 300)||_2 = 600, but the sum of squares (360000) is past the Half maximum 65504.
+        var probe = new HalfNumericsProbe();
+
+        double norm = (double)probe.L2Norm(HalfVector(300, 300, 300, 300));
+
+        Assert.Equal(600.0, norm, 0);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task HalfMeanSquaredError_StaysFiniteWhenTheSumOfSquaresOverflows()
+    {
+        // 1000 outputs each 10 from the target: MSE = 100, while the sum of squares is 100000.
+        var probe = new HalfNumericsProbe();
+        var output = HalfVector(Enumerable.Repeat(10.0, 1000).ToArray());
+
+        double mse = (double)probe.MeanSquaredError(output, new Vector<Half>(1000));
+
+        Assert.Equal(100.0, mse, 0);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task HalfFgsm_BlackBoxGradientDoesNotCollapseBelowTheTypeResolution()
+    {
+        // In Half, 0.5 + 1e-4 rounds back to 0.5, so a 1e-4 probe step gives a zero gradient and FGSM returns x.
+        // The step must stay resolvable; the result is x + eps * sign(dMSE/dx).
+        var inner = new LinearLogitModel(
+            new double[,] { { 1.0, -2.0, 0.5, 3.0 }, { -1.0, 0.25, 2.0, -0.5 } },
+            new double[] { 0.1, -0.2 });
+        var model = new HalfLinearLogitModel(inner);
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var label = OneHot(0, 2);
+        var attack = new FGSMAttack<Half, Vector<Half>, Vector<Half>>(new AdversarialAttackOptions<Half> { Epsilon = 0.1 });
+
+        var adversarial = attack.GenerateAdversarialExample(HalfVector(x), HalfVector(label.ToArray()), model);
+
+        var z = inner.Logits(x);
+        for (int i = 0; i < inner.Inputs; i++)
+        {
+            double gradient = 0;
+            for (int c = 0; c < inner.Classes; c++)
+            {
+                gradient += 2.0 / inner.Classes * inner.Weight(c, i) * (z[c] - label[c]);
+            }
+
+            Assert.Equal(x[i] + 0.1 * Math.Sign(gradient), (double)adversarial[i], 3);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task HalfCW_AdamStaysBoundedWhenTheSquaredGradientUnderflows()
+    {
+        // Pixel 2 barely matters (|g| ~ 1e-3): (1 - beta2) g^2 ~ 1e-9 underflows to 0 in Half, and so does the
+        // Adam epsilon 1e-8, so m / (sqrt(v) + eps) became infinite and threw the pixel to the box edge.
+        // Adam normalizes the step, so the pixel stays near 0.5 while pixels 0 and 1 flip the class.
+        var inner = new LinearLogitModel(
+            new double[,] { { 1.0, -1.0, 0.001 }, { -1.0, 1.0, -0.001 } },
+            new double[] { 0.1, 0.0 });
+        var model = new HalfLinearLogitModel(inner);
+        var attack = new CWAttack<Half, Vector<Half>, Vector<Half>>(new AdversarialAttackOptions<Half> { Iterations = 100 });
+
+        var adversarial = attack.GenerateAdversarialExample(HalfVector(0.5, 0.5, 0.5), HalfVector(1.0, 0.0), model);
+
+        Assert.All(adversarial.ToArray(), v => Assert.False(Half.IsNaN(v)));
+        Assert.Equal(1, ArgMax(model.Logits(adversarial)));
+        Assert.InRange((double)adversarial[2], 0.45, 0.55);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task HalfCW_PixelAtTheBoxEdgeCanStillMove()
+    {
+        // Class 0 holds while pixel 0 (at 1.0) stays above 0.95. Half rounds the 0.9999 tanh-space bound to 1,
+        // where atanh is infinite and the gradient of the pixel is 0, so it could never decrease.
+        var inner = new LinearLogitModel(new double[,] { { 1.0, 0.0 }, { 0.0, 0.0 } }, new double[] { 0.0, 0.95 });
+        var model = new HalfLinearLogitModel(inner);
+        var options = new AdversarialAttackOptions<Half> { Iterations = 300, CWLearningRate = 0.1 };
+        var attack = new CWAttack<Half, Vector<Half>, Vector<Half>>(options);
+
+        var adversarial = attack.GenerateAdversarialExample(HalfVector(1.0, 0.5), HalfVector(1.0, 0.0), model);
+
+        Assert.Equal(1, ArgMax(model.Logits(adversarial)));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CW_TargetedSuccessUsesTheSameClampedTargetAsTheLoss()
+    {
+        // TargetClass 7 is clamped to class 2 for the loss; success must be judged against class 2 as well,
+        // otherwise no candidate ever counts as successful and the clean input comes back.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+            new double[] { 0.0, 0.0, -0.05 });
+        var options = new AdversarialAttackOptions<double> { Iterations = 100, IsTargeted = true, TargetClass = 7 };
+        var attack = new CWAttack<double, Vector<double>, Vector<double>>(options);
+
+        var adversarial = attack.GenerateAdversarialExample(new Vector<double>(new[] { 0.5, 0.5, 0.5 }), OneHot(0, 3), model);
+
+        Assert.Equal(2, ArgMax(model.Logits(adversarial.ToArray())));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ViTPatchAttack_TargetedRunsUntilThePredictionReachesTheTarget()
+    {
+        // Targeted: the step descends the MSE toward the label (class 1), which the class-0 bias of 10 keeps out
+        // of reach. Stopping as soon as the prediction differs from the label ended the attack after one step
+        // (0.02); every step must run, spending the whole budget against the gradient sign.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, -2.0, 0.5, 3.0 }, { -1.0, 0.25, 2.0, -0.5 } },
+            new double[] { 10.0, 0.0 });
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var label = OneHot(1, 2);
+        var options = new AdversarialAttackOptions<double> { Epsilon = 0.1, IsTargeted = true };
+        var attack = new ViTAdversarialAttack<double, Vector<double>, Vector<double>>(
+            options, patchSize: 1, numAttackPatches: 1, numSteps: 5);
+
+        var adversarial = attack.GenerateAdversarialExample(new Vector<double>(x), label, model);
+
+        var z = model.Logits(x);
+        var gradient = new double[model.Inputs];
+        for (int i = 0; i < model.Inputs; i++)
+        {
+            for (int c = 0; c < model.Classes; c++)
+            {
+                gradient[i] += 2.0 / model.Classes * model.Weight(c, i) * (z[c] - label[c]);
+            }
+        }
+
+        int salient = 0;
+        for (int i = 1; i < gradient.Length; i++)
+        {
+            if (Math.Abs(gradient[i]) > Math.Abs(gradient[salient]))
+            {
+                salient = i;
+            }
+        }
+
+        for (int i = 0; i < model.Inputs; i++)
+        {
+            double expected = i == salient ? x[i] - 0.1 * Math.Sign(gradient[i]) : x[i];
+            Assert.Equal(expected, adversarial[i], 9);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_CleanAccuracyIsMeasuredThroughTheDefense()
+    {
+        // logits = x and the defense swaps the two features. The clean input (1, 0) with label 0 is correct
+        // without the defense but wrong through it, so the defended classifier is not clean-correct on it and
+        // there is nothing for the (identity) attack to flip.
+        var model = new LinearLogitModel(new double[,] { { 1.0, 0.0 }, { 0.0, 1.0 } }, new double[] { 0.0, 0.0 });
+        var result = new AiModelResult<double, Vector<double>, Vector<double>> { Model = model };
+        result.SetAdversarialDefense(new ScriptedDefense(v => new Vector<double>(new[] { v[1], v[0] })));
+        var attack = new ScriptedAttack(v => v);
+        var inputs = new[] { new Vector<double>(new[] { 1.0, 0.0 }) };
+        var labels = new[] { OneHot(0, 2) };
+
+        var stats = result.EvaluateRobustness(inputs, labels, attack);
+
+        Assert.Equal(0.0, stats.CleanAccuracy, 12);
+        Assert.Equal(0.0, stats.AdversarialAccuracy, 12);
+        Assert.Equal(0.0, stats.AttackSuccessRate, 12);
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // AdversarialRobustnessOptions attack settings drive the result's robustness methods.
+    // ------------------------------------------------------------------------------------------------
+
+    private static LinearLogitModel SteepModel() => new LinearLogitModel(
+        new double[,] { { 1.0, -2.0, 0.5, 3.0 }, { -1.0, 0.25, 2.0, -0.5 } },
+        new double[] { 0.1, -0.2 });
+
+    private static AiModelResult<double, Vector<double>, Vector<double>> ResultWith(
+        IFullModel<double, Vector<double>, Vector<double>> model,
+        AdversarialRobustnessOptions<double> options)
+    {
+        var result = new AiModelResult<double, Vector<double>, Vector<double>> { Model = model };
+        result.SetAdversarialRobustnessOptions(options);
+        return result;
+    }
+
+    private static double[] Delta(Vector<double> adversarial, double[] x)
+        => Enumerable.Range(0, x.Length).Select(i => adversarial[i] - x[i]).ToArray();
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackEpsilon_BoundsTheGeneratedPerturbation()
+    {
+        // 10 steps of 0.05 along a consistent gradient sign saturate the L-inf ball, so every coordinate moves
+        // exactly AttackEpsilon (0.2). The setting was ignored and the result always used epsilon 0.03.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.2,
+            AttackStepSize = 0.05,
+            AttackIterations = 10,
+            UseRandomStartForAttacks = false
+        });
+
+        var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2));
+
+        Assert.All(Delta(adversarial, x), d => Assert.Equal(0.2, Math.Abs(d), 9));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackStepSize_SetsThePgdStep()
+    {
+        // Two steps of 0.02 inside a 0.5 ball move every coordinate by 0.04.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.5,
+            AttackStepSize = 0.02,
+            AttackIterations = 2,
+            UseRandomStartForAttacks = false
+        });
+
+        var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2));
+
+        Assert.All(Delta(adversarial, x), d => Assert.Equal(0.04, Math.Abs(d), 9));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackIterations_SetsTheNumberOfPgdSteps()
+    {
+        // Three steps of 0.05 inside a 0.5 ball move every coordinate by 0.15.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.5,
+            AttackStepSize = 0.05,
+            AttackIterations = 3,
+            UseRandomStartForAttacks = false
+        });
+
+        var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2));
+
+        Assert.All(Delta(adversarial, x), d => Assert.Equal(0.15, Math.Abs(d), 9));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackNormType_L2SelectsTheL2StepAndBall()
+    {
+        // L2: one normalized-gradient step of length 1 projected onto the 0.1 ball gives ||delta||_2 = 0.1 along
+        // the gradient, so the coordinates move by different amounts. An L-inf step moves all of them equally.
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.1,
+            AttackStepSize = 1.0,
+            AttackIterations = 1,
+            AttackNormType = AdversarialNormType.L2,
+            UseRandomStartForAttacks = false
+        });
+
+        var delta = Delta(result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2)), x);
+
+        Assert.Equal(0.1, Math.Sqrt(delta.Sum(d => d * d)), 9);
+        Assert.True(delta.Max(Math.Abs) - delta.Min(Math.Abs) > 0.01);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredTargetedAttack_PushesTowardTheConfiguredTargetClass()
+    {
+        // logits = x. Targeted PGD descends the MSE toward the target one-hot; with a 0.2 budget the target class
+        // wins whichever class is configured. Untargeted, the true class 0 loses to class 1.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+            new double[] { 0.0, 0.0, 0.0 });
+        var x = new[] { 0.5, 0.45, 0.4 };
+
+        foreach (int target in new[] { 1, 2 })
+        {
+            var result = ResultWith(model, new AdversarialRobustnessOptions<double>
+            {
+                AttackEpsilon = 0.2,
+                AttackStepSize = 0.05,
+                AttackIterations = 10,
+                UseTargetedAttacks = true,
+                TargetClass = target,
+                UseRandomStartForAttacks = false
+            });
+
+            var adversarial = result.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 3));
+
+            Assert.Equal(target, ArgMax(model.Logits(adversarial.ToArray())));
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredTargetedEvaluation_CountsOnlyHitsOnTheTargetAsSuccesses()
+    {
+        // Targeted at class 2: the attack lands on class 2, so the success rate is 1 and nothing stays robust.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+            new double[] { 0.0, 0.0, 0.0 });
+        var result = ResultWith(model, new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.2,
+            AttackStepSize = 0.05,
+            AttackIterations = 10,
+            UseTargetedAttacks = true,
+            TargetClass = 2,
+            UseRandomStartForAttacks = false
+        });
+
+        var stats = result.EvaluateRobustness(new[] { new Vector<double>(new[] { 0.5, 0.45, 0.4 }) }, new[] { OneHot(0, 3) });
+
+        Assert.Equal(1.0, stats.CleanAccuracy, 12);
+        Assert.Equal(0.0, stats.AdversarialAccuracy, 12);
+        Assert.Equal(1.0, stats.AttackSuccessRate, 12);
+        Assert.Equal(0.2, stats.EvaluationEpsilon, 12);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredRandomStart_Disabled_LeavesAZeroGradientInputUnchanged()
+    {
+        // With a constant model every gradient is zero, so only the random start can move the input.
+        var model = new LinearLogitModel(new double[2, 4], new double[] { 0.0, 0.0 });
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var withoutStart = ResultWith(model, new AdversarialRobustnessOptions<double> { UseRandomStartForAttacks = false });
+        var withStart = ResultWith(model, new AdversarialRobustnessOptions<double> { UseRandomStartForAttacks = true });
+
+        Assert.All(Delta(withoutStart.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2)), x), d => Assert.Equal(0.0, d, 12));
+        Assert.Contains(Delta(withStart.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2)), x), d => Math.Abs(d) > 1e-6);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredRobustnessTesting_RunsEachConfiguredAttackMethod()
+    {
+        var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+        {
+            EnableRobustnessTesting = true,
+            AttackMethods = new[] { AdversarialAttackMethod.Fgsm, AdversarialAttackMethod.Pgd },
+            AttackIterations = 2,
+            UseRandomStartForAttacks = false
+        });
+        var inputs = new[] { new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 }) };
+        var labels = new[] { OneHot(0, 2) };
+
+        var stats = result.EvaluateConfiguredRobustness(inputs, labels);
+
+        Assert.Equal(new[] { AdversarialAttackMethod.Fgsm, AdversarialAttackMethod.Pgd }, stats.Keys.OrderBy(k => k));
+        Assert.StartsWith("FGSMAttack", stats[AdversarialAttackMethod.Fgsm].AttackType);
+        Assert.StartsWith("PGDAttack", stats[AdversarialAttackMethod.Pgd].AttackType);
+        Assert.All(stats.Values, s => Assert.True(s.IsEvaluated));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredRobustnessTesting_DisabledOrUnconfiguredRefusesToRun()
+    {
+        var inputs = new[] { new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 }) };
+        var labels = new[] { OneHot(0, 2) };
+        var disabled = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { EnableRobustnessTesting = false });
+        var unconfigured = new AiModelResult<double, Vector<double>, Vector<double>> { Model = SteepModel() };
+
+        Assert.Throws<InvalidOperationException>(() => disabled.EvaluateConfiguredRobustness(inputs, labels));
+        Assert.Throws<InvalidOperationException>(() => unconfigured.EvaluateConfiguredRobustness(inputs, labels));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfiguredAttackSettings_InvalidValuesAreRejected()
+    {
+        var x = new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 });
+        var label = OneHot(0, 2);
+        var inputs = new[] { x };
+        var labels = new[] { label };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackEpsilon = 0.0 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackStepSize = -0.1 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackIterations = 0 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { AttackNormType = (AdversarialNormType)7 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { UseTargetedAttacks = true, TargetClass = -1 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { UseTargetedAttacks = true, TargetClass = 5 }).GenerateAdversarialExample(x, label));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>()).GenerateAdversarialExample(x, label, -1.0));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+            {
+                EnableRobustnessTesting = true,
+                AttackMethods = Array.Empty<AdversarialAttackMethod>()
+            }).EvaluateConfiguredRobustness(inputs, labels));
+        Assert.Throws<InvalidOperationException>(() =>
+            ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
+            {
+                EnableRobustnessTesting = true,
+                AttackMethods = new[] { AdversarialAttackMethod.Pgd, AdversarialAttackMethod.Pgd }
+            }).EvaluateConfiguredRobustness(inputs, labels));
+    }
 }
