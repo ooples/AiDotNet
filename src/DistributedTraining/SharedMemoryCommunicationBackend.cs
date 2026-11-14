@@ -41,7 +41,7 @@ namespace AiDotNet.DistributedTraining;
 public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBase<T>, IDisposable
 {
     private const int MagicValue = 0x4149444E; // "AIDN"
-    private const int ProtocolVersion = 1;
+    private const int ProtocolVersion = 2;
     private const int MaxSupportedRanks = 64;
     private const int GlobalHeaderSize = 64;
     private const int RankHeaderStride = 64;
@@ -53,6 +53,12 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private const int GlobalWorldSizeOffset = 4;
     private const int GlobalAbortFlagOffset = 8;
     private const int GlobalWaiterCountOffset = 12;
+    private const int GlobalSlotCapacityOffset = 16; // int64: per-rank collective slot capacity in bytes
+    private const int GlobalWireTypeOffset = 24;     // int32: numeric wire representation of T
+    private const int GlobalGenerationOffset = 32;   // int64: session generation chosen by Rank 0 at each initialization
+
+    // int64 in each rank header: the session generation that rank registered against.
+    private const int RankGenerationOffset = 48;
 
     private const int SpinCountBeforePark = 16384;
     private const int FastSpinThreshold = 256;
@@ -234,56 +240,49 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             _localPhase = 0;
 
             int currentPid = Process.GetCurrentProcess().Id;
-            long myHeader = RankHeaderOffset(_rank);
-
-            // Register this rank's metadata in its dedicated cache line before publishing active state.
-            WriteInt32Volatile(myHeader + 4, currentPid);
-            WriteInt64Volatile(myHeader + 8, 0L);
-            WriteInt32Volatile(myHeader + 16, 0);
-            WriteInt32Volatile(myHeader + 20, 0);
-            WriteInt64Volatile(myHeader + 24, 0L);
-            WriteInt32Volatile(myHeader + 32, 0);
-            WriteInt32Volatile(myHeader + 40, 0);
-            WriteInt32Volatile(myHeader + 44, 0);
-            Thread.MemoryBarrier();
-            WriteInt32Volatile(myHeader + 0, RankStateActive);
-            Thread.MemoryBarrier();
-
             int expectedHeader = (ProtocolVersion << 16) ^ MagicValue;
-            if (_rank == 0)
-            {
-                WriteInt32Volatile(GlobalWorldSizeOffset, _worldSize);
-                WriteInt32Volatile(GlobalAbortFlagOffset, 0);
-                WriteInt32Volatile(GlobalWaiterCountOffset, 0);
-                Thread.MemoryBarrier();
-                WriteInt32Volatile(GlobalMagicOffset, expectedHeader);
-                Thread.MemoryBarrier();
-            }
+            long startTicks = Stopwatch.GetTimestamp();
 
-            SignalWakeEventUnconditional();
+            // Rank 0 owns the session: every initialization it wipes the header region and publishes
+            // a fresh generation. Every other rank registers against that generation, and a rank is
+            // accepted as a participant only when its header carries the current generation. A
+            // header left behind by a crashed run (the backing file outlives its processes on
+            // Linux and macOS) carries an older generation and is never mistaken for a live peer.
+            long generation = _rank == 0
+                ? PublishNewSessionGeneration(expectedHeader, currentPid)
+                : WaitForSessionAndRegister(expectedHeader, currentPid, startTicks);
 
             // Wait for all ranks to register and bind peer Process handles for instant crash detection.
             // Note: GlobalWaiterCountOffset is not touched until all ranks finish this handshake, so Rank 0's
-            // initialization of GlobalWaiterCountOffset = 0 above never races with Interlocked increments.
-            long startTicks = Stopwatch.GetTimestamp();
+            // initialization of GlobalWaiterCountOffset = 0 never races with Interlocked increments.
+            while (true)
+            {
+            bool restartHandshake = false;
             for (int peer = 0; peer < _worldSize; peer++)
             {
                 long peerHeader = RankHeaderOffset(peer);
                 int spins = 0;
                 while (true)
                 {
-                    int hdrMagic = ReadInt32Volatile(GlobalMagicOffset);
-                    int state = ReadInt32Volatile(peerHeader + 0);
-                    if (hdrMagic == expectedHeader && state == RankStateActive)
+                    if (_rank != 0 &&
+                        (ReadInt32Volatile(GlobalMagicOffset) != expectedHeader ||
+                         ReadInt64Volatile(GlobalGenerationOffset) != generation))
                     {
-                        int savedWorld = ReadInt32Volatile(GlobalWorldSizeOffset);
-                        if (savedWorld != _worldSize)
-                        {
-                            throw new InvalidOperationException(
-                                $"Shared-memory session '{_sessionName}' was initialized with WorldSize={savedWorld}, " +
-                                $"but rank {_rank} configured WorldSize={_worldSize}.");
-                        }
+                        // Rank 0 (re)started the session after this rank registered against an
+                        // older generation. Register again and re-verify every peer.
+                        restartHandshake = true;
+                        break;
+                    }
 
+                    if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+                    {
+                        ThrowSessionAborted();
+                    }
+
+                    int state = ReadInt32Volatile(peerHeader + 0);
+                    if (state == RankStateActive &&
+                        ReadInt64Volatile(peerHeader + RankGenerationOffset) == generation)
+                    {
                         int peerPid = ReadInt32Volatile(peerHeader + 4);
                         if (peer != _rank && peerPid > 0 && peerPid != currentPid)
                         {
@@ -346,6 +345,20 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                         }
                     }
                 }
+
+                if (restartHandshake)
+                {
+                    break;
+                }
+            }
+
+            if (!restartHandshake)
+            {
+                break;
+            }
+
+            ReleasePeerProcessHandles();
+            generation = WaitForSessionAndRegister(expectedHeader, currentPid, startTicks);
             }
 
             // Initial barrier confirms every rank has bound peer PIDs before any collective begins.
@@ -356,6 +369,249 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             ReleaseResources();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Rank 0 only: invalidates whatever session the mapping held, clears every rank header and
+    /// point-to-point mailbox header, publishes this session's layout and a fresh generation,
+    /// registers Rank 0 against it, and only then marks the session valid.
+    /// </summary>
+    private long PublishNewSessionGeneration(int expectedHeader, int currentPid)
+    {
+        // Invalidate first so no rank registers against a half-written header.
+        WriteInt32Volatile(GlobalMagicOffset, 0);
+        Thread.MemoryBarrier();
+
+        long previousGeneration = ReadInt64Volatile(GlobalGenerationOffset);
+        long generation = BitConverter.ToInt64(Guid.NewGuid().ToByteArray(), 0);
+        while (generation == 0L || generation == previousGeneration)
+        {
+            generation = unchecked(generation + 1L);
+        }
+
+        for (int r = 0; r < _worldSize; r++)
+        {
+            ClearMappedHeader(RankHeaderOffset(r), RankHeaderStride);
+        }
+
+        // Stale mailbox sequence/ack counters would otherwise be read as already-delivered messages.
+        long p2pSlotStride = P2PHeaderStride + P2PChunkCapacityBytes;
+        long pairCount = (long)_worldSize * _worldSize;
+        for (long pair = 0; pair < pairCount; pair++)
+        {
+            ClearMappedHeader(_p2pBaseOffset + (pair * p2pSlotStride), P2PHeaderStride);
+        }
+
+        WriteInt32Volatile(GlobalWorldSizeOffset, _worldSize);
+        WriteInt32Volatile(GlobalAbortFlagOffset, 0);
+        WriteInt32Volatile(GlobalWaiterCountOffset, 0);
+        WriteInt64Volatile(GlobalSlotCapacityOffset, _slotCapacityBytes);
+        WriteInt32Volatile(GlobalWireTypeOffset, WireTypeId());
+        WriteInt64Volatile(GlobalGenerationOffset, generation);
+
+        RegisterOwnRankHeader(currentPid, generation);
+
+        WriteInt32Volatile(GlobalMagicOffset, expectedHeader);
+        Thread.MemoryBarrier();
+        SignalWakeEventUnconditional();
+        return generation;
+    }
+
+    /// <summary>
+    /// Non-zero ranks: waits until a live Rank 0 has published a session, validates that this rank's
+    /// layout (world size, slot capacity, numeric wire type) matches it, and registers this rank
+    /// against that session's generation.
+    /// </summary>
+    private long WaitForSessionAndRegister(int expectedHeader, int currentPid, long startTicks)
+    {
+        long rank0Header = RankHeaderOffset(0);
+        int spins = 0;
+        while (true)
+        {
+            if (ReadInt32Volatile(GlobalMagicOffset) == expectedHeader)
+            {
+                long generation = ReadInt64Volatile(GlobalGenerationOffset);
+                int savedWorld = ReadInt32Volatile(GlobalWorldSizeOffset);
+                long savedSlotCapacity = ReadInt64Volatile(GlobalSlotCapacityOffset);
+                int savedWireType = ReadInt32Volatile(GlobalWireTypeOffset);
+                int rank0State = ReadInt32Volatile(rank0Header + 0);
+                int rank0Pid = ReadInt32Volatile(rank0Header + 4);
+                long rank0Generation = ReadInt64Volatile(rank0Header + RankGenerationOffset);
+                Thread.MemoryBarrier();
+
+                // Re-read the validity marker and generation so a header rewritten by Rank 0 while
+                // the fields above were being read is not mistaken for a consistent snapshot.
+                bool consistent = generation != 0L &&
+                                  ReadInt32Volatile(GlobalMagicOffset) == expectedHeader &&
+                                  ReadInt64Volatile(GlobalGenerationOffset) == generation &&
+                                  rank0State == RankStateActive &&
+                                  rank0Generation == generation;
+
+                if (consistent)
+                {
+                    if (IsSessionOwnerAlive(rank0Pid, currentPid))
+                    {
+                        if (savedWorld != _worldSize ||
+                            savedSlotCapacity != _slotCapacityBytes ||
+                            savedWireType != WireTypeId())
+                        {
+                            // Slot and mailbox offsets are derived from these values on each rank;
+                            // a rank that disagrees would read and write the wrong regions.
+                            WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+                            Thread.MemoryBarrier();
+                            SignalWakeEventUnconditional();
+                            throw new InvalidOperationException(
+                                $"Shared-memory session '{_sessionName}' was initialized by rank 0 with WorldSize={savedWorld}, " +
+                                $"SlotCapacityBytes={savedSlotCapacity}, WireType={savedWireType}, but rank {_rank} is configured with " +
+                                $"WorldSize={_worldSize}, SlotCapacityBytes={_slotCapacityBytes}, WireType={WireTypeId()} ({typeof(T).Name}). " +
+                                "All ranks must use the same world size, slot capacity and numeric type.");
+                        }
+
+                        RegisterOwnRankHeader(currentPid, generation);
+                        SignalWakeEventUnconditional();
+                        return generation;
+                    }
+
+                    // The header belongs to a run whose Rank 0 no longer exists. Park until this
+                    // run's Rank 0 replaces it instead of spinning on process lookups.
+                    spins = SpinCountBeforePark;
+                }
+            }
+
+            if (spins < SpinCountBeforePark)
+            {
+                Thread.SpinWait(spins < FastSpinThreshold ? 1 : 4);
+                spins++;
+                if ((spins & 255) == 0 && IsTimedOut(startTicks, out double elapsedMs))
+                {
+                    ThrowHandshakeTimeout(elapsedMs, 0);
+                }
+            }
+            else
+            {
+                WaitParkSlice();
+                if (IsTimedOut(startTicks, out double elapsedMs))
+                {
+                    ThrowHandshakeTimeout(elapsedMs, 0);
+                }
+            }
+        }
+    }
+
+    private void RegisterOwnRankHeader(int currentPid, long generation)
+    {
+        long myHeader = RankHeaderOffset(_rank);
+
+        // Register this rank's metadata in its dedicated cache line before publishing active state.
+        WriteInt32Volatile(myHeader + 0, RankStateUninitialized);
+        Thread.MemoryBarrier();
+        WriteInt32Volatile(myHeader + 4, currentPid);
+        WriteInt64Volatile(myHeader + 8, 0L);
+        WriteInt32Volatile(myHeader + 16, 0);
+        WriteInt32Volatile(myHeader + 20, 0);
+        WriteInt64Volatile(myHeader + 24, 0L);
+        WriteInt32Volatile(myHeader + 32, 0);
+        WriteInt32Volatile(myHeader + 40, 0);
+        WriteInt32Volatile(myHeader + 44, 0);
+        WriteInt64Volatile(myHeader + RankGenerationOffset, generation);
+        Thread.MemoryBarrier();
+        WriteInt32Volatile(myHeader + 0, RankStateActive);
+        Thread.MemoryBarrier();
+    }
+
+    private void ClearMappedHeader(long byteOffset, int byteLength)
+    {
+        for (int i = 0; i < byteLength; i += sizeof(long))
+        {
+            WriteInt64Volatile(byteOffset + i, 0L);
+        }
+    }
+
+    private void ReleasePeerProcessHandles()
+    {
+        var processes = _peerProcesses;
+        var exitedFlags = _peerExited;
+        if (processes is null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < processes.Length; i++)
+        {
+            processes[i]?.Dispose();
+            processes[i] = null;
+            if (exitedFlags is not null)
+            {
+                Volatile.Write(ref exitedFlags[i], 0);
+            }
+        }
+    }
+
+    private static bool IsSessionOwnerAlive(int ownerPid, int currentPid)
+    {
+        if (ownerPid == currentPid)
+        {
+            return true;
+        }
+
+        if (ownerPid <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var owner = Process.GetProcessById(ownerPid);
+            return !owner.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            // No process with that id: the header was left by a run that has ended.
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // The process exists but cannot be inspected from this account.
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Identifies how <typeparamref name="T"/> is laid out in the mapped slots, so ranks built for
+    /// different element types reject each other instead of reinterpreting each other's bytes.
+    /// </summary>
+    private static int WireTypeId()
+    {
+        if (typeof(T) == typeof(float))
+        {
+            return 1;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            return 2;
+        }
+
+        if (typeof(T) == typeof(int))
+        {
+            return 3;
+        }
+
+        if (typeof(T) == typeof(long))
+        {
+            return 4;
+        }
+
+        if (typeof(T) == typeof(byte))
+        {
+            return 5;
+        }
+
+        return 6; // Generic fallback serializes via IEEE-754 double.
     }
 
     /// <inheritdoc/>
@@ -839,10 +1095,21 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
             int msgTag = ReadInt32Volatile(pairOffset + 20);
             int chunk = ReadInt32Volatile(pairOffset + 16);
+            int totalLength = ReadInt32Volatile(pairOffset + 24);
             if (msgTag != tag)
             {
                 throw new InvalidOperationException(
                     $"SharedMemory Receive tag mismatch from rank {sourceRank}: expected tag {tag}, received tag {msgTag}.");
+            }
+
+            // Every chunk carries the sender's total message length. Checking it before the chunk is
+            // copied or acknowledged keeps the mailbox intact on a mismatch; otherwise a short message
+            // would be acknowledged and the next, unrelated message spliced onto it to fill `count`.
+            if (totalLength != count)
+            {
+                throw new InvalidOperationException(
+                    $"SharedMemory Receive size mismatch from rank {sourceRank}: expected {count} elements, " +
+                    $"but the sender published a message of {totalLength} elements (tag {msgTag}).");
             }
 
             if (chunk < 0 || chunk > maxChunkElements)
