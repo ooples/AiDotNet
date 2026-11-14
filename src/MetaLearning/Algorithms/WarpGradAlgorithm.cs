@@ -461,7 +461,10 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// meta-learned WITHOUT backpropagating through the inner loop, and its gradient is exact per step:
     /// <c>dJ/dP = -alpha sum_k grad L_query(theta_{k+1}) * g_k</c>, summed over the coordinates each warp parameter
     /// scales. (This replaces a finite-difference loop that re-ran the full inner loop once per warp parameter.)
-    /// Gradient clipping of the warped step, when enabled, is treated as the identity in this derivative.
+    /// When gradient clipping of the warped step binds, the derivative goes through it: the clip
+    /// <c>c(u) = tau u / ||u||</c> has the symmetric Jacobian <c>(tau / ||u||)(I - u u^T / ||u||^2)</c>, so the query
+    /// gradient loses its component along <c>u</c> (a radial change leaves the clipped step unchanged) and is scaled
+    /// by <c>tau / ||u||</c>. Below the threshold the clip is the identity.
     /// </para>
     /// </remarks>
     private (Vector<T> Adapted, Vector<T> QueryGradient, List<Vector<T>> WarpGradients) WarpedTrajectory(
@@ -477,19 +480,40 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         for (int step = 0; step < _warpOptions.AdaptationSteps; step++)
         {
             var rawGradients = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            var warpedGradients = ClipGradients(Engine.Multiply(rawGradients, scale));
+            var unclipped = Engine.Multiply(rawGradients, scale);
+            var warpedGradients = ClipGradients(unclipped);
             taskParams = ApplyInnerGradients(taskParams, warpedGradients, _warpOptions.InnerLearningRate, step == 0);
             ParamModel.SetParameters(taskParams);
 
             queryGradient = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
+            var pulledBack = ClipPullback(unclipped, queryGradient);
             coordinateGradient = Engine.Add(
-                coordinateGradient, Engine.Multiply(Engine.Multiply(queryGradient, rawGradients), negativeRate));
+                coordinateGradient, Engine.Multiply(Engine.Multiply(pulledBack, rawGradients), negativeRate));
         }
 
         if (queryGradient is null)
             queryGradient = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
 
         return (taskParams, queryGradient, ReduceToWarpLayers(coordinateGradient));
+    }
+
+    /// <summary>
+    /// The clipping Jacobian applied to <paramref name="upstream"/> at the unclipped step <paramref name="unclipped"/>,
+    /// with the threshold and norm <see cref="MetaLearnerBase{T, TInput, TOutput}.ClipGradients"/> uses: the identity
+    /// when the clip does not bind, otherwise <c>(tau / ||u||)(q - u (u . q) / ||u||^2)</c>.
+    /// </summary>
+    private Vector<T> ClipPullback(Vector<T> unclipped, Vector<T> upstream)
+    {
+        var threshold = _options.GradientClipThreshold;
+        if (!threshold.HasValue || threshold.Value <= 0) return upstream;
+
+        double squaredNorm = NumOps.ToDouble(Engine.Sum(Engine.Multiply(unclipped, unclipped)));
+        double norm = Math.Sqrt(squaredNorm);
+        if (norm <= threshold.Value) return upstream;
+
+        double radial = NumOps.ToDouble(Engine.Sum(Engine.Multiply(unclipped, upstream))) / squaredNorm;
+        var tangential = Engine.Subtract(upstream, Engine.Multiply(unclipped, NumOps.FromDouble(radial)));
+        return Engine.Multiply(tangential, NumOps.FromDouble(threshold.Value / norm));
     }
 
     /// <summary>

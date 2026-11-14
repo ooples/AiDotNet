@@ -1,4 +1,5 @@
 using AiDotNet.Data.Structures;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -76,15 +77,47 @@ public class MetaMixReferenceTests
     [Fact]
     public void MetaTrain_ReturnsTheMixedQueryLoss()
     {
-        // The outer objective is the loss on the mixed set only (Eq. 7); it must be finite and update θ.
+        // The outer objective is the loss on the mixed set only (Eq. 7), at the support-adapted parameters (Eq. 3).
+        // The expected value is rebuilt by hand: one SGD step of the linear model's MSE gradient on the support set,
+        // then the MSE on the mixed set built from the same seeded draws (taken from a twin with the same seed).
+        const double innerRate = 1e-5;
+        MetaTaskOptions<double, Matrix<double>, Vector<double>> Options(LinearVectorModel m) => new(m)
+        {
+            Seed = 3, OuterLearningRate = 0.01, InnerLearningRate = innerRate, AdaptationSteps = 1,
+            GradientClipThreshold = null, LossFunction = new MeanSquaredErrorLoss<double>(),
+        };
         var model = new LinearVectorModel(2);
-        var algorithm = new MetaTaskAlgorithm<double, Matrix<double>, Vector<double>>(
-            new MetaTaskOptions<double, Matrix<double>, Vector<double>>(model) { Seed = 3, OuterLearningRate = 0.01 });
+        var algorithm = new MetaTaskAlgorithm<double, Matrix<double>, Vector<double>>(Options(model));
+        var twin = new MetaTaskAlgorithm<double, Matrix<double>, Vector<double>>(Options(new LinearVectorModel(2)));
         var before = model.GetParameters().Clone();
+        var task = Task();
 
-        double loss = algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { Task() }));
+        // theta' = theta - eta * (2 / n) sum_r (x_r . w + b - y_r) [x_r, 1].
+        double[] w = { before[0], before[1], before[2] };
+        var gradient = new double[3];
+        for (int r = 0; r < task.SupportSetX.Rows; r++)
+        {
+            double error = task.SupportSetX[r, 0] * w[0] + task.SupportSetX[r, 1] * w[1] + w[2] - task.SupportSetY[r];
+            double scale = 2.0 / task.SupportSetX.Rows;
+            gradient[0] += scale * error * task.SupportSetX[r, 0];
+            gradient[1] += scale * error * task.SupportSetX[r, 1];
+            gradient[2] += scale * error;
+        }
+        double[] adapted = { w[0] - innerRate * gradient[0], w[1] - innerRate * gradient[1], w[2] - innerRate * gradient[2] };
 
-        Assert.False(double.IsNaN(loss) || double.IsInfinity(loss));
+        var (first, second, lambda) = twin.DrawMix(task);
+        var (mixedX, mixedY) = twin.BuildMixedSet(task, first, second, lambda);
+        double expected = 0;
+        for (int r = 0; r < mixedX.Rows; r++)
+        {
+            double error = mixedX[r, 0] * adapted[0] + mixedX[r, 1] * adapted[1] + adapted[2] - mixedY[r];
+            expected += error * error;
+        }
+        expected /= mixedX.Rows;
+
+        double loss = algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task }));
+
+        Assert.Equal(expected, loss, 9);
         Assert.NotEqual(before[0], model.GetParameters()[0]);
     }
 }
