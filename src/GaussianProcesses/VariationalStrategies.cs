@@ -173,18 +173,13 @@ public class VariationalStrategies<T>
     /// <summary>
     /// Squared Euclidean distance from every data row to every center, [n, m].
     /// </summary>
+    /// <remarks>
+    /// Evaluated in row blocks: one dense [n, m, d] difference tensor is n·m·d elements (8 GB for
+    /// n = 100 000, m = 500, d = 20 in double) and inducing-point selection exists for large n.
+    /// </remarks>
     private static Tensor<T> SquaredDistancesToCenters(Tensor<T> data, Matrix<T> centers)
-    {
-        var engine = AiDotNetEngine.Current;
-        int n = data.Shape[0];
-        int d = data.Shape[1];
-        int m = centers.Rows;
-        var shape = new[] { n, m, d };
-        var diff = engine.TensorSubtract(
-            engine.TensorBroadcastTo(data.Reshape(new[] { n, 1, d }), shape),
-            engine.TensorBroadcastTo(Tensor<T>.FromMatrix(centers).Reshape(new[] { 1, m, d }), shape));
-        return engine.ReduceSum(engine.TensorSquare(diff), new[] { 2 }, keepDims: false);
-    }
+        => Tensor<T>.FromMatrix(
+            AiDotNet.Clustering.Base.ClusteringTensorOps.SquaredDistances(data.ToMatrix(), centers));
 
     /// <summary>
     /// Selects inducing points using greedy variance reduction.
