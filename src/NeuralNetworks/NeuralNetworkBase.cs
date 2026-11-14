@@ -4994,8 +4994,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>Reusable dictionary instance for <see cref="_retainedStreamingGrads"/> across steps.</summary>
     private Dictionary<Tensor<T>, Tensor<T>>? _retainedStreamingGradsPool;
 
-    /// <summary>Persistent per-parameter gradient snapshot buffers reused across streaming steps when retention is enabled.</summary>
-    private Dictionary<Tensor<T>, Tensor<T>>? _retainedStreamingGradSnapshots;
+    /// <summary>Snapshot bank currently backing the published layer gradient surface until the next publication.</summary>
+    private Dictionary<Tensor<T>, Tensor<T>>? _publishedStreamingGradSnapshots;
+
+    /// <summary>Staging snapshot bank written during an in-flight streaming backward pass before publication.</summary>
+    private Dictionary<Tensor<T>, Tensor<T>>? _stagingStreamingGradSnapshots;
     /// <summary>True once a training step deliberately declined to retain gradients.</summary>
     private bool _gradientSurfaceUnavailable;
 
@@ -5044,7 +5047,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         using var suspendScope = TensorScope.Suspend();
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var noGrad = new NoGradScope<T>();
-        var snapshots = _retainedStreamingGradSnapshots
+        var snapshots = _stagingStreamingGradSnapshots
             ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         if (!snapshots.TryGetValue(source, out var snap) || !SameRetainedShape(grad, snap))
         {
@@ -5074,7 +5077,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (bag is null) return;
 
         PublishParameterGradients(bag, sourcesOutliveStep: true);
-        PruneStaleStreamingGradSnapshots(bag);
+        PruneStaleStreamingGradSnapshots(_stagingStreamingGradSnapshots, bag);
+        PruneStaleStreamingGradSnapshots(_publishedStreamingGradSnapshots, bag);
+        var previousPublished = _publishedStreamingGradSnapshots;
+        _publishedStreamingGradSnapshots = _stagingStreamingGradSnapshots;
+        _stagingStreamingGradSnapshots = previousPublished;
         bag.Clear();
     }
 
@@ -5084,15 +5091,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// precision upcast) would otherwise pin its old tensor and a full-size gradient buffer for the model's lifetime.
     /// Nothing references a pruned buffer: the publish above replaced every layer's surface with this step's bag.
     /// </summary>
-    private void PruneStaleStreamingGradSnapshots(Dictionary<Tensor<T>, Tensor<T>> liveBag)
+    private static void PruneStaleStreamingGradSnapshots(
+        Dictionary<Tensor<T>, Tensor<T>>? snapshots,
+        Dictionary<Tensor<T>, Tensor<T>> liveBag)
     {
-        var snapshots = _retainedStreamingGradSnapshots;
-        if (snapshots is null || snapshots.Count <= liveBag.Count) return;
+        if (snapshots is null || snapshots.Count == 0) return;
 
         List<Tensor<T>>? stale = null;
-        foreach (var key in snapshots.Keys)
+        foreach (var kvp in snapshots)
         {
-            if (!liveBag.ContainsKey(key)) (stale ??= new List<Tensor<T>>()).Add(key);
+            if (!liveBag.ContainsKey(kvp.Key)) (stale ??= new List<Tensor<T>>()).Add(kvp.Key);
         }
         if (stale is null) return;
         foreach (var key in stale)
@@ -5100,6 +5108,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             snapshots[key].Dispose();
             snapshots.Remove(key);
         }
+    }
+
+    private static void DisposeStreamingGradSnapshotBank(ref Dictionary<Tensor<T>, Tensor<T>>? bank)
+    {
+        if (bank is null) return;
+        foreach (var snap in bank.Values)
+            snap.Dispose();
+        bank.Clear();
+        bank = null;
     }
 
     /// <summary>
@@ -12815,7 +12832,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : NumOps.One;
 
             double curNormSq = 0.0;
-            bool gpuAccumNorm = s_tryAccumulateSumOfSquares is not null && Engine is DirectGpuTensorEngine;
+            bool gpuAccumNorm = Engine is DirectGpuTensorEngine;
             Tensor<T>? gpuNormSqAcc = null;
             void ApplyFastClipped(Tensor<T> source, Tensor<T> grad)
             {
@@ -12824,8 +12841,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 if (!regularizeAfterClip) grad = Regularize(source, grad);
                 if (clipSet.Contains(source))
                 {
-                    if (gpuAccumNorm && s_tryAccumulateSumOfSquares is { } accumFn && accumFn((DirectGpuTensorEngine)Engine, grad, ref gpuNormSqAcc))
+                    if (gpuAccumNorm)
                     {
+                        if (s_tryAccumulateSumOfSquares is { } accumFn && accumFn((DirectGpuTensorEngine)Engine, grad, ref gpuNormSqAcc))
+                        {
+                        }
+                        else
+                        {
+                            using var suspendScope = TensorScope.Suspend();
+                            using var noGrad = new NoGradScope<T>();
+                            var sq = Engine.TensorMultiply(grad, grad);
+                            var axes = Enumerable.Range(0, sq.Rank).ToArray();
+                            var sum = Engine.ReduceSum(sq, axes, keepDims: false);
+                            sq.Dispose();
+                            if (gpuNormSqAcc is null)
+                            {
+                                gpuNormSqAcc = sum;
+                            }
+                            else
+                            {
+                                var nextAcc = Engine.TensorAdd(gpuNormSqAcc, sum);
+                                sum.Dispose();
+                                gpuNormSqAcc.Dispose();
+                                gpuNormSqAcc = nextAcc;
+                            }
+                        }
                     }
                     else
                     {
@@ -21299,13 +21339,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             (_streamingOptimizerState as IDisposable)?.Dispose();
             _streamingOptimizerState = null;
             _streamingOptimizerKey = null;
-            if (_retainedStreamingGradSnapshots is not null)
-            {
-                foreach (var snap in _retainedStreamingGradSnapshots.Values)
-                    snap.Dispose();
-                _retainedStreamingGradSnapshots.Clear();
-                _retainedStreamingGradSnapshots = null;
-            }
+            DisposeStreamingGradSnapshotBank(ref _publishedStreamingGradSnapshots);
+            DisposeStreamingGradSnapshotBank(ref _stagingStreamingGradSnapshots);
             _retainedStreamingGrads = null;
             _retainedStreamingGradsPool?.Clear();
             _retainedStreamingGradsPool = null;

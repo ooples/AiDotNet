@@ -292,6 +292,64 @@ public sealed class DeepScaleTrack2UpstreamTests
     }
 
     [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    public void HouseholderSubspaceLayer_FloatTinyAndZeroReflectors_KeepExactReflectionAndFiniteBackward(int numReflectors)
+    {
+        const int dim = 8;
+        var layer = new HouseholderSubspaceLayer<float>(dim, numReflectors, transpose: false);
+        var layerT = new HouseholderSubspaceLayer<float>(dim, numReflectors, transpose: true);
+
+        // Reflectors with L2 norm ~1e-12f (well below 1e-9f) must still be exact orthogonal reflections in FP32.
+        for (int j = 0; j < numReflectors; j++)
+        {
+            for (int i = 0; i < dim; i++)
+            {
+                float val = (i == j % dim ? 1.0f : 0.25f * ((i + j) % 3 - 1)) * 1e-12f;
+                layer.Reflectors.SetFlat(j * dim + i, val);
+                layerT.Reflectors.SetFlat(j * dim + i, val);
+            }
+        }
+
+        var eye = new Tensor<float>(new[] { dim, dim });
+        for (int i = 0; i < dim; i++) eye.SetFlat(i * dim + i, 1.0f);
+
+        var q = layer.Forward(eye);
+        var qtq = layerT.Forward(q);
+        float maxDiffFromIdentity = 0f;
+        for (int i = 0; i < eye.Length; i++)
+        {
+            maxDiffFromIdentity = Math.Max(maxDiffFromIdentity, Math.Abs(q.GetFlat(i) - eye.GetFlat(i)));
+            Assert.True(Math.Abs(qtq.GetFlat(i) - eye.GetFlat(i)) <= 1e-5f,
+                $"Q^T Q mismatch at {i} for k={numReflectors} tiny float reflectors: expected={eye.GetFlat(i)}, got={qtq.GetFlat(i)}");
+        }
+        Assert.True(maxDiffFromIdentity > 0.1f, "Tiny float reflector degenerated to identity instead of reflecting.");
+
+        // Zero and sub-floor (1e-20f) float reflectors must remain finite in both forward and backward tape passes.
+        foreach (float scale in new[] { 0.0f, 1e-20f })
+        {
+            for (int j = 0; j < numReflectors; j++)
+            {
+                for (int i = 0; i < dim; i++)
+                    layer.Reflectors.SetFlat(j * dim + i, i == 0 ? scale : 0.0f);
+            }
+
+            using var tape = new GradientTape<float>();
+            var outTensor = layer.Forward(eye);
+            var loss = AiDotNetEngine.Current.ReduceSum(AiDotNetEngine.Current.TensorMultiply(outTensor, outTensor), null);
+            var grads = tape.ComputeGradients(loss, new[] { layer.Reflectors, eye });
+            var reflGrad = grads[layer.Reflectors];
+            var inputGrad = grads[eye];
+            for (int i = 0; i < reflGrad.Length; i++)
+                Assert.False(float.IsNaN(reflGrad.GetFlat(i)) || float.IsInfinity(reflGrad.GetFlat(i)),
+                    $"Non-finite reflector gradient at {i} for scale={scale}, k={numReflectors}: {reflGrad.GetFlat(i)}");
+            for (int i = 0; i < inputGrad.Length; i++)
+                Assert.False(float.IsNaN(inputGrad.GetFlat(i)) || float.IsInfinity(inputGrad.GetFlat(i)),
+                    $"Non-finite input gradient at {i} for scale={scale}, k={numReflectors}: {inputGrad.GetFlat(i)}");
+        }
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void BlockwiseAnchorLocalError_TrainsEveryIntraBlockLayer_IsolatesBlocks_AndSequentialMatchesSingleTape(bool tiedHead)

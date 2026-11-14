@@ -177,6 +177,102 @@ public class ParameterGradientPublicationTests
         Assert.DoesNotContain(clipped, candidate => ReferenceEquals(candidate, network.RawParameter));
     }
 
+    [Fact]
+    public void StreamingRetention_MidStepReadOnUnreadSurface_DoesNotMixSteps()
+    {
+        var probe = new MidStepGradientProbeRegularization();
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4,
+            outputSize: 2);
+        arch.RandomSeed = 19;
+
+        var sgdProbe = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+                Regularization = probe,
+            });
+        var sgdTwin = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+            });
+
+        using var net = new FeedForwardNeuralNetwork<float>(arch, sgdProbe);
+        using var twin = new FeedForwardNeuralNetwork<float>(arch, sgdTwin);
+        net.StreamingTraining = StreamingTrainingMode.ForceOn;
+        twin.StreamingTraining = StreamingTrainingMode.ForceOn;
+        var initial = net.GetParameters();
+        twin.UpdateParameters(initial);
+        probe.Target = net;
+
+        var x = new Tensor<float>(new[] { 2, 4 });
+        var y1 = new Tensor<float>(new[] { 2, 2 });
+        var y2 = new Tensor<float>(new[] { 2, 2 });
+        for (int i = 0; i < x.Length; i++) x[i] = (i + 1) * 0.25f;
+        for (int i = 0; i < y1.Length; i++) { y1[i] = 1.5f * (i + 1); y2[i] = -3.0f * (i + 1); }
+
+        // Step 1: leave net's published surface unread so its layers hold references to the published snapshot bank.
+        net.Train(x, y1);
+        twin.Train(x, y1);
+        float[] expectedStep1 = twin.GetParameterGradients().ToArray();
+
+        // Step 2: probe reads net.GetParameterGradients() right after the first parameter's RetainStreamingGradient
+        // runs in backward, before other parameters or EndStreamingGradientRetention have run.
+        probe.CaptureNextCall = true;
+        net.Train(x, y2);
+        twin.Train(x, y2);
+        float[] expectedStep2 = twin.GetParameterGradients().ToArray();
+
+        Assert.NotNull(probe.CapturedMidStep);
+        if (probe.CapturedMidStep is { } midStep)
+        {
+            Assert.Equal(expectedStep1.Length, midStep.Length);
+            bool stepsDiffer = false;
+            for (int i = 0; i < expectedStep1.Length; i++)
+            {
+                if (System.Math.Abs(expectedStep1[i] - expectedStep2[i]) > 1e-4f) stepsDiffer = true;
+                Assert.Equal(expectedStep1[i], midStep[i], 5);
+            }
+            Assert.True(stepsDiffer, "Step 1 and Step 2 gradients were identical, making the mid-step check vacuous.");
+        }
+
+        float[] actualStep2 = net.GetParameterGradients().ToArray();
+        for (int i = 0; i < expectedStep2.Length; i++)
+            Assert.Equal(expectedStep2[i], actualStep2[i], 5);
+    }
+
+    private sealed class MidStepGradientProbeRegularization : IRegularization<float, Tensor<float>, Tensor<float>>
+    {
+        public FeedForwardNeuralNetwork<float>? Target { get; set; }
+        public bool CaptureNextCall { get; set; }
+        public float[]? CapturedMidStep { get; private set; }
+
+        public Matrix<float> Regularize(Matrix<float> data) => data;
+        public Vector<float> Regularize(Vector<float> data) => data;
+
+        public Tensor<float> Regularize(Tensor<float> gradient, Tensor<float> coefficients)
+        {
+            if (CaptureNextCall && Target is { } target)
+            {
+                CaptureNextCall = false;
+                CapturedMidStep = target.GetParameterGradients().ToArray();
+            }
+            return gradient;
+        }
+
+        public RegularizationOptions GetOptions()
+            => new RegularizationOptions { Type = RegularizationType.None, Strength = 0.0 };
+    }
+
     private static Tensor<float> FilledLike(Tensor<float> parameter, float value)
     {
         var result = new Tensor<float>(parameter.Shape.ToArray());

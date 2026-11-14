@@ -161,15 +161,15 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
         T two = numOps.FromDouble(2.0);
         // Floor the squared-norm denominator instead of adding epsilon so every reflector above the floor remains an
-        // exact orthogonal isometry while zero reflectors yield 0 / floor = 0 (identity). Choose a dtype-safe floor so
-        // 1 / denom^2 and 1 / denom^1.5 in DivideBackward/SqrtBackward stay finite (avoiding (-Inf) - (-Inf) = NaN in
-        // ClampMinBackward on zero or subnormal float/BFloat16/Half/Float8 reflectors).
+        // exact orthogonal isometry while zero reflectors yield 0 / sqrt(floor) = 0 (identity). Because both k == 1
+        // and k > 1 normalize by sqrt(denom), backward divides by denom (not denom^2), so 1e-30 keeps float reflectors
+        // exact down to ||u|| = 1e-15 while keeping 1 / (2 * denom) well below float.MaxValue on sub-floor inputs.
         string typeName = typeof(T).Name;
         double floorValue = (typeof(T) == typeof(double) || typeof(T) == typeof(decimal))
             ? 1.1754943508222875e-38
             : (typeName == "Half" || typeName.StartsWith("Float8", StringComparison.Ordinal))
                 ? 1e-2
-                : 1e-18;
+                : 1e-30;
         T normFloor = numOps.FromDouble(floorValue);
 
         Tensor<T> current = input.Rank == 2
@@ -178,12 +178,12 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
         if (k == 1)
         {
-            Tensor<T> uCol = engine.TensorTranspose(reflectors);
-            Tensor<T> proj = engine.TensorMatMul(current, uCol);
-            Tensor<T> normSq = engine.ReduceSum(engine.TensorMultiply(reflectors, reflectors), null);
+            Tensor<T> normSq = engine.ReduceSum(engine.TensorMultiply(reflectors, reflectors), [1], keepDims: true);
             Tensor<T> denom = engine.TensorMax(normSq, normFloor);
-            Tensor<T> scaledProj = engine.TensorDivide(engine.TensorMultiplyScalar(proj, two), denom);
-            Tensor<T> outer = engine.TensorMatMul(scaledProj, reflectors);
+            Tensor<T> uHat = engine.TensorDivide(reflectors, engine.TensorSqrt(denom));
+            Tensor<T> uHatCol = engine.TensorTranspose(uHat);
+            Tensor<T> proj = engine.TensorMatMul(current, uHatCol);
+            Tensor<T> outer = engine.TensorMatMul(engine.TensorMultiplyScalar(proj, two), uHat);
             current = engine.TensorSubtract(current, outer);
         }
         else
