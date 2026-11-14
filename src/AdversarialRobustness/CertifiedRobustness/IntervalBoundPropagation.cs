@@ -218,23 +218,30 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
 
         int cleanCorrect = 0, certifiedCorrect = 0, certifiedCount = 0;
         var radii = new List<T>();
-        T zero = NumOps.Zero;
         for (int i = 0; i < testData.Length; i++)
         {
             var trueClass = GetPredictedClass(ConversionsHelper.ConvertToVector<T, TOutput>(labels[i]));
             var certification = CertifyPrediction(testData[i], model);
             bool correct = certification.PredictedClass == trueClass;
             cleanCorrect += correct ? 1 : 0;
-            certifiedCount += certification.IsCertified ? 1 : 0;
+            certifiedCount += CertifiedSomewhere(certification) ? 1 : 0;
             certifiedCorrect += correct && CertifiedAt(certification, radius) ? 1 : 0;
-            radii.Add(certification.IsCertified ? certification.CertifiedRadius : zero);
+            radii.Add(certification.CertifiedRadius);
         }
 
         return CertificationMath<T>.Summarize(cleanCorrect, certifiedCorrect, certifiedCount, radius, radii);
     }
 
+    /// <summary>
+    /// Certified at the evaluation radius: the certified radius reaches it. <see cref="CertifiedPrediction{T}.IsCertified"/>
+    /// refers to the radius of the options (NoiseSigma), which need not be the evaluation radius.
+    /// </summary>
     private static bool CertifiedAt(CertifiedPrediction<T> certification, T radius) =>
-        certification.IsCertified && NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius);
+        CertifiedSomewhere(certification) && NumOps.GreaterThanOrEquals(certification.CertifiedRadius, radius);
+
+    /// <summary>Certified at some radius: the certified radius is positive.</summary>
+    private static bool CertifiedSomewhere(CertifiedPrediction<T> certification) =>
+        NumOps.GreaterThan(certification.CertifiedRadius, NumOps.Zero);
 
     /// <inheritdoc/>
     public CertifiedDefenseOptions<T> GetOptions()
@@ -379,8 +386,10 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     /// With layer access this is IBP as in Gowal et al. (2018): the first affine layer is bounded exactly over
     /// the ball (epsilon times the dual norm of each weight row), later layers by center/radius interval
     /// arithmetic, and the margin specification z_y - z_j is merged into the last affine layer (their Eq. 6) so
-    /// the margins are bounded directly instead of from separate logit intervals. Without layer access the
-    /// bounds come from sampling, which is empirical and reported as not sound.
+    /// the margins are bounded directly instead of from separate logit intervals. With
+    /// <see cref="CertifiedDefenseOptions{T}.UseTightBounds"/> the margin bounds are also computed by CROWN and the
+    /// larger (tighter) of the two is kept. Without layer access the bounds come from sampling, which is empirical
+    /// and reported as not sound.
     /// </remarks>
     private BoundResult ComputeOutputBounds(
         Vector<T> vectorInput,
@@ -396,6 +405,15 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
             var x = vectorInput.AsTensor();
             var norm = _options.NormType;
             var margins = network.IntervalMargins(x, epsilon, norm, predictedClass, out var topLogitLower);
+            if (_options.UseTightBounds && network.SupportsCrown)
+            {
+                // Tight bounds: both lower bounds are sound, so their element-wise maximum is too, and it is at
+                // least as tight as IBP alone (CROWN back-substitution, Zhang et al. 2018).
+                var crownMargins = network.CrownMargins(x, epsilon, norm, predictedClass, out var crownTopLogitLower);
+                margins = Engine.TensorMax(margins, crownMargins);
+                topLogitLower = Engine.TensorMax(topLogitLower, crownTopLogitLower);
+            }
+
             var (lower, upper) = network.IntervalBounds(x, epsilon, norm, network.Operations.Count);
             T minimumMargin = Engine.TensorMinValue(margins);
             bool certified = NumOps.GreaterThan(minimumMargin, NumOps.Zero)
@@ -527,11 +545,12 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     }
 
     /// <summary>
-    /// Computes the certified radius using binary search.
+    /// Computes the certified radius: the largest radius at which the bounds certify the prediction.
     /// </summary>
     /// <remarks>
-    /// IBP certification is monotone in the radius (the bounds of a smaller ball are nested inside those of a
-    /// larger one), so bisection over [0, 1] finds the largest certified radius to 2^-20.
+    /// The search doubles the radius from 1 while it stays certified (inputs need not lie in [0, 1], and a wide
+    /// margin certifies beyond 1), up to 2^20, then bisects the last bracket 20 times. Only certified radii are
+    /// kept, so the result is itself certified.
     /// </remarks>
     private T ComputeCertifiedRadiusInternal(
         Vector<T> vectorInput,
@@ -539,10 +558,29 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         IFullModel<T, TInput, TOutput> model,
         int predictedClass)
     {
-        T minRadius = NumOps.Zero;
-        T maxRadius = NumOps.One;
-        int maxIterations = 20; // For binary search precision
+        const int maxDoublings = 20;
+        // The brackets 2^0 .. 2^20, converted to T once.
+        var powers = new double[maxDoublings + 1];
+        for (int d = 0; d <= maxDoublings; d++)
+        {
+            powers[d] = Math.Pow(2.0, d);
+        }
 
+        var brackets = new Tensor<double>(powers, new[] { powers.Length }).Cast<T>().ToArray();
+        T minRadius = NumOps.Zero;
+        T maxRadius = brackets[0];
+        for (int doubling = 0; doubling < maxDoublings; doubling++)
+        {
+            if (!ComputeOutputBounds(vectorInput, referenceInput, model, maxRadius, predictedClass).Certified)
+            {
+                break;
+            }
+
+            minRadius = maxRadius;
+            maxRadius = brackets[doubling + 1];
+        }
+
+        const int maxIterations = 20; // bisection steps over the last bracket
         for (int iter = 0; iter < maxIterations; iter++)
         {
             T midRadius = Midpoint(minRadius, maxRadius);
