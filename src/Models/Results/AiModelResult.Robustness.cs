@@ -270,7 +270,8 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// the best result. This provides a more reliable robustness evaluation because if your
     /// model can resist AutoAttack, it's genuinely robust against a wide variety of attacks.</para>
     /// <para>The attack settings come from the configured options, as for
-    /// <see cref="EvaluateRobustness(TInput[], TOutput[])"/>.</para>
+    /// <see cref="EvaluateRobustness(TInput[], TOutput[])"/>. Without configured options it runs the paper's
+    /// standard AutoAttack settings (<see cref="AutoAttackOptions{T}"/>) at the given budget.</para>
     /// </remarks>
     /// <param name="testInputs">The test inputs to evaluate on.</param>
     /// <param name="testLabels">The true labels for the test inputs.</param>
@@ -281,7 +282,19 @@ public partial class AiModelResult<T, TInput, TOutput>
         TOutput[] testLabels,
         double? epsilon = null)
     {
-        var attack = new AutoAttack<T, TInput, TOutput>(ConfiguredAttackOptions(epsilon));
+        // Without configured options this is the paper's standard AutoAttack (Croce and Hein 2020): 100 APGD/FAB
+        // iterations and 5000 Square queries at the requested budget.
+        var options = ConfiguredAttackOptions(epsilon);
+        if (AdversarialRobustnessOptions is null)
+        {
+            options = new AutoAttackOptions<T>
+            {
+                Epsilon = options.Epsilon,
+                NormType = AdversarialNormType.LInfinity
+            };
+        }
+
+        var attack = new AutoAttack<T, TInput, TOutput>(options);
         return EvaluateRobustness(testInputs, testLabels, attack);
     }
 
