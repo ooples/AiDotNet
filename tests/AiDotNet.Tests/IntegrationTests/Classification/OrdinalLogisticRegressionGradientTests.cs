@@ -1,4 +1,6 @@
 using AiDotNet.Classification.Ordinal;
+using System.Reflection;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.Classification;
@@ -13,8 +15,11 @@ public class OrdinalLogisticRegressionGradientTests
     private static readonly double[] Thresholds = { -0.5, 0.8 };
 
     [Fact(Timeout = 120000)]
-    public void ComputeGradients_MatchesFiniteDifferencesOfMeanNegativeLogLikelihood()
+    public async Task ComputeGradients_MatchesFiniteDifferencesOfMeanNegativeLogLikelihood()
     {
+        // xunit only honours Timeout on async tests
+        await Task.Yield();
+
         // Arrange: three ordered classes so the middle class contributes
         var x = new Matrix<double>(9, 2);
         var y = new Vector<double>(9);
@@ -35,7 +40,14 @@ public class OrdinalLogisticRegressionGradientTests
         var trained = new OrdinalLogisticRegression<double>(maxIterations: 5);
         trained.Train(x, y);
         var parameters = new Vector<double>(new[] { Coefficients[0], Coefficients[1], Thresholds[0], Thresholds[1] });
-        var model = (OrdinalLogisticRegression<double>)trained.WithParameters(parameters);
+
+        // The fitted state is set directly. SetParameters / WithParameters cannot be used here: the parameter
+        // manifest holds both the generated component for the coefficient vector and the packed
+        // coefficients-plus-thresholds component, so a 4-value restore is split 2 + 2 and the packed half is
+        // unpacked as one coefficient and one threshold.
+        SetField(trained, "_coefficients", new Vector<double>(Coefficients));
+        SetField(trained, "_thresholds", new Vector<double>(Thresholds));
+        var model = trained;
 
         // Act
         var gradient = model.ComputeGradients(x, y);
@@ -71,6 +83,21 @@ public class OrdinalLogisticRegressionGradientTests
         }
 
         return total / x.Rows;
+    }
+
+    private static void SetField(object target, string name, object value)
+    {
+        for (var type = target.GetType(); type is not null; type = type.BaseType)
+        {
+            var field = type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            if (field is not null)
+            {
+                field.SetValue(target, value);
+                return;
+            }
+        }
+
+        Assert.Fail($"Field {name} not found on {target.GetType().Name}.");
     }
 
     private static double Sigmoid(double z) => 1.0 / (1.0 + Math.Exp(-z));
