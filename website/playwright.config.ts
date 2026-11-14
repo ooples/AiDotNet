@@ -64,12 +64,12 @@ export default defineConfig({
     // ---------- Anonymous projects (existing test suite) ----------
     {
       name: 'anon-desktop',
-      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**'],
+      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**', '**/journeys/**', '**/helpers/**'],
       use: { viewport: { width: 1440, height: 900 } },
     },
     {
       name: 'anon-mobile',
-      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**'],
+      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**', '**/journeys/**', '**/helpers/**'],
       // Base on Pixel 5's real device config (correct isMobile +
       // hasTouch + user agent) rather than spreading Desktop Chrome +
       // overriding only the viewport. Code paths that gate on
@@ -104,6 +104,16 @@ export default defineConfig({
       name: 'auth-anon',
       testDir: './tests/e2e/auth',
       testIgnore: ['**/*.setup.ts'],
+      use: { viewport: { width: 1440, height: 900 } },
+    },
+
+    // ---------- Real-backend journeys ----------
+    //
+    // Whole user paths that create their own throwaway users (sign-up, purchase, password
+    // recovery), so they start signed out and need the server-side env in helpers/backend.ts.
+    {
+      name: 'journeys',
+      testDir: './tests/e2e/journeys',
       use: { viewport: { width: 1440, height: 900 } },
     },
 

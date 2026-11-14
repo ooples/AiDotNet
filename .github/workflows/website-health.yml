@@ -70,6 +70,27 @@ jobs:
           n=$(psql "$(cat supabase/.temp/pooler-url)" -v ON_ERROR_STOP=1 -Atc "with r as (update public.license_keys set status = 'revoked', revoked_at = now() where customer_full_name like 'e2e-test %' and status <> 'revoked' and issued_at < now() - interval '1 hour' returning 1) select count(*) from r")
           echo "Revoked $n leftover e2e test license(s)."
 
+      - name: Delete leftover e2e test users
+        # Journeys delete their users in afterAll; a cancelled run never gets there. Their licenses
+        # and API keys cascade.
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          n=$(psql "$(cat supabase/.temp/pooler-url)" -v ON_ERROR_STOP=1 -Atc "with d as (delete from auth.users where email like 'delivered+e2e-user-%@resend.dev' and created_at < now() - interval '1 hour' returning 1) select count(*) from d")
+          echo "Deleted $n leftover e2e test user(s)."
+
+      - name: Auth email is configured
+        # Without custom SMTP, Supabase only emails project team members: customers can't confirm
+        # sign-up or reset a password. deploy-website.yml sets it; this catches a revert.
+        run: |
+          set -euo pipefail
+          cfg=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" https://api.supabase.com/v1/projects/$PROJECT_REF/config/auth)
+          host=$(jq -r '.smtp_host // empty' <<<"$cfg"); rate=$(jq -r '.rate_limit_email_sent' <<<"$cfg")
+          echo "smtp_host=${host:-(built-in)} rate_limit_email_sent=$rate"
+          [ "$host" = smtp.resend.com ] || { echo "::error::Supabase Auth is not sending through Resend SMTP"; exit 1; }
+          [ "$rate" -ge 10 ] || { echo "::error::Auth email rate limit is $rate/hour"; exit 1; }
+
       - name: Edge functions match
         run: |
           set -euo pipefail
