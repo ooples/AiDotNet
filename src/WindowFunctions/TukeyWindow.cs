@@ -154,13 +154,17 @@ public class TukeyWindow<T> : IWindowFunction<T>
             return WindowFunctionHelper.GeneralCosine<T>(windowSize, 0.5, 0.5);
         }
 
+        // The index n, 2n/(alpha N) and the region tests are formed in double: Half holds integers exactly only
+        // up to 2048, so an index formed in Half merges neighbouring samples of a longer window.
         var engine = AiDotNetEngine.Current;
-        T N = _numOps.FromDouble(windowSize - 1);
-        T halfAlphaN = _numOps.Multiply(_alpha, _numOps.Divide(N, _numOps.FromDouble(2)));
-        Tensor<T> n = WindowFunctionHelper.SampleIndices<T>(windowSize);
+        double alpha = _numOps.ToDouble(_alpha);
+        double N = windowSize - 1;
+        double halfAlphaN = alpha * N / 2.0;
+        Tensor<double> n = WindowFunctionHelper.SampleIndices<double>(windowSize);
 
         // 2n/(alpha N), shared by both tapers
-        Tensor<T> scaled = engine.TensorDivideScalar(engine.TensorMultiplyScalar(n, _numOps.FromDouble(2)), _numOps.Multiply(_alpha, N));
+        Tensor<T> scaled = TensorCopyHelper.CastLogical<double, T>(
+            engine.TensorDivideScalar(engine.TensorMultiplyScalar(n, 2.0), alpha * N));
         T pi = _numOps.FromDouble(Math.PI);
         T half = _numOps.FromDouble(0.5);
 
@@ -175,8 +179,8 @@ public class TukeyWindow<T> : IWindowFunction<T>
 
         // Flat region: n < N - alpha N / 2 (and past the left taper)
         Tensor<T> flat = Tensor<T>.CreateDefault(new[] { windowSize }, _numOps.One);
-        Tensor<T> beforeRight = engine.TensorLessThan(n, _numOps.Subtract(N, halfAlphaN));
-        Tensor<T> afterLeft = engine.TensorGreaterThan(n, halfAlphaN);
+        Tensor<T> beforeRight = TensorCopyHelper.CastLogical<double, T>(engine.TensorLessThan(n, N - halfAlphaN));
+        Tensor<T> afterLeft = TensorCopyHelper.CastLogical<double, T>(engine.TensorGreaterThan(n, halfAlphaN));
         return engine.TensorWhere(afterLeft, engine.TensorWhere(beforeRight, flat, right), left).ToVector();
     }
 

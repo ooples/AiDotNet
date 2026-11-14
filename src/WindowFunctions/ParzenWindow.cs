@@ -90,16 +90,18 @@ public class ParzenWindow<T> : IWindowFunction<T>
 
         // scipy.signal.windows.parzen (Harris 1978): with n centred on (M-1)/2 and a = |n| / (M/2),
         // w = 1 - 6a^2(1 - a) for |n| <= (M-1)/4, and w = 2(1 - a)^3 otherwise.
+        // |n| and a are formed in double, and the region test made there: Half holds integers exactly only up
+        // to 2048, so a centred index formed in Half merges neighbouring samples of a longer window.
         var engine = AiDotNetEngine.Current;
-        Tensor<T> absN = engine.TensorAbs(engine.TensorSubtractScalar(
-            WindowFunctionHelper.SampleIndices<T>(windowSize), _numOps.FromDouble((windowSize - 1) / 2.0)));
-        Tensor<T> a = engine.TensorDivideScalar(absN, _numOps.FromDouble(windowSize / 2.0));
+        Tensor<double> absN = engine.TensorAbs(engine.TensorSubtractScalar(
+            WindowFunctionHelper.SampleIndices<double>(windowSize), (windowSize - 1) / 2.0));
+        Tensor<T> a = TensorCopyHelper.CastLogical<double, T>(engine.TensorDivideScalar(absN, windowSize / 2.0));
         Tensor<T> oneMinusA = engine.ScalarMinusTensor(_numOps.One, a);
         Tensor<T> inner = engine.ScalarMinusTensor(_numOps.One,
             engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSquare(a), oneMinusA), _numOps.FromDouble(6.0)));
         Tensor<T> outer = engine.TensorMultiplyScalar(
             engine.TensorMultiply(engine.TensorSquare(oneMinusA), oneMinusA), _numOps.FromDouble(2.0));
-        Tensor<T> isOuter = engine.TensorGreaterThan(absN, _numOps.FromDouble((windowSize - 1) / 4.0));
+        Tensor<T> isOuter = TensorCopyHelper.CastLogical<double, T>(engine.TensorGreaterThan(absN, (windowSize - 1) / 4.0));
         return engine.TensorWhere(isOuter, outer, inner).ToVector();
     }
 

@@ -5,7 +5,9 @@ namespace AiDotNet.WindowFunctions;
 /// </summary>
 /// <remarks>
 /// Every window is built as whole-tensor engine operations over the sample index n = 0..M-1, generic in T.
-/// Length 0 and length 1 follow scipy.signal.windows (an empty window and the single value 1).
+/// Length 0 and length 1 follow scipy.signal.windows (an empty window and the single value 1). The sample
+/// geometry (n / (M-1), 2n / (M-1) - 1, n - (M-1)/2) is formed in double and converted to T once: Half holds
+/// integers exactly only up to 2048, so an index formed in Half merges neighbouring samples of a longer window.
 /// </remarks>
 internal static class WindowFunctionHelper
 {
@@ -36,18 +38,17 @@ internal static class WindowFunctionHelper
 
     /// <summary>The phase n / (M-1), running from 0 to 1.</summary>
     internal static Tensor<T> UnitPhase<T>(int windowSize)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return AiDotNetEngine.Current.TensorDivideScalar(SampleIndices<T>(windowSize), numOps.FromDouble(windowSize - 1));
-    }
+        => TensorCopyHelper.CastLogical<double, T>(UnitPhaseInDouble(windowSize));
+
+    private static Tensor<double> UnitPhaseInDouble(int windowSize)
+        => AiDotNetEngine.Current.TensorDivideScalar(SampleIndices<double>(windowSize), windowSize - 1.0);
 
     /// <summary>The centred coordinate 2n / (M-1) - 1, running from -1 to 1.</summary>
     internal static Tensor<T> SymmetricCoordinate<T>(int windowSize)
     {
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return engine.TensorSubtractScalar(
-            engine.TensorMultiplyScalar(UnitPhase<T>(windowSize), numOps.FromDouble(2.0)), numOps.One);
+        return TensorCopyHelper.CastLogical<double, T>(
+            engine.TensorSubtractScalar(engine.TensorMultiplyScalar(UnitPhaseInDouble(windowSize), 2.0), 1.0));
     }
 
     /// <summary>
@@ -61,11 +62,12 @@ internal static class WindowFunctionHelper
             return degenerate;
         }
 
+        // The whole sum is formed in double and converted once: the window is a fixed function of n, and a
+        // narrow T would round both the phase and every cosine term.
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        Tensor<T> x = engine.TensorMultiplyScalar(UnitPhase<T>(windowSize), numOps.FromDouble(2.0 * Math.PI));
+        Tensor<double> x = engine.TensorMultiplyScalar(UnitPhaseInDouble(windowSize), 2.0 * Math.PI);
 
-        Tensor<T> result = engine.ScalarMinusTensor(numOps.FromDouble(a0), CosineTerm(x, 1.0, a1));
+        Tensor<double> result = engine.ScalarMinusTensor(a0, CosineTerm(x, 1.0, a1));
         if (a2 != 0.0)
         {
             result = engine.TensorAdd(result, CosineTerm(x, 2.0, a2));
@@ -81,14 +83,12 @@ internal static class WindowFunctionHelper
             result = engine.TensorAdd(result, CosineTerm(x, 4.0, a4));
         }
 
-        return result.ToVector();
+        return TensorCopyHelper.CastLogical<double, T>(result).ToVector();
     }
 
-    private static Tensor<T> CosineTerm<T>(Tensor<T> x, double harmonic, double coefficient)
+    private static Tensor<double> CosineTerm(Tensor<double> x, double harmonic, double coefficient)
     {
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return engine.TensorMultiplyScalar(
-            engine.TensorCos(engine.TensorMultiplyScalar(x, numOps.FromDouble(harmonic))), numOps.FromDouble(coefficient));
+        return engine.TensorMultiplyScalar(engine.TensorCos(engine.TensorMultiplyScalar(x, harmonic)), coefficient);
     }
 }
