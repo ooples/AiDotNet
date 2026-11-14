@@ -303,7 +303,13 @@ public partial class FlattenLayer<T> : LayerBase<T>, IBatchAwareShapeContract
         if (shape.Length == 0)
             throw new ArgumentException("FlattenLayer cannot flatten a rank-0 tensor.", nameof(input));
 
-        int firstFeatureAxis = shape.Length == 1 ? 0 : 1;
+        // A real forward is batched: axis 0 is the batch (Flatten(start_dim=1)). A shape-only resolution comes from
+        // the layer walk, whose shapes are per-sample after any layer that declares per-sample outputs (a convolution
+        // or pooling layer reports [C, H, W]), so every axis is a feature axis there. The walk's only batched shapes
+        // carry a unit batch, which leaves the product unchanged. Taking axis 0 as the batch there sized the Dense
+        // after Conv -> Pool -> Flatten from H*W alone ([64, 8, 8] -> 64 instead of 4096): the first real
+        // forward re-sized it, after the fused path had collected the old weight, and every such CNN trained eagerly.
+        int firstFeatureAxis = shape.Length == 1 || IsResolvingShapesOnly ? 0 : 1;
         _inputShape = shape.Skip(firstFeatureAxis).ToArray();
         _outputSize = 1;
         for (int i = firstFeatureAxis; i < shape.Length; i++)
