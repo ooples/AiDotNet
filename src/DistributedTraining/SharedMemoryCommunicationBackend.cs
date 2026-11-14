@@ -4,8 +4,12 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+#if !AIDN_LEGACY_TFM
+using System.Numerics.Tensors;
+#endif
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining;
@@ -20,8 +24,9 @@ namespace AiDotNet.DistributedTraining;
 /// Processes on the same host map a common shared-memory region (<see cref="MemoryMappedFile"/>) partitioned into:
 /// <list type="bullet">
 /// <item><description>Cache-line-aligned (64-byte) per-rank sense-reversing phase headers to avoid false sharing.</description></item>
-/// <item><description>Dedicated per-rank collective staging slots supporting pipelined multi-chunk <c>AllReduce</c>,
-/// <c>ReduceScatter</c>, <c>AllGather</c> (both uniform and uneven shard sizes), <c>Broadcast</c>, and <c>Scatter</c>.</description></item>
+/// <item><description>Dedicated per-rank collective staging slots supporting single-pass zero-copy SIMD and pipelined
+/// multi-chunk <c>AllReduce</c>, <c>ReduceScatter</c>, <c>AllGather</c> (both uniform and uneven shard sizes),
+/// <c>Broadcast</c>, and <c>Scatter</c>.</description></item>
 /// <item><description>Dedicated per-pair point-to-point mailboxes for tagged <c>Send</c>/<c>Receive</c>.</description></item>
 /// <item><description>OS process-ID liveness monitoring so if any peer rank crashes or is killed mid-run, surviving
 /// ranks fail fast with an <see cref="IOException"/> instead of hanging indefinitely.</description></item>
@@ -40,10 +45,17 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private const int MaxSupportedRanks = 64;
     private const int GlobalHeaderSize = 64;
     private const int RankHeaderStride = 64;
-    private const int HeaderBytes = GlobalHeaderSize + (MaxSupportedRanks * RankHeaderStride); // 4160 bytes -> padded to 8192
     private const int CollectiveRegionOffset = 8192;
     private const int P2PHeaderStride = 64;
     private const int P2PChunkCapacityBytes = 256 * 1024; // 256 KiB per ordered (src, dst) pair
+
+    private const int GlobalMagicOffset = 0;
+    private const int GlobalWorldSizeOffset = 4;
+    private const int GlobalAbortFlagOffset = 8;
+    private const int GlobalWaiterCountOffset = 12;
+
+    private const int SpinCountBeforePark = 16384;
+    private const int FastSpinThreshold = 256;
 
     private const int OpInit = 1;
     private const int OpBarrier = 2;
@@ -73,14 +85,23 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private readonly string _sessionName;
     private readonly long _slotCapacityBytes;
     private readonly int _timeoutMilliseconds;
+    private readonly long _timeoutStopwatchTicks;
+    private readonly long _livenessPollIntervalTicks;
     private readonly object _collectiveLock = new object();
 
     private MemoryMappedFile? _mmf;
     private MemoryMappedViewAccessor? _accessor;
+    private nint _basePtr;
+    private long _mappedCapacityBytes;
+    private bool _viewHandleAcquired;
     private FileStream? _backingFileStream;
     private string? _backingFilePath;
     private EventWaitHandle? _wakeEvent;
     private Process?[]? _peerProcesses;
+    private int[]? _peerExited;
+    private long[]? _lastAliveCheckTicks;
+    private int[]? _gatherCounts;
+    private int[]? _gatherOffsets;
     private long _localPhase;
     private long _p2pBaseOffset;
     private long[]? _p2pSendSeq;
@@ -106,13 +127,13 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     /// <param name="rank">This process's rank in <c>[0, worldSize - 1]</c>.</param>
     /// <param name="worldSize">Total number of participating processes (<c>1..64</c>).</param>
     /// <param name="sessionName">Unique shared-memory session name shared by all ranks in the job.</param>
-    /// <param name="slotCapacityBytes">Per-rank collective staging buffer capacity in bytes (default 16 MiB).</param>
+    /// <param name="slotCapacityBytes">Per-rank collective staging buffer capacity in bytes (default 64 MiB).</param>
     /// <param name="timeoutMilliseconds">Maximum wait time in milliseconds before throwing a timeout error.</param>
     public SharedMemoryCommunicationBackend(
         int rank,
         int worldSize,
         string sessionName = "aidotnet_shm_default",
-        long slotCapacityBytes = 16L * 1024L * 1024L,
+        long slotCapacityBytes = 64L * 1024L * 1024L,
         int timeoutMilliseconds = 120_000)
     {
         if (worldSize < 1 || worldSize > MaxSupportedRanks)
@@ -149,6 +170,8 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         _sessionName = SanitizeSessionName(sessionName);
         _slotCapacityBytes = AlignUp(slotCapacityBytes, 64);
         _timeoutMilliseconds = timeoutMilliseconds;
+        _timeoutStopwatchTicks = Math.Max(1L, (long)Math.Ceiling(timeoutMilliseconds * (Stopwatch.Frequency / 1000.0)));
+        _livenessPollIntervalTicks = Math.Max(1L, Stopwatch.Frequency / 10); // 100 ms fallback poll interval
     }
 
     /// <inheritdoc/>
@@ -176,122 +199,174 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         _p2pBaseOffset = CollectiveRegionOffset + (_worldSize * _slotCapacityBytes);
         long totalCapacityBytes = _p2pBaseOffset + (pairCount * p2pSlotStride);
 
+        try
+        {
 #if AIDN_LEGACY_TFM
-        if (Environment.OSVersion.Platform == PlatformID.Win32NT)
-        {
-            InitializeWindowsSharedMemory(totalCapacityBytes);
-        }
-        else
-        {
-            InitializeFileBackedSharedMemory(totalCapacityBytes);
-        }
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                InitializeWindowsSharedMemory(totalCapacityBytes);
+            }
+            else
+            {
+                InitializeFileBackedSharedMemory(totalCapacityBytes);
+            }
 #else
-        if (OperatingSystem.IsWindows())
-        {
-            InitializeWindowsSharedMemory(totalCapacityBytes);
-        }
-        else
-        {
-            InitializeFileBackedSharedMemory(totalCapacityBytes);
-        }
+            if (OperatingSystem.IsWindows())
+            {
+                InitializeWindowsSharedMemory(totalCapacityBytes);
+            }
+            else
+            {
+                InitializeFileBackedSharedMemory(totalCapacityBytes);
+            }
 #endif
 
-        var accessor = _accessor ?? throw new InvalidOperationException("Shared-memory accessor failed to initialize.");
-        _p2pSendSeq = new long[_worldSize];
-        _p2pRecvSeq = new long[_worldSize];
-        _peerProcesses = new Process?[_worldSize];
-        _localPhase = 0;
+            var accessor = _accessor ?? throw new InvalidOperationException("Shared-memory accessor failed to initialize.");
+            AcquireViewPointer(accessor, totalCapacityBytes);
 
-        int currentPid = Process.GetCurrentProcess().Id;
-        long myHeader = RankHeaderOffset(_rank);
+            _p2pSendSeq = new long[_worldSize];
+            _p2pRecvSeq = new long[_worldSize];
+            _peerProcesses = new Process?[_worldSize];
+            _peerExited = new int[_worldSize];
+            _lastAliveCheckTicks = new long[_worldSize];
+            _gatherCounts = new int[_worldSize];
+            _gatherOffsets = new int[_worldSize];
+            _localPhase = 0;
 
-        // Register this rank's metadata in its dedicated cache line before publishing active state.
-        accessor.Write(myHeader + 4, currentPid);
-        accessor.Write(myHeader + 8, 0L);
-        accessor.Write(myHeader + 16, 0);
-        accessor.Write(myHeader + 20, 0);
-        accessor.Write(myHeader + 24, Stopwatch.GetTimestamp());
-        accessor.Write(myHeader + 32, 0);
-        accessor.Write(myHeader + 40, 0);
-        accessor.Write(myHeader + 44, 0);
-        Thread.MemoryBarrier();
-        accessor.Write(myHeader + 0, RankStateActive);
-        Thread.MemoryBarrier();
+            int currentPid = Process.GetCurrentProcess().Id;
+            long myHeader = RankHeaderOffset(_rank);
 
-        if (_rank == 0)
-        {
-            accessor.Write(4, _worldSize);
-            accessor.Write(8, 0); // AbortFlag = 0
+            // Register this rank's metadata in its dedicated cache line before publishing active state.
+            WriteInt32Volatile(myHeader + 4, currentPid);
+            WriteInt64Volatile(myHeader + 8, 0L);
+            WriteInt32Volatile(myHeader + 16, 0);
+            WriteInt32Volatile(myHeader + 20, 0);
+            WriteInt64Volatile(myHeader + 24, 0L);
+            WriteInt32Volatile(myHeader + 32, 0);
+            WriteInt32Volatile(myHeader + 40, 0);
+            WriteInt32Volatile(myHeader + 44, 0);
             Thread.MemoryBarrier();
-            accessor.Write(0, (ProtocolVersion << 16) ^ MagicValue);
+            WriteInt32Volatile(myHeader + 0, RankStateActive);
             Thread.MemoryBarrier();
-        }
 
-        SignalWakeEvent();
-
-        // Wait for all ranks to register and bind peer Process handles for instant crash detection.
-        long startTicks = Stopwatch.GetTimestamp();
-        int expectedHeader = (ProtocolVersion << 16) ^ MagicValue;
-        for (int peer = 0; peer < _worldSize; peer++)
-        {
-            long peerHeader = RankHeaderOffset(peer);
-            int spins = 0;
-            while (true)
+            int expectedHeader = (ProtocolVersion << 16) ^ MagicValue;
+            if (_rank == 0)
             {
+                WriteInt32Volatile(GlobalWorldSizeOffset, _worldSize);
+                WriteInt32Volatile(GlobalAbortFlagOffset, 0);
+                WriteInt32Volatile(GlobalWaiterCountOffset, 0);
                 Thread.MemoryBarrier();
-                int hdrMagic = accessor.ReadInt32(0);
-                int state = accessor.ReadInt32(peerHeader + 0);
-                if (hdrMagic == expectedHeader && state == RankStateActive)
-                {
-                    int savedWorld = accessor.ReadInt32(4);
-                    if (savedWorld != _worldSize)
-                    {
-                        throw new InvalidOperationException(
-                            $"Shared-memory session '{_sessionName}' was initialized with WorldSize={savedWorld}, " +
-                            $"but rank {_rank} configured WorldSize={_worldSize}.");
-                    }
-
-                    int peerPid = accessor.ReadInt32(peerHeader + 4);
-                    if (peer != _rank && peerPid > 0 && peerPid != currentPid)
-                    {
-                        try
-                        {
-                            _peerProcesses[peer] = Process.GetProcessById(peerPid);
-                        }
-                        catch (ArgumentException)
-                        {
-                            throw new IOException(
-                                $"Distributed peer rank {peer} (PID {peerPid}) exited during shared-memory handshake.");
-                        }
-                    }
-
-                    break;
-                }
-
-                CheckTimeout(startTicks, $"initializing shared-memory session '{_sessionName}' waiting for rank {peer}");
-                SpinOrYield(ref spins);
+                WriteInt32Volatile(GlobalMagicOffset, expectedHeader);
+                Thread.MemoryBarrier();
             }
-        }
 
-        // Initial barrier confirms every rank has bound peer PIDs before any collective begins.
-        AdvancePhaseAndWait(OpInit, 0);
+            SignalWakeEventUnconditional();
+
+            // Wait for all ranks to register and bind peer Process handles for instant crash detection.
+            // Note: GlobalWaiterCountOffset is not touched until all ranks finish this handshake, so Rank 0's
+            // initialization of GlobalWaiterCountOffset = 0 above never races with Interlocked increments.
+            long startTicks = Stopwatch.GetTimestamp();
+            for (int peer = 0; peer < _worldSize; peer++)
+            {
+                long peerHeader = RankHeaderOffset(peer);
+                int spins = 0;
+                while (true)
+                {
+                    int hdrMagic = ReadInt32Volatile(GlobalMagicOffset);
+                    int state = ReadInt32Volatile(peerHeader + 0);
+                    if (hdrMagic == expectedHeader && state == RankStateActive)
+                    {
+                        int savedWorld = ReadInt32Volatile(GlobalWorldSizeOffset);
+                        if (savedWorld != _worldSize)
+                        {
+                            throw new InvalidOperationException(
+                                $"Shared-memory session '{_sessionName}' was initialized with WorldSize={savedWorld}, " +
+                                $"but rank {_rank} configured WorldSize={_worldSize}.");
+                        }
+
+                        int peerPid = ReadInt32Volatile(peerHeader + 4);
+                        if (peer != _rank && peerPid > 0 && peerPid != currentPid)
+                        {
+                            Process peerProc;
+                            try
+                            {
+                                peerProc = Process.GetProcessById(peerPid);
+                            }
+                            catch (ArgumentException)
+                            {
+                                throw new IOException(
+                                    $"Distributed peer rank {peer} (PID {peerPid}) exited during shared-memory handshake.");
+                            }
+
+                            _peerProcesses[peer] = peerProc;
+                            _lastAliveCheckTicks[peer] = Stopwatch.GetTimestamp();
+                            int capturedPeer = peer;
+                            try
+                            {
+                                peerProc.EnableRaisingEvents = true;
+                                peerProc.Exited += (_, _) =>
+                                {
+                                    var exitedFlags = _peerExited;
+                                    if (exitedFlags is not null)
+                                    {
+                                        Volatile.Write(ref exitedFlags[capturedPeer], 1);
+                                    }
+
+                                    SignalWakeEventUnconditional();
+                                };
+                                if (peerProc.HasExited)
+                                {
+                                    Volatile.Write(ref _peerExited[peer], 1);
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                // Fallback time-throttled HasExited check handles restricted OS environments.
+                            }
+                        }
+
+                        break;
+                    }
+
+                    if (spins < SpinCountBeforePark)
+                    {
+                        Thread.SpinWait(spins < FastSpinThreshold ? 1 : 4);
+                        spins++;
+                        if ((spins & 255) == 0 && IsTimedOut(startTicks, out double elapsedMs))
+                        {
+                            ThrowHandshakeTimeout(elapsedMs, peer);
+                        }
+                    }
+                    else
+                    {
+                        WaitParkSlice();
+                        if (IsTimedOut(startTicks, out double elapsedMs))
+                        {
+                            ThrowHandshakeTimeout(elapsedMs, peer);
+                        }
+                    }
+                }
+            }
+
+            // Initial barrier confirms every rank has bound peer PIDs before any collective begins.
+            AdvancePhaseAndWait(OpInit, 0);
+        }
+        catch
+        {
+            ReleaseResources();
+            throw;
+        }
     }
 
     /// <inheritdoc/>
     protected override void OnShutdown()
     {
-        if (_accessor is not null)
+        if (_viewHandleAcquired && _basePtr != 0)
         {
-            try
-            {
-                long myHeader = RankHeaderOffset(_rank);
-                _accessor.Write(myHeader + 0, RankStateShutdown);
-                Thread.MemoryBarrier();
-                SignalWakeEvent();
-            }
-            catch (ObjectDisposedException)
-            {
-            }
+            long myHeader = RankHeaderOffset(_rank);
+            WriteInt32Volatile(myHeader + 0, RankStateShutdown);
+            Thread.MemoryBarrier();
+            SignalWakeEventUnconditional();
         }
 
         ReleaseResources();
@@ -387,19 +462,18 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
         lock (_collectiveLock)
         {
-            var accessor = _accessor!;
-            accessor.Write(RankHeaderOffset(_rank) + 32, sendData.Length);
+            WriteInt32Volatile(RankHeaderOffset(_rank) + 32, sendData.Length);
             AdvancePhaseAndWait(OpAllGatherMeta, 0);
 
-            var counts = new int[_worldSize];
-            var offsets = new int[_worldSize];
+            int[] counts = _gatherCounts ?? throw new InvalidOperationException("Shared-memory gather buffers are not initialized.");
+            int[] offsets = _gatherOffsets ?? throw new InvalidOperationException("Shared-memory gather buffers are not initialized.");
             long totalLenLong = 0;
             int maxPeerLen = 0;
             int invalidRank = -1;
             int invalidCount = 0;
             for (int r = 0; r < _worldSize; r++)
             {
-                int c = accessor.ReadInt32(RankHeaderOffset(r) + 32);
+                int c = ReadInt32Volatile(RankHeaderOffset(r) + 32);
                 if (c < 0 && invalidRank < 0)
                 {
                     invalidRank = r;
@@ -426,7 +500,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             }
 
             int totalLength = checked((int)totalLenLong);
-            var gathered = new Vector<T>(totalLength);
+            var gathered = AllocateExactOutputVector(totalLength);
             if (totalLength == 0)
             {
                 RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - start);
@@ -493,12 +567,11 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
         lock (_collectiveLock)
         {
-            var accessor = _accessor!;
             int myCount = _rank == root ? data.Length : 0;
-            accessor.Write(RankHeaderOffset(_rank) + 32, myCount);
+            WriteInt32Volatile(RankHeaderOffset(_rank) + 32, myCount);
             AdvancePhaseAndWait(OpBroadcastMeta, 0);
 
-            int totalLength = accessor.ReadInt32(RankHeaderOffset(root) + 32);
+            int totalLength = ReadInt32Volatile(RankHeaderOffset(root) + 32);
             AdvancePhaseAndWait(OpBroadcastMetaAck, 0);
 
             if (totalLength < 0)
@@ -506,7 +579,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                 throw new InvalidOperationException($"Broadcast root rank {root} reported negative length {totalLength}.");
             }
 
-            var result = new Vector<T>(totalLength);
+            var result = AllocateExactOutputVector(totalLength);
             if (totalLength == 0)
             {
                 RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - start);
@@ -573,12 +646,11 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
         lock (_collectiveLock)
         {
-            var accessor = _accessor!;
             int myShardLength = _rank == root ? sendData.Length / _worldSize : 0;
-            accessor.Write(RankHeaderOffset(_rank) + 32, myShardLength);
+            WriteInt32Volatile(RankHeaderOffset(_rank) + 32, myShardLength);
             AdvancePhaseAndWait(OpScatterMeta, 0);
 
-            int shardLength = accessor.ReadInt32(RankHeaderOffset(root) + 32);
+            int shardLength = ReadInt32Volatile(RankHeaderOffset(root) + 32);
             AdvancePhaseAndWait(OpScatterMetaAck, 0);
 
             if (shardLength < 0)
@@ -586,7 +658,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                 throw new InvalidOperationException($"Scatter root rank {root} reported negative shard length {shardLength}.");
             }
 
-            var result = new Vector<T>(shardLength);
+            var result = AllocateExactOutputVector(shardLength);
             if (shardLength == 0)
             {
                 RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - start);
@@ -642,7 +714,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
 
         int shardLength = data.Length / _worldSize;
-        var shard = new Vector<T>(shardLength);
+        var shard = AllocateExactOutputVector(shardLength);
         if (shardLength == 0)
         {
             RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - start);
@@ -698,11 +770,12 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         ValidateData(data, nameof(data));
 
         long start = Stopwatch.GetTimestamp();
-        var accessor = _accessor!;
         int pairIdx = (_rank * _worldSize) + destinationRank;
         long pairOffset = _p2pBaseOffset + ((long)pairIdx * (P2PHeaderStride + P2PChunkCapacityBytes));
         long dataOffset = pairOffset + P2PHeaderStride;
-        long nextSeq = (_p2pSendSeq![destinationRank] + 1);
+        long peerHeader = RankHeaderOffset(destinationRank);
+        var sendSeqTable = _p2pSendSeq ?? throw new InvalidOperationException("Shared-memory point-to-point state is not initialized.");
+        long nextSeq = sendSeqTable[destinationRank] + 1;
 
         int elemSize = ElementSizeBytes();
         int maxChunkElements = P2PChunkCapacityBytes / elemSize;
@@ -711,53 +784,24 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         do
         {
             int chunk = Math.Min(maxChunkElements, span.Length - sent);
-            long waitStart = Stopwatch.GetTimestamp();
-            int spins = 0;
-            while (true)
-            {
-                Thread.MemoryBarrier();
-                long ack = accessor.ReadInt64(pairOffset + 8);
-                if (ack == nextSeq - 1)
-                {
-                    break;
-                }
-
-                CheckPeerAlive(destinationRank);
-                CheckTimeout(waitStart, $"Send from rank {_rank} to rank {destinationRank}");
-                SpinOrYield(ref spins);
-            }
+            WaitForP2PAck(pairOffset, peerHeader, destinationRank, nextSeq - 1, isPreSendSlotWait: true);
 
             if (chunk > 0)
             {
                 WriteReadOnlySpanToRawOffset(dataOffset, span.Slice(sent, chunk));
             }
 
-            accessor.Write(pairOffset + 16, chunk);
-            accessor.Write(pairOffset + 20, tag);
-            accessor.Write(pairOffset + 24, span.Length);
-            Thread.MemoryBarrier();
-            accessor.Write(pairOffset + 0, nextSeq);
+            WriteInt32Volatile(pairOffset + 16, chunk);
+            WriteInt32Volatile(pairOffset + 20, tag);
+            WriteInt32Volatile(pairOffset + 24, span.Length);
+            WriteInt64Volatile(pairOffset + 0, nextSeq);
             Thread.MemoryBarrier();
             SignalWakeEvent();
 
             // Wait for receiver acknowledgment before advancing.
-            waitStart = Stopwatch.GetTimestamp();
-            spins = 0;
-            while (true)
-            {
-                Thread.MemoryBarrier();
-                long ack = accessor.ReadInt64(pairOffset + 8);
-                if (ack == nextSeq)
-                {
-                    break;
-                }
+            WaitForP2PAck(pairOffset, peerHeader, destinationRank, nextSeq, isPreSendSlotWait: false);
 
-                CheckPeerAlive(destinationRank);
-                CheckTimeout(waitStart, $"Send ack from rank {destinationRank} to rank {_rank}");
-                SpinOrYield(ref spins);
-            }
-
-            _p2pSendSeq[destinationRank] = nextSeq;
+            sendSeqTable[destinationRank] = nextSeq;
             nextSeq++;
             sent += chunk;
         }
@@ -777,39 +821,34 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
 
         long start = Stopwatch.GetTimestamp();
-        var accessor = _accessor!;
         int pairIdx = (sourceRank * _worldSize) + _rank;
         long pairOffset = _p2pBaseOffset + ((long)pairIdx * (P2PHeaderStride + P2PChunkCapacityBytes));
         long dataOffset = pairOffset + P2PHeaderStride;
-        long expectedSeq = _p2pRecvSeq![sourceRank] + 1;
+        long peerHeader = RankHeaderOffset(sourceRank);
+        var recvSeqTable = _p2pRecvSeq ?? throw new InvalidOperationException("Shared-memory point-to-point state is not initialized.");
+        long expectedSeq = recvSeqTable[sourceRank] + 1;
 
-        var result = new Vector<T>(count);
+        int elemSize = ElementSizeBytes();
+        int maxChunkElements = P2PChunkCapacityBytes / elemSize;
+        var result = AllocateExactOutputVector(count);
         var dstSpan = result.AsWritableSpan();
         int received = 0;
         do
         {
-            long waitStart = Stopwatch.GetTimestamp();
-            int spins = 0;
-            while (true)
-            {
-                Thread.MemoryBarrier();
-                long seq = accessor.ReadInt64(pairOffset + 0);
-                if (seq == expectedSeq)
-                {
-                    break;
-                }
+            WaitForP2PSeq(pairOffset, peerHeader, sourceRank, expectedSeq);
 
-                CheckPeerAlive(sourceRank);
-                CheckTimeout(waitStart, $"Receive on rank {_rank} from rank {sourceRank}");
-                SpinOrYield(ref spins);
-            }
-
-            int msgTag = accessor.ReadInt32(pairOffset + 20);
-            int chunk = accessor.ReadInt32(pairOffset + 16);
+            int msgTag = ReadInt32Volatile(pairOffset + 20);
+            int chunk = ReadInt32Volatile(pairOffset + 16);
             if (msgTag != tag)
             {
                 throw new InvalidOperationException(
                     $"SharedMemory Receive tag mismatch from rank {sourceRank}: expected tag {tag}, received tag {msgTag}.");
+            }
+
+            if (chunk < 0 || chunk > maxChunkElements)
+            {
+                throw new InvalidOperationException(
+                    $"SharedMemory Receive invalid chunk size {chunk} from rank {sourceRank} (max {maxChunkElements}).");
             }
 
             if (received + chunk > count)
@@ -823,12 +862,11 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                 ReadRawOffsetIntoSpan(dataOffset, dstSpan.Slice(received, chunk), chunk);
             }
 
-            Thread.MemoryBarrier();
-            accessor.Write(pairOffset + 8, expectedSeq);
+            WriteInt64Volatile(pairOffset + 8, expectedSeq);
             Thread.MemoryBarrier();
             SignalWakeEvent();
 
-            _p2pRecvSeq[sourceRank] = expectedSeq;
+            recvSeqTable[sourceRank] = expectedSeq;
             expectedSeq++;
             received += chunk;
         }
@@ -838,24 +876,199 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         return result;
     }
 
+    private void WaitForP2PAck(long pairOffset, long peerHeader, int destinationRank, long expectedAck, bool isPreSendSlotWait)
+    {
+        long waitStart = 0;
+        int spins = 0;
+        while (true)
+        {
+            if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+            {
+                ThrowSessionAborted();
+            }
+
+            if (ReadInt64Volatile(pairOffset + 8) == expectedAck)
+            {
+                return;
+            }
+
+            if (ReadInt32Volatile(peerHeader + 0) == RankStateShutdown)
+            {
+                PublishAbortAndThrowPeerShutdownP2P(destinationRank);
+            }
+
+            if (waitStart == 0)
+            {
+                waitStart = Stopwatch.GetTimestamp();
+            }
+
+            if (spins < SpinCountBeforePark)
+            {
+                Thread.SpinWait(spins < FastSpinThreshold ? 1 : 4);
+                spins++;
+                if ((spins & 255) == 0 && IsTimedOut(waitStart, out double elapsedMs))
+                {
+                    ThrowP2PSendTimeout(elapsedMs, destinationRank, isPreSendSlotWait);
+                }
+
+                if ((spins & 2047) == 0)
+                {
+                    CheckPeerAlive(destinationRank);
+                }
+            }
+            else
+            {
+                bool ready = false;
+                ref int waiterCountRef = ref GetGlobalWaiterCountRef();
+                Interlocked.Increment(ref waiterCountRef);
+                try
+                {
+                    Thread.MemoryBarrier();
+                    if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+                    {
+                        ThrowSessionAborted();
+                    }
+
+                    if (ReadInt64Volatile(pairOffset + 8) == expectedAck)
+                    {
+                        ready = true;
+                    }
+                    else if (ReadInt32Volatile(peerHeader + 0) == RankStateShutdown)
+                    {
+                        PublishAbortAndThrowPeerShutdownP2P(destinationRank);
+                    }
+                    else
+                    {
+                        WaitParkSlice();
+                    }
+                }
+                finally
+                {
+                    int remaining = Interlocked.Decrement(ref waiterCountRef);
+                    if (ready && remaining > 0)
+                    {
+                        SignalWakeEventUnconditional();
+                    }
+                }
+
+                if (ready)
+                {
+                    return;
+                }
+
+                CheckPeerAlive(destinationRank);
+                if (IsTimedOut(waitStart, out double parkedElapsedMs))
+                {
+                    ThrowP2PSendTimeout(parkedElapsedMs, destinationRank, isPreSendSlotWait);
+                }
+            }
+        }
+    }
+
+    private void WaitForP2PSeq(long pairOffset, long peerHeader, int sourceRank, long expectedSeq)
+    {
+        long waitStart = 0;
+        int spins = 0;
+        while (true)
+        {
+            if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+            {
+                ThrowSessionAborted();
+            }
+
+            if (ReadInt64Volatile(pairOffset + 0) == expectedSeq)
+            {
+                return;
+            }
+
+            if (ReadInt32Volatile(peerHeader + 0) == RankStateShutdown)
+            {
+                PublishAbortAndThrowPeerShutdownP2P(sourceRank);
+            }
+
+            if (waitStart == 0)
+            {
+                waitStart = Stopwatch.GetTimestamp();
+            }
+
+            if (spins < SpinCountBeforePark)
+            {
+                Thread.SpinWait(spins < FastSpinThreshold ? 1 : 4);
+                spins++;
+                if ((spins & 255) == 0 && IsTimedOut(waitStart, out double elapsedMs))
+                {
+                    ThrowP2PReceiveTimeout(elapsedMs, sourceRank);
+                }
+
+                if ((spins & 2047) == 0)
+                {
+                    CheckPeerAlive(sourceRank);
+                }
+            }
+            else
+            {
+                bool ready = false;
+                ref int waiterCountRef = ref GetGlobalWaiterCountRef();
+                Interlocked.Increment(ref waiterCountRef);
+                try
+                {
+                    Thread.MemoryBarrier();
+                    if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+                    {
+                        ThrowSessionAborted();
+                    }
+
+                    if (ReadInt64Volatile(pairOffset + 0) == expectedSeq)
+                    {
+                        ready = true;
+                    }
+                    else if (ReadInt32Volatile(peerHeader + 0) == RankStateShutdown)
+                    {
+                        PublishAbortAndThrowPeerShutdownP2P(sourceRank);
+                    }
+                    else
+                    {
+                        WaitParkSlice();
+                    }
+                }
+                finally
+                {
+                    int remaining = Interlocked.Decrement(ref waiterCountRef);
+                    if (ready && remaining > 0)
+                    {
+                        SignalWakeEventUnconditional();
+                    }
+                }
+
+                if (ready)
+                {
+                    return;
+                }
+
+                CheckPeerAlive(sourceRank);
+                if (IsTimedOut(waitStart, out double parkedElapsedMs))
+                {
+                    ThrowP2PReceiveTimeout(parkedElapsedMs, sourceRank);
+                }
+            }
+        }
+    }
+
     private void AdvancePhaseAndWait(int opKind, int elementCount)
     {
-        var accessor = _accessor!;
         long nextPhase = ++_localPhase;
         int parity = (int)(nextPhase & 1L);
         int countOffset = parity == 0 ? 16 : 40;
         int opOffset = parity == 0 ? 20 : 44;
         long myHeader = RankHeaderOffset(_rank);
 
-        accessor.Write(myHeader + countOffset, elementCount);
-        accessor.Write(myHeader + opOffset, opKind);
-        accessor.Write(myHeader + 24, Stopwatch.GetTimestamp());
-        Thread.MemoryBarrier();
-        accessor.Write(myHeader + 8, nextPhase);
+        WriteInt32Volatile(myHeader + countOffset, elementCount);
+        WriteInt32Volatile(myHeader + opOffset, opKind);
+        WriteInt64Volatile(myHeader + 8, nextPhase);
         Thread.MemoryBarrier();
         SignalWakeEvent();
 
-        long waitStart = Stopwatch.GetTimestamp();
+        long waitStart = 0;
         for (int peer = 0; peer < _worldSize; peer++)
         {
             if (peer == _rank)
@@ -867,42 +1080,101 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             int spins = 0;
             while (true)
             {
-                Thread.MemoryBarrier();
-                if (accessor.ReadInt32(8) != 0)
+                if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
                 {
-                    throw new IOException(
-                        $"Shared-memory session '{_sessionName}' was aborted because a peer rank failed or disconnected.");
+                    ThrowSessionAborted();
                 }
 
-                long peerPhase = accessor.ReadInt64(peerHeader + 8);
+                long peerPhase = ReadInt64Volatile(peerHeader + 8);
                 if (peerPhase >= nextPhase)
                 {
-                    Thread.MemoryBarrier();
-                    int peerOp = accessor.ReadInt32(peerHeader + opOffset);
+                    int peerOp = ReadInt32Volatile(peerHeader + opOffset);
                     if (peerOp != opKind)
                     {
-                        accessor.Write(8, 1);
-                        Thread.MemoryBarrier();
-                        throw new InvalidOperationException(
-                            $"Collective mismatch at phase {nextPhase}: rank {_rank} entered op {opKind}, " +
-                            $"but rank {peer} entered op {peerOp}.");
+                        PublishAbortAndThrowMismatch(nextPhase, opKind, peer, peerOp);
                     }
 
                     break;
                 }
 
-                int peerState = accessor.ReadInt32(peerHeader + 0);
+                int peerState = ReadInt32Volatile(peerHeader + 0);
                 if (peerState == RankStateShutdown)
                 {
-                    accessor.Write(8, 1);
-                    Thread.MemoryBarrier();
-                    throw new IOException(
-                        $"Distributed peer rank {peer} shut down before completing collective phase {nextPhase}.");
+                    PublishAbortAndThrowPeerShutdown(peer, nextPhase);
                 }
 
-                CheckPeerAlive(peer);
-                CheckTimeout(waitStart, $"collective op {opKind} at phase {nextPhase} waiting on rank {peer}");
-                SpinOrYield(ref spins);
+                if (waitStart == 0)
+                {
+                    waitStart = Stopwatch.GetTimestamp();
+                }
+
+                if (spins < SpinCountBeforePark)
+                {
+                    Thread.SpinWait(spins < FastSpinThreshold ? 1 : 4);
+                    spins++;
+                    if ((spins & 255) == 0 && IsTimedOut(waitStart, out double elapsedMs))
+                    {
+                        ThrowCollectiveTimeout(elapsedMs, opKind, nextPhase, peer);
+                    }
+
+                    if ((spins & 2047) == 0)
+                    {
+                        CheckPeerAlive(peer);
+                    }
+                }
+                else
+                {
+                    bool ready = false;
+                    ref int waiterCountRef = ref GetGlobalWaiterCountRef();
+                    Interlocked.Increment(ref waiterCountRef);
+                    try
+                    {
+                        Thread.MemoryBarrier();
+                        if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+                        {
+                            ThrowSessionAborted();
+                        }
+
+                        long recheckPhase = ReadInt64Volatile(peerHeader + 8);
+                        if (recheckPhase >= nextPhase)
+                        {
+                            int peerOp = ReadInt32Volatile(peerHeader + opOffset);
+                            if (peerOp != opKind)
+                            {
+                                PublishAbortAndThrowMismatch(nextPhase, opKind, peer, peerOp);
+                            }
+
+                            ready = true;
+                        }
+                        else if (ReadInt32Volatile(peerHeader + 0) == RankStateShutdown)
+                        {
+                            PublishAbortAndThrowPeerShutdown(peer, nextPhase);
+                        }
+                        else
+                        {
+                            WaitParkSlice();
+                        }
+                    }
+                    finally
+                    {
+                        int remaining = Interlocked.Decrement(ref waiterCountRef);
+                        if (ready && remaining > 0)
+                        {
+                            SignalWakeEventUnconditional();
+                        }
+                    }
+
+                    if (ready)
+                    {
+                        break;
+                    }
+
+                    CheckPeerAlive(peer);
+                    if (IsTimedOut(waitStart, out double parkedElapsedMs))
+                    {
+                        ThrowCollectiveTimeout(parkedElapsedMs, opKind, nextPhase, peer);
+                    }
+                }
             }
         }
 
@@ -917,52 +1189,137 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             return;
         }
 
-        bool exited;
-        try
+        var exitedFlags = _peerExited;
+        bool exited = exitedFlags is not null && Volatile.Read(ref exitedFlags[peer]) != 0;
+        if (!exited)
         {
-            exited = proc.HasExited;
-        }
-        catch (Exception)
-        {
-            exited = false;
+            var lastChecks = _lastAliveCheckTicks;
+            long now = Stopwatch.GetTimestamp();
+            if (lastChecks is not null && now - Volatile.Read(ref lastChecks[peer]) < _livenessPollIntervalTicks)
+            {
+                return;
+            }
+
+            if (lastChecks is not null)
+            {
+                Volatile.Write(ref lastChecks[peer], now);
+            }
+
+            try
+            {
+                exited = proc.HasExited;
+                if (exited && exitedFlags is not null)
+                {
+                    Volatile.Write(ref exitedFlags[peer], 1);
+                }
+            }
+            catch (Exception)
+            {
+                exited = false;
+            }
         }
 
         if (exited)
         {
-            if (_accessor is not null)
+            if (_viewHandleAcquired && _basePtr != 0)
             {
-                _accessor.Write(8, 1);
+                WriteInt32Volatile(GlobalAbortFlagOffset, 1);
                 Thread.MemoryBarrier();
             }
 
-            SignalWakeEvent();
+            SignalWakeEventUnconditional();
             throw new IOException(
                 $"Distributed peer rank {peer} (PID {proc.Id}) terminated unexpectedly during distributed training.");
         }
     }
 
-    private void CheckTimeout(long startTimestamp, string context)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool IsTimedOut(long startTimestamp, out double elapsedMs)
     {
-        double elapsedMs = (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / Stopwatch.Frequency;
-        if (elapsedMs > _timeoutMilliseconds)
+        long elapsedTicks = Stopwatch.GetTimestamp() - startTimestamp;
+        if (elapsedTicks > _timeoutStopwatchTicks)
         {
-            throw new TimeoutException(
-                $"Rank {_rank} timed out after {elapsedMs:F0} ms (limit {_timeoutMilliseconds} ms) while {context}.");
+            elapsedMs = elapsedTicks * 1000.0 / Stopwatch.Frequency;
+            return true;
         }
+
+        elapsedMs = 0.0;
+        return false;
     }
 
-    private void SpinOrYield(ref int spins)
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowSessionAborted()
     {
-        spins++;
-        if (spins <= 2048)
-        {
-            Thread.SpinWait(16);
-        }
-        else if (spins <= 4096)
-        {
-            Thread.Yield();
-        }
-        else if (_wakeEvent is not null)
+        throw new IOException(
+            $"Shared-memory session '{_sessionName}' was aborted because a peer rank failed or disconnected.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void PublishAbortAndThrowMismatch(long nextPhase, int opKind, int peer, int peerOp)
+    {
+        WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+        Thread.MemoryBarrier();
+        SignalWakeEventUnconditional();
+        throw new InvalidOperationException(
+            $"Collective mismatch at phase {nextPhase}: rank {_rank} entered op {opKind}, " +
+            $"but rank {peer} entered op {peerOp}.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void PublishAbortAndThrowPeerShutdown(int peer, long nextPhase)
+    {
+        WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+        Thread.MemoryBarrier();
+        SignalWakeEventUnconditional();
+        throw new IOException(
+            $"Distributed peer rank {peer} shut down before completing collective phase {nextPhase}.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void PublishAbortAndThrowPeerShutdownP2P(int peer)
+    {
+        WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+        Thread.MemoryBarrier();
+        SignalWakeEventUnconditional();
+        throw new IOException(
+            $"Distributed peer rank {peer} shut down before completing point-to-point transfer.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowCollectiveTimeout(double elapsedMs, int opKind, long nextPhase, int peer)
+    {
+        throw new TimeoutException(
+            $"Rank {_rank} timed out after {elapsedMs:F0} ms (limit {_timeoutMilliseconds} ms) while collective op {opKind} at phase {nextPhase} waiting on rank {peer}.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowHandshakeTimeout(double elapsedMs, int peer)
+    {
+        throw new TimeoutException(
+            $"Rank {_rank} timed out after {elapsedMs:F0} ms (limit {_timeoutMilliseconds} ms) while initializing shared-memory session '{_sessionName}' waiting for rank {peer}.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowP2PSendTimeout(double elapsedMs, int destinationRank, bool isPreSendSlotWait)
+    {
+        string action = isPreSendSlotWait
+            ? $"Send from rank {_rank} to rank {destinationRank}"
+            : $"Send ack from rank {destinationRank} to rank {_rank}";
+        throw new TimeoutException(
+            $"Rank {_rank} timed out after {elapsedMs:F0} ms (limit {_timeoutMilliseconds} ms) while {action}.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowP2PReceiveTimeout(double elapsedMs, int sourceRank)
+    {
+        throw new TimeoutException(
+            $"Rank {_rank} timed out after {elapsedMs:F0} ms (limit {_timeoutMilliseconds} ms) while Receive on rank {_rank} from rank {sourceRank}.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void WaitParkSlice()
+    {
+        if (_wakeEvent is not null)
         {
             _wakeEvent.WaitOne(millisecondsTimeout: 1);
         }
@@ -972,7 +1329,17 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SignalWakeEvent()
+    {
+        if (ReadInt32Volatile(GlobalWaiterCountOffset) > 0)
+        {
+            SignalWakeEventUnconditional();
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void SignalWakeEventUnconditional()
     {
         try
         {
@@ -981,6 +1348,103 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         catch (ObjectDisposedException)
         {
         }
+    }
+
+    private void AcquireViewPointer(MemoryMappedViewAccessor accessor, long totalCapacityBytes)
+    {
+        bool acquired = false;
+        accessor.SafeMemoryMappedViewHandle.DangerousAddRef(ref acquired);
+        if (!acquired)
+        {
+            throw new InvalidOperationException("Failed to acquire shared-memory view handle.");
+        }
+
+        _basePtr = (nint)accessor.SafeMemoryMappedViewHandle.DangerousGetHandle() + (nint)accessor.PointerOffset;
+        Volatile.Write(ref _mappedCapacityBytes, totalCapacityBytes);
+        _viewHandleAcquired = true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vector<T> AllocateExactOutputVector(int length)
+    {
+        if (length == 0)
+        {
+            return new Vector<T>(Array.Empty<T>());
+        }
+
+#if !AIDN_LEGACY_TFM
+        if (typeof(T) == typeof(float) ||
+            typeof(T) == typeof(double) ||
+            typeof(T) == typeof(int) ||
+            typeof(T) == typeof(long) ||
+            typeof(T) == typeof(byte))
+        {
+            return new Vector<T>(GC.AllocateUninitializedArray<T>(length));
+        }
+#endif
+        return new Vector<T>(length);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ref byte GetMappedRef(long byteOffset, int byteLength)
+    {
+        EnsureRangeInBounds(byteOffset, byteLength);
+        nint ptr = _basePtr;
+        if (ptr == 0)
+        {
+            ThrowViewNotMapped();
+        }
+
+        ref byte baseRef = ref Unsafe.AddByteOffset(ref Unsafe.NullRef<byte>(), (IntPtr)ptr);
+        return ref Unsafe.AddByteOffset(ref baseRef, (IntPtr)byteOffset);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ref int GetGlobalWaiterCountRef()
+        => ref Unsafe.As<byte, int>(ref GetMappedRef(GlobalWaiterCountOffset, sizeof(int)));
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowViewNotMapped()
+    {
+        throw new ObjectDisposedException(
+            nameof(SharedMemoryCommunicationBackend<T>),
+            $"Shared-memory session '{_sessionName}' view has already been unmapped.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int ReadInt32Volatile(long byteOffset)
+        => Volatile.Read(ref Unsafe.As<byte, int>(ref GetMappedRef(byteOffset, sizeof(int))));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void WriteInt32Volatile(long byteOffset, int value)
+        => Volatile.Write(ref Unsafe.As<byte, int>(ref GetMappedRef(byteOffset, sizeof(int))), value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private long ReadInt64Volatile(long byteOffset)
+        => Volatile.Read(ref Unsafe.As<byte, long>(ref GetMappedRef(byteOffset, sizeof(long))));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void WriteInt64Volatile(long byteOffset, long value)
+        => Volatile.Write(ref Unsafe.As<byte, long>(ref GetMappedRef(byteOffset, sizeof(long))), value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EnsureRangeInBounds(long byteOffset, int byteLength)
+    {
+        long capacity = Volatile.Read(ref _mappedCapacityBytes);
+        if (byteLength < 0 ||
+            (ulong)byteOffset > (ulong)capacity ||
+            (ulong)byteLength > (ulong)(capacity - byteOffset))
+        {
+            ThrowMappedRangeOutOfBounds(byteOffset, byteLength, capacity);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowMappedRangeOutOfBounds(long byteOffset, int byteLength, long capacity)
+    {
+        throw new ArgumentOutOfRangeException(
+            nameof(byteOffset),
+            $"Shared-memory range [{byteOffset}, {byteOffset + byteLength}) exceeds mapped capacity {capacity}.");
     }
 
 #if !AIDN_LEGACY_TFM
@@ -1041,6 +1505,18 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
         _wakeEvent?.Dispose();
         _wakeEvent = null;
+
+        bool wasViewAcquired = _viewHandleAcquired;
+        _viewHandleAcquired = false;
+        Volatile.Write(ref _mappedCapacityBytes, 0L);
+        _basePtr = 0;
+        Thread.MemoryBarrier();
+
+        if (wasViewAcquired && _accessor is not null)
+        {
+            _accessor.SafeMemoryMappedViewHandle.DangerousRelease();
+        }
+
         _accessor?.Dispose();
         _accessor = null;
         _mmf?.Dispose();
@@ -1094,6 +1570,46 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         return sizeof(double); // Generic fallback serializes via IEEE-754 double.
     }
 
+#if !AIDN_LEGACY_TFM
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Span<byte> GetMappedByteSpan(long byteOffset, int byteLength)
+        => MemoryMarshal.CreateSpan(ref GetMappedRef(byteOffset, byteLength), byteLength);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ReadOnlySpan<byte> GetMappedReadOnlyByteSpan(long byteOffset, int byteLength)
+        => MemoryMarshal.CreateReadOnlySpan(ref GetMappedRef(byteOffset, byteLength), byteLength);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private Span<TElem> GetMappedSpan<TElem>(long byteOffset, int elementCount)
+        where TElem : unmanaged
+    {
+        int byteLength = checked(elementCount * Unsafe.SizeOf<TElem>());
+        return MemoryMarshal.Cast<byte, TElem>(GetMappedByteSpan(byteOffset, byteLength));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ReadOnlySpan<TElem> GetMappedReadOnlySpan<TElem>(long byteOffset, int elementCount)
+        where TElem : unmanaged
+    {
+        int byteLength = checked(elementCount * Unsafe.SizeOf<TElem>());
+        return MemoryMarshal.Cast<byte, TElem>(GetMappedReadOnlyByteSpan(byteOffset, byteLength));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ReadOnlySpan<TElem> AsReadOnlyTypedSpan<TElem>(ReadOnlySpan<T> span, int count)
+        where TElem : unmanaged
+        => MemoryMarshal.CreateReadOnlySpan(
+            ref Unsafe.As<T, TElem>(ref MemoryMarshal.GetReference(span)),
+            count);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Span<TElem> AsWritableTypedSpan<TElem>(Span<T> span, int count)
+        where TElem : unmanaged
+        => MemoryMarshal.CreateSpan(
+            ref Unsafe.As<T, TElem>(ref MemoryMarshal.GetReference(span)),
+            count);
+#endif
+
     private void WriteSpanToSlot(int rank, Span<T> span)
         => WriteReadOnlySpanToRawOffset(SlotByteOffset(rank), span);
 
@@ -1103,7 +1619,6 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private void WriteReadOnlySpanToSlotOffset(int rank, long byteSubOffset, ReadOnlySpan<T> span)
         => WriteReadOnlySpanToRawOffset(SlotByteOffset(rank) + byteSubOffset, span);
 
-    [AiDotNet.Attributes.ScalarKernel("Generic T fallback converts elements to double for shared-memory staging; float and double use bulk array block copies.")]
     private void WriteReadOnlySpanToRawOffset(long byteOffset, ReadOnlySpan<T> span)
     {
         int count = span.Length;
@@ -1112,13 +1627,377 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             return;
         }
 
-        var accessor = _accessor!;
+#if !AIDN_LEGACY_TFM
+        if (typeof(T) == typeof(float))
+        {
+            MemoryMarshal.AsBytes(AsReadOnlyTypedSpan<float>(span, count))
+                .CopyTo(GetMappedByteSpan(byteOffset, checked(count * sizeof(float))));
+            return;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            MemoryMarshal.AsBytes(AsReadOnlyTypedSpan<double>(span, count))
+                .CopyTo(GetMappedByteSpan(byteOffset, checked(count * sizeof(double))));
+            return;
+        }
+
+        if (typeof(T) == typeof(int))
+        {
+            MemoryMarshal.AsBytes(AsReadOnlyTypedSpan<int>(span, count))
+                .CopyTo(GetMappedByteSpan(byteOffset, checked(count * sizeof(int))));
+            return;
+        }
+
+        if (typeof(T) == typeof(long))
+        {
+            MemoryMarshal.AsBytes(AsReadOnlyTypedSpan<long>(span, count))
+                .CopyTo(GetMappedByteSpan(byteOffset, checked(count * sizeof(long))));
+            return;
+        }
+
+        if (typeof(T) == typeof(byte))
+        {
+            AsReadOnlyTypedSpan<byte>(span, count).CopyTo(GetMappedByteSpan(byteOffset, count));
+            return;
+        }
+
+        WriteGenericSpanToMappedDoubles(GetMappedSpan<double>(byteOffset, count), span, count);
+#else
+        WriteReadOnlySpanToRawOffsetLegacy(byteOffset, span, count);
+#endif
+    }
+
+    private void ReadSlotIntoSpan(int rank, Span<T> destination, int count)
+        => ReadRawOffsetIntoSpan(SlotByteOffset(rank), destination, count);
+
+    private void ReadRawOffsetIntoSpan(long byteOffset, Span<T> destination, int count)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+#if !AIDN_LEGACY_TFM
+        if (typeof(T) == typeof(float))
+        {
+            GetMappedReadOnlySpan<float>(byteOffset, count)
+                .CopyTo(AsWritableTypedSpan<float>(destination, count));
+            return;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            GetMappedReadOnlySpan<double>(byteOffset, count)
+                .CopyTo(AsWritableTypedSpan<double>(destination, count));
+            return;
+        }
+
+        if (typeof(T) == typeof(int))
+        {
+            GetMappedReadOnlySpan<int>(byteOffset, count)
+                .CopyTo(AsWritableTypedSpan<int>(destination, count));
+            return;
+        }
+
+        if (typeof(T) == typeof(long))
+        {
+            GetMappedReadOnlySpan<long>(byteOffset, count)
+                .CopyTo(AsWritableTypedSpan<long>(destination, count));
+            return;
+        }
+
+        if (typeof(T) == typeof(byte))
+        {
+            GetMappedReadOnlyByteSpan(byteOffset, count)
+                .CopyTo(AsWritableTypedSpan<byte>(destination, count));
+            return;
+        }
+
+        ReadMappedDoublesIntoGenericSpan(GetMappedReadOnlySpan<double>(byteOffset, count), destination, count);
+#else
+        ReadRawOffsetIntoSpanLegacy(byteOffset, destination, count);
+#endif
+    }
+
+    private void ReduceSlotsIntoSpan(Span<T> destination, int count, ReductionOperation operation)
+        => ReduceSlotsAtSubOffsetIntoSpan(0L, destination, count, operation);
+
+    private void ReduceSlotsAtSubOffsetIntoSpan(long byteSubOffset, Span<T> destination, int count, ReductionOperation operation)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+#if !AIDN_LEGACY_TFM
+        if (typeof(T) == typeof(float))
+        {
+            Span<float> dest = AsWritableTypedSpan<float>(destination, count);
+            GetMappedReadOnlySpan<float>(SlotByteOffset(0) + byteSubOffset, count).CopyTo(dest);
+            for (int r = 1; r < _worldSize; r++)
+            {
+                ReadOnlySpan<float> peer = GetMappedReadOnlySpan<float>(SlotByteOffset(r) + byteSubOffset, count);
+                CombineFloatSpanInPlace(dest, peer, operation);
+            }
+
+            if (operation == ReductionOperation.Average)
+            {
+                TensorPrimitives.Multiply(dest, 1.0f / _worldSize, dest);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            Span<double> dest = AsWritableTypedSpan<double>(destination, count);
+            GetMappedReadOnlySpan<double>(SlotByteOffset(0) + byteSubOffset, count).CopyTo(dest);
+            for (int r = 1; r < _worldSize; r++)
+            {
+                ReadOnlySpan<double> peer = GetMappedReadOnlySpan<double>(SlotByteOffset(r) + byteSubOffset, count);
+                CombineDoubleSpanInPlace(dest, peer, operation);
+            }
+
+            if (operation == ReductionOperation.Average)
+            {
+                TensorPrimitives.Multiply(dest, 1.0 / _worldSize, dest);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(int))
+        {
+            Span<int> dest = AsWritableTypedSpan<int>(destination, count);
+            GetMappedReadOnlySpan<int>(SlotByteOffset(0) + byteSubOffset, count).CopyTo(dest);
+            for (int r = 1; r < _worldSize; r++)
+            {
+                ReadOnlySpan<int> peer = GetMappedReadOnlySpan<int>(SlotByteOffset(r) + byteSubOffset, count);
+                CombineInt32SpanInPlace(dest, peer, operation);
+            }
+
+            if (operation == ReductionOperation.Average)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    dest[i] /= _worldSize;
+                }
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(long))
+        {
+            Span<long> dest = AsWritableTypedSpan<long>(destination, count);
+            GetMappedReadOnlySpan<long>(SlotByteOffset(0) + byteSubOffset, count).CopyTo(dest);
+            for (int r = 1; r < _worldSize; r++)
+            {
+                ReadOnlySpan<long> peer = GetMappedReadOnlySpan<long>(SlotByteOffset(r) + byteSubOffset, count);
+                CombineInt64SpanInPlace(dest, peer, operation);
+            }
+
+            if (operation == ReductionOperation.Average)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    dest[i] /= _worldSize;
+                }
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(byte))
+        {
+            Span<byte> dest = AsWritableTypedSpan<byte>(destination, count);
+            GetMappedReadOnlyByteSpan(SlotByteOffset(0) + byteSubOffset, count).CopyTo(dest);
+            for (int r = 1; r < _worldSize; r++)
+            {
+                ReadOnlySpan<byte> peer = GetMappedReadOnlyByteSpan(SlotByteOffset(r) + byteSubOffset, count);
+                for (int i = 0; i < count; i++)
+                {
+                    dest[i] = operation switch
+                    {
+                        ReductionOperation.Sum or ReductionOperation.Average => (byte)(dest[i] + peer[i]),
+                        ReductionOperation.Product => (byte)(dest[i] * peer[i]),
+                        ReductionOperation.Min => peer[i] < dest[i] ? peer[i] : dest[i],
+                        ReductionOperation.Max => peer[i] > dest[i] ? peer[i] : dest[i],
+                        _ => throw new NotSupportedException($"Operation {operation} is not supported."),
+                    };
+                }
+            }
+
+            if (operation == ReductionOperation.Average)
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    dest[i] = (byte)(dest[i] / _worldSize);
+                }
+            }
+
+            return;
+        }
+
+        ReduceGenericMappedSlotsIntoSpan(byteSubOffset, destination, count, operation);
+#else
+        ReduceSlotsAtSubOffsetIntoSpanLegacy(byteSubOffset, destination, count, operation);
+#endif
+    }
+
+#if !AIDN_LEGACY_TFM
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void CombineFloatSpanInPlace(Span<float> dest, ReadOnlySpan<float> peer, ReductionOperation op)
+    {
+        switch (op)
+        {
+            case ReductionOperation.Sum:
+            case ReductionOperation.Average:
+                TensorPrimitives.Add(dest, peer, dest);
+                break;
+            case ReductionOperation.Product:
+                TensorPrimitives.Multiply(dest, peer, dest);
+                break;
+            case ReductionOperation.Min:
+                TensorPrimitives.Min(dest, peer, dest);
+                break;
+            case ReductionOperation.Max:
+                TensorPrimitives.Max(dest, peer, dest);
+                break;
+            default:
+                throw new NotSupportedException($"Operation {op} is not supported.");
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void CombineDoubleSpanInPlace(Span<double> dest, ReadOnlySpan<double> peer, ReductionOperation op)
+    {
+        switch (op)
+        {
+            case ReductionOperation.Sum:
+            case ReductionOperation.Average:
+                TensorPrimitives.Add(dest, peer, dest);
+                break;
+            case ReductionOperation.Product:
+                TensorPrimitives.Multiply(dest, peer, dest);
+                break;
+            case ReductionOperation.Min:
+                TensorPrimitives.Min(dest, peer, dest);
+                break;
+            case ReductionOperation.Max:
+                TensorPrimitives.Max(dest, peer, dest);
+                break;
+            default:
+                throw new NotSupportedException($"Operation {op} is not supported.");
+        }
+    }
+
+    private static void CombineInt32SpanInPlace(Span<int> dest, ReadOnlySpan<int> peer, ReductionOperation op)
+    {
+        switch (op)
+        {
+            case ReductionOperation.Sum:
+            case ReductionOperation.Average:
+                TensorPrimitives.Add(dest, peer, dest);
+                break;
+            case ReductionOperation.Product:
+                TensorPrimitives.Multiply(dest, peer, dest);
+                break;
+            case ReductionOperation.Min:
+                TensorPrimitives.Min(dest, peer, dest);
+                break;
+            case ReductionOperation.Max:
+                TensorPrimitives.Max(dest, peer, dest);
+                break;
+            default:
+                throw new NotSupportedException($"Operation {op} is not supported.");
+        }
+    }
+
+    private static void CombineInt64SpanInPlace(Span<long> dest, ReadOnlySpan<long> peer, ReductionOperation op)
+    {
+        switch (op)
+        {
+            case ReductionOperation.Sum:
+            case ReductionOperation.Average:
+                TensorPrimitives.Add(dest, peer, dest);
+                break;
+            case ReductionOperation.Product:
+                TensorPrimitives.Multiply(dest, peer, dest);
+                break;
+            case ReductionOperation.Min:
+                TensorPrimitives.Min(dest, peer, dest);
+                break;
+            case ReductionOperation.Max:
+                TensorPrimitives.Max(dest, peer, dest);
+                break;
+            default:
+                throw new NotSupportedException($"Operation {op} is not supported.");
+        }
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Generic non-IEEE shared-memory write fallback converts T elements to IEEE-754 double.")]
+    private void WriteGenericSpanToMappedDoubles(Span<double> mapped, ReadOnlySpan<T> src, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            mapped[i] = NumOps.ToDouble(src[i]);
+        }
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Generic non-IEEE shared-memory read fallback converts IEEE-754 doubles back to T.")]
+    private void ReadMappedDoublesIntoGenericSpan(ReadOnlySpan<double> mapped, Span<T> dst, int count)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            dst[i] = NumOps.FromDouble(mapped[i]);
+        }
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Generic non-IEEE shared-memory reduction fallback in canonical rank order.")]
+    private void ReduceGenericMappedSlotsIntoSpan(long byteSubOffset, Span<T> destination, int count, ReductionOperation operation)
+    {
+        ReadOnlySpan<double> rank0 = GetMappedReadOnlySpan<double>(SlotByteOffset(0) + byteSubOffset, count);
+        for (int i = 0; i < count; i++)
+        {
+            destination[i] = NumOps.FromDouble(rank0[i]);
+        }
+
+        for (int r = 1; r < _worldSize; r++)
+        {
+            ReadOnlySpan<double> peer = GetMappedReadOnlySpan<double>(SlotByteOffset(r) + byteSubOffset, count);
+            for (int i = 0; i < count; i++)
+            {
+                destination[i] = ApplyReductionOperation(destination[i], NumOps.FromDouble(peer[i]), operation);
+            }
+        }
+
+        if (operation == ReductionOperation.Average)
+        {
+            T invWorld = NumOps.FromDouble(1.0 / _worldSize);
+            for (int i = 0; i < count; i++)
+            {
+                destination[i] = NumOps.Multiply(destination[i], invWorld);
+            }
+        }
+    }
+#else
+    [AiDotNet.Attributes.ScalarKernel("Legacy TFM shared-memory write fallback for generic T; float/double/int/long/byte use bulk array block copies.")]
+    private void WriteReadOnlySpanToRawOffsetLegacy(long byteOffset, ReadOnlySpan<T> span, int count)
+    {
+        var accessor = _accessor ?? throw new InvalidOperationException("Shared-memory accessor is not initialized.");
         if (typeof(T) == typeof(float))
         {
             float[] rented = ArrayPool<float>.Shared.Rent(count);
             try
             {
-                CopyGenericSpanToFloatArray(span, rented, count);
+                for (int i = 0; i < count; i++)
+                {
+                    T val = span[i];
+                    rented[i] = Unsafe.As<T, float>(ref val);
+                }
+
                 accessor.WriteArray(byteOffset, rented, 0, count);
             }
             finally
@@ -1134,12 +2013,80 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             double[] rented = ArrayPool<double>.Shared.Rent(count);
             try
             {
-                CopyGenericSpanToDoubleArray(span, rented, count);
+                for (int i = 0; i < count; i++)
+                {
+                    T val = span[i];
+                    rented[i] = Unsafe.As<T, double>(ref val);
+                }
+
                 accessor.WriteArray(byteOffset, rented, 0, count);
             }
             finally
             {
                 ArrayPool<double>.Shared.Return(rented);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(int))
+        {
+            int[] rented = ArrayPool<int>.Shared.Rent(count);
+            try
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    T val = span[i];
+                    rented[i] = Unsafe.As<T, int>(ref val);
+                }
+
+                accessor.WriteArray(byteOffset, rented, 0, count);
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(rented);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(long))
+        {
+            long[] rented = ArrayPool<long>.Shared.Rent(count);
+            try
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    T val = span[i];
+                    rented[i] = Unsafe.As<T, long>(ref val);
+                }
+
+                accessor.WriteArray(byteOffset, rented, 0, count);
+            }
+            finally
+            {
+                ArrayPool<long>.Shared.Return(rented);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(byte))
+        {
+            byte[] rented = ArrayPool<byte>.Shared.Rent(count);
+            try
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    T val = span[i];
+                    rented[i] = Unsafe.As<T, byte>(ref val);
+                }
+
+                accessor.WriteArray(byteOffset, rented, 0, count);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
             }
 
             return;
@@ -1161,25 +2108,21 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
     }
 
-    private void ReadSlotIntoSpan(int rank, Span<T> destination, int count)
-        => ReadRawOffsetIntoSpan(SlotByteOffset(rank), destination, count);
-
-    [AiDotNet.Attributes.ScalarKernel("Generic T fallback converts staged doubles back to T; float and double use bulk array block copies.")]
-    private void ReadRawOffsetIntoSpan(long byteOffset, Span<T> destination, int count)
+    [AiDotNet.Attributes.ScalarKernel("Legacy TFM shared-memory read fallback for generic T; float/double/int/long/byte use bulk array block copies.")]
+    private void ReadRawOffsetIntoSpanLegacy(long byteOffset, Span<T> destination, int count)
     {
-        if (count == 0)
-        {
-            return;
-        }
-
-        var accessor = _accessor!;
+        var accessor = _accessor ?? throw new InvalidOperationException("Shared-memory accessor is not initialized.");
         if (typeof(T) == typeof(float))
         {
             float[] rented = ArrayPool<float>.Shared.Rent(count);
             try
             {
                 accessor.ReadArray(byteOffset, rented, 0, count);
-                CopyFloatArrayToGenericSpan(rented, destination, count);
+                for (int i = 0; i < count; i++)
+                {
+                    float val = rented[i];
+                    destination[i] = Unsafe.As<float, T>(ref val);
+                }
             }
             finally
             {
@@ -1195,11 +2138,75 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             try
             {
                 accessor.ReadArray(byteOffset, rented, 0, count);
-                CopyDoubleArrayToGenericSpan(rented, destination, count);
+                for (int i = 0; i < count; i++)
+                {
+                    double val = rented[i];
+                    destination[i] = Unsafe.As<double, T>(ref val);
+                }
             }
             finally
             {
                 ArrayPool<double>.Shared.Return(rented);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(int))
+        {
+            int[] rented = ArrayPool<int>.Shared.Rent(count);
+            try
+            {
+                accessor.ReadArray(byteOffset, rented, 0, count);
+                for (int i = 0; i < count; i++)
+                {
+                    int val = rented[i];
+                    destination[i] = Unsafe.As<int, T>(ref val);
+                }
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(rented);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(long))
+        {
+            long[] rented = ArrayPool<long>.Shared.Rent(count);
+            try
+            {
+                accessor.ReadArray(byteOffset, rented, 0, count);
+                for (int i = 0; i < count; i++)
+                {
+                    long val = rented[i];
+                    destination[i] = Unsafe.As<long, T>(ref val);
+                }
+            }
+            finally
+            {
+                ArrayPool<long>.Shared.Return(rented);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(byte))
+        {
+            byte[] rented = ArrayPool<byte>.Shared.Rent(count);
+            try
+            {
+                accessor.ReadArray(byteOffset, rented, 0, count);
+                for (int i = 0; i < count; i++)
+                {
+                    byte val = rented[i];
+                    destination[i] = Unsafe.As<byte, T>(ref val);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
             }
 
             return;
@@ -1220,13 +2227,10 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
     }
 
-    private void ReduceSlotsIntoSpan(Span<T> destination, int count, ReductionOperation operation)
-        => ReduceSlotsAtSubOffsetIntoSpan(0L, destination, count, operation);
-
-    [AiDotNet.Attributes.ScalarKernel("Generic T reduction fallback; float and double use vectorized array kernels in canonical rank order.")]
-    private void ReduceSlotsAtSubOffsetIntoSpan(long byteSubOffset, Span<T> destination, int count, ReductionOperation operation)
+    [AiDotNet.Attributes.ScalarKernel("Legacy TFM generic reduction fallback; float and double use System.Numerics.Vector SIMD in canonical rank order.")]
+    private void ReduceSlotsAtSubOffsetIntoSpanLegacy(long byteSubOffset, Span<T> destination, int count, ReductionOperation operation)
     {
-        var accessor = _accessor!;
+        var accessor = _accessor ?? throw new InvalidOperationException("Shared-memory accessor is not initialized.");
         if (typeof(T) == typeof(float))
         {
             float[] acc = ArrayPool<float>.Shared.Rent(count);
@@ -1237,15 +2241,19 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                 for (int r = 1; r < _worldSize; r++)
                 {
                     accessor.ReadArray(SlotByteOffset(r) + byteSubOffset, peer, 0, count);
-                    CombineFloatArraysInPlace(acc, peer, count, operation);
+                    CombineFloatArraysInPlaceLegacy(acc, peer, count, operation);
                 }
 
                 if (operation == ReductionOperation.Average)
                 {
-                    ScaleFloatArrayInPlace(acc, count, 1.0f / _worldSize);
+                    ScaleFloatArrayInPlaceLegacy(acc, count, 1.0f / _worldSize);
                 }
 
-                CopyFloatArrayToGenericSpan(acc, destination, count);
+                for (int i = 0; i < count; i++)
+                {
+                    float val = acc[i];
+                    destination[i] = Unsafe.As<float, T>(ref val);
+                }
             }
             finally
             {
@@ -1266,20 +2274,56 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                 for (int r = 1; r < _worldSize; r++)
                 {
                     accessor.ReadArray(SlotByteOffset(r) + byteSubOffset, peer, 0, count);
-                    CombineDoubleArraysInPlace(acc, peer, count, operation);
+                    CombineDoubleArraysInPlaceLegacy(acc, peer, count, operation);
                 }
 
                 if (operation == ReductionOperation.Average)
                 {
-                    ScaleDoubleArrayInPlace(acc, count, 1.0 / _worldSize);
+                    ScaleDoubleArrayInPlaceLegacy(acc, count, 1.0 / _worldSize);
                 }
 
-                CopyDoubleArrayToGenericSpan(acc, destination, count);
+                for (int i = 0; i < count; i++)
+                {
+                    double val = acc[i];
+                    destination[i] = Unsafe.As<double, T>(ref val);
+                }
             }
             finally
             {
                 ArrayPool<double>.Shared.Return(peer);
                 ArrayPool<double>.Shared.Return(acc);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(int) || typeof(T) == typeof(long) || typeof(T) == typeof(byte))
+        {
+            T[] peerBuf = ArrayPool<T>.Shared.Rent(count);
+            try
+            {
+                ReadRawOffsetIntoSpanLegacy(SlotByteOffset(0) + byteSubOffset, destination, count);
+                for (int r = 1; r < _worldSize; r++)
+                {
+                    ReadRawOffsetIntoSpanLegacy(SlotByteOffset(r) + byteSubOffset, peerBuf.AsSpan(0, count), count);
+                    for (int i = 0; i < count; i++)
+                    {
+                        destination[i] = ApplyReductionOperation(destination[i], peerBuf[i], operation);
+                    }
+                }
+
+                if (operation == ReductionOperation.Average)
+                {
+                    T divisor = NumOps.FromDouble(_worldSize);
+                    for (int i = 0; i < count; i++)
+                    {
+                        destination[i] = NumOps.Divide(destination[i], divisor);
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<T>.Shared.Return(peerBuf);
             }
 
             return;
@@ -1320,10 +2364,12 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
     }
 
-    private static void CombineFloatArraysInPlace(float[] acc, float[] peer, int count, ReductionOperation op)
+    private static void CombineFloatArraysInPlaceLegacy(float[] acc, float[] peer, int count, ReductionOperation op)
     {
         int i = 0;
-        if (System.Numerics.Vector.IsHardwareAccelerated && (op == ReductionOperation.Sum || op == ReductionOperation.Average || op == ReductionOperation.Product || op == ReductionOperation.Min || op == ReductionOperation.Max))
+        if (System.Numerics.Vector.IsHardwareAccelerated &&
+            (op == ReductionOperation.Sum || op == ReductionOperation.Average || op == ReductionOperation.Product ||
+             op == ReductionOperation.Min || op == ReductionOperation.Max))
         {
             int width = System.Numerics.Vector<float>.Count;
             int limit = count - width;
@@ -1356,7 +2402,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
     }
 
-    private static void ScaleFloatArrayInPlace(float[] acc, int count, float factor)
+    private static void ScaleFloatArrayInPlaceLegacy(float[] acc, int count, float factor)
     {
         int i = 0;
         if (System.Numerics.Vector.IsHardwareAccelerated)
@@ -1376,10 +2422,12 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
     }
 
-    private static void CombineDoubleArraysInPlace(double[] acc, double[] peer, int count, ReductionOperation op)
+    private static void CombineDoubleArraysInPlaceLegacy(double[] acc, double[] peer, int count, ReductionOperation op)
     {
         int i = 0;
-        if (System.Numerics.Vector.IsHardwareAccelerated && (op == ReductionOperation.Sum || op == ReductionOperation.Average || op == ReductionOperation.Product || op == ReductionOperation.Min || op == ReductionOperation.Max))
+        if (System.Numerics.Vector.IsHardwareAccelerated &&
+            (op == ReductionOperation.Sum || op == ReductionOperation.Average || op == ReductionOperation.Product ||
+             op == ReductionOperation.Min || op == ReductionOperation.Max))
         {
             int width = System.Numerics.Vector<double>.Count;
             int limit = count - width;
@@ -1412,7 +2460,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         }
     }
 
-    private static void ScaleDoubleArrayInPlace(double[] acc, int count, double factor)
+    private static void ScaleDoubleArrayInPlaceLegacy(double[] acc, int count, double factor)
     {
         int i = 0;
         if (System.Numerics.Vector.IsHardwareAccelerated)
@@ -1431,68 +2479,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             acc[i] *= factor;
         }
     }
-
-    private static void CopyGenericSpanToFloatArray(ReadOnlySpan<T> src, float[] dst, int count)
-    {
-#if NET7_0_OR_GREATER
-        System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(
-            ref Unsafe.As<T, float>(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(src)),
-            count).CopyTo(dst.AsSpan(0, count));
-#else
-        for (int i = 0; i < count; i++)
-        {
-            T val = src[i];
-            dst[i] = Unsafe.As<T, float>(ref val);
-        }
 #endif
-    }
-
-    private static void CopyFloatArrayToGenericSpan(float[] src, Span<T> dst, int count)
-    {
-#if NET7_0_OR_GREATER
-        src.AsSpan(0, count).CopyTo(
-            System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                ref Unsafe.As<T, float>(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(dst)),
-                count));
-#else
-        for (int i = 0; i < count; i++)
-        {
-            float val = src[i];
-            dst[i] = Unsafe.As<float, T>(ref val);
-        }
-#endif
-    }
-
-    private static void CopyGenericSpanToDoubleArray(ReadOnlySpan<T> src, double[] dst, int count)
-    {
-#if NET7_0_OR_GREATER
-        System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(
-            ref Unsafe.As<T, double>(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(src)),
-            count).CopyTo(dst.AsSpan(0, count));
-#else
-        for (int i = 0; i < count; i++)
-        {
-            T val = src[i];
-            dst[i] = Unsafe.As<T, double>(ref val);
-        }
-#endif
-    }
-
-    private static void CopyDoubleArrayToGenericSpan(double[] src, Span<T> dst, int count)
-    {
-#if NET7_0_OR_GREATER
-        src.AsSpan(0, count).CopyTo(
-            System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
-                ref Unsafe.As<T, double>(ref System.Runtime.InteropServices.MemoryMarshal.GetReference(dst)),
-                count));
-#else
-        for (int i = 0; i < count; i++)
-        {
-            double val = src[i];
-            dst[i] = Unsafe.As<double, T>(ref val);
-        }
-#endif
-    }
 
     private static string SanitizeSessionName(string name)
     {

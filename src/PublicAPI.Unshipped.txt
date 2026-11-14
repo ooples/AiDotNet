@@ -22974,7 +22974,7 @@ AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>
 AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Dispose() -> void
 AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.SessionName.get -> string!
 AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.SharedMemoryCommunicationBackend() -> void
-AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.SharedMemoryCommunicationBackend(int rank, int worldSize, string! sessionName = "aidotnet_shm_default", long slotCapacityBytes = 16777216, int timeoutMilliseconds = 120000) -> void
+AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.SharedMemoryCommunicationBackend(int rank, int worldSize, string! sessionName = "aidotnet_shm_default", long slotCapacityBytes = 67108864, int timeoutMilliseconds = 120000) -> void
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.GradientAccumulationSteps.get -> int
 AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.GradientAccumulationSteps.set -> void
 override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.AllGather(AiDotNet.Tensors.LinearAlgebra.Vector<T>! sendData) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!

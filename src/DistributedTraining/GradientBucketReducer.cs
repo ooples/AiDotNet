@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Engines;
+#if !AIDN_LEGACY_TFM
+using TensorPrimitives = System.Numerics.Tensors.TensorPrimitives;
+#endif
 
 namespace AiDotNet.DistributedTraining;
 
@@ -54,16 +58,23 @@ public sealed class GradientBucketReducer<T> : IDisposable
     private readonly int _bucketSizeBytes;
     private readonly bool _overlapCommunication;
     private readonly bool _useReduceScatter;
+    private readonly Tensor<T>?[] _inputParameterSnapshot;
     private readonly Tensor<T>[] _uniqueParameters;
+    private readonly int[] _uniqueParameterLengths;
     private readonly int _totalElements;
     private readonly int _shardSize;
     private readonly Bucket[] _buckets;
     private readonly Dictionary<Tensor<T>, ParamSlot> _paramLocations;
+    private readonly Vector<T>? _emptyScatterShard;
     private readonly object _syncLock = new object();
 
+    private Dictionary<Tensor<T>, Tensor<T>>? _ownedUnpackGradients;
+    private float[]? _gpuDownloadScratch;
     private double _rankWeight = 1.0;
     private int _nextBucketToDispatch;
     private bool _disposed;
+
+    internal Func<Tensor<T>, Tensor<T>>? GradientSlotProvider { get; set; }
 
     private readonly struct BucketEntry
     {
@@ -149,13 +160,16 @@ public sealed class GradientBucketReducer<T> : IDisposable
         _bucketSizeBytes = bucketSizeBytes;
         _overlapCommunication = overlapCommunication;
         _useReduceScatter = useReduceScatter;
+        _emptyScatterShard = useReduceScatter ? new Vector<T>(0) : null;
 
+        _inputParameterSnapshot = new Tensor<T>?[parameters.Count];
         var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         var unique = new List<Tensor<T>>(parameters.Count);
         long totalElementsLong = 0;
         for (int i = 0; i < parameters.Count; i++)
         {
             var param = parameters[i];
+            _inputParameterSnapshot[i] = param;
             if (param is not null && param.Length > 0 && seen.Add(param))
             {
                 unique.Add(param);
@@ -170,6 +184,11 @@ public sealed class GradientBucketReducer<T> : IDisposable
         }
 
         _uniqueParameters = unique.ToArray();
+        _uniqueParameterLengths = new int[_uniqueParameters.Length];
+        for (int i = 0; i < _uniqueParameters.Length; i++)
+        {
+            _uniqueParameterLengths[i] = _uniqueParameters[i].Length;
+        }
         _totalElements = (int)totalElementsLong;
         _shardSize = _totalElements > 0
             ? (int)(((long)_totalElements + _worldSize - 1L) / _worldSize)
@@ -289,6 +308,32 @@ public sealed class GradientBucketReducer<T> : IDisposable
             return false;
         }
 
+        if (parameters.Count == _inputParameterSnapshot.Length)
+        {
+            bool exactSnapshotMatch = true;
+            for (int i = 0; i < _inputParameterSnapshot.Length; i++)
+            {
+                if (!ReferenceEquals(parameters[i], _inputParameterSnapshot[i]))
+                {
+                    exactSnapshotMatch = false;
+                    break;
+                }
+            }
+
+            if (exactSnapshotMatch)
+            {
+                for (int u = 0; u < _uniqueParameters.Length; u++)
+                {
+                    if (_uniqueParameters[u].Length != _uniqueParameterLengths[u])
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+
         var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         int uniqueIdx = 0;
         for (int i = 0; i < parameters.Count; i++)
@@ -391,13 +436,13 @@ public sealed class GradientBucketReducer<T> : IDisposable
 
             if (!bucket.SlotReady[slot.EntryIndex])
             {
-                WriteScaledToVectorSlice(gradient, bucket.Buffer, slot.Offset, slot.Length, _rankWeight);
+                WriteScaledToVectorSlice(parameter, gradient, bucket.Buffer, slot.Offset, slot.Length, _rankWeight);
                 bucket.SlotReady[slot.EntryIndex] = true;
                 bucket.ReadyCount++;
             }
             else
             {
-                AccumulateScaledToVectorSlice(gradient, bucket.Buffer, slot.Offset, slot.Length, _rankWeight);
+                AccumulateScaledToVectorSlice(parameter, gradient, bucket.Buffer, slot.Offset, slot.Length, _rankWeight);
             }
 
             if (_worldSize > 1 && _overlapCommunication && _backend is IAsyncCommunicationBackend<T> asyncBackend)
@@ -444,7 +489,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
         {
             LastExposedWaitMilliseconds = 0.0;
             LastTotalCollectiveMilliseconds = 0.0;
-            reducedLocalShard = _useReduceScatter ? new Vector<T>(0) : null;
+            reducedLocalShard = _useReduceScatter ? (_emptyScatterShard ?? new Vector<T>(0)) : null;
             return;
         }
 
@@ -477,11 +522,15 @@ public sealed class GradientBucketReducer<T> : IDisposable
                                 nameof(gradients));
                         }
 
-                        WriteScaledToVectorSlice(grad, bucket.Buffer, entry.Offset, entry.Length, _rankWeight);
+                        WriteScaledToVectorSlice(entry.Parameter, grad, bucket.Buffer, entry.Offset, entry.Length, _rankWeight);
                     }
                     else
                     {
                         bucket.Buffer.AsWritableSpan().Slice(entry.Offset, entry.Length).Clear();
+                        if (_useReduceScatter && GradientSlotProvider is not null)
+                        {
+                            ClearSlotForReduceScatterLocked(entry.Parameter, entry.Length);
+                        }
                     }
 
                     bucket.SlotReady[s] = true;
@@ -502,7 +551,9 @@ public sealed class GradientBucketReducer<T> : IDisposable
 
             if (_useReduceScatter)
             {
-                reducedLocalShard = ExtractVectorSlice(_buckets[0].Buffer, 0, _totalElements);
+                reducedLocalShard = _buckets[0].Buffer.Length == _totalElements
+                    ? _buckets[0].Buffer
+                    : ExtractVectorSlice(_buckets[0].Buffer, 0, _totalElements);
             }
             else
             {
@@ -605,7 +656,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
             int myValidLen = Math.Max(0, Math.Min(_shardSize, _totalElements - myStart));
             if (scatterShard is null || myValidLen == 0)
             {
-                reducedLocalShard = new Vector<T>(0);
+                reducedLocalShard = _emptyScatterShard ?? new Vector<T>(0);
             }
             else if (scatterShard.Length == myValidLen)
             {
@@ -641,6 +692,43 @@ public sealed class GradientBucketReducer<T> : IDisposable
         }
     }
 
+    private Tensor<T> GetOrCreateSlotLocked(Tensor<T> parameter)
+    {
+        if (GradientSlotProvider is { } provider)
+        {
+            return provider(parameter);
+        }
+
+        _ownedUnpackGradients ??= new Dictionary<Tensor<T>, Tensor<T>>(
+            _uniqueParameters.Length,
+            TensorReferenceComparer<Tensor<T>>.Instance);
+
+        if (!_ownedUnpackGradients.TryGetValue(parameter, out var slot) ||
+            slot is null ||
+            slot.Length != parameter.Length)
+        {
+            slot = new Tensor<T>(parameter._shape);
+            _ownedUnpackGradients[parameter] = slot;
+        }
+
+        return slot;
+    }
+
+    private static void PrepareTensorForFullHostOverwrite(Tensor<T> tensor, DirectGpuTensorEngine? gpuEngine)
+    {
+        if (tensor._storageOffset == 0 && tensor._storage.Length == tensor.Length)
+        {
+            if (tensor.GetBackingArrayForCacheLookupUnsafe() is { } backing)
+            {
+                AiDotNet.Tensors.Helpers.HostSync.Remove(backing);
+            }
+
+            AiDotNet.Tensors.Helpers.HostSync.Remove(tensor.DataVector);
+        }
+
+        gpuEngine?.InvalidateResidentWeightBuffer(tensor);
+    }
+
     private void UnpackAllReduceBuckets(IDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         var gpuEngine = AiDotNetEngine.Current as DirectGpuTensorEngine;
@@ -656,15 +744,20 @@ public sealed class GradientBucketReducer<T> : IDisposable
                 var entry = entries[s];
                 if (!gradients.TryGetValue(entry.Parameter, out var destTensor) ||
                     destTensor is null ||
-                    destTensor.Length != entry.Length)
+                    destTensor.Length != entry.Length ||
+                    destTensor.DataVector.IsLazyAllocated)
                 {
-                    destTensor = new Tensor<T>(entry.Parameter._shape);
+                    lock (_syncLock)
+                    {
+                        destTensor = GetOrCreateSlotLocked(entry.Parameter);
+                    }
+
                     gradients[entry.Parameter] = destTensor;
                 }
 
+                PrepareTensorForFullHostOverwrite(destTensor, gpuEngine);
                 bucketSpan.Slice(entry.Offset, entry.Length).CopyTo(destTensor.AsWritableSpan());
                 destTensor.IncrementVersion();
-                gpuEngine?.InvalidateResidentWeightBuffer(destTensor);
             }
         }
     }
@@ -681,7 +774,71 @@ public sealed class GradientBucketReducer<T> : IDisposable
         return result;
     }
 
-    private static void WriteScaledToVectorSlice(
+    private void ClearSlotForReduceScatterLocked(Tensor<T> parameter, int length)
+    {
+        var slot = GetOrCreateSlotLocked(parameter);
+        PrepareTensorForFullHostOverwrite(slot, AiDotNetEngine.Current as DirectGpuTensorEngine);
+        int clearLen = Math.Min(length, slot.Length);
+        if (clearLen > 0)
+        {
+            slot.AsWritableSpan().Slice(0, clearLen).Clear();
+        }
+    }
+
+    private ReadOnlySpan<float> GetFloatSourceSpanLocked(
+        Tensor<T> parameter,
+        Tensor<float> srcFloat,
+        int length,
+        bool allowDirectSlotWrite,
+        out bool downloadedDirectlyIntoSlot)
+    {
+        downloadedDirectlyIntoSlot = false;
+        if (srcFloat.HasPendingGpuData &&
+            srcFloat._gpuBuffer is { } srcGpuBuf &&
+            srcGpuBuf.Handle != IntPtr.Zero &&
+            srcFloat._gpuBackend is { } gpuBack &&
+            srcFloat._gpuBufferVersion == srcFloat.GpuCacheVersion &&
+            srcFloat._storageOffset == 0 &&
+            srcFloat.IsContiguous)
+        {
+            int requiredSize = Math.Max(length, srcGpuBuf.Size);
+            if (allowDirectSlotWrite &&
+                (object)GetOrCreateSlotLocked(parameter) is Tensor<float> slotFloat &&
+                slotFloat.IsContiguous &&
+                slotFloat._storageOffset == 0 &&
+                slotFloat._storage.Length == slotFloat.Length &&
+                !ReferenceEquals(slotFloat, srcFloat))
+            {
+                if (slotFloat.GetBackingArrayForCacheLookupUnsafe() is { } slotBacking)
+                {
+                    AiDotNet.Tensors.Helpers.HostSync.Remove(slotBacking);
+                }
+
+                AiDotNet.Tensors.Helpers.HostSync.Remove(slotFloat.DataVector);
+                slotFloat.Device = AiDotNet.Tensors.TensorDevice.CPU;
+                float[] slotArr = slotFloat.GetDataArray();
+                if (slotArr.Length >= requiredSize)
+                {
+                    gpuBack.DownloadBuffer(srcGpuBuf, slotArr);
+                    downloadedDirectlyIntoSlot = true;
+                    return slotArr.AsSpan(0, length);
+                }
+            }
+
+            if (_gpuDownloadScratch is null || _gpuDownloadScratch.Length < requiredSize)
+            {
+                _gpuDownloadScratch = new float[requiredSize];
+            }
+
+            gpuBack.DownloadBuffer(srcGpuBuf, _gpuDownloadScratch);
+            return _gpuDownloadScratch.AsSpan(0, length);
+        }
+
+        return srcFloat.AsSpan().Slice(0, length);
+    }
+
+    private void WriteScaledToVectorSlice(
+        Tensor<T> parameter,
         Tensor<T> source,
         Vector<T> destination,
         int offset,
@@ -698,25 +855,68 @@ public sealed class GradientBucketReducer<T> : IDisposable
             // Explicitly zero rather than multiplying by 0.0 so an idle rank whose dummy forward produced
             // NaN/Inf gradients never contributes IEEE 754 (0.0 * NaN == NaN) into AllReduce/ReduceScatter.
             destination.AsWritableSpan().Slice(offset, length).Clear();
-            return;
-        }
-
-        if (scale == 1.0)
-        {
-            source.AsSpan().Slice(0, length).CopyTo(destination.AsWritableSpan().Slice(offset, length));
+            if (_useReduceScatter && GradientSlotProvider is not null)
+            {
+                ClearSlotForReduceScatterLocked(parameter, length);
+            }
             return;
         }
 
         if ((object)source is Tensor<float> srcFloat && (object)destination is Vector<float> dstFloat)
         {
-            float factor = (float)scale;
-            ReadOnlySpan<float> srcSpan = srcFloat.AsSpan().Slice(0, length);
+            ReadOnlySpan<float> srcSpan = GetFloatSourceSpanLocked(
+                parameter,
+                srcFloat,
+                length,
+                allowDirectSlotWrite: true,
+                out bool downloadedDirectlyIntoSlot);
             Span<float> dstSpan = dstFloat.AsWritableSpan().Slice(offset, length);
-            for (int i = 0; i < length; i++)
+            if (scale == 1.0)
             {
-                dstSpan[i] = srcSpan[i] * factor;
+                srcSpan.CopyTo(dstSpan);
+            }
+            else
+            {
+                float factor = (float)scale;
+#if !AIDN_LEGACY_TFM
+                TensorPrimitives.Multiply(srcSpan, factor, dstSpan);
+#else
+                WriteScaledFloatSimdLegacy(srcSpan, factor, dstSpan);
+#endif
             }
 
+            if (_useReduceScatter && GradientSlotProvider is not null)
+            {
+                var slot = GetOrCreateSlotLocked(parameter);
+                var gpuEngine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+                if (downloadedDirectlyIntoSlot)
+                {
+                    gpuEngine?.InvalidateResidentWeightBuffer(slot);
+                    slot.IncrementVersion();
+                }
+                else if (!ReferenceEquals(slot, source) && (object)slot is Tensor<float> slotFloat)
+                {
+                    PrepareTensorForFullHostOverwrite(slot, gpuEngine);
+                    srcSpan.CopyTo(slotFloat.AsWritableSpan().Slice(0, Math.Min(length, slotFloat.Length)));
+                }
+            }
+            return;
+        }
+
+        ReadOnlySpan<T> hostSrcSpan = source.AsSpan().Slice(0, length);
+        if (_useReduceScatter && GradientSlotProvider is not null)
+        {
+            var slot = GetOrCreateSlotLocked(parameter);
+            if (!ReferenceEquals(slot, source))
+            {
+                PrepareTensorForFullHostOverwrite(slot, null);
+                hostSrcSpan.CopyTo(slot.AsWritableSpan().Slice(0, Math.Min(length, slot.Length)));
+            }
+        }
+
+        if (scale == 1.0)
+        {
+            hostSrcSpan.CopyTo(destination.AsWritableSpan().Slice(offset, length));
             return;
         }
 
@@ -724,16 +924,16 @@ public sealed class GradientBucketReducer<T> : IDisposable
         {
             ReadOnlySpan<double> srcSpan = srcDouble.AsSpan().Slice(0, length);
             Span<double> dstSpan = dstDouble.AsWritableSpan().Slice(offset, length);
-            for (int i = 0; i < length; i++)
-            {
-                dstSpan[i] = srcSpan[i] * scale;
-            }
-
+#if !AIDN_LEGACY_TFM
+            TensorPrimitives.Multiply(srcSpan, scale, dstSpan);
+#else
+            WriteScaledDoubleSimdLegacy(srcSpan, scale, dstSpan);
+#endif
             return;
         }
 
         WriteScaledGenericSpan(
-            source.AsSpan().Slice(0, length),
+            hostSrcSpan,
             destination.AsWritableSpan().Slice(offset, length),
             scale);
     }
@@ -748,7 +948,8 @@ public sealed class GradientBucketReducer<T> : IDisposable
         }
     }
 
-    private static void AccumulateScaledToVectorSlice(
+    private void AccumulateScaledToVectorSlice(
+        Tensor<T> parameter,
         Tensor<T> source,
         Vector<T> destination,
         int offset,
@@ -763,13 +964,32 @@ public sealed class GradientBucketReducer<T> : IDisposable
         if ((object)source is Tensor<float> srcFloat && (object)destination is Vector<float> dstFloat)
         {
             float factor = (float)scale;
-            ReadOnlySpan<float> srcSpan = srcFloat.AsSpan().Slice(0, length);
+            ReadOnlySpan<float> srcSpan = GetFloatSourceSpanLocked(
+                parameter,
+                srcFloat,
+                length,
+                allowDirectSlotWrite: false,
+                out _);
             Span<float> dstSpan = dstFloat.AsWritableSpan().Slice(offset, length);
-            for (int i = 0; i < length; i++)
+#if !AIDN_LEGACY_TFM
+            TensorPrimitives.MultiplyAdd(srcSpan, factor, dstSpan, dstSpan);
+#else
+            AccumulateScaledFloatSimdLegacy(srcSpan, factor, dstSpan);
+#endif
+            if (_useReduceScatter && GradientSlotProvider is not null)
             {
-                dstSpan[i] += srcSpan[i] * factor;
+                var slot = GetOrCreateSlotLocked(parameter);
+                if (!ReferenceEquals(slot, source) && (object)slot is Tensor<float> slotFloat)
+                {
+                    int slotLen = Math.Min(length, slotFloat.Length);
+                    Span<float> slotSpan = slotFloat.AsWritableSpan().Slice(0, slotLen);
+#if !AIDN_LEGACY_TFM
+                    TensorPrimitives.Add(slotSpan, srcSpan.Slice(0, slotLen), slotSpan);
+#else
+                    AccumulateScaledFloatSimdLegacy(srcSpan.Slice(0, slotLen), 1.0f, slotSpan);
+#endif
+                }
             }
-
             return;
         }
 
@@ -777,19 +997,145 @@ public sealed class GradientBucketReducer<T> : IDisposable
         {
             ReadOnlySpan<double> srcSpan = srcDouble.AsSpan().Slice(0, length);
             Span<double> dstSpan = dstDouble.AsWritableSpan().Slice(offset, length);
-            for (int i = 0; i < length; i++)
+#if !AIDN_LEGACY_TFM
+            TensorPrimitives.MultiplyAdd(srcSpan, scale, dstSpan, dstSpan);
+#else
+            AccumulateScaledDoubleSimdLegacy(srcSpan, scale, dstSpan);
+#endif
+            if (_useReduceScatter && GradientSlotProvider is not null)
             {
-                dstSpan[i] += srcSpan[i] * scale;
+                var slot = GetOrCreateSlotLocked(parameter);
+                if (!ReferenceEquals(slot, source) && (object)slot is Tensor<double> slotDouble)
+                {
+                    int slotLen = Math.Min(length, slotDouble.Length);
+                    Span<double> slotSpan = slotDouble.AsWritableSpan().Slice(0, slotLen);
+#if !AIDN_LEGACY_TFM
+                    TensorPrimitives.Add(slotSpan, srcSpan.Slice(0, slotLen), slotSpan);
+#else
+                    AccumulateScaledDoubleSimdLegacy(srcSpan.Slice(0, slotLen), 1.0, slotSpan);
+#endif
+                }
             }
-
             return;
         }
 
+        ReadOnlySpan<T> genericSrc = source.AsSpan().Slice(0, length);
         AccumulateScaledGenericSpan(
-            source.AsSpan().Slice(0, length),
+            genericSrc,
             destination.AsWritableSpan().Slice(offset, length),
             scale);
+        if (_useReduceScatter && GradientSlotProvider is not null)
+        {
+            var slot = GetOrCreateSlotLocked(parameter);
+            if (!ReferenceEquals(slot, source))
+            {
+                int slotLen = Math.Min(length, slot.Length);
+                AccumulateScaledGenericSpan(genericSrc.Slice(0, slotLen), slot.AsWritableSpan().Slice(0, slotLen), 1.0);
+            }
+        }
     }
+
+#if AIDN_LEGACY_TFM
+    private static void WriteScaledFloatSimdLegacy(ReadOnlySpan<float> srcSpan, float factor, Span<float> dstSpan)
+    {
+        int length = srcSpan.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<float>.Count)
+        {
+            int width = System.Numerics.Vector<float>.Count;
+            int simdLen = length - (length % width);
+            var factorVec = new System.Numerics.Vector<float>(factor);
+            var srcVecs = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(srcSpan.Slice(0, simdLen));
+            var dstVecs = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(dstSpan.Slice(0, simdLen));
+            for (int v = 0; v < srcVecs.Length; v++)
+            {
+                dstVecs[v] = srcVecs[v] * factorVec;
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            dstSpan[i] = srcSpan[i] * factor;
+        }
+    }
+
+    private static void WriteScaledDoubleSimdLegacy(ReadOnlySpan<double> srcSpan, double factor, Span<double> dstSpan)
+    {
+        int length = srcSpan.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<double>.Count)
+        {
+            int width = System.Numerics.Vector<double>.Count;
+            int simdLen = length - (length % width);
+            var factorVec = new System.Numerics.Vector<double>(factor);
+            var srcVecs = MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(srcSpan.Slice(0, simdLen));
+            var dstVecs = MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(dstSpan.Slice(0, simdLen));
+            for (int v = 0; v < srcVecs.Length; v++)
+            {
+                dstVecs[v] = srcVecs[v] * factorVec;
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            dstSpan[i] = srcSpan[i] * factor;
+        }
+    }
+
+    private static void AccumulateScaledFloatSimdLegacy(ReadOnlySpan<float> srcSpan, float factor, Span<float> dstSpan)
+    {
+        int length = srcSpan.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<float>.Count)
+        {
+            int width = System.Numerics.Vector<float>.Count;
+            int simdLen = length - (length % width);
+            var factorVec = new System.Numerics.Vector<float>(factor);
+            var srcVecs = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(srcSpan.Slice(0, simdLen));
+            var dstVecs = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(dstSpan.Slice(0, simdLen));
+            for (int v = 0; v < srcVecs.Length; v++)
+            {
+                dstVecs[v] += srcVecs[v] * factorVec;
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            dstSpan[i] += srcSpan[i] * factor;
+        }
+    }
+
+    private static void AccumulateScaledDoubleSimdLegacy(ReadOnlySpan<double> srcSpan, double factor, Span<double> dstSpan)
+    {
+        int length = srcSpan.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<double>.Count)
+        {
+            int width = System.Numerics.Vector<double>.Count;
+            int simdLen = length - (length % width);
+            var factorVec = new System.Numerics.Vector<double>(factor);
+            var srcVecs = MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(srcSpan.Slice(0, simdLen));
+            var dstVecs = MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(dstSpan.Slice(0, simdLen));
+            for (int v = 0; v < srcVecs.Length; v++)
+            {
+                dstVecs[v] += srcVecs[v] * factorVec;
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            dstSpan[i] += srcSpan[i] * factor;
+        }
+    }
+#endif
 
     [AiDotNet.Attributes.ScalarKernel("Generic T span scaled-accumulation fallback after float and double fast paths.")]
     private static void AccumulateScaledGenericSpan(ReadOnlySpan<T> source, Span<T> destination, double scale)
@@ -878,6 +1224,11 @@ public sealed class GradientBucketReducer<T> : IDisposable
             {
                 DisposeBucketHandles(_buckets[b]);
             }
+
+            _ownedUnpackGradients?.Clear();
+            _ownedUnpackGradients = null;
+            _gpuDownloadScratch = null;
+            GradientSlotProvider = null;
         }
     }
 }

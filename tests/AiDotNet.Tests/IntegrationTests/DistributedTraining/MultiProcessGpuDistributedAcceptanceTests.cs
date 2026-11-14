@@ -101,6 +101,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         public int WarmupSteps { get; set; } = 5;
         public int TimedSteps { get; set; } = 30;
         public int[] BenchmarkSeeds { get; set; } = new[] { 101, 202, 303 };
+        public bool DisableFusedSession { get; set; } = false;
         public string ResultPath { get; set; } = string.Empty;
     }
 
@@ -500,7 +501,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
 
                 model.SetParameters(new Vector<float>(initArr));
                 model.SetBaseTrainOptimizer(optimizer);
-                model.FusedSession.IsDisabled = true; // Set after Predict/SetParameters so InvalidateParameterCountCache cannot reset it
+                model.FusedSession.IsDisabled = spec.DisableFusedSession; // Set after Predict/SetParameters so InvalidateParameterCountCache cannot reset it
 
                 var shardingCfg = new ShardingConfiguration<float>(backend)
                 {
@@ -1377,6 +1378,164 @@ public static class Program
         }
     }
 
+    [SkippableFact(Timeout = 240000)]
+    public async Task TwoProcess_SequentialMultiCheckpointGpuSaveStepSaveResume_MatchesUninterruptedRun()
+    {
+        var gpus = DetectedNvidiaGpus.Value;
+        Skip.If(gpus.Count < 2, $"Requires >=2 NVIDIA GPUs; found {gpus.Count}.");
+
+        // Uninterrupted 8-step 2-process GPU DDP baseline (B0=8, B1=8 -> GlobalBatch=16)
+        string refShm = "mp_multickpt_ref_" + Guid.NewGuid().ToString("N");
+        WorkerResult uninterrupted;
+        using (var ref0 = StartWorkerProcess(new WorkerSpec
+        {
+            Mode = "StreamingTrain",
+            BackendKind = "SharedMemory",
+            Strategy = "DDP",
+            Rank = 0,
+            WorldSize = 2,
+            SessionName = refShm,
+            UseGpu = true,
+            PhysicalGpuIndex = 0,
+            SampleCount = 32,
+            LocalBatchSize = 8,
+            MaxSteps = 8,
+            DataSeed = 6060,
+            InitWeightSeed = 222,
+        }))
+        using (var ref1 = StartWorkerProcess(new WorkerSpec
+        {
+            Mode = "StreamingTrain",
+            BackendKind = "SharedMemory",
+            Strategy = "DDP",
+            Rank = 1,
+            WorldSize = 2,
+            SessionName = refShm,
+            UseGpu = true,
+            PhysicalGpuIndex = 1,
+            SampleCount = 32,
+            LocalBatchSize = 8,
+            MaxSteps = 8,
+            DataSeed = 6060,
+            InitWeightSeed = 222,
+        }))
+        {
+            var (u0, u1) = await WaitForWorkerPairAsync(ref0, ref1, TimeSpan.FromSeconds(90));
+            Assert.True(u0.ExitCode == 0 && u0.Result is { Succeeded: true }, $"Uninterrupted Rank 0 failed: {u0.Result?.ExceptionMessage ?? u0.Stderr}");
+            Assert.True(u1.ExitCode == 0 && u1.Result is { Succeeded: true }, $"Uninterrupted Rank 1 failed: {u1.Result?.ExceptionMessage ?? u1.Stderr}");
+            uninterrupted = u0.Result!;
+        }
+
+        // Phase 1: Train 4 steps with SaveFrequency = 2 so Checkpoint #1 (step 2) downloads GPU moments via HostSync,
+        // steps 3..4 update GPU moments in-place (re-arming HostSync), and Checkpoint #2 (step 4) must serialize fresh step-4 moments!
+        string ckptMulti = Path.Combine(_tempRoot, "mp_ckpt_sequential_multi");
+        string shmP1 = "mp_multickpt_p1_" + Guid.NewGuid().ToString("N");
+        WorkerResult step4Res;
+        using (var p0 = StartWorkerProcess(new WorkerSpec
+        {
+            Mode = "StreamingTrain",
+            BackendKind = "SharedMemory",
+            Strategy = "DDP",
+            Rank = 0,
+            WorldSize = 2,
+            SessionName = shmP1,
+            UseGpu = true,
+            PhysicalGpuIndex = 0,
+            SampleCount = 32,
+            LocalBatchSize = 8,
+            MaxSteps = 4,
+            DataSeed = 6060,
+            InitWeightSeed = 222,
+            CheckpointDir = ckptMulti,
+            SaveFrequency = 2,
+        }))
+        using (var p1 = StartWorkerProcess(new WorkerSpec
+        {
+            Mode = "StreamingTrain",
+            BackendKind = "SharedMemory",
+            Strategy = "DDP",
+            Rank = 1,
+            WorldSize = 2,
+            SessionName = shmP1,
+            UseGpu = true,
+            PhysicalGpuIndex = 1,
+            SampleCount = 32,
+            LocalBatchSize = 8,
+            MaxSteps = 4,
+            DataSeed = 6060,
+            InitWeightSeed = 222,
+            CheckpointDir = ckptMulti,
+            SaveFrequency = 2,
+        }))
+        {
+            var (ph0, ph1) = await WaitForWorkerPairAsync(p0, p1, TimeSpan.FromSeconds(90));
+            Assert.True(ph0.ExitCode == 0 && ph0.Result is { Succeeded: true }, $"Multi-ckpt Phase 1 Rank 0 failed: {ph0.Result?.ExceptionMessage ?? ph0.Stderr}");
+            Assert.True(ph1.ExitCode == 0 && ph1.Result is { Succeeded: true }, $"Multi-ckpt Phase 1 Rank 1 failed: {ph1.Result?.ExceptionMessage ?? ph1.Stderr}");
+            step4Res = ph0.Result!;
+        }
+
+        var savedPhase1Files = Directory.GetFiles(ckptMulti, "*.json")
+            .Where(f => f.IndexOf(".tmp", StringComparison.OrdinalIgnoreCase) < 0)
+            .ToArray();
+        Assert.True(savedPhase1Files.Length >= 2, $"Expected >=2 sequential checkpoints in Phase 1 (step 2 and step 4), found {savedPhase1Files.Length}.");
+        Assert.True(MaxAbsDiff(step4Res.FinalWeights, uninterrupted.FinalWeights) > 1e-3,
+            "Step 4 weights must differ from step 8 weights so sequential checkpoint resume verification is non-vacuous.");
+
+        // Phase 2: Resume from Checkpoint #2 (step 4) on 2 GPUs with SaveFrequency = 2 to MaxSteps = 8
+        // (exercises Deserialize GPU moment promotion -> step 6 Checkpoint #3 -> step 8 Checkpoint #4!)
+        string shmP2 = "mp_multickpt_p2_" + Guid.NewGuid().ToString("N");
+        using (var r0 = StartWorkerProcess(new WorkerSpec
+        {
+            Mode = "StreamingTrain",
+            BackendKind = "SharedMemory",
+            Strategy = "DDP",
+            Rank = 0,
+            WorldSize = 2,
+            SessionName = shmP2,
+            UseGpu = true,
+            PhysicalGpuIndex = 0,
+            SampleCount = 32,
+            LocalBatchSize = 8,
+            MaxSteps = 8,
+            DataSeed = 6060,
+            UseScrambledInit = true,
+            CheckpointDir = ckptMulti,
+            SaveFrequency = 2,
+            ResumeFromCheckpoint = true,
+        }))
+        using (var r1 = StartWorkerProcess(new WorkerSpec
+        {
+            Mode = "StreamingTrain",
+            BackendKind = "SharedMemory",
+            Strategy = "DDP",
+            Rank = 1,
+            WorldSize = 2,
+            SessionName = shmP2,
+            UseGpu = true,
+            PhysicalGpuIndex = 1,
+            SampleCount = 32,
+            LocalBatchSize = 8,
+            MaxSteps = 8,
+            DataSeed = 6060,
+            UseScrambledInit = true,
+            CheckpointDir = ckptMulti,
+            SaveFrequency = 2,
+            ResumeFromCheckpoint = true,
+        }))
+        {
+            var (res0, res1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(90));
+            Assert.True(res0.ExitCode == 0 && res0.Result is { Succeeded: true }, $"Multi-ckpt Phase 2 Rank 0 failed: {res0.Result?.ExceptionMessage ?? res0.Stderr}");
+            Assert.True(res1.ExitCode == 0 && res1.Result is { Succeeded: true }, $"Multi-ckpt Phase 2 Rank 1 failed: {res1.Result?.ExceptionMessage ?? res1.Stderr}");
+
+            Assert.True(MaxAbsDiff(res0.Result!.FinalWeights, res1.Result!.FinalWeights) < 1e-6);
+            double diff = MaxAbsDiff(uninterrupted.FinalWeights, res0.Result.FinalWeights);
+            _output.WriteLine($"Sequential multi-checkpoint GPU save(2)->step->save(4)->resume->save(6)->save(8) MaxWeightDiff vs uninterrupted = {diff:E3}");
+            Assert.True(diff < 1e-4,
+                $"Sequential multi-checkpoint GPU save->step->save->resume diverged from uninterrupted 2-GPU run by {diff}.");
+            Assert.Equal(uninterrupted.FinalLearningRate, res0.Result.FinalLearningRate, 9);
+        }
+    }
+
     #endregion
 
     #region (c) Mid-Run Rank Kill & Fault-Tolerant Checkpoint Resume
@@ -1592,11 +1751,13 @@ public static class Program
 
         bool fullSweep = string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DIST_BENCH_FULL"), "1", StringComparison.Ordinal)
             || !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AIDOTNET_DIST_BENCH_OUT"));
+        bool disableFused = string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DIST_BENCH_DISABLE_FUSED"), "1", StringComparison.Ordinal);
+        bool controlOnly = string.Equals(Environment.GetEnvironmentVariable("AIDOTNET_DIST_BENCH_CONTROL_ONLY"), "1", StringComparison.Ordinal);
         int warmupSteps = fullSweep ? 5 : 2;
         int timedSteps = fullSweep ? 30 : 3;
         int[] benchSeeds = fullSweep ? new[] { 101, 202, 303 } : new[] { 101 };
 
-        var cases = new (string Label, string BackendKind, int B0, int B1, int BucketBytes)[]
+        var allCases = new (string Label, string BackendKind, int B0, int B1, int BucketBytes)[]
         {
             ("SharedMemory_Homogeneous_32_32_Cap25MB", "SharedMemory", 32, 32, 25 * 1024 * 1024),
             ("SharedMemory_Heterogeneous_16_48_Cap25MB", "SharedMemory", 16, 48, 25 * 1024 * 1024),
@@ -1607,6 +1768,9 @@ public static class Program
             ("GlooTcp_Homogeneous_32_32_Cap8MB", "GlooTcp", 32, 32, 8 * 1024 * 1024),
             ("GlooTcp_Heterogeneous_16_48_Cap8MB", "GlooTcp", 16, 48, 8 * 1024 * 1024),
         };
+        var cases = controlOnly
+            ? allCases.Where(c => c.B0 == 32 && c.B1 == 32 && c.BucketBytes == 25 * 1024 * 1024).ToArray()
+            : allCases;
 
         var armSummaries = new List<Dictionary<string, object>>();
 
@@ -1639,6 +1803,7 @@ public static class Program
                     WarmupSteps = warmupSteps,
                     TimedSteps = timedSteps,
                     BenchmarkSeeds = benchSeeds,
+                    DisableFusedSession = disableFused,
                 });
                 using var w1 = StartWorkerProcess(new WorkerSpec
                 {
@@ -1657,6 +1822,7 @@ public static class Program
                     WarmupSteps = warmupSteps,
                     TimedSteps = timedSteps,
                     BenchmarkSeeds = benchSeeds,
+                    DisableFusedSession = disableFused,
                 });
 
                 (f0, f1) = await WaitForWorkerPairAsync(w0, w1, TimeSpan.FromSeconds(180));
@@ -1729,6 +1895,8 @@ public static class Program
             {
                 ["label"] = arm.Label,
                 ["backend"] = arm.BackendKind,
+                ["execution_mode"] = disableFused ? "eager_tape_control" : "fused_session_default",
+                ["disable_fused_session"] = disableFused,
                 ["batch_per_rank"] = new[] { arm.B0, arm.B1 },
                 ["global_batch_size"] = globalBs,
                 ["bucket_size_bytes"] = arm.BucketBytes,
@@ -1772,6 +1940,9 @@ public static class Program
             ["protocol"] = new Dictionary<string, object>
             {
                 ["mode"] = fullSweep ? "full_3seed_90step" : "ci_smoke_1seed_3step",
+                ["execution_mode"] = disableFused ? "eager_tape_control" : "fused_session_default",
+                ["disable_fused_session"] = disableFused,
+                ["control_only"] = controlOnly,
                 ["warmup_steps"] = warmupSteps,
                 ["timed_steps_per_seed"] = timedSteps,
                 ["seeds"] = benchSeeds,

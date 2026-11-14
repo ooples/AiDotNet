@@ -7886,7 +7886,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     ctx => ExecuteDistributedOptimizerContextStep(ctx, resolvedOptimizer, selectedParameters),
                     InvalidateLayerWeightCaches);
 
-                PublishParameterGradients(finalGrads);
+                bool accumGradsPersist = accumWeightedGrads is null
+                    && OptimizerRegularizer(resolvedOptimizer) is null
+                    && activeCoord.Strategy is Enums.DistributedStrategy.DDP
+                        or Enums.DistributedStrategy.ZeRO1
+                        or Enums.DistributedStrategy.ZeRO2
+                        or Enums.DistributedStrategy.FSDP
+                        or Enums.DistributedStrategy.None;
+                PublishParameterGradients(finalGrads, sourcesOutliveStep: accumGradsPersist);
                 if (stepped)
                 {
                     InvalidateWeightCachesAfterSuccessfulWeightUpdate();
@@ -8216,10 +8223,33 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (param is null || lastGrad is null || lastGrad.Length == 0) return;
                     if (!seenInLast.Add(param)) return;
-                    var combined = CombineLastMicroBatchGradient(
-                        param, lastGrad, accumWeightedGrads, hasScaleFactors, lastWeightOverTotal, invTotalTokens);
-                    finalGrads[param] = combined;
-                    activeCoord.OnParameterGradientReady(param, combined);
+                    if (accumWeightedGrads is not null && accumWeightedGrads.TryGetValue(param, out var accExisting))
+                    {
+                        using (new NoGradScope<T>())
+                        {
+                            Engine.TensorMultiplyScalarInPlace(accExisting, invTotalTokens);
+                            var scaledLast = Engine.TensorMultiplyScalar(lastGrad, lastWeightOverTotal);
+                            Engine.TensorAddInPlace(accExisting, scaledLast);
+                        }
+                        activeCoord.OnParameterGradientReady(param, accExisting);
+                        finalGrads[param] = activeCoord.GetOrCreateGradientSlot(param);
+                        return;
+                    }
+
+                    if (!hasScaleFactors)
+                    {
+                        activeCoord.OnParameterGradientReady(param, lastGrad);
+                        finalGrads[param] = activeCoord.GetOrCreateGradientSlot(param);
+                        return;
+                    }
+
+                    Tensor<T> scaled;
+                    using (new NoGradScope<T>())
+                    {
+                        scaled = Engine.TensorMultiplyScalar(lastGrad, lastWeightOverTotal);
+                    }
+                    activeCoord.OnParameterGradientReady(param, scaled);
+                    finalGrads[param] = activeCoord.GetOrCreateGradientSlot(param);
                 });
 
             if (accumWeightedGrads is not null)
@@ -8229,8 +8259,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (seenInLast.Contains(kvp.Key)) continue;
                     Engine.TensorMultiplyScalarInPlace(kvp.Value, invTotalTokens);
-                    finalGrads[kvp.Key] = kvp.Value;
                     activeCoord.OnParameterGradientReady(kvp.Key, kvp.Value);
+                    finalGrads[kvp.Key] = activeCoord.GetOrCreateGradientSlot(kvp.Key);
                 }
             }
             return finalGrads;
@@ -8246,8 +8276,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 if (param is null) continue;
                 if (lastGrads.TryGetValue(param, out var lastGrad) && lastGrad is not null)
                 {
-                    finalGrads[param] = CombineLastMicroBatchGradient(
-                        param, lastGrad, accumWeightedGrads, hasScaleFactors, lastWeightOverTotal, invTotalTokens);
+                    if (accumWeightedGrads is not null && accumWeightedGrads.TryGetValue(param, out var accExisting))
+                    {
+                        using var noGrad = new NoGradScope<T>();
+                        Engine.TensorMultiplyScalarInPlace(accExisting, invTotalTokens);
+                        var scaledLast = Engine.TensorMultiplyScalar(lastGrad, lastWeightOverTotal);
+                        Engine.TensorAddInPlace(accExisting, scaledLast);
+                        finalGrads[param] = accExisting;
+                    }
+                    else if (!hasScaleFactors)
+                    {
+                        finalGrads[param] = activeCoord.CopyIntoGradientSlot(param, lastGrad);
+                    }
+                    else
+                    {
+                        using var noGrad = new NoGradScope<T>();
+                        var scaled = Engine.TensorMultiplyScalar(lastGrad, lastWeightOverTotal);
+                        finalGrads[param] = activeCoord.CopyIntoGradientSlot(param, scaled);
+                    }
                 }
                 else if (accumWeightedGrads is not null && accumWeightedGrads.TryGetValue(param, out var priorOnly))
                 {
@@ -8430,9 +8476,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         IReadOnlyList<Tensor<T>> parameters)
     {
+        _ = parameters;
         MarkTrainMutationStarted();
         optimizer.Step(context);
-        InvalidateResidentGpuBuffersForHostStep(parameters);
+        InvalidateResidentGpuBuffersForHostStep(context.Parameters);
     }
 
     private void InvalidateResidentGpuBuffersForHostStep(IReadOnlyList<Tensor<T>> parameters)
@@ -8442,7 +8489,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             for (int i = 0; i < parameters.Count; i++)
             {
                 var wtensor = parameters[i];
-                if (wtensor is null || wtensor.HasPendingGpuData) continue;
+                if (wtensor is null || wtensor.HasPendingGpuData || residentGpuEngine.IsDeviceAuthoritative(wtensor)) continue;
                 residentGpuEngine.InvalidateResidentWeightBuffer(wtensor);
             }
         }
@@ -8557,7 +8604,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (param is null || grad is null || grad.Length == 0) return;
                     if (grads.ContainsKey(param)) return;
                     distCoord.OnParameterGradientReady(param, grad);
-                    grads[param] = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { grad })[0];
+                    grads[param] = distCoord.GetOrCreateGradientSlot(param);
                 });
         }
         else
@@ -8574,6 +8621,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(selectedParameters, grads, Engine);
 
+        var regularizer = OptimizerRegularizer(opt);
         MarkTrainMutationStarted();
         bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
             selectedParameters,
@@ -8582,7 +8630,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             mpCtx,
             restoreFp32Masters,
             syncFp32MastersFromWorking: null,
-            OptimizerRegularizer(opt),
+            regularizer,
             MaxGradNormValue,
             ctx =>
             {
@@ -8599,7 +8647,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             },
             InvalidateLayerWeightCaches);
 
-        PublishParameterGradients(grads);
+        bool eagerSlotsPersist = canStreamOverlap
+            && regularizer is null
+            && distCoord.Strategy is Enums.DistributedStrategy.DDP
+                or Enums.DistributedStrategy.ZeRO1
+                or Enums.DistributedStrategy.ZeRO2
+                or Enums.DistributedStrategy.FSDP
+                or Enums.DistributedStrategy.None;
+        PublishParameterGradients(grads, sourcesOutliveStep: eagerSlotsPersist);
         if (stepped)
         {
             InvalidateWeightCachesAfterSuccessfulWeightUpdate();
@@ -8641,7 +8696,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ClampStreamingGradientByValue(grad, optimizerClipValue);
             MarkTrainMutationStarted();
             streamingOptimizer.Apply(source, grad);
-            if (Engine is DirectGpuTensorEngine sg && !source.HasPendingGpuData)
+            if (Engine is DirectGpuTensorEngine sg && !source.HasPendingGpuData && !sg.IsDeviceAuthoritative(source))
                 sg.InvalidateResidentWeightBuffer(source);
         }
         streamingOptimizer.EndStep();
@@ -8675,7 +8730,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return;
         }
 
-        BeginStreamingGradientRetention();
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
@@ -8727,9 +8781,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grads.ContainsKey(source)) return;
                     distCoord.OnParameterGradientReady(source, grad);
-                    var captured = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { grad })[0];
-                    grads[source] = captured;
-                    RetainStreamingGradient(source, captured);
+                    grads[source] = distCoord.GetOrCreateGradientSlot(source);
                     return;
                 }
 
@@ -8737,13 +8789,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     using var noGrad = new NoGradScope<T>();
                     Engine.TensorAddInPlace(existing, grad);
-                    RetainStreamingGradient(source, existing);
                 }
                 else
                 {
-                    var captured = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { grad })[0];
-                    grads[source] = captured;
-                    RetainStreamingGradient(source, captured);
+                    grads[source] = distCoord.CopyIntoGradientSlot(source, grad);
                 }
             }
 
@@ -8765,6 +8814,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             double streamingMaxNorm = distCoord.Strategy == AiDotNet.Enums.DistributedStrategy.DDP
                 ? EffectiveGlobalGradNormClip(resolvedOptimizer, MaxGradNormValue)
                 : MaxGradNormValue;
+            var streamingRegularizer = OptimizerRegularizer(resolvedOptimizer);
             MarkTrainMutationStarted();
             bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
                 sources,
@@ -8773,15 +8823,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 mpCtx,
                 () => RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored),
                 syncFp32MastersFromWorking: null,
-                OptimizerRegularizer(resolvedOptimizer),
+                streamingRegularizer,
                 streamingMaxNorm,
                 ctx => ApplyStreamingOptimizerFullStep(ctx, resolvedOptimizer, useStreamingDefaults),
                 InvalidateLayerWeightCaches);
 
-            foreach (var kvp in grads)
-                RetainStreamingGradient(kvp.Key, kvp.Value);
-            EndStreamingGradientRetention();
-            PublishParameterGradients(grads);
+            bool streamingSlotsPersist = streamingRegularizer is null
+                && distCoord.Strategy is Enums.DistributedStrategy.DDP
+                    or Enums.DistributedStrategy.ZeRO1
+                    or Enums.DistributedStrategy.ZeRO2
+                    or Enums.DistributedStrategy.FSDP
+                    or Enums.DistributedStrategy.None;
+            PublishParameterGradients(grads, sourcesOutliveStep: streamingSlotsPersist);
 
             if (stepped)
             {

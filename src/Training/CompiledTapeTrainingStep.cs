@@ -123,6 +123,8 @@ public static class CompiledTapeTrainingStep<T>
         internal object? mpGenericPlan;
         internal int[]? mpGenericKey;
         internal List<(Tensor<T> Input, Tensor<T> Target)>? persistentByShape;
+        internal int[]? cachedCompositeShapeKey;
+        [AiDotNet.Attributes.Scratch] internal Dictionary<Tensor<T>, Tensor<T>>? distributedGradMap;
         internal object? shapeSwitchFrom;
         internal CompiledModelCache<T>? retiringCache;
     }
@@ -970,6 +972,8 @@ public static class CompiledTapeTrainingStep<T>
         _persistentInput = null;
         _persistentTarget = null;
         _persistentByShape = null;
+        CurrentState.cachedCompositeShapeKey = null;
+        CurrentState.distributedGradMap = null;
         _shapeSwitchFrom = null;
         _retiringCache?.Invalidate();
         _retiringCache = null;
@@ -2108,7 +2112,9 @@ public static class CompiledTapeTrainingStep<T>
                 distNet.SetLastLossFromStepper(idleLossT);
                 distCoord.BeginBackwardStep(idleParameters, 0.0);
 
-                var emptyGrads = new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                var emptyGrads = CurrentState.distributedGradMap
+                    ??= new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                emptyGrads.Clear();
                 distNet.MarkDistributedMutationStarted();
                 bool idleStepped = distCoord.SynchronizeUnscaleClipAndStep(
                     idleParameters,
@@ -2150,7 +2156,7 @@ public static class CompiledTapeTrainingStep<T>
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
-            var compositeKey = BuildCompositeShapeKey(input._shape, target._shape);
+            var compositeKey = GetOrBuildCompositeShapeKey(input._shape, target._shape, shapeChanged);
             var persistentIn = _persistentInput!;
             var persistentTgt = _persistentTarget!;
             ICompiledTrainingPlan<T> plan;
@@ -2191,7 +2197,7 @@ public static class CompiledTapeTrainingStep<T>
             distNet.SetLastLossFromStepper(globalLossT);
             distCoord.BeginBackwardStep(parameters, rankWeight);
 
-            var gradMap = BuildPlanGradientDictionary(parameters, plan.Gradients);
+            var gradMap = PopulateDistributedPlanGradients(distCoord, parameters, plan.Gradients);
             distNet.MarkDistributedMutationStarted();
             bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
                 parameters,
@@ -2262,7 +2268,9 @@ public static class CompiledTapeTrainingStep<T>
                 distNet.SetLastLossFromStepper(idleLossT);
                 distCoord.BeginBackwardStep(idleParameters, 0.0);
 
-                var emptyGrads = new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                var emptyGrads = CurrentState.distributedGradMap
+                    ??= new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                emptyGrads.Clear();
                 distNet.MarkDistributedMutationStarted();
                 bool idleStepped = distCoord.SynchronizeUnscaleClipAndStep(
                     idleParameters,
@@ -2310,7 +2318,7 @@ public static class CompiledTapeTrainingStep<T>
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
-            var compositeKey = BuildCompositeShapeKey(input._shape, target._shape);
+            var compositeKey = GetOrBuildCompositeShapeKey(input._shape, target._shape, shapeChanged);
             var persistentIn = _persistentInput!;
             var persistentTgt = _persistentTarget!;
             ICompiledTrainingPlan<T> plan;
@@ -2353,7 +2361,7 @@ public static class CompiledTapeTrainingStep<T>
             distNet.SetLastLossFromStepper(globalLossT);
             distCoord.BeginBackwardStep(parameters, rankWeight);
 
-            var gradMap = BuildPlanGradientDictionary(parameters, plan.Gradients);
+            var gradMap = PopulateDistributedPlanGradients(distCoord, parameters, plan.Gradients);
             distNet.MarkDistributedMutationStarted();
             bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
                 parameters,
@@ -2438,28 +2446,76 @@ public static class CompiledTapeTrainingStep<T>
         }
     }
 
-    private static int[] BuildCompositeShapeKey(int[] inputShape, int[] targetShape)
+    private static bool CompositeShapeKeyMatches(int[] cached, int[] inputShape, int[] targetShape)
     {
-        var compositeKey = new int[inputShape.Length + 1 + targetShape.Length];
+        if (cached.Length != inputShape.Length + 1 + targetShape.Length || cached[inputShape.Length] != -1)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (cached[i] != inputShape[i])
+            {
+                return false;
+            }
+        }
+
+        int targetOffset = inputShape.Length + 1;
+        for (int i = 0; i < targetShape.Length; i++)
+        {
+            if (cached[targetOffset + i] != targetShape[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int[] GetOrBuildCompositeShapeKey(int[] inputShape, int[] targetShape, bool shapeChanged)
+    {
+        if (!shapeChanged
+            && CurrentState.cachedCompositeShapeKey is { } cached
+            && CompositeShapeKeyMatches(cached, inputShape, targetShape))
+        {
+            return cached;
+        }
+
+        int expectedLength = inputShape.Length + 1 + targetShape.Length;
+        var compositeKey = new int[expectedLength];
         Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
         compositeKey[inputShape.Length] = -1;
         Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
+        CurrentState.cachedCompositeShapeKey = compositeKey;
         return compositeKey;
     }
 
-    private static Dictionary<Tensor<T>, Tensor<T>> BuildPlanGradientDictionary(
+    private static Dictionary<Tensor<T>, Tensor<T>> PopulateDistributedPlanGradients(
+        DistributedTraining.DistributedTapeCoordinator<T> distCoord,
         Tensor<T>[] parameters,
         Tensor<T>[]? planGradients)
     {
-        var gradMap = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        var gradMap = CurrentState.distributedGradMap
+            ??= new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        gradMap.Clear();
         if (planGradients is null) return gradMap;
         int count = Math.Min(parameters.Length, planGradients.Length);
+        bool multiRank = distCoord.WorldSize > 1;
         for (int i = 0; i < count; i++)
         {
             var param = parameters[i];
             var grad = planGradients[i];
-            if (param is null || grad is null || grad.Length == 0) continue;
-            gradMap[param] = TensorCheckpoint<T>.Capture(new[] { grad })[0];
+            if (param is null || grad is null || grad.Length == 0 || gradMap.ContainsKey(param)) continue;
+            if (multiRank)
+            {
+                distCoord.OnParameterGradientReady(param, grad);
+                gradMap[param] = distCoord.GetOrCreateGradientSlot(param);
+            }
+            else
+            {
+                gradMap[param] = distCoord.CopyIntoGradientSlot(param, grad);
+            }
         }
         return gradMap;
     }

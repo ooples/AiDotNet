@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -12,6 +13,10 @@ using AiDotNet.MixedPrecision;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
+#if !AIDN_LEGACY_TFM
+using TensorPrimitives = System.Numerics.Tensors.TensorPrimitives;
+#endif
 
 namespace AiDotNet.DistributedTraining;
 
@@ -82,11 +87,33 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             "TransientTapeTensorStates",
             BindingFlags.Instance | BindingFlags.NonPublic);
 
+    private readonly Vector<T> _metadataBuffer = new Vector<T>(2);
+    private readonly Vector<T> _singleElementBuffer = new Vector<T>(1);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _persistentGradSlots =
+        new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly object _slotSync = new object();
+    private float[]? _slotDownloadScratch;
+
     private GradientBucketReducer<T>? _reducer;
+    private Tensor<T>?[]? _cachedInputParameters;
+    private Tensor<T>[]? _cachedUniqueParameters;
+    private int[]? _cachedUniqueParameterLengths;
+    private int _cachedTotalElements;
     private Tensor<T>[]? _syncedParamSnapshot;
     private Tensor<T>? _ownedParamShard;
     private Tensor<T>[]? _ownedParamShardList;
+    private Tensor<T>? _shardGradTensor;
+    private Dictionary<Tensor<T>, Tensor<T>>? _shardGradDict;
+    private Dictionary<Tensor<T>, Tensor<T>>? _shardRegDict;
+    private Tensor<T>[]? _lastShardedParamsRef;
+    private int[]? _lastShardedParamVersions;
+    private int[]? _lastShardedParamGpuVersions;
+    private int _lastShardedStart = -1;
+    private int _lastShardedLength = -1;
     private Vector<T>? _gatherSendBuffer;
+    private Dictionary<Tensor<float>, (IGpuBuffer Buffer, Tensor<float> BoundTensor)>? _persistentGradBuffers;
+    private (IGpuBuffer Buffer, Tensor<float> BoundTensor)? _shardGradGpuBinding;
+    private IDirectGpuBackend? _gpuBufferBackend;
 
     private long _stepStartTimestamp;
     private double _stepCommMilliseconds;
@@ -228,6 +255,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
     {
         ThrowIfDisposed();
         _syncedParamSnapshot = null;
+        _lastShardedParamsRef = null;
     }
 
     /// <summary>
@@ -248,13 +276,14 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             throw new ArgumentNullException(nameof(trainableParameters));
         }
 
-        var uniqueParams = DeduplicateParameters(trainableParameters, out int totalElements);
+        var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
         if (MatchesSnapshot(_syncedParamSnapshot, uniqueParams))
         {
             return;
         }
 
         _syncedParamSnapshot = uniqueParams;
+        _lastShardedParamsRef = null;
 
         if (WorldSize <= 1 || totalElements <= 0)
         {
@@ -277,7 +306,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         flat = Backend.Broadcast(flat, root: 0);
-        UnpackVectorIntoParameters(flat.AsSpan().Slice(0, totalElements), uniqueParams);
+        UnpackVectorIntoParameters(flat.AsSpan().Slice(0, totalElements), uniqueParams, preserveGpuWeightBuffers: false);
         invalidateCaches?.Invoke();
     }
 
@@ -331,21 +360,20 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
 
         EnsureBackendInitialized();
 
-        var metadata = new Vector<T>(2);
         {
-            Span<T> writeSpan = metadata.AsWritableSpan();
+            Span<T> writeSpan = _metadataBuffer.AsWritableSpan();
             writeSpan[0] = NumOps.FromDouble(localTokenCount);
             writeSpan[1] = NumOps.FromDouble(localTokenCount > 0 ? localUnscaledLoss * localTokenCount : 0.0);
         }
 
         long t0 = Stopwatch.GetTimestamp();
-        Backend.AllReduce(metadata, ReductionOperation.Sum);
+        Backend.AllReduce(_metadataBuffer, ReductionOperation.Sum);
         long t1 = Stopwatch.GetTimestamp();
         double elapsedMs = (t1 - t0) * 1000.0 / Stopwatch.Frequency;
         _stepCommMilliseconds += elapsedMs;
         _stepExposedCommMilliseconds += elapsedMs;
 
-        ReadOnlySpan<T> readSpan = metadata.AsSpan();
+        ReadOnlySpan<T> readSpan = _metadataBuffer.AsSpan();
         double globalTokensDouble = NumOps.ToDouble(readSpan[0]);
         long globalTokens = globalTokensDouble > 0.0 ? (long)Math.Round(globalTokensDouble) : 0L;
         double weightedLossSum = NumOps.ToDouble(readSpan[1]);
@@ -394,6 +422,101 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
     {
         ThrowIfDisposed();
         _reducer?.NotifyGradientReady(parameter, gradient);
+    }
+
+    /// <summary>
+    /// Returns a persistent reusable host-backed destination gradient tensor for <paramref name="parameter"/>,
+    /// eliminating per-step LOH allocations and GPU copy snapshots during overlapped distributed backward passes.
+    /// </summary>
+    internal Tensor<T> GetOrCreateGradientSlot(Tensor<T> parameter)
+    {
+        if (parameter is null)
+        {
+            throw new ArgumentNullException(nameof(parameter));
+        }
+
+        lock (_slotSync)
+        {
+            if (!_persistentGradSlots.TryGetValue(parameter, out var slot) ||
+                slot is null ||
+                slot.Length != parameter.Length)
+            {
+                slot = new Tensor<T>(parameter._shape);
+                _persistentGradSlots[parameter] = slot;
+            }
+
+            return slot;
+        }
+    }
+
+    /// <summary>
+    /// Copies <paramref name="sourceGradient"/> into the persistent reusable host-backed gradient slot
+    /// for <paramref name="parameter"/> without per-step LOH allocations or stale GPU host-sync downloads.
+    /// </summary>
+    internal Tensor<T> CopyIntoGradientSlot(Tensor<T> parameter, Tensor<T> sourceGradient)
+    {
+        if (sourceGradient is null)
+        {
+            throw new ArgumentNullException(nameof(sourceGradient));
+        }
+
+        var slot = GetOrCreateGradientSlot(parameter);
+        int length = Math.Min(slot.Length, sourceGradient.Length);
+        if (length <= 0)
+        {
+            return slot;
+        }
+
+        var gpuEngine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        if (slot._storageOffset == 0 && slot._storage.Length == slot.Length)
+        {
+            if (slot.GetBackingArrayForCacheLookupUnsafe() is { } slotBacking)
+            {
+                AiDotNet.Tensors.Helpers.HostSync.Remove(slotBacking);
+            }
+
+            AiDotNet.Tensors.Helpers.HostSync.Remove(slot.DataVector);
+        }
+
+        gpuEngine?.InvalidateResidentWeightBuffer(slot);
+
+        if (typeof(T) == typeof(float) &&
+            (object)sourceGradient is Tensor<float> srcFloat &&
+            (object)slot is Tensor<float> slotFloat &&
+            srcFloat.HasPendingGpuData &&
+            srcFloat._gpuBuffer is { } srcGpuBuf &&
+            srcFloat._gpuBackend is { } gpuBack &&
+            srcGpuBuf.Handle != IntPtr.Zero &&
+            slotFloat._storageOffset == 0 &&
+            slotFloat.GetBackingArrayForCacheLookupUnsafe() is { } slotArr)
+        {
+            int srcOffset = srcFloat._storageOffset;
+            int required = Math.Max(srcOffset + length, srcGpuBuf.Size);
+            if (srcOffset == 0 && slotArr.Length >= required)
+            {
+                gpuBack.DownloadBuffer(srcGpuBuf, slotArr);
+                slot.IncrementVersion();
+                return slot;
+            }
+
+            lock (_slotSync)
+            {
+                if (_slotDownloadScratch is null || _slotDownloadScratch.Length < required)
+                {
+                    _slotDownloadScratch = new float[required];
+                }
+
+                gpuBack.DownloadBuffer(srcGpuBuf, _slotDownloadScratch);
+                _slotDownloadScratch.AsSpan(srcOffset, length).CopyTo(slotArr.AsSpan(0, length));
+            }
+
+            slot.IncrementVersion();
+            return slot;
+        }
+
+        sourceGradient.AsSpan().Slice(0, length).CopyTo(slot.AsWritableSpan().Slice(0, length));
+        slot.IncrementVersion();
+        return slot;
     }
 
     /// <summary>
@@ -456,7 +579,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         _stepCommMilliseconds += _reducer.LastTotalCollectiveMilliseconds;
         _stepExposedCommMilliseconds += _reducer.LastExposedWaitMilliseconds;
 
-        var uniqueParams = DeduplicateParameters(trainableParameters, out int totalElements);
+        var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
         int worldSize = Math.Max(1, WorldSize);
         int shardSize = totalElements > 0 ? (int)(((long)totalElements + worldSize - 1L) / worldSize) : 0;
         int myStart = Rank * shardSize;
@@ -465,11 +588,18 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         Tensor<T>? shardGradTensor = null;
         if (UseReduceScatter && myValidLen > 0)
         {
-            shardGradTensor = new Tensor<T>(new[] { myValidLen });
+            shardGradTensor = EnsureShardGradTensor(myValidLen);
+            PrepareTensorForFullHostOverwrite(shardGradTensor, AiDotNetEngine.Current as DirectGpuTensorEngine);
             if (reducedLocalShard is not null && reducedLocalShard.Length >= myValidLen)
             {
                 reducedLocalShard.AsSpan().Slice(0, myValidLen).CopyTo(shardGradTensor.AsWritableSpan());
             }
+            else
+            {
+                shardGradTensor.AsWritableSpan().Clear();
+            }
+
+            shardGradTensor.IncrementVersion();
         }
 
         // (b) Mixed-precision unscale (1.0 / scale) + NaN/Inf overflow detection.
@@ -488,17 +618,16 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
 
                 if (WorldSize > 1)
                 {
-                    var overflowFlag = new Vector<T>(1);
-                    overflowFlag.AsWritableSpan()[0] = NumOps.FromDouble(hasOverflow ? 1.0 : 0.0);
+                    _singleElementBuffer.AsWritableSpan()[0] = NumOps.FromDouble(hasOverflow ? 1.0 : 0.0);
 
                     long t0 = Stopwatch.GetTimestamp();
-                    Backend.AllReduce(overflowFlag, ReductionOperation.Max);
+                    Backend.AllReduce(_singleElementBuffer, ReductionOperation.Max);
                     long t1 = Stopwatch.GetTimestamp();
                     double flagMs = (t1 - t0) * 1000.0 / Stopwatch.Frequency;
                     _stepCommMilliseconds += flagMs;
                     _stepExposedCommMilliseconds += flagMs;
 
-                    hasOverflow = NumOps.ToDouble(overflowFlag.AsSpan()[0]) > 0.0;
+                    hasOverflow = NumOps.ToDouble(_singleElementBuffer.AsSpan()[0]) > 0.0;
                 }
             }
             else
@@ -541,7 +670,10 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                     ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
                 }
 
-                gradOptBase.ClipTapeGradientsAhead(uniqueParams, gradients);
+                gradOptBase.ClipTapeGradientsAhead(
+                    uniqueParams,
+                    gradients,
+                    canReuseNormInStep: regularizeGradients is null);
                 regularizeGradients?.Invoke(trainableParameters, gradients);
             }
             else
@@ -550,6 +682,25 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                 if (maxGradNorm > 0.0)
                 {
                     ClipGradientsByGlobalNorm(uniqueParams, gradients, maxGradNorm);
+                }
+            }
+
+            if (typeof(T) == typeof(float) &&
+                AiDotNetEngine.Current is DirectGpuTensorEngine preStepGpuEngine &&
+                preStepGpuEngine.GetBackend() is { } preStepGpuBackend)
+            {
+                for (int i = 0; i < uniqueParams.Length; i++)
+                {
+                    var p = uniqueParams[i];
+                    if (gradients.TryGetValue(p, out var grad) && grad is not null && grad.Length > 0)
+                    {
+                        BindHostSynchronizedGpuGradient(
+                            preStepGpuEngine,
+                            preStepGpuBackend,
+                            (Tensor<float>)(object)p,
+                            (Tensor<float>)(object)grad,
+                            isShardGrad: false);
+                    }
                 }
             }
 
@@ -571,7 +722,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             for (int i = 0; i < uniqueParams.Length; i++)
             {
                 var p = uniqueParams[i];
-                if (!p.HasPendingGpuData)
+                if (!p.HasPendingGpuData && (ddpGpuEngine is null || !ddpGpuEngine.IsDeviceAuthoritative(p)))
                 {
                     p.IncrementVersion();
                     ddpGpuEngine?.InvalidateResidentWeightBuffer(p);
@@ -584,8 +735,14 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         {
             if (myValidLen > 0)
             {
-                EnsureOwnedParamShard(myValidLen);
-                PackParameterSliceIntoShard(uniqueParams, myStart, myValidLen, _ownedParamShard!);
+                bool shardCreated = EnsureOwnedParamShard(myValidLen);
+                bool mpRestoredBeforeStep = mixedPrecisionContext is not null && restoreFp32Masters is not null;
+                if (shardCreated || mpRestoredBeforeStep || !IsShardedParameterSliceUpToDate(uniqueParams, myStart, myValidLen))
+                {
+                    PackParameterSliceIntoShard(uniqueParams, myStart, myValidLen, _ownedParamShard!);
+                }
+
+                EnsureOwnedParamShardGpuResident(_ownedParamShard!);
             }
 
             double optClipNorm = gradOptBase is not null && !double.IsNaN(gradOptBase.TapeStepGradientClipNorm)
@@ -626,7 +783,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
 
                 if (myValidLen > 0)
                 {
-                    shardGradTensor = new Tensor<T>(new[] { myValidLen });
+                    shardGradTensor = EnsureShardGradTensor(myValidLen);
                     PackGradientSliceIntoShard(uniqueParams, gradients, myStart, myValidLen, shardGradTensor);
                 }
             }
@@ -646,15 +803,27 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             }
 
             if (myValidLen > 0 &&
+                _ownedParamShard is not null &&
+                shardGradTensor is not null &&
+                typeof(T) == typeof(float) &&
+                AiDotNetEngine.Current is DirectGpuTensorEngine shardedGpuEngine &&
+                shardedGpuEngine.GetBackend() is { } shardedGpuBackend)
+            {
+                BindHostSynchronizedGpuGradient(
+                    shardedGpuEngine,
+                    shardedGpuBackend,
+                    (Tensor<float>)(object)_ownedParamShard,
+                    (Tensor<float>)(object)shardGradTensor,
+                    isShardGrad: true);
+            }
+
+            if (myValidLen > 0 &&
                 effectiveOptimizer is not null &&
                 _ownedParamShard is not null &&
                 _ownedParamShardList is not null &&
                 shardGradTensor is not null)
             {
-                var shardGradDict = new Dictionary<Tensor<T>, Tensor<T>>(1, TensorReferenceComparer<Tensor<T>>.Instance)
-                {
-                    [_ownedParamShard] = shardGradTensor
-                };
+                var shardGradDict = PopulateShardGradDict(_ownedParamShard, shardGradTensor);
 
                 if (gradOptBase is not null && optClipNorm > 0.0)
                 {
@@ -673,10 +842,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                      _ownedParamShardList is not null &&
                      shardGradTensor is not null)
             {
-                var shardGradDict = new Dictionary<Tensor<T>, Tensor<T>>(1, TensorReferenceComparer<Tensor<T>>.Instance)
-                {
-                    [_ownedParamShard] = shardGradTensor
-                };
+                var shardGradDict = PopulateShardGradDict(_ownedParamShard, shardGradTensor);
 
                 executeFullParameterStep(new TapeStepContext<T>(
                     _ownedParamShardList,
@@ -690,7 +856,17 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                 {
                     if (_ownedParamShard is not null)
                     {
-                        UnpackVectorIntoParameters(_ownedParamShard.AsSpan().Slice(0, totalElements), uniqueParams);
+                        if (_gatherSendBuffer is null || _gatherSendBuffer.Length < totalElements)
+                        {
+                            _gatherSendBuffer = new Vector<T>(totalElements);
+                        }
+
+                        CopyOwnedParamShardToVector(_ownedParamShard, totalElements, _gatherSendBuffer);
+                        UnpackVectorIntoParameters(
+                            _gatherSendBuffer.AsSpan().Slice(0, totalElements),
+                            uniqueParams,
+                            preserveGpuWeightBuffers: true);
+                        RecordShardedParameterVersions(uniqueParams, myStart, myValidLen);
                     }
                 }
                 else
@@ -700,15 +876,14 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                         _gatherSendBuffer = new Vector<T>(shardSize);
                     }
 
-                    Span<T> sendSpan = _gatherSendBuffer.AsWritableSpan();
                     if (myValidLen > 0 && _ownedParamShard is not null)
                     {
-                        _ownedParamShard.AsSpan().Slice(0, myValidLen).CopyTo(sendSpan.Slice(0, myValidLen));
+                        CopyOwnedParamShardToVector(_ownedParamShard, myValidLen, _gatherSendBuffer);
                     }
 
                     if (myValidLen < shardSize)
                     {
-                        sendSpan.Slice(myValidLen, shardSize - myValidLen).Clear();
+                        _gatherSendBuffer.AsWritableSpan().Slice(myValidLen, shardSize - myValidLen).Clear();
                     }
 
                     long t0 = Stopwatch.GetTimestamp();
@@ -718,7 +893,11 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                     _stepCommMilliseconds += gatherMs;
                     _stepExposedCommMilliseconds += gatherMs;
 
-                    UnpackVectorIntoParameters(gathered.AsSpan().Slice(0, totalElements), uniqueParams);
+                    UnpackVectorIntoParameters(
+                        gathered.AsSpan().Slice(0, totalElements),
+                        uniqueParams,
+                        preserveGpuWeightBuffers: true);
+                    RecordShardedParameterVersions(uniqueParams, myStart, myValidLen);
                 }
 
                 invalidateLayerCaches?.Invoke();
@@ -766,7 +945,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                 : Array.Empty<byte>();
         }
 
-        var uniqueParams = DeduplicateParameters(trainableParameters, out int totalElements);
+        var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
         if (uniqueParams.Length == 0 ||
             totalElements <= 0 ||
             effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
@@ -910,10 +1089,9 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
 
     private bool AllReduceAnyRankFlag(bool hasLocal)
     {
-        var flagVec = new Vector<T>(1);
-        flagVec.AsWritableSpan()[0] = NumOps.FromDouble(hasLocal ? 1.0 : 0.0);
-        Backend.AllReduce(flagVec, ReductionOperation.Max);
-        return NumOps.ToDouble(flagVec.AsSpan()[0]) > 0.0;
+        _singleElementBuffer.AsWritableSpan()[0] = NumOps.FromDouble(hasLocal ? 1.0 : 0.0);
+        Backend.AllReduce(_singleElementBuffer, ReductionOperation.Max);
+        return NumOps.ToDouble(_singleElementBuffer.AsSpan()[0]) > 0.0;
     }
 
     /// <summary>
@@ -957,7 +1135,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             return;
         }
 
-        var uniqueParams = DeduplicateParameters(trainableParameters, out int totalElements);
+        var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
         if (uniqueParams.Length == 0 ||
             totalElements <= 0 ||
             effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
@@ -978,6 +1156,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             // backing-array or compressed-slot cache in the optimizer cannot alias pre-restore moments.
             _ownedParamShard = new Tensor<T>(new[] { myValidLen });
             _ownedParamShardList = new[] { _ownedParamShard };
+            _lastShardedParamsRef = null;
             PackParameterSliceIntoShard(uniqueParams, myStart, myValidLen, _ownedParamShard);
         }
 
@@ -1229,6 +1408,14 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
     }
 
+    private Dictionary<Tensor<T>, Tensor<T>> PopulateShardGradDict(Tensor<T> paramShard, Tensor<T> gradShard)
+    {
+        _shardGradDict ??= new Dictionary<Tensor<T>, Tensor<T>>(1, TensorReferenceComparer<Tensor<T>>.Instance);
+        _shardGradDict.Clear();
+        _shardGradDict[paramShard] = gradShard;
+        return _shardGradDict;
+    }
+
     private Tensor<T>? ApplyShardRegularization(
         Tensor<T>? shardGradTensor,
         Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? regularizeGradients)
@@ -1242,13 +1429,12 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             return shardGradTensor;
         }
 
-        var tempDict = new Dictionary<Tensor<T>, Tensor<T>>(1, TensorReferenceComparer<Tensor<T>>.Instance)
-        {
-            [_ownedParamShard] = shardGradTensor
-        };
+        _shardRegDict ??= new Dictionary<Tensor<T>, Tensor<T>>(1, TensorReferenceComparer<Tensor<T>>.Instance);
+        _shardRegDict.Clear();
+        _shardRegDict[_ownedParamShard] = shardGradTensor;
 
-        regularizeGradients(_ownedParamShardList, tempDict);
-        return tempDict.TryGetValue(_ownedParamShard, out var updated) && updated is not null
+        regularizeGradients(_ownedParamShardList, _shardRegDict);
+        return _shardRegDict.TryGetValue(_ownedParamShard, out var updated) && updated is not null
             ? updated
             : shardGradTensor;
     }
@@ -1267,17 +1453,16 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         double globalNormSq = localNormSq;
         if (WorldSize > 1)
         {
-            var normBuf = new Vector<T>(1);
-            normBuf.AsWritableSpan()[0] = NumOps.FromDouble(localNormSq);
+            _singleElementBuffer.AsWritableSpan()[0] = NumOps.FromDouble(localNormSq);
 
             long t0 = Stopwatch.GetTimestamp();
-            Backend.AllReduce(normBuf, ReductionOperation.Sum);
+            Backend.AllReduce(_singleElementBuffer, ReductionOperation.Sum);
             long t1 = Stopwatch.GetTimestamp();
             double normMs = (t1 - t0) * 1000.0 / Stopwatch.Frequency;
             _stepCommMilliseconds += normMs;
             _stepExposedCommMilliseconds += normMs;
 
-            globalNormSq = NumOps.ToDouble(normBuf.AsSpan()[0]);
+            globalNormSq = NumOps.ToDouble(_singleElementBuffer.AsSpan()[0]);
         }
 
         if (double.IsNaN(globalNormSq) || double.IsInfinity(globalNormSq) || globalNormSq <= 0.0)
@@ -1357,31 +1542,93 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         if ((object)tensor is Tensor<float> tf)
         {
             ReadOnlySpan<float> span = tf.AsSpan();
-            double sum = 0.0;
-            for (int i = 0; i < span.Length; i++)
+#if !AIDN_LEGACY_TFM
+            float sumF = TensorPrimitives.SumOfSquares(span);
+            if (!float.IsInfinity(sumF))
             {
-                double v = span[i];
-                sum += v * v;
+                return sumF;
             }
-
-            return sum;
+#endif
+            return ComputeSumOfSquaresFloatWideSimd(span);
         }
 
         if ((object)tensor is Tensor<double> td)
         {
             ReadOnlySpan<double> span = td.AsSpan();
-            double sum = 0.0;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = span[i];
-                sum += v * v;
-            }
-
-            return sum;
+#if !AIDN_LEGACY_TFM
+            return TensorPrimitives.SumOfSquares(span);
+#else
+            return ComputeSumOfSquaresDoubleSimdLegacy(span);
+#endif
         }
 
         return ComputeSumOfSquaresGeneric(tensor.AsSpan());
     }
+
+    private static double ComputeSumOfSquaresFloatWideSimd(ReadOnlySpan<float> span)
+    {
+        int length = span.Length;
+        int i = 0;
+        double sum = 0.0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<float>.Count)
+        {
+            int width = System.Numerics.Vector<float>.Count;
+            int simdLen = length - (length % width);
+            var vecs = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(span.Slice(0, simdLen));
+            var accLo = System.Numerics.Vector<double>.Zero;
+            var accHi = System.Numerics.Vector<double>.Zero;
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                System.Numerics.Vector.Widen(vecs[v], out var lo, out var hi);
+                accLo += lo * lo;
+                accHi += hi * hi;
+            }
+
+            var totalVec = accLo + accHi;
+            sum += System.Numerics.Vector.Dot(totalVec, System.Numerics.Vector<double>.One);
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            double val = span[i];
+            sum += val * val;
+        }
+
+        return sum;
+    }
+
+#if AIDN_LEGACY_TFM
+    private static double ComputeSumOfSquaresDoubleSimdLegacy(ReadOnlySpan<double> span)
+    {
+        int length = span.Length;
+        int i = 0;
+        double sum = 0.0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<double>.Count)
+        {
+            int width = System.Numerics.Vector<double>.Count;
+            int simdLen = length - (length % width);
+            var vecs = MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(span.Slice(0, simdLen));
+            var acc = System.Numerics.Vector<double>.Zero;
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                var dv = vecs[v];
+                acc += dv * dv;
+            }
+
+            sum += System.Numerics.Vector.Dot(acc, System.Numerics.Vector<double>.One);
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            double val = span[i];
+            sum += val * val;
+        }
+
+        return sum;
+    }
+#endif
 
     [AiDotNet.Attributes.ScalarKernel("Generic T L2 norm sum-of-squares fallback after float and double fast paths.")]
     private static double ComputeSumOfSquaresGeneric(ReadOnlySpan<T> span)
@@ -1407,18 +1654,20 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         {
             float factor = (float)scale;
             Span<float> span = tf.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++)
-            {
-                span[i] *= factor;
-            }
+#if !AIDN_LEGACY_TFM
+            TensorPrimitives.Multiply(span, factor, span);
+#else
+            ScaleFloatSimdLegacy(span, factor);
+#endif
         }
         else if ((object)tensor is Tensor<double> td)
         {
             Span<double> span = td.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++)
-            {
-                span[i] *= scale;
-            }
+#if !AIDN_LEGACY_TFM
+            TensorPrimitives.Multiply(span, scale, span);
+#else
+            ScaleDoubleSimdLegacy(span, scale);
+#endif
         }
         else
         {
@@ -1431,6 +1680,56 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             gpuEngine.InvalidateResidentWeightBuffer(tensor);
         }
     }
+
+#if AIDN_LEGACY_TFM
+    private static void ScaleFloatSimdLegacy(Span<float> span, float factor)
+    {
+        int length = span.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<float>.Count)
+        {
+            int width = System.Numerics.Vector<float>.Count;
+            int simdLen = length - (length % width);
+            var factorVec = new System.Numerics.Vector<float>(factor);
+            var vecs = MemoryMarshal.Cast<float, System.Numerics.Vector<float>>(span.Slice(0, simdLen));
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                vecs[v] *= factorVec;
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            span[i] *= factor;
+        }
+    }
+
+    private static void ScaleDoubleSimdLegacy(Span<double> span, double factor)
+    {
+        int length = span.Length;
+        int i = 0;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<double>.Count)
+        {
+            int width = System.Numerics.Vector<double>.Count;
+            int simdLen = length - (length % width);
+            var factorVec = new System.Numerics.Vector<double>(factor);
+            var vecs = MemoryMarshal.Cast<double, System.Numerics.Vector<double>>(span.Slice(0, simdLen));
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                vecs[v] *= factorVec;
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            span[i] *= factor;
+        }
+    }
+#endif
 
     [AiDotNet.Attributes.ScalarKernel("Generic T in-place gradient scaling fallback after float and double fast paths.")]
     private static void ScaleSpanGenericInPlace(Span<T> span, double scale)
@@ -1449,30 +1748,30 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         {
             float factor = (float)invScale;
             Span<float> span = tf.AsWritableSpan();
-            overflow = false;
-            for (int i = 0; i < span.Length; i++)
+            if (factor != 1.0f)
             {
-                float v = span[i] * factor;
-                span[i] = v;
-                if (float.IsNaN(v) || float.IsInfinity(v))
-                {
-                    overflow = true;
-                }
+#if !AIDN_LEGACY_TFM
+                TensorPrimitives.Multiply(span, factor, span);
+#else
+                ScaleFloatSimdLegacy(span, factor);
+#endif
             }
+
+            overflow = ContainsNonFiniteFloatSimd(span);
         }
         else if ((object)tensor is Tensor<double> td)
         {
             Span<double> span = td.AsWritableSpan();
-            overflow = false;
-            for (int i = 0; i < span.Length; i++)
+            if (invScale != 1.0)
             {
-                double v = span[i] * invScale;
-                span[i] = v;
-                if (double.IsNaN(v) || double.IsInfinity(v))
-                {
-                    overflow = true;
-                }
+#if !AIDN_LEGACY_TFM
+                TensorPrimitives.Multiply(span, invScale, span);
+#else
+                ScaleDoubleSimdLegacy(span, invScale);
+#endif
             }
+
+            overflow = ContainsNonFiniteDoubleSimd(span);
         }
         else
         {
@@ -1486,6 +1785,74 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         return overflow;
+    }
+
+    private static bool ContainsNonFiniteFloatSimd(ReadOnlySpan<float> span)
+    {
+        ReadOnlySpan<int> bits = MemoryMarshal.Cast<float, int>(span);
+        int length = bits.Length;
+        int i = 0;
+        const int expMaskScalar = 0x7F800000;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<int>.Count)
+        {
+            int width = System.Numerics.Vector<int>.Count;
+            int simdLen = length - (length % width);
+            var expMask = new System.Numerics.Vector<int>(expMaskScalar);
+            var vecs = MemoryMarshal.Cast<int, System.Numerics.Vector<int>>(bits.Slice(0, simdLen));
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                if (System.Numerics.Vector.EqualsAny(vecs[v] & expMask, expMask))
+                {
+                    return true;
+                }
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            if ((bits[i] & expMaskScalar) == expMaskScalar)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsNonFiniteDoubleSimd(ReadOnlySpan<double> span)
+    {
+        ReadOnlySpan<long> bits = MemoryMarshal.Cast<double, long>(span);
+        int length = bits.Length;
+        int i = 0;
+        const long expMaskScalar = 0x7FF0000000000000L;
+        if (System.Numerics.Vector.IsHardwareAccelerated && length >= System.Numerics.Vector<long>.Count)
+        {
+            int width = System.Numerics.Vector<long>.Count;
+            int simdLen = length - (length % width);
+            var expMask = new System.Numerics.Vector<long>(expMaskScalar);
+            var vecs = MemoryMarshal.Cast<long, System.Numerics.Vector<long>>(bits.Slice(0, simdLen));
+            for (int v = 0; v < vecs.Length; v++)
+            {
+                if (System.Numerics.Vector.EqualsAny(vecs[v] & expMask, expMask))
+                {
+                    return true;
+                }
+            }
+
+            i = simdLen;
+        }
+
+        for (; i < length; i++)
+        {
+            if ((bits[i] & expMaskScalar) == expMaskScalar)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     [AiDotNet.Attributes.ScalarKernel("Generic T mixed-precision unscale and NaN/Inf overflow detection fallback.")]
@@ -1515,6 +1882,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                 OverlapCommunication,
                 UseReduceScatter))
         {
+            _reducer.GradientSlotProvider ??= GetOrCreateGradientSlot;
             return;
         }
 
@@ -1524,20 +1892,305 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             trainableParameters,
             GradientBucketSizeBytes,
             OverlapCommunication,
-            UseReduceScatter);
+            UseReduceScatter)
+        {
+            GradientSlotProvider = GetOrCreateGradientSlot
+        };
     }
 
-    private void EnsureOwnedParamShard(int validLength)
+    private bool EnsureOwnedParamShard(int validLength)
     {
         if (_ownedParamShard is not null &&
             _ownedParamShard.Length == validLength &&
             _ownedParamShardList is not null)
         {
-            return;
+            return false;
         }
 
         _ownedParamShard = new Tensor<T>(new[] { validLength });
         _ownedParamShardList = new[] { _ownedParamShard };
+        _lastShardedParamsRef = null;
+        return true;
+    }
+
+    private Tensor<T> EnsureShardGradTensor(int validLength)
+    {
+        if (_shardGradTensor is null || _shardGradTensor.Length != validLength)
+        {
+            _shardGradTensor = new Tensor<T>(new[] { validLength });
+        }
+
+        return _shardGradTensor;
+    }
+
+    private void CopyOwnedParamShardToVector(Tensor<T> ownedParamShard, int validLength, Vector<T> destination)
+    {
+        if (validLength <= 0)
+        {
+            return;
+        }
+
+        if (typeof(T) == typeof(float) &&
+            (object)ownedParamShard is Tensor<float> pf &&
+            (object)destination is Vector<float> dstFloat &&
+            pf.HasPendingGpuData &&
+            pf._gpuBuffer is { } shardBuf &&
+            shardBuf.Handle != IntPtr.Zero &&
+            pf._gpuBackend is { } gpuBack &&
+            pf._gpuBufferVersion == pf.GpuCacheVersion)
+        {
+            int srcOffset = pf._storageOffset;
+            int required = Math.Max(srcOffset + validLength, shardBuf.Size);
+            lock (_slotSync)
+            {
+                if (_slotDownloadScratch is null || _slotDownloadScratch.Length < required)
+                {
+                    _slotDownloadScratch = new float[required];
+                }
+
+                gpuBack.DownloadBuffer(shardBuf, _slotDownloadScratch);
+                _slotDownloadScratch.AsSpan(srcOffset, validLength).CopyTo(dstFloat.AsWritableSpan().Slice(0, validLength));
+            }
+
+            return;
+        }
+
+        ownedParamShard.AsSpan().Slice(0, validLength).CopyTo(destination.AsWritableSpan().Slice(0, validLength));
+    }
+
+    private bool IsShardedParameterSliceUpToDate(Tensor<T>[] uniqueParams, int shardStart, int shardLength)
+    {
+        if (!ReferenceEquals(_lastShardedParamsRef, uniqueParams) ||
+            _lastShardedParamVersions is null ||
+            _lastShardedParamGpuVersions is null ||
+            _lastShardedParamVersions.Length != uniqueParams.Length ||
+            _lastShardedParamGpuVersions.Length != uniqueParams.Length ||
+            _lastShardedStart != shardStart ||
+            _lastShardedLength != shardLength)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < uniqueParams.Length; i++)
+        {
+            var p = uniqueParams[i];
+            if (p.Version != _lastShardedParamVersions[i] ||
+                p.GpuCacheVersion != _lastShardedParamGpuVersions[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void RecordShardedParameterVersions(Tensor<T>[] uniqueParams, int shardStart, int shardLength)
+    {
+        if (_lastShardedParamVersions is null || _lastShardedParamVersions.Length != uniqueParams.Length)
+        {
+            _lastShardedParamVersions = new int[uniqueParams.Length];
+        }
+
+        if (_lastShardedParamGpuVersions is null || _lastShardedParamGpuVersions.Length != uniqueParams.Length)
+        {
+            _lastShardedParamGpuVersions = new int[uniqueParams.Length];
+        }
+
+        for (int i = 0; i < uniqueParams.Length; i++)
+        {
+            var p = uniqueParams[i];
+            _lastShardedParamVersions[i] = p.Version;
+            _lastShardedParamGpuVersions[i] = p.GpuCacheVersion;
+        }
+
+        _lastShardedParamsRef = uniqueParams;
+        _lastShardedStart = shardStart;
+        _lastShardedLength = shardLength;
+    }
+
+    private static void EnsureOwnedParamShardGpuResident(Tensor<T> ownedParamShard)
+    {
+        if (typeof(T) != typeof(float) ||
+            AiDotNetEngine.Current is not DirectGpuTensorEngine gpuEngine ||
+            gpuEngine.GetBackend() is not { } gpuBackend)
+        {
+            return;
+        }
+
+        var pf = (Tensor<float>)(object)ownedParamShard;
+        if (!pf.IsContiguous || pf._storageOffset != 0 || pf._storage.Length != pf.Length)
+        {
+            return;
+        }
+
+        if (pf.HasPendingGpuData || gpuEngine.IsDeviceAuthoritative(pf))
+        {
+            return;
+        }
+
+        if (pf._gpuBuffer is { } existingBuf &&
+            existingBuf.Handle != IntPtr.Zero &&
+            ReferenceEquals(pf._gpuBackend, gpuBackend) &&
+            pf.GetLiveBackingArrayOrNull() is { } hostArr &&
+            hostArr.Length <= existingBuf.Size)
+        {
+            gpuBackend.UploadBufferInPlace(hostArr, existingBuf);
+            gpuEngine.CommitParameterUpdatedOnDevice(pf, existingBuf, gpuBackend, syncPoint: null);
+            return;
+        }
+
+        if (gpuEngine.AcquireParameterBuffer(pf, out _) is { } acquiredBuf)
+        {
+            gpuEngine.CommitParameterUpdatedOnDevice(pf, acquiredBuf, gpuBackend, syncPoint: null);
+        }
+    }
+
+    private void BindHostSynchronizedGpuGradient(
+        DirectGpuTensorEngine gpuEngine,
+        IDirectGpuBackend gpuBackend,
+        Tensor<float> keyOwner,
+        Tensor<float> gradFloat,
+        bool isShardGrad)
+    {
+        if (_gpuBufferBackend is not null && !ReferenceEquals(_gpuBufferBackend, gpuBackend))
+        {
+            ReleasePersistentGpuBuffers();
+        }
+
+        _gpuBufferBackend = gpuBackend;
+
+        if (gradFloat.TryGetGpuBuffer() is { } alreadyBound &&
+            ReferenceEquals(gradFloat._gpuBackend, gpuBackend) &&
+            gradFloat._gpuBufferVersion == gradFloat.GpuCacheVersion)
+        {
+            return;
+        }
+
+        if (!gradFloat.IsContiguous ||
+            gradFloat._storageOffset != 0 ||
+            gradFloat._storage.Length != gradFloat.Length ||
+            gradFloat.HasPendingGpuData ||
+            gradFloat.GetLiveBackingArrayOrNull() is not { } hostArr ||
+            hostArr.Length != gradFloat.Length)
+        {
+            return;
+        }
+
+        IGpuBuffer persistentBuf;
+        if (isShardGrad)
+        {
+            if (_shardGradGpuBinding is { } existingShard &&
+                existingShard.Buffer.Handle != IntPtr.Zero &&
+                existingShard.Buffer.Size == gradFloat.Length)
+            {
+                persistentBuf = existingShard.Buffer;
+            }
+            else
+            {
+                if (_shardGradGpuBinding is { } oldShard)
+                {
+                    DetachAndDisposeGpuBinding(oldShard.Buffer, oldShard.BoundTensor);
+                }
+
+                persistentBuf = gpuBackend.AllocateBuffer(gradFloat.Length);
+            }
+
+            _shardGradGpuBinding = (persistentBuf, gradFloat);
+        }
+        else
+        {
+            _persistentGradBuffers ??= new Dictionary<Tensor<float>, (IGpuBuffer Buffer, Tensor<float> BoundTensor)>(
+                TensorReferenceComparer<Tensor<float>>.Instance);
+
+            if (_persistentGradBuffers.TryGetValue(keyOwner, out var existingEntry) &&
+                existingEntry.Buffer.Handle != IntPtr.Zero &&
+                existingEntry.Buffer.Size == gradFloat.Length)
+            {
+                persistentBuf = existingEntry.Buffer;
+            }
+            else
+            {
+                if (existingEntry.Buffer is not null)
+                {
+                    DetachAndDisposeGpuBinding(existingEntry.Buffer, existingEntry.BoundTensor);
+                }
+
+                persistentBuf = gpuBackend.AllocateBuffer(gradFloat.Length);
+            }
+
+            _persistentGradBuffers[keyOwner] = (persistentBuf, gradFloat);
+        }
+
+        gpuBackend.UploadBufferInPlace(hostArr, persistentBuf);
+        gpuEngine.BindResidentBuffer(gradFloat, persistentBuf, gpuBackend);
+
+        // Both hostArr and persistentBuf hold the identical reduced gradient; clear the pending D2H flag
+        // armed by BindResidentBuffer while preserving ResidentHostMirror metadata so host reads (such as
+        // GlobalGradientSquaredNorm or PublishParameterGradients) do not re-download 50 MB over PCIe.
+        AiDotNet.Tensors.Helpers.HostSync.Remove(hostArr);
+        gradFloat.Device = AiDotNet.Tensors.TensorDevice.CPU;
+    }
+
+    private static void DetachAndDisposeGpuBinding(IGpuBuffer buffer, Tensor<float>? boundTensor)
+    {
+        if (boundTensor is not null)
+        {
+            if (boundTensor.GetBackingArrayForCacheLookupUnsafe() is { } backing)
+            {
+                AiDotNet.Tensors.Helpers.HostSync.Remove(backing);
+            }
+
+            AiDotNet.Tensors.Helpers.HostSync.Remove(boundTensor.DataVector);
+            if (ReferenceEquals(boundTensor._gpuBuffer, buffer))
+            {
+                boundTensor._gpuBuffer = null;
+                boundTensor._gpuBackend = null;
+                boundTensor._gpuBufferVersion = -1;
+                boundTensor.Device = AiDotNet.Tensors.TensorDevice.CPU;
+            }
+        }
+
+        if (buffer.Handle != IntPtr.Zero)
+        {
+            buffer.Dispose();
+        }
+    }
+
+    private void ReleasePersistentGpuBuffers()
+    {
+        if (_shardGradGpuBinding is { } shardBinding)
+        {
+            DetachAndDisposeGpuBinding(shardBinding.Buffer, shardBinding.BoundTensor);
+            _shardGradGpuBinding = null;
+        }
+
+        if (_persistentGradBuffers is not null)
+        {
+            foreach (var kvp in _persistentGradBuffers)
+            {
+                DetachAndDisposeGpuBinding(kvp.Value.Buffer, kvp.Value.BoundTensor);
+            }
+
+            _persistentGradBuffers.Clear();
+            _persistentGradBuffers = null;
+        }
+
+        _gpuBufferBackend = null;
+    }
+
+    private static void PrepareTensorForFullHostOverwrite(Tensor<T> tensor, DirectGpuTensorEngine? gpuEngine)
+    {
+        if (tensor._storageOffset == 0 && tensor._storage.Length == tensor.Length)
+        {
+            if (tensor.GetBackingArrayForCacheLookupUnsafe() is { } backing)
+            {
+                AiDotNet.Tensors.Helpers.HostSync.Remove(backing);
+            }
+
+            AiDotNet.Tensors.Helpers.HostSync.Remove(tensor.DataVector);
+        }
+
+        gpuEngine?.InvalidateResidentWeightBuffer(tensor);
     }
 
     private static void PackParameterSliceIntoShard(
@@ -1546,6 +2199,17 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         int shardLength,
         Tensor<T> destinationShard)
     {
+        if (destinationShard._storageOffset == 0 && destinationShard._storage.Length == destinationShard.Length)
+        {
+            if (destinationShard.GetBackingArrayForCacheLookupUnsafe() is { } shardBacking)
+            {
+                AiDotNet.Tensors.Helpers.HostSync.Remove(shardBacking);
+            }
+
+            AiDotNet.Tensors.Helpers.HostSync.Remove(destinationShard.DataVector);
+            destinationShard.Device = AiDotNet.Tensors.TensorDevice.CPU;
+        }
+
         Span<T> dstSpan = destinationShard.AsWritableSpan();
         int shardEnd = shardStart + shardLength;
         int paramOffset = 0;
@@ -1570,7 +2234,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         destinationShard.IncrementVersion();
-        if (AiDotNetEngine.Current is DirectGpuTensorEngine gpuEngine)
+        if (typeof(T) != typeof(float) && AiDotNetEngine.Current is DirectGpuTensorEngine gpuEngine)
         {
             gpuEngine.InvalidateResidentWeightBuffer(destinationShard);
         }
@@ -1583,6 +2247,9 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         int shardLength,
         Tensor<T> destinationShard)
     {
+        var gradGpuEngine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        PrepareTensorForFullHostOverwrite(destinationShard, gradGpuEngine);
+
         Span<T> dstSpan = destinationShard.AsWritableSpan();
         int shardEnd = shardStart + shardLength;
         int paramOffset = 0;
@@ -1613,25 +2280,119 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         destinationShard.IncrementVersion();
-        if (AiDotNetEngine.Current is DirectGpuTensorEngine gradGpuEngine)
-        {
-            gradGpuEngine.InvalidateResidentWeightBuffer(destinationShard);
-        }
     }
 
-    private static void UnpackVectorIntoParameters(ReadOnlySpan<T> flatSource, Tensor<T>[] uniqueParams)
+    private static void UnpackVectorIntoParameters(
+        ReadOnlySpan<T> flatSource,
+        Tensor<T>[] uniqueParams,
+        bool preserveGpuWeightBuffers)
     {
         var gpuEngine = AiDotNetEngine.Current as DirectGpuTensorEngine;
+        var gpuBackend = typeof(T) == typeof(float) ? gpuEngine?.GetBackend() : null;
         int offset = 0;
         for (int i = 0; i < uniqueParams.Length; i++)
         {
             var param = uniqueParams[i];
             int len = param.Length;
+
+            if (gpuEngine is not null &&
+                gpuBackend is not null &&
+                (object)param is Tensor<float> pf &&
+                pf.IsContiguous &&
+                pf._storageOffset == 0 &&
+                pf._storage.Length == pf.Length &&
+                !DirectGpuTensorEngine.IsFlatParameterView(pf))
+            {
+                IGpuBuffer? existingPBuf = pf._gpuBuffer is { } b && b.Handle != IntPtr.Zero && ReferenceEquals(pf._gpuBackend, gpuBackend)
+                    ? b
+                    : (preserveGpuWeightBuffers ? gpuEngine.AcquireParameterBuffer(pf, out _) : null);
+
+                if (pf.GetBackingArrayForCacheLookupUnsafe() is { } pArr)
+                {
+                    AiDotNet.Tensors.Helpers.HostSync.Remove(pArr);
+                }
+
+                AiDotNet.Tensors.Helpers.HostSync.Remove(pf.DataVector);
+                pf.Device = AiDotNet.Tensors.TensorDevice.CPU;
+
+                flatSource.Slice(offset, len).CopyTo(param.AsWritableSpan());
+
+                if (existingPBuf is not null &&
+                    existingPBuf.Handle != IntPtr.Zero &&
+                    pf.GetLiveBackingArrayOrNull() is { } pHostArr &&
+                    pHostArr.Length <= existingPBuf.Size)
+                {
+                    gpuBackend.UploadBufferInPlace(pHostArr, existingPBuf);
+                    gpuEngine.CommitParameterUpdatedOnDevice(pf, existingPBuf, gpuBackend, syncPoint: null);
+                    offset += len;
+                    continue;
+                }
+            }
+
+            PrepareTensorForFullHostOverwrite(param, gpuEngine);
             flatSource.Slice(offset, len).CopyTo(param.AsWritableSpan());
             param.IncrementVersion();
-            gpuEngine?.InvalidateResidentWeightBuffer(param);
             offset += len;
         }
+    }
+
+    private Tensor<T>[] GetOrDeduplicateParameters(IReadOnlyList<Tensor<T>> parameters, out int totalElements)
+    {
+        var cachedInputs = _cachedInputParameters;
+        var cachedUnique = _cachedUniqueParameters;
+        var cachedLengths = _cachedUniqueParameterLengths;
+        if (cachedInputs is not null &&
+            cachedUnique is not null &&
+            cachedLengths is not null &&
+            parameters.Count == cachedInputs.Length)
+        {
+            bool match = true;
+            for (int i = 0; i < cachedInputs.Length; i++)
+            {
+                if (!ReferenceEquals(parameters[i], cachedInputs[i]))
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+            {
+                for (int u = 0; u < cachedUnique.Length; u++)
+                {
+                    if (cachedUnique[u].Length != cachedLengths[u])
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match)
+                {
+                    totalElements = _cachedTotalElements;
+                    return cachedUnique;
+                }
+            }
+        }
+
+        var unique = DeduplicateParameters(parameters, out totalElements);
+        var inputSnapshot = new Tensor<T>?[parameters.Count];
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            inputSnapshot[i] = parameters[i];
+        }
+
+        var uniqueLengths = new int[unique.Length];
+        for (int u = 0; u < unique.Length; u++)
+        {
+            uniqueLengths[u] = unique[u].Length;
+        }
+
+        _cachedInputParameters = inputSnapshot;
+        _cachedUniqueParameters = unique;
+        _cachedUniqueParameterLengths = uniqueLengths;
+        _cachedTotalElements = totalElements;
+        return unique;
     }
 
     private static Tensor<T>[] DeduplicateParameters(IReadOnlyList<Tensor<T>> parameters, out int totalElements)
@@ -1664,6 +2425,11 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         if (snapshot is null || snapshot.Length != current.Length)
         {
             return false;
+        }
+
+        if (ReferenceEquals(snapshot, current))
+        {
+            return true;
         }
 
         for (int i = 0; i < snapshot.Length; i++)
@@ -1736,8 +2502,24 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         _disposed = true;
         _reducer?.Dispose();
         _reducer = null;
+        ReleasePersistentGpuBuffers();
+        lock (_slotSync)
+        {
+            _persistentGradSlots.Clear();
+            _slotDownloadScratch = null;
+        }
+
         _ownedParamShard = null;
         _ownedParamShardList = null;
+        _shardGradTensor = null;
+        _shardGradDict = null;
+        _shardRegDict = null;
+        _lastShardedParamsRef = null;
+        _lastShardedParamVersions = null;
+        _lastShardedParamGpuVersions = null;
+        _cachedInputParameters = null;
+        _cachedUniqueParameters = null;
+        _cachedUniqueParameterLengths = null;
         _gatherSendBuffer = null;
         _syncedParamSnapshot = null;
     }

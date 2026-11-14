@@ -829,6 +829,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         float weightDecay,
         bool decoupledWeightDecay)
     {
+        if (gpuEngine.GetBackend() is not { } gpuBackend)
+        {
+            return false;
+        }
+
         var pFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref param);
         var gFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref grad);
 
@@ -840,24 +845,25 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     return false;
             }
 
-            if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackendBf16
+            if ((state.HostRestored || state.HostDirty)
                 && state.GpuMBf16 is { } gpuMBf16 && state.GpuVBf16 is { } gpuVBf16
                 && state.MBf16 is not null && state.VBf16 is not null)
             {
-                UploadUShortMomentsToGpu(restoreBackendBf16, gpuMBf16, state.MBf16);
-                UploadUShortMomentsToGpu(restoreBackendBf16, gpuVBf16, state.VBf16);
+                UploadUShortMomentsToGpu(gpuBackend, gpuMBf16, state.MBf16);
+                UploadUShortMomentsToGpu(gpuBackend, gpuVBf16, state.VBf16);
                 state.HostRestored = false;
                 state.HostDirty = false;
             }
 
-            if (!GpuOptimizer.TryAdamBf16Step(
-                pFloat, gFloat, state.GpuMBf16, state.GpuVBf16,
+            if (!TryExecuteGpuAdamBf16Step(
+                gpuEngine, gpuBackend, param, pFloat, gFloat,
+                state.GpuMBf16, state.GpuVBf16,
                 lr, beta1, beta2, epsilon, weightDecay, _tapeStep, decoupledWeightDecay))
             {
                 return false;
             }
 
-            state.GpuBackend = gpuEngine.GetBackend();
+            state.GpuBackend = gpuBackend;
             state.GpuDirty = true;
             return true;
         }
@@ -888,9 +894,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             var vRef = state.VFullPrecision!;
             var mFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref mRef);
             var vFloat = Unsafe.As<Tensor<T>, Tensor<float>>(ref vRef);
-            return decoupledWeightDecay
-                ? GpuOptimizer.TryAdamWStep(pFloat, gFloat, mFloat, vFloat, lr, beta1, beta2, epsilon, weightDecay, _tapeStep)
-                : GpuOptimizer.TryAdamStep(pFloat, gFloat, mFloat, vFloat, lr, beta1, beta2, epsilon, weightDecay, _tapeStep);
+            return TryExecuteGpuAdamOrAdamWStep(
+                gpuEngine, gpuBackend, param, pFloat, gFloat, mFloat, vFloat,
+                lr, beta1, beta2, epsilon, weightDecay, _tapeStep, decoupledWeightDecay);
         }
 
         bool canUseGpu8Bit = _options.CompressBothMoments
@@ -912,17 +918,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
         }
 
-        if ((state.HostRestored || state.HostDirty) && gpuEngine.GetBackend() is { } restoreBackend8
+        if ((state.HostRestored || state.HostDirty)
             && state.MQuantized is not null && state.VQuantized is not null
             && state.MScales is not null && state.VScales is not null)
         {
-            Upload8BitMomentsToGpu(restoreBackend8, state);
+            Upload8BitMomentsToGpu(gpuBackend, state);
             state.HostRestored = false;
             state.HostDirty = false;
         }
 
-        if (!GpuOptimizer.TryAdam8BitStep(
-            pFloat, gFloat,
+        if (!TryExecuteGpuAdam8BitStep(
+            gpuEngine, gpuBackend, param, pFloat, gFloat,
             state.GpuMQuantized, state.GpuVQuantized, state.GpuMScales, state.GpuVScales,
             lr, beta1, beta2, epsilon, biasCorrection1, biasCorrection2, _options.BlockSize,
             weightDecay, decoupledWeightDecay))
@@ -930,7 +936,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             return false;
         }
 
-        state.GpuBackend = gpuEngine.GetBackend();
+        state.GpuBackend = gpuBackend;
         state.GpuDirty = true;
         return true;
     }

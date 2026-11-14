@@ -218,6 +218,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _tapeV.Clear();
         _tapeVMax.Clear();
         _fp32StepCache.Clear();
+        DisposeCachedGpuGradBuffers();
         _tapeStep = 0;
 
         // Initialize parameters
@@ -818,13 +819,20 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         bool clipActive = GradientOptions.EnableGradientClipping && !GradientsClippedAhead
             && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm
             && GradientOptions.MaxGradientNorm > 0.0;
-        double globalNormSq = guardActive || clipActive ? GlobalGradientSquaredNorm(context) : 0.0;
+        double globalNormSq = 0.0;
+        if (guardActive || clipActive)
+        {
+            if (clipActive || !TryGetClippedAheadGradNormSq(out globalNormSq))
+            {
+                globalNormSq = GlobalGradientSquaredNorm(context);
+            }
+        }
 
         // Any NaN or infinite gradient makes the sum of squares non-finite. NaN can only come from a NaN
         // gradient; +Infinity can also be a finite gradient whose square overflowed T, so that case alone
         // is settled by the exact element check.
         if (guardActive && !IsFiniteDouble(globalNormSq)
-            && (double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
+            && (typeof(T) == typeof(float) || double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
         {
             return;
         }
@@ -891,8 +899,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // The anomaly guard and global-norm clipping above read one scalar back to the host. That keeps this eager
         // tape step out of CUDA-graph capture, but it is not a reason to update on the host: graph capture is the
         // compiled plan's path, which has its own fused optimizer, and this step is never captured.
-        bool gpuAdam = isFloat && !_options.UseAMSGrad
-            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine = isFloat && !_options.UseAMSGrad
+            ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+            : null;
+        IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
+        bool gpuAdam = gpuEngine is not null && gpuBackend is not null;
 
         // Per-parameter Adam updates are fully INDEPENDENT: each param's m/v/vMax
         // live in the _tapeM/_tapeV/_tapeVMax ConcurrentDictionaries keyed by tensor
@@ -977,9 +988,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // at the real shape — m / v need to be re-allocated to match,
             // otherwise TensorAdd's result has a length larger than m and
             // TensorCopy throws "Destination array was not long enough".
-            bool createStateOnDevice = gpuAdam
-                && param.TryGetGpuBuffer() is not null
-                && (denseGradLookup is null || ((Tensor<T>)denseGradLookup).TryGetGpuBuffer() is not null);
+            bool createStateOnDevice = gpuAdam;
             if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
             {
                 m = CreateOptimizerStateTensor(param._shape, createStateOnDevice);
@@ -1040,17 +1049,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 grad = Engine.Reshape(grad, param._shape);
             }
 
-            // GPU-resident Adam update (Phase 1): when param/grad/m/v all resolve to GPU buffers, the kernel
-            // updates weights + moments in place on the GPU with no host download. Returns false (-> CPU path)
-            // if any tensor isn't GPU-resident this step. weightDecay=0 (plain Adam; AdamW handles its own).
-            if (gpuAdam)
+            // GPU-resident Adam update: places host-initialized parameters on GPU via AcquireParameterBuffer,
+            // promotes deserialized/host m and v to GPU once via BindResidentBuffer, uploads host-only gradients
+            // in-place into reusable per-parameter GPU buffers, updates weights + moments in place on device,
+            // and commits parameter residency via CommitParameterUpdatedOnDevice.
+            if (gpuAdam && gpuEngine is not null && gpuBackend is not null)
             {
                 var pf = (Tensor<float>)(object)param;
                 var gf = (Tensor<float>)(object)grad;
                 var mf = (Tensor<float>)(object)m;
                 var vf = (Tensor<float>)(object)v;
-                if (AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamStep(
-                        pf, gf, mf, vf, (float)lr, (float)b1, (float)b2, (float)eps, 0f, _tapeStep))
+                if (TryExecuteGpuAdamOrAdamWStep(
+                        gpuEngine, gpuBackend, param,
+                        pf, gf, mf, vf,
+                        (float)lr, (float)b1, (float)b2, (float)eps,
+                        weightDecay: 0f, _tapeStep, decoupledWeightDecay: false))
                     return;   // weights/moments updated in place on GPU; skip the CPU SIMD path for this param
             }
 
@@ -1462,6 +1475,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _tapeV.Clear();
         _tapeVMax.Clear();
         _fp32StepCache.Clear();
+        DisposeCachedGpuGradBuffers();
         _tapeStep = 0;
     }
 
@@ -1577,7 +1591,10 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _gpuV?.Dispose();
         _gpuV = null;
         _gpuStateInitialized = false;
+        base.DisposeGpuState();
     }
+
+    private readonly List<Tensor<float>> _deviceGradsScratch = new();
 
     /// <summary>
     /// Applies PyTorch-style global-norm gradient clipping across every
@@ -1633,10 +1650,42 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private bool AnyGradientIsAnomalous(TapeStepContext<T> context)
     {
+        bool devicePendingVerifiedFinite = false;
+        if (typeof(T) == typeof(float)
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        {
+            _deviceGradsScratch.Clear();
+            try
+            {
+                foreach (var kvp in context.Gradients)
+                {
+                    if (kvp.Value is { Length: > 0, HasPendingGpuData: true } g)
+                    {
+                        _deviceGradsScratch.Add((Tensor<float>)(object)g);
+                    }
+                }
+
+                if (_deviceGradsScratch.Count > 0)
+                {
+                    using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(_deviceGradsScratch);
+                    if (deviceSum is not null)
+                    {
+                        if (!deviceSum.IsFinite) return true;
+                        devicePendingVerifiedFinite = true;
+                    }
+                }
+            }
+            finally
+            {
+                _deviceGradsScratch.Clear();
+            }
+        }
+
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
-            if (grad is null) continue;
+            if (grad is null || grad.Length == 0) continue;
+            if (grad.HasPendingGpuData && devicePendingVerifiedFinite) continue;
             if (HasNonFiniteElement(grad)) return true;
         }
         return false;
@@ -1660,16 +1709,101 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private bool HasNonFiniteElement(Tensor<T> tensor)
     {
         if (tensor.Length == 0) return false;
+        if (!tensor.HasPendingGpuData)
+        {
+            double sq = TrySumOfSquaresHostSimd(tensor, out double hostSq)
+                ? hostSq
+                : SumOfSquares(ContiguousSpan(tensor));
+            if (IsFiniteDouble(sq)) return false;
+            if (typeof(T) == typeof(float) || double.IsNaN(sq)) return true;
+        }
         using var finiteMask = Engine.TensorIsFinite(tensor);
         return Engine.TensorMinValue(finiteMask) == AiDotNet.Tensors.Bit.False;
     }
 
     /// <summary>
-    /// The squared L2 norm of every gradient together: one engine reduction per tensor, summed on the
-    /// engine, read back once.
+    /// The squared L2 norm of every gradient together: computed directly in double on host when gradients are
+    /// already host-current (zero PCIe traffic, zero GPU allocations), via <see cref="AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares"/>
+    /// when gradients are device-resident, or via engine reductions for generic numeric types.
     /// </summary>
     private double GlobalGradientSquaredNorm(TapeStepContext<T> context)
     {
+        double hostSum = 0.0;
+        bool hasUnresolvedGpuGrad = false;
+
+        if (typeof(T) == typeof(float)
+            && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        {
+            _deviceGradsScratch.Clear();
+            try
+            {
+                foreach (var kvp in context.Gradients)
+                {
+                    var grad = kvp.Value;
+                    if (grad is null || grad.Length == 0) continue;
+                    if (grad.HasPendingGpuData)
+                    {
+                        _deviceGradsScratch.Add((Tensor<float>)(object)grad);
+                    }
+                    else if (TrySumOfSquaresHostSimd(grad, out double sq))
+                    {
+                        hostSum += sq;
+                    }
+                    else
+                    {
+                        hostSum += SumOfSquares(ContiguousSpan(grad));
+                    }
+                }
+
+                if (_deviceGradsScratch.Count == 0)
+                {
+                    return hostSum;
+                }
+
+                using var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(_deviceGradsScratch);
+                if (deviceNorm is not null)
+                {
+                    if (!deviceNorm.IsFinite)
+                    {
+                        return deviceNorm.NanCount > 0 ? double.NaN : double.PositiveInfinity;
+                    }
+                    return hostSum + deviceNorm.TotalNormSquared;
+                }
+
+                hasUnresolvedGpuGrad = true;
+            }
+            finally
+            {
+                _deviceGradsScratch.Clear();
+            }
+        }
+        else
+        {
+            foreach (var kvp in context.Gradients)
+            {
+                var grad = kvp.Value;
+                if (grad is null || grad.Length == 0) continue;
+                if (grad.HasPendingGpuData)
+                {
+                    hasUnresolvedGpuGrad = true;
+                    break;
+                }
+                if (TrySumOfSquaresHostSimd(grad, out double sq))
+                {
+                    hostSum += sq;
+                }
+                else
+                {
+                    hostSum += SumOfSquares(ContiguousSpan(grad));
+                }
+            }
+
+            if (!hasUnresolvedGpuGrad)
+            {
+                return hostSum;
+            }
+        }
+
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // The norm's temporaries must not come from the training step's arena. Renting them there advanced the
         // arena's tensor ring, so a later rent in the same step reissued a wrapper a caller's tape still held,
@@ -1699,12 +1833,15 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
-            if (grad is null) continue;
-            sum += SumOfSquares(grad.Data.Span);
+            if (grad is null || grad.Length == 0) continue;
+            sum += SumOfSquares(ContiguousSpan(grad));
         }
 
         return sum;
     }
+
+    private static Span<T> ContiguousSpan(Tensor<T> tensor)
+        => (tensor.IsContiguous ? tensor : tensor.Contiguous()).Data.Span;
 
     private static bool IsFiniteDouble(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
@@ -1732,12 +1869,41 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         // Scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,
         // max_norm / (total_norm + 1e-6), the same one the network clip and the fused plan apply.
-        T scale = NumOps.FromDouble(maxNorm / (globalNorm + 1e-6));
+        double scaleFactor = maxNorm / (globalNorm + 1e-6);
+        T scale = NumOps.FromDouble(scaleFactor);
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpuEngine =
+            typeof(T) == typeof(float)
+                ? AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                : null;
+        IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
-            if (grad is null) continue;
+            if (grad is null || grad.Length == 0) continue;
+            if (!grad.HasPendingGpuData)
+            {
+                Tensor<float>? gf = gpuBackend is not null ? (Tensor<float>)(object)grad : null;
+                IGpuBuffer? syncedGpuBuf = gf is not null
+                    && gf._gpuBuffer is not null
+                    && gf._gpuBuffer.Handle != IntPtr.Zero
+                    && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
+                    && gf._gpuBuffer.Size >= gf.Length
+                    && gf._gpuBufferVersion == gf.GpuCacheVersion
+                    ? gf._gpuBuffer
+                    : null;
+
+                if (AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scaleFactor))
+                {
+                    if (syncedGpuBuf is not null && gpuEngine is not null && gpuBackend is not null && gf is not null)
+                    {
+                        using var __gpuOp = gpuEngine.EnterGpuOp();
+                        gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, (float)scaleFactor, gf.Length);
+                        gf._gpuBufferVersion = gf.GpuCacheVersion;
+                    }
+                    continue;
+                }
+            }
             Engine.TensorMultiplyScalarInPlace(grad, scale);
         }
     }

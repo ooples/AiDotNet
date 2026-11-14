@@ -163,14 +163,23 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
         var p = (Tensor<float>)(object)param;
         var g = (Tensor<float>)(object)grad;
 
-        if (gpu && p.HasPendingGpuData && g.HasPendingGpuData && slot.TryMoveToDevice())
+        if (gpu
+            && AiDotNetEngine.Current is DirectGpuTensorEngine gpuEngine
+            && gpuEngine.GetBackend() is { } gpuBackend
+            && slot.TryMoveToDevice())
         {
             bool done = slot.Int8
-                ? GpuOptimizer.TryAdam8BitStep(p, g, slot.DeviceM, slot.DeviceV, slot.DeviceMScales, slot.DeviceVScales,
-                    lr, b1, b2, eps, 1f - (float)Math.Pow(b1, _tapeStep), 1f - (float)Math.Pow(b2, _tapeStep), slot.BlockSize,
-                    wd, decoupledWeightDecay: true)
-                : GpuOptimizer.TryAdamBf16Step(p, g, slot.DeviceM, slot.DeviceV, lr, b1, b2, eps, wd, _tapeStep,
-                    decoupledWeightDecay: true);
+                ? TryExecuteGpuAdam8BitStep(
+                    gpuEngine, gpuBackend, param, p, g,
+                    slot.DeviceM, slot.DeviceV, slot.DeviceMScales, slot.DeviceVScales,
+                    lr, b1, b2, eps,
+                    1f - (float)Math.Pow(b1, _tapeStep),
+                    1f - (float)Math.Pow(b2, _tapeStep),
+                    slot.BlockSize, wd, decoupledWeightDecay: true)
+                : TryExecuteGpuAdamBf16Step(
+                    gpuEngine, gpuBackend, param, p, g,
+                    slot.DeviceM, slot.DeviceV,
+                    lr, b1, b2, eps, wd, _tapeStep, decoupledWeightDecay: true);
             if (done) return;
         }
 

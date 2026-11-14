@@ -936,6 +936,7 @@ internal sealed class TapeTrainingStepper<T>
 
             if (widenSources is null
                 && objectiveTerms is null
+                && hooks.OnTapeGradients is null
                 && distCoord is { WorldSize: > 1, OverlapCommunication: true }
                 && !distNet.IsGradientCheckpointingEnabled)
             {
@@ -947,9 +948,8 @@ internal sealed class TapeTrainingStepper<T>
                         if (param is null || grad is null || grad.Length == 0 || gradients.ContainsKey(param))
                             return;
                         distCoord.OnParameterGradientReady(param, grad);
-                        gradients[param] = TensorCheckpoint<T>.Capture(new[] { grad })[0];
+                        gradients[param] = distCoord.GetOrCreateGradientSlot(param);
                     });
-                hooks.OnTapeGradients?.Invoke(gradients);
             }
             else
             {
