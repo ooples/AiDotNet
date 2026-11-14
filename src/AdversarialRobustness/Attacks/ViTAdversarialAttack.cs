@@ -119,8 +119,9 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
     /// patch attacks studied for ViTs: Bhojanapalli et al. 2021; Fu et al. 2022, Patch-Fool), and the
     /// top <c>numAttackPatches</c> are attacked. Each step is x + stepSize * sign(g) on those patches,
     /// projected to the epsilon ball and clipped to [0, 1] (Madry et al. 2018), with stepSize = epsilon / steps.
-    /// The loss is the same MSE against the label vector that FGSM and PGD use. The attack stops as soon as the
-    /// predicted class (argmax) differs from the true class.
+    /// The loss is the same MSE against the label vector that FGSM and PGD use. An untargeted attack stops as
+    /// soon as the predicted class (argmax) differs from the label's class; a targeted attack, which descends
+    /// the loss toward the label, stops once the prediction reaches the label's class.
     /// </para>
     /// </remarks>
     private Vector<T> GeneratePatchAdversarial(
@@ -150,7 +151,10 @@ public class ViTAdversarialAttack<T, TInput, TOutput> : AdversarialAttackBase<T,
             adversarial = engine.Add<T>(input, ProjectLInfinity(engine.Subtract<T>(adversarial, input), epsilon));
             adversarial = engine.Clamp<T>(adversarial, NumOps.Zero, NumOps.One);
 
-            if (PredictedClass(adversarial, targetModel) != trueClass)
+            // Untargeted: done once the prediction leaves the true class. Targeted (the step descends the loss
+            // toward the label, so the label is the target): done once the prediction reaches it.
+            int predicted = PredictedClass(adversarial, targetModel);
+            if (Options.IsTargeted ? predicted == trueClass : predicted != trueClass)
             {
                 break;
             }
