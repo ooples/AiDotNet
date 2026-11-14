@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
                 Source = "You et al. 2023, Sec. 4: Ferret is trained on GRIT for three epochs at a "
                         + "learning rate of 2e-5 and a batch size of 128. The paper names its optimizer "
                         + "only by citation, Loshchilov and Hutter 2017, which is AdamW.")]
-public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>, IGroundingTrainable<T>
 {
     private readonly FerretOptions _options;
 
@@ -167,6 +167,45 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         var (boxes, scores) = head.Ground(visualFeatures, TokenIds(textQuery), RunLanguageModel, _options.MaxDetections);
         return GroundingDetections<T>.Ranked(Engine, boxes, scores, _options.ConfidenceThreshold, _options.MaxDetections,
             _options.NmsThreshold);
+    }
+
+    /// <summary>
+    /// One training step of the grounding head and the language model with Ferret (You et al. 2023)'s objective: the answer writing
+    /// <paramref name="boxes"/> (in their order) as coordinate text, read teacher-forced after the image tokens and the
+    /// instruction <paramref name="caption"/>, with next-token cross-entropy on every answer token.
+    /// </summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">The instruction, such as "Where is the cat?".</param>
+    /// <param name="boxes">The answer's boxes; their phrases are not read.</param>
+    public void TrainGrounding(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode)
+            throw new NotSupportedException("An ONNX-backed model has no trainable grounding head.");
+        var target = CoordinateTokenDecoder<T>.BoxesOf(boxes);
+        var ids = TokenIds(caption);
+        TrainWithCustomObjective(PreprocessImage(image), target, (x, answer) => GroundingObjective(x, ids, answer), _optimizer);
+    }
+
+    /// <summary>The loss of <see cref="TrainGrounding"/> on the same supervision, without training.</summary>
+    public T EvaluateGroundingLoss(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode)
+            throw new NotSupportedException("An ONNX-backed model has no trainable grounding head.");
+        var target = CoordinateTokenDecoder<T>.BoxesOf(boxes);
+        var ids = TokenIds(caption);
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        return GroundingObjective(PreprocessImage(image), ids, target)[0];
+    }
+
+    private Tensor<T> GroundingObjective(Tensor<T> preprocessed, IReadOnlyList<int> tokenIds, Tensor<T> boxes)
+    {
+        var visualFeatures = preprocessed;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        return head.AnswerLoss(visualFeatures, tokenIds, RunLanguageModel, boxes);
     }
 
     /// <inheritdoc />
