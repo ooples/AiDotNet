@@ -307,9 +307,13 @@ internal static class KMaXTransformerDecoder
     internal static Tensor<T> HardAssignment<T>(Tensor<T> maskLogits)
     {
         var engine = AiDotNetEngine.Current;
-        int n = maskLogits.Shape[1];
+        int b = maskLogits.Shape[0], n = maskLogits.Shape[1], hw = maskLogits.Shape[2];
         var detached = engine.StopGradient(maskLogits);
-        return engine.TensorPermute(engine.TensorOneHot<T>(engine.TensorArgMax(detached, 1), n), new[] { 0, 2, 1 });
+        // The winners are flattened before the one-hot and the batch axis restored after it, so the result is
+        // [B, hw, N] whatever rank TensorOneHot gives a [B, hw] index tensor.
+        var winners = engine.TensorArgMax(detached, 1).Reshape(new[] { b * hw });
+        var oneHot = engine.Reshape(engine.TensorOneHot<T>(winners, n), new[] { b, hw, n });
+        return engine.TensorPermute(oneHot, new[] { 0, 2, 1 });
     }
 
     /// <summary>

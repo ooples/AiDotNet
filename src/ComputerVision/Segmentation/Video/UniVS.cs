@@ -460,7 +460,11 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
             {
                 // A corrected object is prompted with its correction mask on this frame.
                 if (correction.Rank != 2 || correction.Shape[0] != hm || correction.Shape[1] != wm)
+                {
+                    // The rejected correction is dropped first: left queued, it threw again on every later frame.
+                    _corrections.Remove(id);
                     throw new ArgumentException($"A correction mask must be [{hm}, {wm}].");
+                }
                 rows[i] = Engine.Reshape(correction, new[] { 1, hm, wm });
                 continue;
             }
