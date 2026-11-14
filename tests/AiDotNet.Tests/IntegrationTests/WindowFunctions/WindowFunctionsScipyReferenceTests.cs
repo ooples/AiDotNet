@@ -143,4 +143,36 @@ public class WindowFunctionsScipyReferenceTests
             Assert.True(System.Math.Abs(Hann8[i] - single[i]) <= 1e-6, $"Hann<float>[{i}] = {single[i]}");
         }
     }
+
+#if NET5_0_OR_GREATER
+    // Half holds integers exactly only up to 2048 and overflows above 65504, so a sample index formed in Half
+    // merged neighbouring samples and turned n >= 65520 into infinity (a NaN window). The geometry is formed in
+    // double, so a Half window of 70001 samples matches the double window to Half's precision.
+    [Fact]
+    public void Half_LongWindow_MatchesDouble()
+    {
+        const int length = 70001;
+        var pairs = new (IWindowFunction<Half> Narrow, IWindowFunction<double> Wide)[]
+        {
+            (new HammingWindow<Half>(), new HammingWindow<double>()),
+            (new BlackmanWindow<Half>(), new BlackmanWindow<double>()),
+            (new BartlettWindow<Half>(), new BartlettWindow<double>()),
+            (new WelchWindow<Half>(), new WelchWindow<double>()),
+            (new ParzenWindow<Half>(), new ParzenWindow<double>()),
+            (new TukeyWindow<Half>(0.5), new TukeyWindow<double>(0.5)),
+        };
+        foreach (var (narrow, wide) in pairs)
+        {
+            var actual = narrow.Create(length);
+            var expected = wide.Create(length);
+            for (int i = 0; i < length; i++)
+            {
+                double value = (double)actual[i];
+                Assert.False(double.IsNaN(value) || double.IsInfinity(value), $"{narrow.GetType().Name}[{i}] = {value}");
+                Assert.True(System.Math.Abs(expected[i] - value) <= 2e-3,
+                    $"{narrow.GetType().Name}[{i}] = {value}, double {expected[i]}");
+            }
+        }
+    }
+#endif
 }
