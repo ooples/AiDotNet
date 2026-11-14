@@ -7721,6 +7721,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             matched += gradient.Length;
         }
 
+        // The buffers are keyed by the parameter tensor. One whose tensor was replaced (weights set from outside, a
+        // lazy resize) gets no gradient again, so its buffer and the old tensor it pins are dropped here rather than
+        // held until the layer is disposed. The surface below references only this step's buffers.
+        if (buffers.Count > owned.Count)
+        {
+            List<Tensor<T>>? stale = null;
+            foreach (var key in buffers.Keys)
+            {
+                if (!owned.ContainsKey(key)) (stale ??= new List<Tensor<T>>()).Add(key);
+            }
+            if (stale is not null)
+            {
+                foreach (var key in stale)
+                {
+                    buffers[key].Dispose();
+                    buffers.Remove(key);
+                }
+            }
+        }
+
         _parameterGradients = null;
         _pendingDeviceGradients = owned;
         return true;

@@ -5074,7 +5074,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (bag is null) return;
 
         PublishParameterGradients(bag, sourcesOutliveStep: true);
+        PruneStaleStreamingGradSnapshots(bag);
         bag.Clear();
+    }
+
+    /// <summary>
+    /// Drops the snapshot buffers of tensors this step produced no gradient for. The snapshots are keyed by the
+    /// parameter tensor, so a parameter whose tensor was replaced (weights set from outside, a lazy resize, a
+    /// precision upcast) would otherwise pin its old tensor and a full-size gradient buffer for the model's lifetime.
+    /// Nothing references a pruned buffer: the publish above replaced every layer's surface with this step's bag.
+    /// </summary>
+    private void PruneStaleStreamingGradSnapshots(Dictionary<Tensor<T>, Tensor<T>> liveBag)
+    {
+        var snapshots = _retainedStreamingGradSnapshots;
+        if (snapshots is null || snapshots.Count <= liveBag.Count) return;
+
+        List<Tensor<T>>? stale = null;
+        foreach (var key in snapshots.Keys)
+        {
+            if (!liveBag.ContainsKey(key)) (stale ??= new List<Tensor<T>>()).Add(key);
+        }
+        if (stale is null) return;
+        foreach (var key in stale)
+        {
+            snapshots[key].Dispose();
+            snapshots.Remove(key);
+        }
     }
 
     /// <summary>
