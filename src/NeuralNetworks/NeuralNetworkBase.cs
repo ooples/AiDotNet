@@ -12869,7 +12869,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // otherwise those layers are created during the trace and never trained.
         // The warm-up runs in inference mode: it resolves shapes, and must not count as a training forward
         // (a BatchNorm would update its running statistics, a Dropout would consume its random stream).
-        if (_warmedCustomForwards.Add(warmupKey ?? forward.Method))
+        // A whole training objective (warmupKey set) warms up only when the model still has lazily sized parameters,
+        // the one thing the warm-up is for: an objective runs more than a forward (its own random draws, a nested tape
+        // for a gradient penalty, which records nothing under the warm-up's no-grad scope), and the eager step it
+        // replaces never ran it twice. If it cannot run there, the objective trains on its eager step.
+        bool objective = warmupKey is not null;
+        if ((!objective || HasUninitializedParameters) && _warmedCustomForwards.Add(warmupKey ?? forward.Method))
         {
             bool wasTraining = IsTrainingMode;
             SetTrainingMode(false);
@@ -12877,6 +12882,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 using (new NoGradScope<T>())
                     forward(input);
+            }
+            catch (Exception ex) when (objective && eagerFallback is not null && ex is not OutOfMemoryException)
+            {
+                session.Disable("the objective's shape warm-up (one no-grad forward to size lazy layers) failed, so it "
+                    + "trains on its eager step: " + ex.GetType().Name + ": " + ex.Message);
+                SetTrainingMode(wasTraining);
+                CustomEagerStepCount++;
+                var fallbackLoss = eagerFallback();
+                LastLoss = fallbackLoss;
+                return fallbackLoss;
             }
             finally
             {
@@ -12915,6 +12930,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             VerifyReplayAgreement = verifyReplayAgreement,
             EagerReplay = eagerFallback,
             ObjectiveKey = verifyReplayAgreement ? warmupKey ?? forward.Method : null,
+            // A whole training objective (TrainWithCustomObjective / TrainWithCustomLoss) builds its per-step data
+            // inside itself, so every replay is checked against its signature, not only the first.
+            ClosureObjective = warmupKey is not null,
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
@@ -15150,7 +15168,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 optimizer,
                 parameterProvider: null,
                 sessionPerOptimizer: true,
-                verifyReplayAgreement: true,
+                // Every replay is guarded by the objective's signature (FusedTrainingStepRequest.ClosureObjective), so
+                // the one-time check against an eager forward is not run: it would run the objective, and its host-side
+                // draws, a second time on that step.
+                verifyReplayAgreement: false,
                 warmupKey: objectiveKey,
                 eagerFallback: eagerStep);
         }

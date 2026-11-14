@@ -1612,6 +1612,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             {
                 committed = "error";
                 reason = ex.GetType().Name + ": " + ex.Message;
+                // The full exception beside the table, so an error row can be traced without re-running the family.
+                lock (s_fusedAuditLock)
+                    System.IO.File.AppendAllText(path! + ".errors.txt", "==== " + model + System.Environment.NewLine
+                        + ex + System.Environment.NewLine);
             }
         }
         string line = string.Join("\t", typeof(T).Name, model, committed,
