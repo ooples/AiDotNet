@@ -166,10 +166,8 @@ internal sealed class SegNeXtNetwork<T>
     {
         double rate = Configuration.MlpDropout;
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x.Shape.ToArray());
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        return _engine.TensorMultiply(x, mask);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, rate));
     }
 
     private Tensor<T> ForwardBlock(Block b, Tensor<T> x, bool training, Random random)
