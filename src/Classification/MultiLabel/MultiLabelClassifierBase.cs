@@ -265,7 +265,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
         }
 
         var probabilities = PredictProbabilities(features);
-        if (features.Rows == 0 || NumLabels == 0)
+        if (features.Rows == 0)
         {
             return new Matrix<T>(features.Rows, NumLabels);
         }

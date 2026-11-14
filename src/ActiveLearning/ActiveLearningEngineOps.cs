@@ -363,7 +363,6 @@ internal static class ActiveLearningEngineOps
     /// <returns>A [n] tensor.</returns>
     internal static Tensor<T> RowNorms<T>(Tensor<T> rows)
     {
-        var engine = AiDotNetEngine.Current;
         if (rows.Shape[1] == 0)
         {
             return new Tensor<T>(new[] { rows.Shape[0] });
