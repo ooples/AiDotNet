@@ -99,6 +99,14 @@ internal sealed class FusedTrainingStepRequest<T>
     /// <see cref="TapeTrainingStepper{T}.EagerStep"/> on a copy of this step's input and target.
     /// </summary>
     public Func<T>? EagerReplay { get; init; }
+
+    /// <summary>
+    /// What identifies the objective this step trains, for <see cref="VerifyReplayAgreement"/> (a custom objective's
+    /// method). Objectives that share an optimizer share its session and its plan, and the plan is not keyed by the
+    /// objective: when this differs from the previous step's, the next replay is checked against the eager forward
+    /// again, so a plan traced for one objective is never replayed unchecked as another. Null never re-checks.
+    /// </summary>
+    public object? ObjectiveKey { get; init; }
 }
 
 /// <summary>
@@ -138,6 +146,7 @@ internal sealed class FusedTrainingSession<T>
     private object? _verifiedPlan;
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
+    private object? _objectiveKey;
     private bool _zeroGradientCrossChecked;
 
     // The state before the trace step of a plan whose replay is still to be checked, and that step's eager redo: on a
@@ -272,6 +281,14 @@ internal sealed class FusedTrainingSession<T>
             if (_lastOptimizer is not null)
                 Reset(stickyDisable: false);
             _lastOptimizer = request.Optimizer;
+        }
+
+        // A different objective on this session's plan: its replay has to pass the agreement check again.
+        if (request.VerifyReplayAgreement && request.ObjectiveKey is { } objectiveKey)
+        {
+            if (IsCommitted && _objectiveKey is not null && !_objectiveKey.Equals(objectiveKey))
+                _replayAgreementVerified = false;
+            _objectiveKey = objectiveKey;
         }
 
         if (request.GraphBreakReason is { } graphBreak)

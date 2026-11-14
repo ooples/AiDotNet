@@ -12914,6 +12914,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : null,
             VerifyReplayAgreement = verifyReplayAgreement,
             EagerReplay = eagerFallback,
+            ObjectiveKey = verifyReplayAgreement ? warmupKey ?? forward.Method : null,
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.

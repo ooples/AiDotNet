@@ -35,6 +35,11 @@ public class CustomObjectiveFusedRoutingTests
             => TrainWithCustomObjective(x, y, (input, target) =>
                 new MeanSquaredErrorLoss<float>().ComputeTapeLoss(ForwardForTraining(input), target));
 
+        // A second objective on the same optimizer: same shapes, a different loss.
+        internal float SecondObjectiveStep(Tensor<float> x, Tensor<float> y)
+            => TrainWithCustomObjective(x, y, (input, target) =>
+                new MeanAbsoluteErrorLoss<float>().ComputeTapeLoss(ForwardForTraining(input), target));
+
         // The target is captured by the closure, not passed: a host value a plan would bake at its trace.
         internal float CapturedTargetStep(Tensor<float> x, Tensor<float> capturedTarget)
             => TrainWithCustomLoss(x, prediction => new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, capturedTarget));
@@ -51,10 +56,16 @@ public class CustomObjectiveFusedRoutingTests
         => Train(compiled, captured, init, targetScale: 0.5);
 
     private static (Vector<float> Parameters, ObjectiveNetwork Model) Train(bool compiled, bool captured, Vector<float>? init,
-        double targetScale)
+        double targetScale, bool reuseBuffers = false, bool warmup = false)
     {
         var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
-            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 0.01, UseAdaptiveLearningRate = false });
+            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                UseAdaptiveLearningRate = false,
+                LearningRateScheduler = warmup ? new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(0.01, 4, 20) : null,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            });
         var model = new ObjectiveNetwork(optimizer);
         if (init is not null) model.UpdateParameters(init);
         var options = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
@@ -62,10 +73,21 @@ public class CustomObjectiveFusedRoutingTests
         try
         {
             options.EnableCompilation = compiled;
+            Tensor<float>? sharedX = null, sharedY = null;
             for (int s = 0; s < Steps; s++)
             {
                 var x = Batch(s, 4, 6, 1.0);
                 var y = Batch(s + 100, 4, 2, targetScale);   // a different target every step
+                if (reuseBuffers)
+                {
+                    // One input and one target tensor for the whole run, refilled in place, as a data loader does.
+                    sharedX ??= x;
+                    sharedY ??= y;
+                    x.AsSpan().CopyTo(sharedX.AsWritableSpan());
+                    y.AsSpan().CopyTo(sharedY.AsWritableSpan());
+                    x = sharedX;
+                    y = sharedY;
+                }
                 if (captured) model.CapturedTargetStep(x, y);
                 else model.ArgumentObjectiveStep(x, y);
             }
@@ -137,5 +159,85 @@ public class CustomObjectiveFusedRoutingTests
         Assert.Contains("disagrees with the eager forward", fused.Model.LastObjectiveMissReason ?? "");
         double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
         Assert.True(divergence < 1e-4, $"a baked-target run with small losses diverged from eager by {divergence:E3}");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task ACapturedTarget_InBuffersRefilledInPlace_StillMatchesEager()
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        // The caller keeps one input and one target tensor and refills them every step. Whether the plan reads the
+        // captured tensor live or the replay check sends the run back to the eager tape, every step must train on
+        // that step's data.
+        var init = Train(compiled: false, captured: true, init: null, targetScale: 0.5, reuseBuffers: true).Model.GetParameters();
+        var eager = Train(compiled: false, captured: true, init, targetScale: 0.5, reuseBuffers: true);
+        var fused = Train(compiled: true, captured: true, init, targetScale: 0.5, reuseBuffers: true);
+
+        double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
+        Assert.True(divergence < 1e-4, $"a captured-target run on refilled buffers diverged from eager by {divergence:E3}");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task AnObjectiveOnAWarmupSchedule_TrainsFused_AndMatchesEager()
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        // The rate changes on every one of these steps (a four-step linear warm-up, then decay): the fused custom
+        // objective has to follow the schedule step for step, as the eager one does.
+        var init = Train(compiled: false, captured: false, init: null, targetScale: 0.5, warmup: true).Model.GetParameters();
+        var eager = Train(compiled: false, captured: false, init, targetScale: 0.5, warmup: true);
+        var fused = Train(compiled: true, captured: false, init, targetScale: 0.5, warmup: true);
+
+        Assert.True(fused.Model.ObjectiveSessionCommitted, "the custom objective did not commit a fused plan: "
+            + (fused.Model.LastObjectiveMissReason ?? "no reason recorded"));
+        double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
+        Assert.True(divergence < 1e-4, $"a fused custom objective on a warm-up schedule diverged from eager by {divergence:E3}");
+    }
+
+    private static (Vector<float> Parameters, ObjectiveNetwork Model) TrainTwoObjectives(bool compiled, Vector<float>? init,
+        bool switchObjective = true)
+    {
+        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
+            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 0.01, UseAdaptiveLearningRate = false });
+        var model = new ObjectiveNetwork(optimizer);
+        if (init is not null) model.UpdateParameters(init);
+        var options = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        bool saved = options.EnableCompilation;
+        try
+        {
+            options.EnableCompilation = compiled;
+            for (int s = 0; s < Steps; s++)
+            {
+                var x = Batch(s, 4, 6, 1.0);
+                var y = Batch(s + 100, 4, 2, 0.5);
+                // The first objective long enough to trace, replay and pass its replay check; then the second.
+                if (s < 3 || !switchObjective) model.ArgumentObjectiveStep(x, y);
+                else model.SecondObjectiveStep(x, y);
+            }
+            return (model.GetParameters(), model);
+        }
+        finally
+        {
+            options.EnableCompilation = saved;
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task ASecondObjectiveOnTheSameOptimizer_IsNotReplayedFromTheFirstObjectivesPlan()
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        // Both objectives share the optimizer, so they share its session and its plan. The plan traced for the first
+        // objective (mean squared error) was replayed for the second (mean absolute error): the last three steps
+        // trained the first objective again, and the run ended exactly where six steps of the first objective end.
+        var init = TrainTwoObjectives(compiled: false, init: null).Model.GetParameters();
+        var switched = TrainTwoObjectives(compiled: true, init);
+        var firstOnly = TrainTwoObjectives(compiled: true, init, switchObjective: false);
+
+        Assert.True(firstOnly.Model.ObjectiveSessionCommitted, "the first objective alone did not commit a fused plan.");
+        // The second objective's first step re-runs the replay check, which the first objective's plan fails; the
+        // plan is dropped and the second objective trains on the eager tape (with fresh optimizer moments, as any
+        // dropped committed plan does, so this run is not compared to an all-eager one).
+        Assert.False(switched.Model.ObjectiveSessionCommitted, "the first objective's plan was kept for the second objective.");
+        Assert.Contains("disagrees with the eager forward", switched.Model.LastObjectiveMissReason ?? "");
+        double difference = MaxAbsDifference(switched.Parameters, firstOnly.Parameters);
+        Assert.True(difference > 1e-3, $"the second objective's steps trained the first objective (difference {difference:E3}).");
     }
 }
