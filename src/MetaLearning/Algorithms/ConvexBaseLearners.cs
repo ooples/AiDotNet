@@ -322,12 +322,16 @@ internal static class ConvexBaseLearners<T>
             Engine.TensorBroadcastTo(Engine.Reshape(features, new[] { n, d, 1 }), featureSquare),
             Engine.TensorBroadcastTo(Engine.Reshape(features, new[] { n, 1, d }), featureSquare));
 
-        // Kronecker blocks [n, c, j, e, l], summed over the examples
-        var blockShape = new[] { n, classes, d, classes, d };
-        var blocks = Engine.TensorMultiply(
-            Engine.TensorBroadcastTo(Engine.Reshape(s, new[] { n, classes, 1, classes, 1 }), blockShape),
-            Engine.TensorBroadcastTo(Engine.Reshape(outer, new[] { n, 1, d, 1, d }), blockShape));
-        var summed = Engine.Reshape(Engine.ReduceSum(blocks, new[] { 0 }, keepDims: false), new[] { size, size });
+        // sum_i S_i (x) (z_i z_i') as one product over the examples: S' [c * e, n] times the outer products
+        // [n, j * l] gives [c, e, j, l], reordered to the Hessian's (c, j, e, l). The largest intermediate is
+        // the [n, d, d] outer products; materialising every example's Kronecker block [n, c, d, c, d] instead
+        // costs n times the Hessian itself (gigabytes at the default 512-wide embedding).
+        var summedPairs = Engine.TensorMatMul(
+            Engine.TensorTranspose(Engine.Reshape(s, new[] { n, classes * classes })),
+            Engine.Reshape(outer, new[] { n, d * d }));
+        var summed = Engine.Reshape(
+            Engine.TensorPermute(Engine.Reshape(summedPairs, new[] { classes, classes, d, d }), new[] { 0, 2, 1, 3 }),
+            new[] { size, size });
 
         return Engine.TensorAdd(
             Engine.TensorMultiplyScalar(summed, Ops.FromDouble(1.0 / n)),
