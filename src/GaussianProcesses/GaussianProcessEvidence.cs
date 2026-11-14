@@ -1,187 +1,156 @@
 namespace AiDotNet.GaussianProcesses;
 
 /// <summary>
-/// Double-precision linear algebra for type-II maximum likelihood (ML-II): choosing a Gaussian process's
+/// Linear algebra for type-II maximum likelihood (ML-II): choosing a Gaussian process's
 /// hyperparameters by maximizing the log marginal likelihood of the training targets.
 /// </summary>
 /// <remarks>
-/// The hyperparameter search runs in double regardless of the model's numeric type: the log determinant
-/// and the solves are exactly where float loses the digits a line search needs. The fitted model keeps
-/// its own type; only the evidence is computed here.
+/// Everything runs in the model's numeric type through engine and Linalg ops: Cholesky factors,
+/// Cholesky solves and log determinants, so the evidence and its gradient carry the same precision
+/// as the fitted model.
 /// </remarks>
 internal static class GaussianProcessEvidence
 {
     /// <summary>
-    /// Lower Cholesky factor of a symmetric matrix, or null when the matrix is not positive definite.
+    /// Lower Cholesky factor of a symmetric matrix, or null when the matrix is not positive definite
+    /// (a pivot that is not positive, or a factor that is not finite).
     /// </summary>
-    internal static double[,]? Cholesky(double[,] matrix)
+    internal static Tensor<T>? Cholesky<T>(Tensor<T> matrix)
     {
-        int n = matrix.GetLength(0);
-        var lower = new double[n, n];
-        for (int j = 0; j < n; j++)
-        {
-            double pivot = matrix[j, j];
-            for (int k = 0; k < j; k++)
-                pivot -= lower[j, k] * lower[j, k];
-            if (!(pivot > 0) || double.IsInfinity(pivot))
-                return null;
-
-            double diagonal = Math.Sqrt(pivot);
-            lower[j, j] = diagonal;
-            for (int i = j + 1; i < n; i++)
-            {
-                double sum = matrix[i, j];
-                for (int k = 0; k < j; k++)
-                    sum -= lower[i, k] * lower[j, k];
-                lower[i, j] = sum / diagonal;
-            }
-        }
+        var (lower, info) = LinalgDispatch<T>.CholeskyEx(matrix, upper: false);
+        if (AiDotNetEngine.Current.TensorCountNonzero(info) > 0 || !GaussianProcessEngineOps.AllFinite(lower))
+            return null;
 
         return lower;
     }
 
     /// <summary>
-    /// Solves (L L^T) x = b for a lower Cholesky factor L.
+    /// Solves A X = B for X given the lower Cholesky factor of A; <paramref name="rhs"/> is [n, k].
     /// </summary>
-    internal static double[] Solve(double[,] lower, double[] rhs)
+    internal static Tensor<T> Solve<T>(Tensor<T> lower, Tensor<T> rhs)
     {
-        int n = rhs.Length;
-        var z = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double sum = rhs[i];
-            for (int k = 0; k < i; k++)
-                sum -= lower[i, k] * z[k];
-            z[i] = sum / lower[i, i];
-        }
-
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            double sum = z[i];
-            for (int k = i + 1; k < n; k++)
-                sum -= lower[k, i] * x[k];
-            x[i] = sum / lower[i, i];
-        }
-
-        return x;
+        return LinalgDispatch<T>.CholeskySolve(rhs, lower, upper: false);
     }
 
     /// <summary>
-    /// The inverse of L L^T for a lower Cholesky factor L.
+    /// A^-1 from the lower Cholesky factor of A.
     /// </summary>
-    internal static double[,] Inverse(double[,] lower)
+    internal static Tensor<T> Inverse<T>(Tensor<T> lower)
     {
-        int n = lower.GetLength(0);
-        var inverse = new double[n, n];
-        var unit = new double[n];
-        for (int column = 0; column < n; column++)
-        {
-            Array.Clear(unit, 0, n);
-            unit[column] = 1.0;
-            var solved = Solve(lower, unit);
-            for (int row = 0; row < n; row++)
-                inverse[row, column] = solved[row];
-        }
-
-        return inverse;
+        return LinalgDispatch<T>.CholeskyInverse(lower, upper: false);
     }
 
     /// <summary>
-    /// log |L L^T| for a lower Cholesky factor L.
+    /// log |A| = 2 Σ log L_ii from the lower Cholesky factor of A.
     /// </summary>
-    internal static double LogDeterminant(double[,] lower)
+    internal static T LogDeterminant<T>(Tensor<T> lower)
     {
-        double sum = 0;
-        for (int i = 0; i < lower.GetLength(0); i++)
-            sum += Math.Log(lower[i, i]);
-        return 2.0 * sum;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        return numOps.Multiply(numOps.FromDouble(2.0), engine.TensorSum(engine.TensorLog(engine.TensorDiagonal(lower))));
     }
 
     /// <summary>
-    /// log N(y | 0, K) summed over independent target columns sharing K = L L^T.
+    /// Σ_c log N(y_c | 0, A) over the columns y_c of <paramref name="columns"/> ([n, c]),
+    /// given the lower Cholesky factor of A.
     /// </summary>
-    internal static double LogMarginalLikelihood(double[,] lower, IReadOnlyList<double[]> columns)
+    internal static T LogMarginalLikelihood<T>(Tensor<T> lower, Tensor<T> columns)
     {
-        int n = lower.GetLength(0);
-        double quadratic = 0;
-        foreach (var column in columns)
-        {
-            var alpha = Solve(lower, column);
-            for (int i = 0; i < n; i++)
-                quadratic += column[i] * alpha[i];
-        }
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        int n = lower.Shape[0];
+        int count = columns.Shape[1];
+        var alpha = Solve(lower, columns);
+        T quadratic = engine.TensorSum(engine.TensorMultiply(columns, alpha));
+        T half = numOps.FromDouble(0.5);
 
-        return -0.5 * quadratic
-            - 0.5 * columns.Count * LogDeterminant(lower)
-            - 0.5 * n * columns.Count * Math.Log(2.0 * Math.PI);
+        return numOps.Subtract(
+            numOps.Subtract(
+                numOps.Negate(numOps.Multiply(half, quadratic)),
+                numOps.Multiply(numOps.FromDouble(0.5 * count), LogDeterminant(lower))),
+            numOps.FromDouble(0.5 * n * count * Math.Log(2.0 * Math.PI)));
     }
 
     /// <summary>
-    /// Fits the signal variance s^2 and the noise variance sigma^2 of K = s^2 K_x + (sigma^2 + jitter) I by
-    /// maximizing the log marginal likelihood summed over the target columns.
+    /// Fits K = s^2 K_x + (sigma^2 + jitter) I to the columns of <paramref name="columns"/> ([n, c]) by
+    /// Adam on log s^2 and log sigma^2, ascending the analytic gradient of the evidence
+    /// 1/2 tr((Σ_c a_c a_c^T - c K^-1) dK/dtheta), a_c = K^-1 y_c. The best point seen is returned;
+    /// a fixed noise is not moved.
     /// </summary>
-    /// <remarks>
-    /// Adam on (log s^2, log sigma^2) with the analytic gradient d log p / d theta = 1/2 tr(W dK/dtheta),
-    /// W = sum_c a_c a_c^T - C K^-1, a_c = K^-1 y_c: 1/2 s^2 sum_ij W_ij K_x,ji for the signal and
-    /// 1/2 sigma^2 tr(W) for the noise. It starts from s^2 = the mean column variance and sigma^2 = a tenth of
-    /// that, so scaled targets give proportionally scaled hyperparameters. The best point seen is returned;
-    /// a fixed noise is never moved.
-    /// </remarks>
-    internal static (double SignalVariance, double NoiseVariance) FitSignalAndNoise(
-        double[,] inputKernel,
-        IReadOnlyList<double[]> columns,
+    internal static (T SignalVariance, T NoiseVariance) FitSignalAndNoise<T>(
+        Tensor<T> inputKernel,
+        Tensor<T> columns,
         double? fixedNoise,
         int steps,
         double jitter)
     {
-        int n = inputKernel.GetLength(0);
-        double averageVariance = 0;
-        foreach (var column in columns)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += column[i] / n;
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-                variance += (column[i] - mean) * (column[i] - mean) / Math.Max(n - 1, 1);
-            averageVariance += variance / columns.Count;
-        }
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        int n = inputKernel.Shape[0];
+        int count = columns.Shape[1];
 
-        double logSignal = Math.Log(Math.Max(averageVariance, 1e-8));
+        // Average sample variance of the columns (denominator n - 1, at least 1)
+        var means = engine.ReduceMean(columns, new[] { 0 }, keepDims: true);
+        var deviations = engine.TensorSubtract(columns, engine.TensorBroadcastTo(means, new[] { n, count }));
+        T averageVariance = numOps.Divide(
+            engine.TensorSumOfSquares(deviations), numOps.FromDouble(Math.Max(n - 1, 1) * (double)count));
+
+        T floor = numOps.FromDouble(1e-8);
+        T logSignal = numOps.Log(MathHelper.Max(averageVariance, floor));
         bool learnNoise = !fixedNoise.HasValue;
-        double logNoise = learnNoise ? Math.Log(Math.Max(0.1 * averageVariance, 1e-8)) : 0.0;
-        double NoiseOf(double log) => learnNoise ? Math.Exp(log) : fixedNoise ?? 0.0;
+        T fixedNoiseValue = numOps.FromDouble(fixedNoise ?? 0.0);
+        T logNoise = learnNoise
+            ? numOps.Log(MathHelper.Max(numOps.Multiply(numOps.FromDouble(0.1), averageVariance), floor))
+            : numOps.Zero;
+        T NoiseOf(T log) => learnNoise ? numOps.Exp(log) : fixedNoiseValue;
 
-        double[,]? FactorOf(double signal, double noise)
+        var identity = engine.TensorEye<T>(n);
+        T jitterValue = numOps.FromDouble(jitter);
+        Tensor<T>? FactorOf(T signal, T noise)
         {
-            var matrix = new double[n, n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                    matrix[i, j] = signal * inputKernel[i, j];
-                matrix[i, i] += noise + jitter;
-            }
-
+            var matrix = engine.TensorAdd(
+                engine.TensorMultiplyScalar(inputKernel, signal),
+                engine.TensorMultiplyScalar(identity, numOps.Add(noise, jitterValue)));
             return Cholesky(matrix);
         }
 
-        double bestSignal = Math.Exp(logSignal);
-        double bestNoise = NoiseOf(logNoise);
-        double bestEvidence = double.NegativeInfinity;
-        double m1Signal = 0, v1Signal = 0, m1Noise = 0, v1Noise = 0;
+        var kernelTransposed = engine.TensorTranspose(inputKernel);
+        T bestSignal = numOps.Exp(logSignal);
+        T bestNoise = NoiseOf(logNoise);
+        T bestEvidence = numOps.FromDouble(double.NegativeInfinity);
+        T m1Signal = numOps.Zero, v1Signal = numOps.Zero, m1Noise = numOps.Zero, v1Noise = numOps.Zero;
         const double LearningRate = 0.05, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8;
+        T beta1 = numOps.FromDouble(Beta1), oneMinusBeta1 = numOps.FromDouble(1 - Beta1);
+        T beta2 = numOps.FromDouble(Beta2), oneMinusBeta2 = numOps.FromDouble(1 - Beta2);
+        T half = numOps.FromDouble(0.5);
+        T countValue = numOps.FromDouble(count);
+
+        // Scalar Adam update of a log-parameter, ascending the evidence; gradient = 0.5 * scale * traceValue.
+        T AdamStep(T log, T scale, T traceValue, ref T first, ref T second, int step)
+        {
+            T gradient = numOps.Multiply(half, numOps.Multiply(scale, traceValue));
+            first = numOps.Add(numOps.Multiply(beta1, first), numOps.Multiply(oneMinusBeta1, gradient));
+            second = numOps.Add(numOps.Multiply(beta2, second),
+                numOps.Multiply(oneMinusBeta2, numOps.Multiply(gradient, gradient)));
+            T firstHat = numOps.Divide(first, numOps.FromDouble(1 - Math.Pow(Beta1, step + 1)));
+            T secondHat = numOps.Divide(second, numOps.FromDouble(1 - Math.Pow(Beta2, step + 1)));
+            return numOps.Add(log, numOps.Divide(numOps.Multiply(numOps.FromDouble(LearningRate), firstHat),
+                numOps.Add(numOps.Sqrt(secondHat), numOps.FromDouble(Epsilon))));
+        }
+
+        T SignalOf(T log) => numOps.Exp(log);
+        bool Improves(T evidence, T best) => numOps.GreaterThan(evidence, best);
 
         for (int step = 0; step <= steps; step++)
         {
-            double signal = Math.Exp(logSignal);
-            double noise = NoiseOf(logNoise);
+            T signal = SignalOf(logSignal);
+            T noise = NoiseOf(logNoise);
             var lower = FactorOf(signal, noise);
             if (lower is null)
                 break;
 
-            double evidence = LogMarginalLikelihood(lower, columns);
-            if (evidence > bestEvidence)
+            T evidence = LogMarginalLikelihood(lower, columns);
+            if (Improves(evidence, bestEvidence))
             {
                 bestEvidence = evidence;
                 bestSignal = signal;
@@ -191,44 +160,23 @@ internal static class GaussianProcessEvidence
             if (step == steps)
                 break;
 
-            var inverse = Inverse(lower);
-            var w = new double[n, n];
-            for (int i = 0; i < n; i++)
-                for (int j = 0; j < n; j++)
-                    w[i, j] = -columns.Count * inverse[i, j];
-            foreach (var column in columns)
-            {
-                var alpha = Solve(lower, column);
-                for (int i = 0; i < n; i++)
-                    for (int j = 0; j < n; j++)
-                        w[i, j] += alpha[i] * alpha[j];
-            }
+            // W = Σ_c a_c a_c^T - c K^-1
+            var alpha = Solve(lower, columns);
+            var w = engine.TensorSubtract(
+                engine.TensorMatMul(alpha, engine.TensorTranspose(alpha)),
+                engine.TensorMultiplyScalar(Inverse(lower), countValue));
 
-            double kernelTrace = 0, trace = 0;
-            for (int i = 0; i < n; i++)
-            {
-                trace += w[i, i];
-                for (int j = 0; j < n; j++)
-                    kernelTrace += w[i, j] * inputKernel[j, i];
-            }
+            T kernelTrace = engine.TensorSum(engine.TensorMultiply(w, kernelTransposed));
+            T trace = engine.TensorTrace(w);
 
-            double gradientSignal = 0.5 * signal * kernelTrace;
-            m1Signal = Beta1 * m1Signal + (1 - Beta1) * gradientSignal;
-            v1Signal = Beta2 * v1Signal + (1 - Beta2) * gradientSignal * gradientSignal;
-            logSignal += LearningRate * (m1Signal / (1 - Math.Pow(Beta1, step + 1)))
-                / (Math.Sqrt(v1Signal / (1 - Math.Pow(Beta2, step + 1))) + Epsilon);
+            logSignal = AdamStep(logSignal, signal, kernelTrace, ref m1Signal, ref v1Signal, step);
 
             if (learnNoise)
             {
-                double gradientNoise = 0.5 * noise * trace;
-                m1Noise = Beta1 * m1Noise + (1 - Beta1) * gradientNoise;
-                v1Noise = Beta2 * v1Noise + (1 - Beta2) * gradientNoise * gradientNoise;
-                logNoise += LearningRate * (m1Noise / (1 - Math.Pow(Beta1, step + 1)))
-                    / (Math.Sqrt(v1Noise / (1 - Math.Pow(Beta2, step + 1))) + Epsilon);
+                logNoise = AdamStep(logNoise, noise, trace, ref m1Noise, ref v1Noise, step);
             }
         }
 
         return (bestSignal, bestNoise);
     }
-
 }

@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
@@ -214,14 +215,8 @@ public class StabilityValidation<T>
         }
 
         // Build label vectors for shared points
-        var sharedLabels1 = new Vector<T>(sharedIndices.Count);
-        var sharedLabels2 = new Vector<T>(sharedIndices.Count);
-
-        for (int i = 0; i < sharedIndices.Count; i++)
-        {
-            sharedLabels1[i] = labels1[sharedPositions1[i]];
-            sharedLabels2[i] = labels2[sharedPositions2[i]];
-        }
+        var sharedLabels1 = ClusteringTensorOps.SelectElements(labels1, sharedPositions1.ToArray());
+        var sharedLabels2 = ClusteringTensorOps.SelectElements(labels2, sharedPositions2.ToArray());
 
         // Use Adjusted Rand Index for comparison
         var ari = new RandIndex<T>(adjusted: true);
@@ -230,15 +225,7 @@ public class StabilityValidation<T>
 
     private Matrix<T> ExtractSubMatrix(Matrix<T> data, int[] indices)
     {
-        var subMatrix = new Matrix<T>(indices.Length, data.Columns);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                subMatrix[i, j] = data[indices[i], j];
-            }
-        }
-        return subMatrix;
+        return ClusteringTensorOps.SelectRows(data, indices);
     }
 }
 

@@ -142,71 +142,20 @@ public partial class KMedoids<T> : ClusteringBase<T>
         _medoidIndices = medoids;
 
         // Assign labels and compute inertia
-        Labels = new Vector<T>(n);
-        T totalInertia = NumOps.Zero;
-
-        for (int i = 0; i < n; i++)
-        {
-            int nearestMedoid = 0;
-            T minDist = NumOps.MaxValue;
-
-            for (int m = 0; m < k; m++)
-            {
-                T dist = distMatrix[i, medoids[m]];
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearestMedoid = m;
-                }
-            }
-
-            Labels[i] = NumOps.FromDouble(nearestMedoid);
-            totalInertia = NumOps.Add(totalInertia, minDist);
-        }
-
-        Inertia = totalInertia;
+        var toMedoids = ClusteringTensorOps.SelectColumns(distMatrix, medoids).ToMatrix();
+        Labels = ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.ArgMinRows(toMedoids));
+        Inertia = Engine.TensorSum(ClusteringTensorOps.MinRows(toMedoids).AsTensor());
 
         // Set cluster centers as medoid points
-        ClusterCenters = new Matrix<T>(k, d);
-        for (int m = 0; m < k; m++)
-        {
-            int medoidIdx = medoids[m];
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[m, j] = x[medoidIdx, j];
-            }
-        }
-
+        ClusterCenters = ClusteringTensorOps.SelectRows(x, medoids);
         MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
-    private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
+    private Tensor<T> ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
-        int d = x.Columns;
-        var distMatrix = new T[n, n];
-
-        // Cache rows as arrays for allocation-free distance
-        var rowArrays = new T[n][];
-        for (int i = 0; i < n; i++)
-        {
-            rowArrays[i] = new T[d];
-            for (int c = 0; c < d; c++)
-                rowArrays[i][c] = x[i, c];
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            distMatrix[i, i] = NumOps.Zero;
-            for (int j = i + 1; j < n; j++)
-            {
-                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
-                distMatrix[i, j] = dist;
-                distMatrix[j, i] = dist;
-            }
-        }
-
-        return distMatrix;
+        // Symmetric pairwise distances with a zero diagonal
+        return Tensor<T>.FromMatrix(metric.ComputePairwise(x));
     }
 
     private int[] InitializeRandom(int n, int k, Random rand)
@@ -219,118 +168,47 @@ public partial class KMedoids<T> : ClusteringBase<T>
         return indices.ToArray();
     }
 
-    private int[] InitializeKMedoidsPlusPlus(T[,] distMatrix, int n, int k, Random rand)
+    private int[] InitializeKMedoidsPlusPlus(Tensor<T> distMatrix, int n, int k, Random rand)
     {
         var medoids = new List<int>();
 
         // First medoid: random
         medoids.Add(rand.Next(n));
 
-        // Remaining medoids: probabilistic based on distance
+        // Remaining medoids: probabilistic based on the squared distance to the nearest medoid
         for (int m = 1; m < k; m++)
         {
-            var minDistances = new T[n];
-            T totalDist = NumOps.Zero;
+            var minDistances = ClusteringTensorOps.MinRows(ClusteringTensorOps.SelectColumns(distMatrix, medoids.ToArray()).ToMatrix());
+            var weights = Engine.Multiply(minDistances, minDistances);
 
-            for (int i = 0; i < n; i++)
-            {
-                T minDist = NumOps.MaxValue;
-                foreach (int med in medoids)
-                {
-                    if (NumOps.LessThan(distMatrix[i, med], minDist))
-                        minDist = distMatrix[i, med];
-                }
-                minDistances[i] = NumOps.Multiply(minDist, minDist); // Square for probability
-                totalDist = NumOps.Add(totalDist, minDistances[i]);
-            }
-
-            // Select next medoid proportional to squared distance
-            double target = rand.NextDouble() * NumOps.ToDouble(totalDist);
-            double cumulative = 0;
-            int selected = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                if (medoids.Contains(i)) continue;
-                cumulative += NumOps.ToDouble(minDistances[i]);
-                if (cumulative >= target)
-                {
-                    selected = i;
-                    break;
-                }
-            }
-
-            medoids.Add(selected);
+            // Select the next medoid among the non-medoids, proportional to the squared distance
+            var candidates = Enumerable.Range(0, n).Where(i => !medoids.Contains(i)).ToArray();
+            int position = ClusteringTensorOps.SampleProportionalOrNone(ClusteringTensorOps.SelectElements(weights, candidates), rand);
+            medoids.Add(position >= 0 ? candidates[position] : 0);
         }
 
         return medoids.ToArray();
     }
 
-    private int[] InitializeBuild(T[,] distMatrix, int n, int k)
+    private int[] InitializeBuild(Tensor<T> distMatrix, int n, int k)
     {
         var medoids = new List<int>();
 
         // First medoid: point with minimum total distance to all others
-        int firstMedoid = 0;
-        T minTotalDist = NumOps.MaxValue;
-
-        for (int i = 0; i < n; i++)
-        {
-            T totalDist = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                totalDist = NumOps.Add(totalDist, distMatrix[i, j]);
-            }
-
-            if (NumOps.LessThan(totalDist, minTotalDist))
-            {
-                minTotalDist = totalDist;
-                firstMedoid = i;
-            }
-        }
-
-        medoids.Add(firstMedoid);
+        medoids.Add(ClusteringTensorOps.ArgMin(Engine.ReduceSum(distMatrix, new[] { 1 }, false).ToVector()));
 
         // Remaining medoids: greedily add point that reduces cost most
         while (medoids.Count < k)
         {
-            int bestCandidate = -1;
-            T bestGain = NumOps.MinValue;
-
-            for (int i = 0; i < n; i++)
+            var candidates = Enumerable.Range(0, n).Where(i => !medoids.Contains(i)).ToArray();
+            if (candidates.Length > 0)
             {
-                if (medoids.Contains(i)) continue;
-
-                T gain = NumOps.Zero;
-                for (int j = 0; j < n; j++)
-                {
-                    // Current nearest medoid distance
-                    T currentDist = NumOps.MaxValue;
-                    foreach (int med in medoids)
-                    {
-                        if (NumOps.LessThan(distMatrix[j, med], currentDist))
-                            currentDist = distMatrix[j, med];
-                    }
-
-                    // Distance to candidate
-                    T candidateDist = distMatrix[j, i];
-
-                    // Gain is reduction in distance
-                    T reduction = NumOps.Subtract(currentDist, candidateDist);
-                    if (NumOps.GreaterThan(reduction, NumOps.Zero))
-                        gain = NumOps.Add(gain, reduction);
-                }
-
-                if (NumOps.GreaterThan(gain, bestGain))
-                {
-                    bestGain = gain;
-                    bestCandidate = i;
-                }
-            }
-
-            if (bestCandidate >= 0)
-            {
-                medoids.Add(bestCandidate);
+                // gain(i) = sum_j max(nearest medoid distance of j - d(j, i), 0)
+                var current = ClusteringTensorOps.MinRows(ClusteringTensorOps.SelectColumns(distMatrix, medoids.ToArray()).ToMatrix());
+                var reductions = Engine.TensorSubtract(
+                    Engine.TensorBroadcastTo(Tensor<T>.FromVector(current, new[] { n, 1 }), new[] { n, n }), distMatrix);
+                var gains = Engine.ReduceSum(Engine.TensorReLU(reductions), new[] { 0 }, false).ToVector();
+                medoids.Add(candidates[ClusteringTensorOps.ArgMax(ClusteringTensorOps.SelectElements(gains, candidates))]);
             }
             else
             {
@@ -348,37 +226,28 @@ public partial class KMedoids<T> : ClusteringBase<T>
         return medoids.ToArray();
     }
 
-    private int[] RunPAM(T[,] distMatrix, int[] medoids, int n, int k)
+    private int[] RunPAM(Tensor<T> distMatrix, int[] medoids, int n, int k)
     {
         var currentMedoids = (int[])medoids.Clone();
         T currentCost = ComputeTotalCost(distMatrix, currentMedoids, n);
-        T tolerance = NumOps.FromDouble(Options.Tolerance);
 
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
             bool improved = false;
 
-            // Try all possible swaps
+            // Try swaps medoid by medoid; the first candidate (in index order) that lowers the cost is taken
             for (int m = 0; m < k && !improved; m++)
             {
-                int oldMedoid = currentMedoids[m];
-
-                for (int i = 0; i < n && !improved; i++)
+                var costs = SwapCosts(distMatrix, currentMedoids, m, n);
+                var accept = ClusteringTensorOps.LessThanFlags(costs, ImprovementThreshold(currentCost));
+                for (int i = 0; i < n; i++)
                 {
-                    if (Array.IndexOf(currentMedoids, i) >= 0) continue;
-
-                    // Try swapping medoid m with point i
-                    currentMedoids[m] = i;
-                    T newCost = ComputeTotalCost(distMatrix, currentMedoids, n);
-
-                    if (NumOps.LessThan(newCost, NumOps.Subtract(currentCost, tolerance)))
+                    if (accept[i] && Array.IndexOf(currentMedoids, i) < 0)
                     {
-                        currentCost = newCost;
+                        currentMedoids[m] = i;
+                        currentCost = ComputeTotalCost(distMatrix, currentMedoids, n);
                         improved = true;
-                    }
-                    else
-                    {
-                        currentMedoids[m] = oldMedoid;
+                        break;
                     }
                 }
             }
@@ -389,76 +258,77 @@ public partial class KMedoids<T> : ClusteringBase<T>
         return currentMedoids;
     }
 
-    private int[] RunFastPAM(T[,] distMatrix, int[] medoids, int n, int k)
+    /// <summary>The cost a swap must beat: current cost minus the tolerance.</summary>
+    private T ImprovementThreshold(T currentCost) => NumOps.Subtract(currentCost, NumOps.FromDouble(Options.Tolerance));
+
+    /// <summary>
+    /// Total cost of replacing medoid m by each point i: sum over j of min(nearest other medoid of j, d(j, i)).
+    /// </summary>
+    private Vector<T> SwapCosts(Tensor<T> distMatrix, int[] medoids, int m, int n)
+    {
+        var others = medoids.Where((_, index) => index != m).ToArray();
+        Tensor<T> candidateCosts = distMatrix;
+        if (others.Length > 0)
+        {
+            var nearestOther = ClusteringTensorOps.MinRows(ClusteringTensorOps.SelectColumns(distMatrix, others).ToMatrix());
+            candidateCosts = Engine.TensorMin(
+                Engine.TensorBroadcastTo(Tensor<T>.FromVector(nearestOther, new[] { n, 1 }), new[] { n, n }), distMatrix);
+        }
+
+        return Engine.ReduceSum(candidateCosts, new[] { 0 }, false).ToVector();
+    }
+
+    private int[] RunFastPAM(Tensor<T> distMatrix, int[] medoids, int n, int k)
     {
         var currentMedoids = (int[])medoids.Clone();
 
-        // Precompute nearest and second-nearest medoid for each point
-        var nearest = new int[n];
-        var nearestDist = new T[n];
-        var secondDist = new T[n];
-
-        UpdateNearestMedoids(distMatrix, currentMedoids, n, k, nearest, nearestDist, secondDist);
-
-        T tolerance = NumOps.FromDouble(Options.Tolerance);
-
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
-            int bestM = -1;
-            int bestI = -1;
-            T bestDelta = NumOps.Zero;
+            // Nearest and second-nearest medoid of every point
+            UpdateNearestMedoids(distMatrix, currentMedoids, n, k, out var nearest, out var nearestDist, out var secondDist);
 
-            // For each medoid
-            for (int m = 0; m < k; m++)
+            // delta[m, i] = sum over points of the change in their nearest distance when medoid m becomes point i:
+            //   points of m move to min(d(j, i), second_j); the others move to d(j, i) only when it is closer.
+            var nearestMask = ClusteringTensorOps.OneHotMask(ClusteringTensorOps.FromIntArray<T>(nearest), k);
+            var nearestColumn = Engine.TensorBroadcastTo(Tensor<T>.FromVector(nearestDist, new[] { n, 1 }), new[] { n, n });
+            var secondColumn = Engine.TensorBroadcastTo(Tensor<T>.FromVector(secondDist, new[] { n, 1 }), new[] { n, n });
+            var ownChange = Engine.TensorSubtract(Engine.TensorMin(distMatrix, secondColumn), nearestColumn);
+            var otherChange = Engine.TensorMin(Engine.TensorSubtract(distMatrix, nearestColumn), NumOps.Zero);
+            var otherMask = Engine.ScalarMinusTensor(NumOps.One, nearestMask);
+            var delta = Engine.TensorAdd(
+                Engine.TensorMatMul(Engine.TensorTranspose(nearestMask), ownChange),
+                Engine.TensorMatMul(Engine.TensorTranspose(otherMask), otherChange));
+
+            // Only non-medoid candidates count; the best swap is the first (m, i) with the most negative delta
+            var medoidFlags = new int[n];
+            foreach (int medoid in currentMedoids)
             {
-                // For each non-medoid
-                for (int i = 0; i < n; i++)
-                {
-                    if (Array.IndexOf(currentMedoids, i) >= 0) continue;
-
-                    // Compute swap cost delta
-                    T delta = NumOps.Zero;
-
-                    for (int j = 0; j < n; j++)
-                    {
-                        T distToNew = distMatrix[j, i];
-
-                        if (nearest[j] == m)
-                        {
-                            // Currently assigned to medoid being swapped
-                            T newDist = NumOps.LessThan(distToNew, secondDist[j]) ? distToNew : secondDist[j];
-                            delta = NumOps.Add(delta, NumOps.Subtract(newDist, nearestDist[j]));
-                        }
-                        else if (NumOps.LessThan(distToNew, nearestDist[j]))
-                        {
-                            // Would be reassigned to new medoid
-                            delta = NumOps.Add(delta, NumOps.Subtract(distToNew, nearestDist[j]));
-                        }
-                    }
-
-                    if (NumOps.LessThan(delta, bestDelta))
-                    {
-                        bestDelta = delta;
-                        bestM = m;
-                        bestI = i;
-                    }
-                }
+                medoidFlags[medoid] = 1;
             }
 
-            if (bestM < 0 || !NumOps.LessThan(bestDelta, NumOps.Negate(tolerance)))
+            var isMedoid = ClusteringTensorOps.FromIntArray<T>(medoidFlags);
+            var excluded = Engine.TensorBroadcastTo(Tensor<T>.FromVector(isMedoid, new[] { 1, n }), new[] { k, n });
+            var candidateDelta = Engine.TensorWhere(excluded, Engine.TensorZerosLike(delta), delta);
+            var flat = candidateDelta.ToVector();
+            int best = ClusteringTensorOps.ArgMin(flat);
+
+            if (!IsImprovingSwap(Engine.TensorMinValue(candidateDelta)))
             {
                 break;
             }
 
             // Perform best swap
-            currentMedoids[bestM] = bestI;
-            UpdateNearestMedoids(distMatrix, currentMedoids, n, k, nearest, nearestDist, secondDist);
+            currentMedoids[best / n] = best % n;
         }
 
         return currentMedoids;
     }
 
-    private int[] RunAlternate(T[,] distMatrix, int[] medoids, int n, int k)
+    /// <summary>True when the swap delta is below minus the tolerance.</summary>
+    private bool IsImprovingSwap(T bestDelta)
+        => NumOps.LessThan(bestDelta, NumOps.Zero) && NumOps.LessThan(bestDelta, NumOps.Negate(NumOps.FromDouble(Options.Tolerance)));
+
+    private int[] RunAlternate(Tensor<T> distMatrix, int[] medoids, int n, int k)
     {
         var currentMedoids = (int[])medoids.Clone();
         var labels = new int[n];
@@ -466,62 +336,20 @@ public partial class KMedoids<T> : ClusteringBase<T>
         for (int iter = 0; iter < Options.MaxIterations; iter++)
         {
             // Assign step
-            bool changed = false;
-            for (int i = 0; i < n; i++)
-            {
-                int nearestIdx = 0;
-                T minDist = NumOps.MaxValue;
+            var nearest = ClusteringTensorOps.ArgMinRows(ClusteringTensorOps.SelectColumns(distMatrix, currentMedoids).ToMatrix());
+            bool changed = !nearest.SequenceEqual(labels);
+            labels = nearest;
 
-                for (int m = 0; m < k; m++)
-                {
-                    T dist = distMatrix[i, currentMedoids[m]];
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestIdx = m;
-                    }
-                }
-
-                if (labels[i] != nearestIdx)
-                {
-                    labels[i] = nearestIdx;
-                    changed = true;
-                }
-            }
-
-            // Update step: find best medoid for each cluster
+            // Update step: in each cluster, the member with the smallest total distance to the other members
+            var mask = ClusteringTensorOps.OneHotMask(ClusteringTensorOps.FromIntArray<T>(labels), k);
+            var withinCost = Engine.ReduceSum(
+                Engine.TensorMultiply(Engine.TensorMatMul(distMatrix, mask), mask), new[] { 1 }, false).ToVector();
             for (int m = 0; m < k; m++)
             {
-                var clusterPoints = new List<int>();
-                for (int i = 0; i < n; i++)
-                {
-                    if (labels[i] == m)
-                    {
-                        clusterPoints.Add(i);
-                    }
-                }
+                var clusterPoints = Enumerable.Range(0, n).Where(i => labels[i] == m).ToArray();
+                if (clusterPoints.Length == 0) continue;
 
-                if (clusterPoints.Count == 0) continue;
-
-                // Find point that minimizes sum of distances to others in cluster
-                int bestMedoid = currentMedoids[m];
-                T bestCost = NumOps.MaxValue;
-
-                foreach (int candidate in clusterPoints)
-                {
-                    T cost = NumOps.Zero;
-                    foreach (int other in clusterPoints)
-                    {
-                        cost = NumOps.Add(cost, distMatrix[candidate, other]);
-                    }
-
-                    if (NumOps.LessThan(cost, bestCost))
-                    {
-                        bestCost = cost;
-                        bestMedoid = candidate;
-                    }
-                }
-
+                int bestMedoid = clusterPoints[ClusteringTensorOps.ArgMin(ClusteringTensorOps.SelectElements(withinCost, clusterPoints))];
                 if (currentMedoids[m] != bestMedoid)
                 {
                     currentMedoids[m] = bestMedoid;
@@ -535,48 +363,23 @@ public partial class KMedoids<T> : ClusteringBase<T>
         return currentMedoids;
     }
 
-    private void UpdateNearestMedoids(T[,] distMatrix, int[] medoids, int n, int k,
-        int[] nearest, T[] nearestDist, T[] secondDist)
+    private void UpdateNearestMedoids(Tensor<T> distMatrix, int[] medoids, int n, int k,
+        out int[] nearest, out Vector<T> nearestDist, out Vector<T> secondDist)
     {
-        for (int i = 0; i < n; i++)
-        {
-            nearest[i] = 0;
-            nearestDist[i] = NumOps.MaxValue;
-            secondDist[i] = NumOps.MaxValue;
+        var toMedoids = ClusteringTensorOps.SelectColumns(distMatrix, medoids);
+        var asMatrix = toMedoids.ToMatrix();
+        nearest = ClusteringTensorOps.ArgMinRows(asMatrix);
+        nearestDist = ClusteringTensorOps.MinRows(asMatrix);
 
-            for (int m = 0; m < k; m++)
-            {
-                T dist = distMatrix[i, medoids[m]];
-                if (NumOps.LessThan(dist, nearestDist[i]))
-                {
-                    secondDist[i] = nearestDist[i];
-                    nearestDist[i] = dist;
-                    nearest[i] = m;
-                }
-                else if (NumOps.LessThan(dist, secondDist[i]))
-                {
-                    secondDist[i] = dist;
-                }
-            }
-        }
+        // Second-nearest: the smallest distance once the nearest medoid's entry is set aside
+        var nearestMask = ClusteringTensorOps.OneHotMask(ClusteringTensorOps.FromIntArray<T>(nearest), k);
+        var rest = Engine.TensorWhere(nearestMask, Engine.TensorFullLike(toMedoids, NumOps.MaxValue), toMedoids);
+        secondDist = ClusteringTensorOps.MinRows(rest.ToMatrix());
     }
 
-    private T ComputeTotalCost(T[,] distMatrix, int[] medoids, int n)
+    private T ComputeTotalCost(Tensor<T> distMatrix, int[] medoids, int n)
     {
-        T totalCost = NumOps.Zero;
-
-        for (int i = 0; i < n; i++)
-        {
-            T minDist = NumOps.MaxValue;
-            foreach (int m in medoids)
-            {
-                if (NumOps.LessThan(distMatrix[i, m], minDist))
-                    minDist = distMatrix[i, m];
-            }
-            totalCost = NumOps.Add(totalCost, minDist);
-        }
-
-        return totalCost;
+        return Engine.TensorSum(ClusteringTensorOps.MinRows(ClusteringTensorOps.SelectColumns(distMatrix, medoids).ToMatrix()).AsTensor());
     }
 
     /// <inheritdoc />
@@ -584,34 +387,16 @@ public partial class KMedoids<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />
@@ -635,16 +420,6 @@ public partial class KMedoids<T> : ClusteringBase<T>
             return new Matrix<T>(0, originalData.Columns);
         }
 
-        var medoids = new Matrix<T>(_medoidIndices.Length, originalData.Columns);
-        for (int i = 0; i < _medoidIndices.Length; i++)
-        {
-            int idx = _medoidIndices[i];
-            for (int j = 0; j < originalData.Columns; j++)
-            {
-                medoids[i, j] = originalData[idx, j];
-            }
-        }
-
-        return medoids;
+        return ClusteringTensorOps.SelectRows(originalData, _medoidIndices);
     }
 }

@@ -114,27 +114,27 @@ public partial class KMeans<T> : ClusteringBase<T>
         ValidateInputData(x);
         NumFeatures = x.Columns;
 
+        // The data, its row norms and the convergence threshold serve every initialization.
+        var data = new KMeansData(x, UsesEuclideanDistance, AbsoluteTolerance(x));
+
+        // Run multiple initializations and keep the best (the first one with the lowest inertia)
+        int numInits = _options.InitMethod == KMeansInitMethod.Custom ? 1 : _options.NumInitializations;
+        var runs = new List<(Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations)>(numInits);
+        for (int init = 0; init < numInits; init++)
+        {
+            runs.Add(FitSingle(data));
+        }
+
         Matrix<T>? bestCenters = null;
         Vector<T>? bestLabels = null;
         T bestInertia = NumOps.MaxValue;
-
-        // Run multiple initializations and keep the best
-        int numInits = _options.InitMethod == KMeansInitMethod.Custom ? 1 : _options.NumInitializations;
-
-        // One double copy of the data and its row norms serves every initialization.
-        var kernel = UsesEuclideanDistance ? CreateKernel(x) : null;
-
-        for (int init = 0; init < numInits; init++)
+        if (runs.Count > 0)
         {
-            var (centers, labels, inertia, iterations) = kernel is null ? FitSingle(x) : FitSingleEuclidean(x, kernel);
-
-            if (NumOps.LessThan(inertia, bestInertia))
-            {
-                bestCenters = centers;
-                bestLabels = labels;
-                bestInertia = inertia;
-                _numIterations = iterations;
-            }
+            int best = ClusteringTensorOps.ArgMin(Vector<T>.FromEnumerable(runs.Select(run => run.Inertia)));
+            bestCenters = runs[best].Centers;
+            bestLabels = runs[best].Labels;
+            bestInertia = runs[best].Inertia;
+            _numIterations = runs[best].Iterations;
         }
 
         ClusterCenters = bestCenters;
@@ -151,17 +151,7 @@ public partial class KMeans<T> : ClusteringBase<T>
         ValidatePredictInput(x);
 
         if (ClusterCenters is null) return new Vector<T>(x.Rows);
-        if (UsesEuclideanDistance)
-        {
-            var kernel = CreateKernel(x);
-            var labels = new int[x.Rows];
-            kernel.Assign(ToDoubles(ClusterCenters), ClusterCenters.Rows, labels, null, null);
-            var result = new Vector<T>(x.Rows);
-            for (int i = 0; i < labels.Length; i++) result[i] = NumOps.FromDouble(labels[i]);
-            return result;
-        }
-
-        return AssignLabels(x, ClusterCenters);
+        return AssignLabels(new KMeansData(x, UsesEuclideanDistance, NumOps.Zero), ClusterCenters);
     }
 
     /// <inheritdoc />
@@ -171,17 +161,6 @@ public partial class KMeans<T> : ClusteringBase<T>
         ValidatePredictInput(x);
 
         if (ClusterCenters is null) return new Matrix<T>(x.Rows, NumClusters);
-        if (UsesEuclideanDistance)
-        {
-            int clusters = ClusterCenters.Rows;
-            var distances = CreateKernel(x).Distances(ToDoubles(ClusterCenters), clusters);
-            var result = new Matrix<T>(x.Rows, clusters);
-            for (int i = 0; i < x.Rows; i++)
-                for (int k = 0; k < clusters; k++)
-                    result[i, k] = NumOps.FromDouble(distances[i * clusters + k]);
-            return result;
-        }
-
         return ComputeDistancesToCenters(x, ClusterCenters);
     }
 
@@ -193,162 +172,49 @@ public partial class KMeans<T> : ClusteringBase<T>
     }
 
     /// <summary>
-    /// True when distances are plain Euclidean, which <see cref="EuclideanKMeansKernel"/> computes directly. A custom
-    /// metric, including a subclass of <see cref="EuclideanDistance{T}"/>, keeps the generic path.
+    /// True when distances are plain Euclidean, so the assignment can use the batched
+    /// <c>||x||^2 - 2 x.c + ||c||^2</c> form. A custom metric, including a subclass of
+    /// <see cref="EuclideanDistance{T}"/>, goes through the metric itself.
     /// </summary>
     private bool UsesEuclideanDistance =>
         _options.DistanceMetric is null || _options.DistanceMetric.GetType() == typeof(EuclideanDistance<T>);
 
-    private EuclideanKMeansKernel CreateKernel(Matrix<T> x) => new(ToDoubles(x), x.Rows, x.Columns);
-
-    private double[] ToDoubles(Matrix<T> matrix)
-    {
-        var values = new double[matrix.Rows * matrix.Columns];
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            var row = matrix.GetRowReadOnlySpan(i);
-            int offset = i * matrix.Columns;
-            for (int j = 0; j < row.Length; j++) values[offset + j] = NumOps.ToDouble(row[j]);
-        }
-
-        return values;
-    }
-
     /// <summary>
-    /// <see cref="FitSingle"/> for Euclidean distance, on <paramref name="kernel"/>: the same initialization, the same
-    /// Lloyd iterations, empty-cluster handling and convergence test.
+    /// The data of one fit or prediction: the matrix, its rank-2 tensor, each row's squared norm (Euclidean only) and the
+    /// absolute convergence threshold.
     /// </summary>
-    private (Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations) FitSingleEuclidean(
-        Matrix<T> x, EuclideanKMeansKernel kernel)
+    private sealed class KMeansData
     {
-        int clusters = _options.NumClusters;
-        int columns = kernel.Columns;
-        var centers = _options.InitMethod switch
+        public KMeansData(Matrix<T> x, bool euclidean, T tolerance)
         {
-            KMeansInitMethod.Custom when _options.InitialCenters is not null => ToDoubles(_options.InitialCenters),
-            KMeansInitMethod.KMeansPlusPlus => InitializeKMeansPlusPlusEuclidean(kernel, clusters),
-            _ => ToDoubles(InitializeRandom(x))
-        };
-
-        var labels = new int[kernel.Rows];
-        var previousLabels = new int[kernel.Rows];
-        for (int i = 0; i < previousLabels.Length; i++) previousLabels[i] = -1;
-        var sums = new double[clusters * columns];
-        var counts = new int[clusters];
-        double tolerance = AbsoluteTolerance(kernel.Data, kernel.Rows, columns);
-        bool unchanged = false;
-        int iterations = 0;
-        while (iterations < _options.MaxIterations)
-        {
-            kernel.Assign(centers, clusters, labels, sums, counts);
-            iterations++;
-
-            var (newCenters, shift) = MeanCenters(centers, sums, counts, clusters, columns);
-            centers = newCenters;
-            if (labels.AsSpan().SequenceEqual(previousLabels))
+            X = x;
+            Values = ClusteringTensorOps.ToTensor(x);
+            Euclidean = euclidean;
+            Tolerance = tolerance;
+            if (euclidean && x.Rows > 0)
             {
-                unchanged = true;
-                break;
-            }
-
-            if (shift <= tolerance) break;
-            Array.Copy(labels, previousLabels, labels.Length);
-        }
-
-        // Label every row by the centers returned, unless the last assignment already did.
-        if (iterations > 0 && !unchanged)
-            kernel.Assign(centers, clusters, labels, null, null);
-
-        double inertia = iterations > 0 ? kernel.Inertia(centers, labels) : 0;
-
-        var centerMatrix = new Matrix<T>(clusters, columns);
-        for (int k = 0; k < clusters; k++)
-            for (int j = 0; j < columns; j++)
-                centerMatrix[k, j] = NumOps.FromDouble(centers[k * columns + j]);
-        var labelVector = new Vector<T>(labels.Length);
-        for (int i = 0; i < labels.Length; i++) labelVector[i] = NumOps.FromDouble(labels[i]);
-        return (centerMatrix, labelVector, NumOps.FromDouble(inertia), iterations);
-    }
-
-    /// <summary>
-    /// Each cluster's new center, the mean of its rows (an empty cluster keeps its old center), and the sum of the
-    /// centers' squared shifts.
-    /// </summary>
-    private static (double[] Centers, double Shift) MeanCenters(double[] centers, double[] sums, int[] counts,
-        int clusters, int columns)
-    {
-        var newCenters = new double[clusters * columns];
-        double shift = 0;
-        for (int k = 0; k < clusters; k++)
-        {
-            int offset = k * columns;
-            if (counts[k] > 0)
-            {
-                for (int j = 0; j < columns; j++) newCenters[offset + j] = sums[offset + j] / counts[k];
-            }
-            else
-            {
-                Array.Copy(centers, offset, newCenters, offset, columns);
-            }
-
-            shift += EuclideanKMeansKernel.SquaredDistance(centers, offset, newCenters, offset, columns);
-        }
-
-        return (newCenters, shift);
-    }
-
-    /// <summary>
-    /// k-means++ seeding on <paramref name="kernel"/>, drawing from the random stream exactly as
-    /// <see cref="InitializeKMeansPlusPlus"/> does.
-    /// </summary>
-    private double[] InitializeKMeansPlusPlusEuclidean(EuclideanKMeansKernel kernel, int clusters)
-    {
-        int rows = kernel.Rows;
-        int columns = kernel.Columns;
-        var data = kernel.Data;
-        var centers = new double[clusters * columns];
-
-        int firstIdx = _random.Next(rows);
-        Array.Copy(data, firstIdx * columns, centers, 0, columns);
-
-        var minDistances = new double[rows];
-        for (int i = 0; i < rows; i++) minDistances[i] = double.MaxValue;
-
-        int trials = LocalTrials(clusters);
-        var cumulative = new double[rows];
-        var candidateDistances = new double[trials][];
-        for (int t = 0; t < trials; t++) candidateDistances[t] = new double[rows];
-        kernel.UpdateMinSquaredDistances(centers, 0, minDistances);
-        for (int k = 1; k < clusters; k++)
-        {
-            // Every candidate's squared distances and potential in one pass; the winner's distances then lower
-            // minDistances directly, with no second pass for the new center.
-            int chosen = -1;
-            int selectedIdx = DrawCenter(minDistances, cumulative, trials, candidates =>
-                kernel.CandidatePotentials(candidates, minDistances, candidateDistances), out chosen);
-            Array.Copy(data, selectedIdx * columns, centers, k * columns, columns);
-            if (k + 1 == clusters) break;
-
-            if (chosen < 0)
-            {
-                kernel.UpdateMinSquaredDistances(centers, k, minDistances);
-            }
-            else
-            {
-                var distances = candidateDistances[chosen];
-                for (int i = 0; i < rows; i++)
-                    if (distances[i] < minDistances[i]) minDistances[i] = distances[i];
+                var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+                RowNorms = engine.ReduceSum(engine.TensorSquare(Values), new[] { 1 }, true);
             }
         }
 
-        return centers;
+        public Matrix<T> X { get; }
+
+        /// <summary>The data as a [rows, columns] tensor.</summary>
+        public Tensor<T> Values { get; }
+
+        public bool Euclidean { get; }
+
+        public T Tolerance { get; }
+
+        /// <summary>Each row's squared norm as [rows, 1]; null unless Euclidean.</summary>
+        public Tensor<T>? RowNorms { get; }
     }
 
-    private (Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations) FitSingle(Matrix<T> x)
+    private (Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations) FitSingle(KMeansData data)
     {
-        var centers = InitializeCenters(x);
-        var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        double tolerance = AbsoluteTolerance(ToDoubles(x), x.Rows, x.Columns);
+        var x = data.X;
+        var centers = InitializeCenters(data);
 
         Vector<T> labels = new Vector<T>(x.Rows);
         Vector<T>? previousLabels = null;
@@ -357,95 +223,60 @@ public partial class KMeans<T> : ClusteringBase<T>
         while (iterations < _options.MaxIterations)
         {
             // Assignment step: assign each point to nearest center
-            labels = AssignLabels(x, centers);
+            labels = AssignLabels(data, centers);
             iterations++;
 
-            // Update step: compute new centers, and the sum of the centers' squared shifts
-            var (newCenters, _) = UpdateCenters(x, labels, centers);
-            double shift = 0;
-            for (int k = 0; k < _options.NumClusters; k++)
-            {
-                double distance = NumOps.ToDouble(distanceMetric.Compute(GetRow(centers, k), GetRow(newCenters, k)));
-                shift += distance * distance;
-            }
+            // Update step: compute new centers, and whether the sum of the centers' squared shifts is within tolerance
+            var newCenters = UpdateCenters(x, labels, centers);
+            bool shiftWithinTolerance = HasConverged(data, centers, newCenters);
 
             centers = newCenters;
-            if (previousLabels is not null && SameLabels(labels, previousLabels))
+            if (previousLabels is not null && Engine.TensorEqual(labels.AsTensor(), previousLabels.AsTensor()))
             {
                 unchanged = true;
                 break;
             }
 
-            if (shift <= tolerance) break;
+            if (shiftWithinTolerance) break;
             previousLabels = labels;
         }
 
         // Label every row by the centers returned, unless the last assignment already did.
         if (iterations > 0 && !unchanged)
-            labels = AssignLabels(x, centers);
+            labels = AssignLabels(data, centers);
 
-        T inertia = NumOps.Zero;
-        if (iterations > 0)
-        {
-            for (int i = 0; i < x.Rows; i++)
-            {
-                T distance = distanceMetric.Compute(GetRow(x, i), GetRow(centers, (int)NumOps.ToDouble(labels[i])));
-                inertia = NumOps.Add(inertia, NumOps.Multiply(distance, distance));
-            }
-        }
-
+        T inertia = iterations > 0 ? ComputeInertia(data, labels, centers) : NumOps.Zero;
         return (centers, labels, inertia, iterations);
-    }
-
-    private bool SameLabels(Vector<T> a, Vector<T> b)
-    {
-        for (int i = 0; i < a.Length; i++)
-            if (NumOps.Compare(a[i], b[i]) != 0) return false;
-        return true;
     }
 
     /// <summary>
     /// The convergence threshold on the summed squared center shift: the tolerance times the mean over features of
     /// each feature's (population) variance, as scikit-learn's KMeans.
     /// </summary>
-    private double AbsoluteTolerance(double[] rowMajor, int rows, int columns)
+    private T AbsoluteTolerance(Matrix<T> x)
     {
-        if (rows == 0 || columns == 0) return 0;
+        if (x.Rows == 0 || x.Columns == 0) return NumOps.Zero;
 
-        double totalVariance = 0;
-        for (int j = 0; j < columns; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < rows; i++) mean += rowMajor[i * columns + j];
-            mean /= rows;
-
-            double variance = 0;
-            for (int i = 0; i < rows; i++)
-            {
-                double d = rowMajor[i * columns + j] - mean;
-                variance += d * d;
-            }
-
-            totalVariance += variance / rows;
-        }
-
-        return _options.Tolerance * (totalVariance / columns);
+        // Mean over all entries of the squared deviation from the column mean = mean of the per-feature variances.
+        var deviations = ClusteringTensorOps.SubtractRow(x, ClusteringTensorOps.ColumnMeans(x));
+        T meanVariance = Engine.TensorMean(Engine.TensorSquare(deviations));
+        return NumOps.Multiply(NumOps.FromDouble(_options.Tolerance), meanVariance);
     }
 
-    private Matrix<T> InitializeCenters(Matrix<T> x)
+    private Matrix<T> InitializeCenters(KMeansData data)
     {
         return _options.InitMethod switch
         {
             KMeansInitMethod.Custom when _options.InitialCenters is not null => _options.InitialCenters,
-            KMeansInitMethod.KMeansPlusPlus => InitializeKMeansPlusPlus(x),
-            _ => InitializeRandom(x)
+            KMeansInitMethod.KMeansPlusPlus => InitializeKMeansPlusPlus(data),
+            _ => InitializeRandom(data.X)
         };
     }
 
     private Matrix<T> InitializeRandom(Matrix<T> x)
     {
-        var centers = new Matrix<T>(_options.NumClusters, x.Columns);
         var selectedIndices = new HashSet<int>();
+        var order = new int[_options.NumClusters];
 
         for (int k = 0; k < _options.NumClusters; k++)
         {
@@ -456,14 +287,10 @@ public partial class KMeans<T> : ClusteringBase<T>
             } while (selectedIndices.Contains(idx));
 
             selectedIndices.Add(idx);
-
-            for (int j = 0; j < x.Columns; j++)
-            {
-                centers[k, j] = x[idx, j];
-            }
+            order[k] = idx;
         }
 
-        return centers;
+        return ClusteringTensorOps.SelectRows(x, order);
     }
 
     /// <summary>
@@ -487,222 +314,148 @@ public partial class KMeans<T> : ClusteringBase<T>
     }
 
     /// <summary>
-    /// Draws <paramref name="trials"/> rows with probability proportional to <paramref name="minDistances"/> and returns
-    /// the one whose potential is lowest (the first drawn on a tie), with its draw index in <paramref name="chosen"/>. One
-    /// trial returns the drawn row, classic k-means++, without evaluating any potential, and sets
-    /// <paramref name="chosen"/> to -1.
+    /// Greedy k-means++ (Arthur and Vassilvitskii, 2007; scikit-learn's default): each new center is the best of
+    /// <see cref="LocalTrials"/> rows drawn with probability proportional to the squared distance to the nearest chosen
+    /// center, the one whose potential (the total of those squared distances once it is added) is lowest, the first drawn
+    /// on a tie. One trial is classic k-means++, which takes the drawn row.
     /// </summary>
-    /// <param name="potentials">Each candidate's potential, given the candidates in draw order.</param>
-    private int DrawCenter(double[] minDistances, double[] cumulative, int trials, Func<int[], double[]> potentials,
-        out int chosen)
+    private Matrix<T> InitializeKMeansPlusPlus(KMeansData data)
     {
-        double total = 0;
-        for (int i = 0; i < minDistances.Length; i++)
-        {
-            total += minDistances[i];
-            cumulative[i] = total;
-        }
-
-        var candidates = new int[trials];
-        for (int t = 0; t < trials; t++) candidates[t] = FirstAtLeast(cumulative, _random.NextDouble() * total);
-
-        chosen = -1;
-        if (trials == 1) return candidates[0];
-
-        var values = potentials(candidates);
-        chosen = 0;
-        for (int t = 1; t < trials; t++)
-            if (values[t] < values[chosen]) chosen = t;
-        return candidates[chosen];
-    }
-
-    /// <summary>
-    /// The first index whose running total reaches <paramref name="threshold"/>, or 0 when none does (as the linear
-    /// scan this replaces did).
-    /// </summary>
-    private static int FirstAtLeast(double[] cumulative, double threshold)
-    {
-        int low = 0, high = cumulative.Length;
-        while (low < high)
-        {
-            int middle = low + (high - low) / 2;
-            if (cumulative[middle] >= threshold) high = middle;
-            else low = middle + 1;
-        }
-
-        return low < cumulative.Length ? low : 0;
-    }
-
-    private Matrix<T> InitializeKMeansPlusPlus(Matrix<T> x)
-    {
-        var centers = new Matrix<T>(_options.NumClusters, x.Columns);
-        var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var x = data.X;
+        int rows = x.Rows;
+        var chosen = new int[_options.NumClusters];
 
         // Choose first center randomly
-        int firstIdx = _random.Next(x.Rows);
-        for (int j = 0; j < x.Columns; j++)
-        {
-            centers[0, j] = x[firstIdx, j];
-        }
-
-        // Choose remaining centers with probability proportional to distance squared
-        var minDistances = new double[x.Rows];
-        for (int i = 0; i < x.Rows; i++)
-        {
-            minDistances[i] = double.MaxValue;
-        }
-
-        var points = new Vector<T>[x.Rows];
-        for (int i = 0; i < x.Rows; i++) points[i] = GetRow(x, i);
+        chosen[0] = _random.Next(rows);
 
         int trials = LocalTrials(_options.NumClusters);
-        var cumulative = new double[x.Rows];
+        Vector<T>? minDistances = null;
         for (int k = 1; k < _options.NumClusters; k++)
         {
-            // Update minimum distances to already selected centers
-            var lastCenter = GetRow(centers, k - 1);
-            for (int i = 0; i < x.Rows; i++)
+            // The first center sets the minimum squared distances; each later pick lowers them below
+            if (minDistances is null)
             {
-                double distSquared = Math.Pow(NumOps.ToDouble(distanceMetric.Compute(points[i], lastCenter)), 2);
-                if (distSquared < minDistances[i])
-                {
-                    minDistances[i] = distSquared;
-                }
+                minDistances = Engine.Reshape(
+                    SquaredDistancesTo(data, ClusteringTensorOps.SelectRows(x, new[] { chosen[k - 1] })), new[] { rows }).ToVector();
             }
 
             // Select next center with probability proportional to distance squared, keeping the best of the trials
-            int selectedIdx = DrawCenter(minDistances, cumulative, trials, candidates =>
+            var candidates = ClusteringTensorOps.SampleProportionalMany(minDistances, _random, trials);
+            if (trials == 1)
             {
-                var potentials = new double[candidates.Length];
-                for (int t = 0; t < candidates.Length; t++)
-                {
-                    double potential = 0;
-                    for (int i = 0; i < x.Rows; i++)
-                    {
-                        double distSquared = Math.Pow(
-                            NumOps.ToDouble(distanceMetric.Compute(points[i], points[candidates[t]])), 2);
-                        potential += Math.Min(minDistances[i], distSquared);
-                    }
-
-                    potentials[t] = potential;
-                }
-
-                return potentials;
-            }, out _);
-
-            for (int j = 0; j < x.Columns; j++)
-            {
-                centers[k, j] = x[selectedIdx, j];
+                chosen[k] = candidates[0];
+                var toChosen = SquaredDistancesTo(data, ClusteringTensorOps.SelectRows(x, candidates));
+                minDistances = Engine.TensorMin(minDistances.AsTensor(), Engine.Reshape(toChosen, new[] { rows })).ToVector();
+                continue;
             }
+
+            // [rows, trials]: every row's minimum squared distance once each candidate is a center
+            var lowered = Engine.TensorMin(
+                Engine.TensorBroadcastTo(Tensor<T>.FromVector(minDistances, new[] { rows, 1 }), new[] { rows, trials }),
+                SquaredDistancesTo(data, ClusteringTensorOps.SelectRows(x, candidates)));
+            var potentials = Engine.ReduceSum(lowered, new[] { 0 }, false).ToVector();
+            int best = ClusteringTensorOps.ArgMin(potentials);
+            chosen[k] = candidates[best];
+            minDistances = Engine.Reshape(Engine.TensorSlice(lowered, new[] { 0, best }, new[] { rows, 1 }), new[] { rows }).ToVector();
         }
 
-        return centers;
+        return ClusteringTensorOps.SelectRows(x, chosen);
     }
 
-    private Vector<T> AssignLabels(Matrix<T> x, Matrix<T> centers)
+    /// <summary>
+    /// Squared distance from every row of the data to every row of <paramref name="points"/>, as [rows, points]:
+    /// computed directly for Euclidean distance, as the square of the configured metric otherwise.
+    /// </summary>
+    private Tensor<T> SquaredDistancesTo(KMeansData data, Matrix<T> points)
     {
-        var labels = new Vector<T>(x.Rows);
-        var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        // The centers are fixed for the whole pass; copying each one out again for every point allocated
-        // rows x clusters vectors per iteration.
-        var centerRows = new Vector<T>[centers.Rows];
-        for (int k = 0; k < centers.Rows; k++)
-            centerRows[k] = GetRow(centers, k);
-
-        for (int i = 0; i < x.Rows; i++)
+        if (data.Euclidean)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            for (int k = 0; k < centers.Rows; k++)
-            {
-                var center = centerRows[k];
-                T dist = distanceMetric.Compute(point, center);
-
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearestCluster = k;
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return ClusteringTensorOps.ToTensor(ClusteringTensorOps.SquaredDistances(data.X, points));
         }
 
-        return labels;
+        var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        return Engine.TensorSquare(ClusteringTensorOps.ToTensor(distanceMetric.ComputePairwise(data.X, points)));
     }
 
-    private (Matrix<T> Centers, T Inertia) UpdateCenters(Matrix<T> x, Vector<T> labels, Matrix<T> oldCenters)
+    /// <summary>
+    /// Nearest-center label (the lowest index on a tie) for every row. Euclidean distance ranks the centers by
+    /// <c>||x||^2 + ||c||^2 - 2 x.c</c>, one matrix product for all rows and centers; any other metric by its own
+    /// pairwise distances.
+    /// </summary>
+    private Vector<T> AssignLabels(KMeansData data, Matrix<T> centers)
     {
-        var newCenters = new Matrix<T>(_options.NumClusters, x.Columns);
-        var counts = new int[_options.NumClusters];
-        T totalInertia = NumOps.Zero;
+        var x = data.X;
+        if (!data.Euclidean || data.RowNorms is null || centers.Rows == 0)
+        {
+            var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+            return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(distanceMetric, x, centers));
+        }
+
+        int rows = x.Rows;
+        int clusters = centers.Rows;
+        var ct = ClusteringTensorOps.ToTensor(centers);
+        var dots = Engine.TensorMatMul(data.Values, Engine.TensorTranspose(ct));
+        var centerNorms = Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(ct), new[] { 1 }, false), new[] { 1, clusters });
+        var norms = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(data.RowNorms, new[] { rows, clusters }),
+            Engine.TensorBroadcastTo(centerNorms, new[] { rows, clusters }));
+        var scores = Engine.TensorSubtract(norms, Engine.TensorMultiplyScalar(dots, NumOps.FromDouble(2.0)));
+        return ClusteringTensorOps.FromIntArray<T>(Engine.TensorArgMin(scores, 1).ToArray());
+    }
+
+    private Matrix<T> UpdateCenters(Matrix<T> x, Vector<T> labels, Matrix<T> oldCenters)
+    {
+        // Mean of each cluster; an empty cluster keeps its old center
+        var means = ClusteringTensorOps.ClusterMeans(x, labels, _options.NumClusters, out var counts);
+        return ClusteringTensorOps.RowsWherePositive(counts, means, oldCenters);
+    }
+
+    /// <summary>True when the sum over clusters of each center's squared shift is at most the absolute tolerance.</summary>
+    private bool HasConverged(KMeansData data, Matrix<T> oldCenters, Matrix<T> newCenters)
+        => NumOps.LessThanOrEquals(ComputeCenterShift(data, oldCenters, newCenters), data.Tolerance);
+
+    /// <summary>The sum over clusters of each center's squared shift.</summary>
+    private T ComputeCenterShift(KMeansData data, Matrix<T> oldCenters, Matrix<T> newCenters)
+    {
+        if (oldCenters.Rows == 0) return NumOps.Zero;
+
+        if (data.Euclidean)
+        {
+            return Engine.TensorSum(ClusteringTensorOps.RowSquaredEuclidean(
+                ClusteringTensorOps.ToTensor(oldCenters), ClusteringTensorOps.ToTensor(newCenters)));
+        }
+
         var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var shifts = ClusteringTensorOps.RowwiseDistances(distanceMetric, oldCenters, newCenters);
+        return Engine.DotProduct(shifts, shifts);
+    }
 
-        // Sum points for each cluster
-        for (int i = 0; i < x.Rows; i++)
+    /// <summary>Sum of squared distances from every row to the center its label names.</summary>
+    private T ComputeInertia(KMeansData data, Vector<T> labels, Matrix<T> centers)
+    {
+        if (data.Euclidean)
         {
-            int cluster = (int)NumOps.ToDouble(labels[i]);
-            counts[cluster]++;
-
-            for (int j = 0; j < x.Columns; j++)
-            {
-                newCenters[cluster, j] = NumOps.Add(newCenters[cluster, j], x[i, j]);
-            }
+            return ClusteringTensorOps.Inertia(data.X, labels, centers);
         }
 
-        // Compute mean and inertia
-        for (int k = 0; k < _options.NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                T countT = NumOps.FromDouble(counts[k]);
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    newCenters[k, j] = NumOps.Divide(newCenters[k, j], countT);
-                }
-            }
-            else
-            {
-                // Empty cluster: reinitialize with random point or keep old center
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    newCenters[k, j] = oldCenters[k, j];
-                }
-            }
-        }
-
-        // Compute inertia (sum of squared distances to assigned centers)
-        for (int i = 0; i < x.Rows; i++)
-        {
-            int cluster = (int)NumOps.ToDouble(labels[i]);
-            var point = GetRow(x, i);
-            var center = GetRow(newCenters, cluster);
-            T dist = distanceMetric.Compute(point, center);
-            totalInertia = NumOps.Add(totalInertia, NumOps.Multiply(dist, dist));
-        }
-
-        return (newCenters, totalInertia);
+        var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var distances = ClusteringTensorOps.AssignedDistances(distanceMetric, data.X, labels, centers);
+        return Engine.DotProduct(distances, distances);
     }
 
     private Matrix<T> ComputeDistancesToCenters(Matrix<T> x, Matrix<T> centers)
     {
-        var distances = new Matrix<T>(x.Rows, _options.NumClusters);
         var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        var distances = distanceMetric.ComputePairwise(x, centers);
+        if (centers.Rows >= _options.NumClusters)
         {
-            var point = GetRow(x, i);
-            for (int k = 0; k < centers.Rows; k++)
-            {
-                var center = GetRow(centers, k);
-                distances[i, k] = distanceMetric.Compute(point, center);
-            }
+            return distances;
         }
 
-        return distances;
+        // Fewer centers than configured clusters (after merging): the remaining columns stay zero
+        var padded = new Matrix<T>(x.Rows, _options.NumClusters);
+        padded.SetSubMatrix(0, 0, distances);
+        return padded;
     }
 
     private void ValidateInputData(Matrix<T> x)
@@ -727,16 +480,9 @@ public partial class KMeans<T> : ClusteringBase<T>
             }
         }
 
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusteringTensorOps.ContainsNonFinite(x))
         {
-            foreach (T value in x.GetRowReadOnlySpan(i))
-            {
-                // NumOps, not NumericalStabilityHelper, which looks the operations up again for every element.
-                if (NumOps.IsNaN(value) || NumOps.IsInfinity(value))
-                {
-                    throw new ArgumentException("Input data contains NaN or Infinity values.", nameof(x));
-                }
-            }
+            throw new ArgumentException("Input data contains NaN or Infinity values.", nameof(x));
         }
     }
 

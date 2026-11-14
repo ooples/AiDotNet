@@ -81,6 +81,9 @@ public class VariationalStrategies<T>
 
         var rand = RandomHelper.CreateSeededRandom(seed);
 
+        var engine = AiDotNetEngine.Current;
+        var data = Tensor<T>.FromMatrix(X);
+
         // Initialize centers using k-means++
         var centers = new Matrix<T>(m, d);
         var usedIndices = new HashSet<int>();
@@ -88,125 +91,67 @@ public class VariationalStrategies<T>
         // First center: random point
         int firstIdx = rand.Next(n);
         usedIndices.Add(firstIdx);
-        for (int j = 0; j < d; j++)
-        {
-            centers[0, j] = X[firstIdx, j];
-        }
+        centers.SetRow(0, X.GetRow(firstIdx));
 
         // Remaining centers: k-means++ initialization
-        var minDistances = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            minDistances[i] = double.MaxValue;
-        }
+        var minDistances = Tensor<T>.CreateDefault(new[] { n }, _numOps.FromDouble(double.MaxValue));
+        T tinyTotal = _numOps.FromDouble(1e-10);
 
         for (int k = 1; k < m; k++)
         {
             // Update distances to nearest center
-            for (int i = 0; i < n; i++)
-            {
-                double dist = ComputeSquaredDistance(X, i, centers, k - 1);
-                minDistances[i] = Math.Min(minDistances[i], dist);
-            }
+            minDistances = engine.TensorMin(minDistances, SquaredDistancesToCenters(data, centers.GetRow(k - 1)));
 
             // Sample next center proportional to squared distance
-            double totalDist = minDistances.Sum();
-            if (totalDist < 1e-10)
+            T totalDist = engine.TensorSum(minDistances);
+            int selectedIdx;
+            if (_numOps.LessThan(totalDist, tinyTotal))
             {
                 // All points are very close to existing centers
                 // Just pick a random unused point
-                int nextIdx;
                 do
                 {
-                    nextIdx = rand.Next(n);
-                } while (usedIndices.Contains(nextIdx));
-
-                usedIndices.Add(nextIdx);
-                for (int j = 0; j < d; j++)
-                {
-                    centers[k, j] = X[nextIdx, j];
-                }
+                    selectedIdx = rand.Next(n);
+                } while (usedIndices.Contains(selectedIdx));
             }
             else
             {
-                double threshold = rand.NextDouble() * totalDist;
-                double cumSum = 0;
-                int selectedIdx = 0;
-
-                for (int i = 0; i < n; i++)
-                {
-                    cumSum += minDistances[i];
-                    if (cumSum >= threshold)
-                    {
-                        selectedIdx = i;
-                        break;
-                    }
-                }
-
-                usedIndices.Add(selectedIdx);
-                for (int j = 0; j < d; j++)
-                {
-                    centers[k, j] = X[selectedIdx, j];
-                }
+                // First index whose running distance total reaches threshold (index 0 if none does)
+                var threshold = Tensor<T>.FromScalar(_numOps.Multiply(_numOps.FromDouble(rand.NextDouble()), totalDist))
+                    .Reshape(new[] { 1 });
+                var cumulative = engine.TensorCumSum(minDistances, 0);
+                selectedIdx = engine.TensorSearchSorted(cumulative, threshold).AsSpan()[0];
+                if (selectedIdx >= n) selectedIdx = 0;
             }
+
+            usedIndices.Add(selectedIdx);
+            centers.SetRow(k, X.GetRow(selectedIdx));
         }
 
         // Run k-means iterations
         var assignments = new int[n];
-
+        var ones = Tensor<T>.CreateDefault(new[] { n }, _numOps.One);
         for (int iter = 0; iter < maxIterations; iter++)
         {
-            // Assignment step
-            bool changed = false;
-            for (int i = 0; i < n; i++)
-            {
-                int nearestCenter = 0;
-                double minDist = double.MaxValue;
-
-                for (int k = 0; k < m; k++)
-                {
-                    double dist = ComputeSquaredDistance(X, i, centers, k);
-                    if (dist < minDist)
-                    {
-                        minDist = dist;
-                        nearestCenter = k;
-                    }
-                }
-
-                if (assignments[i] != nearestCenter)
-                {
-                    assignments[i] = nearestCenter;
-                    changed = true;
-                }
-            }
+            // Assignment step: nearest center (first one on ties) for every point
+            var distances = SquaredDistancesToCenters(data, centers);
+            var nearest = engine.TensorArgMin(distances, 1);
+            var nearestCenters = nearest.AsSpan().ToArray();
+            bool changed = !nearestCenters.AsSpan().SequenceEqual(assignments);
+            assignments = nearestCenters;
 
             if (!changed)
                 break;
 
-            // Update step: compute new centers
-            var newCenters = new Matrix<T>(m, d);
-            var counts = new int[m];
-
-            for (int i = 0; i < n; i++)
-            {
-                int k = assignments[i];
-                counts[k]++;
-                for (int j = 0; j < d; j++)
-                {
-                    newCenters[k, j] = _numOps.Add(newCenters[k, j], X[i, j]);
-                }
-            }
-
-            for (int k = 0; k < m; k++)
-            {
-                if (counts[k] > 0)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        centers[k, j] = _numOps.Divide(newCenters[k, j], _numOps.FromDouble(counts[k]));
-                    }
-                }
-            }
+            // Update step: mean of the points assigned to each center (empty clusters keep their center)
+            var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { m, d }), 0, nearest, data);
+            var counts = engine.TensorIndexAdd(new Tensor<T>(new[] { m }), 0, nearest, ones);
+            var hasPoints = engine.TensorGreaterThan(counts, _numOps.Zero);
+            var safeCounts = engine.TensorWhere(hasPoints, counts, engine.TensorOnesLike(counts));
+            var means = engine.TensorDivide(
+                sums, engine.TensorBroadcastTo(safeCounts.Reshape(new[] { m, 1 }), new[] { m, d }));
+            var keep = engine.TensorBroadcastTo(hasPoints.Reshape(new[] { m, 1 }), new[] { m, d });
+            centers = engine.TensorWhere(keep, means, Tensor<T>.FromMatrix(centers)).ToMatrix();
         }
 
         return centers;
@@ -215,11 +160,30 @@ public class VariationalStrategies<T>
     /// <summary>
     /// Computes squared distance between a data point and a center.
     /// </summary>
-    private double ComputeSquaredDistance(Matrix<T> X, int dataIdx, Matrix<T> centers, int centerIdx)
+    private static Tensor<T> SquaredDistancesToCenters(Tensor<T> data, Vector<T> center)
     {
         var engine = AiDotNetEngine.Current;
-        var diff = engine.Subtract(X.GetRow(dataIdx), centers.GetRow(centerIdx));
-        return _numOps.ToDouble(engine.DotProduct(diff, diff));
+        int n = data.Shape[0];
+        int d = data.Shape[1];
+        var diff = engine.TensorSubtract(
+            data, engine.TensorBroadcastTo(Tensor<T>.FromVector(center).Reshape(new[] { 1, d }), new[] { n, d }));
+        return engine.ReduceSum(engine.TensorSquare(diff), new[] { 1 }, keepDims: false);
+    }
+
+    /// <summary>
+    /// Squared Euclidean distance from every data row to every center, [n, m].
+    /// </summary>
+    private static Tensor<T> SquaredDistancesToCenters(Tensor<T> data, Matrix<T> centers)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = data.Shape[0];
+        int d = data.Shape[1];
+        int m = centers.Rows;
+        var shape = new[] { n, m, d };
+        var diff = engine.TensorSubtract(
+            engine.TensorBroadcastTo(data.Reshape(new[] { n, 1, d }), shape),
+            engine.TensorBroadcastTo(Tensor<T>.FromMatrix(centers).Reshape(new[] { 1, m, d }), shape));
+        return engine.ReduceSum(engine.TensorSquare(diff), new[] { 2 }, keepDims: false);
     }
 
     /// <summary>
@@ -315,17 +279,7 @@ public class VariationalStrategies<T>
         }
 
         // Extract selected points
-        var inducingPoints = new Matrix<T>(m, d);
-        for (int k = 0; k < m; k++)
-        {
-            int idx = selectedIndices[k];
-            for (int j = 0; j < d; j++)
-            {
-                inducingPoints[k, j] = X[idx, j];
-            }
-        }
-
-        return inducingPoints;
+        return X.GetRows(selectedIndices.Take(m));
     }
 
     /// <summary>
@@ -333,12 +287,7 @@ public class VariationalStrategies<T>
     /// </summary>
     private Vector<T> GetRow(Matrix<T> M, int row)
     {
-        var result = new Vector<T>(M.Columns);
-        for (int j = 0; j < M.Columns; j++)
-        {
-            result[j] = M[row, j];
-        }
-        return result;
+        return M.GetRow(row);
     }
 
     /// <summary>
@@ -408,126 +357,80 @@ public class VariationalStrategies<T>
         var Kuu = ComputeKernelMatrix(Z, Z, kernel);
         var Kuf = ComputeKernelMatrix(Z, X, kernel);
 
+        var engine = AiDotNetEngine.Current;
+        T negativeInfinity = _numOps.FromDouble(double.NegativeInfinity);
+
         // Add jitter to Kuu
-        for (int i = 0; i < m; i++)
+        Kuu = GaussianProcessEngineOps.AddToDiagonal(Kuu, _numOps.FromDouble(1e-6));
+
+        // Cholesky decomposition of Kuu; a factor that does not exist or has a pivot below 1e-10
+        // makes the triangular solves below undefined.
+        var (luu, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(Kuu), upper: false);
+        if (engine.TensorCountNonzero(info) > 0 || !GaussianProcessEngineOps.AllFinite(luu))
         {
-            Kuu[i, i] = _numOps.Add(Kuu[i, i], _numOps.FromDouble(1e-6));
+            return negativeInfinity;
         }
 
-        // Cholesky decomposition of Kuu
-        var Luu = CholeskyDecomposition(Kuu);
-        if (Luu is null)
+        var luuDiagonal = engine.TensorAbs(engine.TensorDiagonal(luu));
+        if (m > 0 && _numOps.LessThan(engine.TensorMinValue(luuDiagonal), _numOps.FromDouble(1e-10)))
         {
-            return _numOps.FromDouble(double.NegativeInfinity);
+            return negativeInfinity;
         }
 
-        // Solve Luu \ Kuf
-        var alpha = SolveTriangular(Luu, Kuf, lower: true);
-        if (alpha is null)
-        {
-            return _numOps.FromDouble(double.NegativeInfinity);
-        }
+        // alpha = Luu \ Kuf (whitened cross-covariance), Kuu^{-1} m and A = Kuu^{-1} Kuf
+        var kuf = Tensor<T>.FromMatrix(Kuf);
+        var alpha = LinalgDispatch<T>.SolveTriangular(luu, kuf, upper: false);
+        var mean = Tensor<T>.FromVector(variationalMean).Reshape(new[] { m, 1 });
+        var KuuInvM = LinalgDispatch<T>.CholeskySolve(mean, luu, upper: false);
+        var KuuInvKuf = LinalgDispatch<T>.CholeskySolve(kuf, luu, upper: false);
 
-        // Expected log likelihood term
-        double beta = 1.0 / noiseVariance;
-        double logLikeTerm = 0;
+        // Expected log likelihood term (Hensman et al. 2013):
+        // Σ_i log N(y_i | k_iᵀ Kuu⁻¹ m, σ²) - β/2 Σ_i (k_ii - q_ii) - β/2 Σ_i k_iᵀ Kuu⁻¹ S Kuu⁻¹ k_i
+        T halfBeta = _numOps.FromDouble(0.5 / noiseVariance);
 
         // Predictive mean: Kfu @ Kuu^{-1} @ m
-        var KuuInvM = SolveTriangularSystem(Luu, variationalMean);
-        if (KuuInvM is null)
+        var predictiveMean = engine.TensorMatMul(engine.TensorTranspose(kuf), KuuInvM).Reshape(new[] { n });
+        var residuals = engine.TensorSubtract(Tensor<T>.FromVector(y), predictiveMean);
+        T logLikeTerm = _numOps.Subtract(
+            _numOps.FromDouble(n * -0.5 * Math.Log(2 * Math.PI * noiseVariance)),
+            _numOps.Multiply(halfBeta, engine.TensorSumOfSquares(residuals)));
+
+        // Trace term for variance correction: Σ_i (k_ii - Σ_j alpha[j,i]²)
+        var selfKernel = new Vector<T>(X.Rows);
+        for (int ri = 0; ri < X.Rows; ri++)
         {
-            return _numOps.FromDouble(double.NegativeInfinity);
+            var rowA = X.GetRow(ri);
+            selfKernel[ri] = kernel.Calculate(rowA, rowA);
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            // Mean at training point i
-            double mean = 0;
-            for (int j = 0; j < m; j++)
-            {
-                mean += _numOps.ToDouble(Kuf[j, i]) * _numOps.ToDouble(KuuInvM[j]);
-            }
+        var kernelDiagonal = Tensor<T>.FromVector(selfKernel);
+        T traceTerm = _numOps.Subtract(engine.TensorSum(kernelDiagonal), engine.TensorSumOfSquares(alpha));
+        logLikeTerm = _numOps.Subtract(logLikeTerm, _numOps.Multiply(halfBeta, traceTerm));
 
-            double diff = _numOps.ToDouble(y[i]) - mean;
-            logLikeTerm += -0.5 * Math.Log(2 * Math.PI / beta) - 0.5 * beta * diff * diff;
-        }
-
-        // Trace term for variance correction
-        double traceTerm = 0;
-        for (int i = 0; i < n; i++)
-        {
-            // Kii - sum_j alpha[j,i]^2
-            var xi = GetRow(X, i);
-            double kii = _numOps.ToDouble(kernel.Calculate(xi, xi));
-
-            double qii = 0;
-            for (int j = 0; j < m; j++)
-            {
-                double alphaJi = _numOps.ToDouble(alpha[j, i]);
-                qii += alphaJi * alphaJi;
-            }
-
-            traceTerm += kii - qii;
-        }
-        logLikeTerm -= 0.5 * beta * traceTerm;
+        // Variance of q(u) carried to f: Σ_i a_iᵀ S a_i = ||L_Sᵀ A||_F² with A = Kuu⁻¹ Kuf
+        var covChol = Tensor<T>.FromMatrix(variationalCovChol);
+        var projected = engine.TensorMatMul(engine.TensorTranspose(covChol), KuuInvKuf);
+        logLikeTerm = _numOps.Subtract(logLikeTerm, _numOps.Multiply(halfBeta, engine.TensorSumOfSquares(projected)));
 
         // KL divergence term: KL(q(u) || p(u))
         // = 0.5 * (tr(Kuu^{-1} S) + m^T Kuu^{-1} m - M + log|Kuu| - log|S|)
-        double klTerm = 0;
+        T floor = _numOps.FromDouble(1e-10);
+        T two = _numOps.FromDouble(2.0);
+        T logDetKuu = _numOps.Multiply(two, engine.TensorSum(engine.TensorLog(engine.TensorMax(luuDiagonal, floor))));
+        T logDetS = _numOps.Multiply(two, engine.TensorSum(engine.TensorLog(
+            engine.TensorMax(engine.TensorAbs(engine.TensorDiagonal(covChol)), floor))));
+        T mKuuInvM = engine.TensorVecDot(mean.Reshape(new[] { m }), KuuInvM.Reshape(new[] { m }));
 
-        // log|Kuu|
-        double logDetKuu = 0;
-        for (int i = 0; i < m; i++)
-        {
-            logDetKuu += 2 * Math.Log(Math.Max(1e-10, Math.Abs(_numOps.ToDouble(Luu[i, i]))));
-        }
+        // tr(Kuu^{-1} S) = ||Luu^{-1} @ S_chol||_F^2 where S = S_chol @ S_chol^T and Kuu = Luu @ Luu^T
+        T traceKuuInvS = engine.TensorSumOfSquares(LinalgDispatch<T>.SolveTriangular(luu, covChol, upper: false));
 
-        // log|S|
-        double logDetS = 0;
-        for (int i = 0; i < m; i++)
-        {
-            logDetS += 2 * Math.Log(Math.Max(1e-10, Math.Abs(_numOps.ToDouble(variationalCovChol[i, i]))));
-        }
+        T klTerm = _numOps.Multiply(
+            _numOps.FromDouble(0.5),
+            _numOps.Add(
+                _numOps.Subtract(_numOps.Add(traceKuuInvS, mKuuInvM), _numOps.FromDouble(m)),
+                _numOps.Subtract(logDetKuu, logDetS)));
 
-        // m^T Kuu^{-1} m
-        double mKuuInvM = 0;
-        for (int i = 0; i < m; i++)
-        {
-            mKuuInvM += _numOps.ToDouble(variationalMean[i]) * _numOps.ToDouble(KuuInvM[i]);
-        }
-
-        // Compute tr(Kuu^{-1} S) = ||Luu^{-1} @ S_chol||_F^2
-        // where S = S_chol @ S_chol^T and Kuu = Luu @ Luu^T
-        double traceKuuInvS = 0;
-        bool traceFailed = false;
-        for (int j = 0; j < m && !traceFailed; j++)
-        {
-            // Solve Luu @ x = S_chol[:, j] for each column of S_chol
-            var sCol = new Vector<T>(m);
-            for (int i = 0; i < m; i++)
-            {
-                sCol[i] = variationalCovChol[i, j];
-            }
-            var x = SolveTriangularSystem(Luu, sCol);
-            if (x is null)
-            {
-                // Fallback to heuristic if solve fails
-                traceKuuInvS = m; // Assume trace = m as approximation
-                traceFailed = true;
-                break;
-            }
-            // Add ||x||^2 to the trace
-            for (int i = 0; i < m; i++)
-            {
-                double xi = _numOps.ToDouble(x[i]);
-                traceKuuInvS += xi * xi;
-            }
-        }
-
-        klTerm = 0.5 * (traceKuuInvS + mKuuInvM - m + logDetKuu - logDetS);
-
-        double elbo = logLikeTerm - klTerm;
-        return _numOps.FromDouble(elbo);
+        return _numOps.Subtract(logLikeTerm, klTerm);
     }
 
     /// <summary>
@@ -550,145 +453,6 @@ public class VariationalStrategies<T>
         }
 
         return K;
-    }
-
-    /// <summary>
-    /// Performs Cholesky decomposition of a symmetric positive definite matrix.
-    /// </summary>
-    private Matrix<T>? CholeskyDecomposition(Matrix<T> A)
-    {
-        int n = A.Rows;
-        var L = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                double sum = _numOps.ToDouble(A[i, j]);
-
-                for (int k = 0; k < j; k++)
-                {
-                    sum -= _numOps.ToDouble(L[i, k]) * _numOps.ToDouble(L[j, k]);
-                }
-
-                if (i == j)
-                {
-                    if (sum <= 0)
-                    {
-                        return null; // Not positive definite
-                    }
-                    L[i, j] = _numOps.FromDouble(Math.Sqrt(sum));
-                }
-                else
-                {
-                    double ljj = _numOps.ToDouble(L[j, j]);
-                    if (Math.Abs(ljj) < 1e-10)
-                    {
-                        return null;
-                    }
-                    L[i, j] = _numOps.FromDouble(sum / ljj);
-                }
-            }
-        }
-
-        return L;
-    }
-
-    /// <summary>
-    /// Solves L @ X = B for X where L is lower triangular.
-    /// </summary>
-    private Matrix<T>? SolveTriangular(Matrix<T> L, Matrix<T> B, bool lower = true)
-    {
-        int m = L.Rows;
-        int n = B.Columns;
-        var X = new Matrix<T>(m, n);
-
-        if (lower)
-        {
-            for (int col = 0; col < n; col++)
-            {
-                for (int i = 0; i < m; i++)
-                {
-                    double sum = _numOps.ToDouble(B[i, col]);
-                    for (int j = 0; j < i; j++)
-                    {
-                        sum -= _numOps.ToDouble(L[i, j]) * _numOps.ToDouble(X[j, col]);
-                    }
-                    double lii = _numOps.ToDouble(L[i, i]);
-                    if (Math.Abs(lii) < 1e-10)
-                    {
-                        return null;
-                    }
-                    X[i, col] = _numOps.FromDouble(sum / lii);
-                }
-            }
-        }
-        else
-        {
-            for (int col = 0; col < n; col++)
-            {
-                for (int i = m - 1; i >= 0; i--)
-                {
-                    double sum = _numOps.ToDouble(B[i, col]);
-                    for (int j = i + 1; j < m; j++)
-                    {
-                        sum -= _numOps.ToDouble(L[i, j]) * _numOps.ToDouble(X[j, col]);
-                    }
-                    double lii = _numOps.ToDouble(L[i, i]);
-                    if (Math.Abs(lii) < 1e-10)
-                    {
-                        return null;
-                    }
-                    X[i, col] = _numOps.FromDouble(sum / lii);
-                }
-            }
-        }
-
-        return X;
-    }
-
-    /// <summary>
-    /// Solves L @ L^T @ x = b for x.
-    /// </summary>
-    private Vector<T>? SolveTriangularSystem(Matrix<T> L, Vector<T> b)
-    {
-        int n = L.Rows;
-
-        // Forward substitution: L @ z = b
-        var z = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            double sum = _numOps.ToDouble(b[i]);
-            for (int j = 0; j < i; j++)
-            {
-                sum -= _numOps.ToDouble(L[i, j]) * _numOps.ToDouble(z[j]);
-            }
-            double lii = _numOps.ToDouble(L[i, i]);
-            if (Math.Abs(lii) < 1e-10)
-            {
-                return null;
-            }
-            z[i] = _numOps.FromDouble(sum / lii);
-        }
-
-        // Backward substitution: L^T @ x = z
-        var x = new Vector<T>(n);
-        for (int i = n - 1; i >= 0; i--)
-        {
-            double sum = _numOps.ToDouble(z[i]);
-            for (int j = i + 1; j < n; j++)
-            {
-                sum -= _numOps.ToDouble(L[j, i]) * _numOps.ToDouble(x[j]);
-            }
-            double lii = _numOps.ToDouble(L[i, i]);
-            if (Math.Abs(lii) < 1e-10)
-            {
-                return null;
-            }
-            x[i] = _numOps.FromDouble(sum / lii);
-        }
-
-        return x;
     }
 
     /// <summary>
@@ -724,32 +488,19 @@ public class VariationalStrategies<T>
         int n = y.Length;
 
         // Initialize mean: weighted average of nearby targets
-        var mean = new Vector<T>(m);
-        for (int i = 0; i < m; i++)
-        {
-            double weightSum = 0;
-            double valueSum = 0;
-
-            for (int j = 0; j < n; j++)
-            {
-                double weight = Math.Abs(_numOps.ToDouble(Kuf[i, j]));
-                weightSum += weight;
-                valueSum += weight * _numOps.ToDouble(y[j]);
-            }
-
-            if (weightSum > 1e-10)
-            {
-                mean[i] = _numOps.FromDouble(valueSum / weightSum);
-            }
-        }
+        // mean_i = Σ_j |Kuf_ij| y_j / Σ_j |Kuf_ij|, or 0 when the weights sum to at most 1e-10
+        var engine = AiDotNetEngine.Current;
+        var weights = engine.TensorAbs(Tensor<T>.FromMatrix(Kuf));
+        var weightSums = engine.ReduceSum(weights, new[] { 1 }, keepDims: false);
+        var valueSums = engine.TensorMatMul(weights, Tensor<T>.FromVector(y).Reshape(new[] { n, 1 })).Reshape(new[] { m });
+        var hasWeight = engine.TensorGreaterThan(weightSums, _numOps.FromDouble(1e-10));
+        var safeSums = engine.TensorWhere(hasWeight, weightSums, engine.TensorOnesLike(weightSums));
+        var mean = engine.TensorWhere(
+            hasWeight, engine.TensorDivide(valueSums, safeSums), engine.TensorZerosLike(weightSums)).ToVector();
 
         // Initialize covariance Cholesky: scaled identity
-        var covChol = new Matrix<T>(m, m);
         double scale = Math.Sqrt(Math.Max(noiseVariance, 0.1));
-        for (int i = 0; i < m; i++)
-        {
-            covChol[i, i] = _numOps.FromDouble(scale);
-        }
+        var covChol = engine.TensorMultiplyScalar(engine.TensorEye<T>(m), _numOps.FromDouble(scale)).ToMatrix();
 
         return (mean, covChol);
     }

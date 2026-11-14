@@ -177,12 +177,7 @@ public class ConstantMean<T> : IMeanFunction<T>
     {
         if (X is null) throw new ArgumentNullException(nameof(X));
 
-        var result = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
-        {
-            result[i] = _constant;
-        }
-        return result;
+        return Tensor<T>.CreateDefault(new[] { X.Rows }, _constant).ToVector();
     }
 }
 
@@ -243,11 +238,7 @@ public class LinearMean<T> : IMeanFunction<T>
         if (weights is null) throw new ArgumentNullException(nameof(weights));
 
         _numOps = MathHelper.GetNumericOperations<T>();
-        _weights = new Vector<T>(weights.Length);
-        for (int i = 0; i < weights.Length; i++)
-        {
-            _weights[i] = weights[i];
-        }
+        _weights = weights.Clone();
 
         _bias = bias is not null ? bias : _numOps.Zero;
     }
@@ -300,12 +291,7 @@ public class LinearMean<T> : IMeanFunction<T>
     {
         get
         {
-            var copy = new Vector<T>(_weights.Length);
-            for (int i = 0; i < _weights.Length; i++)
-            {
-                copy[i] = _weights[i];
-            }
-            return copy;
+            return _weights.Clone();
         }
     }
 
@@ -338,12 +324,7 @@ public class LinearMean<T> : IMeanFunction<T>
         if (x.Length != _weights.Length)
             throw new ArgumentException($"Input dimension ({x.Length}) must match weight dimension ({_weights.Length}).");
 
-        T result = _bias;
-        for (int i = 0; i < x.Length; i++)
-        {
-            result = _numOps.Add(result, _numOps.Multiply(_weights[i], x[i]));
-        }
-        return result;
+        return _numOps.Add(_bias, AiDotNetEngine.Current.DotProduct(_weights, x));
     }
 
     /// <summary>
@@ -357,17 +338,9 @@ public class LinearMean<T> : IMeanFunction<T>
         if (X.Columns != _weights.Length)
             throw new ArgumentException($"Input dimension ({X.Columns}) must match weight dimension ({_weights.Length}).");
 
-        var result = new Vector<T>(X.Rows);
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T value = _bias;
-            for (int j = 0; j < X.Columns; j++)
-            {
-                value = _numOps.Add(value, _numOps.Multiply(_weights[j], X[i, j]));
-            }
-            result[i] = value;
-        }
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var product = engine.MatrixVectorMultiply(X, _weights);
+        return engine.TensorAddScalar(Tensor<T>.FromVector(product), _bias).ToVector();
     }
 
     /// <summary>
@@ -399,140 +372,30 @@ public class LinearMean<T> : IMeanFunction<T>
         int n = X.Rows;
         int d = X.Columns;
 
+        var engine = AiDotNetEngine.Current;
+
         // Add bias column (all ones)
-        var XBias = new Matrix<T>(n, d + 1);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                XBias[i, j] = X[i, j];
-            }
-            XBias[i, d] = numOps.One; // Bias column
-        }
+        var XBias = engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(X), Tensor<T>.CreateDefault(new[] { n, 1 }, numOps.One) },
+            1);
 
-        // Solve X^T X w = X^T y using simple pseudo-inverse
-        // First compute X^T X
-        var XtX = new Matrix<T>(d + 1, d + 1);
-        for (int i = 0; i < d + 1; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                T sum = numOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    sum = numOps.Add(sum, numOps.Multiply(XBias[k, i], XBias[k, j]));
-                }
-                XtX[i, j] = sum;
-                XtX[j, i] = sum;
-            }
-            // Add regularization
-            XtX[i, i] = numOps.Add(XtX[i, i], numOps.FromDouble(1e-6));
-        }
+        // Solve (X^T X + 1e-6 I) w = X^T y
+        var XbiasT = engine.TensorTranspose(XBias);
+        var XtX = engine.TensorAdd(
+            engine.TensorMatMul(XbiasT, XBias),
+            engine.TensorMultiplyScalar(engine.TensorEye<T>(d + 1), numOps.FromDouble(1e-6)));
+        var Xty = engine.TensorMatMul(XbiasT, Tensor<T>.FromVector(y).Reshape(new[] { n, 1 }));
 
-        // Compute X^T y
-        var Xty = new Vector<T>(d + 1);
-        for (int i = 0; i < d + 1; i++)
-        {
-            T sum = numOps.Zero;
-            for (int k = 0; k < n; k++)
-            {
-                sum = numOps.Add(sum, numOps.Multiply(XBias[k, i], y[k]));
-            }
-            Xty[i] = sum;
-        }
-
-        // Solve using Cholesky decomposition or simple Gauss-Jordan
-        var w = SolveLinearSystem(XtX, Xty);
+        // Partial-pivoting LU solve of the regularized normal equations
+        var w = LinalgDispatch<T>.Solve(XtX, Xty).Reshape(new[] { d + 1 }).ToVector();
 
         // Extract weights and bias
-        var weights = new double[d];
-        for (int i = 0; i < d; i++)
-        {
-            weights[i] = numOps.ToDouble(w[i]);
-        }
-        double bias = numOps.ToDouble(w[d]);
+        if (d == 0)
+            throw new ArgumentException("Weights array cannot be empty.", "weights");
 
-        return new LinearMean<T>(weights, bias);
+        return new LinearMean<T>(w.GetSubVector(0, d), w[d]);
     }
 
-    /// <summary>
-    /// Solves Ax = b using Gauss-Jordan elimination.
-    /// </summary>
-    private static Vector<T> SolveLinearSystem(Matrix<T> A, Vector<T> b)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int n = A.Rows;
-
-        // Create augmented matrix
-        var aug = new Matrix<T>(n, n + 1);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                aug[i, j] = A[i, j];
-            }
-            aug[i, n] = b[i];
-        }
-
-        // Forward elimination
-        for (int i = 0; i < n; i++)
-        {
-            // Find pivot
-            int maxRow = i;
-            double maxVal = Math.Abs(numOps.ToDouble(aug[i, i]));
-            for (int k = i + 1; k < n; k++)
-            {
-                double val = Math.Abs(numOps.ToDouble(aug[k, i]));
-                if (val > maxVal)
-                {
-                    maxVal = val;
-                    maxRow = k;
-                }
-            }
-
-            // Swap rows
-            if (maxRow != i)
-            {
-                for (int j = 0; j <= n; j++)
-                {
-                    T temp = aug[i, j];
-                    aug[i, j] = aug[maxRow, j];
-                    aug[maxRow, j] = temp;
-                }
-            }
-
-            // Eliminate column
-            T pivot = aug[i, i];
-            if (Math.Abs(numOps.ToDouble(pivot)) > 1e-12)
-            {
-                for (int j = 0; j <= n; j++)
-                {
-                    aug[i, j] = numOps.Divide(aug[i, j], pivot);
-                }
-
-                for (int k = 0; k < n; k++)
-                {
-                    if (k != i)
-                    {
-                        T factor = aug[k, i];
-                        for (int j = 0; j <= n; j++)
-                        {
-                            aug[k, j] = numOps.Subtract(aug[k, j],
-                                numOps.Multiply(factor, aug[i, j]));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Extract solution
-        var x = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            x[i] = aug[i, n];
-        }
-        return x;
-    }
 }
 
 /// <summary>

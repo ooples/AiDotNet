@@ -542,7 +542,6 @@ public class HyperparameterOptimizer<T>
             throw new ArgumentException("Number of folds cannot exceed number of samples.");
 
         int n = X.Rows;
-        int d = X.Columns;
         var rand = RandomHelper.CreateSeededRandom(_randomSeed);
 
         // Shuffle indices
@@ -560,6 +559,9 @@ public class HyperparameterOptimizer<T>
         var foldScores = new List<double>();
         int startIdx = 0;
 
+        T varianceFloor = _numOps.FromDouble(1e-10);
+        T twoPi = _numOps.FromDouble(2 * Math.PI);
+        T minusHalf = _numOps.FromDouble(-0.5);
         for (int fold = 0; fold < numFolds; fold++)
         {
             int foldSize = baseFoldSize + (fold < remainder ? 1 : 0);
@@ -572,35 +574,13 @@ public class HyperparameterOptimizer<T>
                 testIndices.Add(indices[i]);
             }
 
-            // Split data
-            int trainSize = n - foldSize;
-            var XTrain = new Matrix<T>(trainSize, d);
-            var yTrain = new Vector<T>(trainSize);
-            var XTest = new Matrix<T>(foldSize, d);
-            var yTest = new Vector<T>(foldSize);
-
-            int trainIdx = 0, testIdx = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (testIndices.Contains(i))
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        XTest[testIdx, j] = X[i, j];
-                    }
-                    yTest[testIdx] = y[i];
-                    testIdx++;
-                }
-                else
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        XTrain[trainIdx, j] = X[i, j];
-                    }
-                    yTrain[trainIdx] = y[i];
-                    trainIdx++;
-                }
-            }
+            // Split data (rows keep their original order within each split)
+            var testRows = Enumerable.Range(0, n).Where(testIndices.Contains).ToArray();
+            var trainRows = Enumerable.Range(0, n).Where(i => !testIndices.Contains(i)).ToArray();
+            var XTrain = GaussianProcessEngineOps.SelectRows(X, trainRows);
+            var yTrain = GaussianProcessEngineOps.Select(y, trainRows);
+            var XTest = GaussianProcessEngineOps.SelectRows(X, testRows);
+            var yTest = GaussianProcessEngineOps.Select(y, testRows);
 
             try
             {
@@ -611,20 +591,20 @@ public class HyperparameterOptimizer<T>
                 // Predict on test set
                 var (predictions, variances) = predictFunc(XTest, yTest);
 
-                // Compute test log-likelihood
-                double testLl = 0;
-                for (int i = 0; i < foldSize; i++)
-                {
-                    double pred = _numOps.ToDouble(predictions[i]);
-                    double var = Math.Max(_numOps.ToDouble(variances[i]), 1e-10);
-                    double actual = _numOps.ToDouble(yTest[i]);
+                // Compute test Gaussian log-likelihood:
+                // sum_i -0.5 * (log(2 pi var_i) + (y_i - mu_i)^2 / var_i)
+                var engine = AiDotNetEngine.Current;
+                var predictionTensor = engine.TensorSlice(Tensor<T>.FromVector(predictions), new[] { 0 }, new[] { foldSize });
+                var varianceTensor = engine.TensorMax(
+                    engine.TensorSlice(Tensor<T>.FromVector(variances), new[] { 0 }, new[] { foldSize }),
+                    varianceFloor);
+                var diff = engine.TensorSubtract(Tensor<T>.FromVector(yTest), predictionTensor);
+                var terms = engine.TensorAdd(
+                    engine.TensorLog(engine.TensorMultiplyScalar(varianceTensor, twoPi)),
+                    engine.TensorDivide(engine.TensorSquare(diff), varianceTensor));
+                T testLl = _numOps.Multiply(minusHalf, engine.TensorSum(terms));
 
-                    // Gaussian log-likelihood
-                    double diff = actual - pred;
-                    testLl += -0.5 * (Math.Log(2 * Math.PI * var) + diff * diff / var);
-                }
-
-                foldScores.Add(testLl / foldSize);
+                foldScores.Add(_numOps.ToDouble(testLl) / foldSize);
             }
             catch
             {

@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -40,6 +41,7 @@ public class KDTree<T>
     private KDNode? _root;
     private Matrix<T>? _data;
     private int _dimensions;
+    private int[][]? _ranks;
 
     /// <summary>
     /// Initializes a new KD-Tree instance.
@@ -77,12 +79,15 @@ public class KDTree<T>
         _data = data;
         _dimensions = data.Columns;
 
-        // Create indices array for all points
-        var indices = new int[data.Rows];
-        for (int i = 0; i < data.Rows; i++)
+        // Dense per-dimension ranks: integer comparisons of ranks order points exactly like their values
+        _ranks = new int[_dimensions][];
+        for (int j = 0; j < _dimensions; j++)
         {
-            indices[i] = i;
+            _ranks[j] = ClusteringTensorOps.DenseRanks(data.GetColumn(j));
         }
+
+        // Create indices array for all points
+        var indices = Enumerable.Range(0, data.Rows).ToArray();
 
         _root = BuildRecursive(indices, 0, indices.Length, 0);
     }
@@ -137,15 +142,17 @@ public class KDTree<T>
         QueryRadiusRecursive(_root, query, radius, results, 0);
 
         // Sort by distance
-        results.Sort((a, b) =>
-        {
-            double da = _numOps.ToDouble(a.Distance);
-            double db = _numOps.ToDouble(b.Distance);
-            return da.CompareTo(db);
-        });
+        results.Sort(CompareByDistance);
 
         return results.ToArray();
     }
+
+    /// <summary>Orders (index, distance) pairs by ascending distance.</summary>
+    private int CompareByDistance((int Index, T Distance) a, (int Index, T Distance) b)
+        => _numOps.Compare(a.Distance, b.Distance);
+
+    /// <summary>True when <paramref name="distance"/> is at most <paramref name="limit"/>.</summary>
+    private bool IsWithin(T distance, T limit) => _numOps.LessThanOrEquals(distance, limit);
 
     /// <summary>
     /// Finds all points within the given squared radius of the query point.
@@ -255,12 +262,13 @@ public class KDTree<T>
             Swap(indices, mid, right);
         }
 
-        T pivotValue = (_data ?? throw new InvalidOperationException("KDTree: Data not initialized."))[indices[right], dimension];
+        var ranks = Ranks(dimension);
+        int pivotRank = ranks[indices[right]];
         int storeIndex = left;
 
         for (int i = left; i < right; i++)
         {
-            if (_numOps.ToDouble(_data[indices[i], dimension]) < _numOps.ToDouble(pivotValue))
+            if (ranks[indices[i]] < pivotRank)
             {
                 Swap(indices, i, storeIndex);
                 storeIndex++;
@@ -273,11 +281,13 @@ public class KDTree<T>
 
     private int Compare(int idx1, int idx2, int dimension)
     {
-        var data = _data ?? throw new InvalidOperationException("KDTree: Data not initialized.");
-        double v1 = _numOps.ToDouble(data[idx1, dimension]);
-        double v2 = _numOps.ToDouble(data[idx2, dimension]);
-        return v1.CompareTo(v2);
+        var ranks = Ranks(dimension);
+        return ranks[idx1].CompareTo(ranks[idx2]);
     }
+
+    /// <summary>Dense value ranks of every point along one dimension.</summary>
+    private int[] Ranks(int dimension)
+        => (_ranks ?? throw new InvalidOperationException("KDTree: Data not initialized."))[dimension];
 
     private static void Swap(int[] array, int i, int j)
     {
@@ -306,17 +316,12 @@ public class KDTree<T>
             heap.TryAdd(node.PointIndex, dist);
         }
 
-        int splitDim = node.SplitDimension;
-        T queryValue = query[splitDim];
-        T splitValue = node.SplitValue;
-
-        double queryDouble = _numOps.ToDouble(queryValue);
-        double splitDouble = _numOps.ToDouble(splitValue);
-        double diff = queryDouble - splitDouble;
+        T diff = _numOps.Subtract(query[node.SplitDimension], node.SplitValue);
 
         // Determine which subtree to search first
-        KDNode? nearNode = diff <= 0 ? node.Left : node.Right;
-        KDNode? farNode = diff <= 0 ? node.Right : node.Left;
+        bool goLeft = !_numOps.GreaterThan(diff, _numOps.Zero);
+        KDNode? nearNode = goLeft ? node.Left : node.Right;
+        KDNode? farNode = goLeft ? node.Right : node.Left;
 
         // Search near subtree first
         if (nearNode is not null)
@@ -325,8 +330,8 @@ public class KDTree<T>
         }
 
         // Check if we need to search far subtree
-        double axisDist = Math.Abs(diff);
-        if (farNode is not null && (heap.Count < heap.Capacity || axisDist < _numOps.ToDouble(heap.MaxDistance)))
+        T axisDist = _numOps.Abs(diff);
+        if (farNode is not null && (heap.Count < heap.Capacity || _numOps.LessThan(axisDist, heap.MaxDistance)))
         {
             QueryKNearestRecursive(farNode, query, heap, depth + 1);
         }
@@ -339,7 +344,7 @@ public class KDTree<T>
             foreach (int idx in (node.Indices ?? throw new InvalidOperationException("KDTree: Leaf node has null indices.")))
             {
                 T dist = ComputeDistance(query, idx);
-                if (_numOps.ToDouble(dist) <= _numOps.ToDouble(radius))
+                if (IsWithin(dist, radius))
                 {
                     results.Add((idx, dist));
                 }
@@ -351,25 +356,22 @@ public class KDTree<T>
         if (node.PointIndex >= 0)
         {
             T dist = ComputeDistance(query, node.PointIndex);
-            if (_numOps.ToDouble(dist) <= _numOps.ToDouble(radius))
+            if (IsWithin(dist, radius))
             {
                 results.Add((node.PointIndex, dist));
             }
         }
 
-        int splitDim = node.SplitDimension;
-        double queryValue = _numOps.ToDouble(query[splitDim]);
-        double splitValue = _numOps.ToDouble(node.SplitValue);
-        double radiusDouble = _numOps.ToDouble(radius);
+        T queryValue = query[node.SplitDimension];
 
         // Search left subtree if it might contain points within radius
-        if (node.Left is not null && queryValue - radiusDouble <= splitValue)
+        if (node.Left is not null && _numOps.LessThanOrEquals(_numOps.Subtract(queryValue, radius), node.SplitValue))
         {
             QueryRadiusRecursive(node.Left, query, radius, results, depth + 1);
         }
 
         // Search right subtree if it might contain points within radius
-        if (node.Right is not null && queryValue + radiusDouble >= splitValue)
+        if (node.Right is not null && _numOps.GreaterThanOrEquals(_numOps.Add(queryValue, radius), node.SplitValue))
         {
             QueryRadiusRecursive(node.Right, query, radius, results, depth + 1);
         }
@@ -382,7 +384,7 @@ public class KDTree<T>
             foreach (int idx in (node.Indices ?? throw new InvalidOperationException("KDTree: Leaf node has null indices.")))
             {
                 T squaredDist = ComputeSquaredDistance(query, idx);
-                if (_numOps.ToDouble(squaredDist) <= _numOps.ToDouble(squaredRadius))
+                if (IsWithin(squaredDist, squaredRadius))
                 {
                     results.Add(idx);
                 }
@@ -394,25 +396,23 @@ public class KDTree<T>
         if (node.PointIndex >= 0)
         {
             T squaredDist = ComputeSquaredDistance(query, node.PointIndex);
-            if (_numOps.ToDouble(squaredDist) <= _numOps.ToDouble(squaredRadius))
+            if (IsWithin(squaredDist, squaredRadius))
             {
                 results.Add(node.PointIndex);
             }
         }
 
-        int splitDim = node.SplitDimension;
-        double queryValue = _numOps.ToDouble(query[splitDim]);
-        double splitValue = _numOps.ToDouble(node.SplitValue);
-        double radius = Math.Sqrt(_numOps.ToDouble(squaredRadius));
+        T queryValue = query[node.SplitDimension];
+        T radius = _numOps.Sqrt(squaredRadius);
 
         // Search left subtree if it might contain points within radius
-        if (node.Left is not null && queryValue - radius <= splitValue)
+        if (node.Left is not null && _numOps.LessThanOrEquals(_numOps.Subtract(queryValue, radius), node.SplitValue))
         {
             QueryRadiusIndicesRecursive(node.Left, query, squaredRadius, results, depth + 1);
         }
 
         // Search right subtree if it might contain points within radius
-        if (node.Right is not null && queryValue + radius >= splitValue)
+        if (node.Right is not null && _numOps.GreaterThanOrEquals(_numOps.Add(queryValue, radius), node.SplitValue))
         {
             QueryRadiusIndicesRecursive(node.Right, query, squaredRadius, results, depth + 1);
         }
@@ -420,38 +420,15 @@ public class KDTree<T>
 
     private T ComputeDistance(Vector<T> query, int dataIndex)
     {
-        var point = GetRow((_data ?? throw new InvalidOperationException("KDTree: Data not initialized.")), dataIndex);
+        var point = (_data ?? throw new InvalidOperationException("KDTree: Data not initialized.")).GetRow(dataIndex);
         return _distanceMetric.Compute(query, point);
     }
 
     private T ComputeSquaredDistance(Vector<T> query, int dataIndex)
     {
-        // Inline sum-of-squares — see ClusteringBase.ComputeDistance for
-        // the rationale (Engine.DotProduct on tiny vectors dispatches to
-        // GPU when AutoDetectAndConfigureGpu has switched backends and
-        // produces wrong values for clustering distance metrics).
+        // Sum of squared differences as whole-vector tensor ops (no per-element numeric calls)
         var data = _data ?? throw new InvalidOperationException("KDTree: Data not initialized.");
-        // Reuse the cached _numOps — re-resolving it through MathHelper inside
-        // this recursive distance hot path adds dictionary-lookup overhead per
-        // call.
-        T sumSq = _numOps.Zero;
-        int d = query.Length;
-        for (int j = 0; j < d; j++)
-        {
-            T diffJ = _numOps.Subtract(query[j], data[dataIndex, j]);
-            sumSq = _numOps.Add(sumSq, _numOps.Multiply(diffJ, diffJ));
-        }
-        return sumSq;
-    }
-
-    private Vector<T> GetRow(Matrix<T> matrix, int rowIndex)
-    {
-        var row = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            row[j] = matrix[rowIndex, j];
-        }
-        return row;
+        return ClusteringTensorOps.SquaredDistancesToPoint(query, data.GetSubMatrix(dataIndex, 0, 1, data.Columns))[0];
     }
 
     /// <summary>
@@ -496,7 +473,7 @@ public class KDTree<T>
                 _heap.Add((index, distance));
                 BubbleUp(_heap.Count - 1);
             }
-            else if (_ops.ToDouble(distance) < _ops.ToDouble(_heap[0].Distance))
+            else if (_ops.LessThan(distance, _heap[0].Distance))
             {
                 _heap[0] = (index, distance);
                 BubbleDown(0);
@@ -506,16 +483,22 @@ public class KDTree<T>
         public (int Index, TNum Distance)[] ToSortedArray()
         {
             var result = _heap.ToArray();
-            Array.Sort(result, (a, b) => _ops.ToDouble(a.Distance).CompareTo(_ops.ToDouble(b.Distance)));
+            Array.Sort(result, CompareByDistance);
             return result;
         }
+
+        private int CompareByDistance((int Index, TNum Distance) a, (int Index, TNum Distance) b)
+            => _ops.Compare(a.Distance, b.Distance);
+
+        /// <summary>True when the entry at <paramref name="i"/> is farther than the entry at <paramref name="j"/>.</summary>
+        private bool IsFarther(int i, int j) => _ops.GreaterThan(_heap[i].Distance, _heap[j].Distance);
 
         private void BubbleUp(int index)
         {
             while (index > 0)
             {
                 int parent = (index - 1) / 2;
-                if (_ops.ToDouble(_heap[index].Distance) <= _ops.ToDouble(_heap[parent].Distance))
+                if (!IsFarther(index, parent))
                 {
                     break;
                 }
@@ -532,12 +515,12 @@ public class KDTree<T>
                 int left = 2 * index + 1;
                 int right = 2 * index + 2;
 
-                if (left < _heap.Count && _ops.ToDouble(_heap[left].Distance) > _ops.ToDouble(_heap[largest].Distance))
+                if (left < _heap.Count && IsFarther(left, largest))
                 {
                     largest = left;
                 }
 
-                if (right < _heap.Count && _ops.ToDouble(_heap[right].Distance) > _ops.ToDouble(_heap[largest].Distance))
+                if (right < _heap.Count && IsFarther(right, largest))
                 {
                     largest = right;
                 }

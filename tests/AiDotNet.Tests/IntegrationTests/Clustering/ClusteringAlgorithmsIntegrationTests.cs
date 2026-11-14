@@ -934,10 +934,10 @@ public class ProbabilisticClusteringIntegrationTests
         gmm.Train(dataset.Data);
 
         var probs = gmm.PredictProba(dataset.Data);
-        for (int i = 0; i < probs.GetLength(0); i++)
+        for (int i = 0; i < probs.Rows; i++)
         {
             double sum = 0;
-            for (int j = 0; j < probs.GetLength(1); j++)
+            for (int j = 0; j < probs.Columns; j++)
             {
                 sum += probs[i, j];
             }
@@ -1028,8 +1028,8 @@ public class EnsembleNeuralClusteringIntegrationTests
         _ = ClusteringTestHelpers.RequireNotNull(som.Weights, "Weights");
         _ = ClusteringTestHelpers.RequireNotNull(som.NeuronLabels, "NeuronLabels");
         var umat = som.GetUMatrix();
-        Assert.Equal(options.GridHeight, umat.GetLength(0));
-        Assert.Equal(options.GridWidth, umat.GetLength(1));
+        Assert.Equal(options.GridHeight, umat.Rows);
+        Assert.Equal(options.GridWidth, umat.Columns);
     }
 }
 

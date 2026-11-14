@@ -57,8 +57,8 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private T[,]? _embedding;
-    private T[,]? _affinityMatrix;
+    private Matrix<T>? _embedding;
+    private Matrix<T>? _affinityMatrix;
 
     /// <summary>
     /// Initializes a new SpectralClustering instance.
@@ -74,12 +74,12 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the spectral embedding.
     /// </summary>
-    public T[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets the affinity matrix.
     /// </summary>
-    public T[,]? AffinityMatrix => _affinityMatrix;
+    public Matrix<T>? AffinityMatrix => _affinityMatrix;
 
     /// <inheritdoc />
 
@@ -115,7 +115,7 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
         // Normalize rows of embedding for normalized cut
         if (_options.Normalization == LaplacianNormalization.Normalized)
         {
-            NormalizeRows(_embedding, n, _options.NumClusters);
+            _embedding = NormalizeRows(_embedding);
         }
 
         // Cluster the embedding
@@ -128,7 +128,7 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
-    private T[,] BuildAffinityMatrix(Matrix<T> x)
+    private Matrix<T> BuildAffinityMatrix(Matrix<T> x)
     {
         int n = x.Rows;
 
@@ -142,367 +142,192 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
 
             case AffinityType.Precomputed:
                 // Assume x is the affinity matrix
-                var affinity = new T[n, n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        affinity[i, j] = x[i, j];
-                    }
-                }
-                return affinity;
+                return x.GetSubMatrix(0, 0, n, n);
 
             default:
                 return BuildRBFAffinity(x, n);
         }
     }
 
-    private T[,] BuildRBFAffinity(Matrix<T> x, int n)
+    private Matrix<T> BuildRBFAffinity(Matrix<T> x, int n)
     {
-        var affinity = new T[n, n];
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         // Compute gamma if not specified. Use 1/(n_features * Var(X)) following
         // scikit-learn's "scale" convention. The naive 1/n_features doesn't account for
         // data scale, causing the RBF kernel to collapse when features are large.
-        double gammaValue;
+        T gamma;
         if (_options.Gamma.HasValue)
         {
-            gammaValue = _options.Gamma.Value;
+            gamma = NumOps.FromDouble(_options.Gamma.Value);
         }
         else
         {
-            double totalVar = 0;
-            for (int j = 0; j < x.Columns; j++)
-            {
-                double mean = 0;
-                for (int i2 = 0; i2 < n; i2++)
-                    mean += NumOps.ToDouble(x[i2, j]);
-                mean /= n;
-
-                double featureVar = 0;
-                for (int i2 = 0; i2 < n; i2++)
-                {
-                    double diff = NumOps.ToDouble(x[i2, j]) - mean;
-                    featureVar += diff * diff;
-                }
-                totalVar += featureVar / n;
-            }
-            gammaValue = totalVar > 1e-10 ? 1.0 / totalVar : 1.0 / x.Columns;
-        }
-        T gamma = NumOps.FromDouble(gammaValue);
-        int d = x.Columns;
-
-        // Cache rows as arrays for allocation-free distance
-        var rowArrays = new T[n][];
-        for (int i = 0; i < n; i++)
-        {
-            rowArrays[i] = new T[d];
-            for (int c = 0; c < d; c++)
-                rowArrays[i][c] = x[i, c];
+            // Sum of the per-feature population variances
+            var centered = ClusteringTensorOps.SubtractRow(x, ClusteringTensorOps.ColumnMeans(x));
+            T totalVar = Engine.TensorSum(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, false));
+            gamma = NumOps.GreaterThan(totalVar, NumOps.FromDouble(1e-10))
+                ? NumOps.Divide(NumOps.One, totalVar)
+                : NumOps.Divide(NumOps.One, NumOps.FromDouble(x.Columns));
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            affinity[i, i] = NumOps.One;
-
-            for (int j = i + 1; j < n; j++)
-            {
-                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
-                T distSq = NumOps.Multiply(dist, dist);
-
-                T similarity = NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distSq)));
-                affinity[i, j] = similarity;
-                affinity[j, i] = similarity;
-            }
-        }
-
-        return affinity;
+        // exp(-gamma * dist^2) off the diagonal, 1 on it
+        var distances = Tensor<T>.FromMatrix(metric.ComputePairwise(x));
+        var similarity = Engine.TensorExp(Engine.TensorNegate(Engine.TensorMultiplyScalar(Engine.TensorSquare(distances), gamma)));
+        return Engine.TensorWhere(Engine.TensorEye<T>(n), Engine.TensorOnesLike(similarity), similarity).ToMatrix();
     }
 
-    private T[,] BuildNearestNeighborsAffinity(Matrix<T> x, int n)
+    private Matrix<T> BuildNearestNeighborsAffinity(Matrix<T> x, int n)
     {
-        var affinity = new T[n, n];
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        int k = _options.NumNeighbors;
-
-        // Initialize to zero
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                affinity[i, j] = NumOps.Zero;
-
-        // Compute all pairwise distances with allocation-free inline metric
-        int d2 = x.Columns;
-        var nnRowArrays = new T[n][];
-        for (int i = 0; i < n; i++)
+        int k = Math.Min(_options.NumNeighbors, n - 1);
+        if (k <= 0)
         {
-            nnRowArrays[i] = new T[d2];
-            for (int c = 0; c < d2; c++)
-                nnRowArrays[i][c] = x[i, c];
+            return new Matrix<T>(n, n);
         }
 
-        var distances = new T[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            distances[i, i] = NumOps.Zero;
-            for (int j = i + 1; j < n; j++)
-            {
-                T dist = metric.ComputeInline(nnRowArrays[i], nnRowArrays[j], d2);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
+        // Pairwise distances; a point is never its own neighbour
+        var shape = new[] { n, n };
+        var distances = Tensor<T>.FromMatrix(metric.ComputePairwise(x));
+        var offDiagonal = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorEye<T>(n));
+        var candidates = Engine.TensorWhere(offDiagonal, distances, Engine.TensorFullLike(distances, NumOps.MaxValue));
 
-        // For each point, find k nearest neighbors
-        for (int i = 0; i < n; i++)
-        {
-            var neighborDists = new List<(int Index, double Dist)>();
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    neighborDists.Add((j, NumOps.ToDouble(distances[i, j])));
-                }
-            }
+        // The k nearest per row, ties broken by lower index (stable ordering):
+        // every distance below the k-th smallest, plus the first equal ones needed to reach k
+        var (sorted, _) = Engine.TensorSort(candidates, 1, false);
+        var kth = Engine.TensorBroadcastTo(Engine.TensorSlice(sorted, new[] { 0, k - 1 }, new[] { n, 1 }), shape);
+        var below = Engine.TensorMultiply(Engine.TensorGreaterThan(kth, candidates), offDiagonal);
+        var equal = Engine.TensorMultiply(Engine.TensorEquals(candidates, kth), offDiagonal);
+        var needed = Engine.TensorBroadcastTo(
+            Engine.ScalarMinusTensor(NumOps.FromDouble(k), Engine.ReduceSum(below, new[] { 1 }, true)), shape);
+        var withinNeeded = Engine.TensorGreaterThan(
+            Engine.TensorSubtract(needed, Engine.TensorCumSum(equal, 1)), NumOps.FromDouble(-0.5));
+        var selected = Engine.TensorAdd(below, Engine.TensorMultiply(equal, withinNeeded));
 
-            var nearestNeighbors = neighborDists.OrderBy(nd => nd.Dist).Take(k).ToList();
-
-            foreach (var (idx, _) in nearestNeighbors)
-            {
-                affinity[i, idx] = NumOps.One;
-                affinity[idx, i] = NumOps.One; // Make symmetric
-            }
-        }
-
-        return affinity;
+        // Make symmetric
+        return Engine.TensorMax(selected, Engine.TensorTranspose(selected)).ToMatrix();
     }
 
-    private T[,] ComputeLaplacian(T[,] affinity, int n)
+    private Matrix<T> ComputeLaplacian(Matrix<T> affinity, int n)
     {
         T epsilon = NumOps.FromDouble(1e-10);
+        var shape = new[] { n, n };
+        var weights = Tensor<T>.FromMatrix(affinity);
+        var identity = Engine.TensorEye<T>(n);
 
-        // Compute degree matrix (sum of each row)
-        var degree = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            degree[i] = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                degree[i] = NumOps.Add(degree[i], affinity[i, j]);
-            }
-        }
-
-        var laplacian = new T[n, n];
+        // Degree of each node (sum of each row), as an [n, 1] column
+        var degree = Engine.ReduceSum(weights, new[] { 1 }, true);
+        var flooredDegree = Engine.TensorMax(degree, epsilon);
 
         switch (_options.Normalization)
         {
             case LaplacianNormalization.Unnormalized:
                 // L = D - W
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        if (i == j)
-                        {
-                            laplacian[i, j] = NumOps.Subtract(degree[i], affinity[i, j]);
-                        }
-                        else
-                        {
-                            laplacian[i, j] = NumOps.Negate(affinity[i, j]);
-                        }
-                    }
-                }
-                break;
+                return Engine.TensorSubtract(
+                    Engine.TensorMultiply(identity, Engine.TensorBroadcastTo(degree, shape)), weights).ToMatrix();
 
             case LaplacianNormalization.Normalized:
+            {
                 // L_sym = I - D^(-1/2) * W * D^(-1/2)
-                for (int i = 0; i < n; i++)
-                {
-                    T di = NumOps.LessThan(degree[i], epsilon) ? epsilon : degree[i];
-                    T sqrtDi = NumOps.Sqrt(di);
-                    for (int j = 0; j < n; j++)
-                    {
-                        T dj = NumOps.LessThan(degree[j], epsilon) ? epsilon : degree[j];
-                        T sqrtDj = NumOps.Sqrt(dj);
-                        T normalized = NumOps.Divide(affinity[i, j], NumOps.Multiply(sqrtDi, sqrtDj));
-                        if (i == j)
-                        {
-                            laplacian[i, j] = NumOps.Subtract(NumOps.One, normalized);
-                        }
-                        else
-                        {
-                            laplacian[i, j] = NumOps.Negate(normalized);
-                        }
-                    }
-                }
-                break;
+                var sqrtDegree = Engine.TensorSqrt(flooredDegree);
+                var scale = Engine.TensorMatMul(sqrtDegree, Engine.TensorTranspose(sqrtDegree));
+                return Engine.TensorSubtract(identity, Engine.TensorDivide(weights, scale)).ToMatrix();
+            }
 
             case LaplacianNormalization.RandomWalk:
+            {
                 // L_rw = I - D^(-1) * W
-                for (int i = 0; i < n; i++)
-                {
-                    T di = NumOps.LessThan(degree[i], epsilon) ? epsilon : degree[i];
-                    T invDi = NumOps.Divide(NumOps.One, di);
-                    for (int j = 0; j < n; j++)
-                    {
-                        if (i == j)
-                        {
-                            laplacian[i, j] = NumOps.Subtract(NumOps.One, NumOps.Multiply(affinity[i, j], invDi));
-                        }
-                        else
-                        {
-                            laplacian[i, j] = NumOps.Negate(NumOps.Multiply(affinity[i, j], invDi));
-                        }
-                    }
-                }
-                break;
-        }
+                var inverseDegree = Engine.TensorReciprocal(flooredDegree);
+                return Engine.TensorSubtract(
+                    identity, Engine.TensorMultiply(weights, Engine.TensorBroadcastTo(inverseDegree, shape))).ToMatrix();
+            }
 
-        return laplacian;
+            default:
+                return new Matrix<T>(n, n);
+        }
     }
 
-    private T[,] ComputeEigenvectors(T[,] laplacian, int n, int k)
+    private Matrix<T> ComputeEigenvectors(Matrix<T> laplacian, int n, int k)
     {
         // Simple power iteration method for finding smallest eigenvalues/eigenvectors
-        var eigenvectors = new T[n, k];
         T epsilon = NumOps.FromDouble(1e-10);
+        T tolerance = NumOps.FromDouble(1e-12);
 
         // Initialize with random vectors
         var rand = Random ?? RandomHelper.CreateSecureRandom();
-        var vectors = new T[k, n];
+        // [k, n] start vectors with entries rand.NextDouble() - 0.5, drawn in row-major order,
+        // each row normalized to unit length
+        var starts = Engine.TensorSubtractScalar(
+            Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(rand, k, n)), NumOps.FromDouble(0.5));
+        var startNorms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(starts), new[] { 1 }, true));
+        var vectors = Engine.TensorDivide(starts, Engine.TensorBroadcastTo(startNorms, new[] { k, n })).ToMatrix();
 
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                vectors[i, j] = NumOps.FromDouble(rand.NextDouble() - 0.5);
-            }
-        }
+        // Shifted power iteration: use (sigma I - L) to find smallest eigenvalues
+        // as largest eigenvalues of the shifted matrix.
+        // sigma = trace(L)/n + 1 is a safe upper bound for Laplacian eigenvalues.
+        var laplacianTensor = Tensor<T>.FromMatrix(laplacian);
+        T sigma = NumOps.Add(
+            NumOps.Divide(Engine.TensorSum(Engine.TensorDiagonal(laplacianTensor)), NumOps.FromDouble(n)), NumOps.One);
 
         // Find eigenvectors corresponding to smallest eigenvalues
+        var eigenvectors = new List<Vector<T>>();
         for (int vec = 0; vec < k; vec++)
         {
-            var v = new Vector<T>(n);
-            for (int j = 0; j < n; j++)
-            {
-                v[j] = vectors[vec, j];
-            }
-
-            // Normalize using Engine
-            T norm = NumOps.Sqrt(Engine.DotProduct(v, v));
-            for (int j = 0; j < n; j++)
-            {
-                v[j] = NumOps.Divide(v[j], norm);
-            }
-
-            // Shifted power iteration: use (σI - L) to find smallest eigenvalues
-            // as largest eigenvalues of the shifted matrix.
-            // σ = trace(L)/n + 1 is a safe upper bound for Laplacian eigenvalues.
-            double sigma = 0;
-            for (int j = 0; j < n; j++)
-                sigma += NumOps.ToDouble(laplacian[j, j]);
-            sigma = sigma / n + 1.0;
+            var v = vectors.GetRow(vec);
 
             for (int iter = 0; iter < 300; iter++)
             {
-                // Compute (σI - L) * v instead of L * v
-                var lv = MultiplyMatrixVector(laplacian, v, n);
-                var newV = new Vector<T>(n);
-                for (int j = 0; j < n; j++)
-                    newV[j] = NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(sigma), v[j]), lv[j]);
+                // Compute (sigma I - L) * v instead of L * v
+                var lv = Engine.Reshape(Engine.TensorMatMul(laplacianTensor, Tensor<T>.FromVector(v, new[] { n, 1 })), new[] { n }).ToVector();
+                var newV = Engine.Subtract(Engine.Multiply(v, sigma), lv);
 
                 // Orthogonalize against previous eigenvectors (two passes for numerical stability)
                 for (int pass = 0; pass < 2; pass++)
                 {
-                    for (int prev = 0; prev < vec; prev++)
+                    foreach (var previous in eigenvectors)
                     {
-                        var eigCol = new Vector<T>(n);
-                        for (int j = 0; j < n; j++) eigCol[j] = eigenvectors[j, prev];
-                        T dot = Engine.DotProduct(newV, eigCol);
-                        for (int j = 0; j < n; j++)
-                        {
-                            newV[j] = NumOps.Subtract(newV[j], NumOps.Multiply(dot, eigenvectors[j, prev]));
-                        }
+                        newV = Engine.Subtract(newV, Engine.Multiply(previous, Engine.DotProduct(newV, previous)));
                     }
                 }
 
-                // Normalize using Engine
-                norm = NumOps.Sqrt(Engine.DotProduct(newV, newV));
-                if (NumOps.LessThan(norm, epsilon))
-                {
-                    norm = epsilon;
-                }
+                // Normalize, then check convergence: ||v_new - v_old|| < tolerance
+                var normalized = Engine.Divide(newV, FlooredNorm(newV, epsilon));
+                var change = Engine.Subtract(normalized, v);
+                v = normalized;
 
-                // Check convergence: ||v_new - v_old|| < tolerance
-                double changeSq = 0;
-                for (int j = 0; j < n; j++)
-                {
-                    T newVal = NumOps.Divide(newV[j], norm);
-                    double diff = NumOps.ToDouble(NumOps.Subtract(newVal, v[j]));
-                    changeSq += diff * diff;
-                    v[j] = newVal;
-                }
-
-                if (changeSq < 1e-12) break;
+                if (IsBelow(Engine.DotProduct(change, change), tolerance)) break;
             }
 
             // Store eigenvector
-            for (int j = 0; j < n; j++)
-            {
-                eigenvectors[j, vec] = v[j];
-            }
+            eigenvectors.Add(v);
         }
 
-        return eigenvectors;
+        return k == 0
+            ? new Matrix<T>(n, 0)
+            : Engine.TensorStack(eigenvectors.Select(e => e.AsTensor()).ToArray(), 1).ToMatrix();
     }
 
-    private Vector<T> MultiplyMatrixVector(T[,] matrix, Vector<T> vector, int n)
+    /// <summary>Euclidean norm of <paramref name="v"/>, raised to <paramref name="floor"/> when smaller.</summary>
+    private T FlooredNorm(Vector<T> v, T floor)
     {
-        var result = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            var row = new Vector<T>(n);
-            for (int j = 0; j < n; j++) row[j] = matrix[i, j];
-            result[i] = Engine.DotProduct(row, vector);
-        }
-        return result;
+        T norm = NumOps.Sqrt(Engine.DotProduct(v, v));
+        return NumOps.LessThan(norm, floor) ? floor : norm;
     }
 
-    private void NormalizeRows(T[,] embedding, int n, int k)
+    /// <summary>True when <paramref name="value"/> is strictly below <paramref name="threshold"/>.</summary>
+    private bool IsBelow(T value, T threshold) => NumOps.LessThan(value, threshold);
+
+    private Matrix<T> NormalizeRows(Matrix<T> embedding)
     {
+        // Divide each row by sqrt(max(||row||^2, epsilon))
         T epsilon = NumOps.FromDouble(1e-10);
-        for (int i = 0; i < n; i++)
-        {
-            T norm = NumOps.Zero;
-            for (int j = 0; j < k; j++)
-            {
-                norm = NumOps.Add(norm, NumOps.Multiply(embedding[i, j], embedding[i, j]));
-            }
-            if (NumOps.LessThan(norm, epsilon))
-            {
-                norm = epsilon;
-            }
-            norm = NumOps.Sqrt(norm);
-
-            for (int j = 0; j < k; j++)
-            {
-                embedding[i, j] = NumOps.Divide(embedding[i, j], norm);
-            }
-        }
+        var rows = Tensor<T>.FromMatrix(embedding);
+        var norms = Engine.TensorSqrt(Engine.TensorMax(Engine.ReduceSum(Engine.TensorSquare(rows), new[] { 1 }, true), epsilon));
+        return Engine.TensorDivide(rows, Engine.TensorBroadcastTo(norms, new[] { embedding.Rows, embedding.Columns })).ToMatrix();
     }
 
-    private Vector<T> ClusterEmbedding(T[,] embedding, int n, int k)
+    private Vector<T> ClusterEmbedding(Matrix<T> embedding, int n, int k)
     {
-        // Convert embedding to Matrix<T>
-        var embeddingMatrix = new Matrix<T>(n, k);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                embeddingMatrix[i, j] = embedding[i, j];
-            }
-        }
-
         if (_options.AssignLabels == SpectralAssignment.KMeans)
         {
             // Use K-Means on the embedding
@@ -512,7 +337,7 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
                 MaxIterations = Options.MaxIterations,
                 Seed = Options.Seed
             });
-            kmeans.Train(embeddingMatrix);
+            kmeans.Train(embedding);
             return kmeans.Labels ?? new Vector<T>(0);
         }
         else
@@ -522,31 +347,17 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
         }
     }
 
-    private Vector<T> DiscretizeEmbedding(T[,] embedding, int n, int k)
+    private Vector<T> DiscretizeEmbedding(Matrix<T> embedding, int n, int k)
     {
         // Simple discretization: assign each point to the cluster
-        // corresponding to its largest eigenvector component
-        var labels = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        // corresponding to its largest eigenvector component (first on ties)
+        if (k == 0)
         {
-            int bestCluster = 0;
-            T maxVal = NumOps.Abs(embedding[i, 0]);
-
-            for (int j = 1; j < k; j++)
-            {
-                T absVal = NumOps.Abs(embedding[i, j]);
-                if (NumOps.GreaterThan(absVal, maxVal))
-                {
-                    maxVal = absVal;
-                    bestCluster = j;
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(bestCluster);
+            return new Vector<T>(n);
         }
 
-        return labels;
+        return ClusteringTensorOps.FromIntArray<T>(
+            Engine.TensorArgMax(Engine.TensorAbs(Tensor<T>.FromMatrix(embedding)), 1).ToArray());
     }
 
     private void ComputeClusterCenters(Matrix<T> x)
@@ -556,33 +367,8 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
             return;
         }
 
-        ClusterCenters = new Matrix<T>(NumClusters, x.Columns);
-        var counts = new int[NumClusters];
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            int cluster = (int)NumOps.ToDouble(Labels[i]);
-            if (cluster >= 0 && cluster < NumClusters)
-            {
-                counts[cluster]++;
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    ClusterCenters[cluster, j] = NumOps.Add(ClusterCenters[cluster, j], x[i, j]);
-                }
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                T countT = NumOps.FromDouble(counts[k]);
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], countT);
-                }
-            }
-        }
+        // Mean of each cluster's members (empty clusters stay at zero)
+        ClusterCenters = ClusteringTensorOps.ClusterMeans(x, Labels, NumClusters, out _);
     }
 
     /// <inheritdoc />
@@ -590,37 +376,16 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        int dims = x.Columns;
-        var pointArr = new T[dims];
-        var centerArr = new T[dims];
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            for (int j = 0; j < dims; j++) pointArr[j] = x[i, j];
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    for (int j = 0; j < dims; j++) centerArr[j] = ClusterCenters[k, j];
-                    T dist = metric.ComputeInline(pointArr, centerArr, dims);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />
@@ -638,20 +403,6 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        if (_embedding is null) return new Matrix<T>(0, 0);
-
-        int n = _embedding.GetLength(0);
-        int k = _embedding.GetLength(1);
-        var result = new Matrix<T>(n, k);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                result[i, j] = _embedding[i, j];
-            }
-        }
-
-        return result;
+        return _embedding is null ? new Matrix<T>(0, 0) : _embedding.Clone();
     }
 }

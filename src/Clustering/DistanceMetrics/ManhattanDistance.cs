@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -49,11 +50,5 @@ public class ManhattanDistance<T> : DistanceMetricBase<T>
     }
 
     /// <inheritdoc />
-    public override T ComputeInline(T[] a, T[] b, int length)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-            sum = NumOps.Add(sum, NumOps.Abs(NumOps.Subtract(a[i], b[i])));
-        return sum;
-    }
+    protected override Tensor<T> ComputeRowPairs(Tensor<T> a, Tensor<T> b) => ClusteringTensorOps.RowManhattan(a, b);
 }

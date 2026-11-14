@@ -243,12 +243,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
         _originalLabels = y;
 
         // Determine number of classes
-        var uniqueLabels = new HashSet<double>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            uniqueLabels.Add(_numOps.ToDouble(y[i]));
-        }
-        _numClasses = uniqueLabels.Count;
+        _numClasses = y.Length == 0 ? 0 : AiDotNetEngine.Current.TensorUnique(Tensor<T>.FromVector(y)).Length;
 
         // Transform labels from {0, 1} to {-1, +1} for binary classification
         // This makes the math work better with the logistic sigmoid
@@ -260,10 +255,6 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
 
         // Initialize latent function values to zero
         _f = new Vector<T>(X.Rows);
-        for (int i = 0; i < _f.Length; i++)
-        {
-            _f[i] = _numOps.Zero;
-        }
 
         // Newton-Raphson optimization to find the mode of the posterior
         // This is the core of the Laplace approximation
@@ -291,14 +282,13 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// </remarks>
     private Vector<T> TransformLabels(Vector<T> y)
     {
-        var transformed = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            // Convert 0 -> -1, 1 -> +1 (use threshold comparison to avoid floating point equality)
-            double label = _numOps.ToDouble(y[i]);
-            transformed[i] = _numOps.FromDouble(label < 0.5 ? -1.0 : 1.0);
-        }
-        return transformed;
+        // Convert 0 -> -1, 1 -> +1 (use threshold comparison to avoid floating point equality)
+        var engine = AiDotNetEngine.Current;
+        var labels = Tensor<T>.FromVector(y);
+        return engine.TensorWhere(
+            engine.TensorLessThan(labels, _numOps.FromDouble(0.5)),
+            engine.TensorFullLike(labels, _numOps.FromDouble(-1.0)),
+            engine.TensorFullLike(labels, _numOps.One)).ToVector();
     }
 
     /// <summary>
@@ -317,11 +307,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// </remarks>
     private void AddJitter(Matrix<T> K)
     {
-        var jitter = _numOps.FromDouble(1e-6);
-        for (int i = 0; i < K.Rows; i++)
-        {
-            K[i, i] = _numOps.Add(K[i, i], jitter);
-        }
+        GaussianProcessEngineOps.AddToDiagonalInPlace(K, _numOps.FromDouble(1e-6));
     }
 
     /// <summary>
@@ -372,12 +358,9 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
 
             // Solve for the Newton direction
             // b = W * f + grad
+            var engine = AiDotNetEngine.Current;
             var Wf = _W.Multiply(_f);
-            var b = new Vector<T>(_f.Length);
-            for (int i = 0; i < b.Length; i++)
-            {
-                b[i] = _numOps.Add(Wf[i], grad[i]);
-            }
+            var b = engine.Add(Wf, grad);
 
             // a = b - W^(1/2) * B^(-1) * W^(1/2) * K * b
             var Kb = _K.Multiply(b);
@@ -387,28 +370,18 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
             var temp = MatrixSolutionHelper.SolveLinearSystem(B, sqrtWKb, _decompositionType);
 
             var sqrtWtemp = sqrtW.Multiply(temp);
-            var a = new Vector<T>(b.Length);
-            for (int i = 0; i < a.Length; i++)
-            {
-                a[i] = _numOps.Subtract(b[i], sqrtWtemp[i]);
-            }
+            var a = engine.Subtract(b, sqrtWtemp);
 
             // Update f = K * a
             var fNew = _K.Multiply(a);
 
             // Check convergence
-            T maxDiff = _numOps.Zero;
-            for (int i = 0; i < _f.Length; i++)
-            {
-                T diff = _numOps.Abs(_numOps.Subtract(fNew[i], _f[i]));
-                if (_numOps.ToDouble(diff) > _numOps.ToDouble(maxDiff))
-                {
-                    maxDiff = diff;
-                }
-                _f[i] = fNew[i];
-            }
+            T maxDiff = _f.Length == 0
+                ? _numOps.Zero
+                : engine.TensorMaxValue(engine.TensorAbs(Tensor<T>.FromVector(engine.Subtract(fNew, _f))));
+            fNew.AsSpan().CopyTo(_f.AsWritableSpan());
 
-            if (_numOps.ToDouble(maxDiff) < _tolerance)
+            if (_numOps.LessThan(maxDiff, _numOps.FromDouble(_tolerance)))
             {
                 break;
             }
@@ -435,14 +408,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// </remarks>
     private Vector<T> CalculateSigmoid(Vector<T> f)
     {
-        var pi = new Vector<T>(f.Length);
-        for (int i = 0; i < f.Length; i++)
-        {
-            double fVal = _numOps.ToDouble(f[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-fVal));
-            pi[i] = _numOps.FromDouble(sigmoid);
-        }
-        return pi;
+        return AiDotNetEngine.Current.Sigmoid(f);
     }
 
     /// <summary>
@@ -466,14 +432,9 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// </remarks>
     private Matrix<T> CalculateWMatrix(Vector<T> pi)
     {
-        var W = new Matrix<T>(pi.Length, pi.Length);
-        for (int i = 0; i < pi.Length; i++)
-        {
-            T piVal = pi[i];
-            T oneMinusPi = _numOps.Subtract(_numOps.One, piVal);
-            W[i, i] = _numOps.Multiply(piVal, oneMinusPi);
-        }
-        return W;
+        var engine = AiDotNetEngine.Current;
+        var p = Tensor<T>.FromVector(pi);
+        return engine.TensorDiag(engine.TensorMultiply(p, engine.ScalarMinusTensor(_numOps.One, p))).ToMatrix();
     }
 
     /// <summary>
@@ -498,16 +459,11 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// </remarks>
     private Vector<T> CalculateGradient(Vector<T> pi)
     {
-        var grad = new Vector<T>(pi.Length);
-        for (int i = 0; i < pi.Length; i++)
-        {
-            // Convert y from {-1, +1} to {0, 1} for gradient calculation
-            double yVal = _numOps.ToDouble(_y[i]);
-            double target = (yVal + 1.0) / 2.0; // -1 -> 0, +1 -> 1
-            double piVal = _numOps.ToDouble(pi[i]);
-            grad[i] = _numOps.FromDouble(target - piVal);
-        }
-        return grad;
+        // Convert y from {-1, +1} to {0, 1} for gradient calculation: target = (y + 1) / 2
+        var engine = AiDotNetEngine.Current;
+        var target = engine.TensorDivideScalar(
+            engine.TensorAddScalar(Tensor<T>.FromVector(_y), _numOps.One), _numOps.FromDouble(2.0));
+        return engine.TensorSubtract(target, Tensor<T>.FromVector(pi)).ToVector();
     }
 
     /// <summary>
@@ -527,13 +483,9 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// </remarks>
     private Matrix<T> CalculateSqrtW(Matrix<T> W)
     {
-        var sqrtW = new Matrix<T>(W.Rows, W.Columns);
-        for (int i = 0; i < W.Rows; i++)
-        {
-            double diagVal = _numOps.ToDouble(W[i, i]);
-            sqrtW[i, i] = _numOps.FromDouble(Math.Sqrt(Math.Max(diagVal, 0)));
-        }
-        return sqrtW;
+        var engine = AiDotNetEngine.Current;
+        var diagonal = engine.TensorMax(engine.TensorDiagonal(Tensor<T>.FromMatrix(W)), _numOps.Zero);
+        return engine.TensorDiag(engine.TensorSqrt(diagonal)).ToMatrix();
     }
 
     /// <summary>
@@ -558,17 +510,7 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
         var sqrtWK = sqrtW.Multiply(_K);
         var sqrtWKsqrtW = sqrtWK.Multiply(sqrtW);
 
-        var B = new Matrix<T>(sqrtW.Rows, sqrtW.Columns);
-        for (int i = 0; i < B.Rows; i++)
-        {
-            for (int j = 0; j < B.Columns; j++)
-            {
-                B[i, j] = i == j
-                    ? _numOps.Add(_numOps.One, sqrtWKsqrtW[i, j])
-                    : sqrtWKsqrtW[i, j];
-            }
-        }
-        return B;
+        return GaussianProcessEngineOps.AddToDiagonal(sqrtWKsqrtW, _numOps.One);
     }
 
     /// <summary>
@@ -599,47 +541,36 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     private T CalculateLogMarginalLikelihood()
     {
         // Log-likelihood term: sum of log p(y|f)
-        double logLik = 0.0;
-        for (int i = 0; i < _y.Length; i++)
-        {
-            double yVal = _numOps.ToDouble(_y[i]);
-            double fVal = _numOps.ToDouble(_f[i]);
-            // log p(y|f) = log σ(y*f) for {-1,+1} labels
-            double logProb = -Math.Log(1.0 + Math.Exp(-yVal * fVal));
-            logLik += logProb;
-        }
+        // log p(y|f) = log σ(y*f) = -log(1 + exp(-y*f)) for {-1,+1} labels
+        var engine = AiDotNetEngine.Current;
+        var margins = engine.TensorMultiply(Tensor<T>.FromVector(_y), Tensor<T>.FromVector(_f));
+        T logLik = _numOps.Negate(engine.TensorSum(engine.Softplus(engine.TensorNegate(margins))));
 
         // Prior term: -0.5 * f^T * K^(-1) * f
         var Kinv_f = MatrixSolutionHelper.SolveLinearSystem(_K, _f, _decompositionType);
-        double priorTerm = 0.0;
-        for (int i = 0; i < _f.Length; i++)
-        {
-            priorTerm += _numOps.ToDouble(_f[i]) * _numOps.ToDouble(Kinv_f[i]);
-        }
-        priorTerm *= -0.5;
+        T priorTerm = _numOps.Multiply(_numOps.FromDouble(-0.5), engine.DotProduct(_f, Kinv_f));
 
         // Complexity term: -0.5 * log|B|
         var sqrtW = CalculateSqrtW(_W);
         var B = CalculateBMatrix(sqrtW);
-        double logDetB = 0.0;
+        T logDetB = _numOps.Zero;
         try
         {
             var choleskyB = new CholeskyDecomposition<T>(B);
             // log|B| = 2 * sum(log(diag(L))) where B = L*L^T
-            for (int i = 0; i < choleskyB.L.Rows; i++)
-            {
-                logDetB += 2.0 * Math.Log(Math.Abs(_numOps.ToDouble(choleskyB.L[i, i])));
-            }
+            var diagonal = engine.TensorAbs(Tensor<T>.FromVector(GaussianProcessEngineOps.Diagonal(choleskyB.L)));
+            logDetB = _numOps.Multiply(_numOps.FromDouble(2.0), engine.TensorSum(engine.TensorLog(diagonal)));
         }
         catch (ArgumentException ex)
         {
             // If Cholesky fails, use a fallback estimate (matrix may not be positive definite)
             System.Diagnostics.Debug.WriteLine($"Cholesky decomposition failed in log marginal likelihood: {ex.Message}");
-            logDetB = 0.0;
+            logDetB = _numOps.Zero;
         }
 
-        double lml = logLik + priorTerm - 0.5 * logDetB;
-        return _numOps.FromDouble(lml);
+        return _numOps.Subtract(
+            _numOps.Add(logLik, priorTerm),
+            _numOps.Multiply(_numOps.FromDouble(0.5), logDetB));
     }
 
     /// <inheritdoc/>
@@ -672,25 +603,16 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
         var sqrtWkStar = sqrtW.Multiply(kStar);
         var v = MatrixSolutionHelper.SolveLinearSystem(B, sqrtWkStar, _decompositionType);
         var sqrtWv = sqrtW.Multiply(v);
-
-        T variance = kStarStar;
-        for (int i = 0; i < kStar.Length; i++)
-        {
-            variance = _numOps.Subtract(variance, _numOps.Multiply(kStar[i], sqrtWv[i]));
-        }
+        T variance = _numOps.Subtract(kStarStar, kStar.DotProduct(sqrtWv));
 
         // Convert latent mean to probability using probit approximation
         // This integrates out the uncertainty in f to get p(y=1|x)
-        double fMeanVal = _numOps.ToDouble(fMean);
-        double varVal = Math.Max(_numOps.ToDouble(variance), 1e-10);
+        var probabilities = ProbitClassOneProbability(
+            new Vector<T>(new[] { fMean }), new Vector<T>(new[] { variance }));
+        T probClass1 = probabilities[0];
 
-        // Probit approximation: use sigmoid with scaled input
-        // κ = 1 / sqrt(1 + π * var / 8)
-        double kappa = 1.0 / Math.Sqrt(1.0 + Math.PI * varVal / 8.0);
-        double probClass1 = 1.0 / (1.0 + Math.Exp(-kappa * fMeanVal));
-
-        int predictedClass = probClass1 >= 0.5 ? 1 : 0;
-        T probability = _numOps.FromDouble(predictedClass == 1 ? probClass1 : 1.0 - probClass1);
+        int predictedClass = _numOps.GreaterThanOrEquals(probClass1, _numOps.FromDouble(0.5)) ? 1 : 0;
+        T probability = predictedClass == 1 ? probClass1 : _numOps.Subtract(_numOps.One, probClass1);
 
         return (predictedClass, probability, variance);
     }
@@ -707,38 +629,33 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
 
         int nSamples = X.Rows;
         // Binary classification: always 2 columns (class 0 and class 1)
-        var probabilities = new Matrix<T>(nSamples, 2);
+        // The posterior quantities do not depend on the test point: compute them once.
+        var alpha = MatrixSolutionHelper.SolveLinearSystem(_K, _f, _decompositionType);
+        var sqrtW = CalculateSqrtW(_W);
+        var B = CalculateBMatrix(sqrtW);
 
+        // Per test point: latent mean k*·α and variance k** - k*ᵀ W^½ B⁻¹ W^½ k* (one kernel vector and one
+        // solve against B per point).
+        var latentMeans = new List<T>(nSamples);
+        var priorVariances = new List<T>(nSamples);
+        var explainedVariances = new List<T>(nSamples);
         for (int i = 0; i < nSamples; i++)
         {
-            // Compute probabilities directly from latent function
-            var kStar = CalculateKernelVector(_X, X.GetRow(i));
-            var alpha = MatrixSolutionHelper.SolveLinearSystem(_K, _f, _decompositionType);
-            T fMean = kStar.DotProduct(alpha);
+            var xi = X.GetRow(i);
+            var kStar = CalculateKernelVector(_X, xi);
+            latentMeans.Add(kStar.DotProduct(alpha));
 
-            T kStarStar = _kernel.Calculate(X.GetRow(i), X.GetRow(i));
-            var sqrtW = CalculateSqrtW(_W);
-            var B = CalculateBMatrix(sqrtW);
             var sqrtWkStar = sqrtW.Multiply(kStar);
             var v = MatrixSolutionHelper.SolveLinearSystem(B, sqrtWkStar, _decompositionType);
-            var sqrtWv = sqrtW.Multiply(v);
-
-            T variance = kStarStar;
-            for (int j = 0; j < kStar.Length; j++)
-            {
-                variance = _numOps.Subtract(variance, _numOps.Multiply(kStar[j], sqrtWv[j]));
-            }
-
-            double fMeanVal = _numOps.ToDouble(fMean);
-            double varVal = Math.Max(_numOps.ToDouble(variance), 1e-10);
-            double kappa = 1.0 / Math.Sqrt(1.0 + Math.PI * varVal / 8.0);
-            double p1 = 1.0 / (1.0 + Math.Exp(-kappa * fMeanVal));
-
-            probabilities[i, 0] = _numOps.FromDouble(1.0 - p1);
-            probabilities[i, 1] = _numOps.FromDouble(p1);
+            priorVariances.Add(_kernel.Calculate(xi, xi));
+            explainedVariances.Add(kStar.DotProduct(sqrtW.Multiply(v)));
         }
 
-        return probabilities;
+        var engine = AiDotNetEngine.Current;
+        var latentVariances = engine.Subtract(new Vector<T>(priorVariances), new Vector<T>(explainedVariances));
+        var p1 = Tensor<T>.FromVector(ProbitClassOneProbability(new Vector<T>(latentMeans), latentVariances))
+            .Reshape(new[] { nSamples, 1 });
+        return engine.TensorConcatenate(new[] { engine.ScalarMinusTensor(_numOps.One, p1), p1 }, 1).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -772,6 +689,16 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// similar inputs should produce similar outputs.
     /// </para>
     /// </remarks>
+    private Vector<T> ProbitClassOneProbability(Vector<T> latentMeans, Vector<T> latentVariances)
+    {
+        // Probit approximation: sigmoid(κ f) with κ = 1 / sqrt(1 + π * max(var, 1e-10) / 8)
+        var engine = AiDotNetEngine.Current;
+        var variance = engine.TensorMax(Tensor<T>.FromVector(latentVariances), _numOps.FromDouble(1e-10));
+        var kappa = engine.TensorRsqrt(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(variance, _numOps.FromDouble(Math.PI / 8.0)), _numOps.One));
+        return engine.TensorSigmoid(engine.TensorMultiply(kappa, Tensor<T>.FromVector(latentMeans))).ToVector();
+    }
+
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
         var K = new Matrix<T>(X1.Rows, X2.Rows);

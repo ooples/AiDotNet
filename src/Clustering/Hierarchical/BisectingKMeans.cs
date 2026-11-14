@@ -114,16 +114,8 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
         if (_options.NumClusters >= n)
         {
             // Each point is its own cluster
-            Labels = new Vector<T>(n);
-            ClusterCenters = new Matrix<T>(n, d);
-            for (int i = 0; i < n; i++)
-            {
-                Labels[i] = NumOps.FromDouble(i);
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[i, j] = x[i, j];
-                }
-            }
+            Labels = Engine.TensorArange<T>(0, n, 1).ToVector();
+            ClusterCenters = x.Clone();
             Inertia = NumOps.Zero;
             IsTrained = true;
             return;
@@ -138,8 +130,6 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
 
         if (_options.BuildHierarchy)
         {
-            var firstClusterInertia = clusterInfos[0].Inertia;
-            double firstInertiaValue = firstClusterInertia is not null ? NumOps.ToDouble(firstClusterInertia) : 0;
             _hierarchy = new List<BisectionNode>
             {
                 new BisectionNode
@@ -147,7 +137,7 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
                     ClusterId = 0,
                     ParentId = -1,
                     Size = n,
-                    Inertia = firstInertiaValue
+                    Inertia = InertiaValue(clusterInfos[0].Inertia)
                 }
             };
         }
@@ -208,62 +198,37 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
             // Record hierarchy
             if (_options.BuildHierarchy && _hierarchy is not null)
             {
-                var lastClusterInertia = clusterInfos[clusterInfos.Count - 1].Inertia;
-                double lastInertiaValue = lastClusterInertia is not null ? NumOps.ToDouble(lastClusterInertia) : 0;
                 _hierarchy.Add(new BisectionNode
                 {
                     ClusterId = rightClusterId,
                     ParentId = leftClusterId,
                     Size = originalRightIndices.Count,
-                    Inertia = lastInertiaValue
+                    Inertia = InertiaValue(clusterInfos[clusterInfos.Count - 1].Inertia)
                 });
             }
 
             currentNumClusters++;
         }
 
-        // Renumber clusters to be 0, 1, 2, ... k-1
+        // Renumber clusters to be 0, 1, 2, ... k-1 (in order of first appearance)
         var clusterMapping = new Dictionary<int, int>();
-        int newClusterId = 0;
+        var finalLabels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            if (!clusterMapping.ContainsKey(clusterAssignments[i]))
+            if (!clusterMapping.TryGetValue(clusterAssignments[i], out int mapped))
             {
-                clusterMapping[clusterAssignments[i]] = newClusterId++;
+                mapped = clusterMapping.Count;
+                clusterMapping[clusterAssignments[i]] = mapped;
             }
+
+            finalLabels[i] = mapped;
         }
 
-        Labels = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            Labels[i] = NumOps.FromDouble(clusterMapping[clusterAssignments[i]]);
-        }
+        Labels = ClusteringTensorOps.FromIntArray<T>(finalLabels);
 
-        // Build final cluster centers
+        // Build final cluster centers (every renumbered cluster has members)
         NumClusters = clusterMapping.Count;
-        ClusterCenters = new Matrix<T>(NumClusters, d);
-        var centerCounts = new int[NumClusters];
-
-        for (int i = 0; i < n; i++)
-        {
-            int cluster = clusterMapping[clusterAssignments[i]];
-            centerCounts[cluster]++;
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[cluster, j] = NumOps.Add(ClusterCenters[cluster, j], x[i, j]);
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (centerCounts[k] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], NumOps.FromDouble(centerCounts[k]));
-                }
-            }
-        }
+        ClusterCenters = ClusteringTensorOps.ClusterMeans(x, Labels, NumClusters, out _);
 
         // Compute final inertia
         Inertia = ComputeInertia(x, Labels, ClusterCenters);
@@ -274,39 +239,24 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
         IsTrained = true;
     }
 
+    /// <summary>Inertia as the double stored on hierarchy nodes (0 when unknown).</summary>
+    private double InertiaValue(T? inertia) => inertia is T value ? NumOps.ToDouble(value) : 0;
+
     /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> x)
     {
         ValidateIsTrained();
         ValidatePredictInput(x);
 
-        var labels = new Vector<T>(x.Rows);
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var point = GetRow(x, i);
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = _distanceMetric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(_distanceMetric, x, centers));
     }
 
     private int SelectClusterToBisect(List<ClusterInfo> clusterInfos)
@@ -322,15 +272,8 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
                 continue;
             }
 
-            T score = _options.ClusterSelection switch
-            {
-                BisectionClusterSelection.Largest => NumOps.FromDouble(info.Indices.Count),
-                BisectionClusterSelection.HighestInertia => info.Inertia ?? NumOps.Zero,
-                BisectionClusterSelection.LargestDiameter => info.Diameter,
-                _ => NumOps.FromDouble(info.Indices.Count)
-            };
-
-            if (NumOps.GreaterThan(score, bestScore))
+            T score = SelectionScore(info);
+            if (IsHigher(score, bestScore))
             {
                 bestScore = score;
                 bestIdx = i;
@@ -340,8 +283,20 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
         return bestIdx;
     }
 
+    /// <summary>The bisection priority of a cluster under the configured selection rule.</summary>
+    private T SelectionScore(ClusterInfo info) => _options.ClusterSelection switch
+    {
+        BisectionClusterSelection.Largest => NumOps.FromDouble(info.Indices.Count),
+        BisectionClusterSelection.HighestInertia => info.Inertia ?? NumOps.Zero,
+        BisectionClusterSelection.LargestDiameter => info.Diameter,
+        _ => NumOps.FromDouble(info.Indices.Count)
+    };
+
+    /// <summary>Scalar comparison of two scores.</summary>
+    private bool IsHigher(T candidate, T reference) => NumOps.GreaterThan(candidate, reference);
+
     private (List<int> LeftIndices, List<int> RightIndices, Vector<T> LeftCenter, Vector<T> RightCenter)
-        BisectCluster(Matrix<T> subData)
+    BisectCluster(Matrix<T> subData)
     {
         if (subData.Rows < 2)
         {
@@ -361,9 +316,6 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
         for (int trial = 0; trial < _options.NumBisectionTrials; trial++)
         {
             // Initialize two centers randomly
-            var center1 = new Vector<T>(d);
-            var center2 = new Vector<T>(d);
-
             int idx1 = _random.Next(n);
             int idx2;
             do
@@ -371,17 +323,11 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
                 idx2 = _random.Next(n);
             } while (idx2 == idx1 && n > 1);
 
-            for (int j = 0; j < d; j++)
-            {
-                center1[j] = subData[idx1, j];
-                center2[j] = subData[idx2, j];
-            }
-
             // Run K-Means with k=2
             var (leftIndices, rightIndices, finalCenter1, finalCenter2, inertia) =
-                RunBinaryKMeans(subData, center1, center2);
+                RunBinaryKMeans(subData, subData.GetRow(idx1), subData.GetRow(idx2));
 
-            if (NumOps.LessThan(inertia, bestInertia) && leftIndices.Count > 0 && rightIndices.Count > 0)
+            if (IsLower(inertia, bestInertia) && leftIndices.Count > 0 && rightIndices.Count > 0)
             {
                 bestInertia = inertia;
                 bestLeftIndices = leftIndices;
@@ -394,12 +340,15 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
         return (bestLeftIndices, bestRightIndices, bestLeftCenter, bestRightCenter);
     }
 
+    /// <summary>Scalar comparison of two inertias.</summary>
+    private bool IsLower(T candidate, T reference) => NumOps.LessThan(candidate, reference);
+
     private (List<int> LeftIndices, List<int> RightIndices, Vector<T> Center1, Vector<T> Center2, T Inertia)
-        RunBinaryKMeans(Matrix<T> data, Vector<T> center1, Vector<T> center2)
+    RunBinaryKMeans(Matrix<T> data, Vector<T> center1, Vector<T> center2)
     {
         int n = data.Rows;
-        int d = data.Columns;
 
+        var centers = Matrix<T>.FromRows(new IEnumerable<T>[] { center1, center2 });
         var assignments = new int[n];
         var prevAssignments = new int[n];
         for (int i = 0; i < n; i++)
@@ -409,19 +358,15 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
 
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
-            // Assignment step
+            // Assignment step (ties go to the first center)
+            assignments = ClusteringTensorOps.NearestCenters(_distanceMetric, data, centers);
             bool changed = false;
             for (int i = 0; i < n; i++)
             {
-                var point = GetRow(data, i);
-                T dist1 = _distanceMetric.Compute(point, center1);
-                T dist2 = _distanceMetric.Compute(point, center2);
-
-                assignments[i] = !NumOps.GreaterThan(dist1, dist2) ? 0 : 1;
-
                 if (assignments[i] != prevAssignments[i])
                 {
                     changed = true;
+                    break;
                 }
             }
 
@@ -432,71 +377,31 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
 
             Array.Copy(assignments, prevAssignments, n);
 
-            // Update step
-            var newCenter1 = new Vector<T>(d);
-            var newCenter2 = new Vector<T>(d);
-            int count1 = 0, count2 = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                if (assignments[i] == 0)
-                {
-                    count1++;
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCenter1[j] = NumOps.Add(newCenter1[j], data[i, j]);
-                    }
-                }
-                else
-                {
-                    count2++;
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCenter2[j] = NumOps.Add(newCenter2[j], data[i, j]);
-                    }
-                }
-            }
-
-            if (count1 > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    center1[j] = NumOps.Divide(newCenter1[j], NumOps.FromDouble(count1));
-                }
-            }
-
-            if (count2 > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    center2[j] = NumOps.Divide(newCenter2[j], NumOps.FromDouble(count2));
-                }
-            }
+            // Update step (an empty side keeps its center)
+            var means = ClusteringTensorOps.ClusterMeans(data, ClusteringTensorOps.FromIntArray<T>(assignments), 2, out var counts);
+            centers = ClusteringTensorOps.RowsWherePositive(counts, means, centers);
         }
 
         // Build result lists
         var leftIndices = new List<int>();
         var rightIndices = new List<int>();
-        T totalInertia = NumOps.Zero;
-
         for (int i = 0; i < n; i++)
         {
-            var point = GetRow(data, i);
             if (assignments[i] == 0)
             {
                 leftIndices.Add(i);
-                T dist = _distanceMetric.Compute(point, center1);
-                totalInertia = NumOps.Add(totalInertia, NumOps.Multiply(dist, dist));
             }
             else
             {
                 rightIndices.Add(i);
-                T dist = _distanceMetric.Compute(point, center2);
-                totalInertia = NumOps.Add(totalInertia, NumOps.Multiply(dist, dist));
             }
         }
 
-        return (leftIndices, rightIndices, center1, center2, totalInertia);
+        var distances = ClusteringTensorOps.AssignedDistances(
+            _distanceMetric, data, ClusteringTensorOps.FromIntArray<T>(assignments), centers);
+        T totalInertia = Engine.DotProduct(distances, distances);
+
+        return (leftIndices, rightIndices, centers.GetRow(0), centers.GetRow(1), totalInertia);
     }
 
     private ClusterInfo CreateClusterInfo(Matrix<T> x, int[] assignments, int clusterId, List<int> indices)
@@ -504,49 +409,22 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
         int d = x.Columns;
         var center = new Vector<T>(d);
 
-        // Compute center
-        foreach (int idx in indices)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                center[j] = NumOps.Add(center[j], x[idx, j]);
-            }
-        }
-
-        if (indices.Count > 0)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                center[j] = NumOps.Divide(center[j], NumOps.FromDouble(indices.Count));
-            }
-        }
-
         // Compute inertia and diameter
         T inertia = NumOps.Zero;
         T diameter = NumOps.Zero;
 
-        foreach (int idx in indices)
+        if (indices.Count > 0)
         {
-            var point = GetRow(x, idx);
-            T dist = _distanceMetric.Compute(point, center);
-            inertia = NumOps.Add(inertia, NumOps.Multiply(dist, dist));
-        }
+            var members = ExtractSubMatrix(x, indices);
+            center = ClusteringTensorOps.ColumnMeans(members);
+            var distances = ClusteringTensorOps.DistancesToPoint(_distanceMetric, members, center);
+            inertia = Engine.DotProduct(distances, distances);
 
-        // Approximate diameter using center + max distance from center * 2
-        if (indices.Count > 1)
-        {
-            T maxDist = NumOps.Zero;
-            foreach (int idx in indices)
+            // Approximate diameter using center + max distance from center * 2
+            if (indices.Count > 1)
             {
-                var point = GetRow(x, idx);
-                T dist = _distanceMetric.Compute(point, center);
-                if (NumOps.GreaterThan(dist, maxDist))
-                {
-                    maxDist = dist;
-                }
+                diameter = NumOps.Multiply(ClusteringTensorOps.MaxOrZero(distances), NumOps.FromDouble(2.0));
             }
-            T two = NumOps.FromDouble(2.0);
-            diameter = NumOps.Multiply(maxDist, two);
         }
 
         return new ClusterInfo
@@ -562,15 +440,9 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
 
     private Matrix<T> ExtractSubMatrix(Matrix<T> x, List<int> indices)
     {
-        var subMatrix = new Matrix<T>(indices.Count, x.Columns);
-        for (int i = 0; i < indices.Count; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                subMatrix[i, j] = x[indices[i], j];
-            }
-        }
-        return subMatrix;
+        return indices.Count == 0
+            ? new Matrix<T>(0, x.Columns)
+            : ClusteringTensorOps.SelectRows(x, indices.ToArray());
     }
 
     private void ValidateInputData(Matrix<T> x)

@@ -101,8 +101,6 @@ public partial class XMeans<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
         // Start with minimum clusters
         int currentK = _options.MinClusters;
 
@@ -123,8 +121,9 @@ public partial class XMeans<T> : ClusteringBase<T>
         while (improved && currentK < _options.MaxClusters)
         {
             improved = false;
-            var newCenters = new List<T[]>();
+            var newCenters = new List<Vector<T>>();
             var clusterMapping = new Dictionary<int, List<int>>();
+            var labelIds = ClusteringTensorOps.ToIntArray(currentLabels);
 
             // For each cluster, decide whether to split
             for (int c = 0; c < currentK; c++)
@@ -133,7 +132,7 @@ public partial class XMeans<T> : ClusteringBase<T>
                 var clusterPoints = new List<int>();
                 for (int i = 0; i < n; i++)
                 {
-                    if ((int)NumOps.ToDouble(currentLabels[i]) == c)
+                    if (labelIds[i] == c)
                     {
                         clusterPoints.Add(i);
                     }
@@ -142,25 +141,13 @@ public partial class XMeans<T> : ClusteringBase<T>
                 if (clusterPoints.Count < 4)
                 {
                     // Too few points to split
-                    var center = new T[d];
-                    for (int j = 0; j < d; j++)
-                    {
-                        center[j] = currentCenters[c, j];
-                    }
                     clusterMapping[newCenters.Count] = clusterPoints;
-                    newCenters.Add(center);
+                    newCenters.Add(currentCenters.GetRow(c));
                     continue;
                 }
 
                 // Create sub-matrix for this cluster
-                var subMatrix = new Matrix<T>(clusterPoints.Count, d);
-                for (int i = 0; i < clusterPoints.Count; i++)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        subMatrix[i, j] = x[clusterPoints[i], j];
-                    }
-                }
+                var subMatrix = ClusteringTensorOps.SelectRows(x, clusterPoints.ToArray());
 
                 // Compute BIC for parent cluster
                 T parentBIC = ComputeClusterBIC(subMatrix, d);
@@ -181,61 +168,50 @@ public partial class XMeans<T> : ClusteringBase<T>
                 // Compute BIC for children
                 T childBIC = ComputeSplitBIC(subMatrix, subLabels, subCenters, d);
 
-                if (NumOps.LessThan(childBIC, parentBIC) && newCenters.Count + 1 < _options.MaxClusters)
+                if (IsLower(childBIC, parentBIC) && newCenters.Count + 1 < _options.MaxClusters)
                 {
                     // Accept split
+                    var subIds = ClusteringTensorOps.ToIntArray(subLabels);
                     for (int sc = 0; sc < 2; sc++)
                     {
-                        var center = new T[d];
-                        for (int j = 0; j < d; j++)
-                        {
-                            center[j] = subCenters[sc, j];
-                        }
-
                         var subClusterPoints = new List<int>();
                         for (int i = 0; i < clusterPoints.Count; i++)
                         {
-                            if ((int)NumOps.ToDouble(subLabels[i]) == sc)
+                            if (subIds[i] == sc)
                             {
                                 subClusterPoints.Add(clusterPoints[i]);
                             }
                         }
 
                         clusterMapping[newCenters.Count] = subClusterPoints;
-                        newCenters.Add(center);
+                        newCenters.Add(subCenters.GetRow(sc));
                     }
                     improved = true;
                 }
                 else
                 {
                     // Keep parent cluster
-                    var center = new T[d];
-                    for (int j = 0; j < d; j++)
-                    {
-                        center[j] = currentCenters[c, j];
-                    }
                     clusterMapping[newCenters.Count] = clusterPoints;
-                    newCenters.Add(center);
+                    newCenters.Add(currentCenters.GetRow(c));
                 }
             }
 
             // Update current state
             currentK = newCenters.Count;
-            currentCenters = new Matrix<T>(currentK, d);
-            currentLabels = new Vector<T>(n);
+            currentCenters = currentK > 0
+                ? Matrix<T>.FromRows(newCenters.Cast<IEnumerable<T>>().ToArray())
+                : new Matrix<T>(0, d);
 
+            var newLabels = new int[n];
             for (int c = 0; c < currentK; c++)
             {
-                for (int j = 0; j < d; j++)
-                {
-                    currentCenters[c, j] = newCenters[c][j];
-                }
-
                 foreach (int i in clusterMapping[c])
                 {
-                    currentLabels[i] = NumOps.FromDouble(c);
+                    newLabels[i] = c;
                 }
             }
+
+            currentLabels = ClusteringTensorOps.FromIntArray<T>(newLabels);
         }
 
         // Set final results
@@ -254,6 +230,9 @@ public partial class XMeans<T> : ClusteringBase<T>
 
         IsTrained = true;
     }
+
+    /// <summary>Scalar comparison of two criterion values.</summary>
+    private bool IsLower(T candidate, T reference) => NumOps.LessThan(candidate, reference);
 
     private T ComputeClusterBIC(Matrix<T> clusterData, int d)
     {
@@ -285,126 +264,65 @@ public partial class XMeans<T> : ClusteringBase<T>
         int n = data.Rows;
         if (n == 0) return NumOps.Zero;
 
-        T totalLogL = NumOps.Zero;
-        int totalParams = 0;
-        T eps = NumOps.FromDouble(1e-10);
-        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
+        // Each non-empty child contributes d (mean) + 1 (variance) parameters
+        T totalLogL = SumClusterLogLikelihood(data, labels, 2, d, out int nonEmpty);
+        return Criterion(totalLogL, nonEmpty * (d + 1), n);
+    }
+
+    /// <summary>
+    /// Sum over clusters 0..k-1 of the spherical Gaussian log-likelihood
+    /// -n_c / 2 (d log 2 pi + d log(var_c + eps) + d), where var_c is the per-dimension variance (1e-10 for n_c &lt;= 1).
+    /// </summary>
+    private T SumClusterLogLikelihood(Matrix<T> data, Vector<T> labels, int k, int d, out int nonEmpty)
+    {
+        int n = data.Rows;
+        var means = ClusteringTensorOps.ClusterMeans(data, labels, k, out var counts);
+        var squared = ClusteringTensorOps.AssignedSquaredDistances(data, labels, means);
+        var members = ClusteringTensorOps.OneHotMask(labels, k);
+        var sumSquares = Engine.TensorMatMul(Engine.TensorTranspose(members), Tensor<T>.FromVector(squared, new[] { n, 1 }));
+        var countTensor = counts.AsTensor();
+
+        var variance = Engine.TensorDivideScalar(
+            Engine.TensorDivide(Engine.Reshape(sumSquares, new[] { k }), Engine.TensorMax(countTensor, NumOps.One)),
+            NumOps.FromDouble(d));
+        var singular = Engine.TensorLessThan(countTensor, NumOps.FromDouble(1.5));
+        variance = Engine.TensorWhere(singular, Engine.TensorFullLike(variance, NumOps.FromDouble(1e-10)), variance);
+
         T dT = NumOps.FromDouble(d);
-        T halfNeg = NumOps.FromDouble(-0.5);
+        var logVariance = Engine.TensorLog(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-10)));
+        var inner = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(logVariance, dT),
+            NumOps.Add(NumOps.Multiply(dT, NumOps.FromDouble(Math.Log(2 * Math.PI))), dT));
+        T totalLogL = NumOps.Multiply(NumOps.FromDouble(-0.5), Engine.TensorSum(Engine.TensorMultiply(countTensor, inner)));
 
-        for (int c = 0; c < 2; c++)
-        {
-            var clusterPoints = new List<int>();
-            for (int i = 0; i < n; i++)
-            {
-                if ((int)NumOps.ToDouble(labels[i]) == c)
-                {
-                    clusterPoints.Add(i);
-                }
-            }
+        nonEmpty = ClusteringTensorOps.ToIntArray(
+            Engine.TensorGreaterThan(countTensor, NumOps.Zero).ToVector()).Sum();
+        return totalLogL;
+    }
 
-            if (clusterPoints.Count == 0) continue;
-
-            var clusterData = new Matrix<T>(clusterPoints.Count, d);
-            for (int i = 0; i < clusterPoints.Count; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    clusterData[i, j] = data[clusterPoints[i], j];
-                }
-            }
-
-            T variance = ComputeVariance(clusterData, clusterPoints.Count, d);
-            T nC = NumOps.FromDouble(clusterPoints.Count);
-            T logL = NumOps.Multiply(NumOps.Multiply(halfNeg, nC),
-                NumOps.Add(NumOps.Add(NumOps.Multiply(dT, log2Pi), NumOps.Multiply(dT, NumOps.Log(NumOps.Add(variance, eps)))), dT));
-            totalLogL = NumOps.Add(totalLogL, logL);
-            totalParams += d + 1;
-        }
-
-        T nT = NumOps.FromDouble(n);
-        T totalParamsT = NumOps.FromDouble(totalParams);
+    /// <summary>BIC (-2 logL + p ln n) or AIC (-2 logL + 2 p) for the configured criterion.</summary>
+    private T Criterion(T logL, int numParams, int n)
+    {
+        T paramsT = NumOps.FromDouble(numParams);
+        T fit = NumOps.Multiply(NumOps.FromDouble(-2), logL);
         return _options.Criterion == InformationCriterion.BIC
-            ? NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(totalParamsT, NumOps.Log(nT)))
-            : NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(NumOps.FromDouble(2), totalParamsT));
+            ? NumOps.Add(fit, NumOps.Multiply(paramsT, NumOps.Log(NumOps.FromDouble(n))))
+            : NumOps.Add(fit, NumOps.Multiply(NumOps.FromDouble(2), paramsT));
     }
 
     private T ComputeTotalBIC(Matrix<T> data, Vector<T> labels, Matrix<T> centers, int n, int d, int k)
     {
-        T totalLogL = NumOps.Zero;
-        int totalParams = k * (d + 1);
-        T eps = NumOps.FromDouble(1e-10);
-        T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
-        T dT = NumOps.FromDouble(d);
-        T halfNeg = NumOps.FromDouble(-0.5);
-
-        for (int c = 0; c < k; c++)
-        {
-            var clusterPoints = new List<int>();
-            for (int i = 0; i < n; i++)
-            {
-                if ((int)NumOps.ToDouble(labels[i]) == c)
-                {
-                    clusterPoints.Add(i);
-                }
-            }
-
-            if (clusterPoints.Count == 0) continue;
-
-            var clusterData = new Matrix<T>(clusterPoints.Count, d);
-            for (int i = 0; i < clusterPoints.Count; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    clusterData[i, j] = data[clusterPoints[i], j];
-                }
-            }
-
-            T variance = ComputeVariance(clusterData, clusterPoints.Count, d);
-            T nC = NumOps.FromDouble(clusterPoints.Count);
-            T logL = NumOps.Multiply(NumOps.Multiply(halfNeg, nC),
-                NumOps.Add(NumOps.Add(NumOps.Multiply(dT, log2Pi), NumOps.Multiply(dT, NumOps.Log(NumOps.Add(variance, eps)))), dT));
-            totalLogL = NumOps.Add(totalLogL, logL);
-        }
-
-        T nT = NumOps.FromDouble(n);
-        T totalParamsT = NumOps.FromDouble(totalParams);
-        return _options.Criterion == InformationCriterion.BIC
-            ? NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(totalParamsT, NumOps.Log(nT)))
-            : NumOps.Add(NumOps.Multiply(NumOps.FromDouble(-2), totalLogL), NumOps.Multiply(NumOps.FromDouble(2), totalParamsT));
+        T totalLogL = k > 0 && n > 0 ? SumClusterLogLikelihood(data, labels, k, d, out _) : NumOps.Zero;
+        return Criterion(totalLogL, k * (d + 1), n);
     }
 
     private T ComputeVariance(Matrix<T> data, int n, int d)
     {
         if (n <= 1) return NumOps.FromDouble(1e-10);
 
-        // Compute mean
-        var mean = new Vector<T>(d);
-        T nT = NumOps.FromDouble(n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                mean[j] = NumOps.Add(mean[j], data[i, j]);
-            }
-        }
-        for (int j = 0; j < d; j++)
-        {
-            mean[j] = NumOps.Divide(mean[j], nT);
-        }
-
-        // Compute variance
-        T variance = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(data[i, j], mean[j]);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-        }
-
-        return NumOps.Divide(variance, NumOps.FromDouble((double)n * d));
+        // Mean squared deviation from the column means over all n * d entries
+        var centered = ClusteringTensorOps.SubtractRow(data, ClusteringTensorOps.ColumnMeans(data));
+        return NumOps.Divide(Engine.TensorSum(Engine.TensorSquare(centered)), NumOps.FromDouble((double)n * d));
     }
 
     /// <inheritdoc />
@@ -416,37 +334,15 @@ public partial class XMeans<T> : ClusteringBase<T>
         if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
             return new Vector<T>(Labels);
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-        int d = x.Columns;
-        var pointArr = new T[d];
-        var centerArr = new T[d];
-
-        for (int i = 0; i < x.Rows; i++)
+        int k = ClusterCenters is null ? 0 : Math.Min(NumClusters, ClusterCenters.Rows);
+        if (ClusterCenters is null || k <= 0)
         {
-            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int c = 0; c < Math.Min(NumClusters, ClusterCenters.Rows); c++)
-                {
-                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[c, j];
-                    T dist = metric.ComputeInline(pointArr, centerArr, d);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = c;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == k ? ClusterCenters : ClusterCenters.GetSubMatrix(0, 0, k, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />

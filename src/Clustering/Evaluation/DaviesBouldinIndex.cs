@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.DistanceMetrics;
 using AiDotNet.Clustering.Interfaces;
@@ -62,14 +64,14 @@ public class DaviesBouldinIndex<T> : IClusterMetric<T>
     public double Compute(Matrix<T> data, Vector<T> labels)
     {
         int n = data.Rows;
-        int d = data.Columns;
         var metric = _distanceMetric ?? new EuclideanDistance<T>();
 
         // Get unique labels (excluding -1 for noise)
         var uniqueLabels = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < n; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 uniqueLabels.Add(label);
@@ -83,104 +85,39 @@ public class DaviesBouldinIndex<T> : IClusterMetric<T>
         }
 
         var labelList = uniqueLabels.ToList();
+        var engine = AiDotNetEngine.Current;
 
-        // Compute centroids
-        var centroids = new Dictionary<int, double[]>();
-        var clusterCounts = new Dictionary<int, int>();
+        // Centroids over label slots 0..max; only the slots in labelList are used below
+        int numSlots = labelList.Max() + 1;
+        var mask = ClusteringTensorOps.OneHotMask(labels, numSlots);
+        var counts = engine.ReduceSum(mask, new[] { 0 }, false);
+        var sums = engine.TensorMatMul(engine.TensorTranspose(mask), Tensor<T>.FromMatrix(data)).ToMatrix();
+        var allCentroids = ClusteringTensorOps.DivideRows(sums, counts.ToVector());
 
-        foreach (int label in labelList)
-        {
-            centroids[label] = new double[d];
-            clusterCounts[label] = 0;
-        }
+        // Scatter: average distance (configured metric) from each member to its centroid
+        var pointToCentroid = Tensor<T>.FromMatrix(metric.ComputePairwise(data, allCentroids));
+        var ownDistance = engine.ReduceSum(engine.TensorMultiply(pointToCentroid, mask), new[] { 1 }, false);
+        var scatterSums = engine.TensorMatMul(
+            engine.TensorTranspose(mask), engine.Reshape(ownDistance, new[] { n, 1 }));
+        var allScatter = engine.TensorDivide(
+            engine.Reshape(scatterSums, new[] { numSlots }), engine.TensorMax(counts, _numOps.One));
 
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
+        // Restrict to the clusters that are present
+        var present = labelList.ToArray();
+        var centroids = ClusteringTensorOps.SelectRows(allCentroids, present);
+        var scatter = ClusteringTensorOps.SelectElements(allScatter.ToVector(), present);
 
-            for (int j = 0; j < d; j++)
-            {
-                centroids[label][j] += _numOps.ToDouble(data[i, j]);
-            }
-            clusterCounts[label]++;
-        }
-
-        foreach (int label in labelList)
-        {
-            if (clusterCounts[label] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    centroids[label][j] /= clusterCounts[label];
-                }
-            }
-        }
-
-        // Compute scatter (average distance to centroid) for each cluster
-        var scatter = new Dictionary<int, double>();
-        foreach (int label in labelList)
-        {
-            scatter[label] = 0;
-        }
-
-        // Precompute centroid vectors for distance metric
-        var centroidVectors = new Dictionary<int, Vector<T>>();
-        foreach (int label in labelList)
-        {
-            var vec = new Vector<T>(d);
-            for (int j = 0; j < d; j++)
-            {
-                vec[j] = _numOps.FromDouble(centroids[label][j]);
-            }
-            centroidVectors[label] = vec;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)_numOps.ToDouble(labels[i]);
-            if (label < 0) continue;
-
-            // Use the configured distance metric
-            var pointVec = data.GetRow(i);
-            double dist = _numOps.ToDouble(metric.Compute(pointVec, centroidVectors[label]));
-            scatter[label] += dist;
-        }
-
-        foreach (int label in labelList)
-        {
-            if (clusterCounts[label] > 0)
-            {
-                scatter[label] /= clusterCounts[label];
-            }
-        }
-
-        // Compute Davies-Bouldin index
-        double dbSum = 0;
-
-        for (int ii = 0; ii < k; ii++)
-        {
-            int labelI = labelList[ii];
-            double maxR = 0;
-
-            for (int jj = 0; jj < k; jj++)
-            {
-                if (ii == jj) continue;
-
-                int labelJ = labelList[jj];
-
-                // Distance between centroids using configured metric
-                double centroidDist = _numOps.ToDouble(metric.Compute(centroidVectors[labelI], centroidVectors[labelJ]));
-
-                if (centroidDist > 0)
-                {
-                    double r = (scatter[labelI] + scatter[labelJ]) / centroidDist;
-                    maxR = Math.Max(maxR, r);
-                }
-            }
-
-            dbSum += maxR;
-        }
+        // R_ij = (s_i + s_j) / d(c_i, c_j) for i != j with d > 0; DB = mean_i max_j R_ij (0 when no such j)
+        var centroidDist = Tensor<T>.FromMatrix(metric.ComputePairwise(centroids, centroids));
+        var scatterRow = engine.TensorBroadcastTo(Tensor<T>.FromVector(scatter, new[] { k, 1 }), new[] { k, k });
+        var scatterCol = engine.TensorBroadcastTo(Tensor<T>.FromVector(scatter, new[] { 1, k }), new[] { k, k });
+        var offDiagonal = engine.ScalarMinusTensor(_numOps.One, engine.TensorEye<T>(k));
+        var usable = engine.TensorMultiply(engine.TensorGreaterThan(centroidDist, _numOps.Zero), offDiagonal);
+        var safeDist = engine.TensorWhere(usable, centroidDist, engine.TensorOnesLike(centroidDist));
+        var ratios = engine.TensorMultiply(
+            engine.TensorDivide(engine.TensorAdd(scatterRow, scatterCol), safeDist), usable);
+        var maxR = engine.ReduceMax(ratios, new[] { 1 }, false);
+        double dbSum = _numOps.ToDouble(engine.TensorSum(maxR));
 
         return dbSum / k;
     }

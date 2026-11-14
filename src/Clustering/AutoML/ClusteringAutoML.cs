@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.AutoML;
 using AiDotNet.Clustering.AutoK;
@@ -408,9 +409,10 @@ public class ClusteringAutoML<T> : UnsupervisedAutoMLBase<T>
     private int CountClusters(Vector<T> labels)
     {
         var unique = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < labels.Length; i++)
         {
-            int label = (int)NumOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 unique.Add(label);

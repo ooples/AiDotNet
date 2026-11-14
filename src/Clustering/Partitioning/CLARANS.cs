@@ -143,9 +143,8 @@ public partial class CLARANS<T> : ClusteringBase<T>
             var currentMedoids = SelectRandomMedoids(n, k, rand);
             T currentCost = ComputeTotalCost(distMatrix, currentMedoids, n);
 
-            // Local search
+            // Local search: random single-medoid swaps, accepted when they lower the cost
             int neighborsExplored = 0;
-
             while (neighborsExplored < maxNeighbor)
             {
                 // Select random medoid to swap
@@ -163,7 +162,7 @@ public partial class CLARANS<T> : ClusteringBase<T>
                 newMedoids[medoidIdx] = newMedoid;
                 T newCost = ComputeTotalCost(distMatrix, newMedoids, n);
 
-                if (NumOps.LessThan(newCost, currentCost))
+                if (IsLower(newCost, currentCost))
                 {
                     // Accept swap, reset counter
                     currentMedoids = newMedoids;
@@ -177,7 +176,7 @@ public partial class CLARANS<T> : ClusteringBase<T>
             }
 
             // Update best if improved
-            if (NumOps.LessThan(currentCost, _bestCost))
+            if (IsLower(currentCost, _bestCost))
             {
                 _bestCost = currentCost;
                 bestMedoids = (int[])currentMedoids.Clone();
@@ -187,65 +186,23 @@ public partial class CLARANS<T> : ClusteringBase<T>
         _medoidIndices = bestMedoids ?? SelectRandomMedoids(n, k, rand);
 
         // Set cluster centers as medoid points
-        ClusterCenters = new Matrix<T>(k, d);
-        for (int i = 0; i < k; i++)
-        {
-            int medoidIdx = _medoidIndices[i];
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[i, j] = x[medoidIdx, j];
-            }
-        }
+        ClusterCenters = ClusteringTensorOps.SelectRows(x, _medoidIndices);
 
         // Assign labels
-        Labels = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            int nearestMedoid = 0;
-            T minDist = NumOps.MaxValue;
-
-            for (int m = 0; m < k; m++)
-            {
-                T dist = distMatrix[i, _medoidIndices[m]];
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearestMedoid = m;
-                }
-            }
-
-            Labels[i] = NumOps.FromDouble(nearestMedoid);
-        }
+        Labels = ClusteringTensorOps.FromIntArray<T>(
+            ClusteringTensorOps.ArgMinRows(ClusteringTensorOps.SelectColumns(distMatrix, _medoidIndices).ToMatrix()));
 
         MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
-    private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
+    /// <summary>Scalar comparison of two costs.</summary>
+    private bool IsLower(T candidate, T reference) => NumOps.LessThan(candidate, reference);
+
+    private Tensor<T> ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
-        int d = x.Columns;
-        var distMatrix = new T[n, n];
-
-        // Cache rows as arrays for allocation-free distance
-        var rowArrays = new T[n][];
-        for (int i = 0; i < n; i++)
-        {
-            rowArrays[i] = new T[d];
-            for (int c = 0; c < d; c++)
-                rowArrays[i][c] = x[i, c];
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
-                distMatrix[i, j] = dist;
-                distMatrix[j, i] = dist;
-            }
-        }
-
-        return distMatrix;
+        // Symmetric pairwise distances with a zero diagonal
+        return Tensor<T>.FromMatrix(metric.ComputePairwise(x));
     }
 
     private int[] SelectRandomMedoids(int n, int k, Random rand)
@@ -258,24 +215,10 @@ public partial class CLARANS<T> : ClusteringBase<T>
         return indices.ToArray();
     }
 
-    private T ComputeTotalCost(T[,] distMatrix, int[] medoids, int n)
+    private T ComputeTotalCost(Tensor<T> distMatrix, int[] medoids, int n)
     {
-        T totalCost = NumOps.Zero;
-
-        for (int i = 0; i < n; i++)
-        {
-            T minDist = NumOps.MaxValue;
-            foreach (int m in medoids)
-            {
-                if (NumOps.LessThan(distMatrix[i, m], minDist))
-                {
-                    minDist = distMatrix[i, m];
-                }
-            }
-            totalCost = NumOps.Add(totalCost, minDist);
-        }
-
-        return totalCost;
+        // Sum over points of the distance to their nearest medoid
+        return Engine.TensorSum(ClusteringTensorOps.MinRows(ClusteringTensorOps.SelectColumns(distMatrix, medoids).ToMatrix()).AsTensor());
     }
 
     /// <inheritdoc />
@@ -283,34 +226,16 @@ public partial class CLARANS<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />
@@ -334,16 +259,6 @@ public partial class CLARANS<T> : ClusteringBase<T>
             return new Matrix<T>(0, originalData.Columns);
         }
 
-        var medoids = new Matrix<T>(_medoidIndices.Length, originalData.Columns);
-        for (int i = 0; i < _medoidIndices.Length; i++)
-        {
-            int idx = _medoidIndices[i];
-            for (int j = 0; j < originalData.Columns; j++)
-            {
-                medoids[i, j] = originalData[idx, j];
-            }
-        }
-
-        return medoids;
+        return ClusteringTensorOps.SelectRows(originalData, _medoidIndices);
     }
 }

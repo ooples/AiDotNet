@@ -161,8 +161,7 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
                     _lowerBound = ComputeLowerBound(x, n, d, k);
 
                     // Check convergence
-                    T diff = NumOps.Abs(NumOps.Subtract(_lowerBound, prevLowerBound));
-                    if (NumOps.LessThan(diff, NumOps.FromDouble(_options.Tolerance)))
+                    if (HasConverged(_lowerBound, prevLowerBound))
                     {
                         break;
                     }
@@ -171,7 +170,7 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
             }
 
             // Keep best result
-            if (NumOps.GreaterThan(_lowerBound, bestLowerBound))
+            if (IsHigher(_lowerBound, bestLowerBound))
             {
                 bestLowerBound = _lowerBound;
                 bestWeights = AiDotNet.Training.HostStateCheckpoint<T>.Capture(FittedWeights, bestWeights);
@@ -191,55 +190,31 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
         _responsibilities = bestResponsibilities;
         _lowerBound = bestLowerBound;
 
-        // Assign labels based on maximum responsibility
-        Labels = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            int bestCluster = 0;
-            T maxResp = FittedResponsibilities[i, 0];
-            for (int c = 1; c < k; c++)
-            {
-                if (NumOps.GreaterThan(FittedResponsibilities[i, c], maxResp))
-                {
-                    maxResp = FittedResponsibilities[i, c];
-                    bestCluster = c;
-                }
-            }
-            Labels[i] = NumOps.FromDouble(bestCluster);
-        }
+        // Assign labels based on maximum responsibility (first component on ties)
+        Labels = ClusteringTensorOps.FromIntArray<T>(
+            Engine.TensorArgMax(Tensor<T>.FromMatrix(FittedResponsibilities), 1).ToArray());
 
         // Set cluster centers
-        ClusterCenters = new Matrix<T>(k, d);
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[c, j] = FittedMeans[c, j];
-            }
-        }
+        ClusterCenters = FittedMeans.GetSubMatrix(0, 0, k, d);
 
         MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
+    /// <summary>True when the lower bound moved by less than the configured tolerance.</summary>
+    private bool HasConverged(T current, T previous)
+        => NumOps.LessThan(NumOps.Abs(NumOps.Subtract(current, previous)), NumOps.FromDouble(_options.Tolerance));
+
+    /// <summary>True when <paramref name="value"/> is strictly greater than <paramref name="best"/>.</summary>
+    private bool IsHigher(T value, T best) => NumOps.GreaterThan(value, best);
+
     private void InitializeParameters(Matrix<T> data, int n, int d, int k)
     {
-        _weights = new Vector<T>(k);
+        // Uniform weights and zero responsibilities
+        _weights = Engine.Fill(k, NumOps.Divide(NumOps.One, NumOps.FromDouble(k)));
         _means = new Matrix<T>(k, d);
         _covariances = new Tensor<T>([k, d, d]);
         _responsibilities = new Matrix<T>(n, k);
-
-        // Initialize weights uniformly
-        T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(k));
-        for (int c = 0; c < k; c++)
-        {
-            _weights[c] = uniformWeight;
-        }
-
-        // Initialize responsibilities to zero
-        for (int i = 0; i < n; i++)
-            for (int c = 0; c < k; c++)
-                _responsibilities[i, c] = NumOps.Zero;
 
         // Initialize means based on method
         switch (_options.InitMethod)
@@ -274,21 +249,23 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
         if (kmeans.ClusterCenters is not null && _means is not null)
         {
             int actualK = Math.Min(k, kmeans.ClusterCenters.Rows);
-            for (int c = 0; c < actualK; c++)
+            var centers = actualK > 0 ? kmeans.ClusterCenters.GetSubMatrix(0, 0, actualK, d) : new Matrix<T>(0, d);
+            if (actualK >= k)
             {
-                for (int j = 0; j < d; j++)
-                {
-                    _means[c, j] = kmeans.ClusterCenters[c, j];
-                }
+                _means = centers;
+                return;
             }
-            // If KMeans returned fewer clusters, fill remaining with slight perturbations
-            for (int c = actualK; c < k; c++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    _means[c, j] = NumOps.Add(_means[0, j], NumOps.FromDouble(c * 0.01));
-                }
-            }
+
+            // If KMeans returned fewer clusters, fill remaining rows c with mean_0 + c * 0.01
+            int missing = k - actualK;
+            var first = actualK > 0 ? centers.GetRow(0) : new Vector<T>(d);
+            var offsets = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(actualK, k, 1), NumOps.FromDouble(0.01));
+            var padding = Engine.TensorAdd(
+                ClusteringTensorOps.TileRow(first, missing),
+                Engine.TensorBroadcastTo(Engine.Reshape(offsets, new[] { missing, 1 }), new[] { missing, d }));
+            _means = actualK > 0
+                ? Engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(centers), padding }, 0).ToMatrix()
+                : padding.ToMatrix();
         }
     }
 
@@ -297,64 +274,26 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
         var rand = Random ?? RandomHelper.CreateSecureRandom();
 
         // First center: random
-        int firstIdx = rand.Next(n);
-        for (int j = 0; j < d; j++)
-        {
-            FittedMeans[0, j] = data[firstIdx, j];
-        }
+        var chosen = new int[k];
+        chosen[0] = rand.Next(n);
+        var minDistances = ClusteringTensorOps.SquaredDistancesToPoint(data.GetRow(chosen[0]), data);
 
-        var distances = new T[n];
-
-        // Subsequent centers: probability proportional to squared distance
+        // Subsequent centers: probability proportional to the squared distance to the nearest chosen center
         for (int c = 1; c < k; c++)
         {
-            T totalDist = NumOps.Zero;
-
-            for (int i = 0; i < n; i++)
-            {
-                T minDist = NumOps.MaxValue;
-                for (int prev = 0; prev < c; prev++)
-                {
-                    T dist = NumOps.Zero;
-                    for (int j = 0; j < d; j++)
-                    {
-                        T diff = NumOps.Subtract(data[i, j], FittedMeans[prev, j]);
-                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-                    }
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                    }
-                }
-                distances[i] = minDist;
-                totalDist = NumOps.Add(totalDist, minDist);
-            }
-
-            // Sample next center (random boundary stays double)
-            double target = rand.NextDouble() * NumOps.ToDouble(totalDist);
-            double cumulative = 0;
-            int nextIdx = n - 1;
-            for (int i = 0; i < n; i++)
-            {
-                cumulative += NumOps.ToDouble(distances[i]);
-                if (cumulative >= target)
-                {
-                    nextIdx = i;
-                    break;
-                }
-            }
-
-            for (int j = 0; j < d; j++)
-            {
-                FittedMeans[c, j] = data[nextIdx, j];
-            }
+            int next = ClusteringTensorOps.SampleProportionalOrNone(minDistances, rand);
+            chosen[c] = next >= 0 ? next : n - 1;
+            minDistances = Engine.Min(minDistances, ClusteringTensorOps.SquaredDistancesToPoint(data.GetRow(chosen[c]), data));
         }
+
+        _means = ClusteringTensorOps.SelectRows(data, chosen);
     }
 
     private void InitializeRandom(Matrix<T> data, int n, int d, int k)
     {
         var rand = Random ?? RandomHelper.CreateSecureRandom();
         var selectedIndices = new HashSet<int>();
+        var chosen = new int[k];
 
         for (int c = 0; c < k; c++)
         {
@@ -364,214 +303,184 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
                 idx = rand.Next(n);
             } while (selectedIndices.Contains(idx) && selectedIndices.Count < n);
             selectedIndices.Add(idx);
-
-            for (int j = 0; j < d; j++)
-            {
-                FittedMeans[c, j] = data[idx, j];
-            }
+            chosen[c] = idx;
         }
+
+        _means = ClusteringTensorOps.SelectRows(data, chosen);
     }
 
     private void InitializeCovariances(Matrix<T> data, int n, int d, int k)
     {
         T reg = NumOps.FromDouble(_options.RegularizationCovariance);
+        T nMinus1 = NumOps.FromDouble(n - 1);
+        var centered = ClusteringTensorOps.SubtractRow(data, ClusteringTensorOps.ColumnMeans(data));
+        var identity = Engine.TensorEye<T>(d);
 
+        // Sample variances of each feature (n - 1 denominator)
+        Tensor<T> Variances() => Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 0 }, false), nMinus1);
+
+        Tensor<T> shared;
         switch (_options.CovarianceType)
         {
             case CovarianceType.Full:
             case CovarianceType.Tied:
-                // Initialize with empirical covariance + regularization
-                var globalCov = ComputeEmpiricalCovariance(data, n, d);
-                for (int c = 0; c < k; c++)
-                {
-                    for (int i = 0; i < d; i++)
-                    {
-                        for (int j = 0; j < d; j++)
-                        {
-                            FittedCovariances[c, i, j] = globalCov[i, j];
-                        }
-                        FittedCovariances[c, i, i] = NumOps.Add(FittedCovariances[c, i, i], reg);
-                    }
-                }
+                // Empirical covariance + regularization
+                shared = Engine.TensorAdd(
+                    Engine.TensorDivideScalar(Engine.TensorMatMul(Engine.TensorTranspose(centered), centered), nMinus1),
+                    Engine.TensorMultiplyScalar(identity, reg));
                 break;
 
             case CovarianceType.Diagonal:
-                // Initialize with variances + regularization
-                var variances = ComputeVariances(data, n, d);
-                for (int c = 0; c < k; c++)
-                {
-                    for (int i = 0; i < d; i++)
-                    {
-                        for (int j = 0; j < d; j++)
-                        {
-                            FittedCovariances[c, i, j] = (i == j) ? NumOps.Add(variances[i], reg) : NumOps.Zero;
-                        }
-                    }
-                }
+                // Variances + regularization
+                shared = DiagonalBlocks(Engine.Reshape(Engine.TensorAddScalar(Variances(), reg), new[] { 1, d }));
                 break;
 
             case CovarianceType.Spherical:
-                // Initialize with average variance + regularization
-                T avgVar = NumOps.Add(ComputeAverageVariance(data, n, d), reg);
-                for (int c = 0; c < k; c++)
-                {
-                    for (int i = 0; i < d; i++)
-                    {
-                        for (int j = 0; j < d; j++)
-                        {
-                            FittedCovariances[c, i, j] = (i == j) ? avgVar : NumOps.Zero;
-                        }
-                    }
-                }
+                // Average variance + regularization
+                shared = Engine.TensorMultiplyScalar(identity, NumOps.Add(Engine.TensorMean(Variances()), reg));
                 break;
+
+            default:
+                return;
         }
+
+        _covariances = Engine.TensorTile(Engine.Reshape(shared, new[] { 1, d, d }), new[] { k, 1, 1 });
     }
 
-    private T[,] ComputeEmpiricalCovariance(Matrix<T> data, int n, int d)
+    /// <summary>[m, d, d] diagonal matrices whose diagonals are the rows of <paramref name="diagonals"/> [m, d].</summary>
+    private Tensor<T> DiagonalBlocks(Tensor<T> diagonals)
     {
-        var mean = new T[d];
-        T nT = NumOps.FromDouble(n);
-        for (int j = 0; j < d; j++)
-        {
-            mean[j] = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                mean[j] = NumOps.Add(mean[j], data[i, j]);
-            }
-            mean[j] = NumOps.Divide(mean[j], nT);
-        }
-
-        var cov = new T[d, d];
-        T nMinus1 = NumOps.FromDouble(n - 1);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < n; s++)
-                {
-                    T diffI = NumOps.Subtract(data[s, i], mean[i]);
-                    T diffJ = NumOps.Subtract(data[s, j], mean[j]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diffI, diffJ));
-                }
-                cov[i, j] = NumOps.Divide(sum, nMinus1);
-            }
-        }
-
-        return cov;
+        int m = diagonals.Shape[0];
+        int d = diagonals.Shape[1];
+        var shape = new[] { m, d, d };
+        var onDiagonal = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorEye<T>(d), new[] { 1, d, d }), shape);
+        var values = Engine.TensorBroadcastTo(Engine.Reshape(diagonals, new[] { m, 1, d }), shape);
+        return Engine.TensorWhere(onDiagonal, values, Tensor<T>.CreateZeros(shape));
     }
 
-    private T[] ComputeVariances(Matrix<T> data, int n, int d)
+    /// <summary>The d x d covariance matrix of one component.</summary>
+    private Matrix<T> ComponentCovariance(int component)
     {
-        var variances = new T[d];
-        T nT = NumOps.FromDouble(n);
-        T nMinus1 = NumOps.FromDouble(n - 1);
-
-        for (int j = 0; j < d; j++)
-        {
-            T mean = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                mean = NumOps.Add(mean, data[i, j]);
-            }
-            mean = NumOps.Divide(mean, nT);
-
-            T sumSq = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], mean);
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-            }
-            variances[j] = NumOps.Divide(sumSq, nMinus1);
-        }
-
-        return variances;
-    }
-
-    private T ComputeAverageVariance(Matrix<T> data, int n, int d)
-    {
-        var variances = ComputeVariances(data, n, d);
-        T sum = NumOps.Zero;
-        for (int j = 0; j < d; j++)
-        {
-            sum = NumOps.Add(sum, variances[j]);
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(d));
+        int d = FittedCovariances.Shape[1];
+        return Engine.Reshape(
+            Engine.TensorSlice(FittedCovariances, new[] { component, 0, 0 }, new[] { 1, d, d }), new[] { d, d }).ToMatrix();
     }
 
     private void EStep(Matrix<T> data, int n, int d, int k)
     {
-        // Compute log probabilities for each sample and component
-        var logProbs = new T[n, k];
-        T halfT = NumOps.FromDouble(0.5);
-        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
+        // Responsibilities from the per-component log probabilities (log-sum-exp for stability)
+        _responsibilities = Normalize(LogProbabilities(data, k), out _).ToMatrix();
+    }
 
+    /// <summary>
+    /// [n, k] log(w_c) + log N(x_i | mu_c, Sigma_c) for the first <paramref name="k"/> components, with the
+    /// Mahalanobis term evaluated through the Cholesky factor: (x - mu)^T Sigma^-1 (x - mu) = ||L^-1 (x - mu)||^2.
+    /// </summary>
+    private Tensor<T> LogProbabilities(Matrix<T> x, int k)
+    {
+        int n = x.Rows;
+        int d = x.Columns;
+        T half = NumOps.FromDouble(0.5);
+        T dLog2Pi = NumOps.Multiply(NumOps.FromDouble(d), NumOps.Log(NumOps.FromDouble(2 * Math.PI)));
+        T choleskyFloor = NumOps.FromDouble(1e-6);
+        T zero = NumOps.Zero;
+
+        var mahalanobis = new Tensor<T>[k];
+        var halfLogDets = new Tensor<T>[k];
         for (int c = 0; c < k; c++)
         {
-            T logWeight = NumOps.Log(FittedWeights[c]);
+            var factor = Cholesky(ComponentCovariance(c), zero, choleskyFloor);
 
-            // Get covariance for this component
-            var cov = new T[d, d];
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    cov[i, j] = FittedCovariances[c, i, j];
-                }
-            }
+            // log det Sigma = 2 * sum(log diag(L))
+            halfLogDets[c] = Engine.ReduceSum(Engine.TensorLog(Engine.TensorDiagonal(Tensor<T>.FromMatrix(factor))), new[] { 0 }, true);
 
-            // Compute log determinant and inverse
-            var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
-
-            T logNormConst = NumOps.Negate(NumOps.Multiply(halfT,
-                NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet)));
-
-            for (int i = 0; i < n; i++)
-            {
-                // Compute Mahalanobis distance
-                T mahal = NumOps.Zero;
-                for (int p = 0; p < d; p++)
-                {
-                    T diffP = NumOps.Subtract(data[i, p], FittedMeans[c, p]);
-                    for (int q = 0; q < d; q++)
-                    {
-                        T diffQ = NumOps.Subtract(data[i, q], FittedMeans[c, q]);
-                        mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
-                    }
-                }
-
-                logProbs[i, c] = NumOps.Add(NumOps.Add(logWeight, logNormConst),
-                    NumOps.Negate(NumOps.Multiply(halfT, mahal)));
-            }
+            var centered = ClusteringTensorOps.SubtractRow(x, FittedMeans.GetRow(c));
+            var whitened = Engine.TensorMatMul(centered, Engine.TensorTranspose(Tensor<T>.FromMatrix(InverseLower(factor))));
+            mahalanobis[c] = Engine.ReduceSum(Engine.TensorSquare(whitened), new[] { 1 }, true);
         }
 
-        // Convert to responsibilities using log-sum-exp for stability
-        for (int i = 0; i < n; i++)
+        // log w_c - (d log(2 pi) + log det Sigma_c) / 2
+        var logDets = Engine.TensorMultiplyScalar(Engine.TensorConcatenate(halfLogDets, 0), NumOps.FromDouble(2.0));
+        var logWeights = Engine.TensorLog(Engine.TensorSlice(FittedWeights.AsTensor(), new[] { 0 }, new[] { k }));
+        var offsets = Engine.TensorSubtract(logWeights, Engine.TensorMultiplyScalar(Engine.TensorAddScalar(logDets, dLog2Pi), half));
+
+        var shape = new[] { n, k };
+        return Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(Engine.Reshape(offsets, new[] { 1, k }), shape),
+            Engine.TensorMultiplyScalar(Engine.TensorConcatenate(mahalanobis, 1), half));
+    }
+
+    /// <summary>Row-wise softmax of [n, k] log probabilities; <paramref name="logSumExp"/> is the [n, 1] normaliser.</summary>
+    private Tensor<T> Normalize(Tensor<T> logProbs, out Tensor<T> logSumExp)
+    {
+        var shape = new[] { logProbs.Shape[0], logProbs.Shape[1] };
+        var maxLog = Engine.ReduceMax(logProbs, new[] { 1 }, true);
+        var sumExp = Engine.ReduceSum(
+            Engine.TensorExp(Engine.TensorSubtract(logProbs, Engine.TensorBroadcastTo(maxLog, shape))), new[] { 1 }, true);
+        logSumExp = Engine.TensorAdd(maxLog, Engine.TensorLog(sumExp));
+        return Engine.TensorExp(Engine.TensorSubtract(logProbs, Engine.TensorBroadcastTo(logSumExp, shape)));
+    }
+
+    /// <summary>
+    /// Lower Cholesky factor (matrix = L L^T), built column by column. A pivot that is not above
+    /// <paramref name="threshold"/> is replaced by <paramref name="floor"/>, keeping near-singular covariances usable.
+    /// </summary>
+    private Matrix<T> Cholesky(Matrix<T> matrix, T threshold, T floor)
+    {
+        int d = matrix.Rows;
+        var factor = new Matrix<T>(d, d);
+        var identity = Engine.TensorEye<T>(d).ToMatrix();
+        var strictlyBelow = Engine.TensorTranspose(Engine.TensorTriu(Engine.TensorOnesLike(Tensor<T>.FromMatrix(matrix)), 1)).ToMatrix();
+
+        for (int j = 0; j < d; j++)
         {
-            // Find max for stability
-            T maxLog = logProbs[i, 0];
-            for (int c = 1; c < k; c++)
-            {
-                if (NumOps.GreaterThan(logProbs[i, c], maxLog))
-                {
-                    maxLog = logProbs[i, c];
-                }
-            }
+            // s_i = A_ij - sum_{m<j} L_im L_jm (columns >= j of L are still zero)
+            var s = Engine.TensorSubtract(
+                matrix.GetColumn(j).AsTensor(),
+                Engine.Reshape(
+                    Engine.TensorMatMul(Tensor<T>.FromMatrix(factor), Engine.Reshape(factor.GetRow(j).AsTensor(), new[] { d, 1 })),
+                    new[] { d }));
 
-            // Compute log-sum-exp
-            T sumExp = NumOps.Zero;
-            for (int c = 0; c < k; c++)
-            {
-                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logProbs[i, c], maxLog)));
-            }
-            T logSumExp = NumOps.Add(maxLog, NumOps.Log(sumExp));
+            var roots = Engine.TensorSqrt(Engine.TensorWhere(Engine.TensorGreaterThan(s, threshold), s, Engine.TensorFullLike(s, floor)));
+            T pivot = Engine.DotProduct(roots.ToVector(), identity.GetColumn(j));
 
-            // Compute responsibilities
-            for (int c = 0; c < k; c++)
-            {
-                FittedResponsibilities[i, c] = NumOps.Exp(NumOps.Subtract(logProbs[i, c], logSumExp));
-            }
+            // L_jj = pivot, L_ij = s_i / pivot below the diagonal, zero above
+            var column = Engine.TensorAdd(
+                Engine.TensorMultiply(Engine.TensorDivideScalar(s, pivot), strictlyBelow.GetColumn(j).AsTensor()),
+                Engine.TensorMultiplyScalar(identity.GetColumn(j).AsTensor(), pivot));
+            Engine.SetColumn(factor, j, column.ToVector());
         }
+
+        return factor;
+    }
+
+    /// <summary>Inverse of a lower-triangular matrix with a non-zero diagonal, by forward substitution.</summary>
+    private Matrix<T> InverseLower(Matrix<T> lower)
+    {
+        int d = lower.Rows;
+        var shape = new[] { d, d };
+        var lowerTensor = Tensor<T>.FromMatrix(lower);
+        var inverseDiagonal = Engine.TensorReciprocal(Engine.TensorDiagonal(lowerTensor));
+
+        // L = D U with U unit lower-triangular, so L^-1 = U^-1 D^-1
+        var unit = Engine.TensorMultiply(lowerTensor, Engine.TensorBroadcastTo(Engine.Reshape(inverseDiagonal, new[] { d, 1 }), shape)).ToMatrix();
+        var identity = Engine.TensorEye<T>(d).ToMatrix();
+        var unitInverse = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+        {
+            // Row i of U^-1 = e_i - U[i, :] U^-1 (rows >= i of U^-1 are still zero)
+            var row = Engine.TensorSubtract(
+                identity.GetRow(i).AsTensor(),
+                Engine.Reshape(
+                    Engine.TensorMatMul(Engine.Reshape(unit.GetRow(i).AsTensor(), new[] { 1, d }), Tensor<T>.FromMatrix(unitInverse)),
+                    new[] { d }));
+            Engine.SetRow(unitInverse, i, row.ToVector());
+        }
+
+        return Engine.TensorMultiply(
+            Tensor<T>.FromMatrix(unitInverse),
+            Engine.TensorBroadcastTo(Engine.Reshape(inverseDiagonal, new[] { 1, d }), shape)).ToMatrix();
     }
 
     private void MStep(Matrix<T> data, int n, int d, int k)
@@ -580,329 +489,109 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
         T nT = NumOps.FromDouble(n);
         T epsilon = NumOps.FromDouble(1e-10);
         T minWeight = NumOps.FromDouble(_options.MinWeight);
+        var resp = Tensor<T>.FromMatrix(FittedResponsibilities);
 
-        // Compute effective number of points per component
-        var nk = new T[k];
-        for (int c = 0; c < k; c++)
-        {
-            nk[c] = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                nk[c] = NumOps.Add(nk[c], FittedResponsibilities[i, c]);
-            }
-            if (NumOps.LessThan(nk[c], epsilon))
-            {
-                nk[c] = epsilon;
-            }
-        }
+        // Effective number of points per component (floored at epsilon)
+        var nk = Engine.TensorMax(Engine.ReduceSum(resp, new[] { 0 }, false), epsilon);
 
-        // Update weights
-        for (int c = 0; c < k; c++)
+        // Update weights, then normalize
+        var weights = Engine.TensorDivideScalar(nk, nT);
+        if (!_options.AllowLowWeights)
         {
-            FittedWeights[c] = NumOps.Divide(nk[c], nT);
-            if (!_options.AllowLowWeights && NumOps.LessThan(FittedWeights[c], minWeight))
-            {
-                FittedWeights[c] = minWeight;
-            }
+            weights = Engine.TensorMax(weights, minWeight);
         }
+        _weights = Engine.TensorDivideScalar(weights, Engine.TensorSum(weights)).ToVector();
 
-        // Normalize weights
-        T sumWeights = NumOps.Zero;
-        for (int c = 0; c < k; c++)
-        {
-            sumWeights = NumOps.Add(sumWeights, FittedWeights[c]);
-        }
-        for (int c = 0; c < k; c++)
-        {
-            FittedWeights[c] = NumOps.Divide(FittedWeights[c], sumWeights);
-        }
-
-        // Update means
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                // Engine.DotProduct for responsibility-weighted mean
-                var respCol = new Vector<T>(n);
-                var dataCol = new Vector<T>(n);
-                for (int i = 0; i < n; i++) { respCol[i] = FittedResponsibilities[i, c]; dataCol[i] = data[i, j]; }
-                FittedMeans[c, j] = NumOps.Divide(Engine.DotProduct(respCol, dataCol), nk[c]);
-            }
-        }
+        // Update means: responsibility-weighted averages
+        var nkColumn = Engine.Reshape(nk, new[] { k, 1 });
+        _means = Engine.TensorDivide(
+            Engine.TensorMatMul(Engine.TensorTranspose(resp), Tensor<T>.FromMatrix(data)),
+            Engine.TensorBroadcastTo(nkColumn, new[] { k, d })).ToMatrix();
 
         // Update covariances based on type
+        var blockShape = new[] { k, d, d };
+        var regIdentity = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorMultiplyScalar(Engine.TensorEye<T>(d), reg), new[] { 1, d, d }), blockShape);
         switch (_options.CovarianceType)
         {
             case CovarianceType.Full:
-                UpdateFullCovariance(data, n, d, k, nk, reg);
+                _covariances = Engine.TensorAdd(
+                    Engine.TensorDivide(WeightedScatter(data, resp), Engine.TensorBroadcastTo(Engine.Reshape(nk, new[] { k, 1, 1 }), blockShape)),
+                    regIdentity);
                 break;
+
             case CovarianceType.Tied:
-                UpdateTiedCovariance(data, n, d, k, nk, reg);
+            {
+                // Weighted average covariance shared by all components
+                var shared = Engine.TensorDivideScalar(
+                    Engine.ReduceSum(WeightedScatter(data, resp), new[] { 0 }, false), Engine.TensorSum(nk));
+                _covariances = Engine.TensorAdd(
+                    Engine.TensorBroadcastTo(Engine.Reshape(shared, new[] { 1, d, d }), blockShape), regIdentity);
                 break;
+            }
+
             case CovarianceType.Diagonal:
-                UpdateDiagonalCovariance(data, n, d, k, nk, reg);
+                _covariances = DiagonalBlocks(Engine.TensorAddScalar(
+                    Engine.TensorDivide(WeightedSquares(data, resp), Engine.TensorBroadcastTo(nkColumn, new[] { k, d })), reg));
                 break;
+
             case CovarianceType.Spherical:
-                UpdateSphericalCovariance(data, n, d, k, nk, reg);
+            {
+                // Average weighted variance over the features
+                var total = Engine.ReduceSum(WeightedSquares(data, resp), new[] { 1 }, true);
+                var average = Engine.TensorAddScalar(
+                    Engine.TensorDivide(total, Engine.TensorMultiplyScalar(nkColumn, NumOps.FromDouble(d))), reg);
+                _covariances = DiagonalBlocks(Engine.TensorBroadcastTo(average, new[] { k, d }));
                 break;
+            }
         }
     }
 
-    private void UpdateFullCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
+    /// <summary>[k, d, d] responsibility-weighted scatter sum_i r_ic (x_i - mu_c)(x_i - mu_c)^T per component.</summary>
+    private Tensor<T> WeightedScatter(Matrix<T> data, Tensor<T> resp)
     {
+        int k = resp.Shape[1];
+        var respMatrix = resp.ToMatrix();
+        var blocks = new Tensor<T>[k];
         for (int c = 0; c < k; c++)
         {
-            for (int p = 0; p < d; p++)
-            {
-                for (int q = 0; q < d; q++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < n; i++)
-                    {
-                        T diffP = NumOps.Subtract(data[i, p], FittedMeans[c, p]);
-                        T diffQ = NumOps.Subtract(data[i, q], FittedMeans[c, q]);
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(FittedResponsibilities[i, c], diffP), diffQ));
-                    }
-                    FittedCovariances[c, p, q] = NumOps.Divide(sum, nk[c]);
-                    if (p == q)
-                    {
-                        FittedCovariances[c, p, q] = NumOps.Add(FittedCovariances[c, p, q], reg);
-                    }
-                }
-            }
+            var centered = ClusteringTensorOps.SubtractRow(data, FittedMeans.GetRow(c));
+            blocks[c] = Engine.TensorMatMul(Engine.TensorTranspose(WeightRows(centered, respMatrix.GetColumn(c))), centered);
         }
+
+        return Engine.TensorStack(blocks, 0);
     }
 
-    private void UpdateTiedCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
+    /// <summary>[k, d] responsibility-weighted squared deviations sum_i r_ic (x_ip - mu_cp)^2 per component.</summary>
+    private Tensor<T> WeightedSquares(Matrix<T> data, Tensor<T> resp)
     {
-        // Compute weighted average covariance
-        var sharedCov = new T[d, d];
-        T totalWeight = NumOps.Zero;
-
-        for (int p = 0; p < d; p++)
-            for (int q = 0; q < d; q++)
-                sharedCov[p, q] = NumOps.Zero;
-
+        int k = resp.Shape[1];
+        var respMatrix = resp.ToMatrix();
+        var rows = new Tensor<T>[k];
         for (int c = 0; c < k; c++)
         {
-            totalWeight = NumOps.Add(totalWeight, nk[c]);
-            for (int p = 0; p < d; p++)
-            {
-                for (int q = 0; q < d; q++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < n; i++)
-                    {
-                        T diffP = NumOps.Subtract(data[i, p], FittedMeans[c, p]);
-                        T diffQ = NumOps.Subtract(data[i, q], FittedMeans[c, q]);
-                        sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(FittedResponsibilities[i, c], diffP), diffQ));
-                    }
-                    sharedCov[p, q] = NumOps.Add(sharedCov[p, q], sum);
-                }
-            }
+            var centered = ClusteringTensorOps.SubtractRow(data, FittedMeans.GetRow(c));
+            rows[c] = Engine.ReduceSum(WeightRows(Engine.TensorSquare(centered), respMatrix.GetColumn(c)), new[] { 0 }, false);
         }
 
-        // Normalize and apply to all components
-        for (int c = 0; c < k; c++)
-        {
-            for (int p = 0; p < d; p++)
-            {
-                for (int q = 0; q < d; q++)
-                {
-                    FittedCovariances[c, p, q] = NumOps.Divide(sharedCov[p, q], totalWeight);
-                    if (p == q)
-                    {
-                        FittedCovariances[c, p, q] = NumOps.Add(FittedCovariances[c, p, q], reg);
-                    }
-                }
-            }
-        }
+        return Engine.TensorStack(rows, 0);
     }
 
-    private void UpdateDiagonalCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
-    {
-        for (int c = 0; c < k; c++)
-        {
-            for (int p = 0; p < d; p++)
-            {
-                // Engine-accelerated weighted variance: sum = resp · diff²
-                var respVec = new Vector<T>(n);
-                var diffSq = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
-                {
-                    T diff = NumOps.Subtract(data[i, p], FittedMeans[c, p]);
-                    respVec[i] = FittedResponsibilities[i, c];
-                    diffSq[i] = NumOps.Multiply(diff, diff);
-                }
-                T sum = Engine.DotProduct(respVec, diffSq);
-                FittedCovariances[c, p, p] = NumOps.Add(NumOps.Divide(sum, nk[c]), reg);
-
-                // Zero out off-diagonal elements
-                for (int q = 0; q < d; q++)
-                {
-                    if (p != q)
-                    {
-                        FittedCovariances[c, p, q] = NumOps.Zero;
-                    }
-                }
-            }
-        }
-    }
-
-    private void UpdateSphericalCovariance(Matrix<T> data, int n, int d, int k, T[] nk, T reg)
-    {
-        for (int c = 0; c < k; c++)
-        {
-            T totalVar = NumOps.Zero;
-            for (int p = 0; p < d; p++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    T diff = NumOps.Subtract(data[i, p], FittedMeans[c, p]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(FittedResponsibilities[i, c], diff), diff));
-                }
-                totalVar = NumOps.Add(totalVar, sum);
-            }
-            T avgVar = NumOps.Add(NumOps.Divide(totalVar, NumOps.Multiply(nk[c], NumOps.FromDouble(d))), reg);
-
-            for (int p = 0; p < d; p++)
-            {
-                for (int q = 0; q < d; q++)
-                {
-                    FittedCovariances[c, p, q] = (p == q) ? avgVar : NumOps.Zero;
-                }
-            }
-        }
-    }
-
-    private (T logDet, T[,] inverse) ComputeLogDetAndInverse(T[,] matrix, int n)
-    {
-        // Use Cholesky decomposition for positive definite matrices
-        var L = new T[n, n];
-        T regVal = NumOps.FromDouble(1e-6);
-        T two = NumOps.FromDouble(2.0);
-
-        // Cholesky decomposition: matrix = L * L^T
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                T sum = matrix[i, j];
-                for (int k = 0; k < j; k++)
-                {
-                    sum = NumOps.Subtract(sum, NumOps.Multiply(L[i, k], L[j, k]));
-                }
-                if (i == j)
-                {
-                    if (!NumOps.GreaterThan(sum, NumOps.Zero))
-                    {
-                        // Not positive definite, add regularization
-                        sum = regVal;
-                    }
-                    L[i, j] = NumOps.Sqrt(sum);
-                }
-                else
-                {
-                    L[i, j] = NumOps.Divide(sum, L[j, j]);
-                }
-            }
-        }
-
-        // Log determinant = 2 * sum(log(diagonal of L))
-        T logDet = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            logDet = NumOps.Add(logDet, NumOps.Multiply(two, NumOps.Log(L[i, i])));
-        }
-
-        // Compute inverse using forward/backward substitution
-        var inverse = new T[n, n];
-
-        // Compute L^-1
-        var Linv = new T[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            Linv[i, i] = NumOps.Divide(NumOps.One, L[i, i]);
-            for (int j = 0; j < i; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = j; k < i; k++)
-                {
-                    sum = NumOps.Subtract(sum, NumOps.Multiply(L[i, k], Linv[k, j]));
-                }
-                Linv[i, j] = NumOps.Divide(sum, L[i, i]);
-            }
-        }
-
-        // inverse = (L^-1)^T * L^-1
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = Math.Max(i, j); k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(Linv[k, i], Linv[k, j]));
-                }
-                inverse[i, j] = sum;
-            }
-        }
-
-        return (logDet, inverse);
-    }
+    /// <summary>Scales row i of an [n, d] tensor by weights[i].</summary>
+    private Tensor<T> WeightRows(Tensor<T> rows, Vector<T> weights)
+        => Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(Tensor<T>.FromVector(weights, new[] { weights.Length, 1 }), new[] { rows.Shape[0], rows.Shape[1] }),
+            rows);
 
     private T ComputeLowerBound(Matrix<T> data, int n, int d, int k)
     {
-        T bound = NumOps.Zero;
-        T halfT = NumOps.FromDouble(0.5);
-        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
+        // sum over (i, c) with r_ic > epsilon of r_ic * (log p(x_i, c) - log r_ic)
         T epsilon = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < n; i++)
-        {
-            T sampleBound = NumOps.Zero;
-            for (int c = 0; c < k; c++)
-            {
-                if (NumOps.GreaterThan(FittedResponsibilities[i, c], epsilon))
-                {
-                    // Get covariance for this component
-                    var cov = new T[d, d];
-                    for (int p = 0; p < d; p++)
-                    {
-                        for (int q = 0; q < d; q++)
-                        {
-                            cov[p, q] = FittedCovariances[c, p, q];
-                        }
-                    }
-
-                    var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
-
-                    // Compute log probability
-                    T mahal = NumOps.Zero;
-                    for (int p = 0; p < d; p++)
-                    {
-                        T diffP = NumOps.Subtract(data[i, p], FittedMeans[c, p]);
-                        for (int q = 0; q < d; q++)
-                        {
-                            T diffQ = NumOps.Subtract(data[i, q], FittedMeans[c, q]);
-                            mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
-                        }
-                    }
-
-                    T logProb = NumOps.Subtract(NumOps.Log(FittedWeights[c]),
-                        NumOps.Multiply(halfT, NumOps.Add(NumOps.Add(
-                            NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet), mahal)));
-                    T entropy = NumOps.Negate(NumOps.Log(FittedResponsibilities[i, c]));
-
-                    sampleBound = NumOps.Add(sampleBound,
-                        NumOps.Multiply(FittedResponsibilities[i, c], NumOps.Add(logProb, entropy)));
-                }
-            }
-            bound = NumOps.Add(bound, sampleBound);
-        }
-
-        return bound;
+        var resp = Tensor<T>.FromMatrix(FittedResponsibilities);
+        var terms = Engine.TensorMultiply(
+            resp, Engine.TensorSubtract(LogProbabilities(data, k), Engine.TensorLog(Engine.TensorMax(resp, epsilon))));
+        var counted = Engine.TensorGreaterThan(resp, epsilon);
+        return Engine.TensorSum(Engine.TensorWhere(counted, terms, Engine.TensorFullLike(terms, NumOps.Zero)));
     }
 
     /// <inheritdoc />
@@ -910,29 +599,9 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = x.Rows;
-        var labels = new Vector<T>(n);
-
-        // Compute responsibilities for new data
-        var resp = PredictProba(x);
-
-        // Assign to component with highest probability
-        for (int i = 0; i < n; i++)
-        {
-            int bestCluster = 0;
-            T maxProb = resp[i, 0];
-            for (int c = 1; c < NumClusters; c++)
-            {
-                if (NumOps.GreaterThan(resp[i, c], maxProb))
-                {
-                    maxProb = resp[i, c];
-                    bestCluster = c;
-                }
-            }
-            labels[i] = NumOps.FromDouble(bestCluster);
-        }
-
-        return labels;
+        // Assign to component with highest probability (first on ties)
+        return ClusteringTensorOps.FromIntArray<T>(
+            Engine.TensorArgMax(Tensor<T>.FromMatrix(PredictProba(x)), 1).ToArray());
     }
 
     /// <summary>
@@ -940,81 +609,11 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="x">Input data.</param>
     /// <returns>Matrix of probabilities [samples x components].</returns>
-    public T[,] PredictProba(Matrix<T> x)
+    public Matrix<T> PredictProba(Matrix<T> x)
     {
         ValidateIsTrained();
 
-        int n = x.Rows;
-        int d = x.Columns;
-        int k = NumClusters;
-        var resp = new T[n, k];
-        T halfT = NumOps.FromDouble(0.5);
-        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
-
-        // Compute log probabilities
-        var logProbs = new T[n, k];
-
-        for (int c = 0; c < k; c++)
-        {
-            T logWeight = NumOps.Log(FittedWeights[c]);
-
-            var cov = new T[d, d];
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    cov[i, j] = FittedCovariances[c, i, j];
-                }
-            }
-
-            var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
-            T logNormConst = NumOps.Negate(NumOps.Multiply(halfT,
-                NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet)));
-
-            for (int i = 0; i < n; i++)
-            {
-                T mahal = NumOps.Zero;
-                for (int p = 0; p < d; p++)
-                {
-                    T diffP = NumOps.Subtract(x[i, p], FittedMeans[c, p]);
-                    for (int q = 0; q < d; q++)
-                    {
-                        T diffQ = NumOps.Subtract(x[i, q], FittedMeans[c, q]);
-                        mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
-                    }
-                }
-
-                logProbs[i, c] = NumOps.Add(NumOps.Add(logWeight, logNormConst),
-                    NumOps.Negate(NumOps.Multiply(halfT, mahal)));
-            }
-        }
-
-        // Normalize using log-sum-exp
-        for (int i = 0; i < n; i++)
-        {
-            T maxLog = logProbs[i, 0];
-            for (int c = 1; c < k; c++)
-            {
-                if (NumOps.GreaterThan(logProbs[i, c], maxLog))
-                {
-                    maxLog = logProbs[i, c];
-                }
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int c = 0; c < k; c++)
-            {
-                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logProbs[i, c], maxLog)));
-            }
-            T logSumExp = NumOps.Add(maxLog, NumOps.Log(sumExp));
-
-            for (int c = 0; c < k; c++)
-            {
-                resp[i, c] = NumOps.Exp(NumOps.Subtract(logProbs[i, c], logSumExp));
-            }
-        }
-
-        return resp;
+        return Normalize(LogProbabilities(x, NumClusters), out _).ToMatrix();
     }
 
     /// <summary>
@@ -1026,69 +625,9 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        int n = x.Rows;
-        int d = x.Columns;
-        int k = NumClusters;
-        T logLikelihood = NumOps.Zero;
-        T halfT = NumOps.FromDouble(0.5);
-        T log2Pi = NumOps.Log(NumOps.FromDouble(2 * Math.PI));
-
-        for (int i = 0; i < n; i++)
-        {
-            var logProbs = new T[k];
-
-            for (int c = 0; c < k; c++)
-            {
-                T logWeight = NumOps.Log(FittedWeights[c]);
-
-                var cov = new T[d, d];
-                for (int p = 0; p < d; p++)
-                {
-                    for (int q = 0; q < d; q++)
-                    {
-                        cov[p, q] = FittedCovariances[c, p, q];
-                    }
-                }
-
-                var (logDet, covInv) = ComputeLogDetAndInverse(cov, d);
-                T logNormConst = NumOps.Negate(NumOps.Multiply(halfT,
-                    NumOps.Add(NumOps.Multiply(NumOps.FromDouble(d), log2Pi), logDet)));
-
-                T mahal = NumOps.Zero;
-                for (int p = 0; p < d; p++)
-                {
-                    T diffP = NumOps.Subtract(x[i, p], FittedMeans[c, p]);
-                    for (int q = 0; q < d; q++)
-                    {
-                        T diffQ = NumOps.Subtract(x[i, q], FittedMeans[c, q]);
-                        mahal = NumOps.Add(mahal, NumOps.Multiply(NumOps.Multiply(diffP, covInv[p, q]), diffQ));
-                    }
-                }
-
-                logProbs[c] = NumOps.Add(NumOps.Add(logWeight, logNormConst),
-                    NumOps.Negate(NumOps.Multiply(halfT, mahal)));
-            }
-
-            // Log-sum-exp
-            T maxLog = logProbs[0];
-            for (int c = 1; c < k; c++)
-            {
-                if (NumOps.GreaterThan(logProbs[c], maxLog))
-                {
-                    maxLog = logProbs[c];
-                }
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int c = 0; c < k; c++)
-            {
-                sumExp = NumOps.Add(sumExp, NumOps.Exp(NumOps.Subtract(logProbs[c], maxLog)));
-            }
-
-            logLikelihood = NumOps.Add(logLikelihood, NumOps.Add(maxLog, NumOps.Log(sumExp)));
-        }
-
-        return logLikelihood;
+        // Sum over samples of log sum_c w_c N(x_i | mu_c, Sigma_c)
+        Normalize(LogProbabilities(x, NumClusters), out var logSumExp);
+        return Engine.TensorSum(logSumExp);
     }
 
     /// <inheritdoc />
@@ -1108,84 +647,52 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
         ValidateIsTrained();
 
         var rand = Random ?? RandomHelper.CreateSecureRandom();
-        var samples = new Matrix<T>(numSamples, NumFeatures);
+        int k = NumClusters;
+        int d = NumFeatures;
 
+        // Per sample, one uniform draw (component choice) followed by d standard normal draws, consumed
+        // from the caller's Random in that order so seeded sampling stays reproducible.
+        var noise = new Matrix<T>(numSamples, d + 1);
         for (int i = 0; i < numSamples; i++)
         {
-            // Choose component based on weights (random boundary stays double)
-            double u = rand.NextDouble();
-            double cumulative = 0;
-            int component = NumClusters - 1;
-            for (int c = 0; c < NumClusters; c++)
+            for (int j = 0; j <= d; j++)
             {
-                cumulative += NumOps.ToDouble(FittedWeights[c]);
-                if (u < cumulative)
-                {
-                    component = c;
-                    break;
-                }
-            }
-
-            // Sample from chosen component's Gaussian
-            var sample = SampleGaussian(component, rand);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                samples[i, j] = sample[j];
+                noise[i, j] = NumOps.FromDouble(j == 0 ? rand.NextDouble() : rand.NextGaussian());
             }
         }
 
-        return samples;
-    }
-
-    private T[] SampleGaussian(int component, Random rand)
-    {
-        int d = NumFeatures;
-        T regVal = NumOps.FromDouble(1e-10);
-
-        // Generate standard normal samples
-        var z = new T[d];
-        for (int i = 0; i < d; i++)
+        if (numSamples == 0 || k == 0)
         {
-            z[i] = NumOps.FromDouble(rand.NextGaussian());
+            return new Matrix<T>(numSamples, d);
         }
 
-        // Cholesky decomposition of covariance
-        var L = new T[d, d];
-        for (int i = 0; i < d; i++)
+        // Component: first c with u < cumulative weight c (k - 1 when none), i.e. k - #{c : u < cumulative_c}
+        var noiseDraws = Tensor<T>.FromMatrix(noise);
+        var cumulative = Engine.TensorCumSum(Engine.TensorSlice(FittedWeights.AsTensor(), new[] { 0 }, new[] { k }), 0);
+        var shape = new[] { numSamples, k };
+        var above = Engine.TensorGreaterThan(
+            Engine.TensorBroadcastTo(Engine.Reshape(cumulative, new[] { 1, k }), shape),
+            Engine.TensorBroadcastTo(Engine.TensorSlice(noiseDraws, new[] { 0, 0 }, new[] { numSamples, 1 }), shape));
+        var components = Engine.TensorMin(
+            Engine.ScalarMinusTensor(NumOps.FromDouble(k), Engine.ReduceSum(above, new[] { 1 }, true)), NumOps.FromDouble(k - 1));
+        var chosen = Engine.TensorEquals(
+            Engine.TensorBroadcastTo(components, shape),
+            Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, k, 1), new[] { 1, k }), shape)).ToMatrix();
+
+        // sample = mean + L z for the chosen component's Cholesky factor L
+        T floor = NumOps.FromDouble(1e-10);
+        var z = Engine.TensorSlice(noiseDraws, new[] { 0, 1 }, new[] { numSamples, d });
+        var samples = Tensor<T>.CreateZeros(new[] { numSamples, d });
+        for (int c = 0; c < k; c++)
         {
-            for (int j = 0; j <= i; j++)
-            {
-                T sum = FittedCovariances[component, i, j];
-                for (int k = 0; k < j; k++)
-                {
-                    sum = NumOps.Subtract(sum, NumOps.Multiply(L[i, k], L[j, k]));
-                }
-                if (i == j)
-                {
-                    if (!NumOps.GreaterThan(sum, regVal))
-                    {
-                        sum = regVal;
-                    }
-                    L[i, j] = NumOps.Sqrt(sum);
-                }
-                else
-                {
-                    L[i, j] = NumOps.Divide(sum, L[j, j]);
-                }
-            }
+            var factor = Cholesky(ComponentCovariance(c), floor, floor);
+            var drawn = Engine.TensorAdd(
+                Engine.TensorMatMul(z, Engine.TensorTranspose(Tensor<T>.FromMatrix(factor))),
+                ClusteringTensorOps.TileRow(FittedMeans.GetRow(c), numSamples));
+            var mask = Engine.TensorBroadcastTo(Tensor<T>.FromVector(chosen.GetColumn(c), new[] { numSamples, 1 }), new[] { numSamples, d });
+            samples = Engine.TensorWhere(mask, drawn, samples);
         }
 
-        // Transform: sample = mean + L * z
-        var sample = new T[d];
-        for (int i = 0; i < d; i++)
-        {
-            sample[i] = FittedMeans[component, i];
-            for (int j = 0; j <= i; j++)
-            {
-                sample[i] = NumOps.Add(sample[i], NumOps.Multiply(L[i, j], z[j]));
-            }
-        }
-
-        return sample;
+        return samples.ToMatrix();
     }
 }

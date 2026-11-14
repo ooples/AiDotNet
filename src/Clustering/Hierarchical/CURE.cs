@@ -138,51 +138,22 @@ public partial class CURE<T> : ClusteringBase<T>
         _clusters = new List<CureCluster>();
         for (int i = 0; i < sampleN; i++)
         {
-            var point = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                point[j] = data[i, j];
-            }
-
-            var cluster = new CureCluster
+            _clusters.Add(new CureCluster
             {
                 Points = new List<int> { i },
-                Center = point,
-                Representatives = new List<T[]> { (T[])point.Clone() }
-            };
-            _clusters.Add(cluster);
+                Center = data.GetRow(i),
+                Representatives = data.GetSubMatrix(i, 0, 1, d)
+            });
         }
 
-        // Pre-compute pairwise cluster distances to avoid O(k²) recomputation each iteration
-        var distCache = new Dictionary<(int, int), T>();
-        for (int i = 0; i < _clusters.Count; i++)
-        {
-            for (int j = i + 1; j < _clusters.Count; j++)
-            {
-                distCache[(i, j)] = ComputeClusterDistance(_clusters[i], _clusters[j]);
-            }
-        }
+        // Pairwise cluster distances (minimum representative distance), kept in cluster-list order
+        var clusterDist = _distanceMetric.ComputePairwise(data);
 
         // Agglomerative clustering with cached distances
         while (_clusters.Count > _options.NumClusters)
         {
-            // Find closest pair from cache
-            int bestI = -1, bestJ = -1;
-            T minDist = NumOps.MaxValue;
-            for (int i = 0; i < _clusters.Count; i++)
-            {
-                for (int j = i + 1; j < _clusters.Count; j++)
-                {
-                    var key = (i, j);
-                    T cachedDist = distCache.GetValueOrDefault(key, NumOps.MaxValue);
-                    if (NumOps.LessThan(cachedDist, minDist))
-                    {
-                        minDist = cachedDist;
-                        bestI = i;
-                        bestJ = j;
-                    }
-                }
-            }
+            // Find closest pair (first in list order on ties)
+            var (bestI, bestJ) = FindClosestClusters(clusterDist);
 
             if (bestI < 0 || bestJ < 0) break;
 
@@ -193,45 +164,21 @@ public partial class CURE<T> : ClusteringBase<T>
             int hi = Math.Max(bestI, bestJ), lo = Math.Min(bestI, bestJ);
             _clusters.RemoveAt(hi);
             _clusters.RemoveAt(lo);
+
+            // Distances between the remaining clusters are unchanged; only the merged cluster needs new ones
+            var remaining = Enumerable.Range(0, clusterDist.Rows).Where(i => i != lo && i != hi).ToArray();
+            var toMerged = DistancesToCluster(mergedCluster, _clusters);
             _clusters.Add(mergedCluster);
-
-            // Update cache: remove stale entries for merged clusters, add new cluster distances
-            var newCache = new Dictionary<(int, int), T>();
-            int newCount = _clusters.Count;
-            int newIdx = newCount - 1; // merged cluster is at the end
-
-            for (int i = 0; i < newCount; i++)
-            {
-                for (int j = i + 1; j < newCount; j++)
-                {
-                    // Reuse cached distances for pairs that didn't change
-                    // (indices may have shifted due to removals, so recompute all)
-                    // For small datasets this is fast; for large datasets a proper
-                    // index mapping would avoid recomputation
-                    if (i == newIdx || j == newIdx)
-                    {
-                        // One of the pair is the new merged cluster — must compute
-                        newCache[(i, j)] = ComputeClusterDistance(_clusters[i], _clusters[j]);
-                    }
-                    else
-                    {
-                        // Try to find the original pair — but indices shifted after removals.
-                        // For correctness, just recompute (still faster than the original
-                        // FindClosestClusters which was called 87 times)
-                        newCache[(i, j)] = ComputeClusterDistance(_clusters[i], _clusters[j]);
-                    }
-                }
-            }
-            distCache = newCache;
+            clusterDist = AppendCluster(clusterDist, remaining, toMerged);
         }
 
         NumClusters = _clusters.Count;
 
         // Assign labels to all original points
-        Labels = new Vector<T>(n);
+        var labels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            Labels[i] = NumOps.FromDouble(-1);
+            labels[i] = -1;
         }
 
         // Assign sampled points based on their cluster
@@ -239,8 +186,7 @@ public partial class CURE<T> : ClusteringBase<T>
         {
             foreach (int sampleIdx in _clusters[clusterIdx].Points)
             {
-                int originalIdx = sampleIndices[sampleIdx];
-                Labels[originalIdx] = NumOps.FromDouble(clusterIdx);
+                labels[sampleIndices[sampleIdx]] = clusterIdx;
             }
         }
 
@@ -248,21 +194,15 @@ public partial class CURE<T> : ClusteringBase<T>
         if (sampleIndices.Length < n)
         {
             var sampledSet = new HashSet<int>(sampleIndices);
-            for (int i = 0; i < n; i++)
+            var unsampled = Enumerable.Range(0, n).Where(i => !sampledSet.Contains(i)).ToArray();
+            var nearest = FindNearestClusters(ExtractSubMatrix(x, unsampled));
+            for (int u = 0; u < unsampled.Length; u++)
             {
-                if (!sampledSet.Contains(i))
-                {
-                    var point = new T[d];
-                    for (int j = 0; j < d; j++)
-                    {
-                        point[j] = x[i, j];
-                    }
-
-                    int nearestCluster = FindNearestCluster(point);
-                    Labels[i] = NumOps.FromDouble(nearestCluster);
-                }
+                labels[unsampled[u]] = nearest[u];
             }
         }
+
+        Labels = ClusteringTensorOps.FromIntArray<T>(labels);
 
         // Compute cluster centers
         ComputeClusterCenters(x);
@@ -271,6 +211,27 @@ public partial class CURE<T> : ClusteringBase<T>
         // Rebuild _clusters to match post-merge state (Labels/NumClusters/ClusterCenters updated by merge)
         RebuildClustersFromLabels(x);
         IsTrained = true;
+    }
+
+    /// <summary>
+    /// Distances in list order after removing two clusters and appending a new one: the rows/columns
+    /// <paramref name="remaining"/> are kept and the new cluster's distances become the last row and column.
+    /// </summary>
+    private Matrix<T> AppendCluster(Matrix<T> clusterDist, int[] remaining, Vector<T> toNew)
+    {
+        int k = remaining.Length;
+        var result = new Matrix<T>(k + 1, k + 1);
+        if (k > 0)
+        {
+            var kept = ClusteringTensorOps.SelectColumns(
+                Tensor<T>.FromMatrix(ClusteringTensorOps.SelectRows(clusterDist, remaining)), remaining).ToMatrix();
+            result.SetSubMatrix(0, 0, kept);
+        }
+
+        var edge = Vector<T>.Concatenate(new[] { toNew, Engine.Fill(1, NumOps.MaxValue) });
+        Engine.SetRow(result, k, edge);
+        Engine.SetColumn(result, k, edge);
+        return result;
     }
 
     /// <inheritdoc />
@@ -284,77 +245,82 @@ public partial class CURE<T> : ClusteringBase<T>
             return new Vector<T>(Labels);
 
         int n = x.Rows;
-        int d = x.Columns;
-        var labels = new Vector<T>(n);
 
         if (_clusters is null || _clusters.Count == 0)
         {
-            for (int i = 0; i < n; i++)
-            {
-                labels[i] = NumOps.FromDouble(-1);
-            }
-            return labels;
+            var unassigned = new Vector<T>(n);
+            return n == 0 ? unassigned : Engine.TensorFullLike(unassigned.AsTensor(), NumOps.FromDouble(-1)).ToVector();
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            var point = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                point[j] = x[i, j];
-            }
-
-            int nearestCluster = FindNearestCluster(point);
-            labels[i] = NumOps.FromDouble(nearestCluster);
-        }
-
-        return labels;
+        return ClusteringTensorOps.FromIntArray<T>(FindNearestClusters(x));
     }
 
-    private (int, int) FindClosestClusters()
+    private (int, int) FindClosestClusters(Matrix<T> clusterDist)
     {
-        int bestI = -1, bestJ = -1;
-        T minDistance = NumOps.MaxValue;
-
-        for (int i = 0; i < (_clusters ?? throw new InvalidOperationException("CURE: Clusters not initialized.")).Count; i++)
+        // Pairs (i < j) in row-major order; the first strictly smallest distance below MaxValue wins
+        int k = clusterDist.Rows;
+        if (k < 2)
         {
-            for (int j = i + 1; j < _clusters.Count; j++)
+            return (-1, -1);
+        }
+
+        var dist = Tensor<T>.FromMatrix(clusterDist);
+        var upper = Engine.TensorTriu(Engine.TensorOnesLike(dist), 1);
+        var candidates = Engine.Reshape(Engine.TensorWhere(upper, dist, Engine.TensorFullLike(dist, NumOps.MaxValue)), new[] { k * k }).ToVector();
+        int best = ClusteringTensorOps.ArgMin(candidates);
+        return NumOps.LessThan(candidates[best], NumOps.MaxValue) ? (best / k, best % k) : (-1, -1);
+    }
+
+    /// <summary>Stacks the representatives of the clusters and records the owning cluster of every row.</summary>
+    private static Matrix<T> StackRepresentatives(List<CureCluster> clusters, int d, out int[] owners)
+    {
+        var ownerList = new List<int>();
+        var blocks = new List<Matrix<T>>();
+        for (int c = 0; c < clusters.Count; c++)
+        {
+            var reps = clusters[c].Representatives;
+            blocks.Add(reps);
+            ownerList.AddRange(Enumerable.Repeat(c, reps.Rows));
+        }
+
+        owners = ownerList.ToArray();
+        var stacked = new Matrix<T>(owners.Length, d);
+        int row = 0;
+        foreach (var block in blocks)
+        {
+            if (block.Rows > 0)
             {
-                T dist = ComputeClusterDistance(_clusters[i], _clusters[j]);
-                if (NumOps.LessThan(dist, minDistance))
-                {
-                    minDistance = dist;
-                    bestI = i;
-                    bestJ = j;
-                }
+                stacked.SetSubMatrix(row, 0, block);
+                row += block.Rows;
             }
         }
 
-        return (bestI, bestJ);
+        return stacked;
     }
 
-    private T ComputeClusterDistance(CureCluster c1, CureCluster c2)
+    /// <summary>
+    /// Minimum representative distance from <paramref name="cluster"/> to each of <paramref name="others"/>
+    /// (MaxValue when either side has no representatives).
+    /// </summary>
+    private Vector<T> DistancesToCluster(CureCluster cluster, List<CureCluster> others)
     {
-        // Minimum distance between any pair of representatives
-        T minDist = NumOps.MaxValue;
-
-        foreach (var rep1 in c1.Representatives)
+        int k = others.Count;
+        int d = cluster.Representatives.Columns;
+        var stacked = StackRepresentatives(others, d, out var owners);
+        if (k == 0 || owners.Length == 0 || cluster.Representatives.Rows == 0)
         {
-            foreach (var rep2 in c2.Representatives)
-            {
-                T dist = ComputeDistance(rep1, rep2);
-                if (NumOps.LessThan(dist, minDist))
-                    minDist = dist;
-            }
+            return k == 0 ? new Vector<T>(0) : Engine.Fill(k, NumOps.MaxValue);
         }
 
-        return minDist;
-    }
-
-    private T ComputeDistance(T[] a, T[] b)
-    {
-        // Use allocation-free ComputeInline from the user's chosen distance metric
-        return _distanceMetric.ComputeInline(a, b, a.Length);
+        // Closest representative of the cluster for every stacked representative, then the minimum per owner
+        var pairwise = Tensor<T>.FromMatrix(_distanceMetric.ComputePairwise(cluster.Representatives, stacked));
+        var closest = Engine.TensorAmin(pairwise, new[] { 0 });
+        var ownership = Engine.TensorTranspose(ClusteringTensorOps.OneHotMask(ClusteringTensorOps.FromIntArray<T>(owners), k));
+        var perOwner = Engine.TensorWhere(
+            ownership,
+            Engine.TensorBroadcastTo(Engine.Reshape(closest, new[] { 1, owners.Length }), new[] { k, owners.Length }),
+            Engine.TensorFullLike(ownership, NumOps.MaxValue));
+        return Engine.TensorAmin(perOwner, new[] { 1 }).ToVector();
     }
 
     private CureCluster MergeClusters(CureCluster c1, CureCluster c2, Matrix<T> data)
@@ -366,33 +332,19 @@ public partial class CURE<T> : ClusteringBase<T>
         mergedPoints.AddRange(c2.Points);
 
         // Compute new center
-        var center = new T[d];
-        for (int j = 0; j < d; j++) center[j] = NumOps.Zero;
-        foreach (int idx in mergedPoints)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                center[j] = NumOps.Add(center[j], data[idx, j]);
-            }
-        }
-        T countT = NumOps.FromDouble(mergedPoints.Count);
-        for (int j = 0; j < d; j++)
-        {
-            center[j] = NumOps.Divide(center[j], countT);
-        }
+        var members = ExtractSubMatrix(data, mergedPoints.ToArray());
+        var center = ClusteringTensorOps.ColumnMeans(members);
 
         // Select representatives using farthest-point heuristic
-        var representatives = SelectRepresentatives(mergedPoints, data, center);
+        var representatives = SelectRepresentatives(members, center);
 
-        // Shrink representatives toward center
-        T shrinkFactor = NumOps.FromDouble(_options.ShrinkFactor);
-        for (int i = 0; i < representatives.Count; i++)
+        // Shrink representatives toward center: rep + s (center - rep)
+        if (representatives.Rows > 0)
         {
-            for (int j = 0; j < d; j++)
-            {
-                representatives[i][j] = NumOps.Add(representatives[i][j],
-                    NumOps.Multiply(shrinkFactor, NumOps.Subtract(center[j], representatives[i][j])));
-            }
+            T shrinkFactor = NumOps.FromDouble(_options.ShrinkFactor);
+            var reps = Tensor<T>.FromMatrix(representatives);
+            var toCenter = Engine.TensorSubtract(ClusteringTensorOps.TileRow(center, representatives.Rows), reps);
+            representatives = Engine.TensorAdd(reps, Engine.TensorMultiplyScalar(toCenter, shrinkFactor)).ToMatrix();
         }
 
         return new CureCluster
@@ -403,108 +355,44 @@ public partial class CURE<T> : ClusteringBase<T>
         };
     }
 
-    private List<T[]> SelectRepresentatives(List<int> points, Matrix<T> data, T[] center)
+    private Matrix<T> SelectRepresentatives(Matrix<T> members, Vector<T> center)
     {
-        int d = data.Columns;
-        int numReps = Math.Min(_options.NumRepresentatives, points.Count);
-        var representatives = new List<T[]>();
+        int m = members.Rows;
+        int numReps = Math.Min(_options.NumRepresentatives, m);
+        if (numReps <= 0)
+        {
+            return new Matrix<T>(0, members.Columns);
+        }
+
+        // Start with point farthest from center (first on ties)
+        var chosen = new List<int> { ClusteringTensorOps.ArgMax(ClusteringTensorOps.DistancesToPoint(_distanceMetric, members, center)) };
+
+        // Add more representatives using farthest-point heuristic: the point farthest from its nearest
+        // representative, skipping points that coincide (closer than 1e-10) with a representative
         T epsilon = NumOps.FromDouble(1e-10);
-
-        if (numReps == 0)
+        var minToReps = ClusteringTensorOps.DistancesToPoint(_distanceMetric, members, members.GetRow(chosen[0])).AsTensor();
+        var isRep = Engine.TensorLessThan(minToReps, epsilon);
+        T minusOne = NumOps.Negate(NumOps.One);
+        while (chosen.Count < numReps)
         {
-            return representatives;
-        }
-
-        // Start with point farthest from center
-        int farthestIdx = -1;
-        T maxDist = NumOps.Negate(NumOps.One);
-
-        foreach (int idx in points)
-        {
-            var point = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                point[j] = data[idx, j];
-            }
-
-            T dist = ComputeDistance(point, center);
-            if (NumOps.GreaterThan(dist, maxDist))
-            {
-                maxDist = dist;
-                farthestIdx = idx;
-            }
-        }
-
-        if (farthestIdx >= 0)
-        {
-            var point = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                point[j] = data[farthestIdx, j];
-            }
-            representatives.Add(point);
-        }
-
-        // Add more representatives using farthest-point heuristic
-        while (representatives.Count < numReps)
-        {
-            int nextIdx = -1;
-            T maxMinDist = NumOps.Negate(NumOps.One);
-
-            foreach (int idx in points)
-            {
-                // Skip if already a representative
-                bool isRep = false;
-                var point = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    point[j] = data[idx, j];
-                }
-
-                foreach (var rep in representatives)
-                {
-                    if (NumOps.LessThan(ComputeDistance(point, rep), epsilon))
-                    {
-                        isRep = true;
-                        break;
-                    }
-                }
-
-                if (isRep) continue;
-
-                // Find minimum distance to any existing representative
-                T minDist = NumOps.MaxValue;
-                foreach (var rep in representatives)
-                {
-                    T dist = ComputeDistance(point, rep);
-                    if (NumOps.LessThan(dist, minDist))
-                        minDist = dist;
-                }
-
-                if (NumOps.GreaterThan(minDist, maxMinDist))
-                {
-                    maxMinDist = minDist;
-                    nextIdx = idx;
-                }
-            }
-
-            if (nextIdx >= 0)
-            {
-                var point = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    point[j] = data[nextIdx, j];
-                }
-                representatives.Add(point);
-            }
-            else
+            var candidates = Engine.TensorWhere(isRep, Engine.TensorFullLike(minToReps, minusOne), minToReps).ToVector();
+            int next = ClusteringTensorOps.ArgMax(candidates);
+            if (!IsCandidate(candidates, next))
             {
                 break; // No more points to add
             }
+
+            chosen.Add(next);
+            var toNext = ClusteringTensorOps.DistancesToPoint(_distanceMetric, members, members.GetRow(next)).AsTensor();
+            minToReps = Engine.TensorMin(minToReps, toNext);
+            isRep = Engine.TensorMax(isRep, Engine.TensorLessThan(toNext, epsilon));
         }
 
-        return representatives;
+        return ClusteringTensorOps.SelectRows(members, chosen.ToArray());
     }
+
+    /// <summary>True when the selected entry is a real candidate (non-representatives are marked by a distance above -1).</summary>
+    private bool IsCandidate(Vector<T> candidates, int index) => NumOps.GreaterThan(candidates[index], NumOps.Negate(NumOps.One));
 
     /// <summary>
     /// Rebuilds the internal _clusters list from the current Labels after degenerate merge.
@@ -514,6 +402,10 @@ public partial class CURE<T> : ClusteringBase<T>
         if (Labels is null || _clusters is null) return;
 
         int d = x.Columns;
+        var labelIds = ClusteringTensorOps.ToIntArray(Labels);
+        var centroids = NumClusters > 0
+            ? ClusteringTensorOps.ClusterMeans(x, Labels, NumClusters, out _)
+            : new Matrix<T>(0, d);
         var newClusters = new List<CureCluster>();
 
         for (int c = 0; c < NumClusters; c++)
@@ -521,12 +413,12 @@ public partial class CURE<T> : ClusteringBase<T>
             var cluster = new CureCluster
             {
                 Points = new List<int>(),
-                Representatives = new List<T[]>()
+                Representatives = new Matrix<T>(0, d)
             };
 
-            for (int i = 0; i < Labels.Length; i++)
+            for (int i = 0; i < labelIds.Length; i++)
             {
-                if ((int)NumOps.ToDouble(Labels[i]) == c)
+                if (labelIds[i] == c)
                 {
                     cluster.Points.Add(i);
                 }
@@ -534,16 +426,9 @@ public partial class CURE<T> : ClusteringBase<T>
 
             if (cluster.Points.Count > 0)
             {
-                // Compute centroid as representative point
-                var centroid = new T[d];
-                foreach (int idx in cluster.Points)
-                    for (int j = 0; j < d; j++)
-                        centroid[j] = NumOps.Add(centroid[j], x[idx, j]);
-                T count = NumOps.FromDouble(cluster.Points.Count);
-                for (int j = 0; j < d; j++)
-                    centroid[j] = NumOps.Divide(centroid[j], count);
-                cluster.Center = centroid;
-                cluster.Representatives.Add(centroid);
+                // Centroid as representative point
+                cluster.Center = centroids.GetRow(c);
+                cluster.Representatives = centroids.GetSubMatrix(c, 0, 1, d);
             }
 
             newClusters.Add(cluster);
@@ -552,22 +437,21 @@ public partial class CURE<T> : ClusteringBase<T>
         _clusters = newClusters;
     }
 
-    private int FindNearestCluster(T[] point)
+    private int[] FindNearestClusters(Matrix<T> points)
     {
-        int nearest = 0;
-        T minDist = NumOps.MaxValue;
-
-        for (int i = 0; i < (_clusters ?? throw new InvalidOperationException("CURE: Clusters not initialized.")).Count; i++)
+        // Cluster owning the closest representative (first in cluster/representative order); 0 when there is none
+        var clusters = _clusters ?? throw new InvalidOperationException("CURE: Clusters not initialized.");
+        var stacked = StackRepresentatives(clusters, points.Columns, out var owners);
+        var nearest = new int[points.Rows];
+        if (owners.Length == 0 || points.Rows == 0)
         {
-            foreach (var rep in _clusters[i].Representatives)
-            {
-                T dist = ComputeDistance(point, rep);
-                if (NumOps.LessThan(dist, minDist))
-                {
-                    minDist = dist;
-                    nearest = i;
-                }
-            }
+            return nearest;
+        }
+
+        var closestRep = ClusteringTensorOps.ArgMinRows(_distanceMetric.ComputePairwise(points, stacked));
+        for (int i = 0; i < nearest.Length; i++)
+        {
+            nearest[i] = owners[closestRep[i]];
         }
 
         return nearest;
@@ -581,48 +465,12 @@ public partial class CURE<T> : ClusteringBase<T>
             return;
         }
 
-        int d = x.Columns;
-        int n = x.Rows;
-        ClusterCenters = new Matrix<T>(NumClusters, d);
-        var counts = new int[NumClusters];
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)NumOps.ToDouble((Labels ?? throw new InvalidOperationException("Labels have not been computed."))[i]);
-            if (label >= 0 && label < NumClusters)
-            {
-                counts[label]++;
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[label, j] = NumOps.Add(ClusterCenters[label, j], x[i, j]);
-                }
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], NumOps.FromDouble(counts[k]));
-                }
-            }
-        }
+        // Mean of each cluster's members (unassigned points are ignored; empty clusters stay at zero)
+        var labels = Labels ?? throw new InvalidOperationException("Labels have not been computed.");
+        ClusterCenters = ClusteringTensorOps.ClusterMeans(x, labels, NumClusters, out _);
     }
 
-    private Matrix<T> ExtractSubMatrix(Matrix<T> data, int[] indices)
-    {
-        var subMatrix = new Matrix<T>(indices.Length, data.Columns);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            for (int j = 0; j < data.Columns; j++)
-            {
-                subMatrix[i, j] = data[indices[i], j];
-            }
-        }
-        return subMatrix;
-    }
+    private Matrix<T> ExtractSubMatrix(Matrix<T> data, int[] indices) => ClusteringTensorOps.SelectRows(data, indices);
 
     private void ValidateInputData(Matrix<T> x)
     {
@@ -643,7 +491,7 @@ public partial class CURE<T> : ClusteringBase<T>
     private class CureCluster
     {
         public List<int> Points { get; set; } = new List<int>();
-        public T[] Center { get; set; } = Array.Empty<T>();
-        public List<T[]> Representatives { get; set; } = new List<T[]>();
+        public Vector<T> Center { get; set; } = new Vector<T>(0);
+        public Matrix<T> Representatives { get; set; } = new Matrix<T>(0, 0);
     }
 }

@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -61,20 +62,10 @@ public class EuclideanDistance<T> : DistanceMetricBase<T>
             throw new ArgumentException(
                 $"Vectors must have the same length. Got {a.Length} and {b.Length}.");
         }
-
-        // Direct sum-of-squares loop — see VectorHelper.EuclideanDistance
-        // for the rationale (clustering distance computations dispatch to
-        // GPU per call when engine.AutoDetectAndConfigureGpu has switched
-        // backends, which surfaced as the issue #1224 Cluster B regression).
-        // Use the inherited NumOps cache from DistanceMetricBase — re-resolving
-        // it inside this hot loop adds dictionary-lookup overhead per call.
-        T sumSq = NumOps.Zero;
-        int n = a.Length;
-        for (int i = 0; i < n; i++)
-        {
-            T diffI = NumOps.Subtract(a[i], b[i]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diffI, diffI));
-        }
-        return sumSq;
+        var diff = Engine.Subtract(a, b);
+        return Engine.DotProduct(diff, diff);
     }
+
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeRowPairs(Tensor<T> a, Tensor<T> b) => ClusteringTensorOps.RowEuclidean(a, b);
 }

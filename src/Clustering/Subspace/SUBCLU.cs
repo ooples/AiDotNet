@@ -61,8 +61,8 @@ namespace AiDotNet.Clustering.Subspace;
 public partial class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;
-    private double[]? _normMeans;
-    private double[]? _normStds;
+    private Vector<T>? _normMeans;
+    private Vector<T>? _normStds;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -109,60 +109,33 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        // Store original training data for prediction
-        _trainingData = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                _trainingData[i, j] = x[i, j];
-
         // Normalize features to zero-mean unit-variance for scale-invariant epsilon.
         // Without normalization, epsilon is scale-dependent.
-        var featureMeans = new double[d];
-        var featureStds = new double[d];
-        for (int j = 0; j < d; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-                sum += NumOps.ToDouble(x[i, j]);
-            featureMeans[j] = sum / n;
-
-            double varSum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(x[i, j]) - featureMeans[j];
-                varSum += diff * diff;
-            }
-            featureStds[j] = Math.Sqrt(varSum / n);
-            if (featureStds[j] < 1e-10) featureStds[j] = 1.0;
-        }
+        var xNorm = ClusteringTensorOps.StandardizeColumns(x, out var featureMeans, out var featureStds);
 
         // Store normalization parameters for prediction consistency
         _normMeans = featureMeans;
         _normStds = featureStds;
-
-        var xNorm = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - featureMeans[j]) / featureStds[j]);
         x = xNorm;
 
-        // Update _trainingData to normalized version so Predict distance comparisons
+        // Store the normalized training data so Predict distance comparisons
         // use the same scale as the clustered data
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < d; j++)
-                _trainingData[i, j] = xNorm[i, j];
+        _trainingData = xNorm.Clone();
 
         _subspaceClusterInfos = new List<SubspaceClusterInfo>();
 
-        // Find 1-D dense clusters
+        // Find 1-D dense clusters (with their core points)
         var oneDClusters = new Dictionary<int, List<HashSet<int>>>();
+        var oneDCorePoints = new Dictionary<int, List<HashSet<int>>>();
 
         for (int dim = 0; dim < d; dim++)
         {
-            var clusters = RunDBSCAN1D(x, dim);
+            var within = WithinEpsilon(x, new[] { dim });
+            var clusters = RunDBSCAN1D(x, dim, within);
             if (clusters.Count > 0)
             {
                 oneDClusters[dim] = clusters;
+                oneDCorePoints[dim] = clusters.Select(cluster => IdentifyCorePoints(within, n, cluster)).ToList();
             }
         }
 
@@ -170,14 +143,15 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         foreach (var kvp in oneDClusters)
         {
             int dim = kvp.Key;
-            foreach (var cluster in kvp.Value)
+            var cores = oneDCorePoints[dim];
+            for (int c = 0; c < kvp.Value.Count; c++)
             {
                 _subspaceClusterInfos.Add(new SubspaceClusterInfo
                 {
                     ClusterId = _subspaceClusterInfos.Count,
                     Dimensions = new[] { dim },
-                    Points = cluster,
-                    CorePoints = IdentifyCorePoints(x, cluster, new[] { dim })
+                    Points = kvp.Value[c],
+                    CorePoints = cores[c]
                 });
             }
         }
@@ -225,13 +199,14 @@ public partial class SUBCLU<T> : ClusteringBase<T>
                         if (allSubsetsHaveClusters && !nextDimClusters.ContainsKey(merged))
                         {
                             // Run DBSCAN on this subspace
-                            var clusters = RunDBSCAN(x, merged.ToArray());
+                            var dimsArray = merged.OrderBy(dd => dd).ToArray();
+                            var within = WithinEpsilon(x, dimsArray);
+                            var clusters = RunDBSCAN(within, n);
                             if (clusters.Count > 0)
                             {
                                 nextDimClusters[merged] = clusters;
 
                                 // Add to results
-                                var dimsArray = merged.OrderBy(dd => dd).ToArray();
                                 foreach (var cluster in clusters)
                                 {
                                     _subspaceClusterInfos.Add(new SubspaceClusterInfo
@@ -239,7 +214,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
                                         ClusterId = _subspaceClusterInfos.Count,
                                         Dimensions = dimsArray,
                                         Points = cluster,
-                                        CorePoints = IdentifyCorePoints(x, cluster, dimsArray)
+                                        CorePoints = IdentifyCorePoints(within, n, cluster)
                                     });
                                 }
                             }
@@ -252,19 +227,11 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         }
 
         // Assign labels based on highest-dimensional cluster membership
-        Labels = AssignLabels(n, _subspaceClusterInfos);
+        var labelIds = AssignLabels(n, _subspaceClusterInfos);
+        Labels = ClusteringTensorOps.FromIntArray<T>(labelIds);
 
         // Count unique clusters
-        var uniqueLabels = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)NumOps.ToDouble(Labels[i]);
-            if (label >= 0)
-            {
-                uniqueLabels.Add(label);
-            }
-        }
-        NumClusters = uniqueLabels.Count;
+        NumClusters = labelIds.Where(label => label >= 0).Distinct().Count();
 
         // Compute cluster centers
         ComputeClusterCenters(x);
@@ -281,28 +248,18 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         // Normalize prediction input using the same parameters as training
         if (_normMeans is not null && _normStds is not null && !ReferenceEquals(x, TrainingDataRef))
         {
-            int d = x.Columns;
-            var xNorm = new Matrix<T>(x.Rows, d);
-            for (int i = 0; i < x.Rows; i++)
-                for (int j = 0; j < d; j++)
-                    xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _normMeans[j]) / _normStds[j]);
-            x = xNorm;
+            x = ClusteringTensorOps.Standardize(x, _normMeans, _normStds);
         }
 
         if (_subspaceClusterInfos is null || _subspaceClusterInfos.Count == 0 || _trainingData is null)
         {
-            var noise = new Vector<T>(x.Rows);
-            for (int i = 0; i < x.Rows; i++)
-            {
-                noise[i] = NumOps.FromDouble(-1);
-            }
-            return noise;
+            return Engine.Fill(x.Rows, NumOps.FromDouble(-1));
         }
 
         return AssignLabelsForNewData(x);
     }
 
-    private HashSet<int> IdentifyCorePoints(Matrix<T> x, HashSet<int> clusterPoints, int[] dims)
+    private HashSet<int> IdentifyCorePoints(bool[] within, int n, HashSet<int> clusterPoints)
     {
         var corePoints = new HashSet<int>();
 
@@ -311,8 +268,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
             int neighborCount = 0;
             foreach (int otherIdx in clusterPoints)
             {
-                double dist = ComputeSubspaceDistance(x, pointIdx, otherIdx, dims);
-                if (dist <= _options.Epsilon)
+                if (within[pointIdx * n + otherIdx])
                 {
                     neighborCount++;
                 }
@@ -327,58 +283,33 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         return corePoints;
     }
 
-    private double ComputeSubspaceDistance(Matrix<T> x, int idx1, int idx2, int[] dims)
+    /// <summary>
+    /// Row-major [n * n] flags: true when the Euclidean distance between two points, measured over the given
+    /// dimensions only, is at most epsilon.
+    /// </summary>
+    private bool[] WithinEpsilon(Matrix<T> x, int[] dims)
     {
-        double distSq = 0;
-        foreach (int dim in dims)
-        {
-            double diff = NumOps.ToDouble(x[idx1, dim]) - NumOps.ToDouble(x[idx2, dim]);
-            distSq += diff * diff;
-        }
-        return Math.Sqrt(distSq);
+        var subspace = ClusteringTensorOps.SelectColumns(Tensor<T>.FromMatrix(x), dims).ToMatrix();
+        var distances = ClusteringTensorOps.Distances(subspace, subspace);
+        return ClusteringTensorOps.LessOrEqualFlags(ClusteringTensorOps.Flatten(distances), NumOps.FromDouble(_options.Epsilon));
     }
 
-    private double ComputeSubspaceDistanceToPoint(Matrix<T> trainingData, int trainIdx, Matrix<T> newData, int newIdx, int[] dims)
-    {
-        double distSq = 0;
-        foreach (int dim in dims)
-        {
-            double diff = NumOps.ToDouble(trainingData[trainIdx, dim]) - NumOps.ToDouble(newData[newIdx, dim]);
-            distSq += diff * diff;
-        }
-        return Math.Sqrt(distSq);
-    }
-
-    private List<HashSet<int>> RunDBSCAN1D(Matrix<T> x, int dim)
+    private List<HashSet<int>> RunDBSCAN1D(Matrix<T> x, int dim, bool[] within)
     {
         int n = x.Rows;
-        var values = new List<(int Index, double Value)>();
 
-        for (int i = 0; i < n; i++)
-        {
-            values.Add((i, NumOps.ToDouble(x[i, dim])));
-        }
-
-        // Sort by value for efficient neighbor search
-        values.Sort((a, b) => a.Value.CompareTo(b.Value));
+        // Visit points in order of value
+        var order = Engine.TensorArgsort(Tensor<T>.FromVector(x.GetColumn(dim), new[] { n }), 0, false).ToArray();
 
         var visited = new bool[n];
         var clusters = new List<HashSet<int>>();
 
-        foreach (var (idx, val) in values)
+        foreach (int idx in order)
         {
             if (visited[idx]) continue;
 
             // Find neighbors within epsilon
-            var neighbors = new List<int>();
-            for (int i = 0; i < n; i++)
-            {
-                double dist = Math.Abs(NumOps.ToDouble(x[i, dim]) - val);
-                if (dist <= _options.Epsilon)
-                {
-                    neighbors.Add(i);
-                }
-            }
+            var neighbors = GetNeighbors(within, n, idx);
 
             if (neighbors.Count >= _options.MinPoints)
             {
@@ -395,17 +326,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
                 while (queue.Count > 0)
                 {
                     int current = queue.Dequeue();
-                    double currentVal = NumOps.ToDouble(x[current, dim]);
-
-                    var currentNeighbors = new List<int>();
-                    for (int i = 0; i < n; i++)
-                    {
-                        double dist = Math.Abs(NumOps.ToDouble(x[i, dim]) - currentVal);
-                        if (dist <= _options.Epsilon)
-                        {
-                            currentNeighbors.Add(i);
-                        }
-                    }
+                    var currentNeighbors = GetNeighbors(within, n, current);
 
                     if (currentNeighbors.Count >= _options.MinPoints)
                     {
@@ -435,9 +356,8 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         return clusters;
     }
 
-    private List<HashSet<int>> RunDBSCAN(Matrix<T> x, int[] dims)
+    private List<HashSet<int>> RunDBSCAN(bool[] within, int n)
     {
-        int n = x.Rows;
         var visited = new bool[n];
         var clusters = new List<HashSet<int>>();
 
@@ -445,7 +365,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         {
             if (visited[i]) continue;
 
-            var neighbors = GetNeighbors(x, i, dims);
+            var neighbors = GetNeighbors(within, n, i);
 
             if (neighbors.Count >= _options.MinPoints)
             {
@@ -466,7 +386,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
                 while (queue.Count > 0)
                 {
                     int current = queue.Dequeue();
-                    var currentNeighbors = GetNeighbors(x, current, dims);
+                    var currentNeighbors = GetNeighbors(within, n, current);
 
                     if (currentNeighbors.Count >= _options.MinPoints)
                     {
@@ -496,15 +416,14 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         return clusters;
     }
 
-    private List<int> GetNeighbors(Matrix<T> x, int pointIdx, int[] dims)
+    private static List<int> GetNeighbors(bool[] within, int n, int pointIdx)
     {
-        int n = x.Rows;
         var neighbors = new List<int>();
+        int offset = pointIdx * n;
 
         for (int i = 0; i < n; i++)
         {
-            double dist = ComputeSubspaceDistance(x, pointIdx, i, dims);
-            if (dist <= _options.Epsilon)
+            if (within[offset + i])
             {
                 neighbors.Add(i);
             }
@@ -513,13 +432,13 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         return neighbors;
     }
 
-    private Vector<T> AssignLabels(int n, List<SubspaceClusterInfo> clusters)
+    private int[] AssignLabels(int n, List<SubspaceClusterInfo> clusters)
     {
-        var labels = new Vector<T>(n);
+        var labels = new int[n];
 
         for (int i = 0; i < n; i++)
         {
-            labels[i] = NumOps.FromDouble(-1);
+            labels[i] = -1;
         }
 
         if (clusters.Count == 0)
@@ -536,7 +455,7 @@ public partial class SUBCLU<T> : ClusteringBase<T>
             {
                 if (cluster.Points.Contains(i))
                 {
-                    labels[i] = NumOps.FromDouble(cluster.ClusterId);
+                    labels[i] = cluster.ClusterId;
                     break;
                 }
             }
@@ -548,12 +467,13 @@ public partial class SUBCLU<T> : ClusteringBase<T>
     private Vector<T> AssignLabelsForNewData(Matrix<T> x)
     {
         int n = x.Rows;
-        var labels = new Vector<T>(n);
+        var trainingData = _trainingData ?? throw new InvalidOperationException("_trainingData is null where it is required.");
 
         // Initialize all as noise
+        var labels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            labels[i] = NumOps.FromDouble(-1);
+            labels[i] = -1;
         }
 
         // Sort clusters by dimensionality (prefer higher dimensional matches)
@@ -562,37 +482,36 @@ public partial class SUBCLU<T> : ClusteringBase<T>
             .OrderByDescending(c => c.Dimensions.Length)
             .ToList();
 
-        for (int i = 0; i < n; i++)
+        // A new point is assigned to the first (highest-dimensional) cluster with a core point
+        // within epsilon in that cluster's subspace
+        foreach (var cluster in sortedClusters)
         {
-            // For each point, check if it's density-reachable from any cluster
-            // A new point is assigned to a cluster if it's within epsilon of any core point
-            // in that cluster's subspace
-            foreach (var cluster in sortedClusters)
+            if (cluster.CorePoints.Count == 0)
             {
-                bool isReachable = false;
+                continue;
+            }
 
-                // Check distance to core points in this cluster's subspace
-                foreach (int corePointIdx in cluster.CorePoints)
+            var reachable = ReachableFromCorePoints(x, trainingData, cluster);
+            for (int i = 0; i < n; i++)
+            {
+                if (labels[i] < 0 && reachable[i])
                 {
-                    double dist = ComputeSubspaceDistanceToPoint(
-                        (_trainingData ?? throw new InvalidOperationException("_trainingData is null where it is required.")), corePointIdx, x, i, cluster.Dimensions);
-
-                    if (dist <= _options.Epsilon)
-                    {
-                        isReachable = true;
-                        break;
-                    }
-                }
-
-                if (isReachable)
-                {
-                    labels[i] = NumOps.FromDouble(cluster.ClusterId);
-                    break; // Assigned to highest-dimensional reachable cluster
+                    labels[i] = cluster.ClusterId;
                 }
             }
         }
 
-        return labels;
+        return ClusteringTensorOps.FromIntArray<T>(labels);
+    }
+
+    /// <summary>For each row of x, whether some core point of the cluster lies within epsilon in its subspace.</summary>
+    private bool[] ReachableFromCorePoints(Matrix<T> x, Matrix<T> trainingData, SubspaceClusterInfo cluster)
+    {
+        var points = ClusteringTensorOps.SelectColumns(Tensor<T>.FromMatrix(x), cluster.Dimensions).ToMatrix();
+        var cores = ClusteringTensorOps.SelectColumns(
+            Tensor<T>.FromMatrix(ClusteringTensorOps.SelectRows(trainingData, cluster.CorePoints.ToArray())), cluster.Dimensions).ToMatrix();
+        var nearest = ClusteringTensorOps.MinRows(ClusteringTensorOps.Distances(points, cores));
+        return ClusteringTensorOps.LessOrEqualFlags(nearest, NumOps.FromDouble(_options.Epsilon));
     }
 
     private void ComputeClusterCenters(Matrix<T> x)
@@ -603,34 +522,9 @@ public partial class SUBCLU<T> : ClusteringBase<T>
             return;
         }
 
-        int d = x.Columns;
-        int n = x.Rows;
-        ClusterCenters = new Matrix<T>(NumClusters, d);
-        var counts = new int[NumClusters];
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)NumOps.ToDouble((Labels ?? throw new InvalidOperationException("Labels has not been initialized."))[i]);
-            if (label >= 0 && label < NumClusters)
-            {
-                counts[label]++;
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[label, j] = NumOps.Add(ClusterCenters[label, j], x[i, j]);
-                }
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], NumOps.FromDouble(counts[k]));
-                }
-            }
-        }
+        // Mean of each cluster's members (labels outside [0, NumClusters) are ignored, empty clusters stay zero)
+        ClusterCenters = ClusteringTensorOps.ClusterMeans(
+            x, Labels ?? throw new InvalidOperationException("Labels has not been initialized."), NumClusters, out _);
     }
 
     private void ValidateInputData(Matrix<T> x)

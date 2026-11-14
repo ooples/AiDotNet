@@ -22921,3 +22921,34 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.Clustering.Evaluation.SilhouetteScore<T>.ComputeSampleScores(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels) -> double[]!
+*REMOVED*AiDotNet.Clustering.Evaluation.WCSS<T>.ComputePerCluster(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels) -> System.Collections.Generic.Dictionary<int, double>!
+*REMOVED*AiDotNet.Clustering.Neural.SelfOrganizingMap<T>.GetUMatrix() -> T[,]!
+*REMOVED*AiDotNet.Clustering.Neural.SelfOrganizingMap<T>.Weights.get -> T[]![,]?
+*REMOVED*AiDotNet.Clustering.Partitioning.AffinityPropagation<T>.SimilarityMatrix.get -> T[,]?
+*REMOVED*AiDotNet.Clustering.Partitioning.FuzzyCMeans<T>.PredictMembership(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! x) -> T[,]!
+*REMOVED*AiDotNet.Clustering.Probabilistic.GaussianMixtureModel<T>.PredictProba(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! x) -> T[,]!
+*REMOVED*AiDotNet.Clustering.Spectral.SpectralClustering<T>.AffinityMatrix.get -> T[,]?
+*REMOVED*AiDotNet.Clustering.Spectral.SpectralClustering<T>.Embedding.get -> T[,]?
+*REMOVED*override AiDotNet.Clustering.DistanceMetrics.ManhattanDistance<T>.ComputeInline(T[]! a, T[]! b, int length) -> T
+AiDotNet.Clustering.Evaluation.SilhouetteScore<T>.ComputeSampleScores(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Clustering.Evaluation.WCSS<T>.ComputePerCluster(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! labels) -> System.Collections.Generic.Dictionary<int, T>!
+AiDotNet.Clustering.Neural.SelfOrganizingMap<T>.GetUMatrix() -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Clustering.Neural.SelfOrganizingMap<T>.Weights.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Clustering.Partitioning.AffinityPropagation<T>.SimilarityMatrix.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
+AiDotNet.Clustering.Partitioning.FuzzyCMeans<T>.PredictMembership(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Clustering.Probabilistic.GaussianMixtureModel<T>.PredictProba(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! x) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Clustering.Spectral.SpectralClustering<T>.AffinityMatrix.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
+AiDotNet.Clustering.Spectral.SpectralClustering<T>.Embedding.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>?
+virtual AiDotNet.Clustering.DistanceMetrics.DistanceMetricBase<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Clustering.DistanceMetrics.ChebyshevDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Clustering.DistanceMetrics.EuclideanDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Clustering.DistanceMetrics.MahalanobisDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Clustering.DistanceMetrics.ManhattanDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Clustering.DistanceMetrics.MinkowskiDistance<T>.ComputeRowPairs(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! a, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! b) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.GaussianProcesses.BetaLikelihood<T>.LogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, AiDotNet.Tensors.LinearAlgebra.Vector<T>! f) -> double
+AiDotNet.GaussianProcesses.BetaLikelihood<T>.LogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, AiDotNet.Tensors.LinearAlgebra.Vector<T>! f) -> T
+*REMOVED*AiDotNet.GaussianProcesses.StudentTGaussianProcess<T>.GetOutlierWeights() -> double[]?
+AiDotNet.GaussianProcesses.StudentTGaussianProcess<T>.GetOutlierWeights() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.GaussianProcesses.HeteroscedasticGaussianProcess<T>.GetNoiseVariances() -> double[]?
+AiDotNet.GaussianProcesses.HeteroscedasticGaussianProcess<T>.GetNoiseVariances() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?

@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -70,10 +71,12 @@ public class AdjustedRandIndex<T> : IExternalClusterMetric<T>
         var trueUnique = new HashSet<int>();
         var predUnique = new HashSet<int>();
 
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
         for (int i = 0; i < n; i++)
         {
-            trueUnique.Add((int)_numOps.ToDouble(trueLabels[i]));
-            predUnique.Add((int)_numOps.ToDouble(predictedLabels[i]));
+            trueUnique.Add(trueLabelsIds[i]);
+            predUnique.Add(predictedLabelsIds[i]);
         }
 
         var trueList = trueUnique.ToList();
@@ -86,8 +89,8 @@ public class AdjustedRandIndex<T> : IExternalClusterMetric<T>
 
         for (int i = 0; i < n; i++)
         {
-            int trueIdx = trueMap[(int)_numOps.ToDouble(trueLabels[i])];
-            int predIdx = predMap[(int)_numOps.ToDouble(predictedLabels[i])];
+            int trueIdx = trueMap[trueLabelsIds[i]];
+            int predIdx = predMap[predictedLabelsIds[i]];
             contingency[trueIdx, predIdx]++;
         }
 

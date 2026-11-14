@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 
@@ -97,11 +98,10 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         var diff = Engine.Subtract(a, b);
 
         // Compute Σ^(-1) × (a - b)
-        var temp = MultiplyMatrixVector(_inverseCovarianceMatrix, diff);
+        var temp = Engine.MatrixVectorMultiply(_inverseCovarianceMatrix, diff);
 
         // Compute (a - b)^T × temp
-        T result = NumOps.Zero;
-        result = NumOps.Add(result, Engine.DotProduct(diff, temp));
+        T result = Engine.DotProduct(diff, temp);
 
         return Sqrt(result);
     }
@@ -120,45 +120,38 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
                 "to estimate covariance matrix.");
         }
 
-        // Compute mean
-        var mean = new Vector<T>(data.Columns);
-        for (int j = 0; j < data.Columns; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < data.Rows; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-            mean[j] = NumOps.Divide(sum, NumOps.FromDouble(data.Rows));
-        }
-
-        // Compute covariance matrix
-        var covariance = new Matrix<T>(data.Columns, data.Columns);
-        for (int j = 0; j < data.Columns; j++)
-        {
-            for (int k = j; k < data.Columns; k++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < data.Rows; i++)
-                {
-                    T diffJ = NumOps.Subtract(data[i, j], mean[j]);
-                    T diffK = NumOps.Subtract(data[i, k], mean[k]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diffJ, diffK));
-                }
-                T cov = NumOps.Divide(sum, NumOps.FromDouble(data.Rows - 1));
-                covariance[j, k] = cov;
-                covariance[k, j] = cov; // Symmetric
-            }
-        }
+        // Compute mean and the (unbiased) covariance of the centered data: C = X_c^T X_c / (n - 1)
+        var centered = ClusteringTensorOps.SubtractRow(data, ClusteringTensorOps.ColumnMeans(data));
+        var scatter = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
+        var covariance = Engine.TensorDivideScalar(scatter, NumOps.FromDouble(data.Rows - 1));
 
         // Add small regularization for numerical stability
-        for (int i = 0; i < data.Columns; i++)
+        var ridge = Engine.TensorMultiplyScalar(Engine.TensorEye<T>(data.Columns), NumOps.FromDouble(1e-6));
+
+        _inverseCovarianceMatrix = InvertMatrix(Engine.TensorAdd(covariance, ridge).ToMatrix());
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeRowPairs(Tensor<T> a, Tensor<T> b)
+    {
+        if (_inverseCovarianceMatrix is null)
         {
-            covariance[i, i] = NumOps.Add(covariance[i, i], NumOps.FromDouble(1e-6));
+            return ClusteringTensorOps.RowEuclidean(a, b);
         }
 
-        // Compute inverse using Cholesky decomposition for numerical stability
-        _inverseCovarianceMatrix = InvertMatrix(covariance);
+        int d = a.Shape[1];
+        if (_inverseCovarianceMatrix.Rows != d || _inverseCovarianceMatrix.Columns != d)
+        {
+            throw new ArgumentException(
+                $"Inverse covariance matrix dimensions ({_inverseCovarianceMatrix.Rows}x{_inverseCovarianceMatrix.Columns}) " +
+                $"must match vector length ({d}).");
+        }
+
+        // Row i of diff * (S^-1)^T is S^-1 (a_i - b_i); its dot with (a_i - b_i) is the squared distance.
+        var diff = Engine.TensorSubtract(a, b);
+        var inverseT = Engine.TensorTranspose(Tensor<T>.FromMatrix(_inverseCovarianceMatrix));
+        var quadratic = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMatMul(diff, inverseT), diff), new[] { 1 }, false);
+        return Engine.TensorSqrt(quadratic);
     }
 
     private T ComputeEuclidean(Vector<T> a, Vector<T> b)
@@ -166,97 +159,46 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         return VectorHelper.EuclideanDistance(a, b);
     }
 
-    private Vector<T> MultiplyMatrixVector(Matrix<T> matrix, Vector<T> vector)
-    {
-        var result = new Vector<T>(matrix.Rows);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            result[i] = Engine.DotProduct(matrix.GetRow(i), vector);
-        }
-        return result;
-    }
-
     private Matrix<T> InvertMatrix(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        var augmented = new Matrix<T>(n, 2 * n);
+        var engine = Engine;
 
-        // Create augmented matrix [A | I]
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = matrix[i, j];
-                augmented[i, j + n] = i == j ? NumOps.One : NumOps.Zero;
-            }
-        }
+        // Augmented matrix [A | I]
+        var augmented = engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(matrix), engine.TensorEye<T>(n) }, 1).ToMatrix();
+        var ones = engine.Fill(n, NumOps.One);
+        var tolerance = NumOps.FromDouble(1e-10);
 
-        // Gauss-Jordan elimination with partial pivoting
+        // Gauss-Jordan elimination with partial pivoting, one whole-matrix update per column
         for (int col = 0; col < n; col++)
         {
-            // Find pivot
-            int maxRow = col;
-            double maxVal = Math.Abs(NumOps.ToDouble(augmented[col, col]));
-            for (int row = col + 1; row < n; row++)
-            {
-                double val = Math.Abs(NumOps.ToDouble(augmented[row, col]));
-                if (val > maxVal)
-                {
-                    maxVal = val;
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows if necessary
+            // Pivot: the largest |entry| of this column at or below the diagonal (first one on ties)
+            var below = engine.Abs(augmented.GetColumn(col).GetSubVector(col, n - col));
+            int maxRow = col + below.IndexOfMax();
             if (maxRow != col)
             {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    T temp = augmented[col, j];
-                    augmented[col, j] = augmented[maxRow, j];
-                    augmented[maxRow, j] = temp;
-                }
+                engine.SwapRows(augmented, col, maxRow);
             }
 
-            // Check for singular matrix
-            if (NumOps.LessThan(NumOps.Abs(augmented[col, col]), NumOps.FromDouble(1e-10)))
+            // Every candidate below the tolerance means the matrix is singular
+            if (engine.TensorCountNonzero(engine.TensorLessThan(below.AsTensor(), tolerance)) == below.Length)
             {
                 throw new InvalidOperationException("Matrix is singular and cannot be inverted.");
             }
 
             // Scale pivot row
-            T pivot = augmented[col, col];
-            for (int j = 0; j < 2 * n; j++)
-            {
-                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
-            }
+            var pivotRow = augmented.GetRow(col);
+            var scaledRow = engine.Divide(pivotRow, engine.Sum(pivotRow.GetSubVector(col, 1)));
+            engine.SetRow(augmented, col, scaledRow);
 
-            // Eliminate column
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = augmented[row, col];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        augmented[row, j] = NumOps.Subtract(
-                            augmented[row, j],
-                            NumOps.Multiply(factor, augmented[col, j]));
-                    }
-                }
-            }
+            // Eliminate the column from every other row: A -= f * scaledRow^T with f[col] = 0
+            var factors = engine.Multiply(
+                augmented.GetColumn(col), engine.Subtract(ones, Vector<T>.CreateStandardBasis(n, col)));
+            augmented = engine.MatrixSubtract(augmented, engine.OuterProduct(factors, scaledRow));
         }
 
         // Extract inverse matrix
-        var inverse = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                inverse[i, j] = augmented[i, j + n];
-            }
-        }
-
-        return inverse;
+        return augmented.GetSubMatrix(0, n, n, n);
     }
 }

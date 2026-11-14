@@ -129,44 +129,35 @@ public partial class OnlineKMeans<T> : ClusteringBase<T>
 
         for (int pass = 0; pass < numPasses; pass++)
         {
-        // Process each point
-        for (int i = 0; i < n; i++)
-        {
-            var point = new T[d];
-            for (int j = 0; j < d; j++)
+            // Process each point: every update changes the centers the next point is compared with
+            for (int i = 0; i < n; i++)
             {
-                point[j] = x[i, j];
-            }
+                var point = x.GetRow(i);
 
-            // Find nearest center
-            int nearest = FindNearestCenter(point, d, k);
-            labels[i] = nearest;
+                // Find nearest center
+                int nearest = FindNearestCenter(point, k);
+                labels[i] = nearest;
 
-            // Update center
-            UpdateCenter(point, nearest, d);
+                // Update center
+                UpdateCenter(point, nearest);
 
-            _totalPointsSeen++;
-            _clusterCounts[nearest]++;
+                _totalPointsSeen++;
+                _clusterCounts[nearest]++;
 
-            // Decay learning rate
-            if (_options.DecayLearningRate)
-            {
-                CurrentLearningRate = Math.Max(
-                    _options.MinLearningRate,
-                    _options.LearningRate / (1 + _totalPointsSeen * 0.0001)
-                );
+                // Decay learning rate
+                if (_options.DecayLearningRate)
+                {
+                    CurrentLearningRate = Math.Max(
+                        _options.MinLearningRate,
+                        _options.LearningRate / (1 + _totalPointsSeen * 0.0001)
+                    );
+                }
             }
         }
-        } // end multi-pass loop
 
         // Set results — clone internal centers to base class property (avoid aliasing)
         ClusterCenters = _centers.Clone();
-        Labels = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            Labels[i] = NumOps.FromDouble(labels[i]);
-        }
+        Labels = ClusteringTensorOps.FromIntArray<T>(labels);
 
         MergeDegenerateClusters(x);
         IsTrained = true;
@@ -174,89 +165,37 @@ public partial class OnlineKMeans<T> : ClusteringBase<T>
 
     private void InitializeCenters(Matrix<T> x, int k, int d, Random rand)
     {
-        _centers = new Matrix<T>(k, d);
         _clusterCounts = new int[k];
 
         // K-Means++ initialization: select well-separated initial centers
         // First center: random data point
-        int firstIdx = rand.Next(x.Rows);
-        for (int j = 0; j < d; j++)
-            _centers[0, j] = x[firstIdx, j];
+        var chosen = new int[k];
+        chosen[0] = rand.Next(x.Rows);
 
         // Subsequent centers: choose proportional to squared distance from nearest existing center
+        Vector<T>? distances = null;
         for (int c = 1; c < k; c++)
         {
-            var distances = new double[x.Rows];
-            double totalDist = 0;
-
-            for (int i = 0; i < x.Rows; i++)
-            {
-                double minDist = double.MaxValue;
-                for (int cc = 0; cc < c; cc++)
-                {
-                    double dist = 0;
-                    for (int j = 0; j < d; j++)
-                    {
-                        double diff = NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(_centers[cc, j]);
-                        dist += diff * diff;
-                    }
-                    minDist = Math.Min(minDist, dist);
-                }
-                distances[i] = minDist;
-                totalDist += minDist;
-            }
-
-            // Weighted random selection
-            double target = rand.NextDouble() * totalDist;
-            double cumulative = 0;
-            int selectedIdx = 0;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                cumulative += distances[i];
-                if (cumulative >= target)
-                {
-                    selectedIdx = i;
-                    break;
-                }
-            }
-
-            for (int j = 0; j < d; j++)
-                _centers[c, j] = x[selectedIdx, j];
-        }
-    }
-
-    private int FindNearestCenter(T[] point, int d, int k)
-    {
-        int nearest = 0;
-        T minDist = NumOps.MaxValue;
-
-        for (int c = 0; c < k; c++)
-        {
-            T dist = NumOps.Zero;
-            for (int j = 0; j < d; j++)
-            {
-                T diff = NumOps.Subtract(point[j], _centers[c, j]);
-                dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-            }
-
-            if (NumOps.LessThan(dist, minDist))
-            {
-                minDist = dist;
-                nearest = c;
-            }
+            var toLast = ClusteringTensorOps.SquaredDistancesToPoint(x.GetRow(chosen[c - 1]), x);
+            distances = distances is null ? toLast : Engine.Min(distances, toLast);
+            chosen[c] = ClusteringTensorOps.SampleProportional(distances, rand);
         }
 
-        return nearest;
+        _centers = k > 0 ? ClusteringTensorOps.SelectRows(x, chosen) : new Matrix<T>(0, d);
     }
 
-    private void UpdateCenter(T[] point, int clusterIdx, int d)
+    private int FindNearestCenter(Vector<T> point, int k)
     {
+        var centers = _centers.Rows == k ? _centers : _centers.GetSubMatrix(0, 0, k, _centers.Columns);
+        return ClusteringTensorOps.ArgMin(ClusteringTensorOps.SquaredDistancesToPoint(point, centers));
+    }
+
+    private void UpdateCenter(Vector<T> point, int clusterIdx)
+    {
+        // center += lr * (point - center)
         T lr = NumOps.FromDouble(CurrentLearningRate);
-        for (int j = 0; j < d; j++)
-        {
-            T diff = NumOps.Subtract(point[j], _centers[clusterIdx, j]);
-            _centers[clusterIdx, j] = NumOps.Add(_centers[clusterIdx, j], NumOps.Multiply(lr, diff));
-        }
+        var center = _centers.GetRow(clusterIdx);
+        Engine.SetRow(_centers, clusterIdx, Engine.Add(center, Engine.Multiply(Engine.Subtract(point, center), lr)));
     }
 
     /// <summary>
@@ -266,22 +205,14 @@ public partial class OnlineKMeans<T> : ClusteringBase<T>
     /// <returns>The cluster assignment for this point.</returns>
     public int PartialFit(Vector<T> point)
     {
-        int d = point.Length;
-
         if (_centers.Rows == 0)
         {
             throw new InvalidOperationException("Model must be initialized before calling PartialFit. " +
                 "Call Train with initial data first, or use InitializeWithRandom.");
         }
 
-        var pointArray = new T[d];
-        for (int j = 0; j < d; j++)
-        {
-            pointArray[j] = point[j];
-        }
-
-        int nearest = FindNearestCenter(pointArray, d, NumClusters);
-        UpdateCenter(pointArray, nearest, d);
+        int nearest = FindNearestCenter(point, NumClusters);
+        UpdateCenter(point, nearest);
 
         _totalPointsSeen++;
         _clusterCounts[nearest]++;
@@ -337,23 +268,15 @@ public partial class OnlineKMeans<T> : ClusteringBase<T>
         ValidateIsTrained();
 
         int n = x.Rows;
-        int d = NumFeatures;
         int k = NumClusters;
-        var labels = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0 || k == 0)
         {
-            var point = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                point[j] = x[i, j];
-            }
-
-            int nearest = FindNearestCenter(point, d, k);
-            labels[i] = NumOps.FromDouble(nearest);
+            return new Vector<T>(n);
         }
 
-        return labels;
+        var centers = _centers.Rows == k ? _centers : _centers.GetSubMatrix(0, 0, k, _centers.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(
+            ClusteringTensorOps.ArgMinRows(ClusteringTensorOps.SquaredDistances(x, centers)));
     }
 
     /// <inheritdoc />
