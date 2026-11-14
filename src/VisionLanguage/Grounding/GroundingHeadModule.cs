@@ -166,8 +166,13 @@ internal abstract class GroundingHeadModule<T>
     internal static Tensor<T> InverseSigmoid(IEngine engine, Tensor<T> p, double eps = 1e-5)
     {
         // A type too narrow to hold 1 - eps (Half) clamps one unit in the last place below 1 instead, so the logit
-        // stays finite.
-        double guard = Math.Max(eps, Math.Pow(2, -(NumOps.PrecisionBits - 1)));
+        // stays finite. That unit is measured in T itself, as |3 (4/3 - 1) - 1| (the spacing of T at 1: 2^-10 for
+        // Half, 2^-23 for float, 2^-52 for double). PrecisionBits is the storage width (16 for Half, whose
+        // significand has 11 bits), so the guard taken from it, 2^-15, rounded 1 - guard back to 1 and a saturated
+        // coordinate gave log(1 / 0) = +infinity.
+        var third = NumOps.Subtract(NumOps.Divide(NumOps.FromDouble(4), NumOps.FromDouble(3)), NumOps.One);
+        double spacing = Math.Abs(NumOps.ToDouble(NumOps.Subtract(NumOps.Add(NumOps.Add(third, third), third), NumOps.One)));
+        double guard = Math.Max(eps, spacing);
         var clamped = engine.TensorClamp(p, NumOps.FromDouble(guard), NumOps.FromDouble(1 - guard));
         return engine.TensorLog(engine.TensorDivide(clamped, engine.ScalarMinusTensor(NumOps.One, clamped)));
     }
