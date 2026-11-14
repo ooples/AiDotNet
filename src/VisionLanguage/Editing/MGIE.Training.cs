@@ -145,24 +145,18 @@ public partial class MGIE<T>
         if (Scheduler is NoiseSchedulerBase<T> scheduler)
             return scheduler.AddNoiseBatched(clean, noise, timesteps);
 
-        int perRow = clean.Length / timesteps.Length;
-        var noisy = new Tensor<T>(clean.Shape.ToArray());
-        var cleanSpan = clean.AsSpan();
-        var noiseSpan = noise.AsSpan();
-        var noisySpan = noisy.AsWritableSpan();
-        for (int row = 0; row < timesteps.Length; row++)
+        int rowCount = timesteps.Length;
+        int perRow = clean.Length / rowCount;
+        var cleanRows = clean.Reshape([rowCount, perRow]);
+        var noiseRows = noise.Reshape([rowCount, perRow]);
+        var noisyRows = new Tensor<T>[rowCount];
+        for (int row = 0; row < rowCount; row++)
         {
-            var cleanRow = new Vector<T>(perRow);
-            var noiseRow = new Vector<T>(perRow);
-            for (int i = 0; i < perRow; i++)
-            {
-                cleanRow[i] = cleanSpan[row * perRow + i];
-                noiseRow[i] = noiseSpan[row * perRow + i];
-            }
-            var noised = Scheduler.AddNoise(cleanRow, noiseRow, timesteps[row]);
-            for (int i = 0; i < perRow; i++) noisySpan[row * perRow + i] = noised[i];
+            var cleanRow = Engine.TensorSlice(cleanRows, [row, 0], [1, perRow]).ToVector();
+            var noiseRow = Engine.TensorSlice(noiseRows, [row, 0], [1, perRow]).ToVector();
+            noisyRows[row] = Tensor<T>.FromVector(Scheduler.AddNoise(cleanRow, noiseRow, timesteps[row]), [1, perRow]);
         }
-        return noisy;
+        return Engine.TensorConcatenate(noisyRows, 0).Reshape(clean.Shape.ToArray());
     }
 
     /// <summary>Row-wise choice between two equally shaped batches, keeping the tape connection of both.</summary>

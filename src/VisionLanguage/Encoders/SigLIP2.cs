@@ -288,29 +288,13 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         var imageEmb = EncodeImage(image);
         var textEmbs = EncodeTexts(labels);
 
-        // SigLIP 2 uses sigmoid scoring per pair: sigmoid(sim/t + b)
-        var scores = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        double bias = _options.SigmoidBias;
-
-        for (int i = 0; i < labels.Length; i++)
-        {
-            double sim = NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i]));
-            double logit = sim / temp + bias;
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
-        }
-
-        // Normalize to probabilities
-        double total = 0;
-        for (int i = 0; i < scores.Length; i++)
-            total += NumOps.ToDouble(scores[i]);
-
+        // SigLIP 2 scores every image-text pair on its own: sigmoid(sim / t + b) is the probability that the
+        // pair matches (Zhai et al., 2023), so the scores are not renormalized across the labels.
+        T[] probs = EmbeddingScores<T>.SigmoidPairScores(Engine, imageEmb, textEmbs,
+            NumOps.FromDouble(_options.Temperature), NumOps.FromDouble(_options.SigmoidBias)).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
-        {
-            double prob = total > 1e-8 ? NumOps.ToDouble(scores[i]) / total : 1.0 / labels.Length;
-            result[labels[i]] = NumOps.FromDouble(prob);
-        }
+            result[labels[i]] = probs[i];
 
         return result;
     }
@@ -345,39 +329,62 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
             return OnnxImageEncoder.Run(preprocessed);
         }
 
-        // Get vision encoder features (before projection, since decoder cross-attends to full features)
-        var visionFeatures = ForwardVisionEncoder(preprocessed);
+        // The decoder cross-attends to the vision tower's (projected) patch tokens
+        return DecodeCaption(ForwardVisionEncoder(preprocessed));
+    }
 
-        // Run autoregressive decoding: start with BOS token, generate up to MaxCaptionLength
+    /// <summary>
+    /// Greedy autoregressive decoding: the sequence is a start-of-sequence embedding followed by the
+    /// embedding of every token generated so far. Each step cross-attends the whole sequence to the vision
+    /// tokens, runs the decoder, and takes the last position's logits; their argmax is the next token,
+    /// embedded with the vocabulary projection's weights (tied input/output embeddings).
+    /// </summary>
+    /// <param name="visionFeatures">Vision tokens, read as rows of <c>CaptioningDecoderDim</c> values.</param>
+    /// <returns>The <c>[MaxCaptionLength * VocabSize]</c> logits of every step.</returns>
+    internal Tensor<T> DecodeCaption(Tensor<T> visionFeatures)
+    {
         int maxLen = _options.MaxCaptionLength;
-        var captionLogits = new Tensor<T>([maxLen * _options.VocabSize]);
+        if (maxLen <= 0)
+            return new Tensor<T>([0]);
 
-        // Initialize with start-of-sequence embedding
-        var decoderInput = new Tensor<T>([_options.CaptioningDecoderDim]);
-        for (int i = 0; i < decoderInput.Length; i++)
-            decoderInput[i] = NumOps.FromDouble(0.01);
-
+        int width = _options.CaptioningDecoderDim;
+        var sequence = Tensor<T>.CreateDefault([1, width], NumOps.FromDouble(0.01));
+        var stepLogits = new Tensor<T>[maxLen];
         for (int step = 0; step < maxLen; step++)
         {
-            // Cross-attention: decoder attends to vision features
-            var crossAttended = CrossAttend(decoderInput, visionFeatures);
+            int positions = sequence.Shape[0];
+            var decoderOutput = ForwardCaptioningDecoder(CrossAttend(sequence, visionFeatures));
+            int perPosition = decoderOutput.Length / positions;
+            var last = Engine.TensorSlice(decoderOutput.Reshape([positions, perPosition]),
+                [positions - 1, 0], [1, perPosition]);
+            stepLogits[step] = FitLength(last, _options.VocabSize);
 
-            // Forward through captioning decoder layers
-            var decoderOutput = ForwardCaptioningDecoder(crossAttended);
-
-            // Project to vocabulary logits for this position
-            int vocabStart = step * _options.VocabSize;
-            int copyLen = Math.Min(_options.VocabSize, decoderOutput.Length);
-            for (int v = 0; v < copyLen; v++)
+            if (step + 1 < maxLen)
             {
-                captionLogits[vocabStart + v] = decoderOutput[v];
+                int next = Math.Max(0, ArgExtremumSearch<T>.FirstIndex(Engine, last, true, out _));
+                sequence = Engine.TensorConcatenate([sequence, CaptionTokenEmbedding(next, width)], 0);
             }
-
-            // Use output as next decoder input (teacher forcing during training)
-            decoderInput = decoderOutput;
         }
 
-        return captionLogits;
+        return Engine.TensorConcatenate(stepLogits, 0);
+    }
+
+    /// <summary>
+    /// The tied input embedding of a caption token: its column of the vocabulary projection's
+    /// <c>[width, vocab]</c> weights, as a <c>[1, width]</c> row.
+    /// </summary>
+    private Tensor<T> CaptionTokenEmbedding(int token, int width)
+    {
+        int projectionIndex = _captioningDecoderEnd - 1;
+        if (projectionIndex < _textEncoderEnd || projectionIndex >= Layers.Count)
+            throw new InvalidOperationException("The captioning decoder has no vocabulary projection layer.");
+
+        var projection = Layers[projectionIndex].GetWeights();
+        if (projection is null || projection.Rank != 2 || projection.Shape[0] != width || token >= projection.Shape[1])
+            throw new InvalidOperationException(
+                "The captioning vocabulary projection must hold [CaptioningDecoderDim, VocabSize] weights.");
+
+        return Engine.TensorSlice(projection, [0, token], [width, 1]).Reshape([1, width]);
     }
 
     #endregion
@@ -402,8 +409,8 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         var preprocessed = PreprocessImage(image);
 
         int patchSize = _options.PatchSize;
-        int numPatchesSide = _options.ImageSize / patchSize;
-        int totalPatches = numPatchesSide * numPatchesSide;
+        int totalPatches = (preprocessed.Shape[preprocessed.Rank - 2] / patchSize)
+            * (preprocessed.Shape[preprocessed.Rank - 1] / patchSize);
         int numMasked = (int)(totalPatches * _options.MimMaskRatio);
 
         // Generate random mask if not provided
@@ -423,27 +430,63 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
             Array.Copy(indices, maskIndices, numMasked);
         }
 
-        // Create masked input: zero out masked patches
-        var maskedInput = new Tensor<T>(preprocessed._shape);
-        for (int i = 0; i < preprocessed.Length; i++)
-            maskedInput[i] = preprocessed[i];
-
-        int patchFeatureSize = patchSize * patchSize * 3;
-        var maskSet = new HashSet<int>(maskIndices);
-        foreach (int patchIdx in maskSet)
-        {
-            int startIdx = patchIdx * patchFeatureSize;
-            for (int i = 0; i < patchFeatureSize && (startIdx + i) < maskedInput.Length; i++)
-                maskedInput[startIdx + i] = NumOps.Zero;
-        }
-
-        // Forward through vision encoder with masked input
-        var encodedFeatures = ForwardVisionEncoder(maskedInput);
+        // Forward through vision encoder with the masked patches zeroed
+        var encodedFeatures = ForwardVisionEncoder(MaskPatches(preprocessed, maskIndices));
 
         // Forward through MIM decoder to predict masked patch features
         var mimPredictions = ForwardMimDecoder(encodedFeatures);
 
         return mimPredictions;
+    }
+
+    /// <summary>
+    /// Zeroes the listed patches of a <c>[C, H, W]</c> or <c>[N, C, H, W]</c> image in every channel. Patch
+    /// <c>p</c> is the <c>PatchSize x PatchSize</c> window at row <c>p / (W / PatchSize)</c> and column
+    /// <c>p % (W / PatchSize)</c> of the patch grid, the order the patch embedding reads patches in.
+    /// </summary>
+    /// <param name="image">The image to mask.</param>
+    /// <param name="maskIndices">Patch indices to zero; each must lie in the patch grid.</param>
+    /// <returns>A masked copy of <paramref name="image"/>.</returns>
+    internal Tensor<T> MaskPatches(Tensor<T> image, int[] maskIndices)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        if (maskIndices is null) throw new ArgumentNullException(nameof(maskIndices));
+        if (image.Rank < 2)
+            throw new ArgumentException("Expected a [C, H, W] or [N, C, H, W] image.", nameof(image));
+
+        int patchSize = _options.PatchSize;
+        int height = image.Shape[image.Rank - 2];
+        int width = image.Shape[image.Rank - 1];
+        int gridHeight = height / patchSize;
+        int gridWidth = width / patchSize;
+        int totalPatches = gridHeight * gridWidth;
+        foreach (int patch in maskIndices)
+        {
+            if (patch < 0 || patch >= totalPatches)
+                throw new ArgumentOutOfRangeException(nameof(maskIndices),
+                    $"Patch index {patch} is outside the {gridHeight}x{gridWidth} patch grid.");
+        }
+
+        if (maskIndices.Length == 0)
+            return image.Clone();
+
+        var keepPatch = Engine.TensorIndexFill(
+            Tensor<T>.CreateDefault([totalPatches], NumOps.One), 0,
+            new Tensor<int>(new[] { maskIndices.Length }, Vector<int>.FromArray(maskIndices)), NumOps.Zero);
+        var keepPixel = Engine.TensorRepeatInterleave(
+            Engine.TensorRepeatInterleave(keepPatch.Reshape([gridHeight, gridWidth]), patchSize, 0), patchSize, 1);
+
+        // Pixels past the last whole patch belong to no patch and are kept.
+        if (gridHeight * patchSize < height)
+            keepPixel = Engine.TensorConcatenate(
+                [keepPixel, Tensor<T>.CreateDefault([height - gridHeight * patchSize, gridWidth * patchSize], NumOps.One)], 0);
+        if (gridWidth * patchSize < width)
+            keepPixel = Engine.TensorConcatenate(
+                [keepPixel, Tensor<T>.CreateDefault([height, width - gridWidth * patchSize], NumOps.One)], 1);
+
+        // Select rather than multiply, so a non-finite pixel in a masked patch still becomes zero.
+        return Engine.TensorWhere(Engine.TensorBroadcastTo(keepPixel, image.Shape.ToArray()), image,
+            new Tensor<T>(image.Shape.ToArray()));
     }
 
     #endregion
@@ -629,9 +672,7 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
 
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
         return tokens;
     }
 
@@ -683,40 +724,31 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     /// Cross-attention: decoder query attends to vision encoder key/value features.
     /// Implements scaled dot-product cross-attention for the captioning decoder.
     /// </summary>
-    private Tensor<T> CrossAttend(Tensor<T> query, Tensor<T> context)
+    /// <param name="query">Decoder positions, read as rows of the last axis' width.</param>
+    /// <param name="context">Vision tokens, read as rows of the same width; they are both keys and values.</param>
+    /// <returns>The <c>[positions, width]</c> residual sum query + softmax(Q K^T / sqrt(d)) V.</returns>
+    internal Tensor<T> CrossAttend(Tensor<T> query, Tensor<T> context)
     {
-        // Compute attention: softmax(Q * K^T / sqrt(d)) * V
-        // Using the context (vision features) as both key and value
-        int dim = Math.Min(query.Length, context.Length);
-        double scale = 1.0 / Math.Sqrt(dim);
+        int width = query.Shape[query.Rank - 1];
+        int contextWidth = context.Shape[context.Rank - 1];
+        if (width <= 0 || contextWidth != width)
+            throw new InvalidOperationException(
+                $"Cross-attention needs vision tokens as wide as the decoder ({width}); got {contextWidth}. "
+                + "Set CaptioningDecoderDim equal to ProjectionDim.");
 
-        // Compute attention score
-        double dotProduct = 0;
-        for (int i = 0; i < dim; i++)
-        {
-            double qv = NumOps.ToDouble(query[i]);
-            double kv = NumOps.ToDouble(context[i]);
-            dotProduct += qv * kv;
-        }
-        double attnWeight = 1.0 / (1.0 + Math.Exp(-dotProduct * scale)); // Sigmoid attention
+        var queries = query.Reshape([query.Length / width, width]);
+        var tokens = context.Reshape([context.Length / width, width]);
 
-        // Apply attention to value (context)
-        var result = new Tensor<T>([query.Length]);
-        for (int i = 0; i < result.Length; i++)
-        {
-            double qVal = NumOps.ToDouble(query[i]);
-            double cVal = i < context.Length ? NumOps.ToDouble(context[i]) : 0;
-            // Residual connection: query + attention-weighted context
-            result[i] = NumOps.FromDouble(qVal + attnWeight * cVal);
-        }
-
-        return result;
+        // Scale the queries before the product so the scores stay small in narrow types.
+        var scaledQueries = Engine.TensorMultiplyScalar(queries, NumOps.FromDouble(1.0 / Math.Sqrt(width)));
+        var weights = Engine.Softmax(Engine.TensorMatMul(scaledQueries, Engine.TensorTranspose(tokens)), 1);
+        return Engine.TensorAdd(queries, Engine.TensorMatMul(weights, tokens));
     }
 
     /// <summary>
     /// Forwards through the captioning decoder layers.
     /// </summary>
-    private Tensor<T> ForwardCaptioningDecoder(Tensor<T> input)
+    internal Tensor<T> ForwardCaptioningDecoder(Tensor<T> input)
     {
         if (!_options.IncludeCaptioningDecoder)
             return input;

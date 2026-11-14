@@ -229,8 +229,7 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
     {
         if (image is null) throw new ArgumentNullException(nameof(image));
         var generated = GenerateFromImage(image, task, taskInput);
-        var ids = new int[generated.Length];
-        for (int i = 0; i < ids.Length; i++) ids[i] = (int)Math.Round(NumOps.ToDouble(generated[i]));
+        int[] ids = Engine.TensorRound(generated).Cast<int>().ToArray();
         return ParseAnswer(ids, image.Shape[image.Rank - 1], image.Shape[image.Rank - 2]);
     }
 

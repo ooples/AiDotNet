@@ -322,10 +322,8 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     {
         var ie = EncodeImage(image);
         var te = EncodeTexts(labels);
-        var logits = new Tensor<T>([labels.Length]);
-        for (int i = 0; i < labels.Length; i++)
-            logits[i] = NumOps.Multiply(CosineSimilarity(ie, te[i]), _logitScale.Scale);
-        var probs = Softmax(logits);
+        var logits = Engine.TensorMultiplyScalar(EmbeddingScores<T>.CosineToEach(Engine, ie, te), _logitScale.Scale);
+        T[] probs = Softmax(logits).ToArray();
         var r = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             r[labels[i]] = probs[i];
@@ -474,9 +472,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
             throw new InvalidOperationException("Tokenizer not initialized.");
         var enc = _tokenizer.Encode(text);
         int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength);
-        var tk = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++)
-            tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        var tk = TokenIdsToTensor(enc.TokenIds, sl);
         return tk;
     }
 
