@@ -641,19 +641,58 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     {
         int numPos = posScores.Shape[0];
         int numNeg = negScores.Shape[0];
-        int totalPairs = numPos * numNeg;
-        if (totalPairs == 0)
+        if (numPos == 0 || numNeg == 0)
         {
             return 0.5;
         }
 
-        // Count (positive, negative) pairs where the positive edge scores strictly higher
-        var pairShape = new[] { numPos, numNeg };
-        var pos = Engine.TensorBroadcastTo(posScores.Reshape(numPos, 1), pairShape);
-        var neg = Engine.TensorBroadcastTo(negScores.Reshape(1, numNeg), pairShape);
-        int correctRankings = Engine.TensorCountNonzero(Engine.TensorGreaterThan(pos, neg));
+        long correctRankings = CountCorrectRankings(posScores, negScores, MaxAucPairsPerBlock);
+        return (double)correctRankings / ((long)numPos * numNeg);
+    }
 
-        return (double)correctRankings / totalPairs;
+    /// <summary>
+    /// Largest [positives, negatives] comparison block <see cref="ComputeAUC"/> materialises at once.
+    /// </summary>
+    private const int MaxAucPairsPerBlock = 1 << 20;
+
+    /// <summary>
+    /// Number of (positive, negative) pairs where the positive edge scores strictly higher.
+    /// </summary>
+    /// <remarks>
+    /// The positives are compared in blocks of at most <paramref name="maxPairsPerBlock"/> pairs, so the
+    /// comparison never allocates the whole [numPos, numNeg] grid: a few thousand validation edges on each
+    /// side would otherwise cost gigabytes per epoch where the pairwise loop it replaced allocated nothing,
+    /// and the pair count is kept in a long because numPos * numNeg passes int.MaxValue at 46341 edges a side.
+    /// </remarks>
+    internal static long CountCorrectRankings(Tensor<T> posScores, Tensor<T> negScores, int maxPairsPerBlock)
+    {
+        if (maxPairsPerBlock < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxPairsPerBlock));
+        }
+
+        var engine = AiDotNetEngine.Current;
+        int numPos = posScores.Shape[0];
+        int numNeg = negScores.Shape[0];
+        if (numPos == 0 || numNeg == 0)
+        {
+            return 0;
+        }
+
+        int blockRows = Math.Max(1, maxPairsPerBlock / numNeg);
+        var negRow = negScores.Contiguous().Reshape(1, numNeg);
+        long correct = 0;
+        for (int start = 0; start < numPos; start += blockRows)
+        {
+            int rows = Math.Min(blockRows, numPos - start);
+            var pairShape = new[] { rows, numNeg };
+            var pos = engine.TensorBroadcastTo(
+                engine.TensorNarrow(posScores, 0, start, rows).Contiguous().Reshape(rows, 1), pairShape);
+            var neg = engine.TensorBroadcastTo(negRow, pairShape);
+            correct += engine.TensorCountNonzero(engine.TensorGreaterThan(pos, neg));
+        }
+
+        return correct;
     }
 
     #region Abstract Method Implementations
