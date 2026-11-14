@@ -73,9 +73,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             if (hits.Count == 0)
                 return new List<Document<T>>();
 
-            var membership = Engine.TensorOneHot<T>(new Tensor<int>(hits.ToArray(), [hits.Count]), documents.Count);
-            var totals = Engine.TensorMatMul(
-                new Tensor<T>(hitScores.ToArray(), [1, hitScores.Count]), membership).ToArray();
+            // Segmented sum per document: linear in the hits, no [hits x documents] membership matrix.
+            var totals = Engine.ScatterAdd(
+                new Tensor<T>(hitScores.ToArray(), [hitScores.Count]), new Tensor<int>(hits.ToArray(), [hits.Count]), 0, documents.Count).ToArray();
 
             return documents
                 .Select((doc, i) => (doc, score: totals[i]))

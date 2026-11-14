@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
@@ -236,6 +237,57 @@ public class RetrievalPaperReferenceTests
         Assert.Equal(1.0 / 61, fused[0].RelevanceScore, Tolerance);
         Assert.Equal(1.0 / 61, fused[1].RelevanceScore, Tolerance);
         Assert.Equal(1.0 / (60 + perList), fused[fused.Count - 1].RelevanceScore, Tolerance);
+    }
+
+    /// <summary>Returns one shared hit (score 0.25) plus a disjoint block of hits (score 0.5) per call.</summary>
+    private sealed class DisjointBlockRetriever : IRetriever<double>
+    {
+        private readonly int _perCall;
+
+        public DisjointBlockRetriever(int perCall) => _perCall = perCall;
+
+        public int Calls { get; private set; }
+        public int DefaultTopK => _perCall + 1;
+        public IEnumerable<Document<double>> Retrieve(string query) => Retrieve(query, DefaultTopK);
+        public IEnumerable<Document<double>> Retrieve(string query, int topK) => Retrieve(query, topK, new Dictionary<string, object>());
+
+        public IEnumerable<Document<double>> Retrieve(string query, int topK, Dictionary<string, object> metadataFilters)
+        {
+            int call = Calls++;
+            var hits = new List<Document<double>>(_perCall + 1)
+            {
+                new Document<double>("shared", "x") { RelevanceScore = 0.25, HasRelevanceScore = true }
+            };
+            for (int i = 0; i < _perCall; i++)
+                hits.Add(new Document<double>($"q{call}-{i}", "x") { RelevanceScore = 0.5, HasRelevanceScore = true });
+            return hits;
+        }
+
+        public System.Threading.Tasks.Task<IEnumerable<Document<double>>> RetrieveAsync(
+            string query, int topK, Dictionary<string, object>? metadataFilters = null,
+            System.Threading.CancellationToken cancellationToken = default)
+            => System.Threading.Tasks.Task.FromResult(Retrieve(query, topK, metadataFilters ?? new Dictionary<string, object>()));
+    }
+
+    /// <summary>
+    /// Multi-query CombSUM over disjoint 50,000-hit result lists: each document's score is the sum of its hit
+    /// scores, which must stay linear in the hits. The one-hot [hits x documents] membership used for the sum
+    /// had at least 10^10 entries here and could not be allocated.
+    /// </summary>
+    [Fact]
+    public void MultiQuery_LargeDisjointResults_SumScoresWithLinearMemory()
+    {
+        const int perCall = 50000;
+        var baseRetriever = new DisjointBlockRetriever(perCall);
+        var retriever = new MultiQueryRetriever<double>(baseRetriever, numQueries: 3);
+
+        var results = retriever.Retrieve("query", topK: perCall + 1).ToList();
+
+        Assert.True(baseRetriever.Calls >= 2);
+        Assert.Equal(perCall + 1, results.Count);
+        Assert.Equal("shared", results[0].Id);
+        Assert.Equal(0.25 * baseRetriever.Calls, results[0].RelevanceScore, Tolerance);
+        Assert.Equal(0.5, results[1].RelevanceScore, Tolerance);
     }
 
     private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)
