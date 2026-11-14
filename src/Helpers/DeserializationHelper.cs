@@ -253,6 +253,20 @@ public static class DeserializationHelper
 
         bool isShapeAgnosticLayer = genericDefForValidation == typeof(AiDotNet.NeuralNetworks.Layers.DropoutLayer<>);
 
+        // A GRU saved before ResetAfter existed applied the reset gate before the recurrent product. The generated
+        // factory below fills an absent constructor argument with the constructor's default (reset-after), and it
+        // accepts any metadata that names the hidden size, so the legacy placement has to be stated here: left to
+        // CreateGRULayer's fallback it was never reached, and such a checkpoint loaded as a different recurrence.
+        if (genericDefForValidation == typeof(GRULayer<>)
+            && (additionalParams is null
+                || !additionalParams.Keys.Any(key => string.Equals(key, "ResetAfter", StringComparison.OrdinalIgnoreCase))))
+        {
+            additionalParams = additionalParams is null
+                ? new Dictionary<string, object>()
+                : new Dictionary<string, object>(additionalParams, additionalParams.Comparer);
+            additionalParams["ResetAfter"] = bool.FalseString;
+        }
+
         // Rebuild from saved constructor state when the layer declares it via [LayerState]. This
         // calls the layer's real constructor with the values it was originally given, so nothing is
         // inferred from inputShape -- which is what let a dynamic (-1) axis reach a constructor and

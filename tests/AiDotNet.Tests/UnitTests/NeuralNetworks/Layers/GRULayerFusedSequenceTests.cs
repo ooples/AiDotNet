@@ -120,6 +120,24 @@ public class GRULayerFusedSequenceTests
     }
 
     [Theory]
+    [InlineData(null, false)]      // a layer saved before the flag existed applied the reset gate before the product
+    [InlineData("False", false)]
+    [InlineData("True", true)]
+    public void Metadata_RebuildsTheSavedResetPlacement(string? savedResetAfter, bool expected)
+    {
+        var metadata = new Dictionary<string, object> { ["HiddenSize"] = "6", ["ReturnSequences"] = "True" };
+        if (savedResetAfter is not null) metadata["ResetAfter"] = savedResetAfter;
+
+        var layer = AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>(
+            layerType: typeof(GRULayer<>).Name,
+            inputShape: new[] { Batch, Steps, Inputs },
+            outputShape: new[] { Batch, Steps, Hidden },
+            additionalParams: metadata);
+
+        Assert.Equal(expected, Assert.IsType<GRULayer<double>>(layer).ResetAfter);
+    }
+
+    [Theory]
     [InlineData(false, true)]
     [InlineData(true, true)]
     [InlineData(false, false)]
