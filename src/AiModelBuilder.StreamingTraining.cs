@@ -194,9 +194,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             _model.Predict((TInput)(object)dummyInput);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException && ex is not OutOfMemoryException)
         {
-            // Best-effort lazy shape resolution; any genuine shape mismatch will surface on the first real training batch.
+            // Best-effort lazy shape resolution; a genuine shape mismatch surfaces on the first real training batch, and
+            // a distributed run whose layers stayed unmaterialized fails the ranks' layout agreement before the first
+            // parameter broadcast. The cause is recorded so either failure can be traced back here.
+            System.Diagnostics.Trace.TraceWarning(
+                $"[AiDotNet] Streaming lazy initialization failed for {neuralNet.GetType().FullName}: {ex}");
         }
         finally
         {
