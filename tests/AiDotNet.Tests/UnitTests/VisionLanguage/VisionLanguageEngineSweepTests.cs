@@ -117,6 +117,7 @@ public class VisionLanguageEngineSweepTests
 
         var logits = model.GenerateCaption(Random(12, 3, 32, 32));
 
+        Assert.Equal(new[] { 3, 40 }, logits.Shape.ToArray());
         Assert.Equal(3 * 40, logits.Length);
         for (int i = 0; i < logits.Length; i++)
             Assert.False(double.IsNaN(logits[i]) || double.IsInfinity(logits[i]));

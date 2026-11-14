@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -76,6 +77,8 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     private int _encoderLayerEnd;
     private readonly List<ILayer<T>> _groundingHeadLayers = new();
     private OwlDetectionHead<T>? _groundingHead;
+    // The ViT patch embedding of the default backbone (null with a custom architecture, whose own layers take the image).
+    private PatchEmbeddingLayer<T>? _patchEmbedding;
 
     public OWLv2(
         NeuralNetworkArchitecture<T> architecture,
@@ -134,7 +137,7 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return L2Normalize(OnnxModel.Run(p));
-        var c = p;
+        var c = PatchTokens(p);
         for (int i = 0; i < _encoderLayerEnd; i++)
             c = Layers[i].Forward(c);
         return L2Normalize(c);
@@ -185,7 +188,7 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     private OwlPrediction<T> Detect(Tensor<T> image, string textQuery)
     {
         var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
-        var patches = GroundingHeadModule<T>.AsRows(Engine, Layers[0].Forward(PreprocessImage(image)));
+        var patches = GroundingHeadModule<T>.AsRows(Engine, Layers[0].Forward(PatchTokens(PreprocessImage(image))));
         var visualFeatures = Engine.TensorConcatenate(new[] { head.ClassToken(), patches }, 0);
         visualFeatures = visualFeatures.Reshape(new[] { 1, visualFeatures.Shape[0], visualFeatures.Shape[1] });
         for (int i = 1; i < _encoderLayerEnd; i++)
@@ -201,10 +204,23 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         return GroundText(image, combined);
     }
 
+    // The image as ViT patch tokens [1, (H / PatchSize) * (W / PatchSize), VisionDim], in row-major grid order, for the
+    // default backbone: its first layer is the linear projection of patch tokens, so a raw image fed to it was
+    // projected per channel scanline and the box head's grid was 1 x (C * H) instead of the patch grid.
+    private Tensor<T> PatchTokens(Tensor<T> preprocessed)
+    {
+        if (_patchEmbedding is null) return preprocessed;
+        var image = preprocessed.Rank == 4 ? preprocessed : preprocessed.Reshape(new[] { 1 }.Concat(preprocessed.Shape.ToArray()).ToArray());
+        return _patchEmbedding.Forward(image);
+    }
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
             return;
+        if (_options.PatchSize <= 0 || _options.PatchSize > _options.ImageSize)
+            throw new ArgumentOutOfRangeException(nameof(_options.PatchSize),
+                $"PatchSize must lie in [1, ImageSize = {_options.ImageSize}], got {_options.PatchSize}.");
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -226,6 +242,11 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
                 )
             );
             ComputeEncoderDecoderBoundary();
+            if (_patchEmbedding is null)
+            {
+                _patchEmbedding = new PatchEmbeddingLayer<T>(_options.PatchSize, _options.VisionDim, expectedInputChannels: 3);
+                _groundingHeadLayers.Add(_patchEmbedding);
+            }
         }
         if (_groundingHead is null)
         {
@@ -241,7 +262,7 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     private void ComputeEncoderDecoderBoundary()
     {
         // Each vision block is one residual TransformerEncoderLayer (+ an optional DropoutLayer);
-        // the encoder prefix is the linear input projection (patch-embedding stand-in) and the
+        // the encoder prefix is the linear projection of the patch tokens (PatchTokens embeds an image) and the
         // trailing prefix is the final encoder LayerNorm — 2 non-block layers total.
         int lpb = _options.DropoutRate > 0 ? 2 : 1;
         _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;

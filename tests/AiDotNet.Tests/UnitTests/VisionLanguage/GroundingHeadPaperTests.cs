@@ -312,6 +312,50 @@ public class GroundingHeadPaperTests
     }
 
     [Fact]
+    public void Shikra_DefaultLanguageModel_IsCausalWithRotaryPositions()
+    {
+        // LLaMA's attention: without a causal mask and positions the instruction was an unordered set of tokens.
+        var architecture = new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.ObjectDetection, inputSize: 32, outputSize: 4);
+        using var model = new Shikra<double>(architecture, new ShikraOptions
+        {
+            ImageSize = 28, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 2, NumHeads = 4,
+            VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 4, DropoutRate = 0.0,
+        });
+
+        var attention = model.Layers.OfType<MultiHeadAttentionLayer<double>>().ToList();
+        var decoder = attention.Skip(attention.Count - 2).ToList();
+        Assert.Equal(2, decoder.Count);
+        Assert.All(decoder, layer =>
+        {
+            Assert.True(layer.UseCausalMask);
+            Assert.Equal(PositionalEncodingType.Rotary, layer.PositionalEncoding);
+        });
+        // The vision tower's attention stays bidirectional.
+        Assert.All(attention.Take(attention.Count - 2), layer => Assert.False(layer.UseCausalMask));
+    }
+
+    [Fact]
+    public void Owlv2_GroundText_PredictsOneBoxPerPatchOfTheSquareGrid()
+    {
+        // A 28 x 28 image in 14-pixel patches is a 2 x 2 grid: four patch tokens, so four detections when nothing is
+        // thresholded or suppressed. The front layer used to project the raw image per channel scanline, 3 x 28 rows.
+        var architecture = new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.ObjectDetection, inputSize: 32, outputSize: 4);
+        using var model = new OWLv2<double>(architecture, new OWLv2Options
+        {
+            ImageSize = 28, PatchSize = 14, VisionDim = 32, TextEmbeddingDim = 32, DecoderDim = 32, DetectionDim = 32,
+            NumVisionLayers = 1, NumFusionLayers = 1, NumDecoderLayers = 1, NumHeads = 4, NumTextLayers = 1,
+            VocabSize = 64, MaxSequenceLength = 8, MaxDetections = 100, NumClassEmbeddings = 32, DropoutRate = 0.0,
+            ConfidenceThreshold = 0.0, NmsThreshold = 1.0,
+        });
+
+        var detections = model.GroundText(Random(9, 1, 3, 28, 28), "cat");
+
+        Assert.Equal(4 * 5, detections.Length);
+    }
+
+    [Fact]
     public void OwlHead_MergesTheClassTokenIntoThePatches_ThenNormalizes()
     {
         var head = new OwlDetectionHead<double>(Engine, new List<ILayer<double>>(), 2,
