@@ -558,6 +558,41 @@ public class AttackReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task CW_ScoresTheCandidateOfTheFinalAdamStep()
+    {
+        await Task.Yield();
+
+        // One iteration from x = 0.5 (w = 0): Adam's first step moves w by -lr * sign(g) with
+        // g = (2, -2.25, -1.5, 3.5) / 2, so w = (-1, 1, 1, -1) and x' = (0.12, 0.88, 0.88, 0.12), where
+        // z = (-0.75, 1.60) is class 1. The loop only scored the pre-step candidate, so it returned x.
+        var model = SteepModel();
+        var x = new[] { 0.5, 0.5, 0.5, 0.5 };
+        var attack = new CWAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>
+        {
+            Iterations = 1,
+            CWConstant = 1.0,
+            CWLearningRate = 1.0
+        });
+
+        var adversarial = attack.GenerateAdversarialExample(new Vector<double>(x), OneHot(0, 2), model);
+
+        Assert.Equal(1, ArgMax(model.Logits(adversarial.ToArray())));
+        double expected = (Math.Tanh(1.0) + 1.0) / 2.0;
+        Assert.Equal(new[] { 1 - expected, expected, expected, 1 - expected }, adversarial.ToArray(), new AbsoluteComparer(1e-6));
+    }
+
+    private sealed class AbsoluteComparer : IEqualityComparer<double>
+    {
+        private readonly double _tolerance;
+
+        public AbsoluteComparer(double tolerance) => _tolerance = tolerance;
+
+        public bool Equals(double x, double y) => Math.Abs(x - y) <= _tolerance;
+
+        public int GetHashCode(double obj) => 0;
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task HalfCW_AdamStaysBoundedWhenTheSquaredGradientUnderflows()
     {
         // Pixel 2 barely matters (|g| ~ 1e-3): (1 - beta2) g^2 ~ 1e-9 underflows to 0 in Half, and so does the
