@@ -101,6 +101,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// </summary>
     private int _previousT;
 
+    /// <inheritdoc />
+    internal override bool SupportsShardedTapeStateConsolidation =>
+        _options.MomentStorage != Enums.OptimizerMomentStorage.Int8Blockwise;
+
     /// <summary>
     /// Initializes a new instance of the AdamWOptimizer class.
     /// </summary>
@@ -782,16 +786,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 continue;
             }
 
-            if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
-            {
-                m = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeM[param] = m;
-            }
-            if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
-            {
-                v = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeV[param] = v;
-            }
+            var m = GetOrCreateShapedOptimizerStateTensor(_tapeM, param, gpuAdam);
+            var v = GetOrCreateShapedOptimizerStateTensor(_tapeV, param, gpuAdam);
 
             // Sparse-embedding scatter path (Tensors#553). Same rationale as the
             // AdamOptimizer path — only the ~16 accessed rows of a 250 002-vocab
@@ -827,18 +823,18 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
 
             // GPU-resident fused AdamW: promotes deserialized/host m and v to GPU once, uploads host-only
             // gradients in-place into reusable per-parameter GPU buffers, and commits updated parameters on device.
-            if (gpuAdam && gpuEngine is not null && gpuBackend is not null && param.Length == grad.Length)
+            if (gpuEngine is not null &&
+                gpuBackend is not null &&
+                param.Length == grad.Length &&
+                TryExecuteGpuAdamOrAdamWStep(
+                    gpuEngine, gpuBackend, param,
+                    (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
+                    (Tensor<float>)(object)m, (Tensor<float>)(object)v,
+                    (float)learningRateValue, (float)_options.Beta1, (float)_options.Beta2,
+                    (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep,
+                    decoupledWeightDecay: true))
             {
-                if (TryExecuteGpuAdamOrAdamWStep(
-                        gpuEngine, gpuBackend, param,
-                        (Tensor<float>)(object)param, (Tensor<float>)(object)grad,
-                        (Tensor<float>)(object)m, (Tensor<float>)(object)v,
-                        (float)learningRateValue, (float)_options.Beta1, (float)_options.Beta2,
-                        (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep,
-                        decoupledWeightDecay: true))
-                {
-                    continue;
-                }
+                continue;
             }
 
             // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),

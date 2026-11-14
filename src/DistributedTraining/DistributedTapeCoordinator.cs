@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -58,34 +56,9 @@ namespace AiDotNet.DistributedTraining;
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric element type.</typeparam>
-public sealed class DistributedTapeCoordinator<T> : IDisposable
+internal sealed class DistributedTapeCoordinator<T> : IDisposable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    private static readonly FieldInfo? TapeParameterIndicesField =
-        typeof(GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>).GetField(
-            "_tapeParameterIndices",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-    private static readonly FieldInfo? PendingTapeTensorStatesField =
-        typeof(GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>).GetField(
-            "_pendingTapeTensorStates",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-    private static readonly FieldInfo? TapeStateSyncField =
-        typeof(GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>).GetField(
-            "_tapeStateSync",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-    private static readonly FieldInfo? GradientsClippedAheadField =
-        typeof(GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>).GetField(
-            "_gradientsClippedAhead",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-    private static readonly MethodInfo? TransientTapeTensorStatesMethod =
-        typeof(GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>).GetMethod(
-            "TransientTapeTensorStates",
-            BindingFlags.Instance | BindingFlags.NonPublic);
 
     private readonly Vector<T> _metadataBuffer = new Vector<T>(2);
     private readonly Vector<T> _singleElementBuffer = new Vector<T>(1);
@@ -139,10 +112,9 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         ValidateStrategy(strategy);
         Strategy = strategy;
 
-        var concreteConfig = configuration as ShardingConfiguration<T>;
-        OverlapCommunication = concreteConfig?.OverlapCommunication ?? true;
-        GradientBucketSizeBytes = concreteConfig is not null && concreteConfig.GradientBucketSizeBytes > 0
-            ? concreteConfig.GradientBucketSizeBytes
+        OverlapCommunication = configuration?.OverlapCommunication ?? true;
+        GradientBucketSizeBytes = configuration is not null && configuration.GradientBucketSizeBytes > 0
+            ? configuration.GradientBucketSizeBytes
             : 25 * 1024 * 1024;
 
         if (!Backend.IsInitialized)
@@ -248,6 +220,11 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
     }
 
     /// <summary>
+    /// Gets a value indicating whether initial parameters have already been synchronized at least once since creation or reset.
+    /// </summary>
+    public bool HasSynchronizedInitialParameters => _syncedParamSnapshot is not null;
+
+    /// <summary>
     /// Clears the cached initial-parameter broadcast marker so the next call to
     /// <see cref="EnsureInitialParametersSynchronized"/> re-broadcasts Rank 0's parameters.
     /// </summary>
@@ -256,6 +233,104 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         ThrowIfDisposed();
         _syncedParamSnapshot = null;
         _lastShardedParamsRef = null;
+    }
+
+    /// <summary>
+    /// Coordinates lazy-layer warmup shapes across ranks so idle ranks (receiving an empty batch on the first step)
+    /// can materialize lazy parameter shapes identically to active ranks before <see cref="EnsureInitialParametersSynchronized"/>.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Exchanges tensor rank shape metadata (1-8 dimensions) across ranks for lazy warmup")]
+    internal bool CoordinateLazyWarmupShapes(
+        bool localNeedsWarmup,
+        int[]? localInputShape,
+        int[]? localTargetShape,
+        out int[]? donorInputShape,
+        out int[]? donorTargetShape)
+    {
+        ThrowIfDisposed();
+        donorInputShape = null;
+        donorTargetShape = null;
+
+        bool hasNonEmptyLocal = localInputShape is { Length: > 0 } && localTargetShape is { Length: > 0 };
+        if (WorldSize <= 1)
+        {
+            if (localNeedsWarmup && hasNonEmptyLocal)
+            {
+                donorInputShape = localInputShape;
+                donorTargetShape = localTargetShape;
+                return true;
+            }
+
+            return false;
+        }
+
+        EnsureBackendInitialized();
+        var flags = new Vector<T>(2);
+        {
+            Span<T> flagSpan = flags.AsWritableSpan();
+            flagSpan[0] = NumOps.FromDouble(localNeedsWarmup ? 1.0 : 0.0);
+            flagSpan[1] = NumOps.FromDouble(hasNonEmptyLocal ? (WorldSize - Rank) : 0.0);
+        }
+
+        Backend.AllReduce(flags, ReductionOperation.Max);
+        ReadOnlySpan<T> flagRead = flags.AsSpan();
+        bool anyNeedsWarmup = NumOps.ToDouble(flagRead[0]) > 0.5;
+        int donorScore = (int)Math.Round(NumOps.ToDouble(flagRead[1]));
+        if (!anyNeedsWarmup || donorScore <= 0)
+        {
+            return false;
+        }
+
+        int donorRank = WorldSize - donorScore;
+        var rankDims = new Vector<T>(2);
+        if (Rank == donorRank && localInputShape is not null && localTargetShape is not null)
+        {
+            Span<T> dimSpan = rankDims.AsWritableSpan();
+            dimSpan[0] = NumOps.FromDouble(localInputShape.Length);
+            dimSpan[1] = NumOps.FromDouble(localTargetShape.Length);
+        }
+
+        Backend.AllReduce(rankDims, ReductionOperation.Max);
+        ReadOnlySpan<T> dimRead = rankDims.AsSpan();
+        int inRank = (int)Math.Round(NumOps.ToDouble(dimRead[0]));
+        int tgtRank = (int)Math.Round(NumOps.ToDouble(dimRead[1]));
+        if (inRank <= 0 || tgtRank <= 0)
+        {
+            return false;
+        }
+
+        var shapeValues = new Vector<T>(inRank + tgtRank);
+        if (Rank == donorRank && localInputShape is not null && localTargetShape is not null)
+        {
+            Span<T> valSpan = shapeValues.AsWritableSpan();
+            for (int i = 0; i < inRank; i++)
+            {
+                valSpan[i] = NumOps.FromDouble(localInputShape[i]);
+            }
+
+            for (int i = 0; i < tgtRank; i++)
+            {
+                valSpan[inRank + i] = NumOps.FromDouble(localTargetShape[i]);
+            }
+        }
+
+        Backend.AllReduce(shapeValues, ReductionOperation.Max);
+        ReadOnlySpan<T> valRead = shapeValues.AsSpan();
+        var resolvedIn = new int[inRank];
+        var resolvedTgt = new int[tgtRank];
+        for (int i = 0; i < inRank; i++)
+        {
+            resolvedIn[i] = (int)Math.Round(NumOps.ToDouble(valRead[i]));
+        }
+
+        for (int i = 0; i < tgtRank; i++)
+        {
+            resolvedTgt[i] = (int)Math.Round(NumOps.ToDouble(valRead[inRank + i]));
+        }
+
+        donorInputShape = resolvedIn;
+        donorTargetShape = resolvedTgt;
+        return true;
     }
 
     /// <summary>
@@ -282,11 +357,10 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             return;
         }
 
-        _syncedParamSnapshot = uniqueParams;
-        _lastShardedParamsRef = null;
-
         if (WorldSize <= 1 || totalElements <= 0)
         {
+            _syncedParamSnapshot = uniqueParams;
+            _lastShardedParamsRef = null;
             return;
         }
 
@@ -308,6 +382,8 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         flat = Backend.Broadcast(flat, root: 0);
         UnpackVectorIntoParameters(flat.AsSpan().Slice(0, totalElements), uniqueParams, preserveGpuWeightBuffers: false);
         invalidateCaches?.Invoke();
+        _syncedParamSnapshot = uniqueParams;
+        _lastShardedParamsRef = null;
     }
 
     /// <summary>
@@ -407,8 +483,8 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             _stepExposedCommMilliseconds = 0.0;
         }
 
-        EnsureReducer(trainableParameters);
-        _reducer!.BeginStep(rankWeight);
+        var reducer = EnsureReducer(trainableParameters);
+        reducer.BeginStep(rankWeight);
         _backwardStepBegun = true;
     }
 
@@ -560,6 +636,13 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             throw new ArgumentNullException(nameof(gradients));
         }
 
+        if (optimizer is null && executeFullParameterStep is null)
+        {
+            throw new ArgumentException(
+                "Either optimizer or executeFullParameterStep must be provided to SynchronizeUnscaleClipAndStep.",
+                nameof(optimizer));
+        }
+
         if (_stepStartTimestamp == 0L)
         {
             _stepStartTimestamp = Stopwatch.GetTimestamp();
@@ -567,17 +650,17 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             _stepExposedCommMilliseconds = 0.0;
         }
 
-        EnsureReducer(trainableParameters);
+        var reducer = EnsureReducer(trainableParameters);
         if (!_backwardStepBegun)
         {
             double defaultWeight = WorldSize <= 1 ? 1.0 : 1.0 / WorldSize;
-            _reducer!.BeginStep(defaultWeight);
+            reducer.BeginStep(defaultWeight);
         }
 
         // (a) Flush & synchronize GradientBucketReducer (AllReduce for DDP/ZeRO1, ReduceScatter for ZeRO2/FSDP).
-        _reducer!.FlushAndSynchronize(gradients, out Vector<T>? reducedLocalShard);
-        _stepCommMilliseconds += _reducer.LastTotalCollectiveMilliseconds;
-        _stepExposedCommMilliseconds += _reducer.LastExposedWaitMilliseconds;
+        reducer.FlushAndSynchronize(gradients, out Vector<T>? reducedLocalShard);
+        _stepCommMilliseconds += reducer.LastTotalCollectiveMilliseconds;
+        _stepExposedCommMilliseconds += reducer.LastExposedWaitMilliseconds;
 
         var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
         int worldSize = Math.Max(1, WorldSize);
@@ -602,11 +685,11 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             shardGradTensor.IncrementVersion();
         }
 
-        // (b) Mixed-precision unscale (1.0 / scale) + NaN/Inf overflow detection.
+        // (b) Mixed-precision unscale (1.0 / scale) + cross-rank NaN/Inf overflow consensus.
         if (mixedPrecisionContext is not null)
         {
             double scale = mixedPrecisionContext.LossScaler?.Scale ?? 1.0;
-            double invScale = scale != 0.0 ? 1.0 / scale : 1.0;
+            double invScale = !IsZeroDouble(scale) ? 1.0 / scale : 1.0;
             bool hasOverflow = false;
 
             if (UseReduceScatter)
@@ -615,33 +698,33 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                 {
                     hasOverflow = UnscaleAndDetectOverflow(shardGradTensor, invScale);
                 }
-
-                if (WorldSize > 1)
-                {
-                    _singleElementBuffer.AsWritableSpan()[0] = NumOps.FromDouble(hasOverflow ? 1.0 : 0.0);
-
-                    long t0 = Stopwatch.GetTimestamp();
-                    Backend.AllReduce(_singleElementBuffer, ReductionOperation.Max);
-                    long t1 = Stopwatch.GetTimestamp();
-                    double flagMs = (t1 - t0) * 1000.0 / Stopwatch.Frequency;
-                    _stepCommMilliseconds += flagMs;
-                    _stepExposedCommMilliseconds += flagMs;
-
-                    hasOverflow = NumOps.ToDouble(_singleElementBuffer.AsSpan()[0]) > 0.0;
-                }
             }
             else
             {
                 for (int i = 0; i < uniqueParams.Length; i++)
                 {
-                    if (gradients.TryGetValue(uniqueParams[i], out var grad) && grad is not null && grad.Length > 0)
+                    if (gradients.TryGetValue(uniqueParams[i], out var grad) &&
+                        grad is not null &&
+                        grad.Length > 0 &&
+                        UnscaleAndDetectOverflow(grad, invScale))
                     {
-                        if (UnscaleAndDetectOverflow(grad, invScale))
-                        {
-                            hasOverflow = true;
-                        }
+                        hasOverflow = true;
                     }
                 }
+            }
+
+            if (WorldSize > 1)
+            {
+                _singleElementBuffer.AsWritableSpan()[0] = NumOps.FromDouble(hasOverflow ? 1.0 : 0.0);
+
+                long t0 = Stopwatch.GetTimestamp();
+                Backend.AllReduce(_singleElementBuffer, ReductionOperation.Max);
+                long t1 = Stopwatch.GetTimestamp();
+                double flagMs = (t1 - t0) * 1000.0 / Stopwatch.Frequency;
+                _stepCommMilliseconds += flagMs;
+                _stepExposedCommMilliseconds += flagMs;
+
+                hasOverflow = NumOps.ToDouble(_singleElementBuffer.AsSpan()[0]) > 0.0;
             }
 
             if (hasOverflow)
@@ -735,14 +818,14 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         {
             if (myValidLen > 0)
             {
-                bool shardCreated = EnsureOwnedParamShard(myValidLen);
+                var (ownedShard, _, shardCreated) = EnsureOwnedParamShard(myValidLen);
                 bool mpRestoredBeforeStep = mixedPrecisionContext is not null && restoreFp32Masters is not null;
                 if (shardCreated || mpRestoredBeforeStep || !IsShardedParameterSliceUpToDate(uniqueParams, myStart, myValidLen))
                 {
-                    PackParameterSliceIntoShard(uniqueParams, myStart, myValidLen, _ownedParamShard!);
+                    PackParameterSliceIntoShard(uniqueParams, myStart, myValidLen, ownedShard);
                 }
 
-                EnsureOwnedParamShardGpuResident(_ownedParamShard!);
+                EnsureOwnedParamShardGpuResident(ownedShard);
             }
 
             double optClipNorm = gradOptBase is not null && !double.IsNaN(gradOptBase.TapeStepGradientClipNorm)
@@ -827,7 +910,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
 
                 if (gradOptBase is not null && optClipNorm > 0.0)
                 {
-                    GradientsClippedAheadField?.SetValue(gradOptBase, shardGradDict);
+                    gradOptBase.MarkGradientsClippedAhead(shardGradDict);
                 }
 
                 effectiveOptimizer.Step(new TapeStepContext<T>(
@@ -936,7 +1019,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             throw new ArgumentNullException(nameof(trainableParameters));
         }
 
-        var effectiveOptimizer = UnwrapGradientOptimizer(optimizer)!;
+        var effectiveOptimizer = UnwrapGradientOptimizer(optimizer) ?? optimizer;
 
         if (!IsShardedStrategy)
         {
@@ -946,16 +1029,24 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
-        if (uniqueParams.Length == 0 ||
-            totalElements <= 0 ||
-            effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
-            TapeParameterIndicesField is null ||
-            PendingTapeTensorStatesField is null ||
-            TapeStateSyncField is null)
+        if (uniqueParams.Length == 0 || totalElements <= 0)
         {
             return WorldSize <= 1 || Rank == 0
                 ? effectiveOptimizer.Serialize()
                 : Array.Empty<byte>();
+        }
+
+        if (effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
+            !gradOpt.SupportsShardedTapeStateConsolidation)
+        {
+            if (WorldSize <= 1)
+            {
+                return effectiveOptimizer.Serialize();
+            }
+
+            throw new NotSupportedException(
+                $"Sharded optimizer state consolidation across {WorldSize} ranks under {Strategy} is not supported for optimizer type '{effectiveOptimizer.GetType().Name}'. " +
+                "Use an element-aligned GradientBasedOptimizerBase (such as AdamOptimizer, AdamWOptimizer with Float32/BFloat16 moments, SGD, Lion, or RMSProp), or use DistributedStrategy.DDP.");
         }
 
         EnsureBackendInitialized();
@@ -965,19 +1056,19 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         int myStart = Rank * shardSize;
         int myValidLen = Math.Max(0, Math.Min(shardSize, totalElements - myStart));
 
-        var syncObj = TapeStateSyncField.GetValue(gradOpt) ?? new object();
-        var pendingStates = (Dictionary<string, Dictionary<int, Tensor<T>>>)PendingTapeTensorStatesField.GetValue(gradOpt)!;
-        var paramIndices = (ConcurrentDictionary<Tensor<T>, int>)TapeParameterIndicesField.GetValue(gradOpt)!;
-        var tapeFields = GetSortedTapeTensorStateFields(gradOpt.GetType());
-
+        string[] stateKeys = gradOpt.GetSortedTapeStateKeyNames();
         var consolidatedPerField = Rank == 0
-            ? new Dictionary<string, Dictionary<int, Tensor<T>>>(tapeFields.Length, StringComparer.Ordinal)
+            ? new Dictionary<string, Dictionary<int, Tensor<T>>>(stateKeys.Length, StringComparer.Ordinal)
             : null;
 
-        for (int f = 0; f < tapeFields.Length; f++)
+        for (int f = 0; f < stateKeys.Length; f++)
         {
-            var field = tapeFields[f];
-            Tensor<T>? localShardState = TryGetLocalShardMoment(gradOpt, field, pendingStates, syncObj, myValidLen, out bool disposeLocal);
+            string stateKey = stateKeys[f];
+            Tensor<T>? localShardState = gradOpt.TryExtractShardTapeStateTensor(
+                stateKey,
+                _ownedParamShard,
+                myValidLen,
+                out bool disposeLocal);
             try
             {
                 bool hasLocal = localShardState is not null;
@@ -1033,7 +1124,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
                         offset += param.Length;
                     }
 
-                    consolidatedPerField[field.Name] = perParamDict;
+                    consolidatedPerField[stateKey] = perParamDict;
                 }
             }
             finally
@@ -1050,41 +1141,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             return Array.Empty<byte>();
         }
 
-        lock (syncObj)
-        {
-            var savedIndices = new List<KeyValuePair<Tensor<T>, int>>(paramIndices);
-            var savedPending = new Dictionary<string, Dictionary<int, Tensor<T>>>(pendingStates, StringComparer.Ordinal);
-
-            try
-            {
-                paramIndices.Clear();
-                pendingStates.Clear();
-                if (consolidatedPerField is not null)
-                {
-                    foreach (var kvp in consolidatedPerField)
-                    {
-                        pendingStates[kvp.Key] = kvp.Value;
-                    }
-                }
-
-                return effectiveOptimizer.Serialize();
-            }
-            finally
-            {
-                pendingStates.Clear();
-                foreach (var kvp in savedPending)
-                {
-                    pendingStates[kvp.Key] = kvp.Value;
-                }
-
-                paramIndices.Clear();
-                for (int i = 0; i < savedIndices.Count; i++)
-                {
-                    var kvp = savedIndices[i];
-                    paramIndices[kvp.Key] = kvp.Value;
-                }
-            }
-        }
+        return gradOpt.SerializeWithConsolidatedTapeStates(consolidatedPerField);
     }
 
     private bool AllReduceAnyRankFlag(bool hasLocal)
@@ -1121,26 +1178,36 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             throw new ArgumentNullException(nameof(trainableParameters));
         }
 
+        var effectiveOptimizer = UnwrapGradientOptimizer(optimizer) ?? optimizer;
+        int totalElements = 0;
+        var uniqueParams = IsShardedStrategy
+            ? GetOrDeduplicateParameters(trainableParameters, out totalElements)
+            : Array.Empty<Tensor<T>>();
+
+        if (IsShardedStrategy &&
+            WorldSize > 1 &&
+            uniqueParams.Length > 0 &&
+            totalElements > 0 &&
+            (effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> checkGradOpt ||
+             !checkGradOpt.SupportsShardedTapeStateConsolidation))
+        {
+            throw new NotSupportedException(
+                $"Sharded optimizer state restoration across {WorldSize} ranks under {Strategy} is not supported for optimizer type '{effectiveOptimizer.GetType().Name}'. " +
+                "Use an element-aligned GradientBasedOptimizerBase (such as AdamOptimizer, AdamWOptimizer with Float32/BFloat16 moments, SGD, Lion, or RMSProp), or use DistributedStrategy.DDP.");
+        }
+
         byte[] payload = BroadcastBytePayload(rank0Bytes, root: 0);
         if (payload.Length == 0)
         {
             return;
         }
 
-        var effectiveOptimizer = UnwrapGradientOptimizer(optimizer)!;
         effectiveOptimizer.Deserialize(payload);
 
-        if (!IsShardedStrategy)
-        {
-            return;
-        }
-
-        var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
-        if (uniqueParams.Length == 0 ||
+        if (!IsShardedStrategy ||
+            uniqueParams.Length == 0 ||
             totalElements <= 0 ||
-            effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
-            PendingTapeTensorStatesField is null ||
-            TapeStateSyncField is null)
+            effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt)
         {
             return;
         }
@@ -1160,184 +1227,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             PackParameterSliceIntoShard(uniqueParams, myStart, myValidLen, _ownedParamShard);
         }
 
-        var syncObj = TapeStateSyncField.GetValue(gradOpt) ?? new object();
-        var pendingStates = (Dictionary<string, Dictionary<int, Tensor<T>>>)PendingTapeTensorStatesField.GetValue(gradOpt)!;
-
-        lock (syncObj)
-        {
-            if (pendingStates.Count == 0)
-            {
-                return;
-            }
-
-            if (myValidLen <= 0)
-            {
-                pendingStates.Clear();
-                return;
-            }
-
-            var fieldNames = new List<string>(pendingStates.Keys);
-            for (int f = 0; f < fieldNames.Count; f++)
-            {
-                string fieldName = fieldNames[f];
-                var perParamEntries = pendingStates[fieldName];
-                if (perParamEntries.Count == 0)
-                {
-                    pendingStates.Remove(fieldName);
-                    continue;
-                }
-
-                // If the checkpoint already contains a single pre-sharded entry matching myValidLen
-                // (when uniqueParams.Length > 1), preserve it directly; otherwise slice [myStart .. myStart + myValidLen)
-                // across canonical per-parameter entries [0 .. K-1].
-                if (uniqueParams.Length > 1 &&
-                    perParamEntries.Count == 1 &&
-                    perParamEntries.TryGetValue(0, out var singleEntry) &&
-                    singleEntry.Length == myValidLen &&
-                    singleEntry.Length != uniqueParams[0].Length)
-                {
-                    continue;
-                }
-
-                var shardMoment = new Tensor<T>(new[] { myValidLen });
-                Span<T> dstSpan = shardMoment.AsWritableSpan();
-                int paramOffset = 0;
-                int myEnd = myStart + myValidLen;
-
-                for (int pIdx = 0; pIdx < uniqueParams.Length; pIdx++)
-                {
-                    int paramLen = uniqueParams[pIdx].Length;
-                    int paramEnd = paramOffset + paramLen;
-
-                    int overlapStart = Math.Max(paramOffset, myStart);
-                    int overlapEnd = Math.Min(paramEnd, myEnd);
-                    if (overlapEnd > overlapStart)
-                    {
-                        int count = overlapEnd - overlapStart;
-                        int dstIndex = overlapStart - myStart;
-                        int srcIndex = overlapStart - paramOffset;
-
-                        if (perParamEntries.TryGetValue(pIdx, out var paramState) && paramState is not null)
-                        {
-                            if (paramState.Length != paramLen)
-                            {
-                                throw new InvalidOperationException(
-                                    $"Consolidated optimizer state for '{fieldName}[{pIdx}]' has length {paramState.Length}, " +
-                                    $"expected parameter length {paramLen}.");
-                            }
-
-                            paramState.AsSpan().Slice(srcIndex, count).CopyTo(dstSpan.Slice(dstIndex, count));
-                        }
-                        else
-                        {
-                            dstSpan.Slice(dstIndex, count).Clear();
-                        }
-                    }
-
-                    paramOffset = paramEnd;
-                }
-
-                pendingStates[fieldName] = new Dictionary<int, Tensor<T>>(1)
-                {
-                    [0] = shardMoment
-                };
-            }
-        }
-    }
-
-    private Tensor<T>? TryGetLocalShardMoment(
-        GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt,
-        FieldInfo field,
-        Dictionary<string, Dictionary<int, Tensor<T>>> pendingStates,
-        object syncObj,
-        int myValidLen,
-        out bool disposeReturnedTensor)
-    {
-        disposeReturnedTensor = false;
-        if (myValidLen <= 0)
-        {
-            return null;
-        }
-
-        lock (syncObj)
-        {
-            if (field.GetValue(gradOpt) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeDict)
-            {
-                if (_ownedParamShard is not null && activeDict.TryGetValue(_ownedParamShard, out var shardTensor))
-                {
-                    return shardTensor;
-                }
-
-                if (activeDict.Count == 1)
-                {
-                    foreach (var kvp in activeDict)
-                    {
-                        if (kvp.Value.Length == myValidLen)
-                        {
-                            return kvp.Value;
-                        }
-                    }
-                }
-            }
-
-            if (pendingStates.TryGetValue(field.Name, out var pendingByIndex) &&
-                pendingByIndex.TryGetValue(0, out var pendingShard) &&
-                pendingShard.Length == myValidLen)
-            {
-                return pendingShard;
-            }
-
-            if (_ownedParamShard is not null && TransientTapeTensorStatesMethod is not null)
-            {
-                var transientEnumerable = TransientTapeTensorStatesMethod.Invoke(
-                    gradOpt,
-                    new object[] { field.Name }) as IEnumerable<(Tensor<T> Parameter, Func<Tensor<T>> Create)>;
-
-                if (transientEnumerable is not null)
-                {
-                    foreach (var item in transientEnumerable)
-                    {
-                        if (ReferenceEquals(item.Parameter, _ownedParamShard))
-                        {
-                            disposeReturnedTensor = true;
-                            return item.Create();
-                        }
-                    }
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private static FieldInfo[] GetSortedTapeTensorStateFields(Type optimizerType)
-    {
-        var fields = new List<FieldInfo>();
-        Type targetFieldType = typeof(ConcurrentDictionary<Tensor<T>, Tensor<T>>);
-
-        for (Type? current = optimizerType; current is not null && current != typeof(object); current = current.BaseType)
-        {
-            var declared = current.GetFields(
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
-
-            for (int i = 0; i < declared.Length; i++)
-            {
-                var field = declared[i];
-                if (field.FieldType == targetFieldType &&
-                    field.Name.StartsWith("_tape", StringComparison.Ordinal))
-                {
-                    fields.Add(field);
-                }
-            }
-        }
-
-        fields.Sort(static (a, b) =>
-        {
-            int typeCmp = string.CompareOrdinal(a.DeclaringType?.FullName ?? string.Empty, b.DeclaringType?.FullName ?? string.Empty);
-            return typeCmp != 0 ? typeCmp : string.CompareOrdinal(a.Name, b.Name);
-        });
-
-        return fields.ToArray();
+        gradOpt.ReshardPendingTapeStatesForLocalSlice(uniqueParams, myStart, myValidLen);
     }
 
     private byte[] BroadcastBytePayload(byte[]? rank0Bytes, int root)
@@ -1643,9 +1533,15 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         return sum;
     }
 
+    private static bool IsZeroDouble(double value) => !(Math.Abs(value) > 0.0);
+
+    private static bool IsUnitDouble(double value) => !(value < 1.0 || value > 1.0);
+
+    private static bool IsUnitFloat(float value) => !(value < 1.0f || value > 1.0f);
+
     private static void ScaleTensorInPlace(Tensor<T> tensor, double scale)
     {
-        if (tensor.Length == 0 || scale == 1.0)
+        if (tensor.Length == 0 || IsUnitDouble(scale))
         {
             return;
         }
@@ -1748,7 +1644,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         {
             float factor = (float)invScale;
             Span<float> span = tf.AsWritableSpan();
-            if (factor != 1.0f)
+            if (!IsUnitFloat(factor))
             {
 #if !AIDN_LEGACY_TFM
                 TensorPrimitives.Multiply(span, factor, span);
@@ -1762,7 +1658,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         else if ((object)tensor is Tensor<double> td)
         {
             Span<double> span = td.AsWritableSpan();
-            if (invScale != 1.0)
+            if (!IsUnitDouble(invScale))
             {
 #if !AIDN_LEGACY_TFM
                 TensorPrimitives.Multiply(span, invScale, span);
@@ -1873,21 +1769,21 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         return overflow;
     }
 
-    private void EnsureReducer(IReadOnlyList<Tensor<T>> trainableParameters)
+    private GradientBucketReducer<T> EnsureReducer(IReadOnlyList<Tensor<T>> trainableParameters)
     {
-        if (_reducer is not null &&
-            _reducer.MatchesConfiguration(
+        if (_reducer is { } existing &&
+            existing.MatchesConfiguration(
                 trainableParameters,
                 GradientBucketSizeBytes,
                 OverlapCommunication,
                 UseReduceScatter))
         {
-            _reducer.GradientSlotProvider ??= GetOrCreateGradientSlot;
-            return;
+            existing.GradientSlotProvider ??= GetOrCreateGradientSlot;
+            return existing;
         }
 
         _reducer?.Dispose();
-        _reducer = new GradientBucketReducer<T>(
+        var created = new GradientBucketReducer<T>(
             Backend,
             trainableParameters,
             GradientBucketSizeBytes,
@@ -1896,21 +1792,25 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         {
             GradientSlotProvider = GetOrCreateGradientSlot
         };
+        _reducer = created;
+        return created;
     }
 
-    private bool EnsureOwnedParamShard(int validLength)
+    private (Tensor<T> Shard, Tensor<T>[] ShardList, bool Created) EnsureOwnedParamShard(int validLength)
     {
-        if (_ownedParamShard is not null &&
-            _ownedParamShard.Length == validLength &&
-            _ownedParamShardList is not null)
+        if (_ownedParamShard is { } existingShard &&
+            existingShard.Length == validLength &&
+            _ownedParamShardList is { } existingList)
         {
-            return false;
+            return (existingShard, existingList, false);
         }
 
-        _ownedParamShard = new Tensor<T>(new[] { validLength });
-        _ownedParamShardList = new[] { _ownedParamShard };
+        var createdShard = new Tensor<T>(new[] { validLength });
+        var createdList = new[] { createdShard };
+        _ownedParamShard = createdShard;
+        _ownedParamShardList = createdList;
         _lastShardedParamsRef = null;
-        return true;
+        return (createdShard, createdList, true);
     }
 
     private Tensor<T> EnsureShardGradTensor(int validLength)
@@ -1937,7 +1837,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             pf._gpuBuffer is { } shardBuf &&
             shardBuf.Handle != IntPtr.Zero &&
             pf._gpuBackend is { } gpuBack &&
-            pf._gpuBufferVersion == pf.GpuCacheVersion)
+            pf._gpuBufferVersion == pf.Version)
         {
             int srcOffset = pf._storageOffset;
             int required = Math.Max(srcOffset + validLength, shardBuf.Size);
@@ -2052,16 +1952,16 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         Tensor<float> gradFloat,
         bool isShardGrad)
     {
-        if (_gpuBufferBackend is not null && !ReferenceEquals(_gpuBufferBackend, gpuBackend))
+        if (_gpuBufferBackend is { } existingBackend && !ReferenceEquals(existingBackend, gpuBackend))
         {
             ReleasePersistentGpuBuffers();
         }
 
         _gpuBufferBackend = gpuBackend;
 
-        if (gradFloat.TryGetGpuBuffer() is { } alreadyBound &&
+        if (gradFloat.TryGetGpuBuffer() is not null &&
             ReferenceEquals(gradFloat._gpuBackend, gpuBackend) &&
-            gradFloat._gpuBufferVersion == gradFloat.GpuCacheVersion)
+            gradFloat._gpuBufferVersion == gradFloat.Version)
         {
             return;
         }

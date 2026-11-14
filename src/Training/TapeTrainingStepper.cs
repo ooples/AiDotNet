@@ -179,7 +179,7 @@ internal sealed class TapeTrainingStepper<T>
     internal static T EagerStep(FusedTrainingStepRequest<T> request, object? owner)
     {
         Guard.NotNull(request);
-        owner ??= ResolveOwnerFromDelegates(request.Forward, request.ComputeLoss, request.OnGradients);
+        owner ??= ResolveOwnerForRequest(request);
         foreach (var layer in request.Layers)
             layer.ZeroGrad();
 
@@ -256,7 +256,15 @@ internal sealed class TapeTrainingStepper<T>
         bool applyOptimizerRegularization = true)
     {
         Guard.NotNull(parameters);
-        return EagerObjectiveStep(() => parameters, objective, optimizer, onGradients, modelGradientClip, beforeUpdate,
+        var owner = ResolveOwner(parameters, objective, onGradients, beforeUpdate);
+        return EagerObjectiveStepCore(
+            () => parameters,
+            objective,
+            optimizer,
+            owner,
+            onGradients,
+            modelGradientClip,
+            beforeUpdate,
             applyOptimizerRegularization);
     }
 
@@ -274,9 +282,32 @@ internal sealed class TapeTrainingStepper<T>
         bool applyOptimizerRegularization = true)
     {
         Guard.NotNull(parameters);
+        var owner = ResolveOwner(null, parameters, objective, onGradients, beforeUpdate)
+            ?? TryResolveOwnerFromParameterProvider(parameters);
+        return EagerObjectiveStepCore(
+            parameters,
+            objective,
+            optimizer,
+            owner,
+            onGradients,
+            modelGradientClip,
+            beforeUpdate,
+            applyOptimizerRegularization);
+    }
+
+    private static T EagerObjectiveStepCore(
+        Func<IReadOnlyList<Tensor<T>>> parameters,
+        Func<Tensor<T>> objective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        object? owner,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
+        double modelGradientClip,
+        Action? beforeUpdate,
+        bool applyOptimizerRegularization)
+    {
+        Guard.NotNull(parameters);
         Guard.NotNull(objective);
         Guard.NotNull(optimizer);
-        var owner = ResolveOwnerFromDelegates(parameters, objective, onGradients, beforeUpdate);
         var placeholder = new Tensor<T>(new[] { 1 });
         return EagerTapeStep(
             objective,
@@ -358,82 +389,118 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(optimizer);
         Guard.Positive(microBatchCount);
 
-        var ownerNet = ResolveOwnerFromDelegates(microObjective, onGradients) as NeuralNetworks.NeuralNetworkBase<T>;
+        var ownerNet = ResolveOwner(parameters, microObjective, onGradients) as NeuralNetworks.NeuralNetworkBase<T>;
         if (ownerNet?.DistributedCoordinator is { } preCoord)
         {
             preCoord.EnsureInitialParametersSynchronized(parameters, ownerNet.InvalidateLayerWeightCaches);
         }
 
-        var engine = AiDotNetEngine.Current;
-        var accumulated = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
-        var reached = new List<Tensor<T>>(parameters.Count);
-        double lossSum = 0.0;
-        for (int i = 0; i < microBatchCount; i++)
+        var mpCtx = ownerNet?.ActiveMixedPrecisionContext;
+        List<float[]>? mpSnapshots = null;
+        List<Tensor<T>>? mpTargets = null;
+        bool mpRestored = true;
+
+        try
         {
-            using var tape = new GradientTape<T>();
-            var loss = microObjective(i);
-            if (loss is null)
-                throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
-            var gradients = tape.ComputeGradients(loss, parameters);
-            lossSum += loss.Length > 0 ? NumOps.ToDouble(loss[0]) : 0.0;
-            foreach (var parameter in parameters)
+            if (ownerNet is not null && mpCtx is not null)
             {
-                if (parameter is null || !gradients.TryGetValue(parameter, out var gradient))
-                    continue;
-                if (accumulated.TryGetValue(parameter, out var sum))
-                {
-                    engine.TensorAddInPlace(sum, gradient);
-                }
-                else
-                {
-                    // An owned copy: the gradient's own storage is recycled when this tape is disposed.
-                    accumulated[parameter] = new Tensor<T>(gradient.ToArray(), gradient.Shape.ToArray());
-                    reached.Add(parameter);
-                }
+                ownerNet.PrepareMixedPrecisionWorkingWeights(mpCtx, parameters, out mpSnapshots, out mpTargets, ref mpRestored);
             }
-        }
 
-        T inverseCount = NumOps.FromDouble(1.0 / microBatchCount);
-        foreach (var sum in accumulated.Values)
-            engine.TensorMultiplyScalarInPlace(sum, inverseCount);
-
-        T meanLoss = NumOps.FromDouble(lossSum / microBatchCount);
-        if (ownerNet?.DistributedCoordinator is { } distCoord)
-        {
-            return ExecuteDistributedAccumulatedObjectiveStep(
-                ownerNet,
-                distCoord,
-                parameters,
-                microBatchCount,
-                microObjective,
-                optimizer,
-                onGradients,
-                applyOptimizerRegularization,
-                accumulated,
-                lossSum,
-                inverseCount);
-        }
-        onGradients?.Invoke(accumulated);
-        RegularizeAndClip(optimizer, reached, accumulated,
-            applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null, modelClip: null);
-
-        // A line-searching optimizer re-evaluates the batch objective: the mean of the micro-objectives.
-        Tensor<T> MeanObjective()
-        {
-            Tensor<T>? total = null;
+            var engine = AiDotNetEngine.Current;
+            var accumulated = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+            var reached = new List<Tensor<T>>(parameters.Count);
+            double lossSum = 0.0;
             for (int i = 0; i < microBatchCount; i++)
             {
+                using var tape = new GradientTape<T>();
                 var loss = microObjective(i);
-                total = total is null ? loss : engine.TensorAdd(total, loss);
+                if (loss is null)
+                    throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
+                lossSum += loss.Length > 0 ? NumOps.ToDouble(loss[0]) : 0.0;
+                var lossForBackward = ownerNet is not null ? ownerNet.ScaleLossForMixedPrecision(mpCtx, loss) : loss;
+                var gradients = tape.ComputeGradients(lossForBackward, parameters);
+                foreach (var parameter in parameters)
+                {
+                    if (parameter is null || !gradients.TryGetValue(parameter, out var gradient))
+                        continue;
+                    if (accumulated.TryGetValue(parameter, out var sum))
+                    {
+                        engine.TensorAddInPlace(sum, gradient);
+                    }
+                    else
+                    {
+                        // An owned copy: the gradient's own storage is recycled when this tape is disposed.
+                        accumulated[parameter] = new Tensor<T>(gradient.ToArray(), gradient.Shape.ToArray());
+                        reached.Add(parameter);
+                    }
+                }
             }
-            return engine.TensorMultiplyScalar(total ?? new Tensor<T>(new[] { 1 }), inverseCount);
-        }
 
-        var placeholder = new Tensor<T>(new[] { 1 });
-        OptimizerUpdate(optimizer)(new TapeStepContext<T>(
-            reached, accumulated, meanLoss, placeholder, placeholder,
-            (_, _) => MeanObjective(), (value, _) => value, parameterBuffer: null));
-        return meanLoss;
+            T inverseCount = NumOps.FromDouble(1.0 / microBatchCount);
+            foreach (var sum in accumulated.Values)
+                engine.TensorMultiplyScalarInPlace(sum, inverseCount);
+
+            T meanLoss = NumOps.FromDouble(lossSum / microBatchCount);
+            if (ownerNet?.DistributedCoordinator is { } distCoord)
+            {
+                return ExecuteDistributedAccumulatedObjectiveStep(
+                    ownerNet,
+                    distCoord,
+                    parameters,
+                    microBatchCount,
+                    microObjective,
+                    optimizer,
+                    onGradients,
+                    applyOptimizerRegularization,
+                    accumulated,
+                    lossSum,
+                    inverseCount,
+                    () => NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored));
+            }
+
+            if (ownerNet is not null && mpCtx is not null)
+            {
+                bool hasOverflow = ownerNet.UnscaleAndCheckMixedPrecisionGradients(mpCtx, reached, accumulated);
+                NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+                if (hasOverflow)
+                {
+                    onGradients?.Invoke(accumulated);
+                    return meanLoss;
+                }
+            }
+
+            onGradients?.Invoke(accumulated);
+            RegularizeAndClip(optimizer, reached, accumulated,
+                applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null, modelClip: null);
+
+            // A line-searching optimizer re-evaluates the batch objective: the mean of the micro-objectives.
+            Tensor<T> MeanObjective()
+            {
+                Tensor<T>? total = null;
+                for (int i = 0; i < microBatchCount; i++)
+                {
+                    var loss = microObjective(i);
+                    total = total is null ? loss : engine.TensorAdd(total, loss);
+                }
+                return engine.TensorMultiplyScalar(total ?? new Tensor<T>(new[] { 1 }), inverseCount);
+            }
+
+            var placeholder = new Tensor<T>(new[] { 1 });
+            OptimizerUpdate(optimizer)(new TapeStepContext<T>(
+                reached, accumulated, meanLoss, placeholder, placeholder,
+                (_, _) => MeanObjective(), (value, _) => value, parameterBuffer: null));
+            if (ownerNet is not null && mpCtx is not null)
+            {
+                ownerNet.InvalidateLayerWeightCaches();
+            }
+
+            return meanLoss;
+        }
+        finally
+        {
+            NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+        }
     }
 
     /// <summary>
@@ -555,12 +622,11 @@ internal sealed class TapeTrainingStepper<T>
                 distNet, distCoord, objective, parameterProvider, update,
                 input, target, recomputeForward, recomputeLoss, hooks, objectiveTerms);
         }
-        if (objectiveTerms is null
-            && hooks?.Owner is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext: { } mpCtx } mpNet)
+        if (hooks?.Owner is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext: { } mpCtx } mpNet)
         {
             return ExecuteMixedPrecisionEagerTapeStep(
                 mpNet, mpCtx, objective, parameterProvider, update,
-                input, target, recomputeForward, recomputeLoss, hooks);
+                input, target, recomputeForward, recomputeLoss, hooks, objectiveTerms);
         }
         if (objectiveTerms is not null)
             return SummedTapeObjective<T>.Step(objectiveTerms, parameterProvider, update,
@@ -701,9 +767,18 @@ internal sealed class TapeTrainingStepper<T>
         var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         var parameters = new List<Tensor<T>>();
         foreach (var layer in request.Layers)
-            foreach (var parameter in layer.GetTrainableParameters())
-                if (parameter is not null && seen.Add(parameter))
-                    parameters.Add(parameter);
+        {
+            if (layer is ILayer<T> compositeLayer)
+            {
+                TapeTrainingStep<T>.CollectLayerParameters(compositeLayer, parameters, seen, materializedOnly: false);
+            }
+            else
+            {
+                foreach (var parameter in layer.GetTrainableParameters())
+                    if (parameter is not null && seen.Add(parameter))
+                        parameters.Add(parameter);
+            }
+        }
         if (request.ExtraParameters is not null)
             foreach (var parameter in request.ExtraParameters)
                 if (parameter is not null && seen.Add(parameter))
@@ -732,32 +807,76 @@ internal sealed class TapeTrainingStepper<T>
             engine.TensorMultiplyScalarInPlace(gradient, scale);
     }
 
-    private static object? ResolveOwnerFromDelegates(params Delegate?[] delegates)
+    private static object? ResolveOwnerForRequest(FusedTrainingStepRequest<T> request)
+    {
+        if (ResolveOwner(null, request.Forward, request.ComputeLoss, request.OnGradients) is { } directOwner)
+            return directOwner;
+
+        if (request.Layers.Count > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryResolveOwnerForLayers(request.Layers, out var layerOwner))
+        {
+            return layerOwner;
+        }
+
+        if (request.Selection is { Count: > 0 } selection
+            && NeuralNetworks.NeuralNetworkBase<T>.TryResolveOwnerForParameters(selection, out var selectionOwner))
+        {
+            return selectionOwner;
+        }
+
+        if (request.ExtraParameters is { Count: > 0 } extras
+            && NeuralNetworks.NeuralNetworkBase<T>.TryResolveOwnerForParameters(extras, out var extrasOwner))
+        {
+            return extrasOwner;
+        }
+
+        var trained = TrainedParameters(request);
+        if (trained.Count > 0
+            && NeuralNetworks.NeuralNetworkBase<T>.TryResolveOwnerForParameters(trained, out var trainedOwner))
+        {
+            return trainedOwner;
+        }
+
+        return null;
+    }
+
+    private static object? ResolveOwner(IReadOnlyList<Tensor<T>>? parameters, params Delegate?[] delegates)
     {
         for (int i = 0; i < delegates.Length; i++)
         {
-            var targetObj = delegates[i]?.Target;
-            if (targetObj is null) continue;
-            if (targetObj is NeuralNetworks.NeuralNetworkBase<T>)
-                return targetObj;
+            if (delegates[i]?.Target is NeuralNetworks.NeuralNetworkBase<T> targetNet)
+                return targetNet;
+        }
 
-            var targetType = targetObj.GetType();
-            if (targetType.Name.StartsWith("<", StringComparison.Ordinal))
+        if (NeuralNetworks.NeuralNetworkBase<T>.ActiveTrainingNetwork is { } activeNet)
+            return activeNet;
+
+        if (parameters is { Count: > 0 }
+            && NeuralNetworks.NeuralNetworkBase<T>.TryResolveOwnerForParameters(parameters, out var paramOwner))
+        {
+            return paramOwner;
+        }
+
+        return null;
+    }
+
+    private static object? TryResolveOwnerFromParameterProvider(Func<IReadOnlyList<Tensor<T>>> parameterProvider)
+    {
+        try
+        {
+            var currentParams = parameterProvider();
+            if (currentParams is { Count: > 0 }
+                && NeuralNetworks.NeuralNetworkBase<T>.TryResolveOwnerForParameters(currentParams, out var owner))
             {
-                var fields = targetType.GetFields(
-                    System.Reflection.BindingFlags.Instance
-                    | System.Reflection.BindingFlags.Public
-                    | System.Reflection.BindingFlags.NonPublic);
-                for (int f = 0; f < fields.Length; f++)
-                {
-                    if (typeof(NeuralNetworks.NeuralNetworkBase<T>).IsAssignableFrom(fields[f].FieldType)
-                        && fields[f].GetValue(targetObj) is NeuralNetworks.NeuralNetworkBase<T> capturedNet)
-                    {
-                        return capturedNet;
-                    }
-                }
+                return owner;
             }
         }
+        catch (Exception ex) when (ex is not OperationCanceledException && ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Parameter-provider peek for owner resolution failed and will be deferred until post-forward: {ex.GetType().Name}: {ex.Message}");
+        }
+
         return null;
     }
 
@@ -772,7 +891,8 @@ internal sealed class TapeTrainingStepper<T>
         bool applyOptimizerRegularization,
         Dictionary<Tensor<T>, Tensor<T>> accumulated,
         double lossSum,
-        T inverseCount)
+        T inverseCount,
+        Action? restoreFp32Masters)
     {
         var engine = AiDotNetEngine.Current;
         double localMeanLoss = lossSum / microBatchCount;
@@ -803,7 +923,7 @@ internal sealed class TapeTrainingStepper<T>
             accumulated,
             optimizer,
             ownerNet.ActiveMixedPrecisionContext,
-            restoreFp32Masters: null,
+            restoreFp32Masters,
             syncFp32MastersFromWorking: null,
             regularizer,
             ownerNet.MaxGradNormValue,
@@ -840,7 +960,32 @@ internal sealed class TapeTrainingStepper<T>
         EagerStepHooks hooks,
         IReadOnlyList<Func<Tensor<T>>>? objectiveTerms)
     {
-        if (input.Length == 0 || target.Length == 0)
+        bool hasNonEmpty = input.Length > 0 && target.Length > 0;
+        if (!distCoord.HasSynchronizedInitialParameters)
+        {
+            bool localNeedsWarmup = distNet.HasLazyUninitializedLayers();
+            if (distCoord.CoordinateLazyWarmupShapes(
+                    localNeedsWarmup,
+                    hasNonEmpty ? input._shape : null,
+                    hasNonEmpty ? target._shape : null,
+                    out var donorInShape,
+                    out var donorTgtShape)
+                && localNeedsWarmup)
+            {
+                Tensor<T>? warmupIn = hasNonEmpty ? input : (donorInShape is not null ? new Tensor<T>(donorInShape) : null);
+                Tensor<T>? warmupTgt = hasNonEmpty ? target : (donorTgtShape is not null ? new Tensor<T>(donorTgtShape) : null);
+                if (warmupIn is not null && warmupTgt is not null)
+                {
+                    WarmupNetworkInInferenceMode(distNet, warmupIn, warmupTgt, recomputeForward);
+                }
+            }
+        }
+        else if (hasNonEmpty && distNet.HasLazyUninitializedLayers())
+        {
+            WarmupNetworkInInferenceMode(distNet, input, target, recomputeForward);
+        }
+
+        if (!hasNonEmpty)
         {
             var idleParameters = parameterProvider()
                 ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
@@ -881,25 +1026,6 @@ internal sealed class TapeTrainingStepper<T>
             return idleLossT;
         }
 
-        if (distNet.HasLazyUninitializedLayers())
-        {
-            bool wasTraining = distNet.IsTrainingMode;
-            if (wasTraining) distNet.SetTrainingMode(false);
-            try
-            {
-                using var noGrad = new NoGradScope<T>();
-                recomputeForward(input, target);
-            }
-            catch
-            {
-                // Best-effort warmup; training objective below surfaces actionable failures.
-            }
-            finally
-            {
-                if (wasTraining) distNet.SetTrainingMode(true);
-            }
-        }
-
         var preParams = parameterProvider()
             ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
         distCoord.EnsureInitialParametersSynchronized(preParams, distNet.InvalidateLayerWeightCaches);
@@ -913,6 +1039,65 @@ internal sealed class TapeTrainingStepper<T>
         {
             distNet.PrepareMixedPrecisionWorkingWeights(mpCtx, preParams, out mpSnapshots, out mpTargets, ref mpRestored);
 
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
+            if (localTokens <= 0) localTokens = 1L;
+
+            if (objectiveTerms is not null)
+            {
+                var (totalLoss, termSelected, allTermGrads) = SummedTapeObjective<T>.AccumulateTerms(
+                    objectiveTerms,
+                    parameterProvider,
+                    hooks,
+                    lossTensor => distNet.ScaleLossForMixedPrecision(mpCtx, lossTensor),
+                    requireFiniteTotalLoss: mpCtx is null);
+
+                hooks.OnTapeGradients?.Invoke(allTermGrads);
+                var termParameters = parameterProvider() ?? termSelected;
+                if (termParameters.Count == 0 && termSelected.Count > 0)
+                {
+                    termParameters = termSelected;
+                }
+
+                double localTermLoss = NumOps.ToDouble(totalLoss);
+                var (termRankWeight, termGlobalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localTermLoss);
+                T termGlobalLossT = NumOps.FromDouble(termGlobalLoss);
+                distNet.SetLastLossFromStepper(termGlobalLossT);
+                distCoord.BeginBackwardStep(termParameters, termRankWeight);
+
+                var termGradients = new Dictionary<Tensor<T>, Tensor<T>>(termParameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+                CopySelectedParameterGradients(termParameters, allTermGrads, termGradients, out _);
+
+                hooks.BeforeUpdate?.Invoke();
+                distNet.MarkDistributedMutationStarted();
+                bool termStepped = distCoord.SynchronizeUnscaleClipAndStep(
+                    termParameters,
+                    termGradients,
+                    hooks.Optimizer,
+                    mpCtx,
+                    () => NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored),
+                    syncFp32MastersFromWorking: null,
+                    hooks.RegularizeGradients,
+                    hooks.ModelGradientClip,
+                    ctx => update(new TapeStepContext<T>(
+                        ctx.Parameters,
+                        ctx.Gradients,
+                        termGlobalLossT,
+                        input,
+                        target,
+                        recomputeForward,
+                        recomputeLoss,
+                        parameterBuffer: null)),
+                    distNet.InvalidateLayerWeightCaches);
+
+                hooks.OnGradients?.Invoke(termGradients);
+                if (termStepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+                {
+                    distNet.FinalizeDistributedStepPostUpdate(hooks.Optimizer);
+                }
+
+                return termGlobalLossT;
+            }
+
             using var tape = new GradientTape<T>();
             var loss = objective();
             if (loss is null)
@@ -921,8 +1106,6 @@ internal sealed class TapeTrainingStepper<T>
             var parameters = parameterProvider()
                 ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
 
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
-            if (localTokens <= 0) localTokens = 1L;
             double localUnscaledLoss = loss.Length > 0 ? NumOps.ToDouble(loss.Data.Span[0]) : 0.0;
             var lossForBackward = distNet.ScaleLossForMixedPrecision(mpCtx, loss);
 
@@ -935,10 +1118,10 @@ internal sealed class TapeTrainingStepper<T>
             var gradients = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
 
             if (widenSources is null
-                && objectiveTerms is null
                 && hooks.OnTapeGradients is null
                 && distCoord is { WorldSize: > 1, OverlapCommunication: true }
-                && !distNet.IsGradientCheckpointingEnabled)
+                && !distNet.IsGradientCheckpointingEnabled
+                && !NeuralNetworks.NeuralNetworkBase<T>.HasDuplicateTensorReferences(parameters))
             {
                 tape.ComputeGradientsStreaming(
                     lossForBackward,
@@ -1004,25 +1187,12 @@ internal sealed class TapeTrainingStepper<T>
         Tensor<T> target,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss,
-        EagerStepHooks hooks)
+        EagerStepHooks hooks,
+        IReadOnlyList<Func<Tensor<T>>>? objectiveTerms)
     {
         if (input.Length > 0 && mpNet.HasLazyUninitializedLayers())
         {
-            bool wasTraining = mpNet.IsTrainingMode;
-            if (wasTraining) mpNet.SetTrainingMode(false);
-            try
-            {
-                using var noGrad = new NoGradScope<T>();
-                recomputeForward(input, target);
-            }
-            catch
-            {
-                // Best-effort warmup.
-            }
-            finally
-            {
-                if (wasTraining) mpNet.SetTrainingMode(true);
-            }
+            WarmupNetworkInInferenceMode(mpNet, input, target, recomputeForward);
         }
 
         var preParams = parameterProvider()
@@ -1034,6 +1204,44 @@ internal sealed class TapeTrainingStepper<T>
         try
         {
             mpNet.PrepareMixedPrecisionWorkingWeights(mpCtx, preParams, out mpSnapshots, out mpTargets, ref mpRestored);
+
+            if (objectiveTerms is not null)
+            {
+                var (totalLoss, termSelected, allTermGrads) = SummedTapeObjective<T>.AccumulateTerms(
+                    objectiveTerms,
+                    parameterProvider,
+                    hooks,
+                    lossTensor => mpNet.ScaleLossForMixedPrecision(mpCtx, lossTensor),
+                    requireFiniteTotalLoss: false);
+
+                hooks.OnTapeGradients?.Invoke(allTermGrads);
+                var termParameters = parameterProvider() ?? termSelected;
+                if (termParameters.Count == 0 && termSelected.Count > 0)
+                {
+                    termParameters = termSelected;
+                }
+
+                var termGradients = new Dictionary<Tensor<T>, Tensor<T>>(termParameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+                CopySelectedParameterGradients(termParameters, allTermGrads, termGradients, out var termReached);
+
+                bool termHasOverflow = mpNet.UnscaleAndCheckMixedPrecisionGradients(mpCtx, termReached, termGradients);
+                NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+
+                if (termHasOverflow)
+                {
+                    hooks.OnGradients?.Invoke(termGradients);
+                    return totalLoss;
+                }
+
+                hooks.OnGradients?.Invoke(termGradients);
+                hooks.RegularizeAndClip(termReached, termGradients);
+                hooks.BeforeUpdate?.Invoke();
+
+                update(new TapeStepContext<T>(
+                    termReached, termGradients, totalLoss, input, target, recomputeForward, recomputeLoss, parameterBuffer: null));
+                mpNet.InvalidateLayerWeightCaches();
+                return totalLoss;
+            }
 
             using var tape = new GradientTape<T>();
             var loss = objective();
@@ -1068,11 +1276,36 @@ internal sealed class TapeTrainingStepper<T>
 
             update(new TapeStepContext<T>(
                 reached, gradients, lossValue, input, target, recomputeForward, recomputeLoss, parameterBuffer: null));
+            mpNet.InvalidateLayerWeightCaches();
             return lossValue;
         }
         finally
         {
             NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+        }
+    }
+
+    private static void WarmupNetworkInInferenceMode(
+        NeuralNetworks.NeuralNetworkBase<T> network,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward)
+    {
+        bool wasTraining = network.IsTrainingMode;
+        if (wasTraining) network.SetTrainingMode(false);
+        try
+        {
+            using var noGrad = new NoGradScope<T>();
+            recomputeForward(input, target);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException && ex is not OutOfMemoryException)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Lazy-layer warmup before training step failed and will be retried under the gradient tape: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            if (wasTraining) network.SetTrainingMode(true);
         }
     }
 

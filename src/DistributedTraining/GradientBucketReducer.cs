@@ -48,7 +48,7 @@ namespace AiDotNet.DistributedTraining;
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric element type.</typeparam>
-public sealed class GradientBucketReducer<T> : IDisposable
+internal sealed class GradientBucketReducer<T> : IDisposable
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -384,7 +384,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
             for (int b = 0; b < _buckets.Length; b++)
             {
                 var bucket = _buckets[b];
-                DisposeBucketHandles(bucket);
+                WaitAndDisposeBucketHandles(bucket);
                 bucket.ReadyCount = 0;
                 bucket.Dispatched = false;
                 bucket.SlotReady.AsSpan().Clear();
@@ -431,7 +431,9 @@ public sealed class GradientBucketReducer<T> : IDisposable
             var bucket = _buckets[slot.BucketIndex];
             if (bucket.Dispatched)
             {
-                return;
+                throw new InvalidOperationException(
+                    "NotifyGradientReady received a duplicate gradient notification for a parameter whose communication bucket has already been dispatched. " +
+                    "Disable OverlapCommunication when a model contains shared/tied parameter references or recomputed subgraphs that invoke backward hooks multiple times for the same parameter.");
             }
 
             if (!bucket.SlotReady[slot.EntryIndex])
@@ -511,7 +513,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
                     }
 
                     var entry = bucket.Entries[s];
-                    if (_rankWeight != 0.0 &&
+                    if (!IsZeroScale(_rankWeight) &&
                         gradients.TryGetValue(entry.Parameter, out var grad) &&
                         grad is not null)
                     {
@@ -589,33 +591,19 @@ public sealed class GradientBucketReducer<T> : IDisposable
                 var bucket = _buckets[b];
                 if (_useReduceScatter)
                 {
-                    var resultHandle = bucket.ResultHandle
+                    using var resultHandle = bucket.ResultHandle
                         ?? throw new InvalidOperationException("ReduceScatter bucket was marked dispatched without a result handle.");
-                    try
-                    {
-                        scatterShard = resultHandle.GetResult();
-                        totalCollectiveMs += resultHandle.Elapsed.TotalMilliseconds;
-                    }
-                    finally
-                    {
-                        resultHandle.Dispose();
-                        bucket.ResultHandle = null;
-                    }
+                    bucket.ResultHandle = null;
+                    scatterShard = resultHandle.GetResult();
+                    totalCollectiveMs += resultHandle.Elapsed.TotalMilliseconds;
                 }
                 else
                 {
-                    var handle = bucket.Handle
+                    using var handle = bucket.Handle
                         ?? throw new InvalidOperationException("AllReduce bucket was marked dispatched without a collective handle.");
-                    try
-                    {
-                        handle.Wait();
-                        totalCollectiveMs += handle.Elapsed.TotalMilliseconds;
-                    }
-                    finally
-                    {
-                        handle.Dispose();
-                        bucket.Handle = null;
-                    }
+                    bucket.Handle = null;
+                    handle.Wait();
+                    totalCollectiveMs += handle.Elapsed.TotalMilliseconds;
                 }
             }
 
@@ -797,7 +785,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
             srcFloat._gpuBuffer is { } srcGpuBuf &&
             srcGpuBuf.Handle != IntPtr.Zero &&
             srcFloat._gpuBackend is { } gpuBack &&
-            srcFloat._gpuBufferVersion == srcFloat.GpuCacheVersion &&
+            srcFloat._gpuBufferVersion == srcFloat.Version &&
             srcFloat._storageOffset == 0 &&
             srcFloat.IsContiguous)
         {
@@ -850,7 +838,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
             return;
         }
 
-        if (scale == 0.0)
+        if (IsZeroScale(scale))
         {
             // Explicitly zero rather than multiplying by 0.0 so an idle rank whose dummy forward produced
             // NaN/Inf gradients never contributes IEEE 754 (0.0 * NaN == NaN) into AllReduce/ReduceScatter.
@@ -871,7 +859,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
                 allowDirectSlotWrite: true,
                 out bool downloadedDirectlyIntoSlot);
             Span<float> dstSpan = dstFloat.AsWritableSpan().Slice(offset, length);
-            if (scale == 1.0)
+            if (IsUnitScale(scale))
             {
                 srcSpan.CopyTo(dstSpan);
             }
@@ -914,7 +902,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
             }
         }
 
-        if (scale == 1.0)
+        if (IsUnitScale(scale))
         {
             hostSrcSpan.CopyTo(destination.AsWritableSpan().Slice(offset, length));
             return;
@@ -956,7 +944,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
         int length,
         double scale)
     {
-        if (length <= 0 || scale == 0.0)
+        if (length <= 0 || IsZeroScale(scale))
         {
             return;
         }
@@ -1184,18 +1172,44 @@ public sealed class GradientBucketReducer<T> : IDisposable
         return 8;
     }
 
-    private static void DisposeBucketHandles(Bucket bucket)
+    private static bool IsZeroScale(double scale) => !(Math.Abs(scale) > 0.0);
+
+    private static bool IsUnitScale(double scale) => !(scale < 1.0 || scale > 1.0);
+
+    private static void WaitAndDisposeBucketHandles(Bucket bucket)
     {
-        if (bucket.Handle is not null)
+        if (bucket.Handle is { } handle)
         {
-            bucket.Handle.Dispose();
             bucket.Handle = null;
+            try
+            {
+                handle.Wait();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Debug.WriteLine($"GradientBucketReducer handle wait during cleanup faulted: {ex.Message}");
+            }
+            finally
+            {
+                handle.Dispose();
+            }
         }
 
-        if (bucket.ResultHandle is not null)
+        if (bucket.ResultHandle is { } resultHandle)
         {
-            bucket.ResultHandle.Dispose();
             bucket.ResultHandle = null;
+            try
+            {
+                _ = resultHandle.GetResult();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                Debug.WriteLine($"GradientBucketReducer result-handle wait during cleanup faulted: {ex.Message}");
+            }
+            finally
+            {
+                resultHandle.Dispose();
+            }
         }
     }
 
@@ -1222,7 +1236,7 @@ public sealed class GradientBucketReducer<T> : IDisposable
             _disposed = true;
             for (int b = 0; b < _buckets.Length; b++)
             {
-                DisposeBucketHandles(_buckets[b]);
+                WaitAndDisposeBucketHandles(_buckets[b]);
             }
 
             _ownedUnpackGradients?.Clear();

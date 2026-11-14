@@ -125,6 +125,8 @@ public static class CompiledTapeTrainingStep<T>
         internal List<(Tensor<T> Input, Tensor<T> Target)>? persistentByShape;
         internal int[]? cachedCompositeShapeKey;
         [AiDotNet.Attributes.Scratch] internal Dictionary<Tensor<T>, Tensor<T>>? distributedGradMap;
+        internal string? distributedReplayDisagreementReason;
+        internal bool distributedReplayEvaluated;
         internal object? shapeSwitchFrom;
         internal CompiledModelCache<T>? retiringCache;
     }
@@ -502,6 +504,17 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>The compiled plan the last fused step configured (null if none), compared by reference: a session that
     /// verified one plan's updates numerically trusts its later replays, but not a plan compiled since.</summary>
     internal static object? ConfiguredPlanIdentity => _configuredPlan;
+
+    internal static bool TryConsumeDistributedReplayDisagreement(
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? reason)
+    {
+        reason = CurrentState.distributedReplayDisagreementReason;
+        CurrentState.distributedReplayDisagreementReason = null;
+        return reason is not null;
+    }
+
+    internal static bool WasLastDistributedReplayEvaluated()
+        => CurrentState.distributedReplayEvaluated;
 
     internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
     {
@@ -974,6 +987,8 @@ public static class CompiledTapeTrainingStep<T>
         _persistentByShape = null;
         CurrentState.cachedCompositeShapeKey = null;
         CurrentState.distributedGradMap = null;
+        CurrentState.distributedReplayDisagreementReason = null;
+        CurrentState.distributedReplayEvaluated = false;
         _shapeSwitchFrom = null;
         _retiringCache?.Invalidate();
         _retiringCache = null;
@@ -1118,7 +1133,10 @@ public static class CompiledTapeTrainingStep<T>
         // each needs its own (see FusedTrainingSession's state key). Null keys the slot by the layer set.
         object? stateKey = null,
         // Add the L2 term after the gradient clip (PyTorch's order) instead of before it.
-        bool l2AfterClip = false)
+        bool l2AfterClip = false,
+        bool verifyDistributedReplay = false,
+        double? distributedEagerReplayLoss = null,
+        double distributedReplayTolerance = 0.0)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
         // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
@@ -1138,7 +1156,36 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, int8MomentBlockSize: int8MomentBlockSize, int8MinQuantizedLength: int8MinQuantizedLength, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss, l2AfterClip: l2AfterClip, owner: owner);
+            return TryStepWithFusedOptimizerCore(
+                layers: layers,
+                input: input,
+                target: target,
+                forward: forward,
+                computeLoss: computeLoss,
+                optimizerType: optimizerType,
+                learningRate: learningRate,
+                beta1: beta1,
+                beta2: beta2,
+                epsilon: epsilon,
+                weightDecay: weightDecay,
+                lossValue: out lossValue,
+                maxGradNorm: maxGradNorm,
+                lrSchedule: lrSchedule,
+                eagerOptimizer: eagerOptimizer,
+                useBf16Moments: useBf16Moments,
+                extraTensors: extraTensors,
+                int8MomentBlockSize: int8MomentBlockSize,
+                int8MinQuantizedLength: int8MinQuantizedLength,
+                fusedExtras: fusedExtras,
+                onGradients: onGradients,
+                trainableSelection: trainableSelection,
+                l2Regularization: l2Regularization,
+                deferredLoss: deferredLoss,
+                l2AfterClip: l2AfterClip,
+                owner: owner,
+                verifyDistributedReplay: verifyDistributedReplay,
+                distributedEagerReplayLoss: distributedEagerReplayLoss,
+                distributedReplayTolerance: distributedReplayTolerance);
         }
         finally
         {
@@ -1181,7 +1228,10 @@ public static class CompiledTapeTrainingStep<T>
         double l2Regularization = 0.0,
         System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null,
         bool l2AfterClip = false,
-        object? owner = null)
+        object? owner = null,
+        bool verifyDistributedReplay = false,
+        double? distributedEagerReplayLoss = null,
+        double distributedReplayTolerance = 0.0)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
@@ -1190,6 +1240,8 @@ public static class CompiledTapeTrainingStep<T>
         // call. (Cleared on entry, not on success, so a successful step doesn't
         // leak a stale exception from earlier.)
         _lastFallbackException = null;
+        CurrentState.distributedReplayDisagreementReason = null;
+        CurrentState.distributedReplayEvaluated = false;
 
         if (!TensorCodecOptions.Current.EnableCompilation) { Fd("EnableCompilation=false"); return false; }
         // Fused optimizer kernels support float and double on the Tensors
@@ -1214,6 +1266,9 @@ public static class CompiledTapeTrainingStep<T>
                 onGradients,
                 trainableSelection,
                 deferredLoss,
+                verifyDistributedReplay,
+                distributedEagerReplayLoss,
+                distributedReplayTolerance,
                 out lossValue);
         }
         // Allowlist of optimizer kernels wired through ConfigureOptimizer in the
@@ -1898,10 +1953,17 @@ public static class CompiledTapeTrainingStep<T>
         var result = new List<Tensor<T>>();
         foreach (var layer in layers)
         {
-            foreach (var p in layer.GetTrainableParameters())
+            if (layer is ILayer<T> compositeLayer)
             {
-                if (p is not null && seen.Add(p))
-                    result.Add(p);
+                TapeTrainingStep<T>.CollectLayerParameters(compositeLayer, result, seen, materializedOnly: false);
+            }
+            else
+            {
+                foreach (var p in layer.GetTrainableParameters())
+                {
+                    if (p is not null && seen.Add(p))
+                        result.Add(p);
+                }
             }
         }
         return result.ToArray();
@@ -1931,15 +1993,31 @@ public static class CompiledTapeTrainingStep<T>
             ? null
             : new HashSet<Tensor<T>>(selection, AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
+        var layerCandidates = new List<Tensor<T>>();
+        var layerSeen = new HashSet<Tensor<T>>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var layer in layers)
         {
-            foreach (var p in layer.GetTrainableParameters())
+            if (layer is ILayer<T> compositeLayer)
             {
-                if (p is null || (allowed is not null && !allowed.Contains(p)))
-                    continue;
-                if (seen.Add(p))
-                    result.Add(p);
+                TapeTrainingStep<T>.CollectLayerParameters(compositeLayer, layerCandidates, layerSeen, materializedOnly: false);
             }
+            else
+            {
+                foreach (var p in layer.GetTrainableParameters())
+                {
+                    if (p is not null && layerSeen.Add(p))
+                        layerCandidates.Add(p);
+                }
+            }
+        }
+
+        for (int i = 0; i < layerCandidates.Count; i++)
+        {
+            var p = layerCandidates[i];
+            if (allowed is not null && !allowed.Contains(p))
+                continue;
+            if (seen.Add(p))
+                result.Add(p);
         }
         if (extras is not null)
         {
@@ -2090,7 +2168,23 @@ public static class CompiledTapeTrainingStep<T>
         INumericOperations<T> numOps,
         AiDotNet.Tensors.Engines.IEngine engine)
     {
-        bool collectivesStarted = false;
+        if (distNet.ActiveMixedPrecisionContext is not null)
+        {
+            return TapeTrainingStepper<T>.EagerTapeStep(
+                () => computeLoss(forward(input), target),
+                () => CollectDeduplicatedParameters(layers),
+                ctx => ApplyCompiledSgdContextUpdate(ctx, learningRate, engine),
+                input,
+                target,
+                (x, _) => forward(x),
+                (predicted, y) => computeLoss(predicted, y),
+                new TapeTrainingStepper<T>.EagerStepHooks
+                {
+                    Owner = distNet,
+                    ModelGradientClip = distNet.MaxGradNormValue,
+                });
+        }
+
         try
         {
             if (InvalidateIfLayerSetChanged(layers))
@@ -2100,24 +2194,41 @@ public static class CompiledTapeTrainingStep<T>
                 _mpGenericPlan = null;
             }
             InvalidateIfSelectionChanged(null);
-            var cache = _cache ??= new CompiledModelCache<T>();
 
-            if (input.Length == 0 || target.Length == 0)
+            bool hasNonEmpty = input.Length > 0 && target.Length > 0;
+            bool shapeChanged = false;
+            Tensor<T>? persistentIn = null;
+            Tensor<T>? persistentTgt = null;
+            if (hasNonEmpty)
             {
-                var idleParameters = _cachedParameters ?? CollectDeduplicatedParameters(layers);
-                collectivesStarted = true;
-                distCoord.EnsureInitialParametersSynchronized(idleParameters, distNet.InvalidateLayerWeightCaches);
+                (shapeChanged, persistentIn, persistentTgt) = EnsurePersistentPairForShape(input._shape, target._shape);
+                input.Contiguous().AsSpan().CopyTo(persistentIn.AsWritableSpan());
+                target.Contiguous().AsSpan().CopyTo(persistentTgt.AsWritableSpan());
+            }
+
+            var parameters = EnsureDistributedParametersInitialized(
+                distNet,
+                distCoord,
+                layers,
+                extraTensors: null,
+                trainableSelection: null,
+                forward,
+                persistentIn,
+                persistentTgt);
+
+            if (!hasNonEmpty)
+            {
                 var (_, idleGlobalLoss, _) = distCoord.SynchronizeStepMetadata(0L, 0.0);
                 T idleLossT = numOps.FromDouble(idleGlobalLoss);
                 distNet.SetLastLossFromStepper(idleLossT);
-                distCoord.BeginBackwardStep(idleParameters, 0.0);
+                distCoord.BeginBackwardStep(parameters, 0.0);
 
                 var emptyGrads = CurrentState.distributedGradMap
-                    ??= new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    ??= new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
                 emptyGrads.Clear();
                 distNet.MarkDistributedMutationStarted();
                 bool idleStepped = distCoord.SynchronizeUnscaleClipAndStep(
-                    idleParameters,
+                    parameters,
                     emptyGrads,
                     optimizer: null,
                     distNet.ActiveMixedPrecisionContext,
@@ -2132,37 +2243,17 @@ public static class CompiledTapeTrainingStep<T>
                 return idleLossT;
             }
 
-            bool shapeChanged = EnsurePersistentPairForShape(input._shape, target._shape);
-            input.Contiguous().AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
-            target.Contiguous().AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
+            if (persistentIn is null || persistentTgt is null)
+                throw new InvalidOperationException("Persistent input/target buffers were not initialized for non-empty distributed step.");
 
-            if (_cachedParameters is null)
-            {
-                WarmupLayersInInferenceMode(layers, _persistentInput!, _persistentTarget!, forward);
-            }
-
-            bool firstCollect = _cachedParameters is null;
-            var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
-            if (firstCollect)
-            {
-                RememberLayerSet(layers);
-                RememberSelection(null);
-            }
-
-            collectivesStarted = true;
-            distCoord.EnsureInitialParametersSynchronized(parameters, distNet.InvalidateLayerWeightCaches);
-            collectivesStarted = false;
-
+            var cache = _cache ??= new CompiledModelCache<T>();
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
             var compositeKey = GetOrBuildCompositeShapeKey(input._shape, target._shape, shapeChanged);
-            var persistentIn = _persistentInput!;
-            var persistentTgt = _persistentTarget!;
             ICompiledTrainingPlan<T> plan;
             Tensor<T> lossOutput;
-            using (var firstCompiledStepAllocations =
-                FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
+            using (FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
             {
                 bool compiledNow = false;
                 using (var stepRandom = CompiledStepRandom<T>.BeginRecording())
@@ -2191,7 +2282,6 @@ public static class CompiledTapeTrainingStep<T>
 
             double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
             long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
-            collectivesStarted = true;
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
             T globalLossT = numOps.FromDouble(globalLoss);
             distNet.SetLastLossFromStepper(globalLossT);
@@ -2215,12 +2305,11 @@ public static class CompiledTapeTrainingStep<T>
 
             return globalLossT;
         }
-        catch when (!collectivesStarted)
+        catch (Exception ex) when (ex is not OutOfMemoryException && ex is not OperationCanceledException)
         {
-            return TapeTrainingStepper<T>.EagerSgdObjectiveStep(
-                () => CollectDeduplicatedParameters(layers),
-                () => computeLoss(forward(input), target),
-                learningRate);
+            System.Diagnostics.Trace.TraceError(
+                $"CompiledTapeTrainingStep.StepDistributedCompiledSgd failed on rank {distCoord.Rank}: {ex}");
+            throw;
         }
     }
 
@@ -2238,11 +2327,22 @@ public static class CompiledTapeTrainingStep<T>
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
         IReadOnlyCollection<Tensor<T>>? trainableSelection,
         System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss,
+        bool verifyDistributedReplay,
+        double? distributedEagerReplayLoss,
+        double distributedReplayTolerance,
         out T lossValue)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         lossValue = numOps.Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
+        CurrentState.distributedReplayDisagreementReason = null;
+        CurrentState.distributedReplayEvaluated = false;
+
+        if (distNet.ActiveMixedPrecisionContext is not null)
+        {
+            Fd("distributed compiled step declined: mixed precision active");
+            return false;
+        }
 
         if (eagerOptimizer is null)
         {
@@ -2255,25 +2355,56 @@ public static class CompiledTapeTrainingStep<T>
         {
             InvalidateIfLayerSetChanged(layers);
             InvalidateIfSelectionChanged(trainableSelection);
-            var cache = _cache ??= new CompiledModelCache<T>();
 
-            if (input.Length == 0 || target.Length == 0)
+            bool hasNonEmpty = input.Length > 0 && target.Length > 0;
+            bool shapeChanged = false;
+            Tensor<T>? persistentIn = null;
+            Tensor<T>? persistentTgt = null;
+            if (hasNonEmpty)
             {
-                var idleParameters = _cachedParameters
-                    ?? CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
+                (shapeChanged, persistentIn, persistentTgt) = EnsurePersistentPairForShape(input._shape, target._shape);
+                input.Contiguous().AsSpan().CopyTo(persistentIn.AsWritableSpan());
+                target.Contiguous().AsSpan().CopyTo(persistentTgt.AsWritableSpan());
+            }
+
+            collectivesStarted = true;
+            var parameters = EnsureDistributedParametersInitialized(
+                distNet,
+                distCoord,
+                layers,
+                extraTensors,
+                trainableSelection,
+                forward,
+                persistentIn,
+                persistentTgt);
+            collectivesStarted = false;
+
+            if (!hasNonEmpty)
+            {
                 collectivesStarted = true;
-                distCoord.EnsureInitialParametersSynchronized(idleParameters, distNet.InvalidateLayerWeightCaches);
+                if (verifyDistributedReplay
+                    && !VerifyDistributedReplayAgreement(
+                        distCoord,
+                        numOps,
+                        hasLocalSample: false,
+                        localCompiledLoss: 0.0,
+                        distributedEagerReplayLoss,
+                        distributedReplayTolerance))
+                {
+                    return false;
+                }
+
                 var (_, idleGlobalLoss, _) = distCoord.SynchronizeStepMetadata(0L, 0.0);
                 T idleLossT = numOps.FromDouble(idleGlobalLoss);
                 distNet.SetLastLossFromStepper(idleLossT);
-                distCoord.BeginBackwardStep(idleParameters, 0.0);
+                distCoord.BeginBackwardStep(parameters, 0.0);
 
                 var emptyGrads = CurrentState.distributedGradMap
-                    ??= new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    ??= new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
                 emptyGrads.Clear();
                 distNet.MarkDistributedMutationStarted();
                 bool idleStepped = distCoord.SynchronizeUnscaleClipAndStep(
-                    idleParameters,
+                    parameters,
                     emptyGrads,
                     eagerOptimizer,
                     distNet.ActiveMixedPrecisionContext,
@@ -2281,7 +2412,7 @@ public static class CompiledTapeTrainingStep<T>
                     syncFp32MastersFromWorking: null,
                     distNet.GetDistributedOptimizerRegularizer(eagerOptimizer),
                     maxGradNorm,
-                    ctx => distNet.ExecuteDistributedOptimizerContextStep(ctx, eagerOptimizer, idleParameters),
+                    ctx => distNet.ExecuteDistributedOptimizerContextStep(ctx, eagerOptimizer, parameters),
                     distNet.InvalidateLayerWeightCaches);
                 if (idleStepped)
                     distNet.FinalizeDistributedStepPostUpdate(eagerOptimizer);
@@ -2293,38 +2424,17 @@ public static class CompiledTapeTrainingStep<T>
                 return true;
             }
 
-            bool shapeChanged = EnsurePersistentPairForShape(input._shape, target._shape);
-            input.Contiguous().AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
-            target.Contiguous().AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
+            if (persistentIn is null || persistentTgt is null)
+                throw new InvalidOperationException("Persistent input/target buffers were not initialized for non-empty distributed step.");
 
-            if (_cachedParameters is null)
-            {
-                WarmupLayersInInferenceMode(layers, _persistentInput!, _persistentTarget!, forward);
-            }
-
-            bool firstCollectThisLifecycle = _cachedParameters is null;
-            var parameters = _cachedParameters ??=
-                CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
-            if (firstCollectThisLifecycle)
-            {
-                RememberLayerSet(layers);
-                RememberSelection(trainableSelection);
-            }
-
-            collectivesStarted = true;
-            distCoord.EnsureInitialParametersSynchronized(parameters, distNet.InvalidateLayerWeightCaches);
-            collectivesStarted = false;
-
+            var cache = _cache ??= new CompiledModelCache<T>();
             foreach (var layer in layers)
                 layer.ZeroGrad();
 
             var compositeKey = GetOrBuildCompositeShapeKey(input._shape, target._shape, shapeChanged);
-            var persistentIn = _persistentInput!;
-            var persistentTgt = _persistentTarget!;
             ICompiledTrainingPlan<T> plan;
             Tensor<T> lossOutput;
-            using (var firstCompiledStepAllocations =
-                FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
+            using (FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
             {
                 bool compiledNow = false;
                 using (var stepRandom = CompiledStepRandom<T>.BeginRecording())
@@ -2354,8 +2464,20 @@ public static class CompiledTapeTrainingStep<T>
             }
 
             double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
-            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
             collectivesStarted = true;
+            if (verifyDistributedReplay
+                && !VerifyDistributedReplayAgreement(
+                    distCoord,
+                    numOps,
+                    hasLocalSample: true,
+                    localCompiledLoss: localLoss,
+                    distributedEagerReplayLoss,
+                    distributedReplayTolerance))
+            {
+                return false;
+            }
+
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
             T globalLossT = numOps.FromDouble(globalLoss);
             distNet.SetLastLossFromStepper(globalLossT);
@@ -2384,7 +2506,7 @@ public static class CompiledTapeTrainingStep<T>
             _fusedStepCount++;
             return true;
         }
-        catch (Exception ex) when (!collectivesStarted)
+        catch (Exception ex) when (!collectivesStarted && ex is not OutOfMemoryException && ex is not OperationCanceledException)
         {
             _lastFallbackException = ex;
             Fd($"DISTRIBUTED COMPILED EXCEPTION {ex.GetType().Name}: {ex.Message}");
@@ -2396,14 +2518,132 @@ public static class CompiledTapeTrainingStep<T>
         }
     }
 
-    private static bool EnsurePersistentPairForShape(int[] inputShape, int[] targetShape)
+    private static Tensor<T>[] EnsureDistributedParametersInitialized(
+        NeuralNetworks.NeuralNetworkBase<T> distNet,
+        DistributedTraining.DistributedTapeCoordinator<T> distCoord,
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        IReadOnlyList<Tensor<T>>? extraTensors,
+        IReadOnlyCollection<Tensor<T>>? trainableSelection,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Tensor<T>? persistentIn,
+        Tensor<T>? persistentTgt)
     {
-        if (_persistentInput is not null
-            && _persistentTarget is not null
-            && ShapesEqual(_persistentInput._shape, inputShape)
-            && ShapesEqual(_persistentTarget._shape, targetShape))
+        if (_cachedParameters is { } alreadyCached)
         {
+            distCoord.EnsureInitialParametersSynchronized(alreadyCached, distNet.InvalidateLayerWeightCaches);
+            return alreadyCached;
+        }
+
+        int[]? localInShape = persistentIn?._shape;
+        int[]? localTgtShape = persistentTgt?._shape;
+        if (distCoord.CoordinateLazyWarmupShapes(
+                localNeedsWarmup: true,
+                localInShape,
+                localTgtShape,
+                out var donorInShape,
+                out var donorTgtShape))
+        {
+            if (persistentIn is not null && persistentTgt is not null)
+            {
+                WarmupLayersInInferenceMode(layers, persistentIn, persistentTgt, forward);
+            }
+            else if (donorInShape is not null && donorTgtShape is not null)
+            {
+                WarmupLayersInInferenceMode(layers, new Tensor<T>(donorInShape), new Tensor<T>(donorTgtShape), forward);
+            }
+
+            var collected = extraTensors is null && trainableSelection is null
+                ? CollectDeduplicatedParameters(layers)
+                : CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
+            _cachedParameters = collected;
+            RememberLayerSet(layers);
+            RememberSelection(trainableSelection);
+            distCoord.EnsureInitialParametersSynchronized(collected, distNet.InvalidateLayerWeightCaches);
+            return collected;
+        }
+
+        var fallbackCollected = extraTensors is null && trainableSelection is null
+            ? CollectDeduplicatedParameters(layers)
+            : CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
+        if (!distNet.HasLazyUninitializedLayers())
+        {
+            _cachedParameters = fallbackCollected;
+            RememberLayerSet(layers);
+            RememberSelection(trainableSelection);
+        }
+
+        distCoord.EnsureInitialParametersSynchronized(fallbackCollected, distNet.InvalidateLayerWeightCaches);
+        return fallbackCollected;
+    }
+
+    private static bool VerifyDistributedReplayAgreement(
+        DistributedTraining.DistributedTapeCoordinator<T> distCoord,
+        INumericOperations<T> numOps,
+        bool hasLocalSample,
+        double localCompiledLoss,
+        double? expectedLocalEagerLoss,
+        double tolerance)
+    {
+        bool localEvaluated = hasLocalSample && expectedLocalEagerLoss.HasValue;
+        bool localAgree = true;
+        string? localMismatch = null;
+        if (localEvaluated)
+        {
+            double eagerVal = expectedLocalEagerLoss.GetValueOrDefault();
+            double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerVal), Math.Abs(localCompiledLoss)));
+            localAgree = (double.IsNaN(eagerVal) && double.IsNaN(localCompiledLoss))
+                || Math.Abs(eagerVal - localCompiledLoss) <= tolerance * scale;
+            if (!localAgree)
+            {
+                localMismatch = "the compiled plan's loss on new data (" + localCompiledLoss.ToString("G6")
+                    + ") disagrees with the eager forward (" + eagerVal.ToString("G6") + "): the training forward "
+                    + "depends on more than its input tensor (a host-side read or captured per-step state), so the "
+                    + "replay was aborted before updating weights and training continues on the eager tape";
+            }
+        }
+
+        bool globalAgree = localAgree;
+        bool anyEvaluated = localEvaluated;
+        if (distCoord.WorldSize > 1)
+        {
+            var verdict = new Vector<T>(2);
+            {
+                Span<T> writeSpan = verdict.AsWritableSpan();
+                writeSpan[0] = numOps.FromDouble(localAgree ? 1.0 : 0.0);
+                writeSpan[1] = numOps.FromDouble(localEvaluated ? 0.0 : 1.0);
+            }
+
+            distCoord.Backend.AllReduce(verdict, DistributedTraining.ReductionOperation.Min);
+            ReadOnlySpan<T> readSpan = verdict.AsSpan();
+            globalAgree = numOps.ToDouble(readSpan[0]) >= 0.5;
+            anyEvaluated = numOps.ToDouble(readSpan[1]) < 0.5;
+        }
+
+        if (!globalAgree)
+        {
+            CurrentState.distributedReplayDisagreementReason = localMismatch
+                ?? "a peer distributed rank detected a replay loss disagreement between the compiled plan and eager forward; "
+                + "all ranks aborted the replay in lockstep and continue on the eager tape";
+            CurrentState.distributedReplayEvaluated = true;
+            _configuredPlan = null;
+            CurrentState.planOptimizerStep = -1;
             return false;
+        }
+
+        CurrentState.distributedReplayEvaluated = anyEvaluated;
+        return true;
+    }
+
+    private static (bool ShapeChanged, Tensor<T> PersistentInput, Tensor<T> PersistentTarget) EnsurePersistentPairForShape(
+        int[] inputShape,
+        int[] targetShape)
+    {
+        if (_persistentInput is { } currentIn
+            && _persistentTarget is { } currentTgt
+            && ShapesEqual(currentIn._shape, inputShape)
+            && ShapesEqual(currentTgt._shape, targetShape))
+        {
+            return (false, currentIn, currentTgt);
         }
 
         var list = _persistentByShape ??= new List<(Tensor<T> Input, Tensor<T> Target)>();
@@ -2414,8 +2654,15 @@ public static class CompiledTapeTrainingStep<T>
             {
                 _persistentInput = pair.Input;
                 _persistentTarget = pair.Target;
-                return false;
+                return (false, pair.Input, pair.Target);
             }
+        }
+
+        if (list.Count >= MaxBatchShapesPerLifecycle)
+        {
+            _cache?.Invalidate();
+            _cache = new CompiledModelCache<T>();
+            list.Clear();
         }
 
         var createdIn = new Tensor<T>((int[])inputShape.Clone());
@@ -2423,7 +2670,7 @@ public static class CompiledTapeTrainingStep<T>
         list.Add((createdIn, createdTgt));
         _persistentInput = createdIn;
         _persistentTarget = createdTgt;
-        return true;
+        return (true, createdIn, createdTgt);
     }
 
     private static void WarmupLayersInInferenceMode(

@@ -714,7 +714,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // in the backward pass. See ooples/AiDotNet#1846.
             // The fused step resolves lazily created weights itself, so it is tried from the first row: an eager first
             // row would leave its optimizer moments behind when the plan takes over.
-            if (fusedMapped)
+            if (fusedMapped && DistributedCoordinator is null)
             {
                 var slots = BuildTabDDPMSlots(numNoisy, actualNoise, catNoisy, catClean, t);
                 if (slots is not null)
@@ -778,6 +778,9 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // softmax cross-entropy for the multinomial-diffused categorical
             // features, Kotelnikov et al. 2023), and backpropagate through the
             // MLP + output heads + timestep projection in one optimizer step.
+            DistributedCoordinator?.EnsureInitialParametersSynchronized(
+                CollectModelTrainableTensors(),
+                InvalidateLayerWeightCaches);
             using var tape = new GradientTape<T>();
             var timeEmbed2 = CreateTimestepEmbeddingTensor(t);
             var (predictedNoise, predictedLogits) = DenoiserForwardTensors(numNoisy, catNoisy, timeEmbed2);

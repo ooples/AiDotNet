@@ -2469,6 +2469,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             distBackend.Initialize();
         }
 
+        if (distBackend is { WorldSize: > 1 } && _model is not NeuralNetworks.NeuralNetworkBase<T>)
+        {
+            throw new NotSupportedException(
+                "Distributed streaming training currently supports only NeuralNetworkBase models. " +
+                "Use a neural network model or disable ConfigureDistributedTraining for this model.");
+        }
+
         IStreamingDataLoader<T, TInput, TOutput> rawLoader =
             (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>)?.InnerLoader
             ?? streamingLoader;
@@ -2477,13 +2484,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 ?? new Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>(rawLoader, distBackend))
             : (streamingLoader as Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>);
 
-        DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator = null;
-        if (distBackend is not null && _model is NeuralNetworks.NeuralNetworkBase<T> distNeuralNet)
+        using DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator =
+            distBackend is not null && _model is NeuralNetworks.NeuralNetworkBase<T>
+                ? new DistributedTraining.DistributedTapeCoordinator<T>(
+                    distBackend,
+                    _distributedStrategy,
+                    _distributedConfiguration)
+                : null;
+        if (distCoordinator is not null && _model is NeuralNetworks.NeuralNetworkBase<T> distNeuralNet)
         {
-            distCoordinator = new DistributedTraining.DistributedTapeCoordinator<T>(
-                distBackend,
-                _distributedStrategy,
-                _distributedConfiguration);
             distNeuralNet.DistributedCoordinator = distCoordinator;
         }
 
@@ -2555,6 +2564,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             int startEpoch = 0;
             int resumeSkipBatches = 0;
             long resumeSkipSamples = 0L;
+            int? savedFitSeed = null;
+            int? savedFitBatchSize = null;
+            int? activeFitSeed = streamingOptions?.Seed;
+            int? activeFitBatchSize = null;
             T? lastValidationLoss = default;
             bool hasValidationLoss = false;
             int cursorEpoch = 0;
@@ -2562,8 +2575,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             long cursorSamplesInEpoch = 0L;
             if (streamingOptions?.ResumeFromLatestCheckpoint == true)
             {
-                (globalStep, startEpoch, resumeSkipBatches, resumeSkipSamples) =
+                (globalStep, startEpoch, resumeSkipBatches, resumeSkipSamples, savedFitSeed, savedFitBatchSize) =
                     ResumeStreamingFromLatestCheckpoint(streamingOptions, rawLoader, distBackend, distCoordinator);
+                activeFitSeed = savedFitSeed ?? activeFitSeed;
+                activeFitBatchSize = savedFitBatchSize;
                 lastCheckpointStep = globalStep;
                 cursorEpoch = startEpoch;
                 cursorBatchInEpoch = resumeSkipBatches;
@@ -2636,26 +2651,50 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 }
             }
 
-            // An uninterrupted run fits the pipelines on the first non-empty batch of epoch 0. The checkpoint does not
-            // store their statistics, so a resumed run would otherwise fit them on the first batch AFTER the skip and
-            // scale every later batch differently from the run it resumes. Refit on that same batch (same epoch-0 seed)
-            // before skipping ahead. With no Seed the shuffle is not reproducible, so no run could match exactly.
+            // Fit unfitted feature/target pipelines on one shared deterministic global batch across all distributed
+            // ranks (and persist the fit seed + batch size in checkpoint metadata so resumed runs across any world
+            // size reconstruct identical feature and target scaling statistics).
             bool resumedPastFirstBatch = startEpoch > 0 || resumeSkipBatches > 0 || resumeSkipSamples > 0;
             bool targetPipelineUnfitted = _targetPipeline is { IsFitted: false };
             bool anyPipelineUnfitted = !pipelineFitted || targetPipelineUnfitted;
-            if (resumedPastFirstBatch && anyPipelineUnfitted)
+            if (anyPipelineUnfitted && (resumedPastFirstBatch || distBackend is { WorldSize: > 1 } || streamingOptions is not null))
             {
                 if (!rawLoader.IsLoaded)
                 {
                     await rawLoader.LoadAsync(cancellationToken);
                 }
 
-                int? firstEpochSeed = streamingOptions?.Seed;
-                await foreach (var (fitInputs, fitOutputs) in rawLoader.GetBatchesAsync(shuffle: true, seed: firstEpochSeed, cancellationToken: cancellationToken))
+                var (resolvedFitSeed, resolvedFitBatchSize) = ResolveStreamingPipelineFitPlan(
+                    streamingOptions,
+                    rawLoader,
+                    distLoader,
+                    distBackend,
+                    savedFitSeed,
+                    savedFitBatchSize);
+                activeFitSeed = resolvedFitSeed;
+                activeFitBatchSize = resolvedFitBatchSize;
+
+                int savedRawBatchSize = rawLoader.BatchSize;
+                if (resolvedFitBatchSize > 0 && savedRawBatchSize != resolvedFitBatchSize)
                 {
-                    if (fitInputs.Length == 0) continue;
-                    FitStreamingPipelines(fitInputs, fitOutputs);
-                    break;
+                    rawLoader.BatchSize = resolvedFitBatchSize;
+                }
+
+                try
+                {
+                    await foreach (var (fitInputs, fitOutputs) in rawLoader.GetBatchesAsync(shuffle: true, seed: resolvedFitSeed, cancellationToken: cancellationToken))
+                    {
+                        if (fitInputs.Length == 0) continue;
+                        FitStreamingPipelines(fitInputs, fitOutputs);
+                        break;
+                    }
+                }
+                finally
+                {
+                    if (rawLoader.BatchSize != savedRawBatchSize)
+                    {
+                        rawLoader.BatchSize = savedRawBatchSize;
+                    }
                 }
             }
 
@@ -2789,7 +2828,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
                         }
 
-                        if ((gradientAccumulationSteps > 1 || isIdleDistributedNeuralRank)
+                        if ((gradientAccumulationSteps > 1 || distCoordinator is not null)
                             && nn is NeuralNetworks.NeuralNetworkBase<T> accumNn
                             && microBatchBuffer is not null)
                         {
@@ -2892,7 +2931,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                         distBackend,
                         distCoordinator,
                         gradientAccumulationSteps,
-                        forceSave: false))
+                        forceSave: false,
+                        fitSeed: activeFitSeed,
+                        fitBatchSize: activeFitBatchSize))
                     {
                         lastCheckpointStep = globalStep;
                     }
@@ -2930,8 +2971,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                             distLoader,
                             distBackend,
                             distCoordinator,
-                            gradientAccumulationSteps);
-                    accumulatedMicroBatches = 0;
+                            gradientAccumulationSteps,
+                            activeFitSeed,
+                            activeFitBatchSize);
                     cursorEpoch = epoch;
                     cursorBatchInEpoch = batchInEpoch;
                     cursorSamplesInEpoch = samplesInEpoch;
@@ -2963,15 +3005,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     DateTime.UtcNow - streamingStart,
                     cancellationToken,
                     out var epochStopReason);
-                if (!continueTraining)
+                if (SynchronizeDistributedStopSignal(distBackend, !continueTraining))
                 {
                     streamingEarlyStopTriggered = true;
-                    streamingStopReason ??= epochStopReason;
+                    streamingStopReason ??= epochStopReason ?? $"distributed peer requested stop at epoch {epoch}";
                     break;
                 }
 
                 // Check for early stopping if configured
-                if (_optimizer is not null && _optimizer.ShouldEarlyStop())
+                bool localOptimizerEarlyStop = _optimizer is not null && _optimizer.ShouldEarlyStop();
+                if (SynchronizeDistributedStopSignal(distBackend, localOptimizerEarlyStop))
                 {
                     streamingEarlyStopTriggered = true;
                     streamingStopReason ??= $"optimizer early-stopping criterion met at epoch {epoch}";
@@ -3011,7 +3054,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     distBackend,
                     distCoordinator,
                     gradientAccumulationSteps,
-                    forceSave: true);
+                    forceSave: true,
+                    fitSeed: activeFitSeed,
+                    fitBatchSize: activeFitBatchSize);
             }
 
             }
@@ -3041,8 +3086,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             {
                 cleanupNet.DistributedCoordinator = null;
             }
-
-            distCoordinator?.Dispose();
         }
 
         // Calculate average loss

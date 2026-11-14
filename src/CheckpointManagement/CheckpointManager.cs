@@ -432,8 +432,10 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
         if (optimizer == null)
             throw new ArgumentNullException(nameof(optimizer));
 
-        // Check if we should save based on configured criteria (SaveFrequency, SaveOnImprovement)
-        if (!ShouldAutoSaveCheckpoint(step, metricValue, shouldMinimize))
+        double? effectiveMetricValue = ResolveConfiguredMetricValue(metrics, metricValue);
+
+        // Check if we should save based on configured criteria (SaveFrequency, SaveInterval, SaveOnImprovement)
+        if (!ShouldAutoSaveCheckpoint(step, effectiveMetricValue, shouldMinimize))
         {
             return null;
         }
@@ -442,7 +444,7 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
         var checkpointId = SaveCheckpoint(model, optimizer, epoch, step, metrics, metadata);
 
         // Update auto-save state for future checks
-        UpdateAutoSaveState(step, metricValue, shouldMinimize);
+        UpdateAutoSaveState(step, effectiveMetricValue, shouldMinimize);
 
         return checkpointId;
     }

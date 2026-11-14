@@ -251,6 +251,8 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
         double max = 0.0;
         for (int i = 0; i < a.Length; i++)
         {
+            Assert.False(float.IsNaN(a[i]) || float.IsInfinity(a[i]), $"Non-finite value at index {i} of first vector: {a[i]}");
+            Assert.False(float.IsNaN(b[i]) || float.IsInfinity(b[i]), $"Non-finite value at index {i} of second vector: {b[i]}");
             double diff = Math.Abs((double)a[i] - b[i]);
             if (diff > max)
             {
@@ -1055,8 +1057,8 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
             for (int r = 0; r < 2; r++)
             {
                 Assert.True(results[r].MixedPrecisionEngaged, $"Rank {r}: MixedPrecisionEngaged should be true.");
-                Assert.NotNull(results[r].MixedPrecisionStatus);
-                Assert.StartsWith("engaged:", results[r].MixedPrecisionStatus!, StringComparison.Ordinal);
+                string mpStatus = Assert.IsType<string>(results[r].MixedPrecisionStatus);
+                Assert.StartsWith("engaged:", mpStatus, StringComparison.Ordinal);
             }
 
             Assert.True(MaxAbsDiff(models[0].GetParameters(), models[1].GetParameters()) < 1e-5);
@@ -1166,16 +1168,18 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
                 model.SetParameters(init.Clone());
 
                 var ckptMgr = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir);
-                ckptMgr.ConfigureAutoCheckpointing(
-                    saveFrequency: 0,
-                    keepLast: 5,
-                    saveOnImprovement: false,
-                    metricName: "loss",
-                    minimizeMetric: true,
-                    saveInterval: TimeSpan.FromMilliseconds(75));
+                ckptMgr.ConfigureAutoCheckpointing(new AutoCheckpointingOptions
+                {
+                    SaveFrequency = 0,
+                    KeepLast = 8,
+                    SaveOnImprovement = false,
+                    MetricName = "loss",
+                    MinimizeMetric = true,
+                    SaveInterval = TimeSpan.FromMilliseconds(50),
+                });
 
                 // Skew Rank 1 slightly via sample delay so naive uncoordinated wall-clock checks would diverge!
-                int delayMs = rank == 0 ? 12 : 18;
+                int delayMs = rank == 0 ? 18 : 25;
 
                 await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                     .ConfigureModel(model)
@@ -1195,11 +1199,24 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
             await Task.WhenAll(tasks);
 
             Assert.True(Directory.Exists(ckptDir), "Checkpoint directory was not created.");
-            var jsonFiles = Directory.GetFiles(ckptDir, "*.json")
-                .Where(p => p.IndexOf(".tmp", StringComparison.OrdinalIgnoreCase) < 0)
-                .ToArray();
-            Assert.True(jsonFiles.Length >= 1,
+            var inspector = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir);
+            var checkpoints = inspector.ListCheckpoints();
+            Assert.True(checkpoints.Count >= 1,
                 "Expected >=1 checkpoint written purely from wall-clock SaveInterval (saveFrequency=0, saveOnImprovement=false).");
+
+            var savedGlobalSteps = new List<long>();
+            foreach (var meta in checkpoints)
+            {
+                var loaded = inspector.LoadCheckpoint(meta.CheckpointId);
+                if (loaded?.Metadata is not null
+                    && loaded.Metadata.TryGetValue("streaming.global_step", out object? rawStep)
+                    && rawStep is not null)
+                {
+                    savedGlobalSteps.Add(Convert.ToInt64(rawStep, System.Globalization.CultureInfo.InvariantCulture));
+                }
+            }
+
+            Assert.Contains(savedGlobalSteps, step => step > 0 && step < 8);
         }
         finally
         {
@@ -1405,6 +1422,777 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
         finally
         {
             ShutdownBackends(backends);
+        }
+    }
+
+    #endregion
+
+    #region (h) Adversarial & Edge-Case Regression Tests
+
+    private sealed class CustomShardingConfigStub : IShardingConfiguration<float>
+    {
+        public CustomShardingConfigStub(ICommunicationBackend<float> backend, bool overlap, int bucketBytes)
+        {
+            CommunicationBackend = backend;
+            OverlapCommunication = overlap;
+            GradientBucketSizeBytes = bucketBytes;
+        }
+
+        public bool AutoSyncGradients => true;
+        public ICommunicationBackend<float> CommunicationBackend { get; }
+        public int MinimumParameterGroupSize => 64;
+        public bool EnableGradientCompression => false;
+        public float LearningRate => 0.01f;
+        public bool CpuOffloadOptimizer => false;
+        public bool CpuOffloadGradients => false;
+        public bool CpuOffloadParams => false;
+        public bool OverlapCommunication { get; }
+        public int GradientBucketSizeBytes { get; }
+    }
+
+    private sealed class TensorMeanCenterTransformer : IDataTransformer<float, Tensor<float>, Tensor<float>>
+    {
+        private float[]? _fittedMean;
+
+        public bool IsFitted => _fittedMean is not null;
+        public int[]? ColumnIndices => null;
+        public bool SupportsInverseTransform => true;
+        public float[] FittedMean => _fittedMean is null ? Array.Empty<float>() : (float[])_fittedMean.Clone();
+
+        public void Fit(Tensor<float> data)
+        {
+            if (data.Shape.Length < 2 || data.Shape[0] <= 0)
+            {
+                throw new InvalidOperationException("Expected 2D non-empty batch tensor to fit TensorMeanCenterTransformer.");
+            }
+
+            int rows = data.Shape[0];
+            int cols = data.Length / rows;
+            var mean = new float[cols];
+            var span = data.AsSpan();
+            for (int r = 0; r < rows; r++)
+            {
+                int rowOffset = r * cols;
+                for (int c = 0; c < cols; c++)
+                {
+                    mean[c] += span[rowOffset + c];
+                }
+            }
+
+            float invRows = 1.0f / rows;
+            for (int c = 0; c < cols; c++)
+            {
+                mean[c] *= invRows;
+            }
+
+            _fittedMean = mean;
+        }
+
+        public Tensor<float> Transform(Tensor<float> data)
+        {
+            if (_fittedMean is null)
+            {
+                throw new InvalidOperationException("TensorMeanCenterTransformer must be fitted before Transform.");
+            }
+
+            if (data.Length == 0)
+            {
+                return data;
+            }
+
+            int cols = _fittedMean.Length;
+            var src = data.AsSpan();
+            var dst = new float[data.Length];
+            for (int i = 0; i < src.Length; i++)
+            {
+                dst[i] = src[i] - _fittedMean[i % cols];
+            }
+
+            return new Tensor<float>(data.Shape.ToArray(), new Vector<float>(dst));
+        }
+
+        public Tensor<float> FitTransform(Tensor<float> data)
+        {
+            Fit(data);
+            return Transform(data);
+        }
+
+        public Tensor<float> InverseTransform(Tensor<float> data)
+        {
+            if (_fittedMean is null)
+            {
+                throw new InvalidOperationException("TensorMeanCenterTransformer must be fitted before InverseTransform.");
+            }
+
+            int cols = _fittedMean.Length;
+            var src = data.AsSpan();
+            var dst = new float[data.Length];
+            for (int i = 0; i < src.Length; i++)
+            {
+                dst[i] = src[i] + _fittedMean[i % cols];
+            }
+
+            return new Tensor<float>(data.Shape.ToArray(), new Vector<float>(dst));
+        }
+
+        public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
+            => inputFeatureNames ?? Array.Empty<string>();
+    }
+
+    private static FeedForwardNeuralNetwork<float> CreatePrimeDimensionMlp(
+        IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>? optimizer = null,
+        bool initializeWeights = true)
+    {
+        // Input=5, Hidden=2 (N < worldSize=3!), Output=1 (1-element bias < worldSize=3!; total params = 5*2 + 2 + 2*1 + 1 = 15, plus prime layer 7 -> 5*7+7+7*1+1 = 50 -> 50 % 3 != 0!)
+        var layers = new List<ILayer<float>>
+        {
+            new InputLayer<float>(5),
+            new DenseLayer<float>(outputSize: 7, activationFunction: new ReLUActivation<float>()),
+            new DenseLayer<float>(outputSize: 2, activationFunction: new ReLUActivation<float>()),
+            new DenseLayer<float>(outputSize: 1, activationFunction: new IdentityActivation<float>()),
+        };
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 5,
+            outputSize: 1,
+            layers: layers);
+        var net = new FeedForwardNeuralNetwork<float>(
+            arch,
+            optimizer: optimizer,
+            lossFunction: new MeanSquaredErrorLoss<float>());
+        if (initializeWeights)
+        {
+            _ = net.Predict(new Tensor<float>(new[] { 1, 5 }));
+        }
+
+        return net;
+    }
+
+    [Theory(Timeout = 90000)]
+    [InlineData(DistributedStrategy.DDP)]
+    [InlineData(DistributedStrategy.ZeRO1)]
+    [InlineData(DistributedStrategy.ZeRO2)]
+    [InlineData(DistributedStrategy.ZeRO3)]
+    [InlineData(DistributedStrategy.FSDP)]
+    public async Task NonDivisibleAndTinyParameters_ThreeRanksWithPrimeSizes_MatchSingleRank(DistributedStrategy strategy)
+    {
+        var probe = CreatePrimeDimensionMlp(CreateAdamOptimizer());
+        int paramCount = probe.GetParameters().Length;
+        Assert.NotEqual(0, paramCount % 3); // Strictly non-divisible by worldSize = 3, with 1-element and 2-element biases (< worldSize)!
+
+        var rng = RandomHelper.CreateSeededRandom(314);
+        var initArr = new float[paramCount];
+        for (int i = 0; i < paramCount; i++)
+        {
+            initArr[i] = (float)(rng.NextDouble() * 0.6 - 0.3);
+        }
+
+        var init = new Vector<float>(initArr);
+        var inputs = new Tensor<float>[18];
+        var targets = new Tensor<float>[18];
+        for (int i = 0; i < 18; i++)
+        {
+            var x = new float[5];
+            float y = 0.25f;
+            for (int d = 0; d < 5; d++)
+            {
+                x[d] = (float)(rng.NextDouble() * 2.0 - 1.0);
+                y += (d % 2 == 0 ? 0.5f : -0.3f) * x[d];
+            }
+
+            inputs[i] = new Tensor<float>(new[] { 5 }, new Vector<float>(x));
+            targets[i] = new Tensor<float>(new[] { 1 }, new Vector<float>(new[] { y }));
+        }
+
+        var singleOpt = CreateAdamOptimizer(lr: 0.015, enableClipping: true, maxGradNorm: 0.75);
+        var singleModel = CreatePrimeDimensionMlp(singleOpt);
+        singleModel.SetParameters(init.Clone());
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(singleModel)
+            .ConfigureOptimizer(singleOpt)
+            .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 6))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+            {
+                Seed = 707,
+                MaxSteps = 4,
+            })
+            .BuildAsync();
+        var expected = singleModel.GetParameters();
+
+        var backends = CreateBackends(worldSize: 3, useSharedMemory: true);
+        try
+        {
+            var rankModels = new FeedForwardNeuralNetwork<float>[3];
+            var tasks = Enumerable.Range(0, 3).Select(rank => Task.Run(async () =>
+            {
+                var opt = CreateAdamOptimizer(lr: 0.015, enableClipping: true, maxGradNorm: 0.75);
+                var model = CreatePrimeDimensionMlp(opt);
+                model.SetParameters(init.Clone());
+                rankModels[rank] = model;
+
+                // Use tiny bucket size (32 bytes) so 1-element/2-element/prime-length tensors split across multiple buckets too!
+                var customCfg = new CustomShardingConfigStub(backends[rank], overlap: true, bucketBytes: 32);
+
+                await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                    .ConfigureModel(model)
+                    .ConfigureOptimizer(opt)
+                    .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 2))
+                    .ConfigureGpuAcceleration(CpuOnlyConfig())
+                    .ConfigureDistributedTraining(backends[rank], strategy, customCfg)
+                    .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        Seed = 707,
+                        MaxSteps = 4,
+                    })
+                    .BuildAsync();
+            })).ToArray();
+
+            await Task.WhenAll(tasks);
+
+            for (int r = 0; r < 3; r++)
+            {
+                Assert.True(MaxAbsDiff(expected, rankModels[r].GetParameters()) < 1e-5,
+                    $"3-rank {strategy} non-divisible parameters on rank {r} diverged from 1-rank by {MaxAbsDiff(expected, rankModels[r].GetParameters())}.");
+            }
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+    }
+
+    [Theory(Timeout = 90000)]
+    [InlineData(DistributedStrategy.DDP)]
+    [InlineData(DistributedStrategy.ZeRO1)]
+    public async Task DdpAndZero1_SingleRankMixedPrecisionOverflow_SynchronizesSkipAcrossAllRanks(DistributedStrategy strategy)
+    {
+        var init = CreateInitialWeights(seed: 515);
+        var backends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var steppedFlags = new bool[2];
+            var scalesAfter = new double[2];
+            var postWeights = new Vector<float>[2];
+
+            var tasks = Enumerable.Range(0, 2).Select(rank => Task.Run(() =>
+            {
+                backends[rank].Initialize();
+                using var coord = new DistributedTapeCoordinator<float>(backends[rank], strategy);
+                var opt = CreateAdamOptimizer(lr: 0.05);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+
+                // Give Rank 1 a tiny InitialLossScale (0.25) so dividing float.MaxValue / 0.25 overflows to +Inf ONLY on Rank 1
+                // during local unscale AFTER AllReduce, proving the !UseReduceScatter AllReduce(Max) overflow consensus!
+                model.EnableMixedPrecision(new AiDotNet.MixedPrecision.MixedPrecisionConfig
+                {
+                    PrecisionType = MixedPrecisionType.FP16,
+                    InitialLossScale = rank == 0 ? 4.0 : 0.25,
+                    MinLossScale = 0.01,
+                    EnableDynamicScaling = true,
+                    ScaleBackoffFactor = 0.5,
+                });
+
+                var prms = GetTrainableParameters(model);
+                coord.EnsureInitialParametersSynchronized(prms);
+                var (rw, _, _) = coord.SynchronizeStepMetadata(4, 1.0);
+                coord.BeginBackwardStep(prms, rw);
+
+                var grads = new Dictionary<Tensor<float>, Tensor<float>>();
+                for (int i = 0; i < prms.Count; i++)
+                {
+                    var gArr = new float[prms[i].Length];
+                    for (int k = 0; k < gArr.Length; k++)
+                    {
+                        gArr[k] = i == 0 && k == 0 ? 2.0e38f : 1.0f;
+                    }
+
+                    var gTensor = new Tensor<float>(prms[i].Shape.ToArray(), new Vector<float>(gArr));
+                    grads[prms[i]] = gTensor;
+                    coord.OnParameterGradientReady(prms[i], gTensor);
+                }
+
+                steppedFlags[rank] = coord.SynchronizeUnscaleClipAndStep(
+                    prms,
+                    grads,
+                    opt,
+                    model.ActiveMixedPrecisionContext,
+                    restoreFp32Masters: null,
+                    syncFp32MastersFromWorking: null,
+                    regularizeGradients: null,
+                    maxGradNorm: 1.0,
+                    executeFullParameterStep: ctx => opt.Step(ctx));
+
+                scalesAfter[rank] = model.ActiveMixedPrecisionContext?.LossScaler?.Scale ?? -1.0;
+                postWeights[rank] = model.GetParameters();
+            })).ToArray();
+
+            await Task.WhenAll(tasks);
+
+            // Rank 0 local unscaled value was 2e38 / 4 = 5e37 (finite!), while Rank 1 unscaled value was 2e38 / 0.25 = +Inf.
+            // Without AllReduce(Max) on !UseReduceScatter, Rank 0 would have stepped while Rank 1 skipped!
+            Assert.False(steppedFlags[0], $"Rank 0 must skip {strategy} step when Rank 1 overflows during unscale.");
+            Assert.False(steppedFlags[1], $"Rank 1 must skip {strategy} step when its unscaled gradient overflows.");
+            Assert.Equal(2.0, scalesAfter[0], 6);
+            Assert.Equal(0.125, scalesAfter[1], 6);
+            Assert.Equal(0.0, MaxAbsDiff(init, postWeights[0]), 6);
+            Assert.Equal(0.0, MaxAbsDiff(init, postWeights[1]), 6);
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task SharedMemoryAndGlooBackends_HeaderValidationReceiveCountAndDynamicBroadcast()
+    {
+        // 1a. SharedMemory rejects Rank 1 requesting larger slotCapacityBytes than existing Rank 0 mapping
+        string mismatchLargerSession = "shm_mismatch_lg_" + Guid.NewGuid().ToString("N");
+        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchLargerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 1_500))
+        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchLargerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 1_500))
+        {
+            var t0 = Task.Run(() => r0.Initialize());
+            var t1 = Task.Run(() => Assert.Throws<InvalidOperationException>(() => r1.Initialize()));
+            await t1;
+            r0.Shutdown();
+            try { await t0; } catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException) { }
+        }
+
+        // 1b. SharedMemory header validation rejects Rank 1 opening smaller slotCapacityBytes against existing Rank 0 mapping
+        string mismatchSmallerSession = "shm_mismatch_sm_" + Guid.NewGuid().ToString("N");
+        using (var r0 = new SharedMemoryCommunicationBackend<float>(0, 2, mismatchSmallerSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 1_500))
+        using (var r1 = new SharedMemoryCommunicationBackend<float>(1, 2, mismatchSmallerSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 1_500))
+        {
+            var t0 = Task.Run(() => r0.Initialize());
+            var t1 = Task.Run(() => Assert.Throws<InvalidOperationException>(() => r1.Initialize()));
+            await t1;
+            r0.Shutdown();
+            try { await t0; } catch (Exception ex) when (ex is IOException or InvalidOperationException or TimeoutException) { }
+        }
+
+        // 2. SharedMemory Receive validates count == totalElements sent and aborts sender cleanly without hanging
+        string countSession = "shm_count_" + Guid.NewGuid().ToString("N");
+        using (var s0 = new SharedMemoryCommunicationBackend<float>(0, 2, countSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 10_000))
+        using (var s1 = new SharedMemoryCommunicationBackend<float>(1, 2, countSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 10_000))
+        {
+            await Task.WhenAll(Task.Run(() => s0.Initialize()), Task.Run(() => s1.Initialize()));
+            var sendTask = Task.Run(() => Assert.Throws<IOException>(() => s0.Send(new Vector<float>(new[] { 1f, 2f, 3f, 4f, 5f }), destinationRank: 1, tag: 9)));
+            var recvTask = Task.Run(() => Assert.Throws<InvalidOperationException>(() => s1.Receive(sourceRank: 0, count: 3, tag: 9)));
+            await Task.WhenAll(sendTask, recvTask);
+            s0.Shutdown();
+            s1.Shutdown();
+        }
+
+        // 3. GlooCommunicationBackend Broadcast dynamically sizes non-root destination when non-root passes empty Vector
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        int freePort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+
+        string? prevAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
+        string? prevPort = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
+        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
+        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", freePort.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        try
+        {
+            var g0 = new GlooCommunicationBackend<float>(rank: 0, worldSize: 2);
+            var g1 = new GlooCommunicationBackend<float>(rank: 1, worldSize: 2);
+            try
+            {
+                await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
+
+                Vector<float>? receivedOnRank1 = null;
+                var b0 = Task.Run(() => g0.Broadcast(new Vector<float>(new[] { 10.5f, -3.25f, 7.0f, 42.0f }), root: 0));
+                var b1 = Task.Run(() => { receivedOnRank1 = g1.Broadcast(new Vector<float>(0), root: 0); });
+                await Task.WhenAll(b0, b1);
+
+                var actual = Assert.IsType<Vector<float>>(receivedOnRank1);
+                Assert.Equal(4, actual.Length);
+                Assert.Equal(10.5f, actual[0], 6);
+                Assert.Equal(-3.25f, actual[1], 6);
+                Assert.Equal(7.0f, actual[2], 6);
+                Assert.Equal(42.0f, actual[3], 6);
+            }
+            finally
+            {
+                g0.Shutdown();
+                g1.Shutdown();
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", prevAddr);
+            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", prevPort);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public Task AutoCheckpointingOptions_MaximizeMetricAndCustomShardingInterface_BehaveAsConfigured()
+    {
+        // 1. Custom IShardingConfiguration<float> properties honored by DistributedTapeCoordinator
+        var inMem = new InMemoryCommunicationBackend<float>(0, 1, "cfg_stub_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var customCfg = new CustomShardingConfigStub(inMem, overlap: false, bucketBytes: 4096);
+            using var coord = new DistributedTapeCoordinator<float>(inMem, DistributedStrategy.DDP, customCfg);
+            Assert.False(coord.OverlapCommunication);
+            Assert.Equal(4096, coord.GradientBucketSizeBytes);
+        }
+        finally
+        {
+            inMem.Shutdown();
+        }
+
+        // 2. AutoCheckpointingOptions with MinimizeMetric = false saves ONLY when metric increases
+        string maxDir = Path.Combine(_tempRoot, "maximize_ckpt");
+        var opt = CreateAdamOptimizer(lr: 0.01);
+        var model = CreateMlp(opt);
+        var ckptMgr = new CheckpointManager<float, Tensor<float>, Tensor<float>>(maxDir);
+        ckptMgr.ConfigureAutoCheckpointing(new AutoCheckpointingOptions
+        {
+            SaveFrequency = 0,
+            KeepLast = 10,
+            SaveOnImprovement = true,
+            MetricName = "r2",
+            MinimizeMetric = false,
+        });
+
+        string? id1 = ckptMgr.TryAutoSaveCheckpoint(
+            model,
+            opt,
+            epoch: 0,
+            step: 1,
+            metrics: new Dictionary<string, float> { ["r2"] = 0.60f });
+        Assert.NotNull(id1);
+
+        // Lower value (0.45 < 0.60) is WORSE when MinimizeMetric = false -> must NOT save!
+        string? id2 = ckptMgr.TryAutoSaveCheckpoint(
+            model,
+            opt,
+            epoch: 0,
+            step: 2,
+            metrics: new Dictionary<string, float> { ["r2"] = 0.45f });
+        Assert.Null(id2);
+
+        // Higher value (0.82 > 0.60) is BETTER when MinimizeMetric = false -> MUST save!
+        string? id3 = ckptMgr.TryAutoSaveCheckpoint(
+            model,
+            opt,
+            epoch: 0,
+            step: 3,
+            metrics: new Dictionary<string, float> { ["r2"] = 0.82f });
+        Assert.NotNull(id3);
+
+        // 3. Shipped 4-param overload preserves caller's shouldMinimize argument on TryAutoSaveCheckpoint
+        string legacyDir = Path.Combine(_tempRoot, "legacy_ckpt");
+        var legacyMgr = new CheckpointManager<float, Tensor<float>, Tensor<float>>(legacyDir);
+        legacyMgr.ConfigureAutoCheckpointing(saveFrequency: 0, keepLast: 10, saveOnImprovement: true, metricName: "acc");
+        Assert.NotNull(legacyMgr.TryAutoSaveCheckpoint(
+            model, opt, 0, 1, new Dictionary<string, float> { ["acc"] = 0.50f }, metricValue: 0.50, shouldMinimize: false));
+        Assert.Null(legacyMgr.TryAutoSaveCheckpoint(
+            model, opt, 0, 2, new Dictionary<string, float> { ["acc"] = 0.30f }, metricValue: 0.30, shouldMinimize: false));
+        Assert.NotNull(legacyMgr.TryAutoSaveCheckpoint(
+            model, opt, 0, 3, new Dictionary<string, float> { ["acc"] = 0.75f }, metricValue: 0.75, shouldMinimize: false));
+        return Task.CompletedTask;
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task DistributedPreprocessingPipeline_FitsIdenticallyAcrossRanksAndResumesCleanly()
+    {
+        const int dataSeed = 6161;
+        var init = CreateInitialWeights(seed: 808);
+        var (inputs, targets) = CreateRegressionDataset(sampleCount: 32, seed: 909);
+        // Shift inputs by a constant offset so mean-centering preprocessing has a large measurable effect!
+        for (int i = 0; i < inputs.Length; i++)
+        {
+            var span = inputs[i].AsWritableSpan();
+            for (int d = 0; d < span.Length; d++)
+            {
+                span[d] += 5.0f + 0.5f * d;
+            }
+        }
+
+        var singleTransformer = new TensorMeanCenterTransformer();
+        var singleOpt = CreateAdamOptimizer(lr: 0.015, enableClipping: true, maxGradNorm: 1.0);
+        var singleModel = CreateMlp(singleOpt);
+        singleModel.SetParameters(init.Clone());
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(singleModel)
+            .ConfigureOptimizer(singleOpt)
+            .ConfigurePreprocessing(singleTransformer)
+            .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 8))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+            {
+                Seed = dataSeed,
+                MaxSteps = 6,
+            })
+            .BuildAsync();
+        var expectedWeights = singleModel.GetParameters();
+        var expectedMean = singleTransformer.FittedMean;
+
+        string ckptDir = Path.Combine(_tempRoot, "preproc_resume");
+        var backends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var rankTransformers = new TensorMeanCenterTransformer[2];
+            var tasks = Enumerable.Range(0, 2).Select(rank => Task.Run(async () =>
+            {
+                var transformer = new TensorMeanCenterTransformer();
+                rankTransformers[rank] = transformer;
+                var opt = CreateAdamOptimizer(lr: 0.015, enableClipping: true, maxGradNorm: 1.0);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+
+                var ckpt = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir);
+                ckpt.ConfigureAutoCheckpointing(saveFrequency: 3, keepLast: 3, saveOnImprovement: false);
+
+                await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                    .ConfigureModel(model)
+                    .ConfigureOptimizer(opt)
+                    .ConfigurePreprocessing(transformer)
+                    .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 4))
+                    .ConfigureGpuAcceleration(CpuOnlyConfig())
+                    .ConfigureCheckpointManager(ckpt)
+                    .ConfigureDistributedTraining(backends[rank], DistributedStrategy.DDP)
+                    .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        Seed = dataSeed,
+                        MaxSteps = 3,
+                    })
+                    .BuildAsync();
+            })).ToArray();
+
+            await Task.WhenAll(tasks);
+
+            Assert.Equal(expectedMean.Length, rankTransformers[0].FittedMean.Length);
+            for (int c = 0; c < expectedMean.Length; c++)
+            {
+                Assert.Equal(expectedMean[c], rankTransformers[0].FittedMean[c], 5);
+                Assert.Equal(expectedMean[c], rankTransformers[1].FittedMean[c], 5);
+            }
+        }
+        finally
+        {
+            ShutdownBackends(backends);
+        }
+
+        // Resume from step 3 to step 6 on a single rank with a fresh unfitted TensorMeanCenterTransformer:
+        // must refit against the persisted initial global batch (seed + globalBatchSize) before skipping!
+        var resumedTransformer = new TensorMeanCenterTransformer();
+        var resumedOpt = CreateAdamOptimizer(lr: 0.015, enableClipping: true, maxGradNorm: 1.0);
+        var resumedModel = CreateMlp(resumedOpt);
+        resumedModel.SetParameters(new Vector<float>(Enumerable.Repeat(-0.2f, init.Length).ToArray()));
+        var resumeCkpt = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir);
+        resumeCkpt.ConfigureAutoCheckpointing(saveFrequency: 100, keepLast: 3, saveOnImprovement: false);
+
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(resumedModel)
+            .ConfigureOptimizer(resumedOpt)
+            .ConfigurePreprocessing(resumedTransformer)
+            .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 8))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureCheckpointManager(resumeCkpt)
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+            {
+                Seed = dataSeed,
+                MaxSteps = 6,
+                ResumeFromLatestCheckpoint = true,
+            })
+            .BuildAsync();
+
+        for (int c = 0; c < expectedMean.Length; c++)
+        {
+            Assert.Equal(expectedMean[c], resumedTransformer.FittedMean[c], 5);
+        }
+
+        Assert.True(MaxAbsDiff(expectedWeights, resumedModel.GetParameters()) < 1e-5,
+            $"Distributed preprocessing pipeline resume diverged by {MaxAbsDiff(expectedWeights, resumedModel.GetParameters())}.");
+
+        // Also verify resuming the same checkpoint onto a 1-rank run with a DIFFERENT raw batchSize (2 vs 8)
+        // uses the persisted fitBatchSize = 8 when refitting the fresh preprocessing transformer!
+        var diffBatchTransformer = new TensorMeanCenterTransformer();
+        var diffBatchOpt = CreateAdamOptimizer(lr: 0.015, enableClipping: true, maxGradNorm: 1.0);
+        var diffBatchModel = CreateMlp(diffBatchOpt);
+        var diffBatchCkpt = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir);
+        diffBatchCkpt.ConfigureAutoCheckpointing(saveFrequency: 100, keepLast: 3, saveOnImprovement: false);
+
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(diffBatchModel)
+            .ConfigureOptimizer(diffBatchOpt)
+            .ConfigurePreprocessing(diffBatchTransformer)
+            .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 2))
+            .ConfigureGpuAcceleration(CpuOnlyConfig())
+            .ConfigureCheckpointManager(diffBatchCkpt)
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+            {
+                Seed = dataSeed,
+                MaxSteps = 4,
+                ResumeFromLatestCheckpoint = true,
+            })
+            .BuildAsync();
+
+        for (int c = 0; c < expectedMean.Length; c++)
+        {
+            Assert.Equal(expectedMean[c], diffBatchTransformer.FittedMean[c], 5);
+        }
+
+        // Also verify unseeded (Seed = null) 2-rank run broadcasts Rank 0's generated fit seed so both ranks
+        // fit the exact same initial preprocessing statistics!
+        var unseededBackends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var unseededRankTransformers = new TensorMeanCenterTransformer[2];
+            var unseededTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(async () =>
+            {
+                var transformer = new TensorMeanCenterTransformer();
+                unseededRankTransformers[rank] = transformer;
+                var opt = CreateAdamOptimizer(lr: 0.01);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+
+                await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                    .ConfigureModel(model)
+                    .ConfigureOptimizer(opt)
+                    .ConfigurePreprocessing(transformer)
+                    .ConfigureDataLoader(CreateStreamingLoader(inputs, targets, batchSize: 4))
+                    .ConfigureGpuAcceleration(CpuOnlyConfig())
+                    .ConfigureDistributedTraining(unseededBackends[rank], DistributedStrategy.DDP)
+                    .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        Seed = null,
+                        MaxSteps = 2,
+                    })
+                    .BuildAsync();
+            })).ToArray();
+
+            await Task.WhenAll(unseededTasks);
+            for (int c = 0; c < unseededRankTransformers[0].FittedMean.Length; c++)
+            {
+                Assert.Equal(unseededRankTransformers[0].FittedMean[c], unseededRankTransformers[1].FittedMean[c], 5);
+            }
+        }
+        finally
+        {
+            ShutdownBackends(unseededBackends);
+        }
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task DistributedCompiledLazyIdleRankAndReplayDisagreement_SynchronizesCleanlyAcrossRanks()
+    {
+        var (inputs, targets) = CreateSequenceClassificationDataset(sampleCount: 8, seed: 404);
+        var lossFn = new CategoricalCrossEntropyLoss<float>();
+
+        // 1. Lazy uninitialized Transformer where Rank 1 gets an empty batch on Step 1 (CR #19)
+        var lazyBackends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var lazyModels = new Transformer<float>[2];
+            var lazyTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(() =>
+            {
+                using var coord = new DistributedTapeCoordinator<float>(lazyBackends[rank], DistributedStrategy.DDP);
+                var opt = CreateAdamOptimizer(lr: 0.01);
+                var model = CreateLazyCanaryTransformer(seed: 1234 + rank); // Uninitialized lazy layers!
+                model.DistributedCoordinator = coord;
+                lazyModels[rank] = model;
+                var stepper = TapeTrainingStepper<float>.ForOwner(model);
+                var layers = model.Layers.OfType<ITrainableLayer<float>>().ToList();
+
+                var step1In = rank == 0 ? StackRows(inputs, 0, 4) : new Tensor<float>(new[] { 0, 4 });
+                var step1Tgt = rank == 0 ? StackRows(targets, 0, 4) : new Tensor<float>(new[] { 0, 8 });
+                stepper.Step(new FusedTrainingStepRequest<float>
+                {
+                    Layers = layers,
+                    Input = step1In,
+                    Target = step1Tgt,
+                    Forward = x => model.ForwardForTraining(x),
+                    ComputeLoss = (pred, y) => lossFn.ComputeTapeLoss(pred, y),
+                    Optimizer = opt,
+                });
+
+                model.DistributedCoordinator = null;
+            })).ToArray();
+
+            await Task.WhenAll(lazyTasks);
+            Assert.True(lazyModels[0].GetParameters().Length > 0);
+            Assert.Equal(lazyModels[0].GetParameters().Length, lazyModels[1].GetParameters().Length);
+            Assert.True(MaxAbsDiff(lazyModels[0].GetParameters(), lazyModels[1].GetParameters()) < 1e-5);
+        }
+        finally
+        {
+            ShutdownBackends(lazyBackends);
+        }
+
+        // 2. Replay disagreement on Rank 0 ONLY aborts compiled replay across ALL ranks in lockstep (CR #23)
+        var (mlpInputs, mlpTargets) = CreateRegressionDataset(sampleCount: 16, seed: 505);
+        var mseLoss = new MeanSquaredErrorLoss<float>();
+        var init = CreateInitialWeights(seed: 606);
+        var replayBackends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var replayModels = new FeedForwardNeuralNetwork<float>[2];
+            var lastStepFused = new bool[2];
+            var sessionDisabled = new bool[2];
+
+            var replayTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(() =>
+            {
+                using var coord = new DistributedTapeCoordinator<float>(replayBackends[rank], DistributedStrategy.DDP);
+                var opt = CreateAdamOptimizer(lr: 0.01);
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+                model.DistributedCoordinator = coord;
+                replayModels[rank] = model;
+                var stepper = TapeTrainingStepper<float>.ForOwner(model);
+                var layers = model.Layers.OfType<ITrainableLayer<float>>().ToList();
+                var engine = AiDotNetEngine.Current;
+                int externalStepCounter = 0;
+
+                for (int s = 0; s < 2; s++)
+                {
+                    externalStepCounter = s;
+                    stepper.Step(new FusedTrainingStepRequest<float>
+                    {
+                        Layers = layers,
+                        Input = StackRows(mlpInputs, rank * 4 + s * 2, 2),
+                        Target = StackRows(mlpTargets, rank * 4 + s * 2, 2),
+                        Forward = x =>
+                        {
+                            var pred = model.ForwardForTraining(x);
+                            // Host-side branch active ONLY on Rank 0 when externalStepCounter > 0:
+                            // compiled plan traced at s=0 misses the +5.0 shift at s=1 on Rank 0, while Rank 1 agrees!
+                            if (rank == 0 && externalStepCounter > 0)
+                            {
+                                return engine.TensorAddScalar(pred, 5.0f);
+                            }
+
+                            return pred;
+                        },
+                        ComputeLoss = (pred, y) => mseLoss.ComputeTapeLoss(pred, y),
+                        Optimizer = opt,
+                        VerifyReplayAgreement = true,
+                    });
+                }
+
+                lastStepFused[rank] = stepper.LastStepFused;
+                sessionDisabled[rank] = stepper.Session.IsDisabled;
+                model.DistributedCoordinator = null;
+            })).ToArray();
+
+            await Task.WhenAll(replayTasks);
+
+            Assert.False(lastStepFused[0], "Rank 0 must fall back to eager on replay disagreement.");
+            Assert.False(lastStepFused[1], "Rank 1 must also fall back to eager in lockstep when Rank 0 disagrees.");
+            Assert.True(sessionDisabled[0]);
+            Assert.True(sessionDisabled[1]);
+            Assert.True(MaxAbsDiff(replayModels[0].GetParameters(), replayModels[1].GetParameters()) < 1e-6);
+        }
+        finally
+        {
+            ShutdownBackends(replayBackends);
         }
     }
 

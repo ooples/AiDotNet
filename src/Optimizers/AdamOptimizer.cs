@@ -820,19 +820,16 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm
             && GradientOptions.MaxGradientNorm > 0.0;
         double globalNormSq = 0.0;
-        if (guardActive || clipActive)
+        if ((guardActive || clipActive) && (clipActive || !TryGetClippedAheadGradNormSq(out globalNormSq)))
         {
-            if (clipActive || !TryGetClippedAheadGradNormSq(out globalNormSq))
-            {
-                globalNormSq = GlobalGradientSquaredNorm(context);
-            }
+            globalNormSq = GlobalGradientSquaredNorm(context);
         }
 
         // Any NaN or infinite gradient makes the sum of squares non-finite. NaN can only come from a NaN
         // gradient; +Infinity can also be a finite gradient whose square overflowed T, so that case alone
         // is settled by the exact element check.
         if (guardActive && !IsFiniteDouble(globalNormSq)
-            && (typeof(T) == typeof(float) || double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
+            && (double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
         {
             return;
         }
@@ -989,16 +986,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // otherwise TensorAdd's result has a length larger than m and
             // TensorCopy throws "Destination array was not long enough".
             bool createStateOnDevice = gpuAdam;
-            if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
-            {
-                m = CreateOptimizerStateTensor(param._shape, createStateOnDevice);
-                _tapeM[param] = m;
-            }
-            if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
-            {
-                v = CreateOptimizerStateTensor(param._shape, createStateOnDevice);
-                _tapeV[param] = v;
-            }
+            var m = GetOrCreateShapedOptimizerStateTensor(_tapeM, param, createStateOnDevice);
+            var v = GetOrCreateShapedOptimizerStateTensor(_tapeV, param, createStateOnDevice);
             // AMSGrad running max of v̂. Initialised to a fresh zero tensor on
             // first encounter of `param`; the max-accumulation guarantees the
             // denominator √v̂_max is non-decreasing once gradients have been
@@ -1008,12 +997,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             bool useAmsgrad = _options.UseAMSGrad;
             if (useAmsgrad)
             {
-                if (!_tapeVMax.TryGetValue(param, out vMax) || !vMax._shape.SequenceEqual(param._shape))
-                {
-                    vMax = new Tensor<T>(param._shape);
-                    vMax.AsWritableSpan().Clear();
-                    _tapeVMax[param] = vMax;
-                }
+                vMax = GetOrCreateShapedOptimizerStateTensor(_tapeVMax, param, createStateOnDevice: false);
             }
 
             // Sparse-embedding scatter path FIRST — before materializing any dense
@@ -1053,7 +1037,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // promotes deserialized/host m and v to GPU once via BindResidentBuffer, uploads host-only gradients
             // in-place into reusable per-parameter GPU buffers, updates weights + moments in place on device,
             // and commits parameter residency via CommitParameterUpdatedOnDevice.
-            if (gpuAdam && gpuEngine is not null && gpuBackend is not null)
+            if (gpuEngine is not null && gpuBackend is not null)
             {
                 var pf = (Tensor<float>)(object)param;
                 var gf = (Tensor<float>)(object)grad;
@@ -1769,8 +1753,6 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     }
                     return hostSum + deviceNorm.TotalNormSquared;
                 }
-
-                hasUnresolvedGpuGrad = true;
             }
             finally
             {
@@ -1881,28 +1863,23 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             var grad = kvp.Value;
             if (grad is null || grad.Length == 0) continue;
-            if (!grad.HasPendingGpuData)
+            if (!grad.HasPendingGpuData && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scaleFactor))
             {
-                Tensor<float>? gf = gpuBackend is not null ? (Tensor<float>)(object)grad : null;
-                IGpuBuffer? syncedGpuBuf = gf is not null
-                    && gf._gpuBuffer is not null
-                    && gf._gpuBuffer.Handle != IntPtr.Zero
-                    && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
-                    && gf._gpuBuffer.Size >= gf.Length
-                    && gf._gpuBufferVersion == gf.GpuCacheVersion
-                    ? gf._gpuBuffer
-                    : null;
-
-                if (AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scaleFactor))
+                if (gpuEngine is not null && gpuBackend is not null)
                 {
-                    if (syncedGpuBuf is not null && gpuEngine is not null && gpuBackend is not null && gf is not null)
+                    var gf = (Tensor<float>)(object)grad;
+                    if (gf._gpuBuffer is { } syncedGpuBuf
+                        && syncedGpuBuf.Handle != IntPtr.Zero
+                        && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
+                        && syncedGpuBuf.Size >= gf.Length
+                        && gf._gpuBufferVersion == gf.Version)
                     {
                         using var __gpuOp = gpuEngine.EnterGpuOp();
                         gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, (float)scaleFactor, gf.Length);
-                        gf._gpuBufferVersion = gf.GpuCacheVersion;
+                        gf._gpuBufferVersion = gf.Version;
                     }
-                    continue;
                 }
+                continue;
             }
             Engine.TensorMultiplyScalarInPlace(grad, scale);
         }

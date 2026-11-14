@@ -421,6 +421,27 @@ public class LossScaler<T>
     }
 
     /// <summary>
+    /// Captures the loss scaler's internal dynamic-scaling state for checkpoint serialization.
+    /// </summary>
+    internal (double Scale, int ConsecutiveSuccessfulUpdates, int TotalUpdates, int SkippedUpdates) CaptureState()
+        => (Scale, _consecutiveSuccessfulUpdates, _totalUpdates, _skippedUpdates);
+
+    /// <summary>
+    /// Restores the loss scaler's internal dynamic-scaling state from a checkpoint.
+    /// </summary>
+    internal void RestoreState(double scale, int consecutiveSuccessfulUpdates, int totalUpdates, int skippedUpdates)
+    {
+        if (scale > 0.0 && !double.IsNaN(scale) && !double.IsInfinity(scale))
+        {
+            Scale = Math.Min(Math.Max(scale, MinScale), MaxScale);
+        }
+
+        _consecutiveSuccessfulUpdates = Math.Max(0, consecutiveSuccessfulUpdates);
+        _totalUpdates = Math.Max(0, totalUpdates);
+        _skippedUpdates = Math.Max(0, skippedUpdates);
+    }
+
+    /// <summary>
     /// Resets the statistics and scale to initial values.
     /// </summary>
     /// <param name="newInitialScale">Optional new initial scale value.</param>

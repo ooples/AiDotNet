@@ -14,7 +14,7 @@ namespace AiDotNet.Models.Options;
 /// </para>
 /// <para>
 /// Periodic checkpoint cadence and retention come from the configured checkpoint manager
-/// (<see cref="ICheckpointManager{T, TInput, TOutput}.ConfigureAutoCheckpointing"/>): the streaming loop offers a
+/// (<see cref="ICheckpointManager{T, TInput, TOutput}.ConfigureAutoCheckpointing(AutoCheckpointingOptions)"/>): the streaming loop offers a
 /// checkpoint after every optimizer step and the manager decides whether to write it.
 /// </para>
 /// <para><b>For Beginners:</b> Long training runs (such as pretraining a language model) are measured in steps,
@@ -54,9 +54,15 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     /// </summary>
     /// <value>The accumulation factor; defaults to <c>1</c> (step on every micro-batch).</value>
     /// <remarks>
+    /// <para>
     /// In distributed runs, gradient synchronization (<c>AllReduce</c> / <c>ReduceScatter</c>), mixed-precision
     /// unscaling, and global-norm clipping run once per optimizer step after all <see cref="GradientAccumulationSteps"/>
     /// micro-batches have been accumulated locally.
+    /// </para>
+    /// <para><b>For Beginners:</b> If your GPU only fits a batch of 8 samples at a time, setting
+    /// <see cref="GradientAccumulationSteps"/> to <c>4</c> adds up the gradients from 4 mini-batches before
+    /// updating the weights once, giving you the stable learning behavior of a batch size of 32 without needing
+    /// 4x the memory.</para>
     /// </remarks>
     public int GradientAccumulationSteps { get; set; } = 1;
 

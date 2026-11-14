@@ -478,8 +478,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         // negotiates RFC 1323 TCP Window Scaling during the SYN/SYN-ACK handshake on accepted sockets.
         int myPort = basePort + _rank;
         _tcpListener = new TcpListener(IPAddress.Any, myPort);
-        _tcpListener.Server.ReceiveBufferSize = TcpSocketBufferBytes;
-        _tcpListener.Server.SendBufferSize = TcpSocketBufferBytes;
+        TryConfigureSocketBuffers(_tcpListener.Server);
         _tcpListener.Start();
         Console.WriteLine($"Rank {_rank}: TCP listener started on port {myPort}");
 
@@ -559,9 +558,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 client = new TcpClient
                 {
                     NoDelay = true,
-                    SendBufferSize = TcpSocketBufferBytes,
-                    ReceiveBufferSize = TcpSocketBufferBytes,
                 };
+                TryConfigureSocketBuffers(client.Client);
                 client.Connect(masterAddr, targetPort);
 
                 // Send handshake: my rank (4-byte little-endian int32, without BinaryWriter stream buffering)
@@ -610,8 +608,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         // Accept incoming connection from ANY rank
         var client = _tcpListener.AcceptTcpClient();
         client.NoDelay = true;
-        client.SendBufferSize = TcpSocketBufferBytes;
-        client.ReceiveBufferSize = TcpSocketBufferBytes;
+        TryConfigureSocketBuffers(client.Client);
 
         // Read handshake to identify the connecting rank (exact 4 bytes, zero read-ahead buffering)
         var stream = client.GetStream();
@@ -917,7 +914,6 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (_useNativeGloo)
         {
-            int totalLength;
             if (Rank == root)
             {
                 ValidateData(sendData, nameof(sendData));
@@ -926,26 +922,15 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                     throw new ArgumentException(
                         $"Data length {sendData.Length} must be divisible by world size {_worldSize}.");
                 }
-                totalLength = sendData.Length;
-            }
-            else
-            {
-                totalLength = 0;
             }
 
-            var lengthVector = PerformNativeGlooBroadcast(
-                new Vector<T>(new[] { NumOps.FromDouble(totalLength) }),
-                root);
-            totalLength = (int)NumOps.ToDouble(lengthVector[0]);
-
-            if (totalLength % _worldSize != 0)
+            var broadcasted = PerformNativeGlooBroadcast(sendData, root);
+            if (broadcasted.Length % _worldSize != 0)
             {
                 throw new ArgumentException(
-                    $"Data length {totalLength} must be divisible by world size {_worldSize}.");
+                    $"Data length {broadcasted.Length} must be divisible by world size {_worldSize}.");
             }
 
-            var fullBuffer = Rank == root ? sendData : new Vector<T>(new T[totalLength]);
-            var broadcasted = PerformNativeGlooBroadcast(fullBuffer, root);
             int chunkSize = broadcasted.Length / _worldSize;
             var chunk = new T[chunkSize];
             broadcasted.AsSpanUnmarked().Slice(_rank * chunkSize, chunkSize).CopyTo(chunk);
@@ -1063,7 +1048,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     }
 
     /// <summary>
-    /// Performs Broadcast via native Gloo (GlooSharp).
+    /// Performs Broadcast via native Gloo (GlooSharp), broadcasting the root buffer length first so non-root ranks
+    /// allocate an exact-sized receive buffer even when called with empty or differently sized input vectors.
     /// </summary>
     private Vector<T> PerformNativeGlooBroadcast(Vector<T> data, int root)
     {
@@ -1072,7 +1058,35 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Native Gloo Broadcast method is not available.");
         }
 
-        var doubleData = data is null ? Array.Empty<double>() : VectorToDoubleArray(data);
+        var lengthBuffer = new double[] { _rank == root ? (data?.Length ?? 0) : 0.0 };
+        _broadcastDelegate(_nativeGlooContext, lengthBuffer, root);
+        int broadcastLength = checked((int)lengthBuffer[0]);
+        if (broadcastLength < 0)
+        {
+            throw new InvalidOperationException(
+                $"Native Gloo Broadcast root rank {root} reported negative length {broadcastLength}.");
+        }
+
+        if (broadcastLength == 0)
+        {
+            return new Vector<T>(Array.Empty<T>());
+        }
+
+        double[] doubleData;
+        if (_rank == root)
+        {
+            if (data is null || data.Length != broadcastLength)
+            {
+                throw new InvalidOperationException("Broadcast root vector length changed unexpectedly.");
+            }
+
+            doubleData = VectorToDoubleArray(data);
+        }
+        else
+        {
+            doubleData = new double[broadcastLength];
+        }
+
         _broadcastDelegate(_nativeGlooContext, doubleData, root);
         return DoubleArrayToVector(doubleData);
     }
@@ -1229,6 +1243,45 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
     }
 
+    private static readonly int[] CandidateSocketBufferSizes =
+    {
+        TcpSocketBufferBytes,
+        2 * 1024 * 1024,
+        1024 * 1024,
+        512 * 1024,
+    };
+
+    private static void TryConfigureSocketBuffers(Socket socket)
+    {
+        for (int i = 0; i < CandidateSocketBufferSizes.Length; i++)
+        {
+            int candidate = CandidateSocketBufferSizes[i];
+            try
+            {
+                socket.ReceiveBufferSize = candidate;
+                break;
+            }
+            catch (SocketException ex)
+            {
+                Debug.WriteLine($"Socket ReceiveBufferSize={candidate} rejected by OS: {ex.Message}");
+            }
+        }
+
+        for (int i = 0; i < CandidateSocketBufferSizes.Length; i++)
+        {
+            int candidate = CandidateSocketBufferSizes[i];
+            try
+            {
+                socket.SendBufferSize = candidate;
+                break;
+            }
+            catch (SocketException ex)
+            {
+                Debug.WriteLine($"Socket SendBufferSize={candidate} rejected by OS: {ex.Message}");
+            }
+        }
+    }
+
     private PersistentSendWorker GetOrCreateSendWorker()
     {
         var worker = Volatile.Read(ref _sendWorker);
@@ -1238,14 +1291,22 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         var created = new PersistentSendWorker(this);
-        var existing = Interlocked.CompareExchange(ref _sendWorker, created, null);
-        if (existing is not null)
+        try
+        {
+            var existing = Interlocked.CompareExchange(ref _sendWorker, created, null);
+            if (existing is not null)
+            {
+                created.Dispose();
+                return existing;
+            }
+
+            return created;
+        }
+        catch
         {
             created.Dispose();
-            return existing;
+            throw;
         }
-
-        return created;
     }
 
     private sealed class PersistentSendWorker : IDisposable
@@ -1350,7 +1411,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                         _owner.SendArraySlice(dest, buf, off, cnt);
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     err = ex;
                 }
@@ -1372,8 +1433,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             {
                 _workAvailable.Set();
             }
-            catch (ObjectDisposedException)
+            catch (ObjectDisposedException ex)
             {
+                Debug.WriteLine($"Gloo send worker event already disposed: {ex.Message}");
             }
 
             bool joined = !_thread.IsAlive || _thread.Join(millisecondsTimeout: 5000);
@@ -1402,7 +1464,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         {
             ReceiveArrayInto(receiveRank, receiveBuffer, receiveOffset, expectedLength: receiveCount);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             receiveException = ex;
         }
@@ -1426,8 +1488,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(float))
         {
-            var dstF = (float[])(object)dst;
-            var srcF = (float[])(object)src;
+            var dstF = Unsafe.As<T[], float[]>(ref dst);
+            var srcF = Unsafe.As<T[], float[]>(ref src);
 #if !AIDN_LEGACY_TFM
             var dstSpan = dstF.AsSpan(dstOffset, count);
             ReadOnlySpan<float> srcSpan = srcF.AsSpan(srcOffset, count);
@@ -1454,8 +1516,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
         else if (typeof(T) == typeof(double))
         {
-            var dstD = (double[])(object)dst;
-            var srcD = (double[])(object)src;
+            var dstD = Unsafe.As<T[], double[]>(ref dst);
+            var srcD = Unsafe.As<T[], double[]>(ref src);
 #if !AIDN_LEGACY_TFM
             var dstSpan = dstD.AsSpan(dstOffset, count);
             ReadOnlySpan<double> srcSpan = srcD.AsSpan(srcOffset, count);
@@ -1638,7 +1700,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(float))
         {
-            var dstF = (float[])(object)dst;
+            var dstF = Unsafe.As<T[], float[]>(ref dst);
             float inv = 1.0f / worldSize;
 #if !AIDN_LEGACY_TFM
             var span = dstF.AsSpan(dstOffset, count);
@@ -1666,7 +1728,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(double))
         {
-            var dstD = (double[])(object)dst;
+            var dstD = Unsafe.As<T[], double[]>(ref dst);
             double inv = 1.0 / worldSize;
 #if !AIDN_LEGACY_TFM
             var span = dstD.AsSpan(dstOffset, count);
@@ -1770,7 +1832,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 {
                     incomingRented = ReceiveRentedArray(prevRank, out incomingLength);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OutOfMemoryException)
                 {
                     receiveException = ex;
                 }
@@ -2020,6 +2082,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new ArgumentException("Tag must be non-negative.", nameof(tag));
         }
 
+        DrainAsyncCollectives();
+
         // Single-process mode: cannot send to self
         if (_worldSize == 1)
         {
@@ -2049,6 +2113,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         {
             throw new ArgumentException("Tag must be non-negative.", nameof(tag));
         }
+
+        DrainAsyncCollectives();
 
         // Single-process mode: cannot receive from self
         if (_worldSize == 1)
@@ -2431,7 +2497,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         if (typeof(T) == typeof(byte))
         {
-            var srcB = (byte[])(object)source;
+            var srcB = Unsafe.As<T[], byte[]>(ref source);
             stream.Write(srcB, offset, count);
             return;
         }
@@ -2439,7 +2505,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 #if !AIDN_LEGACY_TFM
         if (typeof(T) == typeof(float))
         {
-            var srcF = (float[])(object)source;
+            var srcF = Unsafe.As<T[], float[]>(ref source);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(float);
             int pos = 0;
             while (pos < count)
@@ -2454,7 +2520,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(double))
         {
-            var srcD = (double[])(object)source;
+            var srcD = Unsafe.As<T[], double[]>(ref source);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(double);
             int pos = 0;
             while (pos < count)
@@ -2469,7 +2535,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(int))
         {
-            var srcI = (int[])(object)source;
+            var srcI = Unsafe.As<T[], int[]>(ref source);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(int);
             int pos = 0;
             while (pos < count)
@@ -2484,7 +2550,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(long))
         {
-            var srcL = (long[])(object)source;
+            var srcL = Unsafe.As<T[], long[]>(ref source);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(long);
             int pos = 0;
             while (pos < count)
@@ -2499,25 +2565,25 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 #else
         if (typeof(T) == typeof(float))
         {
-            WriteBlittableArrayLegacy(stream, (float[])(object)source, offset, count, sizeof(float));
+            WriteBlittableArrayLegacy(stream, source, offset, count, sizeof(float));
             return;
         }
 
         if (typeof(T) == typeof(double))
         {
-            WriteBlittableArrayLegacy(stream, (double[])(object)source, offset, count, sizeof(double));
+            WriteBlittableArrayLegacy(stream, source, offset, count, sizeof(double));
             return;
         }
 
         if (typeof(T) == typeof(int))
         {
-            WriteBlittableArrayLegacy(stream, (int[])(object)source, offset, count, sizeof(int));
+            WriteBlittableArrayLegacy(stream, source, offset, count, sizeof(int));
             return;
         }
 
         if (typeof(T) == typeof(long))
         {
-            WriteBlittableArrayLegacy(stream, (long[])(object)source, offset, count, sizeof(long));
+            WriteBlittableArrayLegacy(stream, source, offset, count, sizeof(long));
             return;
         }
 #endif
@@ -2590,7 +2656,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         if (typeof(T) == typeof(byte))
         {
-            var dstB = (byte[])(object)destination;
+            var dstB = Unsafe.As<T[], byte[]>(ref destination);
 #if !AIDN_LEGACY_TFM
             stream.ReadExactly(dstB.AsSpan(dstOffset, count));
 #else
@@ -2602,7 +2668,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 #if !AIDN_LEGACY_TFM
         if (typeof(T) == typeof(float))
         {
-            var dstF = (float[])(object)destination;
+            var dstF = Unsafe.As<T[], float[]>(ref destination);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(float);
             int pos = 0;
             while (pos < count)
@@ -2617,7 +2683,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(double))
         {
-            var dstD = (double[])(object)destination;
+            var dstD = Unsafe.As<T[], double[]>(ref destination);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(double);
             int pos = 0;
             while (pos < count)
@@ -2632,7 +2698,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(int))
         {
-            var dstI = (int[])(object)destination;
+            var dstI = Unsafe.As<T[], int[]>(ref destination);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(int);
             int pos = 0;
             while (pos < count)
@@ -2647,7 +2713,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         if (typeof(T) == typeof(long))
         {
-            var dstL = (long[])(object)destination;
+            var dstL = Unsafe.As<T[], long[]>(ref destination);
             const int maxElems = MaxDirectSpanWriteBytes / sizeof(long);
             int pos = 0;
             while (pos < count)
@@ -2662,25 +2728,25 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 #else
         if (typeof(T) == typeof(float))
         {
-            ReadBlittableArrayLegacy(stream, (float[])(object)destination, dstOffset, count, sizeof(float));
+            ReadBlittableArrayLegacy(stream, destination, dstOffset, count, sizeof(float));
             return;
         }
 
         if (typeof(T) == typeof(double))
         {
-            ReadBlittableArrayLegacy(stream, (double[])(object)destination, dstOffset, count, sizeof(double));
+            ReadBlittableArrayLegacy(stream, destination, dstOffset, count, sizeof(double));
             return;
         }
 
         if (typeof(T) == typeof(int))
         {
-            ReadBlittableArrayLegacy(stream, (int[])(object)destination, dstOffset, count, sizeof(int));
+            ReadBlittableArrayLegacy(stream, destination, dstOffset, count, sizeof(int));
             return;
         }
 
         if (typeof(T) == typeof(long))
         {
-            ReadBlittableArrayLegacy(stream, (long[])(object)destination, dstOffset, count, sizeof(long));
+            ReadBlittableArrayLegacy(stream, destination, dstOffset, count, sizeof(long));
             return;
         }
 #endif

@@ -41,7 +41,7 @@ namespace AiDotNet.DistributedTraining;
 public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBase<T>, IDisposable
 {
     private const int MagicValue = 0x4149444E; // "AIDN"
-    private const int ProtocolVersion = 1;
+    private const int ProtocolVersion = 2;
     private const int MaxSupportedRanks = 64;
     private const int GlobalHeaderSize = 64;
     private const int RankHeaderStride = 64;
@@ -53,6 +53,10 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private const int GlobalWorldSizeOffset = 4;
     private const int GlobalAbortFlagOffset = 8;
     private const int GlobalWaiterCountOffset = 12;
+    private const int GlobalSlotCapacityOffset = 16; // int64 (bytes 16..23)
+    private const int GlobalWireTypeOffset = 24;     // int32 (bytes 24..27)
+    private const int GlobalRootPidOffset = 28;      // int32 (bytes 28..31)
+    private const int GlobalSessionTokenOffset = 32; // int64 (bytes 32..39)
 
     private const int SpinCountBeforePark = 16384;
     private const int FastSpinThreshold = 256;
@@ -196,8 +200,8 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
         long pairCount = (long)_worldSize * _worldSize;
         long p2pSlotStride = P2PHeaderStride + P2PChunkCapacityBytes;
-        _p2pBaseOffset = CollectiveRegionOffset + (_worldSize * _slotCapacityBytes);
-        long totalCapacityBytes = _p2pBaseOffset + (pairCount * p2pSlotStride);
+        _p2pBaseOffset = checked(CollectiveRegionOffset + ((long)_worldSize * _slotCapacityBytes));
+        long totalCapacityBytes = checked(_p2pBaseOffset + (pairCount * p2pSlotStride));
 
         try
         {
@@ -234,55 +238,159 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             _localPhase = 0;
 
             int currentPid = Process.GetCurrentProcess().Id;
+            int myWireType = WireElementTypeCode();
             long myHeader = RankHeaderOffset(_rank);
-
-            // Register this rank's metadata in its dedicated cache line before publishing active state.
-            WriteInt32Volatile(myHeader + 4, currentPid);
-            WriteInt64Volatile(myHeader + 8, 0L);
-            WriteInt32Volatile(myHeader + 16, 0);
-            WriteInt32Volatile(myHeader + 20, 0);
-            WriteInt64Volatile(myHeader + 24, 0L);
-            WriteInt32Volatile(myHeader + 32, 0);
-            WriteInt32Volatile(myHeader + 40, 0);
-            WriteInt32Volatile(myHeader + 44, 0);
-            Thread.MemoryBarrier();
-            WriteInt32Volatile(myHeader + 0, RankStateActive);
-            Thread.MemoryBarrier();
-
             int expectedHeader = (ProtocolVersion << 16) ^ MagicValue;
+            long startTicks = Stopwatch.GetTimestamp();
+            long sessionToken;
+
             if (_rank == 0)
             {
+                int existingMagic = ReadInt32Volatile(GlobalMagicOffset);
+                int existingRootState = ReadInt32Volatile(RankHeaderOffset(0) + 0);
+                int existingRootPid = ReadInt32Volatile(GlobalRootPidOffset);
+                if (existingMagic == expectedHeader &&
+                    existingRootState == RankStateActive &&
+                    existingRootPid > 0 &&
+                    existingRootPid != currentPid &&
+                    IsOsProcessAlive(existingRootPid))
+                {
+                    throw new InvalidOperationException(
+                        $"Shared-memory session '{_sessionName}' is already owned by active rank-0 process PID {existingRootPid}.");
+                }
+
+                sessionToken = GenerateSessionToken(currentPid);
+
+                // Invalidate global magic while rank 0 scrubs any stale headers/P2P state from a crashed prior session.
+                WriteInt32Volatile(GlobalMagicOffset, 0);
+                Thread.MemoryBarrier();
+
+                for (int r = 0; r < _worldSize; r++)
+                {
+                    long rHdr = RankHeaderOffset(r);
+                    WriteInt32Volatile(rHdr + 0, RankStateUninitialized);
+                    WriteInt32Volatile(rHdr + 4, 0);
+                    WriteInt64Volatile(rHdr + 8, 0L);
+                    WriteInt32Volatile(rHdr + 16, 0);
+                    WriteInt32Volatile(rHdr + 20, 0);
+                    WriteInt64Volatile(rHdr + 24, 0L);
+                    WriteInt32Volatile(rHdr + 32, 0);
+                    WriteInt32Volatile(rHdr + 40, 0);
+                    WriteInt32Volatile(rHdr + 44, 0);
+                }
+
+                for (long pair = 0; pair < pairCount; pair++)
+                {
+                    long pOffset = _p2pBaseOffset + (pair * p2pSlotStride);
+                    WriteInt64Volatile(pOffset + 0, 0L);
+                    WriteInt64Volatile(pOffset + 8, 0L);
+                    WriteInt32Volatile(pOffset + 16, 0);
+                    WriteInt32Volatile(pOffset + 20, 0);
+                    WriteInt32Volatile(pOffset + 24, 0);
+                }
+
+                WriteInt32Volatile(myHeader + 4, currentPid);
+                WriteInt64Volatile(myHeader + 8, 0L);
+                WriteInt32Volatile(myHeader + 16, 0);
+                WriteInt32Volatile(myHeader + 20, 0);
+                WriteInt64Volatile(myHeader + 24, sessionToken);
+                WriteInt32Volatile(myHeader + 32, 0);
+                WriteInt32Volatile(myHeader + 40, 0);
+                WriteInt32Volatile(myHeader + 44, 0);
+                Thread.MemoryBarrier();
+                WriteInt32Volatile(myHeader + 0, RankStateActive);
+
                 WriteInt32Volatile(GlobalWorldSizeOffset, _worldSize);
                 WriteInt32Volatile(GlobalAbortFlagOffset, 0);
                 WriteInt32Volatile(GlobalWaiterCountOffset, 0);
+                WriteInt64Volatile(GlobalSlotCapacityOffset, _slotCapacityBytes);
+                WriteInt32Volatile(GlobalWireTypeOffset, myWireType);
+                WriteInt32Volatile(GlobalRootPidOffset, currentPid);
+                WriteInt64Volatile(GlobalSessionTokenOffset, sessionToken);
                 Thread.MemoryBarrier();
                 WriteInt32Volatile(GlobalMagicOffset, expectedHeader);
                 Thread.MemoryBarrier();
+                SignalWakeEventUnconditional();
+            }
+            else
+            {
+                int rootSpins = 0;
+                while (true)
+                {
+                    int hdrMagic = ReadInt32Volatile(GlobalMagicOffset);
+                    long candidateToken = ReadInt64Volatile(GlobalSessionTokenOffset);
+                    int rootPid = ReadInt32Volatile(GlobalRootPidOffset);
+                    int rootState = ReadInt32Volatile(RankHeaderOffset(0) + 0);
+                    long rootRankToken = ReadInt64Volatile(RankHeaderOffset(0) + 24);
+
+                    if (hdrMagic == expectedHeader &&
+                        candidateToken != 0L &&
+                        rootState == RankStateActive &&
+                        rootRankToken == candidateToken &&
+                        rootPid > 0 &&
+                        (rootPid == currentPid || IsOsProcessAlive(rootPid)))
+                    {
+                        if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+                        {
+                            ThrowSessionAborted();
+                        }
+
+                        ValidateSessionHeaderOrAbort(myWireType);
+                        sessionToken = candidateToken;
+                        break;
+                    }
+
+                    if (rootSpins < SpinCountBeforePark)
+                    {
+                        Thread.SpinWait(rootSpins < FastSpinThreshold ? 1 : 4);
+                        rootSpins++;
+                        if ((rootSpins & 255) == 0 && IsTimedOut(startTicks, out double elapsedMs))
+                        {
+                            ThrowHandshakeTimeout(elapsedMs, peer: 0);
+                        }
+                    }
+                    else
+                    {
+                        WaitParkSlice();
+                        if (IsTimedOut(startTicks, out double elapsedMs))
+                        {
+                            ThrowHandshakeTimeout(elapsedMs, peer: 0);
+                        }
+                    }
+                }
+
+                WriteInt32Volatile(myHeader + 4, currentPid);
+                WriteInt64Volatile(myHeader + 8, 0L);
+                WriteInt32Volatile(myHeader + 16, 0);
+                WriteInt32Volatile(myHeader + 20, 0);
+                WriteInt64Volatile(myHeader + 24, sessionToken);
+                WriteInt32Volatile(myHeader + 32, 0);
+                WriteInt32Volatile(myHeader + 40, 0);
+                WriteInt32Volatile(myHeader + 44, 0);
+                Thread.MemoryBarrier();
+                WriteInt32Volatile(myHeader + 0, RankStateActive);
+                Thread.MemoryBarrier();
+                SignalWakeEventUnconditional();
             }
 
-            SignalWakeEventUnconditional();
-
-            // Wait for all ranks to register and bind peer Process handles for instant crash detection.
-            // Note: GlobalWaiterCountOffset is not touched until all ranks finish this handshake, so Rank 0's
-            // initialization of GlobalWaiterCountOffset = 0 above never races with Interlocked increments.
-            long startTicks = Stopwatch.GetTimestamp();
+            // Wait for all ranks to register under this session token and bind peer Process handles for crash detection.
             for (int peer = 0; peer < _worldSize; peer++)
             {
                 long peerHeader = RankHeaderOffset(peer);
                 int spins = 0;
                 while (true)
                 {
+                    if (ReadInt32Volatile(GlobalAbortFlagOffset) != 0)
+                    {
+                        ThrowSessionAborted();
+                    }
+
                     int hdrMagic = ReadInt32Volatile(GlobalMagicOffset);
                     int state = ReadInt32Volatile(peerHeader + 0);
-                    if (hdrMagic == expectedHeader && state == RankStateActive)
+                    long peerToken = ReadInt64Volatile(peerHeader + 24);
+                    if (hdrMagic == expectedHeader && state == RankStateActive && peerToken == sessionToken)
                     {
-                        int savedWorld = ReadInt32Volatile(GlobalWorldSizeOffset);
-                        if (savedWorld != _worldSize)
-                        {
-                            throw new InvalidOperationException(
-                                $"Shared-memory session '{_sessionName}' was initialized with WorldSize={savedWorld}, " +
-                                $"but rank {_rank} configured WorldSize={_worldSize}.");
-                        }
+                        ValidateSessionHeaderOrAbort(myWireType);
 
                         int peerPid = ReadInt32Volatile(peerHeader + 4);
                         if (peer != _rank && peerPid > 0 && peerPid != currentPid)
@@ -319,9 +427,18 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                                     Volatile.Write(ref _peerExited[peer], 1);
                                 }
                             }
-                            catch (Exception)
+                            catch (InvalidOperationException ex)
                             {
-                                // Fallback time-throttled HasExited check handles restricted OS environments.
+                                Debug.WriteLine($"Peer PID {peerPid} exited while subscribing Exited event: {ex.Message}");
+                                Volatile.Write(ref _peerExited[peer], 1);
+                            }
+                            catch (System.ComponentModel.Win32Exception ex)
+                            {
+                                Debug.WriteLine($"Peer PID {peerPid} restricted Exited subscription, using fallback polling: {ex.Message}");
+                            }
+                            catch (NotSupportedException ex)
+                            {
+                                Debug.WriteLine($"Peer PID {peerPid} does not support Exited events, using fallback polling: {ex.Message}");
                             }
                         }
 
@@ -768,6 +885,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         EnsureInitialized();
         ValidateRank(destinationRank, nameof(destinationRank));
         ValidateData(data, nameof(data));
+        DrainAsyncCollectives();
 
         long start = Stopwatch.GetTimestamp();
         int pairIdx = (_rank * _worldSize) + destinationRank;
@@ -820,6 +938,8 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             throw new ArgumentOutOfRangeException(nameof(count), "Receive count cannot be negative.");
         }
 
+        DrainAsyncCollectives();
+
         long start = Stopwatch.GetTimestamp();
         int pairIdx = (sourceRank * _worldSize) + _rank;
         long pairOffset = _p2pBaseOffset + ((long)pairIdx * (P2PHeaderStride + P2PChunkCapacityBytes));
@@ -839,21 +959,28 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
             int msgTag = ReadInt32Volatile(pairOffset + 20);
             int chunk = ReadInt32Volatile(pairOffset + 16);
+            int totalElements = ReadInt32Volatile(pairOffset + 24);
             if (msgTag != tag)
             {
-                throw new InvalidOperationException(
+                PublishAbortAndThrowP2PProtocolMismatch(
                     $"SharedMemory Receive tag mismatch from rank {sourceRank}: expected tag {tag}, received tag {msgTag}.");
+            }
+
+            if (totalElements != count)
+            {
+                PublishAbortAndThrowP2PProtocolMismatch(
+                    $"SharedMemory Receive length mismatch from rank {sourceRank}: expected {count} elements, sender transmitted {totalElements} elements.");
             }
 
             if (chunk < 0 || chunk > maxChunkElements)
             {
-                throw new InvalidOperationException(
+                PublishAbortAndThrowP2PProtocolMismatch(
                     $"SharedMemory Receive invalid chunk size {chunk} from rank {sourceRank} (max {maxChunkElements}).");
             }
 
             if (received + chunk > count)
             {
-                throw new InvalidOperationException(
+                PublishAbortAndThrowP2PProtocolMismatch(
                     $"SharedMemory Receive count overflow from rank {sourceRank}: expected {count} elements, got at least {received + chunk}.");
             }
 
@@ -1213,8 +1340,22 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                     Volatile.Write(ref exitedFlags[peer], 1);
                 }
             }
-            catch (Exception)
+            catch (InvalidOperationException)
             {
+                exited = true;
+                if (exitedFlags is not null)
+                {
+                    Volatile.Write(ref exitedFlags[peer], 1);
+                }
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+            {
+                Debug.WriteLine($"HasExited query restricted for peer {peer}: {ex.Message}");
+                exited = false;
+            }
+            catch (NotSupportedException ex)
+            {
+                Debug.WriteLine($"HasExited query unsupported for peer {peer}: {ex.Message}");
                 exited = false;
             }
         }
@@ -1286,6 +1427,15 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
+    private void PublishAbortAndThrowP2PProtocolMismatch(string message)
+    {
+        WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+        Thread.MemoryBarrier();
+        SignalWakeEventUnconditional();
+        throw new InvalidOperationException(message);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ThrowCollectiveTimeout(double elapsedMs, int opKind, long nextPhase, int peer)
     {
         throw new TimeoutException(
@@ -1345,8 +1495,9 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         {
             _wakeEvent?.Set();
         }
-        catch (ObjectDisposedException)
+        catch (ObjectDisposedException ex)
         {
+            Debug.WriteLine($"Shared-memory wake event already disposed: {ex.Message}");
         }
     }
 
@@ -1359,7 +1510,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             throw new InvalidOperationException("Failed to acquire shared-memory view handle.");
         }
 
-        _basePtr = (nint)accessor.SafeMemoryMappedViewHandle.DangerousGetHandle() + (nint)accessor.PointerOffset;
+        _basePtr = accessor.SafeMemoryMappedViewHandle.DangerousGetHandle() + (nint)accessor.PointerOffset;
         Volatile.Write(ref _mappedCapacityBytes, totalCapacityBytes);
         _viewHandleAcquired = true;
     }
@@ -1395,7 +1546,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             ThrowViewNotMapped();
         }
 
-        ref byte baseRef = ref Unsafe.AddByteOffset(ref Unsafe.NullRef<byte>(), (IntPtr)ptr);
+        ref byte baseRef = ref Unsafe.AddByteOffset(ref Unsafe.NullRef<byte>(), ptr);
         return ref Unsafe.AddByteOffset(ref baseRef, (IntPtr)byteOffset);
     }
 
@@ -1454,15 +1605,52 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     {
         string mapName = $"Local\\AiDotNet_Shm_{_sessionName}";
         string eventName = $"Local\\AiDotNet_Evt_{_sessionName}";
-        _mmf = MemoryMappedFile.CreateOrOpen(mapName, totalCapacityBytes, MemoryMappedFileAccess.ReadWrite);
-        _accessor = _mmf.CreateViewAccessor(0, totalCapacityBytes, MemoryMappedFileAccess.ReadWrite);
-        _wakeEvent = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
+        try
+        {
+            _mmf = MemoryMappedFile.CreateOrOpen(mapName, totalCapacityBytes, MemoryMappedFileAccess.ReadWrite);
+            _accessor = _mmf.CreateViewAccessor(0, totalCapacityBytes, MemoryMappedFileAccess.ReadWrite);
+            _wakeEvent = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            TrySignalExistingWindowsSessionAbort(mapName, eventName);
+            throw new InvalidOperationException(
+                $"Failed to open Windows shared-memory session '{_sessionName}' with requested capacity {totalCapacityBytes} bytes. " +
+                "Another rank may have created the session with a smaller slotCapacityBytes or worldSize, or with incompatible access permissions.",
+                ex);
+        }
+    }
+
+#if !AIDN_LEGACY_TFM
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+#endif
+    private static void TrySignalExistingWindowsSessionAbort(string mapName, string eventName)
+    {
+        try
+        {
+            using var existing = MemoryMappedFile.OpenExisting(mapName);
+            using var headerView = existing.CreateViewAccessor(0, GlobalHeaderSize, MemoryMappedFileAccess.ReadWrite);
+            int expectedHeader = (ProtocolVersion << 16) ^ MagicValue;
+            if (headerView.ReadInt32(GlobalMagicOffset) == expectedHeader)
+            {
+                headerView.Write(GlobalAbortFlagOffset, 1);
+                headerView.Flush();
+                Thread.MemoryBarrier();
+                using var evt = new EventWaitHandle(false, EventResetMode.AutoReset, eventName);
+                evt.Set();
+            }
+        }
+        catch (Exception abortEx) when (abortEx is IOException or UnauthorizedAccessException or ObjectDisposedException)
+        {
+            Debug.WriteLine($"Best-effort Windows shared-memory abort signal skipped: {abortEx.Message}");
+        }
     }
 
     private void InitializeFileBackedSharedMemory(long totalCapacityBytes)
     {
         string shmDir = Directory.Exists("/dev/shm") ? "/dev/shm" : Path.GetTempPath();
-        _backingFilePath = Path.Combine(shmDir, $"aidotnet_shm_{_sessionName}.bin");
+        string safeFileName = Path.GetFileName($"aidotnet_shm_{_sessionName}.bin");
+        _backingFilePath = Path.Combine(shmDir, safeFileName);
         _backingFileStream = new FileStream(
             _backingFilePath,
             FileMode.OpenOrCreate,
@@ -1474,9 +1662,9 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             {
                 _backingFileStream.SetLength(totalCapacityBytes);
             }
-            catch (IOException)
+            catch (IOException ex)
             {
-                // Another rank resized concurrently.
+                Debug.WriteLine($"Concurrent shared-memory file resize observed: {ex.Message}");
             }
         }
 
@@ -1492,6 +1680,13 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
     private void ReleaseResources()
     {
+        if (_viewHandleAcquired && _basePtr != 0)
+        {
+            long myHeader = RankHeaderOffset(_rank);
+            WriteInt32Volatile(myHeader + 0, RankStateShutdown);
+            Thread.MemoryBarrier();
+        }
+
         if (_peerProcesses is not null)
         {
             for (int i = 0; i < _peerProcesses.Length; i++)
@@ -1537,10 +1732,121 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                     File.Delete(_backingFilePath);
                 }
             }
-            catch (IOException)
+            catch (IOException ex)
             {
+                Debug.WriteLine($"Unable to unlink shared-memory backing file '{_backingFilePath}': {ex.Message}");
             }
         }
+    }
+
+    private void ValidateSessionHeaderOrAbort(int expectedWireType)
+    {
+        int savedWorld = ReadInt32Volatile(GlobalWorldSizeOffset);
+        if (savedWorld != _worldSize)
+        {
+            WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+            Thread.MemoryBarrier();
+            SignalWakeEventUnconditional();
+            throw new InvalidOperationException(
+                $"Shared-memory session '{_sessionName}' was initialized with WorldSize={savedWorld}, " +
+                $"but rank {_rank} configured WorldSize={_worldSize}.");
+        }
+
+        long savedSlotCapacity = ReadInt64Volatile(GlobalSlotCapacityOffset);
+        if (savedSlotCapacity != _slotCapacityBytes)
+        {
+            WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+            Thread.MemoryBarrier();
+            SignalWakeEventUnconditional();
+            throw new InvalidOperationException(
+                $"Shared-memory session '{_sessionName}' was initialized with SlotCapacityBytes={savedSlotCapacity}, " +
+                $"but rank {_rank} configured SlotCapacityBytes={_slotCapacityBytes}.");
+        }
+
+        int savedWireType = ReadInt32Volatile(GlobalWireTypeOffset);
+        if (savedWireType != expectedWireType)
+        {
+            WriteInt32Volatile(GlobalAbortFlagOffset, 1);
+            Thread.MemoryBarrier();
+            SignalWakeEventUnconditional();
+            throw new InvalidOperationException(
+                $"Shared-memory session '{_sessionName}' element wire type code ({savedWireType}) does not match " +
+                $"rank {_rank}'s element type '{typeof(T).Name}' ({expectedWireType}).");
+        }
+    }
+
+    private static bool IsOsProcessAlive(int pid)
+    {
+        if (pid <= 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var proc = Process.GetProcessById(pid);
+            return !proc.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return true;
+        }
+    }
+
+    private static long GenerateSessionToken(int pid)
+    {
+        byte[] guidBytes = Guid.NewGuid().ToByteArray();
+        long guidPart = BitConverter.ToInt64(guidBytes, 0);
+        long token = (Stopwatch.GetTimestamp() << 16) ^ ((long)pid & 0xFFFFL) ^ guidPart;
+        return token == 0L ? 1L : token;
+    }
+
+    private static int WireElementTypeCode()
+    {
+        if (typeof(T) == typeof(float))
+        {
+            return 1;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            return 2;
+        }
+
+        if (typeof(T) == typeof(int))
+        {
+            return 3;
+        }
+
+        if (typeof(T) == typeof(long))
+        {
+            return 4;
+        }
+
+        if (typeof(T) == typeof(byte))
+        {
+            return 5;
+        }
+
+        // Deterministic FNV-1a 32-bit hash across processes for non-primitive numeric types.
+        string name = typeof(T).FullName ?? typeof(T).Name;
+        uint hash = 2166136261u;
+        for (int i = 0; i < name.Length; i++)
+        {
+            hash ^= name[i];
+            hash *= 16777619u;
+        }
+
+        int code = unchecked((int)(hash | 0x40000000u));
+        return code == 0 ? 6 : code;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -42,7 +42,7 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
     private long _totalCollectiveStopwatchTicks;
     private long _collectiveCount;
     private readonly object _asyncWorkerLock = new object();
-    private BlockingCollection<Action>? _asyncQueue;
+    private BlockingCollection<AsyncQueueItem>? _asyncQueue;
     private Thread? _asyncWorkerThread;
     private int _asyncPendingCount;
 
@@ -180,21 +180,16 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
     private IAsyncCollectiveResultHandle<T> EnqueueAsyncCollective(Func<Vector<T>> work)
     {
         var handle = new QueuedCollectiveHandle(work);
-        var queue = EnsureAsyncWorkerStarted();
+        BlockingCollection<AsyncQueueItem> queue;
+        lock (_asyncWorkerLock)
+        {
+            queue = GetOrStartAsyncQueueLocked();
+        }
+
         Interlocked.Increment(ref _asyncPendingCount);
         try
         {
-            queue.Add(() =>
-            {
-                try
-                {
-                    handle.Execute();
-                }
-                finally
-                {
-                    Interlocked.Decrement(ref _asyncPendingCount);
-                }
-            });
+            queue.Add(AsyncQueueItem.ForCollective(this, handle));
         }
         catch
         {
@@ -217,7 +212,7 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             return;
         }
 
-        BlockingCollection<Action>? queue;
+        BlockingCollection<AsyncQueueItem>? queue;
         Thread? worker;
         lock (_asyncWorkerLock)
         {
@@ -233,55 +228,63 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
         using var barrier = new ManualResetEventSlim(false);
         try
         {
-            queue.Add(() => barrier.Set());
+            queue.Add(AsyncQueueItem.ForBarrier(barrier));
             barrier.Wait();
         }
-        catch (InvalidOperationException)
+        catch (ObjectDisposedException ex)
         {
-            // Queue completed or disposed during shutdown.
+            Debug.WriteLine($"Async collective queue disposed during DrainAsyncCollectives: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Debug.WriteLine($"Async collective queue completed during DrainAsyncCollectives: {ex.Message}");
         }
     }
 
-    private BlockingCollection<Action> EnsureAsyncWorkerStarted()
+    private BlockingCollection<AsyncQueueItem> GetOrStartAsyncQueueLocked()
     {
-        lock (_asyncWorkerLock)
+        if (_asyncQueue is not null && !_asyncQueue.IsAddingCompleted)
         {
-            if (_asyncQueue is not null && !_asyncQueue.IsAddingCompleted)
-            {
-                return _asyncQueue;
-            }
-
-            var queue = new BlockingCollection<Action>();
-            var worker = new Thread(() => RunAsyncWorkerLoop(queue))
-            {
-                IsBackground = true,
-                Name = $"AiDotNet-CollectiveWorker-Rank{Rank}",
-            };
-            _asyncQueue = queue;
-            _asyncWorkerThread = worker;
-            worker.Start();
-            return queue;
+            return _asyncQueue;
         }
+
+        var queue = new BlockingCollection<AsyncQueueItem>();
+        var worker = new Thread(() => RunAsyncWorkerLoop(queue))
+        {
+            IsBackground = true,
+            Name = $"AiDotNet-CollectiveWorker-Rank{Rank}",
+        };
+        _asyncQueue = queue;
+        _asyncWorkerThread = worker;
+        worker.Start();
+        return queue;
     }
 
-    private static void RunAsyncWorkerLoop(BlockingCollection<Action> queue)
+    private static void RunAsyncWorkerLoop(BlockingCollection<AsyncQueueItem> queue)
     {
         try
         {
-            foreach (var item in queue.GetConsumingEnumerable())
+            while (!queue.IsCompleted)
             {
-                item();
+                if (queue.TryTake(out var workItem, Timeout.Infinite))
+                {
+                    workItem.Execute();
+                }
             }
         }
-        catch (ObjectDisposedException)
+        catch (ObjectDisposedException ex)
         {
-            // Normal teardown race when Dispose happens after GetConsumingEnumerable exits.
+            Debug.WriteLine($"Async collective worker exited after queue disposal: {ex.Message}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Debug.WriteLine($"Async collective worker exited after queue completion: {ex.Message}");
         }
     }
 
     private void StopAsyncWorker()
     {
-        BlockingCollection<Action>? queue;
+        BlockingCollection<AsyncQueueItem>? queue;
         Thread? worker;
         lock (_asyncWorkerLock)
         {
@@ -300,16 +303,95 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
         {
             queue.CompleteAdding();
         }
-        catch (ObjectDisposedException)
+        catch (ObjectDisposedException ex)
         {
+            Debug.WriteLine($"Async collective queue already disposed during shutdown: {ex.Message}");
         }
 
-        if (worker is not null && worker.IsAlive && Thread.CurrentThread != worker)
+        bool workerStopped = worker is null || !worker.IsAlive;
+        if (!workerStopped && worker is not null && Thread.CurrentThread != worker)
         {
-            worker.Join(millisecondsTimeout: 10_000);
+            workerStopped = worker.Join(millisecondsTimeout: 10_000);
         }
 
-        queue.Dispose();
+        while (queue.TryTake(out var pendingItem))
+        {
+            pendingItem.CancelForShutdown();
+        }
+
+        if (workerStopped)
+        {
+            queue.Dispose();
+        }
+    }
+
+    private readonly struct AsyncQueueItem
+    {
+        private readonly CommunicationBackendBase<T>? _owner;
+        private readonly QueuedCollectiveHandle? _handle;
+        private readonly ManualResetEventSlim? _barrier;
+
+        private AsyncQueueItem(
+            CommunicationBackendBase<T>? owner,
+            QueuedCollectiveHandle? handle,
+            ManualResetEventSlim? barrier)
+        {
+            _owner = owner;
+            _handle = handle;
+            _barrier = barrier;
+        }
+
+        public static AsyncQueueItem ForCollective(CommunicationBackendBase<T> owner, QueuedCollectiveHandle handle)
+            => new AsyncQueueItem(owner, handle, barrier: null);
+
+        public static AsyncQueueItem ForBarrier(ManualResetEventSlim barrier)
+            => new AsyncQueueItem(owner: null, handle: null, barrier);
+
+        public void Execute()
+        {
+            if (_handle is not null)
+            {
+                try
+                {
+                    _handle.Execute();
+                }
+                finally
+                {
+                    if (_owner is not null)
+                    {
+                        Interlocked.Decrement(ref _owner._asyncPendingCount);
+                    }
+                }
+            }
+            else
+            {
+                _barrier?.Set();
+            }
+        }
+
+        public void CancelForShutdown()
+        {
+            if (_handle is not null)
+            {
+                if (_owner is not null)
+                {
+                    Interlocked.Decrement(ref _owner._asyncPendingCount);
+                }
+
+                _handle.TryFailShutdown();
+            }
+            else
+            {
+                try
+                {
+                    _barrier?.Set();
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    Debug.WriteLine($"Drain barrier already disposed during shutdown: {ex.Message}");
+                }
+            }
+        }
     }
 
     private sealed class CompletedCollectiveResultHandle : IAsyncCollectiveResultHandle<T>
@@ -376,11 +458,19 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
                 Interlocked.Exchange(ref _elapsedStopwatchTicks, Stopwatch.GetTimestamp() - start);
                 _tcs.TrySetResult(result);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 Interlocked.Exchange(ref _elapsedStopwatchTicks, Stopwatch.GetTimestamp() - start);
                 _tcs.TrySetException(ex);
             }
+        }
+
+        public void TryFailShutdown()
+        {
+            _tcs.TrySetException(
+                new ObjectDisposedException(
+                    nameof(CommunicationBackendBase<T>),
+                    "Communication backend was shut down before the queued asynchronous collective completed."));
         }
 
         public void Wait()
@@ -389,7 +479,7 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             {
                 _tcs.Task.GetAwaiter().GetResult();
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 ExceptionDispatchInfo.Capture(ex).Throw();
             }
@@ -400,7 +490,7 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             if (cancellationToken.CanBeCanceled)
             {
                 var cancelTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                using (cancellationToken.Register(static s => ((TaskCompletionSource<bool>)s!).TrySetResult(true), cancelTcs))
+                using (cancellationToken.Register(() => cancelTcs.TrySetResult(true)))
                 {
                     var completed = await Task.WhenAny(_tcs.Task, cancelTcs.Task).ConfigureAwait(false);
                     if (completed == cancelTcs.Task)

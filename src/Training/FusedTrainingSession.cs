@@ -340,17 +340,33 @@ internal sealed class FusedTrainingSession<T>
 
         // The first replay with new data (the step after the trace) is checked against the eager forward when the
         // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
-        // In distributed mode stepLoss is the globally reduced loss across all ranks, whereas eagerLoss is local.
-        bool checkReplay = !isDistributed && request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
+        // In distributed mode stepLoss is the globally reduced loss across all ranks, so each non-empty rank compares
+        // eagerLoss against its pre-reduction local compiled loss before any weight or moment mutation occurs, and
+        // coordinates the verdict across all ranks via AllReduce(Min).
+        bool checkReplay = request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
         double eagerLoss = 0.0;
+        double? distributedEagerReplayLoss = null;
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
         {
-            using var noGrad = new NoGradScope<T>();
-            using var noDraws = CompiledStepRandom<T>.SuppressDraws();
-            var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
-            eagerLoss = eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
-            snapshot = SnapshotTrainedTensors(request);
+            if (isDistributed)
+            {
+                if (request.Input.Length > 0 && request.Target.Length > 0)
+                {
+                    using var noGrad = new NoGradScope<T>();
+                    using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+                    var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
+                    distributedEagerReplayLoss = eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
+                }
+            }
+            else
+            {
+                using var noGrad = new NoGradScope<T>();
+                using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+                var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
+                eagerLoss = eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
+                snapshot = SnapshotTrainedTensors(request);
+            }
         }
 
         // Each step's transient activations are reclaimed when it returns, the way PyTorch's caching allocator
@@ -390,7 +406,10 @@ internal sealed class FusedTrainingSession<T>
                 l2Regularization: l2,
                 deferredLoss: deferredLoss,
                 l2AfterClip: l2AfterClip,
-                stateKey: _stateKey);
+                stateKey: _stateKey,
+                verifyDistributedReplay: isDistributed && checkReplay,
+                distributedEagerReplayLoss: distributedEagerReplayLoss,
+                distributedReplayTolerance: ReplayAgreementTolerance);
         }
         finally
         {
@@ -399,6 +418,13 @@ internal sealed class FusedTrainingSession<T>
 
         if (!ran)
         {
+            if (isDistributed && CompiledTapeTrainingStep<T>.TryConsumeDistributedReplayDisagreement(out string? disagreeReason))
+            {
+                Warn(disagreeReason);
+                Reset(stickyDisable: true);
+                return Decline(disagreeReason);
+            }
+
             LastFallbackException = CompiledTapeTrainingStep<T>.GetLastFallbackException();
             if (IsCommitted)
                 return FusedStepOutcome.CommittedFailure;
@@ -408,7 +434,14 @@ internal sealed class FusedTrainingSession<T>
                 + ")");
         }
 
-        if (checkReplay && snapshot is not null)
+        if (checkReplay && isDistributed)
+        {
+            if (CompiledTapeTrainingStep<T>.WasLastDistributedReplayEvaluated())
+            {
+                _replayAgreementVerified = true;
+            }
+        }
+        else if (checkReplay && snapshot is not null)
         {
             double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
             double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
@@ -465,7 +498,7 @@ internal sealed class FusedTrainingSession<T>
             // point and wrong for a plan whose trace lost the path from the loss to the parameters: such a plan stepped
             // a VAE forever without moving a weight. Once per plan, ask the eager tape. The plan moved nothing, so
             // dropping it here loses no update; this step then runs on the eager tape.
-            if (!isDistributed && !persisted && !detached && gradientsObserved && !gradientNonZero && !_zeroGradientCrossChecked)
+            if (!persisted && !detached && gradientsObserved && !gradientNonZero && !_zeroGradientCrossChecked)
             {
                 _zeroGradientCrossChecked = true;
                 if (EagerGradientNonZero(request))

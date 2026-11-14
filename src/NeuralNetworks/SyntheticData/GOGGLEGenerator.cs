@@ -791,6 +791,9 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 }
             }
 
+            DistributedCoordinator?.EnsureInitialParametersSynchronized(
+                CollectModelTrainableTensors(),
+                InvalidateLayerWeightCaches);
             using var tape = new GradientTape<T>();
             var (mean, logVar) = EncoderForwardTape(input);
             var z = ReparameterizeTape(mean, logVar);

@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
@@ -24,10 +23,10 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using Newtonsoft.Json;
 using Xunit;
 using Xunit.Abstractions;
 #if NET8_0_OR_GREATER
-using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 #endif
@@ -150,7 +149,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
     public static async Task<int> RunChildWorkerFromSpecAsync(string specPath)
     {
         string specJson = File.ReadAllText(specPath);
-        var spec = JsonSerializer.Deserialize<WorkerSpec>(specJson)
+        var spec = JsonConvert.DeserializeObject<WorkerSpec>(specJson)
             ?? throw new InvalidOperationException("Failed to deserialize WorkerSpec.");
 
         var result = new WorkerResult
@@ -233,7 +232,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         }
 
         string tmp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        File.WriteAllText(tmp, JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = false }));
+        File.WriteAllText(tmp, JsonConvert.SerializeObject(result, Formatting.None));
         if (File.Exists(path))
         {
             File.Delete(path);
@@ -695,7 +694,7 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         const string hostSource = @"
 using System;
 using System.IO;
-using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Threading.Tasks;
@@ -730,28 +729,30 @@ public static class Program
             return IntPtr.Zero;
         };
 
-        var testAsm = AssemblyLoadContext.Default.LoadFromAssemblyPath(testDll);
-        var testType = testAsm.GetType(
-            ""AiDotNet.Tests.IntegrationTests.DistributedTraining.MultiProcessGpuDistributedAcceptanceTests"",
-            throwOnError: true)!;
-        var method = testType.GetMethod(""RunChildWorkerFromSpecAsync"", BindingFlags.Public | BindingFlags.Static)!;
-        var task = (Task<int>)method.Invoke(null, new object[] { specPath })!;
-        return await task.ConfigureAwait(false);
+        return await InvokeWorkerAsync(specPath).ConfigureAwait(false);
     }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Task<int> InvokeWorkerAsync(string specPath)
+        => AiDotNet.Tests.IntegrationTests.DistributedTraining.MultiProcessGpuDistributedAcceptanceTests.RunChildWorkerFromSpecAsync(specPath);
 }";
 
         string tpa = (string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")
             ?? throw new InvalidOperationException("TRUSTED_PLATFORM_ASSEMBLIES is unavailable.");
+        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var references = new List<MetadataReference>();
         foreach (string asmPath in tpa.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
-            string fileName = Path.GetFileName(asmPath);
-            if (fileName.StartsWith("System.", StringComparison.OrdinalIgnoreCase) ||
-                fileName.Equals("mscorlib.dll", StringComparison.OrdinalIgnoreCase) ||
-                fileName.Equals("netstandard.dll", StringComparison.OrdinalIgnoreCase))
+            if (File.Exists(asmPath) && seenPaths.Add(asmPath))
             {
                 references.Add(MetadataReference.CreateFromFile(asmPath));
             }
+        }
+
+        string testAssemblyPath = typeof(MultiProcessGpuDistributedAcceptanceTests).Assembly.Location;
+        if (!string.IsNullOrWhiteSpace(testAssemblyPath) && File.Exists(testAssemblyPath) && seenPaths.Add(testAssemblyPath))
+        {
+            references.Add(MetadataReference.CreateFromFile(testAssemblyPath));
         }
 
         var tree = CSharpSyntaxTree.ParseText(hostSource);
@@ -795,14 +796,28 @@ public static class Program
                 return Array.Empty<string>();
             }
 
-            string output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
-            if (proc.ExitCode != 0)
+            Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = proc.StandardError.ReadToEndAsync();
+            if (!proc.WaitForExit(5000))
+            {
+                try
+                {
+                    proc.Kill(entireProcessTree: true);
+                }
+                catch (Exception)
+                {
+                }
+
+                return Array.Empty<string>();
+            }
+
+            Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 2000);
+            if (proc.ExitCode != 0 || stdoutTask.Status != TaskStatus.RanToCompletion)
             {
                 return Array.Empty<string>();
             }
 
-            return output
+            return stdoutTask.Result
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => s.Trim())
                 .Where(s => s.Length > 0)
@@ -854,7 +869,7 @@ public static class Program
         string specPath = Path.Combine(_tempRoot, $"worker_spec_r{spec.Rank}_{id}.json");
         string resultPath = Path.Combine(_tempRoot, $"worker_result_r{spec.Rank}_{id}.json");
         spec.ResultPath = resultPath;
-        File.WriteAllText(specPath, JsonSerializer.Serialize(spec));
+        File.WriteAllText(specPath, JsonConvert.SerializeObject(spec));
 
         string hostDll = WorkerHostDllPath.Value;
         var psi = new ProcessStartInfo("dotnet")
@@ -913,10 +928,19 @@ public static class Program
         WorkerResult? res = null;
         if (File.Exists(worker.ResultPath))
         {
-            res = JsonSerializer.Deserialize<WorkerResult>(File.ReadAllText(worker.ResultPath));
+            res = JsonConvert.DeserializeObject<WorkerResult>(File.ReadAllText(worker.ResultPath));
         }
 
         return (worker.Process.ExitCode, res, stdout, stderr);
+    }
+
+    private static WorkerResult RequireSucceededResult(
+        (int ExitCode, WorkerResult? Result, string Stdout, string Stderr) outcome,
+        string context)
+    {
+        Assert.True(outcome.ExitCode == 0 && outcome.Result is { Succeeded: true },
+            $"{context} failed (exit={outcome.ExitCode}): {outcome.Result?.ExceptionMessage ?? outcome.Stderr}");
+        return outcome.Result ?? throw new InvalidOperationException($"{context} returned null WorkerResult.");
     }
 
     private static async Task<((int ExitCode, WorkerResult? Result, string Stdout, string Stderr) Rank0, (int ExitCode, WorkerResult? Result, string Stdout, string Stderr) Rank1)>
@@ -986,6 +1010,8 @@ public static class Program
         double max = 0.0;
         for (int i = 0; i < a.Length; i++)
         {
+            Assert.False(float.IsNaN(a[i]) || float.IsInfinity(a[i]), $"Non-finite value at index {i} of first array: {a[i]}");
+            Assert.False(float.IsNaN(b[i]) || float.IsInfinity(b[i]), $"Non-finite value at index {i} of second array: {b[i]}");
             double d = Math.Abs((double)a[i] - b[i]);
             if (d > max)
             {
@@ -1060,8 +1086,7 @@ public static class Program
             InitWeightSeed = 88,
         }))
         {
-            var (code1, res1, _, err1) = await WaitForWorkerAsync(singleCpu, TimeSpan.FromSeconds(60));
-            Assert.True(code1 == 0 && res1 is { Succeeded: true }, $"1-process CPU failed: {res1?.ExceptionMessage ?? err1}");
+            var res1 = RequireSucceededResult(await WaitForWorkerAsync(singleCpu, TimeSpan.FromSeconds(60)), "1-process CPU");
 
             string cpuShm = "mp_cpu_" + Guid.NewGuid().ToString("N");
             using var r0Cpu = StartWorkerProcess(new WorkerSpec
@@ -1094,16 +1119,13 @@ public static class Program
             });
 
             var (cpu0, cpu1) = await WaitForWorkerPairAsync(r0Cpu, r1Cpu, TimeSpan.FromSeconds(60));
-
-            Assert.True(cpu0.ExitCode == 0 && cpu0.Result is { Succeeded: true },
-                $"Rank 0 CPU failed: {cpu0.Result?.ExceptionMessage ?? cpu0.Stderr}");
-            Assert.True(cpu1.ExitCode == 0 && cpu1.Result is { Succeeded: true },
-                $"Rank 1 CPU failed: {cpu1.Result?.ExceptionMessage ?? cpu1.Stderr}");
+            var cpuRes0 = RequireSucceededResult(cpu0, "Rank 0 CPU");
+            var cpuRes1 = RequireSucceededResult(cpu1, "Rank 1 CPU");
 
             // Canonical ordered reduction across shared memory yields bit-identical post-step weights across ranks!
-            Assert.Equal(0.0, MaxAbsDiff(cpu0.Result!.FinalWeights, cpu1.Result!.FinalWeights), 9);
-            Assert.True(MaxAbsDiff(res1!.FinalWeights, cpu0.Result!.FinalWeights) < 1e-5,
-                $"2-process CPU diverged from 1-process CPU by {MaxAbsDiff(res1.FinalWeights, cpu0.Result.FinalWeights)}.");
+            Assert.Equal(0.0, MaxAbsDiff(cpuRes0.FinalWeights, cpuRes1.FinalWeights), 9);
+            Assert.True(MaxAbsDiff(res1.FinalWeights, cpuRes0.FinalWeights) < 1e-5,
+                $"2-process CPU diverged from 1-process CPU by {MaxAbsDiff(res1.FinalWeights, cpuRes0.FinalWeights)}.");
         }
 
         // Part 2: 2-Process 2-GPU (GPU 0 = RTX 3080, GPU 1 = RTX 3090) across 3 seeds vs 1-Process GPU
@@ -1129,10 +1151,10 @@ public static class Program
                 InitWeightSeed = seed + 50,
             }))
             {
-                var (c, r, _, e) = await WaitForWorkerAsync(singleGpu, TimeSpan.FromSeconds(90));
-                Assert.True(c == 0 && r is { Succeeded: true }, $"1-process GPU seed {seed} failed: {r?.ExceptionMessage ?? e}");
-                Assert.True(r!.SupportsGpu, $"Expected GPU engine in 1-process worker, got {r.EngineName}.");
-                singleGpuRes = r;
+                singleGpuRes = RequireSucceededResult(
+                    await WaitForWorkerAsync(singleGpu, TimeSpan.FromSeconds(90)),
+                    $"1-process GPU seed {seed}");
+                Assert.True(singleGpuRes.SupportsGpu, $"Expected GPU engine in 1-process worker, got {singleGpuRes.EngineName}.");
             }
 
             string gpuShm = $"mp_gpu_{seed}_" + Guid.NewGuid().ToString("N");
@@ -1168,14 +1190,8 @@ public static class Program
             });
 
             var (gpu0, gpu1) = await WaitForWorkerPairAsync(r0Gpu, r1Gpu, TimeSpan.FromSeconds(90));
-
-            Assert.True(gpu0.ExitCode == 0 && gpu0.Result is { Succeeded: true },
-                $"Rank 0 GPU seed {seed} failed: {gpu0.Result?.ExceptionMessage ?? gpu0.Stderr}");
-            Assert.True(gpu1.ExitCode == 0 && gpu1.Result is { Succeeded: true },
-                $"Rank 1 GPU seed {seed} failed: {gpu1.Result?.ExceptionMessage ?? gpu1.Stderr}");
-
-            var res0 = gpu0.Result!;
-            var res1 = gpu1.Result!;
+            var res0 = RequireSucceededResult(gpu0, $"Rank 0 GPU seed {seed}");
+            var res1 = RequireSucceededResult(gpu1, $"Rank 1 GPU seed {seed}");
             Assert.True(res0.SupportsGpu && res1.SupportsGpu);
             Assert.Equal("0", res0.CudaVisibleDevices);
             Assert.Equal("1", res1.CudaVisibleDevices);
@@ -1226,9 +1242,9 @@ public static class Program
             InitWeightSeed = 333,
         }))
         {
-            var (c, r, _, e) = await WaitForWorkerAsync(straight, TimeSpan.FromSeconds(90));
-            Assert.True(c == 0 && r is { Succeeded: true }, $"Uninterrupted 1-GPU failed: {r?.ExceptionMessage ?? e}");
-            uninterrupted = r!;
+            uninterrupted = RequireSucceededResult(
+                await WaitForWorkerAsync(straight, TimeSpan.FromSeconds(90)),
+                "Uninterrupted 1-GPU");
         }
 
         // Case A: 2-process GPU (ZeRO2, B0=8, B1=8) for 4 steps -> resume on 1-process GPU (B=16) to step 8
@@ -1296,9 +1312,10 @@ public static class Program
             ResumeFromCheckpoint = true,
         }))
         {
-            var (c, r, _, e) = await WaitForWorkerAsync(resume1, TimeSpan.FromSeconds(90));
-            Assert.True(c == 0 && r is { Succeeded: true }, $"2->1 Phase 2 failed: {r?.ExceptionMessage ?? e}");
-            Assert.True(MaxAbsDiff(uninterrupted.FinalWeights, r!.FinalWeights) < 1e-3,
+            var r = RequireSucceededResult(
+                await WaitForWorkerAsync(resume1, TimeSpan.FromSeconds(90)),
+                "2->1 Phase 2");
+            Assert.True(MaxAbsDiff(uninterrupted.FinalWeights, r.FinalWeights) < 1e-3,
                 $"Multi-process 2->1 GPU resume diverged by {MaxAbsDiff(uninterrupted.FinalWeights, r.FinalWeights)}.");
             Assert.Equal(uninterrupted.FinalLearningRate, r.FinalLearningRate, 9);
         }
@@ -1367,14 +1384,12 @@ public static class Program
         }))
         {
             var (rb0, rb1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(90));
-            Assert.True(rb0.ExitCode == 0 && rb0.Result is { Succeeded: true },
-                $"1->2 Phase 2 Rank 0 failed: {rb0.Result?.ExceptionMessage ?? rb0.Stderr}");
-            Assert.True(rb1.ExitCode == 0 && rb1.Result is { Succeeded: true },
-                $"1->2 Phase 2 Rank 1 failed: {rb1.Result?.ExceptionMessage ?? rb1.Stderr}");
+            var rbRes0 = RequireSucceededResult(rb0, "1->2 Phase 2 Rank 0");
+            var rbRes1 = RequireSucceededResult(rb1, "1->2 Phase 2 Rank 1");
 
-            Assert.True(MaxAbsDiff(rb0.Result!.FinalWeights, rb1.Result!.FinalWeights) < 1e-6);
-            Assert.True(MaxAbsDiff(uninterrupted.FinalWeights, rb0.Result.FinalWeights) < 1e-3,
-                $"Multi-process 1->2 GPU FSDP resume diverged by {MaxAbsDiff(uninterrupted.FinalWeights, rb0.Result.FinalWeights)}.");
+            Assert.True(MaxAbsDiff(rbRes0.FinalWeights, rbRes1.FinalWeights) < 1e-6);
+            Assert.True(MaxAbsDiff(uninterrupted.FinalWeights, rbRes0.FinalWeights) < 1e-3,
+                $"Multi-process 1->2 GPU FSDP resume diverged by {MaxAbsDiff(uninterrupted.FinalWeights, rbRes0.FinalWeights)}.");
         }
     }
 
@@ -1421,9 +1436,8 @@ public static class Program
         }))
         {
             var (u0, u1) = await WaitForWorkerPairAsync(ref0, ref1, TimeSpan.FromSeconds(90));
-            Assert.True(u0.ExitCode == 0 && u0.Result is { Succeeded: true }, $"Uninterrupted Rank 0 failed: {u0.Result?.ExceptionMessage ?? u0.Stderr}");
-            Assert.True(u1.ExitCode == 0 && u1.Result is { Succeeded: true }, $"Uninterrupted Rank 1 failed: {u1.Result?.ExceptionMessage ?? u1.Stderr}");
-            uninterrupted = u0.Result!;
+            uninterrupted = RequireSucceededResult(u0, "Uninterrupted Rank 0");
+            _ = RequireSucceededResult(u1, "Uninterrupted Rank 1");
         }
 
         // Phase 1: Train 4 steps with SaveFrequency = 2 so Checkpoint #1 (step 2) downloads GPU moments via HostSync,
@@ -1469,9 +1483,8 @@ public static class Program
         }))
         {
             var (ph0, ph1) = await WaitForWorkerPairAsync(p0, p1, TimeSpan.FromSeconds(90));
-            Assert.True(ph0.ExitCode == 0 && ph0.Result is { Succeeded: true }, $"Multi-ckpt Phase 1 Rank 0 failed: {ph0.Result?.ExceptionMessage ?? ph0.Stderr}");
-            Assert.True(ph1.ExitCode == 0 && ph1.Result is { Succeeded: true }, $"Multi-ckpt Phase 1 Rank 1 failed: {ph1.Result?.ExceptionMessage ?? ph1.Stderr}");
-            step4Res = ph0.Result!;
+            step4Res = RequireSucceededResult(ph0, "Multi-ckpt Phase 1 Rank 0");
+            _ = RequireSucceededResult(ph1, "Multi-ckpt Phase 1 Rank 1");
         }
 
         var savedPhase1Files = Directory.GetFiles(ckptMulti, "*.json")
@@ -1524,15 +1537,15 @@ public static class Program
         }))
         {
             var (res0, res1) = await WaitForWorkerPairAsync(r0, r1, TimeSpan.FromSeconds(90));
-            Assert.True(res0.ExitCode == 0 && res0.Result is { Succeeded: true }, $"Multi-ckpt Phase 2 Rank 0 failed: {res0.Result?.ExceptionMessage ?? res0.Stderr}");
-            Assert.True(res1.ExitCode == 0 && res1.Result is { Succeeded: true }, $"Multi-ckpt Phase 2 Rank 1 failed: {res1.Result?.ExceptionMessage ?? res1.Stderr}");
+            var phase2Res0 = RequireSucceededResult(res0, "Multi-ckpt Phase 2 Rank 0");
+            var phase2Res1 = RequireSucceededResult(res1, "Multi-ckpt Phase 2 Rank 1");
 
-            Assert.True(MaxAbsDiff(res0.Result!.FinalWeights, res1.Result!.FinalWeights) < 1e-6);
-            double diff = MaxAbsDiff(uninterrupted.FinalWeights, res0.Result.FinalWeights);
+            Assert.True(MaxAbsDiff(phase2Res0.FinalWeights, phase2Res1.FinalWeights) < 1e-6);
+            double diff = MaxAbsDiff(uninterrupted.FinalWeights, phase2Res0.FinalWeights);
             _output.WriteLine($"Sequential multi-checkpoint GPU save(2)->step->save(4)->resume->save(6)->save(8) MaxWeightDiff vs uninterrupted = {diff:E3}");
             Assert.True(diff < 1e-4,
                 $"Sequential multi-checkpoint GPU save->step->save->resume diverged from uninterrupted 2-GPU run by {diff}.");
-            Assert.Equal(uninterrupted.FinalLearningRate, res0.Result.FinalLearningRate, 9);
+            Assert.Equal(uninterrupted.FinalLearningRate, phase2Res0.FinalLearningRate, 9);
         }
     }
 
@@ -1583,11 +1596,8 @@ public static class Program
         }))
         {
             var (refRes0, refRes1) = await WaitForWorkerPairAsync(ref0, ref1, TimeSpan.FromSeconds(90));
-            Assert.True(refRes0.ExitCode == 0 && refRes0.Result is { Succeeded: true },
-                $"Reference Rank 0 failed: {refRes0.Result?.ExceptionMessage ?? refRes0.Stderr}");
-            Assert.True(refRes1.ExitCode == 0 && refRes1.Result is { Succeeded: true },
-                $"Reference Rank 1 failed: {refRes1.Result?.ExceptionMessage ?? refRes1.Stderr}");
-            expectedRef = refRes0.Result!;
+            expectedRef = RequireSucceededResult(refRes0, "Reference Rank 0");
+            _ = RequireSucceededResult(refRes1, "Reference Rank 1");
         }
 
         // Phase 1: Spawn Rank 0 + Rank 1 with SampleDelayMs = 45 (~180ms/step) and SaveFrequency = 2.
@@ -1676,9 +1686,9 @@ public static class Program
 
             Assert.NotEqual(0, r0ExitCode);
             Assert.True(detectSeconds < 10.0, $"Rank 0 took too long ({detectSeconds:F2}s) to detect dead peer.");
-            Assert.NotNull(r0Res);
-            Assert.False(r0Res!.Succeeded);
-            Assert.Contains("System.IO.IOException", r0Res.ExceptionChainTypes ?? string.Empty, StringComparison.Ordinal);
+            var killedRank0Result = Assert.IsType<WorkerResult>(r0Res);
+            Assert.False(killedRank0Result.Succeeded);
+            Assert.Contains("System.IO.IOException", killedRank0Result.ExceptionChainTypes ?? string.Empty, StringComparison.Ordinal);
         }
 
         // Phase 2: Respawn Rank 0 + Rank 1 with ResumeFromCheckpoint = true from scrambled weights and complete to MaxSteps=10!
@@ -1725,14 +1735,11 @@ public static class Program
         }))
         {
             var (rec0, rec1) = await WaitForWorkerPairAsync(res0, res1, TimeSpan.FromSeconds(90));
+            var recRes0 = RequireSucceededResult(rec0, "Respawned Rank 0");
+            var recRes1 = RequireSucceededResult(rec1, "Respawned Rank 1");
 
-            Assert.True(rec0.ExitCode == 0 && rec0.Result is { Succeeded: true },
-                $"Respawned Rank 0 failed: {rec0.Result?.ExceptionMessage ?? rec0.Stderr}");
-            Assert.True(rec1.ExitCode == 0 && rec1.Result is { Succeeded: true },
-                $"Respawned Rank 1 failed: {rec1.Result?.ExceptionMessage ?? rec1.Stderr}");
-
-            Assert.True(MaxAbsDiff(rec0.Result!.FinalWeights, rec1.Result!.FinalWeights) < 1e-6);
-            double diffVsClean = MaxAbsDiff(expectedRef.FinalWeights, rec0.Result.FinalWeights);
+            Assert.True(MaxAbsDiff(recRes0.FinalWeights, recRes1.FinalWeights) < 1e-6);
+            double diffVsClean = MaxAbsDiff(expectedRef.FinalWeights, recRes0.FinalWeights);
             _output.WriteLine($"Kill & Resume recovered to MaxSteps=10 cleanly; MaxWeightDiff vs uninterrupted = {diffVsClean:E3}");
             Assert.True(diffVsClean < 1e-4,
                 $"Recovered run after Rank 1 kill diverged from uninterrupted 2-GPU run by {diffVsClean}.");
@@ -1842,13 +1849,8 @@ public static class Program
                 break;
             }
 
-            Assert.True(f0.ExitCode == 0 && f0.Result is { Succeeded: true },
-                $"{arm.Label} Rank 0 failed: {f0.Result?.ExceptionMessage ?? f0.Stderr}");
-            Assert.True(f1.ExitCode == 0 && f1.Result is { Succeeded: true },
-                $"{arm.Label} Rank 1 failed: {f1.Result?.ExceptionMessage ?? f1.Stderr}");
-
-            var r0 = f0.Result!;
-            var r1 = f1.Result!;
+            var r0 = RequireSucceededResult(f0, $"{arm.Label} Rank 0");
+            var r1 = RequireSucceededResult(f1, $"{arm.Label} Rank 1");
             Assert.True(r0.SupportsGpu && r1.SupportsGpu);
             Assert.Equal(benchSeeds.Length, r0.BenchmarkRecords.Count);
             Assert.Equal(benchSeeds.Length, r1.BenchmarkRecords.Count);
@@ -1952,7 +1954,7 @@ public static class Program
             ["runs"] = armSummaries,
         };
 
-        string outJson = JsonSerializer.Serialize(ledger, new JsonSerializerOptions { WriteIndented = true });
+        string outJson = JsonConvert.SerializeObject(ledger, Formatting.Indented);
         string localLedgerPath = Path.Combine(_tempRoot, "aidotnet_2gpu_bench_results.json");
         File.WriteAllText(localLedgerPath, outJson);
 
@@ -1971,15 +1973,6 @@ public static class Program
     }
 
     #endregion
-
-#else
-
-    [Fact]
-    public void MultiProcessGpuSuite_CompilesCleanlyOnLegacyFramework()
-    {
-        // Multi-process child-host execution runs on net10.0; net471 compiles cleanly without executing.
-        Assert.NotNull(_output);
-    }
 
 #endif
 }

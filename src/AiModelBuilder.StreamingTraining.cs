@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Reflection;
 using AiDotNet.Attributes;
 using AiDotNet.CheckpointManagement;
 using AiDotNet.Helpers;
@@ -7,6 +6,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet;
@@ -22,17 +22,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     internal const string StreamingBatchInEpochKey = "streaming.batch_in_epoch";
     internal const string StreamingGlobalStepKey = "streaming.global_step";
     internal const string StreamingSeedKey = "streaming.seed";
+    internal const string StreamingFitSeedKey = "streaming.fit_seed";
+    internal const string StreamingFitBatchSizeKey = "streaming.fit_batch_size";
     internal const string StreamingBatchSizeKey = "streaming.batch_size";
     internal const string StreamingSamplesInEpochKey = "streaming.samples_in_epoch";
     internal const string StreamingGlobalBatchSizeKey = "streaming.global_batch_size";
     internal const string StreamingWorldSizeKey = "streaming.world_size";
     internal const string StreamingMpScaleKey = "mp.scale";
     internal const string StreamingMpGrowthTrackerKey = "mp.growth_tracker";
-
-    private static readonly FieldInfo? LossScalerGrowthTrackerField =
-        typeof(MixedPrecision.LossScaler<float>).GetField(
-            "_consecutiveSuccessfulUpdates",
-            BindingFlags.Instance | BindingFlags.NonPublic);
+    internal const string StreamingMpTotalUpdatesKey = "mp.total_updates";
+    internal const string StreamingMpSkippedUpdatesKey = "mp.skipped_updates";
 
     private DistributedTraining.ICommunicationBackend<T>? ResolveStreamingDistributedBackend()
     {
@@ -162,6 +161,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 WarmupLazyModelWithSampleShape(neuralNet, sharedShape);
             }
 
+            var remainingLazyFlag = new Vector<T>(1);
+            remainingLazyFlag.AsWritableSpan()[0] = numOps.FromDouble(neuralNet.HasLazyUninitializedLayers() ? 1.0 : 0.0);
+            distBackend.AllReduce(remainingLazyFlag, DistributedTraining.ReductionOperation.Max);
+            if (numOps.ToDouble(remainingLazyFlag.AsSpan()[0]) > 0.0)
+            {
+                throw new InvalidOperationException(
+                    $"Distributed lazy layer initialization did not materialize all trainable parameters for {neuralNet.GetType().FullName}. " +
+                    "Ensure the streaming data loader yields at least one valid Tensor<T> sample matching the model input shape, or specify eager layer dimensions.");
+            }
+
             neuralNet.ActiveMixedPrecisionContext?.ClearFp32SnapshotPool();
             distCoordinator?.ResetParameterSync();
         }
@@ -194,9 +203,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             _model.Predict((TInput)(object)dummyInput);
         }
-        catch
+        catch (Exception ex) when (
+            ex is not OperationCanceledException
+            && ex is not OutOfMemoryException)
         {
-            // Best-effort lazy shape resolution; any genuine shape mismatch will surface on the first real training batch.
+            System.Diagnostics.Trace.TraceWarning(
+                $"Streaming lazy initialization failed for {neuralNet.GetType().FullName}: {ex}");
         }
         finally
         {
@@ -227,7 +239,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IStreamingDataLoader<T, TInput, TOutput> rawLoader,
         Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>? distLoader,
         DistributedTraining.ICommunicationBackend<T>? distBackend,
-        int gradientAccumulationSteps)
+        int gradientAccumulationSteps,
+        int? fitSeed,
+        int? fitBatchSize)
     {
         int worldSize = distBackend is not null ? Math.Max(1, distBackend.WorldSize) : 1;
         int baseGlobalBatch = distLoader is not null ? distLoader.GlobalBatchSize : rawLoader.BatchSize;
@@ -249,10 +263,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             metadata[StreamingSeedKey] = seed;
         }
 
-        if (TryReadLossScalerState(_model, out double mpScale, out int mpGrowthTracker))
+        if (fitSeed is int resolvedFitSeed)
+        {
+            metadata[StreamingFitSeedKey] = resolvedFitSeed;
+        }
+
+        if (fitBatchSize is int resolvedFitBatchSize && resolvedFitBatchSize > 0)
+        {
+            metadata[StreamingFitBatchSizeKey] = resolvedFitBatchSize;
+        }
+
+        if (TryReadLossScalerState(_model, out double mpScale, out int mpGrowthTracker, out int mpTotalUpdates, out int mpSkippedUpdates))
         {
             metadata[StreamingMpScaleKey] = mpScale;
             metadata[StreamingMpGrowthTrackerKey] = mpGrowthTracker;
+            metadata[StreamingMpTotalUpdatesKey] = mpTotalUpdates;
+            metadata[StreamingMpSkippedUpdatesKey] = mpSkippedUpdates;
         }
 
         return metadata;
@@ -261,17 +287,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private static bool TryReadLossScalerState(
         IFullModel<T, TInput, TOutput>? model,
         out double scale,
-        out int growthTracker)
+        out int growthTracker,
+        out int totalUpdates,
+        out int skippedUpdates)
     {
         if (model is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext.LossScaler: { } scaler })
         {
-            scale = scaler.Scale;
-            growthTracker = LossScalerGrowthTrackerField?.GetValue(scaler) is int gt ? gt : 0;
+            (scale, growthTracker, totalUpdates, skippedUpdates) = scaler.CaptureState();
             return true;
         }
 
         scale = 1.0;
         growthTracker = 0;
+        totalUpdates = 0;
+        skippedUpdates = 0;
         return false;
     }
 
@@ -279,7 +308,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IFullModel<T, TInput, TOutput>? model,
         bool hasSavedScale,
         double savedScale,
-        int savedGrowthTracker)
+        int savedGrowthTracker,
+        int savedTotalUpdates,
+        int savedSkippedUpdates)
     {
         if (model is not NeuralNetworks.NeuralNetworkBase<T> nn || nn.ActiveMixedPrecisionContext is not { } mpCtx)
         {
@@ -289,8 +320,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         mpCtx.ClearFp32SnapshotPool();
         if (hasSavedScale && mpCtx.LossScaler is { } scaler && savedScale > 0.0)
         {
-            scaler.Reset(savedScale);
-            LossScalerGrowthTrackerField?.SetValue(scaler, savedGrowthTracker);
+            scaler.RestoreState(savedScale, savedGrowthTracker, savedTotalUpdates, savedSkippedUpdates);
         }
     }
 
@@ -333,7 +363,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         DistributedTraining.ICommunicationBackend<T>? distBackend,
         DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator,
         int gradientAccumulationSteps,
-        bool forceSave)
+        bool forceSave,
+        int? fitSeed = null,
+        int? fitBatchSize = null)
     {
         if (_checkpointManager is null || _optimizer is null || _model is null)
         {
@@ -352,7 +384,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             rawLoader,
             distLoader,
             distBackend,
-            gradientAccumulationSteps);
+            gradientAccumulationSteps,
+            fitSeed,
+            fitBatchSize);
 
         if (distBackend is null || (distBackend.WorldSize <= 1 && distCoordinator is null))
         {
@@ -501,21 +535,21 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <summary>
     /// Restores model state, optimizer state (including consolidated cross-world-size moment resharding and the
     /// learning-rate schedule), dynamic loss-scaler state, and the exact global sample cursor from the checkpoint
-    /// manager's latest checkpoint. Returns <c>(0, 0, 0, 0)</c> when there is no checkpoint yet.
+    /// manager's latest checkpoint. Returns <c>(0, 0, 0, 0, null, null)</c> when there is no checkpoint yet.
     /// </summary>
-    private (long GlobalStep, int Epoch, int BatchInEpoch, long SamplesInEpoch) ResumeStreamingFromLatestCheckpoint(
+    private (long GlobalStep, int Epoch, int BatchInEpoch, long SamplesInEpoch, int? SavedFitSeed, int? SavedFitBatchSize) ResumeStreamingFromLatestCheckpoint(
         StreamingTrainingOptions<T, TInput, TOutput> options,
         IStreamingDataLoader<T, TInput, TOutput> rawLoader,
         DistributedTraining.ICommunicationBackend<T>? distBackend,
         DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator)
     {
-        if (_checkpointManager is null)
+        if (_checkpointManager is not { } checkpointManager)
         {
             throw new InvalidOperationException(
                 "StreamingTrainingOptions.ResumeFromLatestCheckpoint requires ConfigureCheckpointManager.");
         }
 
-        if (_optimizer is null || _model is null)
+        if (_optimizer is not { } optimizer || _model is not { } model)
         {
             throw new InvalidOperationException(
                 "StreamingTrainingOptions.ResumeFromLatestCheckpoint requires ConfigureModel and ConfigureOptimizer.");
@@ -523,21 +557,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (distBackend is null || distBackend.WorldSize <= 1)
         {
-            return ResumeStreamingSingleRank(options, rawLoader, distCoordinator);
+            return ResumeStreamingSingleRank(options, rawLoader, distCoordinator, checkpointManager, model, optimizer);
         }
 
-        return ResumeStreamingDistributed(options, distBackend, distCoordinator);
+        return ResumeStreamingDistributed(options, distBackend, distCoordinator, checkpointManager, model, optimizer);
     }
 
-    private (long GlobalStep, int Epoch, int BatchInEpoch, long SamplesInEpoch) ResumeStreamingSingleRank(
+    private (long GlobalStep, int Epoch, int BatchInEpoch, long SamplesInEpoch, int? SavedFitSeed, int? SavedFitBatchSize) ResumeStreamingSingleRank(
         StreamingTrainingOptions<T, TInput, TOutput> options,
         IStreamingDataLoader<T, TInput, TOutput> rawLoader,
-        DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator)
+        DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator,
+        ICheckpointManager<T, TInput, TOutput> checkpointManager,
+        IFullModel<T, TInput, TOutput> model,
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
-        var latest = _checkpointManager!.LoadLatestCheckpoint();
+        var latest = checkpointManager.LoadLatestCheckpoint();
         if (latest is null)
         {
-            return (0L, 0, 0, 0L);
+            return (0L, 0, 0, 0L, null, null);
         }
 
         var metadata = latest.Metadata;
@@ -547,6 +584,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int savedBatchSize = checked((int)ReadStreamingCursor(metadata, StreamingBatchSizeKey, latest.CheckpointId));
 
         ValidateCheckpointSeed(metadata, options.Seed, latest.CheckpointId);
+        int? savedFitSeed = TryReadOptionalIntMetadata(metadata, StreamingFitSeedKey);
+        int? savedFitBatchSize = TryReadOptionalIntMetadata(metadata, StreamingFitBatchSizeKey) ?? savedBatchSize;
 
         long samplesInEpoch;
         if (metadata.TryGetValue(StreamingSamplesInEpochKey, out var samplesObj) && samplesObj is not null)
@@ -565,20 +604,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             samplesInEpoch = (long)batchInEpoch * savedBatchSize;
         }
 
-        if (_checkpointManager is not CheckpointManager<T, TInput, TOutput> typedManager)
+        if (checkpointManager is not CheckpointManager<T, TInput, TOutput> typedManager)
         {
             throw new NotSupportedException(
                 "Resuming requires CheckpointManager<T, TInput, TOutput>, which stores the model's own state " +
                 "(ICheckpointableModel) in a sidecar that can be restored into the configured model.");
         }
 
-        if (!typedManager.RestoreModelState(latest.CheckpointId, _model!))
+        if (!typedManager.RestoreModelState(latest.CheckpointId, model))
         {
             throw new InvalidOperationException(
                 $"Checkpoint '{latest.CheckpointId}' has no saved model state to resume from.");
         }
 
-        if (_model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
+        if (model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
         {
             restoredNn.InvalidateLayerWeightCaches();
             distCoordinator?.ResetParameterSync();
@@ -588,11 +627,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         ILearningRateScheduler? configuredScheduler =
-            (_optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>)?.LearningRateScheduler;
+            (optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>)?.LearningRateScheduler;
 
         if (distCoordinator is not null
-            && _model is NeuralNetworks.NeuralNetworkBase<T> nnForOpt
-            && _optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gbo
+            && model is NeuralNetworks.NeuralNetworkBase<T> nnForOpt
+            && optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gbo
             && latest.OptimizerData.Length > 0)
         {
             distCoordinator.RestoreOptimizerStateFromConsolidatedBytes(
@@ -602,22 +641,30 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         else
         {
-            latest.RestoreOptimizer(_optimizer!);
+            latest.RestoreOptimizer(optimizer);
         }
 
         ApplyConfiguredSchedulerAfterRestore(options, configuredScheduler, globalStep);
 
-        bool hasMpScale = TryReadMpMetadata(metadata, out double mpScale, out int mpGrowthTracker);
-        RestoreLossScalerState(_model, hasMpScale, mpScale, mpGrowthTracker);
+        bool hasMpScale = TryReadMpMetadata(
+            metadata,
+            out double mpScale,
+            out int mpGrowthTracker,
+            out int mpTotalUpdates,
+            out int mpSkippedUpdates);
+        RestoreLossScalerState(model, hasMpScale, mpScale, mpGrowthTracker, mpTotalUpdates, mpSkippedUpdates);
 
-        _checkpointManager.UpdateAutoSaveState(checked((int)globalStep));
-        return (globalStep, epoch, batchInEpoch, samplesInEpoch);
+        checkpointManager.UpdateAutoSaveState(checked((int)globalStep));
+        return (globalStep, epoch, batchInEpoch, samplesInEpoch, savedFitSeed, savedFitBatchSize);
     }
 
-    private (long GlobalStep, int Epoch, int BatchInEpoch, long SamplesInEpoch) ResumeStreamingDistributed(
+    private (long GlobalStep, int Epoch, int BatchInEpoch, long SamplesInEpoch, int? SavedFitSeed, int? SavedFitBatchSize) ResumeStreamingDistributed(
         StreamingTrainingOptions<T, TInput, TOutput> options,
         DistributedTraining.ICommunicationBackend<T> distBackend,
-        DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator)
+        DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator,
+        ICheckpointManager<T, TInput, TOutput> checkpointManager,
+        IFullModel<T, TInput, TOutput> model,
+        IOptimizer<T, TInput, TOutput> optimizer)
     {
         int status = 0;
         long globalStep = 0L;
@@ -627,6 +674,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         bool hasMpScale = false;
         double mpScale = 1.0;
         int mpGrowthTracker = 0;
+        int mpTotalUpdates = 0;
+        int mpSkippedUpdates = 0;
+        int? savedFitSeed = null;
+        int? savedFitBatchSize = null;
         byte[]? rank0StateBytes = null;
         byte[]? rank0OptimizerBytes = null;
         Exception? rank0Error = null;
@@ -635,7 +686,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             try
             {
-                var latest = _checkpointManager!.LoadLatestCheckpoint();
+                var latest = checkpointManager.LoadLatestCheckpoint();
                 if (latest is not null)
                 {
                     var metadata = latest.Metadata;
@@ -645,24 +696,21 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     int savedBatchSize = checked((int)ReadStreamingCursor(metadata, StreamingBatchSizeKey, latest.CheckpointId));
 
                     ValidateCheckpointSeed(metadata, options.Seed, latest.CheckpointId);
+                    savedFitSeed = TryReadOptionalIntMetadata(metadata, StreamingFitSeedKey);
+                    savedFitBatchSize = TryReadOptionalIntMetadata(metadata, StreamingFitBatchSizeKey) ?? savedBatchSize;
 
-                    if (metadata.TryGetValue(StreamingSamplesInEpochKey, out var samplesObj) && samplesObj is not null)
-                    {
-                        samplesInEpoch = Convert.ToInt64(samplesObj, CultureInfo.InvariantCulture);
-                    }
-                    else
-                    {
-                        samplesInEpoch = (long)batchInEpoch * savedBatchSize;
-                    }
+                    samplesInEpoch = metadata.TryGetValue(StreamingSamplesInEpochKey, out var samplesObj) && samplesObj is not null
+                        ? Convert.ToInt64(samplesObj, CultureInfo.InvariantCulture)
+                        : (long)batchInEpoch * savedBatchSize;
 
-                    if (_checkpointManager is not CheckpointManager<T, TInput, TOutput> typedManager)
+                    if (checkpointManager is not CheckpointManager<T, TInput, TOutput> typedManager)
                     {
                         throw new NotSupportedException(
                             "Resuming requires CheckpointManager<T, TInput, TOutput>, which stores the model's own state " +
                             "(ICheckpointableModel) in a sidecar that can be restored into the configured model.");
                     }
 
-                    if (!typedManager.RestoreModelState(latest.CheckpointId, _model!))
+                    if (!typedManager.RestoreModelState(latest.CheckpointId, model))
                     {
                         throw new InvalidOperationException(
                             $"Checkpoint '{latest.CheckpointId}' has no saved model state to resume from.");
@@ -670,14 +718,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                     string stateSidecarPath = latest.FilePath is { Length: > 0 } existingPath
                         ? existingPath + ".state"
-                        : Path.Combine(_checkpointManager.GetCheckpointDirectory(), $"checkpoint_{latest.CheckpointId}.json.state");
+                        : Path.Combine(checkpointManager.GetCheckpointDirectory(), $"checkpoint_{latest.CheckpointId}.json.state");
                     if (File.Exists(stateSidecarPath))
                     {
                         rank0StateBytes = File.ReadAllBytes(stateSidecarPath);
                     }
 
                     rank0OptimizerBytes = latest.OptimizerData;
-                    hasMpScale = TryReadMpMetadata(metadata, out mpScale, out mpGrowthTracker);
+                    hasMpScale = TryReadMpMetadata(metadata, out mpScale, out mpGrowthTracker, out mpTotalUpdates, out mpSkippedUpdates);
                     status = 1;
                 }
             }
@@ -689,7 +737,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var header = new Vector<T>(14);
+        var header = new Vector<T>(19);
         if (distBackend.Rank == 0)
         {
             Span<T> w = header.AsWritableSpan();
@@ -699,6 +747,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             WriteIntAsU16Chunks(numOps, w, 7, batchInEpoch);
             WriteLongAsU16Chunks(numOps, w, 9, samplesInEpoch);
             w[13] = numOps.FromDouble(hasMpScale ? 1.0 : 0.0);
+            w[14] = numOps.FromDouble(savedFitSeed.HasValue ? 1.0 : 0.0);
+            WriteIntAsU16Chunks(numOps, w, 15, savedFitSeed ?? 0);
+            WriteIntAsU16Chunks(numOps, w, 17, savedFitBatchSize ?? 0);
         }
 
         header = distBackend.Broadcast(header, root: 0);
@@ -710,6 +761,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             batchInEpoch = ReadIntFromU16Chunks(numOps, r, 7);
             samplesInEpoch = ReadLongFromU16Chunks(numOps, r, 9);
             hasMpScale = numOps.ToDouble(r[13]) > 0.0;
+            bool hasFitSeed = numOps.ToDouble(r[14]) > 0.0;
+            int fitSeedVal = ReadIntFromU16Chunks(numOps, r, 15);
+            int fitBatchVal = ReadIntFromU16Chunks(numOps, r, 17);
+            savedFitSeed = hasFitSeed ? fitSeedVal : null;
+            savedFitBatchSize = fitBatchVal > 0 ? fitBatchVal : null;
         }
 
         if (status < 0)
@@ -724,27 +780,31 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (status == 0)
         {
-            return (0L, 0, 0, 0L);
+            return (0L, 0, 0, 0L, null, null);
         }
 
         if (hasMpScale)
         {
-            var mpVec = new Vector<T>(3);
+            var mpVec = new Vector<T>(7);
             if (distBackend.Rank == 0)
             {
                 Span<T> mpW = mpVec.AsWritableSpan();
                 mpW[0] = numOps.FromDouble(mpScale);
                 WriteIntAsU16Chunks(numOps, mpW, 1, mpGrowthTracker);
+                WriteIntAsU16Chunks(numOps, mpW, 3, mpTotalUpdates);
+                WriteIntAsU16Chunks(numOps, mpW, 5, mpSkippedUpdates);
             }
 
             mpVec = distBackend.Broadcast(mpVec, root: 0);
             ReadOnlySpan<T> mpR = mpVec.AsSpan();
             mpScale = numOps.ToDouble(mpR[0]);
             mpGrowthTracker = ReadIntFromU16Chunks(numOps, mpR, 1);
+            mpTotalUpdates = ReadIntFromU16Chunks(numOps, mpR, 3);
+            mpSkippedUpdates = ReadIntFromU16Chunks(numOps, mpR, 5);
         }
 
         byte[] sharedStateBytes = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0StateBytes : null, root: 0);
-        if (sharedStateBytes.Length > 0 && _model is ICheckpointableModel checkpointableModel)
+        if (sharedStateBytes.Length > 0 && model is ICheckpointableModel checkpointableModel)
         {
             if (distBackend.Rank != 0)
             {
@@ -754,18 +814,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         else
         {
-            int paramLen = InterfaceGuard.Parameterizable(_model!).GetParameters().Length;
+            var parameterizable = InterfaceGuard.Parameterizable(model);
+            int paramLen = parameterizable.GetParameters().Length;
             Vector<T> fullParams = distBackend.Rank == 0
-                ? InterfaceGuard.Parameterizable(_model!).GetParameters()
+                ? parameterizable.GetParameters()
                 : new Vector<T>(paramLen);
             fullParams = distBackend.Broadcast(fullParams, root: 0);
             if (distBackend.Rank != 0)
             {
-                InterfaceGuard.Parameterizable(_model!).SetParameters(fullParams);
+                parameterizable.SetParameters(fullParams);
             }
         }
 
-        if (_model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
+        if (model is NeuralNetworks.NeuralNetworkBase<T> restoredNn)
         {
             restoredNn.InvalidateLayerWeightCaches();
             distCoordinator?.ResetParameterSync();
@@ -775,11 +836,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         ILearningRateScheduler? configuredScheduler =
-            (_optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>)?.LearningRateScheduler;
+            (optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>)?.LearningRateScheduler;
 
         if (distCoordinator is not null
-            && _model is NeuralNetworks.NeuralNetworkBase<T> nnForOpt
-            && _optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gbo)
+            && model is NeuralNetworks.NeuralNetworkBase<T> nnForOpt
+            && optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gbo)
         {
             distCoordinator.RestoreOptimizerStateFromConsolidatedBytes(
                 gbo,
@@ -791,20 +852,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             byte[] optBytes = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0OptimizerBytes : null, root: 0);
             if (optBytes.Length > 0)
             {
-                _optimizer!.Deserialize(optBytes);
+                optimizer.Deserialize(optBytes);
             }
         }
 
         ApplyConfiguredSchedulerAfterRestore(options, configuredScheduler, globalStep);
-        RestoreLossScalerState(_model, hasMpScale, mpScale, mpGrowthTracker);
+        RestoreLossScalerState(model, hasMpScale, mpScale, mpGrowthTracker, mpTotalUpdates, mpSkippedUpdates);
 
         if (distBackend.Rank == 0)
         {
-            _checkpointManager!.UpdateAutoSaveState(checked((int)globalStep));
+            checkpointManager.UpdateAutoSaveState(checked((int)globalStep));
         }
 
         distBackend.Barrier();
-        return (globalStep, epoch, batchInEpoch, samplesInEpoch);
+        return (globalStep, epoch, batchInEpoch, samplesInEpoch, savedFitSeed, savedFitBatchSize);
     }
 
     private void ApplyConfiguredSchedulerAfterRestore(
@@ -843,10 +904,78 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
     }
 
-    private static bool TryReadMpMetadata(Dictionary<string, object> metadata, out double scale, out int growthTracker)
+    private static int? TryReadOptionalIntMetadata(Dictionary<string, object> metadata, string key)
+    {
+        if (metadata.TryGetValue(key, out var obj) && obj is not null)
+        {
+            return Convert.ToInt32(obj, CultureInfo.InvariantCulture);
+        }
+
+        return null;
+    }
+
+    private static (int FitSeed, int FitBatchSize) ResolveStreamingPipelineFitPlan(
+        StreamingTrainingOptions<T, TInput, TOutput>? streamingOptions,
+        IStreamingDataLoader<T, TInput, TOutput> rawLoader,
+        Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>? distLoader,
+        DistributedTraining.ICommunicationBackend<T>? distBackend,
+        int? savedFitSeed,
+        int? savedFitBatchSize)
+    {
+        int defaultBatchSize = Math.Max(1, distLoader is not null ? distLoader.GlobalBatchSize : rawLoader.BatchSize);
+        int fitBatchSize = savedFitBatchSize is > 0 ? savedFitBatchSize.Value : defaultBatchSize;
+        int? seedCandidate = savedFitSeed ?? streamingOptions?.Seed;
+
+        if (distBackend is not { WorldSize: > 1 })
+        {
+            int localSeed = seedCandidate ?? RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
+            return (localSeed, fitBatchSize);
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var planVec = new Vector<T>(4);
+        if (distBackend.Rank == 0)
+        {
+            int rootSeed = seedCandidate ?? RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
+            Span<T> w = planVec.AsWritableSpan();
+            WriteIntAsU16Chunks(numOps, w, 0, rootSeed);
+            WriteIntAsU16Chunks(numOps, w, 2, fitBatchSize);
+        }
+
+        planVec = distBackend.Broadcast(planVec, root: 0);
+        ReadOnlySpan<T> r = planVec.AsSpan();
+        int sharedSeed = ReadIntFromU16Chunks(numOps, r, 0);
+        int sharedBatchSize = Math.Max(1, ReadIntFromU16Chunks(numOps, r, 2));
+        return (sharedSeed, sharedBatchSize);
+    }
+
+    private static bool SynchronizeDistributedStopSignal(
+        DistributedTraining.ICommunicationBackend<T>? distBackend,
+        bool localStop)
+    {
+        if (distBackend is not { WorldSize: > 1 })
+        {
+            return localStop;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var flag = new Vector<T>(1);
+        flag.AsWritableSpan()[0] = numOps.FromDouble(localStop ? 1.0 : 0.0);
+        distBackend.AllReduce(flag, DistributedTraining.ReductionOperation.Max);
+        return numOps.ToDouble(flag.AsSpan()[0]) > 0.0;
+    }
+
+    private static bool TryReadMpMetadata(
+        Dictionary<string, object> metadata,
+        out double scale,
+        out int growthTracker,
+        out int totalUpdates,
+        out int skippedUpdates)
     {
         scale = 1.0;
         growthTracker = 0;
+        totalUpdates = 0;
+        skippedUpdates = 0;
         if (!metadata.TryGetValue(StreamingMpScaleKey, out var scaleObj) || scaleObj is null)
         {
             return false;
@@ -856,6 +985,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (metadata.TryGetValue(StreamingMpGrowthTrackerKey, out var gtObj) && gtObj is not null)
         {
             growthTracker = Convert.ToInt32(gtObj, CultureInfo.InvariantCulture);
+        }
+
+        if (metadata.TryGetValue(StreamingMpTotalUpdatesKey, out var tuObj) && tuObj is not null)
+        {
+            totalUpdates = Convert.ToInt32(tuObj, CultureInfo.InvariantCulture);
+        }
+
+        if (metadata.TryGetValue(StreamingMpSkippedUpdatesKey, out var suObj) && suObj is not null)
+        {
+            skippedUpdates = Convert.ToInt32(suObj, CultureInfo.InvariantCulture);
         }
 
         return true;
@@ -1092,7 +1231,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>? distLoader,
             DistributedTraining.ICommunicationBackend<T>? distBackend,
             DistributedTraining.DistributedTapeCoordinator<T>? distCoordinator,
-            int gradientAccumulationSteps)
+            int gradientAccumulationSteps,
+            int? fitSeed,
+            int? fitBatchSize)
     {
         ExecuteAccumulatedStreamingStep(neuralNet, microBatchBuffer, gboTrain);
         var lastLoss = neuralNet.GetLastLoss();
@@ -1124,7 +1265,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             distBackend,
             distCoordinator,
             gradientAccumulationSteps,
-            forceSave: false))
+            forceSave: false,
+            fitSeed: fitSeed,
+            fitBatchSize: fitBatchSize))
         {
             lastCheckpointStep = globalStep;
         }
@@ -1233,10 +1376,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         var model = _model ?? throw new InvalidOperationException("Validation requires a configured model.");
         var rawLoader = options.ValidationLoader ?? throw new InvalidOperationException("No validation loader configured.");
         var distBackend = ResolveStreamingDistributedBackend();
-        bool isDistributedVal = distBackend is { WorldSize: > 1 };
-        IStreamingDataLoader<T, TInput, TOutput> loader = isDistributedVal
+        DistributedTraining.ICommunicationBackend<T>? activeDistBackend = distBackend is { WorldSize: > 1 } multiRankBackend
+            ? multiRankBackend
+            : null;
+        IStreamingDataLoader<T, TInput, TOutput> loader = activeDistBackend is not null
             && rawLoader is not Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>
-                ? new Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>(rawLoader, distBackend!)
+                ? new Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>(rawLoader, activeDistBackend)
                 : rawLoader;
         var lossFunction = model.DefaultLossFunction;
         var network = model as NeuralNetworks.NeuralNetworkBase<T>;
@@ -1262,7 +1407,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                 if (inputs.Length == 0)
                 {
-                    if (isDistributedVal)
+                    if (activeDistBackend is not null)
                     {
                         batches++;
                     }
@@ -1302,7 +1447,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
                 sum = numOps.Add(sum, batchLoss);
                 batches++;
-                if (isDistributedVal)
+                if (activeDistBackend is not null)
                 {
                     localWeightedLossSum += ConvertToDoubleScalar(batchLoss) * inputs.Length;
                     localSampleCount += inputs.Length;
@@ -1317,8 +1462,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
         }
 
-        T mean = isDistributedVal
-            ? ComputeGlobalDistributedValidationMean(distBackend!, localWeightedLossSum, localSampleCount)
+        T mean = activeDistBackend is not null
+            ? ComputeGlobalDistributedValidationMean(activeDistBackend, localWeightedLossSum, localSampleCount)
             : (batches > 0 ? numOps.Divide(sum, numOps.FromDouble(batches)) : numOps.Zero);
         if (_trainingMonitor is not null && monitorSessionId is not null)
         {

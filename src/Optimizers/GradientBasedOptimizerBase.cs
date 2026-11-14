@@ -308,6 +308,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private double? _activeStepClippedAheadNormSq;
 
     /// <summary>
+    /// Marks <paramref name="gradients"/> as already clipped for the upcoming <see cref="Step(TapeStepContext{T})"/>
+    /// call without re-running the optimizer's own clipping pass.
+    /// </summary>
+    internal void MarkGradientsClippedAhead(Dictionary<Tensor<T>, Tensor<T>> gradients, double? postClipNormSq = null)
+    {
+        _gradientsClippedAhead = gradients;
+        _clippedAheadNormSq = postClipNormSq;
+    }
+
+    /// <summary>
+    /// Gets whether this optimizer stores element-aligned per-parameter tape states in the base tape-state table
+    /// and therefore supports cross-world-size ZeRO/FSDP shard consolidation and resharding.
+    /// </summary>
+    internal virtual bool SupportsShardedTapeStateConsolidation => true;
+
+    /// <summary>
     /// True while <see cref="StepCore"/> runs on gradients <see cref="ClipTapeGradientsAhead"/> already clipped (and
     /// then regularized): the step must not clip them again, or it would scale the regularization after all.
     /// </summary>
@@ -3703,7 +3719,228 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 using var temporary = create();
                 WriteTapeTensor(writer, temporary);
             }
-            else WriteTapeTensor(writer, entry.Value.Existing!);
+            else if (entry.Value.Existing is { } existing)
+            {
+                WriteTapeTensor(writer, existing);
+            }
+        }
+    }
+
+    internal string[] GetSortedTapeStateKeyNames()
+    {
+        var fields = EnumerateTapeTensorStateFields().ToList();
+        fields.Sort(static (a, b) =>
+        {
+            int typeCmp = string.CompareOrdinal(
+                a.DeclaringType?.FullName ?? string.Empty,
+                b.DeclaringType?.FullName ?? string.Empty);
+            return typeCmp != 0 ? typeCmp : string.CompareOrdinal(a.Name, b.Name);
+        });
+
+        var names = new string[fields.Count];
+        for (int i = 0; i < fields.Count; i++)
+        {
+            names[i] = fields[i].Name;
+        }
+
+        return names;
+    }
+
+    internal Tensor<T>? TryExtractShardTapeStateTensor(
+        string stateKey,
+        Tensor<T>? ownedParamShard,
+        int expectedShardLength,
+        out bool disposeReturnedTensor)
+    {
+        disposeReturnedTensor = false;
+        if (expectedShardLength <= 0)
+        {
+            return null;
+        }
+
+        lock (_tapeStateSync)
+        {
+            foreach (var candidate in EnumerateTapeTensorStateFields())
+            {
+                if (!string.Equals(candidate.Name, stateKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (candidate.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeDict)
+                {
+                    if (ownedParamShard is not null && activeDict.TryGetValue(ownedParamShard, out var shardTensor))
+                    {
+                        return shardTensor;
+                    }
+
+                    if (activeDict.Count == 1)
+                    {
+                        foreach (var kvp in activeDict)
+                        {
+                            if (kvp.Value.Length == expectedShardLength)
+                            {
+                                return kvp.Value;
+                            }
+                        }
+                    }
+                }
+
+                break;
+            }
+
+            if (_pendingTapeTensorStates.TryGetValue(stateKey, out var pendingByIndex) &&
+                pendingByIndex.TryGetValue(0, out var pendingShard) &&
+                pendingShard.Length == expectedShardLength)
+            {
+                return pendingShard;
+            }
+
+            if (ownedParamShard is { } paramShard)
+            {
+                foreach (var item in TransientTapeTensorStates(stateKey))
+                {
+                    if (ReferenceEquals(item.Parameter, paramShard))
+                    {
+                        disposeReturnedTensor = true;
+                        return item.Create();
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    internal byte[] SerializeWithConsolidatedTapeStates(
+        IReadOnlyDictionary<string, Dictionary<int, Tensor<T>>>? consolidatedStates)
+    {
+        lock (_tapeStateSync)
+        {
+            var savedIndices = new List<KeyValuePair<Tensor<T>, int>>(_tapeParameterIndices);
+            var savedPending = new Dictionary<string, Dictionary<int, Tensor<T>>>(_pendingTapeTensorStates, StringComparer.Ordinal);
+            int savedIndexedCount = _tapeIndexedParameterCount;
+            var savedIndexedRef = _tapeIndexedParametersRef;
+
+            try
+            {
+                _tapeParameterIndices.Clear();
+                _tapeIndexedParameterCount = -1;
+                _tapeIndexedParametersRef = null;
+                _pendingTapeTensorStates.Clear();
+
+                if (consolidatedStates is not null)
+                {
+                    foreach (var kvp in consolidatedStates)
+                    {
+                        _pendingTapeTensorStates[kvp.Key] = kvp.Value;
+                    }
+                }
+
+                return Serialize();
+            }
+            finally
+            {
+                _pendingTapeTensorStates.Clear();
+                foreach (var kvp in savedPending)
+                {
+                    _pendingTapeTensorStates[kvp.Key] = kvp.Value;
+                }
+
+                _tapeParameterIndices.Clear();
+                for (int i = 0; i < savedIndices.Count; i++)
+                {
+                    var kvp = savedIndices[i];
+                    _tapeParameterIndices[kvp.Key] = kvp.Value;
+                }
+
+                _tapeIndexedParameterCount = savedIndexedCount;
+                _tapeIndexedParametersRef = savedIndexedRef;
+            }
+        }
+    }
+
+    internal void ReshardPendingTapeStatesForLocalSlice(
+        IReadOnlyList<Tensor<T>> uniqueParams,
+        int myStart,
+        int myValidLen)
+    {
+        lock (_tapeStateSync)
+        {
+            if (_pendingTapeTensorStates.Count == 0)
+            {
+                return;
+            }
+
+            if (myValidLen <= 0)
+            {
+                _pendingTapeTensorStates.Clear();
+                return;
+            }
+
+            var fieldNames = new List<string>(_pendingTapeTensorStates.Keys);
+            for (int f = 0; f < fieldNames.Count; f++)
+            {
+                string fieldName = fieldNames[f];
+                var perParamEntries = _pendingTapeTensorStates[fieldName];
+                if (perParamEntries.Count == 0)
+                {
+                    _pendingTapeTensorStates.Remove(fieldName);
+                    continue;
+                }
+
+                if (uniqueParams.Count > 1 &&
+                    perParamEntries.Count == 1 &&
+                    perParamEntries.TryGetValue(0, out var singleEntry) &&
+                    singleEntry.Length == myValidLen &&
+                    singleEntry.Length != uniqueParams[0].Length)
+                {
+                    continue;
+                }
+
+                var shardMoment = new Tensor<T>(new[] { myValidLen });
+                Span<T> dstSpan = shardMoment.AsWritableSpan();
+                int paramOffset = 0;
+                int myEnd = myStart + myValidLen;
+
+                for (int pIdx = 0; pIdx < uniqueParams.Count; pIdx++)
+                {
+                    int paramLen = uniqueParams[pIdx].Length;
+                    int paramEnd = paramOffset + paramLen;
+
+                    int overlapStart = Math.Max(paramOffset, myStart);
+                    int overlapEnd = Math.Min(paramEnd, myEnd);
+                    if (overlapEnd > overlapStart)
+                    {
+                        int count = overlapEnd - overlapStart;
+                        int dstIndex = overlapStart - myStart;
+                        int srcIndex = overlapStart - paramOffset;
+
+                        if (perParamEntries.TryGetValue(pIdx, out var paramState) && paramState is not null)
+                        {
+                            if (paramState.Length != paramLen)
+                            {
+                                throw new InvalidOperationException(
+                                    $"Consolidated optimizer state for '{fieldName}[{pIdx}]' has length {paramState.Length}, " +
+                                    $"expected parameter length {paramLen}.");
+                            }
+
+                            paramState.AsSpan().Slice(srcIndex, count).CopyTo(dstSpan.Slice(dstIndex, count));
+                        }
+                        else
+                        {
+                            dstSpan.Slice(dstIndex, count).Clear();
+                        }
+                    }
+
+                    paramOffset = paramEnd;
+                }
+
+                _pendingTapeTensorStates[fieldName] = new Dictionary<int, Tensor<T>>(1)
+                {
+                    [0] = shardMoment
+                };
+            }
         }
     }
 
@@ -4066,7 +4303,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
 
         double globalNorm = Math.Sqrt(globalNormSq);
-        if (globalNorm <= maxNorm || globalNorm == 0.0)
+        if (globalNorm <= maxNorm)
         {
             TapeClipNormThreadCache.LastPostClipNormSq = globalNormSq;
             return;
@@ -4079,28 +4316,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IDirectGpuBackend? gpuBackend = gpuEngine?.GetBackend();
         foreach (var grad in grads)
         {
-            if (!grad.HasPendingGpuData)
+            if (!grad.HasPendingGpuData && TryScaleHostSimd(grad, scale))
             {
-                Tensor<float>? gf = gpuBackend is not null ? (Tensor<float>)(object)grad : null;
-                IGpuBuffer? syncedGpuBuf = gf is not null
-                    && gf._gpuBuffer is not null
-                    && gf._gpuBuffer.Handle != IntPtr.Zero
-                    && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
-                    && gf._gpuBuffer.Size >= gf.Length
-                    && gf._gpuBufferVersion == gf.GpuCacheVersion
-                    ? gf._gpuBuffer
-                    : null;
-
-                if (TryScaleHostSimd(grad, scale))
+                if (gpuEngine is not null && gpuBackend is not null)
                 {
-                    if (syncedGpuBuf is not null && gpuEngine is not null && gpuBackend is not null && gf is not null)
+                    var gf = (Tensor<float>)(object)grad;
+                    if (gf._gpuBuffer is { } syncedGpuBuf
+                        && syncedGpuBuf.Handle != IntPtr.Zero
+                        && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
+                        && syncedGpuBuf.Size >= gf.Length
+                        && gf._gpuBufferVersion == gf.Version)
                     {
                         using var __gpuOp = gpuEngine.EnterGpuOp();
                         gpuBackend.Scale(syncedGpuBuf, syncedGpuBuf, (float)scale, gf.Length);
-                        gf._gpuBufferVersion = gf.GpuCacheVersion;
+                        gf._gpuBufferVersion = gf.Version;
                     }
-                    continue;
                 }
+                continue;
             }
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
@@ -4576,10 +4808,48 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             ? asyncBackend.CreateSyncPoint()
             : AiDotNet.Tensors.Engines.Gpu.GpuSyncPoint.CreateComplete();
 
+    private protected Tensor<T> GetOrCreateShapedOptimizerStateTensor(
+        ConcurrentDictionary<Tensor<T>, Tensor<T>> stateTable,
+        Tensor<T> param,
+        bool createStateOnDevice)
+    {
+        if (stateTable.TryGetValue(param, out var existing))
+        {
+            if (existing._shape.SequenceEqual(param._shape))
+            {
+                return existing;
+            }
+
+            if (existing.Length == param.Length)
+            {
+                var reshaped = new Tensor<T>(param._shape);
+                existing.AsSpan().CopyTo(reshaped.AsWritableSpan());
+                if (existing._ownsGpuBuffer)
+                {
+                    existing._gpuBuffer?.Dispose();
+                    existing._ownsGpuBuffer = false;
+                }
+
+                stateTable[param] = reshaped;
+                return reshaped;
+            }
+
+            if (existing._ownsGpuBuffer)
+            {
+                existing._gpuBuffer?.Dispose();
+                existing._ownsGpuBuffer = false;
+            }
+        }
+
+        var created = CreateOptimizerStateTensor(param._shape, createStateOnDevice);
+        stateTable[param] = created;
+        return created;
+    }
+
     private static void MarkGpuTensorUpdated(IDirectGpuBackend backend, Tensor<float> tensor)
     {
         tensor.MarkModified(CreateGpuWriteSyncPoint(backend));
-        tensor._gpuBufferVersion = tensor.GpuCacheVersion;
+        tensor._gpuBufferVersion = tensor.Version;
     }
 
     private static void CommitGpuParameterUpdated(
@@ -4608,7 +4878,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             && moment._gpuBuffer.Handle != IntPtr.Zero
             && (moment._gpuBackend is null || ReferenceEquals(moment._gpuBackend, gpuBackend))
             && moment._gpuBuffer.Size >= moment.Length
-            && (moment.HasPendingGpuData || moment._gpuBufferVersion == moment.GpuCacheVersion))
+            && (moment.HasPendingGpuData || moment._gpuBufferVersion == moment.Version))
         {
             var existing = moment.TryGetGpuBuffer();
             if (existing is not null)
@@ -4631,9 +4901,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var allocated = gpuBackend.AllocateBuffer(hostData);
         moment._ownsGpuBuffer = true;
         gpuEngine.BindResidentBuffer(moment, allocated, gpuBackend);
-        if (previousOwned is not null && !ReferenceEquals(previousOwned, allocated))
+        if (previousOwned is { } prevBuf && !ReferenceEquals(prevBuf, allocated))
         {
-            previousOwned.Dispose();
+            prevBuf.Dispose();
         }
 
         return allocated;
@@ -4648,7 +4918,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             && gf._gpuBuffer.Handle != IntPtr.Zero
             && (gf._gpuBackend is null || ReferenceEquals(gf._gpuBackend, gpuBackend))
             && gf._gpuBuffer.Size >= gf.Length
-            && (gf.HasPendingGpuData || gf._gpuBufferVersion == gf.GpuCacheVersion))
+            && (gf.HasPendingGpuData || gf._gpuBufferVersion == gf.Version))
         {
             var existing = gf.TryGetGpuBuffer();
             if (existing is not null)
@@ -4755,7 +5025,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
-            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.GpuCacheVersion))
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
             {
                 pBuf = pf.TryGetGpuBuffer();
             }
@@ -4850,7 +5120,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
-            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.GpuCacheVersion))
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
             {
                 pBuf = pf.TryGetGpuBuffer();
             }
@@ -4908,7 +5178,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         using var __gpuOp = gpuEngine.EnterGpuOp();
         var db = gpuBackend as IAdam8BitWeightDecayBackend;
         var cb = gpuBackend as ICompressedMomentGpuOptimizerBackend;
-        if (db is null && (weightDecay != 0f || cb is null))
+        if (db is null && (Math.Abs(weightDecay) > 0f || cb is null))
         {
             return false;
         }
@@ -4954,7 +5224,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             var pBuf = gpuEngine.AcquireParameterBuffer(pf, out _);
-            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.GpuCacheVersion))
+            if (pBuf is null && (pf.OffloadDevicePointer != IntPtr.Zero || pf.HasPendingGpuData || pf._gpuBufferVersion == pf.Version))
             {
                 pBuf = pf.TryGetGpuBuffer();
             }

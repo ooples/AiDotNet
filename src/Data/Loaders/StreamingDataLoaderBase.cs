@@ -59,6 +59,12 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
     public int NumWorkers => _numWorkers;
 
     /// <summary>
+    /// Indicates whether <see cref="DistributedStreamingDataLoader{T, TInput, TOutput}"/> can slice sample indices
+    /// directly via <see cref="ReadSampleAsync"/> without materializing peer ranks' samples.
+    /// </summary>
+    internal virtual bool CanUseDirectDistributedSlicing => true;
+
+    /// <summary>
     /// Reads a single sample by index.
     /// </summary>
     /// <param name="index">The index of the sample to read.</param>
@@ -156,6 +162,9 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                 SingleWriter = true
             });
 
+        using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producerToken = producerCancellation.Token;
+
         // Start producer task with bounded parallelism
         var producerTask = Task.Run(async () =>
         {
@@ -166,7 +175,7 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
             {
                 for (int b = 0; b < numBatches; b++)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    producerToken.ThrowIfCancellationRequested();
 
                     int startIdx = b * BatchSize;
                     int endIdx = Math.Min(startIdx + BatchSize, indices.Length);
@@ -177,52 +186,80 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                     }
 
                     // Read samples for this batch using parallel workers with bounded concurrency
-                    var samples = new (TInput Input, TOutput Output)[endIdx - startIdx];
-                    var tasks = new Task[endIdx - startIdx];
+                    int batchLen = endIdx - startIdx;
+                    var samples = new (TInput Input, TOutput Output)[batchLen];
+                    var launchedTasks = new List<Task>(batchLen);
 
-                    for (int i = startIdx; i < endIdx; i++)
+                    try
                     {
-                        int localIdx = i - startIdx;
-                        int sampleIdx = indices[i];
-
-                        // Wait for semaphore slot before starting task
-                        await semaphore.WaitAsync(cancellationToken);
-
-                        tasks[localIdx] = Task.Run(async () =>
+                        for (int i = startIdx; i < endIdx; i++)
                         {
-                            try
+                            int localIdx = i - startIdx;
+                            int sampleIdx = indices[i];
+
+                            // Wait for semaphore slot before starting task
+                            await semaphore.WaitAsync(producerToken).ConfigureAwait(false);
+
+                            launchedTasks.Add(Task.Run(async () =>
                             {
-                                samples[localIdx] = await ReadSampleAsync(sampleIdx, cancellationToken);
-                            }
-                            finally
-                            {
-                                semaphore.Release();
-                            }
-                        }, cancellationToken);
+                                try
+                                {
+                                    samples[localIdx] = await ReadSampleAsync(sampleIdx, producerToken).ConfigureAwait(false);
+                                }
+                                finally
+                                {
+                                    semaphore.Release();
+                                }
+                            }, producerToken));
+                        }
+
+                        await Task.WhenAll(launchedTasks).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        await DrainLaunchedTasksAsync(launchedTasks).ConfigureAwait(false);
+                        throw;
                     }
 
-                    await Task.WhenAll(tasks);
-
                     var batch = AggregateSamples(samples);
-                    await channel.Writer.WriteAsync(batch, cancellationToken);
+                    await channel.Writer.WriteAsync(batch, producerToken).ConfigureAwait(false);
                 }
             }
             finally
             {
                 channel.Writer.Complete();
             }
-        }, cancellationToken);
+        }, producerToken);
 
-        // Consume batches from channel
-        while (await channel.Reader.WaitToReadAsync(cancellationToken))
+        bool completedIteration = false;
+        try
         {
-            while (channel.Reader.TryRead(out var batch))
+            // Consume batches from channel
+            while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                yield return batch;
+                while (channel.Reader.TryRead(out var batch))
+                {
+                    yield return batch;
+                }
+            }
+
+            completedIteration = true;
+            await producerTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!completedIteration)
+            {
+                producerCancellation.Cancel();
+                try
+                {
+                    await producerTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (producerToken.IsCancellationRequested)
+                {
+                }
             }
         }
-
-        await producerTask;
     }
 
     /// <summary>
@@ -355,6 +392,9 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                 SingleWriter = true,
             });
 
+        using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producerToken = producerCancellation.Token;
+
         var producerTask = Task.Run(async () =>
         {
             using var semaphore = new SemaphoreSlim(_numWorkers, _numWorkers);
@@ -363,7 +403,7 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                 long cursor = initialCursor;
                 while (cursor < indices.Length)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    producerToken.ThrowIfCancellationRequested();
 
                     int startIdx = (int)cursor;
                     int endIdx = Math.Min(indices.Length, startIdx + globalBatchSize);
@@ -387,54 +427,97 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                     {
                         await channel.Writer.WriteAsync(
                             (Array.Empty<TInput>(), Array.Empty<TOutput>(), globalCount),
-                            cancellationToken).ConfigureAwait(false);
+                            producerToken).ConfigureAwait(false);
                         continue;
                     }
 
                     var samples = new (TInput Input, TOutput Output)[rankCount];
-                    var tasks = new Task[rankCount];
+                    var launchedTasks = new List<Task>(rankCount);
                     int sliceStart = startIdx + rankOffset;
 
-                    for (int localIdx = 0; localIdx < rankCount; localIdx++)
+                    try
                     {
-                        int capturedLocal = localIdx;
-                        int sampleIdx = indices[sliceStart + localIdx];
-                        await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-                        tasks[capturedLocal] = Task.Run(async () =>
+                        for (int localIdx = 0; localIdx < rankCount; localIdx++)
                         {
-                            try
+                            int capturedLocal = localIdx;
+                            int sampleIdx = indices[sliceStart + localIdx];
+                            await semaphore.WaitAsync(producerToken).ConfigureAwait(false);
+
+                            launchedTasks.Add(Task.Run(async () =>
                             {
-                                samples[capturedLocal] = await ReadSampleAsync(sampleIdx, cancellationToken).ConfigureAwait(false);
-                            }
-                            finally
-                            {
-                                semaphore.Release();
-                            }
-                        }, cancellationToken);
+                                try
+                                {
+                                    samples[capturedLocal] = await ReadSampleAsync(sampleIdx, producerToken).ConfigureAwait(false);
+                                }
+                                finally
+                                {
+                                    semaphore.Release();
+                                }
+                            }, producerToken));
+                        }
+
+                        await Task.WhenAll(launchedTasks).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        await DrainLaunchedTasksAsync(launchedTasks).ConfigureAwait(false);
+                        throw;
                     }
 
-                    await Task.WhenAll(tasks).ConfigureAwait(false);
                     var batch = AggregateSamples(samples);
                     await channel.Writer.WriteAsync(
                         (batch.Inputs, batch.Outputs, globalCount),
-                        cancellationToken).ConfigureAwait(false);
+                        producerToken).ConfigureAwait(false);
                 }
             }
             finally
             {
                 channel.Writer.Complete();
             }
-        }, cancellationToken);
+        }, producerToken);
 
-        while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+        bool completedIteration = false;
+        try
         {
-            while (channel.Reader.TryRead(out var item))
+            while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                yield return item;
+                while (channel.Reader.TryRead(out var item))
+                {
+                    yield return item;
+                }
+            }
+
+            completedIteration = true;
+            await producerTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!completedIteration)
+            {
+                producerCancellation.Cancel();
+                try
+                {
+                    await producerTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (producerToken.IsCancellationRequested)
+                {
+                }
             }
         }
+    }
 
-        await producerTask.ConfigureAwait(false);
+    private static async Task DrainLaunchedTasksAsync(List<Task> launchedTasks)
+    {
+        for (int i = 0; i < launchedTasks.Count; i++)
+        {
+            try
+            {
+                await launchedTasks[i].ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Suppress secondary task exceptions while unwinding primary cancellation/fault so SemaphoreSlim is not disposed early.
+            }
+        }
     }
 }

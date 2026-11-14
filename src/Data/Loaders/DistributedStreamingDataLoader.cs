@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -224,13 +223,13 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         bool dropLast = false,
         int? seed = null)
     {
-        EnsureBatchPlanSynchronized();
+        SynchronizeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
         Interlocked.Exchange(ref _currentGlobalSampleIndex, skipSamples);
 
-        if (CanUseBaseDirectSliceSync(_innerLoader, out var baseLoader))
+        if (_innerLoader is StreamingDataLoaderBase<T, TInput, TOutput> { CanUseDirectDistributedSlicing: true } baseLoader)
         {
             foreach (var item in baseLoader.GetDistributedSliceBatchesCore(
                 _backend.Rank,
@@ -262,13 +261,13 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         int? seed = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        EnsureBatchPlanSynchronized();
+        SynchronizeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
         Interlocked.Exchange(ref _currentGlobalSampleIndex, skipSamples);
 
-        if (CanUseBaseDirectSliceAsync(_innerLoader, out var baseLoader))
+        if (_innerLoader is StreamingDataLoaderBase<T, TInput, TOutput> { CanUseDirectDistributedSlicing: true } baseLoader)
         {
             await foreach (var item in baseLoader.GetDistributedSliceBatchesAsyncCore(
                 _backend.Rank,
@@ -366,7 +365,6 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         rankCount = counts[rank];
     }
 
-    [AiDotNet.Attributes.ScalarKernel("One-time WorldSize batch-size metadata unpack")]
     private void EnsureBatchPlanSynchronized()
     {
         if (_batchPlanSynchronized)
@@ -374,6 +372,12 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             return;
         }
 
+        SynchronizeBatchPlan();
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("One-time WorldSize batch-size metadata unpack")]
+    private void SynchronizeBatchPlan()
+    {
         if (!_backend.IsInitialized)
         {
             _backend.Initialize();
@@ -428,52 +432,6 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         Interlocked.Exchange(ref _lastBatchGlobalSampleCount, globalSamples);
         Interlocked.Add(ref _currentGlobalSampleIndex, globalSamples);
         Interlocked.Increment(ref _currentBatchIndex);
-    }
-
-    private static bool CanUseBaseDirectSliceSync(
-        IStreamingDataLoader<T, TInput, TOutput> loader,
-        out StreamingDataLoaderBase<T, TInput, TOutput> baseLoader)
-    {
-        if (loader is StreamingDataLoaderBase<T, TInput, TOutput> candidate)
-        {
-            var method = candidate.GetType().GetMethod(
-                nameof(IStreamingDataLoader<T, TInput, TOutput>.GetBatches),
-                BindingFlags.Instance | BindingFlags.Public,
-                binder: null,
-                types: new[] { typeof(bool), typeof(bool), typeof(int?) },
-                modifiers: null);
-            if (method?.DeclaringType == typeof(StreamingDataLoaderBase<T, TInput, TOutput>))
-            {
-                baseLoader = candidate;
-                return true;
-            }
-        }
-
-        baseLoader = null!;
-        return false;
-    }
-
-    private static bool CanUseBaseDirectSliceAsync(
-        IStreamingDataLoader<T, TInput, TOutput> loader,
-        out StreamingDataLoaderBase<T, TInput, TOutput> baseLoader)
-    {
-        if (loader is StreamingDataLoaderBase<T, TInput, TOutput> candidate)
-        {
-            var method = candidate.GetType().GetMethod(
-                nameof(IStreamingDataLoader<T, TInput, TOutput>.GetBatchesAsync),
-                BindingFlags.Instance | BindingFlags.Public,
-                binder: null,
-                types: new[] { typeof(bool), typeof(bool), typeof(int?), typeof(CancellationToken) },
-                modifiers: null);
-            if (method?.DeclaringType == typeof(StreamingDataLoaderBase<T, TInput, TOutput>))
-            {
-                baseLoader = candidate;
-                return true;
-            }
-        }
-
-        baseLoader = null!;
-        return false;
     }
 
     private IEnumerable<(TInput[] Inputs, TOutput[] Outputs, int GlobalBatchSamples)> EnumerateFallbackSync(
