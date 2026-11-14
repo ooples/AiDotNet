@@ -229,4 +229,21 @@ public class OpenAiWhisperTests
         var full = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(new double[1600], 80);
         foreach (var v in full.Contiguous().ToArray()) Assert.Equal(-1.5, v);
     }
+
+    // The log-mel is a feature of the waveform: the array code it replaced never reached the gradient tape, and on a
+    // tape the backward of log10 at a silent frame (mel power 0) is NaN, all the way back to the samples. Half of
+    // this recording is silence.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_IsComputedOffTheGradientTape()
+    {
+        await Task.Yield();
+        var samples = new double[3200];
+        for (int i = 0; i < 1600; i++) samples[i] = 0.3 * Math.Sin(2 * Math.PI * 440 * i / 16000.0);
+        var audio = new Tensor<double>(new[] { samples.Length }, new Vector<double>(samples));
+        using var tape = new GradientTape<double>();
+        var mel = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(audio, 80);
+        Assert.Equal(0, tape.EntryCount);
+        Assert.Equal(new[] { 80, 20 }, mel.Shape.ToArray());
+        Assert.All(mel.Contiguous().ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
+    }
 }

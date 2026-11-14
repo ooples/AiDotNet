@@ -213,6 +213,9 @@ internal sealed class OpenAiWhisperTranscriber<T>
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         if (mels != 80 && mels != 128) throw new ArgumentException($"Unsupported n_mels: {mels}", nameof(mels));
         var engine = AiDotNetEngine.Current;
+        // A feature of the waveform, not a differentiable layer: off the gradient tape, as the array code it replaces
+        // was. On a tape, log10's backward at a silent frame (mel power 0) is NaN all the way back to the samples.
+        using var noGrad = new NoGradScope<T>();
         var x = engine.Reshape(audio, new[] { audio.Length });
         if (padding > 0) x = engine.PadNd(x, new[] { 0, padding }, EnginePadMode.Constant, NumOps.Zero);
         int half = FftSize / 2, length = x.Length;
