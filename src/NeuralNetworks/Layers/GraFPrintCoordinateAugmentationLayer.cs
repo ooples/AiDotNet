@@ -121,11 +121,16 @@ public partial class GraFPrintCoordinateAugmentationLayer<T> : LayerBase<T>, ISh
                 hasDynamicRange, Engine.TensorDivide(Engine.TensorSubtract(source, min), safeRange), source);
 
             // time = w / (width - 1) along the columns, frequency = h / (height - 1) along the rows.
+            // Each coordinate is one double division rounded once to T. The engine's scalar divide
+            // multiplies by a reciprocal in T, which is an ulp off the quotient for about one float
+            // coordinate in five (5/6 came out as 0.8333334 instead of 0.8333333).
             var time = width > 1
-                ? Engine.TensorDivideScalar(Engine.TensorArange<T>(0, width), NumOps.FromDouble(width - 1))
+                ? new Tensor<double>(
+                    Enumerable.Range(0, width).Select(w => w / (double)(width - 1)).ToArray(), [width]).Cast<T>()
                 : new Tensor<T>([width]);
             var frequency = height > 1
-                ? Engine.TensorDivideScalar(Engine.TensorArange<T>(0, height), NumOps.FromDouble(height - 1))
+                ? new Tensor<double>(
+                    Enumerable.Range(0, height).Select(h => h / (double)(height - 1)).ToArray(), [height]).Cast<T>()
                 : new Tensor<T>([height]);
             var timeGrid = Engine.TensorBroadcastTo(Engine.Reshape(time, [1, 1, 1, width]), [batch, 1, height, width]);
             var frequencyGrid = Engine.TensorBroadcastTo(Engine.Reshape(frequency, [1, 1, height, 1]), [batch, 1, height, width]);
