@@ -1,0 +1,22 @@
+name: Apply auth SMTP (temporary)
+on:
+  push:
+    branches: [ops/auth-smtp]
+permissions:
+  contents: read
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      T: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+    steps:
+      - name: Apply
+        run: |
+          set -euo pipefail
+          A=https://api.supabase.com/v1/projects/yfkqwpgjahoamlgckjib/config/auth
+          jq -n --arg pass "$RESEND_API_KEY" '{smtp_host:"smtp.resend.com", smtp_port:"465", smtp_user:"resend", smtp_pass:$pass, smtp_admin_email:"noreply@aidotnet.dev", smtp_sender_name:"AiDotNet", rate_limit_email_sent:30}' > body.json
+          code=$(curl -s -o resp.json -w '%{http_code}' -X PATCH -H "Authorization: Bearer $T" -H 'content-type: application/json' --data @body.json "$A")
+          rm body.json
+          echo "PATCH HTTP $code"; [ "$code" = 200 ] || { jq -c '{message, error}' resp.json; exit 1; }
+          curl -s -H "Authorization: Bearer $T" "$A" | jq -c '{smtp_host, smtp_port, smtp_user, smtp_sender_name, admin_email_domain: (.smtp_admin_email|split("@")[1]), pass_set: (.smtp_pass != null), rate_limit_email_sent, mailer_autoconfirm}'
