@@ -155,6 +155,9 @@ public class DefenseReferenceTests
         {
             Assert.Equal(0.0, delta[i], 1e-12);
         }
+
+        // A PreprocessInput that returned the input unchanged would pass everything above.
+        Assert.Contains(new[] { 0, 1, 8, 9 }, i => Math.Abs(delta[i]) > 0.0);
     }
 
     /// <summary>Exposes the character-frequency features of the content classifier.</summary>
