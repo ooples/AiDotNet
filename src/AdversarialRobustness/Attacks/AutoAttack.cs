@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Augmentation.Tabular;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -25,9 +26,14 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 /// returned. If your model resists all of them, it is genuinely robust.</para>
 /// <para>
 /// AutoAttack is an untargeted evaluation: its targeted members only use target classes to search for any
-/// misclassification. <see cref="AdversarialAttackOptions{T}.IsTargeted"/> is therefore not used. Inputs the
-/// model already misclassifies are returned unchanged. For inputs without spatial layout (vectors), the
-/// Square attack uses intervals covering the same fraction of the input instead of squares.
+/// misclassification, and inputs the model already misclassifies are returned unchanged. With
+/// <see cref="AdversarialAttackOptions{T}.IsTargeted"/> set, it runs its targeted members (APGD-T, then FAB-T)
+/// against <see cref="AdversarialAttackOptions{T}.TargetClass"/> only, an attack succeeds when the model
+/// predicts that class, and inputs already predicted as it are returned unchanged.
+/// <see cref="AdversarialAttackOptions{T}.UseRandomStart"/> chooses whether APGD starts from a random point of
+/// the ball (the reference default) or from the clean input. The step size is APGD's own (2 epsilon, halved
+/// adaptively), so <see cref="AdversarialAttackOptions{T}.StepSize"/> is not used. For inputs without spatial
+/// layout (vectors), the Square attack uses intervals covering the same fraction of the input instead of squares.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
@@ -110,9 +116,22 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
         int label = GetClassIndex(ConversionsHelper.ConvertToVector<T, TOutput>(trueLabel));
         var point = new AttackPoint(vectorInput, label, input, targetModel, input as Tensor<T>);
         var cleanLogits = point.Logits(vectorInput);
-        if (Fools(cleanLogits, label))
+        if (_settings.IsTargeted)
         {
-            // Already misclassified: nothing to attack (it is not robust either way).
+            if (_settings.TargetClass < 0 || _settings.TargetClass >= cleanLogits.Length)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(AdversarialAttackOptions<T>.TargetClass),
+                    _settings.TargetClass,
+                    "The target class must be a class index of the model output.");
+            }
+
+            point.Goal = _settings.TargetClass;
+        }
+
+        if (Fools(cleanLogits, point))
+        {
+            // Already misclassified (or already the target): nothing to attack.
             return input;
         }
 
@@ -133,6 +152,11 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// </summary>
     private Stage[] Schedule()
     {
+        if (_settings.IsTargeted)
+        {
+            return new[] { Stage.ApgdTargeted, Stage.FabTargeted };
+        }
+
         return _settings.Version == AutoAttackVersion.Plus
             ? new[] { Stage.ApgdCrossEntropy, Stage.ApgdDlr, Stage.Fab, Stage.Square, Stage.ApgdTargeted, Stage.FabTargeted }
             : new[] { Stage.ApgdCrossEntropy, Stage.ApgdTargeted, Stage.FabTargeted, Stage.Square };
@@ -163,13 +187,21 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     }
 
     /// <summary>
-    /// The highest-scoring wrong classes of the clean input, in decreasing order of their logits.
+    /// The highest-scoring wrong classes of the clean input, in decreasing order of their logits (ties by
+    /// class index), or the configured target class of a targeted attack (<paramref name="goal"/> >= 0).
     /// </summary>
-    private int[] TargetClassesOf(Vector<T> cleanLogits)
+    /// <remarks>
+    /// The true label is excluded by index, not by position: when another class ties with it at the top, the
+    /// label need not come first in the ranking.
+    /// </remarks>
+    internal int[] TargetClassesOf(Vector<T> cleanLogits, int label, int goal)
     {
-        var ranking = RankDescending(cleanLogits);
-        int count = Math.Min(_settings.TargetClasses, ranking.Length - 1);
-        return count > 0 ? ranking.Skip(1).Take(count).ToArray() : Array.Empty<int>();
+        if (goal >= 0)
+        {
+            return new[] { goal };
+        }
+
+        return RankDescending(cleanLogits).Where(c => c != label).Take(Math.Max(_settings.TargetClasses, 0)).ToArray();
     }
 
     #region Shared helpers
@@ -205,6 +237,9 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
         public Vector<T> Clean { get; }
 
         public int Label { get; }
+
+        /// <summary>The target class of a targeted run, or -1.</summary>
+        public int Goal { get; set; } = -1;
 
         public IFullModel<T, TInput, TOutput> Model { get; }
 
@@ -242,14 +277,22 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
 
     private static T At(Vector<T> vector, int index) => vector.AsSpan()[index];
 
-    private bool Fools(Vector<T> logits, int label) => ArgMaxIndex(logits) != label;
+    /// <summary>
+    /// Whether the logits meet the attack's goal: a class other than the label, or the target of a targeted run.
+    /// </summary>
+    private bool Fools(Vector<T> logits, AttackPoint point)
+    {
+        int predicted = ArgMaxIndex(logits);
+        return point.Goal >= 0 ? predicted == point.Goal : predicted != point.Label;
+    }
 
     /// <summary>
-    /// Class indices ordered by decreasing logit.
+    /// Class indices ordered by decreasing logit; ties keep increasing class index (the engine sort is not
+    /// stable).
     /// </summary>
-    private int[] RankDescending(Vector<T> logits)
+    private static int[] RankDescending(Vector<T> logits)
     {
-        return Engine.TensorArgsort(logits.AsTensor(), 0, true).ToArray();
+        return TabularEngineOps<T>.StableOrder(logits.AsTensor(), true);
     }
 
     /// <summary>
@@ -414,7 +457,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// </summary>
     private Vector<T>? ApgdTargeted(AttackPoint point, Vector<T> cleanLogits)
     {
-        foreach (int target in TargetClassesOf(cleanLogits))
+        foreach (int target in TargetClassesOf(cleanLogits, point.Label, point.Goal))
         {
             var adversarial = Apgd(point, LossKind.TargetedDlr, target, 1);
             if (adversarial is not null)
@@ -506,11 +549,12 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             _sizeDecrease = Math.Max((int)(0.03 * iterations), 1);
             _lossSteps = new Vector<T>(_iterations);
 
-            _current = attack.ApgdRandomStart(point.Clean);
+            // autoattack APGDAttack use_rs: a random start in the ball, or the clean input.
+            _current = attack._settings.UseRandomStart ? attack.ApgdRandomStart(point.Clean) : point.Clean;
             var logits = point.Logits(_current);
             var (value, logitGradient) = attack.Loss(logits, loss, point.Label, target);
             _gradient = attack.InputGradient(point, _current, logitGradient);
-            if (attack.Fools(logits, point.Label))
+            if (attack.Fools(logits, point))
             {
                 Adversarial = _current;
             }
@@ -543,7 +587,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             var logits = _point.Logits(_current);
             var (value, logitGradient) = _attack.Loss(logits, _loss, _point.Label, _target);
             _gradient = _attack.InputGradient(_point, _current, logitGradient);
-            if (_attack.Fools(logits, _point.Label))
+            if (_attack.Fools(logits, _point))
             {
                 Adversarial = _current;
             }
@@ -625,7 +669,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// </summary>
     private Vector<T>? Fab(AttackPoint point, Vector<T> cleanLogits, bool targeted, int restarts)
     {
-        var targets = targeted ? TargetClassesOf(cleanLogits) : new[] { -1 };
+        var targets = targeted ? TargetClassesOf(cleanLogits, point.Label, point.Goal) : new[] { -1 };
         foreach (int target in targets)
         {
             for (int restart = 0; restart < restarts; restart++)
@@ -654,7 +698,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
 
     private bool FabSucceeded(AttackPoint point, Vector<T> candidate)
     {
-        return Fools(point.Logits(candidate), point.Label)
+        return Fools(point.Logits(candidate), point)
             && NumOps.LessThanOrEquals(ThreatNorm(Engine.Subtract<T>(candidate, point.Clean)), Epsilon);
     }
 
@@ -928,7 +972,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             var fromClean = engine.Multiply<T>(engine.Add<T>(clean, engine.Multiply<T>(d2, _eta)), alpha);
             _x = engine.Clamp<T>(engine.Add<T>(fromCurrent, fromClean), NumOps.Zero, NumOps.One);
 
-            if (_attack.Fools(_point.Logits(_x), _point.Label))
+            if (_attack.Fools(_point.Logits(_x), _point))
             {
                 T distance = _attack.ThreatNorm(engine.Subtract<T>(_x, clean));
                 if (!_found || NumOps.LessThan(distance, _bestDistance))
@@ -972,7 +1016,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             run.Iterate(query);
         }
 
-        return run.Fooled && Fools(point.Logits(run.Best), point.Label) ? run.Best : null;
+        return run.Fooled && Fools(point.Logits(run.Best), point) ? run.Best : null;
     }
 
     /// <summary>

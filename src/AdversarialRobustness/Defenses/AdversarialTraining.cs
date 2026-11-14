@@ -184,35 +184,23 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                 cleanCorrect++;
             }
 
-            // Generate and evaluate on adversarial example
-            try
-            {
-                var adversarial = attack.GenerateAdversarialExample(input, label, model);
-                var advOutput = model.Predict(adversarial);
-                var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
-                var advPrediction = ArgMaxVector(advOutputVector);
+            // Generate and evaluate on adversarial example. A failing attack propagates its exception: counting
+            // it as a successful defense would overstate the robustness.
+            var adversarial = attack.GenerateAdversarialExample(input, label, model);
+            var advOutput = model.Predict(adversarial);
+            var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
+            var advPrediction = ArgMaxVector(advOutputVector);
 
-                if (advPrediction == trueClass)
-                {
-                    adversarialCorrect++;
-                }
-
-                // Calculate perturbation size using vectorized operations
-                var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
-                var perturbation = Engine.Subtract<T>(adversarialVector, inputVector);
-                var l2Norm = Engine.Norm<T>(perturbation);
-                perturbationSizes.Add(l2Norm);
-            }
-            catch (ArgumentException)
+            if (advPrediction == trueClass)
             {
-                // Count as defended if attack fails
                 adversarialCorrect++;
             }
-            catch (InvalidOperationException)
-            {
-                // Count as defended if attack fails
-                adversarialCorrect++;
-            }
+
+            // Calculate perturbation size using vectorized operations
+            var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
+            var perturbation = Engine.Subtract<T>(adversarialVector, inputVector);
+            var l2Norm = Engine.Norm<T>(perturbation);
+            perturbationSizes.Add(l2Norm);
         }
 
         metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
