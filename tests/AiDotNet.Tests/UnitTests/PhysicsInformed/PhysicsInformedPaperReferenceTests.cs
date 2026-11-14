@@ -504,6 +504,95 @@ public class PhysicsInformedPaperReferenceTests
         Assert.Equal(22500.0, mse, 32.0);
     }
 
+    [Fact]
+    public void DeepOperatorNetwork_GradientsIncludeTheOutputBias()
+    {
+        // Lu et al. (2021), Eq. 2: G(u)(y) = sum_k b_k t_k + b0, so for the MSE loss dL/db0 = (2 / B) sum (G - y).
+        // GetGradients concatenated the branch and trunk gradients only: the vector was one entry shorter than
+        // GetParameters and carried no b0 gradient.
+        var don = new DeepOperatorNetwork<double>(
+            Architecture(6, 1), Architecture(4, 8), Architecture(2, 8),
+            options: new DeepOperatorNetworkOptions { LatentDimension = 8, NumSensors = 4 });
+        var rows = new Tensor<double>(new[]
+        {
+            0.1, 0.2, 0.3, 0.4, 0.5, 0.6,
+            -0.3, 0.7, 0.2, -0.1, 0.9, 0.1,
+            0.4, -0.5, 0.6, 0.8, -0.2, 0.3
+        }, new[] { 3, 6 });
+        var targets = new Tensor<double>(new[] { 1.5, -0.4, 0.8 }, new[] { 3, 1 });
+
+        var predictions = don.Predict(rows).ToArray();
+        double expected = 2.0 / 3.0 * predictions.Zip(targets.ToArray(), (p, t) => p - t).Sum();
+
+        don.Train(rows, targets);
+        var gradients = don.GetGradients().ToArray();
+
+        Assert.Equal(don.GetParameters().Length, gradients.Length);
+        Assert.Equal(expected, gradients[gradients.Length - 1], 1e-10);
+    }
+
+    [Fact]
+    public void VariationalPinn_GaussLegendreRuleMatchesLeggaussInHalfPrecision()
+    {
+        // The rule was computed in T: P'_64 at the outer nodes is about 2000, so P'^2 overflowed half precision and
+        // the outer weights became 0. Computed in double and rounded once, every node and weight is the half value
+        // nearest numpy.polynomial.legendre.leggauss(64), and the weights sum to 2.
+        double[] nodes0 = { -0.99930504173577217, -0.99634011677195522, -0.99101337147674429, -0.98333625388462598 };
+        double[] weights0 = { 0.0017832807216941399, 0.0041470332605644993, 0.0065044579689785024, 0.008846759826363397 };
+        double[] nodes30 = { -0.072993121787799042, -0.024350292663424429, 0.024350292663424429, 0.072993121787799042 };
+        double[] weights30 = { 0.048575467441503511, 0.048690957009139814, 0.048690957009139814, 0.048575467441503511 };
+
+        var nodes = VariationalPINN<Half>.GaussLegendre(64, out var weightTensor).ToArray();
+        var weights = weightTensor.ToArray();
+
+        // Round-to-nearest in half precision is within 2^-11 of the value, relatively.
+        void Near(double reference, Half actual) =>
+            Assert.True(Math.Abs((float)actual - reference) <= Math.Abs(reference) * Math.Pow(2, -11),
+                $"{(float)actual} is not the half value nearest {reference}.");
+
+        for (int i = 0; i < 4; i++)
+        {
+            Near(nodes0[i], nodes[i]);
+            Near(weights0[i], weights[i]);
+            Near(nodes30[i], nodes[30 + i]);
+            Near(weights30[i], weights[30 + i]);
+        }
+
+        // 64 half roundings of relative size 2^-11 each.
+        Assert.Equal(2.0, weights.Sum(w => (double)(float)w), 2e-3);
+    }
+
+    [Fact]
+    public void VariationalPinn_GaussLegendreRuleMatchesLeggaussInDouble()
+    {
+        // Regression guard for the double rule (the old one held P_0 .. P_n for all n nodes): leggauss(64) to
+        // round-off, and the rule integrates x^126, the highest degree it is exact for.
+        var (nodes, weights) = VariationalPINN<double>.GaussLegendreRule(64);
+        Assert.Equal(-0.99930504173577217, nodes[0], 1e-14);
+        Assert.Equal(0.0017832807216941399, weights[0], 1e-14);
+        Assert.Equal(0.024350292663424429, nodes[32], 1e-14);
+        Assert.Equal(0.048690957009139814, weights[32], 1e-14);
+        Assert.Equal(2.0, weights.Sum(), 1e-13);
+        Assert.Equal(2.0 / 127.0, nodes.Zip(weights, (x, w) => w * Math.Pow(x, 126)).Sum(), 1e-13);
+    }
+
+    [Fact]
+    public void UniversalDifferentialEquation_TimeGridIsRoundedOnceInHalfPrecision()
+    {
+        // t_k = t0 + k dt must be the half value nearest the exact time. The ramp was arange(k) in T times dt in T:
+        // the engine's arange rounds each k once (exact to 2048), then the product rounds again, so k = 2049 became
+        // 2048 and t = 2048 * 3 = 6144 where the exact 6147 rounds to 6148.
+        const int steps = 4096;
+        var times = UniversalDifferentialEquation<Half>.TimeGrid((Half)0f, (Half)12288f, steps, out var dt);
+
+        Assert.Equal((Half)3f, dt);
+        Assert.Equal(steps, times.Length);
+        for (int k = 0; k < steps; k++)
+        {
+            Assert.Equal((Half)(float)(3.0 * k), times[k]);
+        }
+    }
+
     private sealed class DiffusivityIdentification : IInverseProblem<double>
     {
         public DiffusivityIdentification(IReadOnlyList<(double[] location, double[] value)> observations)
