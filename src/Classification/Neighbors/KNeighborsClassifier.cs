@@ -299,7 +299,9 @@ public partial class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
         var close = engine.TensorLessThan(distances, Tolerance(1e-10));
         var rowHasClose = engine.TensorGreaterThan(engine.ReduceMax(close, new[] { 1 }, true), NumOps.Zero);
         var nearest = engine.TensorBroadcastTo(engine.TensorAmin(distances, new[] { 1 }, keepDims: true), shape);
-        var inverse = engine.TensorDivide(nearest, distances);
+        // Divide by 1 where the distance is (near) zero: those entries are replaced below, and a zero divisor
+        // throws DivideByZeroException for decimal (the scalar loop never divided by a near-zero distance)
+        var inverse = engine.TensorDivide(nearest, engine.TensorWhere(close, ones, distances));
         return engine.TensorWhere(engine.TensorBroadcastTo(rowHasClose, shape), close, inverse);
     }
 

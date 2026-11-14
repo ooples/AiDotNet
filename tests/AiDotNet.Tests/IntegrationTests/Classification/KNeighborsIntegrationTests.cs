@@ -1042,5 +1042,50 @@ public class KNeighborsIntegrationTests
         Assert.Equal(0, votes[0, 1]);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task KNN_ExactlyEquidistantNeighbors_KeepTheLowerTrainingIndex()
+    {
+        await Task.Yield();
+
+        // Arrange: (2, 9) and (6, 7) are both sqrt(85) from the origin. Scaling each difference by its own largest
+        // component before squaring rounds the two norms one ulp apart (9.219544457292889 against ...887), so the
+        // second point won instead of the first.
+        var x = new Matrix<double>(2, 2);
+        x[0, 0] = 2; x[0, 1] = 9;
+        x[1, 0] = 6; x[1, 1] = 7;
+        var y = new Vector<double>(new[] { 0.0, 1.0 });
+        var knn = new KNeighborsClassifier<double>(new KNeighborsOptions<double> { NNeighbors = 1 });
+        knn.Train(x, y);
+
+        // Act
+        var prediction = knn.Predict(new Matrix<double>(1, 2));
+
+        // Assert
+        Assert.Equal(0.0, prediction[0]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_DistanceWeights_Decimal_ExactMatch_DoesNotDivideByZero()
+    {
+        await Task.Yield();
+
+        // Arrange: predicting a training point with distance weighting. The inverse distances were computed for
+        // every neighbor before the exact matches were masked, which throws DivideByZeroException for decimal.
+        var x = new Matrix<decimal>(4, 1);
+        x[0, 0] = 0m; x[1, 0] = 1m; x[2, 0] = 10m; x[3, 0] = 11m;
+        var y = new Vector<decimal>(new[] { 0m, 0m, 1m, 1m });
+        var knn = new KNeighborsClassifier<decimal>(
+            new KNeighborsOptions<decimal> { NNeighbors = 3, Weights = WeightingScheme.Distance });
+        knn.Train(x, y);
+
+        // Act
+        var probabilities = knn.PredictProbabilities(x);
+
+        // Assert: an exact match takes all the weight
+        Assert.Equal(1m, probabilities[0, 0]);
+        Assert.Equal(0m, probabilities[0, 1]);
+        Assert.Equal(1m, probabilities[3, 1]);
+    }
+
     #endregion
 }

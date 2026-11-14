@@ -585,7 +585,20 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         var powered = p == 2.0 ? engine.TensorMultiply(unit, unit) : engine.TensorPower(unit, numOps.FromDouble(p));
         var sums = engine.ReduceSum(powered, new[] { axis }, false);
         var norms = p == 2.0 ? engine.TensorSqrt(sums) : engine.TensorPower(sums, numOps.FromDouble(1.0 / p));
-        return engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
+        var scaled = engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
+
+        // The scaled form rounds differently for every slice (s differs), so two slices with the same exact norm,
+        // for instance offsets (2, 9) and (6, 7), can come out one ulp apart and a distance tie is then decided by
+        // rounding instead of by index. Where the direct powers neither overflow nor underflow, the direct norm is
+        // used, as the scalar loop computed it; the scaled norm only covers the remaining slices.
+        var plainPowered = p == 2.0
+            ? engine.TensorMultiply(magnitudes, magnitudes)
+            : engine.TensorPower(magnitudes, numOps.FromDouble(p));
+        var plainSums = engine.ReduceSum(plainPowered, new[] { axis }, false);
+        var plain = p == 2.0 ? engine.TensorSqrt(plainSums) : engine.TensorPower(plainSums, numOps.FromDouble(1.0 / p));
+        var usable = engine.TensorMultiply(
+            engine.TensorGreaterThan(plainSums, numOps.Zero), engine.TensorLessThan(plainSums, numOps.MaxValue));
+        return engine.TensorWhere(usable, plain, scaled);
     }
 
     /// <summary>

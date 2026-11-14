@@ -172,7 +172,15 @@ internal static class ActiveLearningEngineOps
         var safeScale = engine.TensorWhere(engine.TensorGreaterThan(scale, numOps.Zero), scale, ones);
         var unit = engine.TensorDivide(values, engine.TensorBroadcastTo(safeScale, shape));
         var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(unit, unit), new[] { axis }, keepDims: false));
-        return engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
+        var scaled = engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
+
+        // The scaled form rounds differently for every slice (s differs), so two slices with the same exact norm
+        // can come out one ulp apart and a distance tie is then decided by rounding instead of by index. Where the
+        // direct squares neither overflow nor underflow, the direct norm is used, as the scalar loops computed it.
+        var plainSums = engine.ReduceSum(engine.TensorMultiply(values, values), new[] { axis }, keepDims: false);
+        var usable = engine.TensorMultiply(
+            engine.TensorGreaterThan(plainSums, numOps.Zero), engine.TensorLessThan(plainSums, numOps.MaxValue));
+        return engine.TensorWhere(usable, engine.TensorSqrt(plainSums), scaled);
     }
 
     /// <summary>
