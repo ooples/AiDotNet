@@ -5313,7 +5313,8 @@ public static partial class LayerHelper<T>
                 kernelSize: 3,
                 stride: 1,
                 padding: 1,
-                activationFunction: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>(),
+                biasMode: BiasMode.Never);   // feeds the stem BatchNorm, as torchvision's conv0
             // No spatial reduction for CIFAR stem (stride 1, padding 1 preserves dims)
 
             yield return new BatchNormalizationLayer<T>();
@@ -5329,7 +5330,8 @@ public static partial class LayerHelper<T>
                 kernelSize: 7,
                 stride: 2,
                 padding: 3,
-                activationFunction: new IdentityActivation<T>());
+                activationFunction: new IdentityActivation<T>(),
+                biasMode: BiasMode.Never);   // feeds the stem BatchNorm, as torchvision's conv0
 
             currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
             currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
@@ -5357,9 +5359,12 @@ public static partial class LayerHelper<T>
             // count resolves from runtime input shape; the helper tracks
             // currentChannels itself instead of asking the block, since
             // OutputChannels stays at -1 until first Forward fires.
+            // No convolution biases: every one feeds a BatchNorm, as in the reference architecture.
             var denseBlock = new DenseBlock<T>(
                 numLayers: numLayersInBlock,
-                growthRate: configuration.GrowthRate);
+                growthRate: configuration.GrowthRate,
+                bnMomentum: 0.1,
+                convolutionBias: false);
 
             yield return denseBlock;
             // DenseNet growth: each inner layer adds growthRate channels.
@@ -5371,7 +5376,8 @@ public static partial class LayerHelper<T>
             if (i < blockLayers.Length - 1)
             {
                 var transition = new TransitionLayer<T>(
-                    compressionFactor: configuration.CompressionFactor);
+                    compressionFactor: configuration.CompressionFactor,
+                    convolutionBias: false);
 
                 yield return transition;
                 currentChannels = (int)(currentChannels * configuration.CompressionFactor);

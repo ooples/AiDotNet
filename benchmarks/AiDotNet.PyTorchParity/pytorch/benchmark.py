@@ -217,10 +217,10 @@ class TransformerClassifier(nn.Module):
         return self.head(encoded.mean(dim=1))
 
 
-# nn.GRU applies the reset gate after the recurrent product (n = tanh(W_in x + b_in + r * (W_hn h + b_hn))); AiDotNet's
-# GRULayer applies it before (n = tanh(W_in x + b_in + W_hn (r * h) + b_hn), Cho et al. / Keras reset_after=False).
-GRU_NOTE = ("Different recurrence: nn.GRU applies the reset gate after the recurrent product, AiDotNet's GRULayer "
-            "before it (Keras reset_after=False). Same sizes and parameter shapes; a timing comparison, not parity.")
+# Both apply the reset gate to the recurrent product (n = tanh(W_in x + b_in + r * (W_hn h + b_hn)), AiDotNet's GRULayer
+# default resetAfter: true). nn.GRU also carries a recurrent bias b_hh; AiDotNet's GRULayer has one bias per gate.
+GRU_NOTE = ("Same reset-after recurrence and weight shapes; nn.GRU has a second (recurrent) bias per gate that "
+            "AiDotNet's GRULayer folds into one, so a timing comparison rather than bitwise parity.")
 MODEL_NOTES = {"gru": GRU_NOTE}
 
 

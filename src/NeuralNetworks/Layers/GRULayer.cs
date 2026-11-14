@@ -532,12 +532,46 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// <param name="returnSequences">If <c>true</c>, returns all hidden states.</param>
     /// <param name="activation">Candidate-hidden-state activation (default tanh).</param>
     /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
+    private readonly bool _resetAfter;
+
+    /// <summary>Whether the reset gate applies to the recurrent product (PyTorch / Keras reset_after=True).</summary>
+    public bool ResetAfter => _resetAfter;
+
+    public GRULayer(
+        int hiddenSize,
+        bool returnSequences,
+        IActivationFunction<T>? activation,
+        IActivationFunction<T>? recurrentActivation,
+        bool stateful)
+        : this(hiddenSize, returnSequences, activation, recurrentActivation, stateful, resetAfter: true)
+    {
+    }
+
+    /// <summary>
+    /// Lazy ctor with the reset gate's placement stated.
+    /// </summary>
+    /// <param name="hiddenSize">The size of the hidden state vector.</param>
+    /// <param name="returnSequences">If <c>true</c>, returns all hidden states.</param>
+    /// <param name="activation">Candidate-hidden-state activation (default tanh).</param>
+    /// <param name="recurrentActivation">Gate activation (default sigmoid).</param>
+    /// <param name="stateful">Carry the hidden state across calls.</param>
+    /// <param name="resetAfter">
+    /// Where the reset gate applies. <c>true</c> (the default, PyTorch's <c>nn.GRU</c> and Keras' <c>reset_after=True</c>):
+    /// to the recurrent product, n = act(W_n x + b_n + r * (U_n h)), so every gate's recurrent product is one matrix
+    /// product per step and the GPU runs the whole sequence in its fused recurrence kernel. <c>false</c>: to the hidden
+    /// state before the product, n = act(W_n x + U_n (r * h) + b_n) (Cho et al. 2014, Keras <c>reset_after=False</c>),
+    /// the layout of layers saved before this option existed. Parameter shapes are the same either way.
+    /// </param>
+    // The activation and vector-activation overloads both carry optional parameters (as their shipped forms did); the
+    // required IVectorActivationFunction second argument keeps every call unambiguous.
+#pragma warning disable RS0026
     public GRULayer(
         int hiddenSize,
         bool returnSequences = false,
         IActivationFunction<T>? activation = null,
         IActivationFunction<T>? recurrentActivation = null,
-        bool stateful = false)
+        bool stateful = false,
+        bool resetAfter = true)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, activation ?? new TanhActivation<T>())
     {
         if (hiddenSize <= 0)
@@ -547,6 +581,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         _inputSize = -1;
         _returnSequences = returnSequences;
         _stateful = stateful;
+        _resetAfter = resetAfter;
         _activation = activation ?? new TanhActivation<T>();
         _recurrentActivation = recurrentActivation ?? new SigmoidActivation<T>();
 
@@ -568,10 +603,36 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public GRULayer(int hiddenSize,
                     IVectorActivationFunction<T> vectorActivation,
+                    bool returnSequences,
+                    IVectorActivationFunction<T>? vectorRecurrentActivation,
+                    bool stateful)
+        : this(hiddenSize, vectorActivation, returnSequences, vectorRecurrentActivation, stateful, resetAfter: true)
+    {
+    }
+
+    /// <summary>
+    /// Lazy ctor with vector activation functions and the reset gate's placement stated.
+    /// </summary>
+    /// <param name="hiddenSize">The size of the hidden state vector.</param>
+    /// <param name="vectorActivation">Candidate-hidden-state activation.</param>
+    /// <param name="returnSequences">If <c>true</c>, returns all hidden states.</param>
+    /// <param name="vectorRecurrentActivation">Gate activation.</param>
+    /// <param name="stateful">Carry the hidden state across calls.</param>
+    /// <param name="resetAfter">
+    /// Where the reset gate applies. <c>true</c> (the default, PyTorch's <c>nn.GRU</c> and Keras' <c>reset_after=True</c>):
+    /// to the recurrent product, n = act(W_n x + b_n + r * (U_n h)), so every gate's recurrent product is one matrix
+    /// product per step and the GPU runs the whole sequence in its fused recurrence kernel. <c>false</c>: to the hidden
+    /// state before the product, n = act(W_n x + U_n (r * h) + b_n) (Cho et al. 2014, Keras <c>reset_after=False</c>),
+    /// the layout of layers saved before this option existed. Parameter shapes are the same either way.
+    /// </param>
+    public GRULayer(int hiddenSize,
+                    IVectorActivationFunction<T> vectorActivation,
                     bool returnSequences = false,
                     IVectorActivationFunction<T>? vectorRecurrentActivation = null,
-                    bool stateful = false)
+                    bool stateful = false,
+                    bool resetAfter = true)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, hiddenSize }, vectorActivation)
+#pragma warning restore RS0026
     {
         if (hiddenSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
@@ -580,6 +641,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         _inputSize = -1;
         _returnSequences = returnSequences;
         _stateful = stateful;
+        _resetAfter = resetAfter;
         _vectorActivation = vectorActivation;
         _vectorRecurrentActivation = vectorRecurrentActivation ?? new SigmoidActivation<T>();
 
@@ -1003,7 +1065,8 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         // ooples/AiDotNet.Tensors#1568: the whole sequence as one fused op (one node on a tape; on a GPU, a few kernels
         // per step instead of a dozen ops) when the layer uses the activations the op computes: sigmoid gates and a tanh
         // candidate, the paper-standard defaults. This layer applies the reset gate to the hidden state before the
-        // recurrent product (Cho et al. 2014), the op's resetAfter: false form, so the values match the per-step loop
+        // recurrent product (Cho et al. 2014) or, with _resetAfter, to the product itself; the op takes either form, and the
+        // layer's single bias rides as the op's input-side bias (outside the reset), so the values match the per-step loop
         // below. Under a tape or a graph capture the stacked weights are tape-connected concatenations, so gradients reach
         // each gate's own weights; in plain inference they are packed once and reused until a gate tensor changes.
         if (sequenceLength > 0 && UsesStandardGruActivations())
@@ -1013,6 +1076,8 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
                 || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             {
+                // A step that may update these weights follows: the inference stacks rebuild on their next use.
+                DerivedTensorCacheGeneration.Advance();
                 stackedWih = engine.TensorConcatenate(new[] { _Wr, _Wz, _Wh }, axis: 0);
                 stackedWhh = engine.TensorConcatenate(new[] { _Ur, _Uz, _Uh }, axis: 0);
                 stackedBias = engine.TensorConcatenate(new[] { _br, _bz, _bh }, axis: 0);
@@ -1025,7 +1090,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             }
 
             var fused = Engine.GruSequenceForward(input3D, _lastHiddenState, stackedWih, stackedWhh, stackedBias, null,
-                out var finalHidden, _returnSequences, resetAfter: false);
+                out var finalHidden, _returnSequences, resetAfter: _resetAfter);
             if (IsTrainingMode)
             {
                 // The fused op keeps its own activations for its backward; these per-step snapshots are not produced.
@@ -1082,8 +1147,12 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             var rPre = Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br);
             var r = ActivateTape(rPre, _vectorRecurrentActivation, _recurrentActivation, gate: true);
 
-            var rh = Engine.TensorMultiply(r, currentHiddenState);
-            var hPre = Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(rh, UhT)), _bh);
+            // Reset after (default): r scales the recurrent product; reset before: r scales h ahead of it.
+            var hPre = _resetAfter
+                ? Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), _bh),
+                    Engine.TensorMultiply(r, Engine.TensorMatMul(currentHiddenState, UhT)))
+                : Engine.TensorAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT),
+                    Engine.TensorMatMul(Engine.TensorMultiply(r, currentHiddenState), UhT)), _bh);
             var h_candidate = ActivateTape(hPre, _vectorActivation, _activation, gate: false);
 
             // Compute (1 - z) using cached ones tensor — avoids per-timestep allocation
@@ -1526,6 +1595,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         var metadata = base.GetMetadata();
         metadata["HiddenSize"] = _hiddenSize.ToString();
         metadata["ReturnSequences"] = _returnSequences.ToString();
+        metadata["ResetAfter"] = _resetAfter.ToString();
         // Persist the gate (recurrent) activation so deserialization restores it exactly. The base
         // GetMetadata only records the candidate/scalar activation; without this, a non-default gate
         // activation would be lost on a serialize/clone round-trip.
@@ -1766,22 +1836,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         _stackedWeightsIhCache.Invalidate();
         _stackedWeightsHhCache.Invalidate();
         _stackedBiasCache.Invalidate();
-    }
-
-    /// <summary>
-    /// Drops the stacked inference weights on a training-mode transition, as <see cref="LSTMLayer{T}"/> does: training
-    /// may have written the gate tensors through a path that did not advance their versions.
-    /// </summary>
-    public override void SetTrainingMode(bool isTraining)
-    {
-        if (isTraining != IsTrainingMode)
-        {
-            _stackedWeightsIhCache.Invalidate();
-            _stackedWeightsHhCache.Invalidate();
-            _stackedBiasCache.Invalidate();
-        }
-
-        base.SetTrainingMode(isTraining);
     }
 
     // Stacks per-gate tensors in r, z, n order along the gate axis.

@@ -413,6 +413,21 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Whether the fast route reproduced the reference exactly at that shape.</summary>
     private bool _optimizedMatchesReference;
 
+    /// <summary>Verification probes at <see cref="_optimizedVerifyingShape"/> that found a mismatch.</summary>
+    /// <remarks>
+    /// The engine tunes its convolution algorithm on the first calls at a shape: the reference can run before the
+    /// shape is measured (on the default algorithm) and the fast route after (on the measured one), so the first probe
+    /// can differ for a reason that is gone by the next call. A mismatch is therefore re-probed on the following calls,
+    /// up to <see cref="MaxVerificationProbes"/>, before the reference is kept for good. Latching the first verdict
+    /// left VGG-11 inference on the three-pass reference (convolution, bias, activation) for the whole run.
+    /// </remarks>
+    private int _optimizedMismatchProbes;
+
+    /// <summary>The shape <see cref="_optimizedMismatchProbes"/> counts probes for.</summary>
+    private int[]? _optimizedVerifyingShape;
+
+    private const int MaxVerificationProbes = 3;
+
     private static int[] ShapeSnapshot(Tensor<T> tensor)
     {
         var shape = new int[tensor.Rank];
@@ -433,6 +448,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     {
         if (a.Length != b.Length) return false;
         var comparer = EqualityComparer<T>.Default;
+        // Both probe results are fresh contiguous tensors: compare their storage in one pass (one device download
+        // each) rather than through the element indexer, which made this probe ~10% of VGG-11's first epoch.
+        if (a.IsContiguous && b.IsContiguous)
+        {
+            var sa = a.AsSpanUnmarked();
+            var sb = b.AsSpanUnmarked();
+            for (int i = 0; i < sa.Length; i++)
+                if (!comparer.Equals(sa[i], sb[i])) return false;
+            return true;
+        }
         for (int i = 0; i < a.Length; i++)
             if (!comparer.Equals(a[i], b[i])) return false;
         return true;
@@ -1631,7 +1656,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 var referenceOnce = Reference();
                 var optimizedOnce = Optimized();
                 _optimizedMatchesReference = BitwiseEquals(referenceOnce, optimizedOnce);
-                _optimizedVerifiedForShape = ShapeSnapshot(input4D);
+                if (_optimizedVerifyingShape is null || !ShapeMatches(_optimizedVerifyingShape, input4D))
+                {
+                    _optimizedVerifyingShape = ShapeSnapshot(input4D);
+                    _optimizedMismatchProbes = 0;
+                }
+                // A match is final; a mismatch is final only once it has repeated (see _optimizedMismatchProbes).
+                if (_optimizedMatchesReference || ++_optimizedMismatchProbes >= MaxVerificationProbes)
+                    _optimizedVerifiedForShape = ShapeSnapshot(input4D);
                 useOptimized = _optimizedMatchesReference;
                 // TensorAllocator may have obtained either candidate from the active TensorArena's
                 // wrapper ring. Do not Dispose the losing probe here: the arena retains that wrapper
