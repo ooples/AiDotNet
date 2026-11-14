@@ -1146,6 +1146,44 @@ public class CertificationReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task AutoAttackOptions_CopyConstructorCopiesEverySetting()
+    {
+        await Task.Yield();
+
+        var source = new AutoAttackOptions<double>
+        {
+            Epsilon = 0.3,
+            StepSize = 0.07,
+            Iterations = 11,
+            NormType = AdversarialNormType.L2,
+            IsTargeted = true,
+            TargetClass = 4,
+            UseRandomStart = false,
+            RandomSeed = 17,
+            CWConstant = 2.5,
+            CWConfidence = 0.4,
+            CWLearningRate = 0.02,
+            Version = AutoAttackVersion.Plus,
+            TargetClasses = 3,
+            SquareQueries = 123,
+            SquareInitialFraction = 0.6,
+            FabAlphaMax = 0.2,
+            FabEta = 1.2,
+            FabBeta = 0.7
+        };
+
+        var copy = new AutoAttackOptions<double>(source);
+
+        Assert.NotSame(source, copy);
+        foreach (var property in typeof(AutoAttackOptions<double>).GetProperties().Where(p => p.CanRead && p.CanWrite))
+        {
+            Assert.Equal(property.GetValue(source), property.GetValue(copy));
+        }
+
+        Assert.Throws<ArgumentNullException>(() => new AutoAttackOptions<double>(global::AiDotNet.Tests.TestNull.Of<AutoAttackOptions<double>>()));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Square_WindowPositionsIncludeTheLastOne()
     {
         await Task.Yield();
